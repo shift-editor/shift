@@ -1,118 +1,90 @@
+import "./App.css";
+import "./index.css";
 import { useEffect, useRef, useState } from "react";
+import { WebGLRenderer } from "./renderer/WebGLRenderer";
 import { invoke } from "@tauri-apps/api/core";
 
-import "./App.css";
-
-interface Vector2F {
-  x: number;
-  y: number;
-}
-
-type Command =
-  | { MoveTo: Vector2F }
-  | { LineTo: Vector2F }
-  | { QuadTo: [Vector2F, Vector2F] }
-  | { CubeTo: [Vector2F, Vector2F] }
-  | "Close";
-
 function App() {
-  const [commands, setCommands] = useState<Command[]>([]);
-
-  const getOutline = async () => {
-    const res = await invoke<Command[]>("get_family_name", { name: "Arial" });
-
-    return res;
-  };
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [startPoint, setStartPoint] = useState<[number, number] | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const drawGlyph = (commands: Command[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    // Find bounds
-    let minX = Infinity,
-      minY = Infinity;
-    let maxX = -Infinity,
-      maxY = -Infinity;
-
-    commands.forEach((cmd) => {
-      if (cmd === "Close") return;
-      const points =
-        "MoveTo" in cmd
-          ? [cmd.MoveTo]
-          : "LineTo" in cmd
-          ? [cmd.LineTo]
-          : "QuadTo" in cmd
-          ? cmd.QuadTo
-          : [];
-
-      points.forEach((p) => {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-      });
-    });
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Set up canvas
-    ctx.beginPath();
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 2; // Make lines more visible
-
-    // Calculate scale and position
-    const padding = 100;
-    const scale = Math.min(
-      (canvas.width - padding * 2) / (maxX - minX),
-      (canvas.height - padding * 2) / (maxY - minY)
-    );
-
-    // Center the glyph
-    ctx.save();
-    ctx.translate(
-      (canvas.width - (maxX - minX) * scale) / 2 - minX * scale,
-      (canvas.height + (maxY - minY) * scale) / 2 - minY * scale
-    );
-    ctx.scale(scale, -scale); // Flip Y axis to match font coordinates;
-
-    commands.forEach((cmd: Command) => {
-      if (cmd === "Close") {
-        ctx.closePath();
-      } else if ("MoveTo" in cmd) {
-        ctx.moveTo(cmd.MoveTo.x, cmd.MoveTo.y);
-      } else if ("LineTo" in cmd) {
-        ctx.lineTo(cmd.LineTo.x, cmd.LineTo.y);
-      } else if ("QuadTo" in cmd) {
-        const [ctrl, end] = cmd.QuadTo;
-        ctx.quadraticCurveTo(ctrl.x, ctrl.y, end.x, end.y);
-      }
-    });
-    ctx.stroke();
-  };
+  const rendererRef = useRef<WebGLRenderer | null>(null);
 
   useEffect(() => {
-    const getData = async () => {
+    if (!canvasRef.current) return;
+
+    // Handle high DPI displays
+    const canvas = canvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+
+    // Set the canvas size accounting for device pixel ratio
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    // Set the viewport to match
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+
+    rendererRef.current = new WebGLRenderer(canvasRef.current);
+
+    // Create async function to handle initial line generation
+    const initLines = async () => {
       try {
-        const commands = await invoke<Command[]>("get_family_name", {
-          name: "Arial",
-        });
-        drawGlyph(commands);
-      } catch (e) {
-        console.error("Error:", e);
+        const vertices = await invoke<number[]>("generate_curve");
+        console.log("Initial vertices:", vertices);
+        rendererRef.current?.renderTriangles(vertices);
+      } catch (error) {
+        console.error("Error getting initial lines:", error);
       }
     };
-    getData();
-  }, []);
+
+    // Call it
+    initLines();
+
+    // rendererRef.current.renderTestTriangle();
+
+    // Initialize renderer
+
+    // // Cleanup
+
+    // canvasRef.current.addEventListener("mousedown", (e: MouseEvent) => {
+    //   if (!canvasRef.current) return;
+
+    //   const rect = canvasRef.current.getBoundingClientRect();
+    //   const Cx = e.clientX - rect.left;
+    //   const Cy = e.clientY - rect.top;
+
+    //   const Gx = (Cx / canvasRef.current.width) * 2 - 1;
+    //   const Gy = -((Cy / canvasRef.current.height) * 2) + 1;
+
+    //   console.log(Gx, Gy);
+
+    //   if (!rendererRef.current) return;
+
+    //   if (!isDrawing) {
+    //     // First click - set start point
+    //     setStartPoint([Gx, Gy]);
+    //     setIsDrawing(true);
+    //     rendererRef.current.render([Gx, Gy]); // Draw first point
+    //   } else {
+    //     // Second click - draw line and reset
+    //     rendererRef.current.renderLine(startPoint!, [Gx, Gy]);
+    //     setIsDrawing(false);
+    //     setStartPoint(null);
+    //   }
+    // });
+
+    return () => {
+      rendererRef.current = null;
+    };
+  }, [isDrawing, startPoint]);
 
   return (
-    <main className="container">
-      <h1>Glyph editor</h1>
-      <canvas ref={canvasRef} width={500} height={500} />
+    <main className="w-screen h-screen flex flex-col items-center justify-center p-10">
+      <h1 className="font-blue">Glyph editor</h1>
+      <canvas ref={canvasRef} width={800} height={600} className="bg-white" />
     </main>
   );
 }

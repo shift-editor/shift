@@ -1,133 +1,120 @@
-use font_kit::{outline::OutlineSink, source::SystemSource};
-use pathfinder_geometry::line_segment::LineSegment2F;
-use pathfinder_geometry::vector::Vector2F;
-use serde::Serialize;
-use tauri_plugin_log::{Target, TargetKind};
+use kurbo::BezPath;
+use lyon::math::point;
+use lyon::tessellation::{BuffersBuilder, VertexBuffers};
 
-#[derive(Serialize)]
-struct Vector2FWrapper {
-    x: f32,
-    y: f32,
+use lyon::tessellation::{StrokeOptions, StrokeTessellator, StrokeVertex};
+
+#[derive(Debug, Clone, Copy)]
+struct Vertex {
+    position: [f32; 2],   // x,y coordinates
+    normal: [f32; 2],     // direction perpendicular to curve
+    tex_coords: [f32; 2], // used for texturing and effects
 }
 
-#[derive(Serialize)]
-struct LineSegment2FWrapper {
-    from: Vector2FWrapper,
-    to: Vector2FWrapper,
-}
+fn subdivide_curve(points: &[(f32, f32)], max_distance: f32) -> Vec<(f32, f32)> {
+    let mut result = Vec::new();
+    for window in points.windows(2) {
+        let start = window[0];
+        let end = window[1];
+        // Calculate distance between points
+        let distance = ((end.0 - start.0).powi(2) + (end.1 - start.1).powi(2)).sqrt();
+        // Determine how many segments we need
+        let segments = (distance / max_distance).ceil() as usize;
 
-impl From<Vector2F> for Vector2FWrapper {
-    fn from(v: Vector2F) -> Self {
-        Vector2FWrapper { x: v.x(), y: v.y() }
-    }
-}
-
-impl From<LineSegment2F> for LineSegment2FWrapper {
-    fn from(v: LineSegment2F) -> Self {
-        LineSegment2FWrapper {
-            from: Vector2FWrapper {
-                x: v.from_x(),
-                y: v.from_y(),
-            },
-            to: Vector2FWrapper {
-                x: v.to_x(),
-                y: v.to_y(),
-            },
+        // Create intermediate points
+        for i in 0..segments {
+            let t = i as f32 / segments as f32;
+            let x = start.0 + (end.0 - start.0) * t; // Linear interpolation
+            let y = start.1 + (end.1 - start.1) * t;
+            result.push((x, y));
         }
     }
+    result.push(*points.last().unwrap());
+    result
 }
 
-#[derive(Debug, Clone)]
-enum Command {
-    MoveTo(Vector2F),
-    LineTo(Vector2F),
-    QuadTo(Vector2F, Vector2F),
-    CubeTo(LineSegment2F, Vector2F),
-    Close,
-}
-
-#[derive(Serialize)]
-enum SerialisedCommand {
-    MoveTo(Vector2FWrapper),
-    LineTo(Vector2FWrapper),
-    QuadTo(Vector2FWrapper, Vector2FWrapper),
-    CubeTo(LineSegment2FWrapper, Vector2FWrapper),
-    Close,
-}
-struct PathSink {
-    commands: Vec<Command>,
-}
-
-impl PathSink {
-    fn new() -> Self {
-        PathSink {
-            commands: Vec::new(),
-        }
-    }
-
-    fn print_commands(&self) {
-        for (i, cmd) in self.commands.iter().enumerate() {
-            println!("Step {}: {:?}", i, cmd);
-        }
-    }
-}
-
-impl OutlineSink for PathSink {
-    fn move_to(&mut self, to: Vector2F) {
-        self.commands.push(Command::MoveTo(to));
-    }
-    // Draws a line to a point.
-    fn line_to(&mut self, to: Vector2F) {
-        self.commands.push(Command::LineTo(to));
-    }
-    // Draws a quadratic Bézier curve to a point.
-    fn quadratic_curve_to(&mut self, ctrl: Vector2F, to: Vector2F) {
-        self.commands.push(Command::QuadTo(ctrl, to));
-    }
-    // Draws a cubic Bézier curve to a point.
-    fn cubic_curve_to(&mut self, ctrl: LineSegment2F, to: Vector2F) {
-        self.commands.push(Command::CubeTo(ctrl, to));
-    }
-    // Closes the path, returning to the first point in it.
-    fn close(&mut self) {
-        self.commands.push(Command::Close);
-    }
-}
-
-impl From<Command> for SerialisedCommand {
-    fn from(c: Command) -> Self {
-        match c {
-            Command::MoveTo(v) => SerialisedCommand::MoveTo(v.into()),
-            Command::LineTo(v) => SerialisedCommand::LineTo(v.into()),
-            Command::QuadTo(ctrl, to) => SerialisedCommand::QuadTo(ctrl.into(), to.into()),
-            Command::CubeTo(ctrl, to) => SerialisedCommand::CubeTo(ctrl.into(), to.into()),
-            Command::Close => SerialisedCommand::Close,
+impl Vertex {
+    fn from_stroke_vertex(vertex: StrokeVertex) -> Self {
+        Self {
+            position: vertex.position().to_array(),
+            normal: vertex.normal().to_array(),
+            tex_coords: [vertex.advancement(), 0.0],
         }
     }
 }
 
 #[tauri::command]
-fn get_family_name(name: &str) -> Result<Vec<SerialisedCommand>, String> {
-    let handle = SystemSource::new().select_family_by_name(name).unwrap();
-    let font = handle.fonts()[0].load().unwrap();
+fn generate_curve() -> Vec<f32> {
+    // 1. Define curve with Kurbo (great for bezier math)
+    let mut path = BezPath::new();
+    path.move_to((-0.5, 0.0));
+    path.curve_to(
+        (0.2, 0.4), // First control point - adjusted for smoother curve
+        (0.8, 0.4), // Second control point
+        (1.0, 0.0), // End point
+    );
+    path.close_path();
 
-    let id = font.glyph_for_char('a').unwrap();
+    // 2. Convert to Lyon path for tessellation
+    let mut lyon_path = lyon::path::Path::builder();
+    lyon_path.begin(point(-0.5, 0.0)); // Start the path
 
-    let mut sink = PathSink::new();
-    font.outline(id, font_kit::hinting::HintingOptions::None, &mut sink)
+    for segment in path.segments() {
+        match segment {
+            kurbo::PathSeg::Line(line) => {
+                lyon_path.line_to(point(line.p1.x as f32, line.p1.y as f32));
+            }
+            kurbo::PathSeg::Quad(quad) => {
+                lyon_path.quadratic_bezier_to(
+                    point(quad.p1.x as f32, quad.p1.y as f32),
+                    point(quad.p2.x as f32, quad.p2.y as f32),
+                );
+            }
+            kurbo::PathSeg::Cubic(cubic) => {
+                lyon_path.cubic_bezier_to(
+                    point(cubic.p1.x as f32, cubic.p1.y as f32),
+                    point(cubic.p2.x as f32, cubic.p2.y as f32),
+                    point(cubic.p3.x as f32, cubic.p3.y as f32),
+                );
+            }
+        }
+    }
+    lyon_path.end(false);
+
+    // 3. Tessellate with Lyon using stroke
+    let mut tessellator = StrokeTessellator::new();
+    let mut geometry: VertexBuffers<Vertex, u16> = VertexBuffers::new();
+
+    tessellator
+        .tessellate_path(
+            &lyon_path.build(),
+            &StrokeOptions::default()
+                .with_line_width(0.005) // Thinner line
+                .with_tolerance(0.0001) // Higher quality tessellation
+                .with_line_join(lyon::path::LineJoin::Round) // Round joins between segments
+                .with_line_cap(lyon::path::LineCap::Round),
+            &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| {
+                Vertex::from_stroke_vertex(vertex)
+            }),
+        )
         .unwrap();
 
-    let commands = sink
-        .commands
+    // Flatten the vertex data for WebGL
+    let vertices = geometry
+        .vertices
         .iter()
-        .map(|cmd| cmd.clone().into())
-        .collect::<Vec<SerialisedCommand>>();
+        .flat_map(|v| {
+            let mut data = Vec::with_capacity(6);
+            data.extend_from_slice(&v.position);
+            data.extend_from_slice(&v.normal);
+            data.extend_from_slice(&v.tex_coords);
+            data
+        })
+        .collect();
 
-    log::info!(
-        "Commands JSON: {}",
-        serde_json::to_string(&commands).unwrap()
-    );
-    Ok(commands)
+    println!("vertices: {:?}", geometry);
+
+    vertices
 }
 
 #[tauri::command]
@@ -140,7 +127,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_family_name, test])
+        .invoke_handler(tauri::generate_handler![generate_curve])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

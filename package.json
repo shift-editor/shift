@@ -16,7 +16,8 @@
     "autoprefixer": "^10.4.20",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwind": "^4.0.0"
+    "tailwind": "^4.0.0",
+    "two.js": "^0.8.14"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
