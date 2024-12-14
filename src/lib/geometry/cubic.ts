@@ -35,7 +35,6 @@ export class Cubic {
     return this._controlPointTwo;
   }
 
-  // Setters
   set start(point: Point) {
     this._start = point;
   }

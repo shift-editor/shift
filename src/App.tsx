@@ -1,7 +1,9 @@
 import "./index.css";
 import { useEffect, useRef } from "react";
-import { SkiaGraphicsContext, SkiaRenderer } from "./lib/graphics/skia";
-import { Point } from "./lib/geometry/point";
+import {
+  SkiaGraphicsContext,
+  SkiaRenderer,
+} from "./lib/graphics/skia/skiaRenderer";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -10,14 +12,15 @@ function App() {
     if (!canvasRef.current) return;
     const drawRect = async (canvas: HTMLCanvasElement) => {
       try {
-        // skia context should probably privately be created in the renderer
         const result = await SkiaGraphicsContext.init(canvas);
         if (!result.success) {
           return;
         }
         const renderer = new SkiaRenderer(result.data);
 
-        renderer.DrawPoint(Point.create(1, 2));
+        renderer.drawLine(0, 0, 30, 500);
+        renderer.drawRect(90, 90, 400, 400);
+        renderer.drawCircle(600, 300, 150);
       } catch (error) {
         console.log(error);
       }

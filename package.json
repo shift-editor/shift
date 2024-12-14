@@ -13,8 +13,10 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-log": "^2.0.1",
     "@tauri-apps/plugin-shell": "^2",
+    "@types/chroma-js": "^2.4.4",
     "autoprefixer": "^10.4.20",
     "canvaskit-wasm": "^0.39.1",
+    "chroma-js": "^3.1.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind": "^4.0.0"
