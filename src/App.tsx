@@ -4,6 +4,10 @@ import {
   SkiaGraphicsContext,
   SkiaRenderer,
 } from "./lib/graphics/skia/skiaRenderer";
+import chroma from "chroma-js";
+import { Handle } from "./lib/graphics/editor/handles/handle";
+import { HandleType } from "./lib/graphics/styles/style";
+import { Point } from "./lib/geometry/point";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,9 +22,24 @@ function App() {
         }
         const renderer = new SkiaRenderer(result.data);
 
-        renderer.drawLine(0, 0, 30, 500);
-        renderer.drawRect(90, 90, 400, 400);
-        renderer.drawCircle(600, 300, 150);
+        renderer.drawLine(0, 0, 30, 300, {
+          strokeWidth: 2,
+          strokeColour: chroma.rgb(76, 96, 230),
+        });
+        renderer.drawRect(90, 90, 400, 400, {
+          strokeWidth: 2,
+          strokeColour: chroma.rgb(255, 0, 255),
+        });
+        renderer.drawCircle(600, 300, 150, {
+          strokeWidth: 1,
+          strokeColour: chroma.rgb(50, 200, 100),
+        });
+
+        const c = new Handle(HandleType.CORNER, Point.create(100, 600));
+        c.draw(renderer);
+
+        const ctrl = new Handle(HandleType.CONTROL, Point.create(100, 625));
+        ctrl.draw(renderer);
       } catch (error) {
         console.log(error);
       }

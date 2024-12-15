@@ -1,11 +1,13 @@
 import InitCanvasKit, {
   Canvas,
   CanvasKit,
+  Paint,
   Path,
   Surface,
 } from "canvaskit-wasm";
 import { IRenderer } from "../../../types/renderer";
 import { SkiaGraphicsContextError } from "./errors";
+import { DEFAULT_STYLES, DrawStyle } from "../styles/style";
 
 export class SkiaGraphicsContext {
   #canvasKit: CanvasKit;
@@ -78,33 +80,54 @@ export class SkiaGraphicsContext {
 export class SkiaRenderer implements IRenderer {
   public constructor(private ctx: SkiaGraphicsContext) {}
 
-  drawLine(x0: number, y0: number, x1: number, y1: number): void {
-    const p = new this.ctx.canvasKit.Paint();
-    p.setStrokeWidth(1);
-    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    p.setColor(this.ctx.canvasKit.BLACK);
-    p.setAntiAlias(true);
+  private getStyledPainter(style: Partial<DrawStyle> = {}): Paint {
+    const finalStyle = { ...DEFAULT_STYLES, ...style };
 
-    this.ctx.canvas.drawLine(x0, y0, x1, y1, p);
+    const p = new this.ctx.canvasKit.Paint();
+    p.setStrokeWidth(finalStyle.strokeWidth);
+    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
+
+    const [r, g, b] = finalStyle.strokeColour.rgb();
+    p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, 1.0));
+
+    p.setAntiAlias(finalStyle.antialias ?? true);
+
+    return p;
   }
 
-  drawRect(x1: number, y1: number, x2: number, y2: number): void {
-    const p = new this.ctx.canvasKit.Paint();
-    p.setStrokeWidth(1);
-    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    p.setColor(this.ctx.canvasKit.BLACK);
-
-    this.ctx.canvas.drawRect([x1, y1, x2, y2], p);
+  drawLine(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    style?: Partial<DrawStyle>
+  ): void {
+    const p = this.getStyledPainter(style);
+    this.ctx.canvas.drawLine(x0, y0, x1, y1, p);
     this.ctx.surface.flush();
   }
 
-  drawCircle(x: number, y: number, radius: number): void {
-    const p = new this.ctx.canvasKit.Paint();
-    p.setStrokeWidth(1);
-    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    p.setColor(this.ctx.canvasKit.BLACK);
-    // Enable anti-aliasing
-    p.setAntiAlias(true);
+  drawRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    style?: Partial<DrawStyle>
+  ): void {
+    const p = this.getStyledPainter(style);
+
+    const rect = this.ctx.canvasKit.XYWHRect(x, y, width, height);
+    this.ctx.canvas.drawRect(rect, p);
+    this.ctx.surface.flush();
+  }
+
+  drawCircle(
+    x: number,
+    y: number,
+    radius: number,
+    style?: Partial<DrawStyle>
+  ): void {
+    const p = this.getStyledPainter(style);
 
     this.ctx.canvas.drawCircle(x, y, radius, p);
     this.ctx.surface.flush();
@@ -136,5 +159,9 @@ export class SkiaRenderer implements IRenderer {
 
   close(): void {
     this.ensurePath().close();
+  }
+
+  stroke(): void {
+    this.ensurePath().stroke();
   }
 }

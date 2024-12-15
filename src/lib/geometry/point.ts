@@ -1,10 +1,10 @@
 export class Point {
-  private _x: number;
-  private _y: number;
+  #x: number;
+  #y: number;
 
   constructor(x: number, y: number) {
-    this._x = x;
-    this._y = y;
+    this.#x = x;
+    this.#y = y;
   }
 
   public static create(x: number, y: number): Point {
@@ -12,18 +12,18 @@ export class Point {
   }
 
   public get x() {
-    return this._x;
+    return this.#x;
   }
 
   public get y() {
-    return this._y;
+    return this.#y;
   }
 
   public set set_x(x: number) {
-    this._x = x;
+    this.#x = x;
   }
 
   public set set_y(y: number) {
-    this._y = y;
+    this.#y = y;
   }
 }
