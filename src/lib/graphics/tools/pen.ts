@@ -1,1 +1,5 @@
-class Pen implements Tool {}
+class Pen implements Tool {
+  constructor() {}
+
+  draw(): void {}
+}
