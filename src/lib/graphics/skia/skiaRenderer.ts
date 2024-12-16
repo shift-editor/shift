@@ -7,7 +7,7 @@ import InitCanvasKit, {
 } from "canvaskit-wasm";
 import { IRenderer } from "../../../types/renderer";
 import { SkiaGraphicsContextError } from "./errors";
-import { DEFAULT_STYLES, DrawStyle } from "../styles/style";
+import { DEFAULT_STYLES, DrawStyle, StrokeStyle } from "../styles/style";
 
 export class SkiaGraphicsContext {
   #canvasKit: CanvasKit;
@@ -82,17 +82,27 @@ export class SkiaRenderer implements IRenderer {
 
   private getStyledPainter(style: Partial<DrawStyle> = {}): Paint {
     const finalStyle = { ...DEFAULT_STYLES, ...style };
-
     const p = new this.ctx.canvasKit.Paint();
-    p.setStrokeWidth(finalStyle.strokeWidth);
-    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
 
+    p.setStrokeWidth(finalStyle.strokeWidth);
+
+    const paintStyle = this.ctx.canvasKit.PaintStyle;
+    const strokeStyle =
+      finalStyle.strokeStyle == StrokeStyle.Fill
+        ? paintStyle.Fill
+        : paintStyle.Stroke;
+
+    p.setStyle(strokeStyle);
     const [r, g, b] = finalStyle.strokeColour.rgb();
     p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, 1.0));
 
     p.setAntiAlias(finalStyle.antialias ?? true);
 
     return p;
+  }
+
+  flush(): void {
+    this.ctx.surface.flush();
   }
 
   drawLine(
@@ -104,7 +114,6 @@ export class SkiaRenderer implements IRenderer {
   ): void {
     const p = this.getStyledPainter(style);
     this.ctx.canvas.drawLine(x0, y0, x1, y1, p);
-    this.ctx.surface.flush();
   }
 
   drawRect(
@@ -118,7 +127,6 @@ export class SkiaRenderer implements IRenderer {
 
     const rect = this.ctx.canvasKit.XYWHRect(x, y, width, height);
     this.ctx.canvas.drawRect(rect, p);
-    this.ctx.surface.flush();
   }
 
   drawCircle(
@@ -130,7 +138,6 @@ export class SkiaRenderer implements IRenderer {
     const p = this.getStyledPainter(style);
 
     this.ctx.canvas.drawCircle(x, y, radius, p);
-    this.ctx.surface.flush();
   }
 
   #path: Path | null = null;
@@ -139,7 +146,7 @@ export class SkiaRenderer implements IRenderer {
     this.#path = new this.ctx.canvasKit.Path();
   }
 
-  private ensurePath(): Path {
+  get path(): Path {
     if (!this.#path) {
       console.warn(
         "Path operation called without beginPath(), creating new path"
@@ -150,18 +157,35 @@ export class SkiaRenderer implements IRenderer {
   }
 
   moveTo(x: number, y: number): void {
-    this.ensurePath().moveTo(x, y);
+    this.path.moveTo(x, y);
   }
 
   lineTo(x: number, y: number): void {
-    this.ensurePath().lineTo(x, y);
+    this.path.lineTo(x, y);
+  }
+
+  cubicTo(
+    cpx1: number,
+    cpy1: number,
+    cpx2: number,
+    cpy2: number,
+    x: number,
+    y: number
+  ): void {
+    this.path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
 
   close(): void {
-    this.ensurePath().close();
+    this.path.close();
+  }
+
+  drawPath(style?: Partial<DrawStyle>): void {
+    const p = this.getStyledPainter(style);
+
+    this.ctx.canvas.drawPath(this.path, p);
   }
 
   stroke(): void {
-    this.ensurePath().stroke();
+    this.path.stroke();
   }
 }

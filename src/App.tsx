@@ -5,9 +5,9 @@ import {
   SkiaRenderer,
 } from "./lib/graphics/skia/skiaRenderer";
 import chroma from "chroma-js";
-import { Handle } from "./lib/graphics/editor/handles/handle";
-import { HandleType } from "./lib/graphics/styles/style";
+import { Handle, HandleType } from "./lib/graphics/editor/handle";
 import { Point } from "./lib/geometry/point";
+import { BezierEditor } from "./lib/graphics/editor/bezier";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,6 +40,20 @@ function App() {
 
         const ctrl = new Handle(HandleType.CONTROL, Point.create(100, 625));
         ctrl.draw(renderer);
+
+        const direction = new Handle(
+          HandleType.DIRECTION,
+          Point.create(400, 400)
+        );
+        direction.draw(renderer);
+
+        const smooth = new Handle(HandleType.SMOOTH, Point.create(150, 625));
+        smooth.draw(renderer);
+
+        const bez = new BezierEditor();
+        bez.draw(renderer);
+
+        renderer.flush();
       } catch (error) {
         console.log(error);
       }
