@@ -4,13 +4,15 @@ import {
   SkiaGraphicsContext,
   SkiaRenderer,
 } from "./lib/graphics/skia/skiaRenderer";
-import { Handle, HandleType } from "./lib/graphics/editor/handle";
+import { PathRenderer } from "./lib/graphics/draw/pathRenderer";
+import { Path } from "./lib/geometry/path";
 import { Point } from "./lib/geometry/point";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SkiaRenderer | null>(null);
-  const handles: Handle[] = [];
+  const pathRenderer = useRef<PathRenderer | null>(null);
+  const path = new Path();
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -21,6 +23,7 @@ function App() {
           return;
         }
         rendererRef.current = new SkiaRenderer(result.data);
+        pathRenderer.current = new PathRenderer(rendererRef.current);
       } catch (error) {
         console.log(error);
       }
@@ -36,6 +39,7 @@ function App() {
       return;
     }
     if (!rendererRef.current) return;
+    if (!pathRenderer.current) return;
 
     const r = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - r.left;
@@ -43,12 +47,9 @@ function App() {
 
     console.log(x, y);
 
-    const corner = new Handle(HandleType.CORNER, new Point(x, y));
-    handles.push(corner);
+    path.addPoint(new Point(x, y));
+    pathRenderer.current.render(path);
 
-    for (const h of handles) {
-      h.draw(rendererRef.current);
-    }
     rendererRef.current.flush();
   };
 

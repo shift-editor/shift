@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "jest",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -14,12 +15,15 @@
     "@tauri-apps/plugin-log": "^2.0.1",
     "@tauri-apps/plugin-shell": "^2",
     "@types/chroma-js": "^2.4.4",
+    "@types/jest": "^29.5.14",
     "autoprefixer": "^10.4.20",
     "canvaskit-wasm": "^0.39.1",
     "chroma-js": "^3.1.2",
+    "jest": "^29.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwind": "^4.0.0"
+    "tailwind": "^4.0.0",
+    "ts-jest": "^29.2.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
@@ -29,5 +33,15 @@
     "tailwindcss": "^3.4.16",
     "typescript": "^5.2.2",
     "vite": "^5.3.1"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    },
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ]
   }
 }

@@ -9,6 +9,7 @@ export enum HandleType {
   DIRECTION,
 }
 
+const CORNER_SIZE = 5;
 export class Handle {
   #type: HandleType;
   #position: Point;
@@ -28,12 +29,23 @@ export class Handle {
     return this.#position;
   }
 
+  set position(point: Point) {
+    this.#position = point;
+  }
+
   draw(renderer: IRenderer): void {
     let style;
     switch (this.#type) {
       case HandleType.CORNER:
         style = { ...HANDLE_STYLES[HandleType.CORNER], ...this.#style };
-        renderer.drawRect(this.#position.x, this.#position.y, 5, 5, style);
+
+        renderer.drawRect(
+          this.#position.x - CORNER_SIZE / 2,
+          this.#position.y - CORNER_SIZE / 2,
+          5,
+          5,
+          style
+        );
         break;
 
       case HandleType.SMOOTH:
