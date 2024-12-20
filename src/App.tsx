@@ -7,6 +7,7 @@ import {
 import { PathRenderer } from "./lib/graphics/draw/pathRenderer";
 import { Path } from "./lib/geometry/path";
 import { Point } from "./lib/geometry/point";
+import { SegmentType } from "./lib/geometry/segment";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,7 +48,7 @@ function App() {
 
     console.log(x, y);
 
-    path.addPoint(new Point(x, y));
+    path.addPoint(new Point(x, y), SegmentType.Bezier);
     pathRenderer.current.render(path);
 
     rendererRef.current.flush();

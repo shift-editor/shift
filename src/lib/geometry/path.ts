@@ -3,6 +3,7 @@ import { Segment, SegmentType } from "./segment";
 
 export class Path {
   #segments: Segment[] = [];
+  #closed: boolean = false;
 
   constructor() {}
 
@@ -14,6 +15,15 @@ export class Path {
     return this.#segments.length;
   }
 
+  get isClosed(): boolean {
+    return this.#closed;
+  }
+
+  close(): void {
+    if (this.numberOfSegments < 2) return;
+    this.#closed = true;
+  }
+
   isEmpty(): boolean {
     return this.segments.length === 0;
   }
@@ -22,9 +32,13 @@ export class Path {
     return this.#segments[this.numberOfSegments - 1];
   }
 
-  addPoint(point: Point): void {
+  addSegment(segment: Segment): void {
+    this.#segments.push(segment);
+  }
+
+  addPoint(point: Point, type: SegmentType): void {
     if (this.isEmpty()) {
-      this.addSegment(new Segment(SegmentType.Line, point));
+      this.addSegment(new Segment(type, point));
       return;
     }
 
@@ -34,11 +48,8 @@ export class Path {
       return;
     }
 
-    this.addSegment(new Segment(SegmentType.Line, point));
+    this.addSegment(new Segment(type, lastSeg.startPoint));
+    this.lastSegment().close(point);
     return;
-  }
-
-  addSegment(segment: Segment): void {
-    this.#segments.push(segment);
   }
 }

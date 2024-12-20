@@ -2,7 +2,6 @@ import { IRenderer } from "../../../types/renderer";
 import { Point } from "../../geometry/point";
 import { Handle, HandleType } from "./handle";
 
-// src/lib/graphics/editor/bezier/bezierEditor.ts
 export class BezierEditor {
   private start: Handle;
   private end: Handle;

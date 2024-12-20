@@ -55,6 +55,7 @@ export class Handle {
 
       case HandleType.CONTROL:
         style = { ...HANDLE_STYLES[HandleType.CONTROL], ...this.#style };
+
         renderer.drawCircle(this.#position.x, this.#position.y, 2.5, style);
         break;
 

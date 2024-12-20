@@ -2,10 +2,14 @@ import { Point } from "./point";
 
 export enum SegmentType {
   Line,
+  Bezier,
 }
+
+type ControlPoints = [Point, Point];
 
 export class Segment {
   #points: Point[] = [];
+  #controlPoints: ControlPoints = [new Point(20, 30), new Point(30, 100)];
   type: SegmentType;
 
   constructor(type: SegmentType, startPoint: Point) {
@@ -27,5 +31,15 @@ export class Segment {
 
   get endPoint(): Point {
     return this.#points[1];
+  }
+
+  set controlPoints(controlPoints: ControlPoints) {
+    // TODO: handle if points is != 2
+    this.#controlPoints[0] = controlPoints[0];
+    this.#controlPoints[1] = controlPoints[1];
+  }
+
+  get controlPoints(): ControlPoints {
+    return this.#controlPoints;
   }
 }
