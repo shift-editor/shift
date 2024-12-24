@@ -11,4 +11,8 @@ export class Circle extends Shape {
   public get radius(): number {
     return this.#radius;
   }
+
+  hit(): boolean {
+    return false;
+  }
 }

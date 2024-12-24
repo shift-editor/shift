@@ -1,3 +1,4 @@
+import { Point } from "./point";
 import { Shape } from "./shape";
 
 export class Rect extends Shape {
@@ -24,6 +25,10 @@ export class Rect extends Shape {
     return [this.x, this.y, this.width, this.height];
   }
 
+  public get_centered_position(): Point {
+    return new Point(this.x - this.width / 2, this.y - this.height / 2);
+  }
+
   get left(): number {
     return this.x;
   }
@@ -46,5 +51,14 @@ export class Rect extends Shape {
 
   get height(): number {
     return this.#height;
+  }
+
+  hit(point: Point): boolean {
+    return (
+      this.x <= point.x &&
+      point.x <= this.x + this.width &&
+      this.y <= point.y &&
+      point.y <= this.y + this.#height
+    );
   }
 }

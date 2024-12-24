@@ -2,7 +2,7 @@ import { IRenderer } from "../../../types/renderer";
 import { Path } from "../../geometry/path";
 import { Point } from "../../geometry/point";
 import { SegmentType } from "../../geometry/segment";
-import { Handle, HandleType } from "../editor/handle";
+import { Handle, HandleType } from "../../editor/handle";
 
 export class PathRenderer {
   #renderer: IRenderer;
@@ -41,33 +41,13 @@ export class PathRenderer {
     }
     this.#renderer.drawPath();
 
-    const control = new Handle(HandleType.CONTROL, new Point(0, 0));
+    cornerHandle.position = segments[0].startPoint;
+    cornerHandle.draw(this.#renderer);
+
     for (let idx = 0; idx <= segments.length - 1; idx++) {
       const currSegment = segments[idx];
       cornerHandle.position = currSegment.endPoint;
       cornerHandle.draw(this.#renderer);
-
-      if (currSegment.type == SegmentType.Bezier) {
-        control.position = currSegment.controlPoints[0];
-        this.#renderer.beginPath();
-        this.#renderer.moveTo(
-          currSegment.startPoint.x,
-          currSegment.startPoint.y
-        );
-        this.#renderer.lineTo(control.position.x, control.position.y);
-        this.#renderer.close();
-        this.#renderer.drawPath();
-
-        control.draw(this.#renderer);
-
-        control.position = currSegment.controlPoints[1];
-        this.#renderer.beginPath();
-        this.#renderer.moveTo(currSegment.endPoint.x, currSegment.endPoint.y);
-        this.#renderer.lineTo(control.position.x, control.position.y);
-        this.#renderer.close();
-        this.#renderer.drawPath();
-        control.draw(this.#renderer);
-      }
     }
   }
 }

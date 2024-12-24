@@ -3,19 +3,22 @@ import { Point } from "./point";
 export abstract class Shape {
   #x: number;
   #y: number;
+  #position: Point;
 
   constructor(x: number, y: number) {
     this.#x = x;
     this.#y = y;
+
+    this.#position = new Point(x, y);
   }
 
-  getPosition(): Point {
-    return new Point(this.x, this.y);
+  get position(): Point {
+    return this.#position;
   }
 
-  setPosition(x: number, y: number): void {
-    this.#x = x;
-    this.#y = y;
+  set position(pos: Point) {
+    this.#position.set_x(pos.x);
+    this.#position.set_y(pos.y);
   }
 
   get x(): number {
@@ -25,4 +28,6 @@ export abstract class Shape {
   get y(): number {
     return this.#y;
   }
+
+  abstract hit(point: Point): boolean;
 }

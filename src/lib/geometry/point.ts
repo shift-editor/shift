@@ -18,12 +18,13 @@ export class Point {
   public get y() {
     return this.#y;
   }
+  
 
-  public set set_x(x: number) {
+  public set_x(x: number) {
     this.#x = x;
   }
 
-  public set set_y(y: number) {
+  public set_y(y: number) {
     this.#y = y;
   }
 }

@@ -1,6 +1,6 @@
-import { IRenderer } from "../../../types/renderer";
-import { Point } from "../../geometry/point";
-import { DrawStyle, HANDLE_STYLES } from "../styles/style";
+import { IRenderer } from "../../types/renderer";
+import { Point } from "../geometry/point";
+import { DrawStyle, HANDLE_STYLES } from "../graphics/styles/style";
 
 export enum HandleType {
   CORNER,
@@ -9,7 +9,12 @@ export enum HandleType {
   DIRECTION,
 }
 
-const CORNER_SIZE = 5;
+const handleDimensions = {
+  [HandleType.CORNER]: { width: 5, height: 5 },
+  [HandleType.CONTROL]: { radius: 2.5 },
+  [HandleType.SMOOTH]: { radius: 2.5 },
+};
+
 export class Handle {
   #type: HandleType;
   #position: Point;
@@ -40,8 +45,8 @@ export class Handle {
         style = { ...HANDLE_STYLES[HandleType.CORNER], ...this.#style };
 
         renderer.drawRect(
-          this.#position.x - CORNER_SIZE / 2,
-          this.#position.y - CORNER_SIZE / 2,
+          this.#position.x - handleDimensions[this.#type].width / 2,
+          this.#position.y - handleDimensions[this.#type].height / 2,
           5,
           5,
           style
@@ -50,7 +55,12 @@ export class Handle {
 
       case HandleType.SMOOTH:
         style = { ...HANDLE_STYLES[HandleType.SMOOTH], ...this.#style };
-        renderer.drawCircle(this.#position.x, this.#position.y, 2.5, style);
+        renderer.drawCircle(
+          this.#position.x,
+          this.#position.y,
+          handleDimensions[this.#type].radius,
+          style
+        );
         break;
 
       case HandleType.CONTROL:

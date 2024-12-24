@@ -17,4 +17,8 @@ export class Triangle extends Shape {
   public get vertices(): Vertices {
     return this.#vertices;
   }
+
+  hit(point: Point): boolean {
+    return false;
+  }
 }
