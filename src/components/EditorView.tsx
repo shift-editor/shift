@@ -7,8 +7,8 @@ import {
 
 export const EditorView = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<SkiaRenderer | null>(null);
-  const editor = new Editor(canvasRef);
+  const editorRef = useRef<Editor>(new Editor(canvasRef));
+  const editor = editorRef.current;
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -18,7 +18,7 @@ export const EditorView = () => {
         if (!result.success) {
           return;
         }
-        rendererRef.current = new SkiaRenderer(result.data);
+        editorRef.current.renderer = new SkiaRenderer(result.data);
       } catch (error) {
         console.log(error);
       }
@@ -31,6 +31,7 @@ export const EditorView = () => {
     e: React.MouseEvent<HTMLCanvasElement>
   ) => {
     editor.currentTool.onMouseDown(e);
+    editor.draw();
   };
 
   const onMouseMove: MouseEventHandler<HTMLCanvasElement> = (
@@ -45,6 +46,6 @@ export const EditorView = () => {
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       className="w-full h-full border border-black"
-    ></canvas>
+    />
   );
 };

@@ -3,10 +3,12 @@ import { Path } from "../geometry/path";
 import { Pen } from "../tools/pen";
 import { Tool } from "../tools/tool";
 import { CanvasManager } from "./canvas";
+import { Handle } from "./handle";
 
 export class Editor {
   #currentTool: Tool = new Pen(this);
   #paths: Path[] = [];
+  #handles: Handle[] = [];
   #renderer: IRenderer | null = null;
   #canvasManager: CanvasManager;
 
@@ -26,11 +28,25 @@ export class Editor {
     this.#renderer = renderer;
   }
 
+  get renderer(): IRenderer {
+    if (!this.#renderer) {
+      throw new Error("no renderer available");
+    }
+    return this.#renderer;
+  }
+
   get paths(): Path[] {
     return this.#paths;
   }
 
+  get handles(): Handle[] {
+    return this.#handles;
+  }
+
   draw() {
+    for (const h of this.handles) {
+      h.draw(this.renderer);
+    }
     this.renderer.flush();
   }
 }

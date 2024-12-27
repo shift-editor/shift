@@ -1,5 +1,5 @@
 import chroma from "chroma-js";
-import { HandleType } from "../../editor/handle";
+import { HandleType } from "../../../types/handle";
 
 export enum StrokeStyle {
   Stroke,

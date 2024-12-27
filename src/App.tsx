@@ -1,13 +1,4 @@
 import "./index.css";
-import { MouseEventHandler, useEffect, useRef } from "react";
-import {
-  SkiaGraphicsContext,
-  SkiaRenderer,
-} from "./lib/graphics/skia/skiaRenderer";
-import { PathRenderer } from "./lib/graphics/draw/pathRenderer";
-import { Point } from "./lib/geometry/point";
-import { SegmentType } from "./lib/geometry/segment";
-import { Path } from "./lib/geometry/path";
 import { EditorView } from "./components/EditorView";
 
 function App() {

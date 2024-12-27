@@ -7,6 +7,10 @@ export class Point {
     this.#y = y;
   }
 
+  clone(): Point {
+    return new Point(this.#x, this.y);
+  }
+
   public static create(x: number, y: number): Point {
     return new Point(x, y);
   }
@@ -18,7 +22,6 @@ export class Point {
   public get y() {
     return this.#y;
   }
-  
 
   public set_x(x: number) {
     this.#x = x;
