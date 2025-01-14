@@ -1,4 +1,4 @@
-import { Path } from "../geometry/path";
+import { Path } from "../core/Path";
 import { Point } from "../geometry/point";
 import { Command } from "./commands";
 

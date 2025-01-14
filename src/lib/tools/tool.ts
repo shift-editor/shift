@@ -1,4 +1,4 @@
-import { Editor } from "../editor/editor";
+import { Editor } from "../editor/Editor";
 
 export interface Tool {
   editor: Editor;

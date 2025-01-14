@@ -1,5 +1,5 @@
 import { MouseEventHandler, useEffect, useRef } from "react";
-import { Editor } from "../lib/editor/editor";
+import { Editor } from "../lib/editor/Editor";
 import {
   SkiaGraphicsContext,
   SkiaRenderer,

@@ -1,18 +1,19 @@
 import { IRenderer } from "../../types/renderer";
-import { Path } from "../geometry/path";
 import { Pen } from "../tools/pen";
 import { Tool } from "../tools/tool";
-import { CanvasManager } from "./canvas";
-import { Handle } from "./handle";
+import { CanvasManager } from "./CanvasManager";
+import { PathManager } from "./PathManager";
 
 export class Editor {
   #currentTool: Tool = new Pen(this);
-  #paths: Path[] = [];
-  #handles: Handle[] = [];
+
   #renderer: IRenderer | null = null;
+
+  #pathManager: PathManager;
   #canvasManager: CanvasManager;
 
   public constructor(canvasRef: React.RefObject<HTMLCanvasElement>) {
+    this.#pathManager = new PathManager();
     this.#canvasManager = new CanvasManager(canvasRef);
   }
 
@@ -22,6 +23,10 @@ export class Editor {
 
   get canvasManager(): CanvasManager {
     return this.#canvasManager;
+  }
+
+  get pathManager(): PathManager {
+    return this.#pathManager;
   }
 
   set renderer(renderer: IRenderer) {
@@ -35,18 +40,7 @@ export class Editor {
     return this.#renderer;
   }
 
-  get paths(): Path[] {
-    return this.#paths;
-  }
-
-  get handles(): Handle[] {
-    return this.#handles;
-  }
-
   draw() {
-    for (const h of this.handles) {
-      h.draw(this.renderer);
-    }
-    this.renderer.flush();
+    
   }
 }

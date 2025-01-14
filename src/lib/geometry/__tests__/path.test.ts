@@ -1,4 +1,4 @@
-import { Path } from "../path";
+import { Path } from "../../core/Path";
 import { Point } from "../point";
 import { Segment, SegmentType } from "../segment";
 

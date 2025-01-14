@@ -8,7 +8,7 @@ export class Point {
   }
 
   clone(): Point {
-    return new Point(this.#x, this.y);
+    return new Point(this.#x, this.#y);
   }
 
   public static create(x: number, y: number): Point {

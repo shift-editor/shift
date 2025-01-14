@@ -1,48 +1,31 @@
-type Ident = number;
-
-const ID_COUNT = 5;
+export type Ident = number;
+const NO_PARENT_ID = 0;
 
 class Id {
-  static #id: number;
+  static #id: number = 0;
 
-  static next(): number {
+  static next(): Ident {
     this.#id++;
     return this.#id;
   }
 }
 
-class EntityId {
-  #parent: Ident | null = null;
-  #id: Ident = 5;
+export class EntityId {
+  #parentId: Ident = NO_PARENT_ID;
+  #id: Ident;
+
+  constructor(parentId?: Ident) {
+    if (parentId) {
+      this.#parentId = parentId;
+    }
+    this.#id = Id.next();
+  }
 
   get id(): Ident {
     return this.#id;
   }
 
-  set parent(ident: Ident) {
-    this.#parent = ident;
-  }
-
-  get parent(): Ident | null {
-    return this.#parent;
-  }
-
-  set id(id: Ident) {
-    this.id = id;
-  }
-
-  static next(): EntityId {
-    const entityId = new EntityId();
-    entityId.#id = Id.next();
-
-    return entityId;
-  }
-
-  static withParent(id: Ident) {
-    const entityId = new EntityId();
-    entityId.#id = Id.next();
-    entityId.#parent = id;
-
-    return entityId;
+  get parentId(): Ident {
+    return this.#parentId;
   }
 }
