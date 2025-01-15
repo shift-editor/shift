@@ -21,4 +21,12 @@ export class PathManager {
       new PathPoint(point.x, point.y, PointType.OnCurve, this.#currentPath.id)
     );
   }
+
+  get paths(): Path[] {
+    return Array.from(this.#paths.values());
+  }
+
+  get currentPath(): Path {
+    return this.#currentPath;
+  }
 }

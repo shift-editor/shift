@@ -1,3 +1,4 @@
+import { Segment } from "../../types/segments";
 import { Point } from "../geometry/point";
 import { EntityId, Ident } from "./EntityId";
 
@@ -40,5 +41,25 @@ export class Path {
 
   get id(): Ident {
     return this.#id.id;
+  }
+
+  segments(): Segment[] {
+    const segments: Segment[] = [];
+
+    let i = 0;
+    while (i < this.#points.length) {
+      const point = this.#points[i];
+      if (point.type === PointType.OnCurve) {
+        segments.push({
+          type: "line",
+          start: point,
+          end: this.#points[i + 1],
+        });
+      }
+
+      i += 2;
+    }
+
+    return segments;
   }
 }
