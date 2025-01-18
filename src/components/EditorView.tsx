@@ -31,7 +31,6 @@ export const EditorView = () => {
     e: React.MouseEvent<HTMLCanvasElement>
   ) => {
     editor.currentTool.onMouseDown(e);
-    editor.draw();
   };
 
   const onMouseMove: MouseEventHandler<HTMLCanvasElement> = (
@@ -40,11 +39,18 @@ export const EditorView = () => {
     editor.currentTool.onMouseMove(e);
   };
 
+  const onMouseUp: MouseEventHandler<HTMLCanvasElement> = (
+    e: React.MouseEvent<HTMLCanvasElement>
+  ) => {
+    editor.currentTool.onMouseUp(e);
+  };
+
   return (
     <canvas
       ref={canvasRef}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
       className="w-full h-full border border-black"
     />
   );

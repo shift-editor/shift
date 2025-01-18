@@ -1,7 +1,7 @@
 import { IRenderer } from "../../types/renderer";
 import { drawPath } from "../draw/path";
 import { Pen } from "../tools/Pen";
-import { Tool } from "../tools/Tool";
+import { Tool } from "../../types/tool";
 import { CanvasManager } from "./CanvasManager";
 import { PathManager } from "./PathManager";
 
