@@ -24,7 +24,8 @@ export class SkiaGraphicsContext {
 
   private setupTransform(): void {
     const canvas = this.surface.getCanvas();
-    canvas.scale(this.#scale, this.#scale); // Scale for device pixel ratio
+    canvas.clear(this.canvasKit.WHITE);
+    canvas.scale(this.#scale, this.#scale);
   }
 
   public get canvas(): Canvas {

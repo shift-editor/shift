@@ -30,6 +30,7 @@ export class PathPoint extends Point {
 export class Path {
   #id: EntityId;
   #points: PathPoint[] = [];
+  #closed: boolean = false;
 
   constructor() {
     this.#id = new EntityId();
@@ -52,14 +53,22 @@ export class Path {
       if (point.type === PointType.OnCurve) {
         segments.push({
           type: "line",
-          start: point,
-          end: this.#points[i + 1],
+          anchor: point,
         });
       }
 
-      i += 2;
+      i += 1;
     }
 
     return segments;
+  }
+
+  get closed(): boolean {
+    return this.#closed;
+  }
+
+  close() {
+    this.#points.pop();
+    this.#closed = true;
   }
 }

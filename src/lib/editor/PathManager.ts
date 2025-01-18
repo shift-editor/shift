@@ -20,6 +20,13 @@ export class PathManager {
     this.#currentPath.points.push(
       new PathPoint(point.x, point.y, PointType.OnCurve, this.#currentPath.id)
     );
+
+    if (
+      this.#currentPath.points.length > 1 &&
+      point.distance(this.#currentPath.points[0]) < 8
+    ) {
+      this.#currentPath.close();
+    }
   }
 
   get paths(): Path[] {

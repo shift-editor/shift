@@ -13,7 +13,7 @@ export interface DrawStyle {
 }
 
 export const DEFAULT_STYLES: DrawStyle = {
-  strokeWidth: 1,
+  strokeWidth: 0.5,
   strokeStyle: StrokeStyle.Stroke,
   strokeColour: chroma.rgb(0, 0, 0),
   antialias: true,

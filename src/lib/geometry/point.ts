@@ -30,4 +30,8 @@ export class Point {
   public set_y(y: number) {
     this.#y = y;
   }
+
+  public distance(point: Point): number {
+    return Math.hypot(this.#x - point.x, this.#y - point.y);
+  }
 }

@@ -1,5 +1,6 @@
 import { Editor } from "../editor/Editor";
-import { Tool } from "./tool";
+import { Tool } from "./Tool";
+
 export class Pen implements Tool {
   public constructor(public editor: Editor) {}
 
