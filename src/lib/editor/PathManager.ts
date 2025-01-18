@@ -11,9 +11,11 @@ export class PathManager {
     this.#paths.set(this.#currentPath.id, this.#currentPath);
   }
 
-  addPath(): void {
+  addPath(): Path {
     const p = new Path();
     this.#paths.set(p.id, p);
+
+    return p;
   }
 
   addPoint(point: Point) {
@@ -26,6 +28,7 @@ export class PathManager {
       point.distance(this.#currentPath.points[0]) < 8
     ) {
       this.#currentPath.close();
+      this.#currentPath = this.addPath();
     }
   }
 

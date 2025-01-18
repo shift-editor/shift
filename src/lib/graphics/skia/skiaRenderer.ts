@@ -102,6 +102,14 @@ export class SkiaRenderer implements IRenderer {
     return p;
   }
 
+  save(): void {
+    this.ctx.canvas.save();
+  }
+
+  restore(): void {
+    this.ctx.canvas.restore();
+  }
+
   flush(): void {
     this.ctx.surface.flush();
   }

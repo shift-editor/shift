@@ -1,6 +1,8 @@
 import { DrawStyle } from "../lib/graphics/styles/style";
 
 export interface IRenderer {
+  save(): void;
+  restore(): void;
   flush(): void;
 
   drawLine(
