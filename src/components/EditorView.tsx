@@ -46,12 +46,14 @@ export const EditorView = () => {
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      className="w-full h-full border border-black"
-    />
+    <>
+      <canvas
+        className={`w-full h-full border border-black cursor-${editor.currentTool.name}`}
+        ref={canvasRef}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+      />
+    </>
   );
 };

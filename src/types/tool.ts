@@ -1,6 +1,7 @@
 import { Editor } from "../lib/editor/Editor";
 
 export interface Tool {
+  name: string;
   editor: Editor;
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void;

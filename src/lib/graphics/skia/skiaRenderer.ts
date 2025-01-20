@@ -114,6 +114,10 @@ export class SkiaRenderer implements IRenderer {
     this.ctx.surface.flush();
   }
 
+  clear(): void {
+    this.ctx.canvas.clear(this.ctx.canvasKit.WHITE);
+  }
+
   drawLine(
     x0: number,
     y0: number,
@@ -190,8 +194,12 @@ export class SkiaRenderer implements IRenderer {
 
   drawPath(style?: Partial<DrawStyle>): void {
     const p = this.getStyledPainter(style);
-
     this.ctx.canvas.drawPath(this.path, p);
+
+    this.path.delete();
+    p.delete();
+
+    this.#path = null;
   }
 
   stroke(): void {

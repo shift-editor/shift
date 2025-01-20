@@ -40,6 +40,10 @@ export class Path {
     return this.#points;
   }
 
+  get lastPoint(): PathPoint {
+    return this.#points[this.#points.length - 1];
+  }
+
   get id(): Ident {
     return this.#id.id;
   }

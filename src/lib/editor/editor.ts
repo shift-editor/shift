@@ -1,7 +1,7 @@
 import { IRenderer } from "../../types/renderer";
+import { Tool } from "../../types/tool";
 import { drawPath } from "../draw/path";
 import { Pen } from "../tools/Pen";
-import { Tool } from "../../types/tool";
 import { CanvasManager } from "./CanvasManager";
 import { PathManager } from "./PathManager";
 
@@ -42,9 +42,14 @@ export class Editor {
   }
 
   public draw() {
+    this.renderer.clear();
+    this.renderer.save();
+
     for (const path of this.pathManager.paths) {
       drawPath(this.renderer, path);
     }
+
+    this.renderer.restore();
     this.renderer.flush();
   }
 }
