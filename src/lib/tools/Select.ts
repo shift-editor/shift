@@ -1,7 +1,9 @@
-import { Tool } from "../../types/tool";
-import { Editor } from "../editor/Editor";
+import { Tool, ToolName } from "../../types/tool";
+import { Editor } from "../editor/editor";
 
 export class Select implements Tool {
+  public readonly name: ToolName = "select";
+
   public constructor(public editor: Editor) {}
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {

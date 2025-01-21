@@ -1,9 +1,9 @@
-import { Tool } from "../../types/tool";
-import { Editor } from "../editor/Editor";
+import { Tool, ToolName } from "../../types/tool";
+import { Editor } from "../editor/editor";
 import { Point } from "../geometry/point";
 
 export class Pen implements Tool {
-  public readonly name: string = "pen";
+  public readonly name: ToolName = "pen";
 
   #isMousedDown: boolean = false;
   #rafId: number | null = null;

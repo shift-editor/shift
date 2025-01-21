@@ -5,9 +5,9 @@ import {
 } from "../lib/graphics/skia/skiaRenderer";
 import { Editor } from "../lib/editor/editor";
 
+
 export const EditorView = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const editorRef = useRef<Editor>(new Editor(canvasRef));
   const editor = editorRef.current;
 
   useEffect(() => {
