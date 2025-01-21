@@ -135,6 +135,9 @@ fn test(name: &str) -> Result<String, String> {
     Ok("HEY FROM THE BACK".into())
 }
 
+#[tauri::command]
+fn system_colour() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

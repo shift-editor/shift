@@ -1,9 +1,9 @@
 import { MouseEventHandler, useEffect, useRef } from "react";
-import { Editor } from "../lib/editor/Editor";
 import {
   SkiaGraphicsContext,
   SkiaRenderer,
 } from "../lib/graphics/skia/skiaRenderer";
+import { Editor } from "../lib/editor/editor";
 
 export const EditorView = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
