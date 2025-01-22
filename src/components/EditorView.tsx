@@ -1,14 +1,13 @@
-import { MouseEventHandler, useEffect, useRef } from "react";
+import { FC, MouseEventHandler, useEffect, useRef, useState } from "react";
 import {
   SkiaGraphicsContext,
   SkiaRenderer,
 } from "../lib/graphics/skia/skiaRenderer";
-import { Editor } from "../lib/editor/editor";
-
+import { Editor } from "../lib/editor/Editor";
 
 export const EditorView = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const editor = editorRef.current;
+  const editorRef = useRef<Editor | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -18,6 +17,7 @@ export const EditorView = () => {
         if (!result.success) {
           return;
         }
+        editorRef.current = Editor.initialize(canvas);
         editorRef.current.renderer = new SkiaRenderer(result.data);
       } catch (error) {
         console.log(error);
@@ -30,25 +30,25 @@ export const EditorView = () => {
   const onMouseDown: MouseEventHandler<HTMLCanvasElement> = (
     e: React.MouseEvent<HTMLCanvasElement>
   ) => {
-    editor.currentTool.onMouseDown(e);
+    editorRef.current?.currentTool.onMouseDown(e);
   };
 
   const onMouseMove: MouseEventHandler<HTMLCanvasElement> = (
     e: React.MouseEvent<HTMLCanvasElement>
   ) => {
-    editor.currentTool.onMouseMove(e);
+    editorRef.current?.currentTool.onMouseMove(e);
   };
 
   const onMouseUp: MouseEventHandler<HTMLCanvasElement> = (
     e: React.MouseEvent<HTMLCanvasElement>
   ) => {
-    editor.currentTool.onMouseUp(e);
+    editorRef.current?.currentTool.onMouseUp(e);
   };
 
   return (
     <>
       <canvas
-        className={`w-full h-full border border-black cursor-${editor.currentTool.name}`}
+        className={`w-full h-full border border-black cursor-${editorRef.current?.currentTool.name}`}
         ref={canvasRef}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}

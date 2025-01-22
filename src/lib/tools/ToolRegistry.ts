@@ -1,5 +1,5 @@
 import { Tool, ToolName } from "../../types/tool";
-import { Editor } from "../editor/editor";
+import { Editor } from "../editor/Editor";
 import { Pen } from "./Pen";
 import { Select } from "./Select";
 

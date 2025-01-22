@@ -1,14 +1,13 @@
 import { Point } from "../geometry/point";
 
 export class CanvasManager {
-  public constructor(private canvasRef: React.RefObject<HTMLCanvasElement>) {}
+  #canvas: HTMLCanvasElement;
+  public constructor(canvas: HTMLCanvasElement) {
+    this.#canvas = canvas;
+  }
 
   get canvas(): HTMLCanvasElement {
-    if (!this.canvasRef.current) {
-      throw new Error("no canvas reference");
-    }
-
-    return this.canvasRef.current;
+    return this.#canvas;
   }
 
   getRelativePosition(e: React.MouseEvent<HTMLCanvasElement>): Point {

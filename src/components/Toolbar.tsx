@@ -1,19 +1,23 @@
 import PenIcon from "../assets/toolbar/pen.svg";
 import SelectIcon from "../assets/toolbar/select.svg";
-import { ToolRegistry } from "../lib/tools/ToolRegistry";
+import AppState from "../store/store";
 
-export interface ToolbarProps {
-  toolRegistry: ToolRegistry;
-}
+export const Toolbar = () => {
+  const setActiveTool = AppState((state) => state.setActiveTool);
 
-export const Toolbar = ({ toolRegistry }: ToolbarProps) => {
   return (
     <main className="flex items-center justify-center w-[100vw] h-[10vh] bg-[#2d2d2d]">
       <section className="flex items-center justify-center gap-2">
-        <div onClick={() => (toolRegistry.activeTool = "select")}>
+        <div
+          className="p-2 hover:bg-gray-700 rounded transition-colors duration-200"
+          onClick={() => setActiveTool("select")}
+        >
           <SelectIcon />
         </div>
-        <div>
+        <div
+          className="p-2 hover:bg-gray-700 rounded transition-colors duration-200"
+          onClick={() => setActiveTool("pen")}
+        >
           <PenIcon />
         </div>
       </section>

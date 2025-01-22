@@ -9,13 +9,28 @@ export class Editor {
   #currentTool: Tool = new Pen(this);
 
   #renderer: IRenderer | null = null;
+  private static instance: Editor | null = null;
 
   #pathManager: PathManager;
   #canvasManager: CanvasManager;
 
-  public constructor(canvasRef: React.RefObject<HTMLCanvasElement>) {
+  private constructor(canvas: HTMLCanvasElement) {
     this.#pathManager = new PathManager();
-    this.#canvasManager = new CanvasManager(canvasRef);
+    this.#canvasManager = new CanvasManager(canvas);
+  }
+
+  public static initialize(canvas: HTMLCanvasElement): Editor {
+    if (!Editor.instance) {
+      Editor.instance = new Editor(canvas);
+    }
+    return Editor.instance;
+  }
+
+  public static getInstance(): Editor {
+    if (!Editor.instance) {
+      throw new Error("Editor not initialized");
+    }
+    return Editor.instance;
   }
 
   get currentTool(): Tool {

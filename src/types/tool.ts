@@ -1,4 +1,4 @@
-import { Editor } from "../lib/editor/editor";
+import { Editor } from "../lib/editor/Editor";
 
 export type ToolName = "select" | "pen";
 export interface Tool {

@@ -1,5 +1,5 @@
 import { Tool, ToolName } from "../../types/tool";
-import { Editor } from "../editor/editor";
+import { Editor } from "../editor/Editor";
 
 export class Select implements Tool {
   public readonly name: ToolName = "select";
