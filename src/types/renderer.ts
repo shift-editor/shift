@@ -5,6 +5,7 @@ export interface IRenderer {
   restore(): void;
   flush(): void;
   clear(): void;
+  dispose(): void;
 
   drawLine(
     x0: number,

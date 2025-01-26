@@ -1,20 +1,19 @@
 import { Tool, ToolName } from "../../types/tool";
-import { Editor } from "../editor/Editor";
 
 export class Select implements Tool {
   public readonly name: ToolName = "select";
 
-  public constructor(public editor: Editor) {}
-
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const p = this.editor.canvasManager.getRelativePosition(e);
+    const { x, y } = e.currentTarget.getBoundingClientRect();
+
+    console.log("select onMouseDown ", e.clientX - x, e.clientY - y);
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const p = this.editor.canvasManager.getRelativePosition(e);
+    console.log("select onMouseUp");
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const p = this.editor.canvasManager.getRelativePosition(e);
+    console.log("select onMouseMove");
   }
 }

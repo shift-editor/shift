@@ -15,16 +15,9 @@ export const drawPath = (ctx: IRenderer, path: Path) => {
 
   ctx.beginPath();
   const segments = path.segments();
-  console.log(segments);
 
   const firstSegment = segments[0];
   ctx.moveTo(firstSegment.anchor.x, firstSegment.anchor.y);
-  if (segments.length === 0) {
-    return;
-  }
-
-  const firstPoint = segments[0].anchor;
-  ctx.moveTo(firstPoint.x, firstPoint.y);
 
   for (let i = 1; i < segments.length; i++) {
     const segment = segments[i];
@@ -46,7 +39,6 @@ export const drawPath = (ctx: IRenderer, path: Path) => {
   }
 
   drawHandles(ctx, path);
-  ctx.restore();
 };
 
 const drawHandles = (ctx: IRenderer, path: Path) => {

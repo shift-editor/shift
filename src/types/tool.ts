@@ -1,9 +1,6 @@
-import { Editor } from "../lib/editor/Editor";
-
 export type ToolName = "select" | "pen";
 export interface Tool {
   name: ToolName;
-  editor: Editor;
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void;
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void;

@@ -1,59 +1,39 @@
-import { FC, MouseEventHandler, useEffect, useRef, useState } from "react";
-import {
-  SkiaGraphicsContext,
-  SkiaRenderer,
-} from "../lib/graphics/skia/skiaRenderer";
 import { Editor } from "../lib/editor/Editor";
+import { CanvasKitRenderer } from "../lib/graphics/backends/CanvasKitRenderer";
+import AppState from "../store/store";
 
-export const EditorView = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const editorRef = useRef<Editor | null>(null);
+export interface EditorViewProps {
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  ctx: React.RefObject<CanvasKitRenderer | null>;
+  editor: React.RefObject<Editor | null>;
+}
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    const initRenderer = async (canvas: HTMLCanvasElement) => {
-      try {
-        const result = await SkiaGraphicsContext.init(canvas);
-        if (!result.success) {
-          return;
-        }
-        editorRef.current = Editor.initialize(canvas);
-        editorRef.current.renderer = new SkiaRenderer(result.data);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    initRenderer(canvasRef.current);
-  }, []);
-
-  const onMouseDown: MouseEventHandler<HTMLCanvasElement> = (
-    e: React.MouseEvent<HTMLCanvasElement>
-  ) => {
-    editorRef.current?.currentTool.onMouseDown(e);
-  };
-
-  const onMouseMove: MouseEventHandler<HTMLCanvasElement> = (
-    e: React.MouseEvent<HTMLCanvasElement>
-  ) => {
-    editorRef.current?.currentTool.onMouseMove(e);
-  };
-
-  const onMouseUp: MouseEventHandler<HTMLCanvasElement> = (
-    e: React.MouseEvent<HTMLCanvasElement>
-  ) => {
-    editorRef.current?.currentTool.onMouseUp(e);
-  };
+export const EditorView = ({ canvasRef, ctx, editor }: EditorViewProps) => {
+  const activeTool = AppState((state) => state.activeTool);
 
   return (
     <>
-      <canvas
-        className={`w-full h-full border border-black cursor-${editorRef.current?.currentTool.name}`}
-        ref={canvasRef}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-      />
+      <main className="w-screen h-screen flex items-center justify-center flex-col p-10">
+        <canvas
+          ref={canvasRef}
+          className={`w-full h-full border border-black cursor-${activeTool}`}
+          onMouseDown={(e) => {
+            if (editor.current) {
+              editor.current.activeTool().onMouseDown(e);
+            }
+          }}
+          // onMouseUp={(e) => {
+          //   if (editor.current) {
+          //     editor.current.activeTool().onMouseUp(e);
+          //   }
+          // }}
+          // onMouseMove={(e) => {
+          //   if (editor.current) {
+          //     editor.current.activeTool().onMouseMove(e);
+          //   }
+          // }}
+        />
+      </main>
     </>
   );
 };
