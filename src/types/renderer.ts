@@ -1,4 +1,4 @@
-import { DrawStyle } from "../lib/graphics/styles/style";
+import { DrawStyle } from "../lib/draw/styles/style";
 
 export interface IRenderer {
   save(): void;

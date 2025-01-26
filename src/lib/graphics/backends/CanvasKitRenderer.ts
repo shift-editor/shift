@@ -1,6 +1,10 @@
 import { Canvas, CanvasKit, Paint, Path, Surface } from "canvaskit-wasm";
 import { IRenderer } from "../../../types/renderer";
-import { DEFAULT_STYLES, DrawStyle, StrokeStyle } from "../styles/style";
+import {
+  DEFAULT_STYLES,
+  DrawStyle,
+  StrokeStyle,
+} from "../../draw/styles/style";
 
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKit;

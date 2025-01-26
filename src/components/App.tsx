@@ -2,19 +2,46 @@ import { useEffect, useRef } from "react";
 import { EditorView } from "./EditorView";
 import { Toolbar } from "./Toolbar";
 import { useCanvasKitRenderer } from "../hooks/useCanvasKitRenderer";
-import { CanvasContext } from "../lib/editor/CanvasContext";
-import { getEditor } from "../lib/editor/Editor";
+import { getEditor } from "../lib/editor/editor";
 
 export const App = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasKit = useCanvasKitRenderer(canvasRef);
-  const canvasCtx = useRef<CanvasContext | null>(null);
   const editor = getEditor();
 
   useEffect(() => {
-    if (canvasRef.current) {
-      canvasCtx.current = new CanvasContext(canvasRef.current);
-    }
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+
+    const updateCanvasSize = (entries: ResizeObserverEntry[]) => {
+      requestAnimationFrame(() => {
+        if (!canvasRef.current || !canvasKit.current) return;
+        const rect = entries[0].contentRect;
+        const canvas = canvasRef.current;
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+
+        canvasKit.current.surface.delete();
+        canvasKit.current.createSurface(canvas);
+
+        canvasKit.current.canvas.scale(dpr, dpr);
+
+        canvasKit.current.drawCircle(10, 10, 10);
+        canvasKit.current.flush();
+      });
+    };
+
+    const observer = new ResizeObserver(updateCanvasSize);
+    observer.observe(canvas);
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   return (

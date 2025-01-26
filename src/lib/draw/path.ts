@@ -2,7 +2,7 @@ import chroma from "chroma-js";
 import { HandleType } from "../../types/handle";
 import { IRenderer } from "../../types/renderer";
 import { Path } from "../core/Path";
-import { StrokeStyle } from "../graphics/styles/style";
+import { StrokeStyle } from "./styles/style";
 import { Handle } from "./Handle";
 
 export const drawPath = (ctx: IRenderer, path: Path) => {
