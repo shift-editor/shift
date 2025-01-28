@@ -3,7 +3,7 @@ import AppState from "../../store/store";
 import { Tool } from "../../types/tool";
 import { tools } from "../tools/tools";
 
-export class Editor {
+export class Scene {
   public constructor() {}
 
   public activeTool(): Tool {
@@ -17,15 +17,15 @@ export class Editor {
   }
 }
 
-export const getEditor = () => {
-  const editorRef = useRef<Editor | null>(null);
+export const getScene = () => {
+  const sceneRef = useRef<Scene | null>(null);
 
-  const editor = () => {
-    if (!editorRef.current) {
-      editorRef.current = new Editor();
+  const scene = () => {
+    if (!sceneRef.current) {
+      sceneRef.current = new Scene();
     }
-    return editorRef;
+    return sceneRef;
   };
 
-  return editor();
+  return scene();
 };

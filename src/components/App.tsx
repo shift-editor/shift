@@ -2,12 +2,15 @@ import { useEffect, useRef } from "react";
 import { EditorView } from "./EditorView";
 import { Toolbar } from "./Toolbar";
 import { useCanvasKitRenderer } from "../hooks/useCanvasKitRenderer";
-import { getEditor } from "../lib/editor/editor";
+import { getScene } from "../lib/editor/Scene";
 
 export const App = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasKit = useCanvasKitRenderer(canvasRef);
-  const editor = getEditor();
+
+  // let's turn editor into a scene
+  // and the scene will triggering a redraw
+  const editor = getScene();
 
   useEffect(() => {
     if (!canvasRef.current) return;
