@@ -5,8 +5,9 @@ import {
   DrawStyle,
   StrokeStyle,
 } from "../../draw/styles/style";
+import { IGraphicContext } from "../GraphicContext";
 
-export class CanvasKitRenderer implements IRenderer {
+export class CanvasKitContext implements IGraphicContext<Surface> {
   #ctx: CanvasKit;
   #surface: Surface | null = null;
 
@@ -18,16 +19,57 @@ export class CanvasKitRenderer implements IRenderer {
     return this.#ctx;
   }
 
-  public createSurface(canvas: HTMLCanvasElement): void {
-    const s = this.#ctx.MakeWebGLCanvasSurface(canvas);
-    this.#surface = s;
-  }
-
   public get surface(): Surface {
     if (!this.#surface) {
       throw new Error("Surface not initialized");
     }
     return this.#surface;
+  }
+
+  public get canvas(): Canvas {
+    if (!this.#surface) {
+      throw new Error("Surface not initialized");
+    }
+    return this.#surface.getCanvas();
+  }
+
+  public createSurface(canvas: HTMLCanvasElement): void {
+    const s = this.#ctx.MakeWebGLCanvasSurface(canvas);
+    this.#surface = s;
+  }
+
+  public recreateSurface(canvas: HTMLCanvasElement): void {
+    this.surface.delete();
+    this.createSurface(canvas);
+  }
+
+  public dispose(): void {
+    this.surface.delete();
+  }
+}
+
+export class CanvasKitRenderer implements IRenderer {
+  #ctx: CanvasKitContext;
+  #surface: Surface | null = null;
+
+  public constructor(ctx: CanvasKitContext) {
+    this.#ctx = ctx;
+  }
+
+  public get ctx(): IGraphicContext<Surface> {
+    return this.#ctx;
+  }
+
+  public createSurface(canvas: HTMLCanvasElement): void {
+    this.#ctx.createSurface(canvas);
+  }
+
+  public recreateSurface(canvas: HTMLCanvasElement): void {
+    this.#ctx.recreateSurface(canvas);
+  }
+
+  public get surface(): Surface {
+    return this.#ctx.surface;
   }
 
   public get canvas(): Canvas {

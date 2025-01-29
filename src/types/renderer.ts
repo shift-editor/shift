@@ -1,6 +1,9 @@
 import { DrawStyle } from "../lib/draw/styles/style";
+import { IGraphicContext, ISurface } from "../lib/graphics/GraphicContext";
 
 export interface IRenderer {
+  ctx: IGraphicContext<ISurface>;
+
   save(): void;
   restore(): void;
   flush(): void;
