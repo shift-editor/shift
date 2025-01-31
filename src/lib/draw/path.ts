@@ -1,8 +1,6 @@
-import chroma from "chroma-js";
 import { HandleType } from "../../types/handle";
 import { IRenderer } from "../../types/graphics";
 import { Path } from "../core/Path";
-import { StrokeStyle } from "./styles/style";
 import { Handle } from "./Handle";
 
 export const drawPath = (ctx: IRenderer, path: Path) => {
@@ -26,16 +24,7 @@ export const drawPath = (ctx: IRenderer, path: Path) => {
 
   if (path.closed) {
     ctx.close();
-    // Fill closed paths
-    ctx.drawPath({
-      strokeStyle: StrokeStyle.Fill,
-      strokeColour: chroma.rgb(0, 0, 0, 0.2), // Semi-transparent fill
-    });
-  } else {
-    // Just stroke for open paths
-    ctx.drawPath({
-      strokeStyle: StrokeStyle.Stroke,
-    });
+    ctx.drawPath();
   }
 
   drawHandles(ctx, path);

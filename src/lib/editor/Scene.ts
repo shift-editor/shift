@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import AppState from "../../store/store";
 import { Tool } from "../../types/tool";
 import { tools } from "../tools/tools";
@@ -25,16 +24,3 @@ export class Scene {
     return tool;
   }
 }
-
-export const getScene = () => {
-  const sceneRef = useRef<Scene | null>(null);
-
-  const scene = () => {
-    if (!sceneRef.current) {
-      sceneRef.current = new Scene();
-    }
-    return sceneRef;
-  };
-
-  return scene();
-};
