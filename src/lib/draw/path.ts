@@ -1,6 +1,6 @@
 import chroma from "chroma-js";
 import { HandleType } from "../../types/handle";
-import { IRenderer } from "../../types/renderer";
+import { IRenderer } from "../../types/graphics";
 import { Path } from "../core/Path";
 import { StrokeStyle } from "./styles/style";
 import { Handle } from "./Handle";

@@ -1,14 +1,12 @@
-import { Scene } from "../lib/editor/Scene";
-import { CanvasKitRenderer } from "../lib/graphics/backends/CanvasKitRenderer";
 import AppState from "../store/store";
+import { IGraphicContext } from "../types/graphics";
 
 export interface EditorViewProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  ctx: React.RefObject<CanvasKitRenderer | null>;
-  scene: React.RefObject<Scene | null>;
+  ctx: React.RefObject<IGraphicContext | null>;
 }
 
-export const EditorView = ({ canvasRef, ctx, scene }: EditorViewProps) => {
+export const EditorView = ({ canvasRef, ctx }: EditorViewProps) => {
   const activeTool = AppState((state) => state.activeTool);
 
   return (
@@ -19,10 +17,11 @@ export const EditorView = ({ canvasRef, ctx, scene }: EditorViewProps) => {
         style={{
           imageRendering: "pixelated",
         }}
-        onMouseDown={(e) => {
-          if (scene.current) {
-            scene.current.activeTool().onMouseDown(e);
-          }
+        onMouseDown={() => {
+          if (!ctx.current) return;
+          const renderer = ctx.current.getContext();
+          renderer.drawCircle(0, 0, 50);
+          renderer.flush();
         }}
       />
     </div>

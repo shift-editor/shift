@@ -1,5 +1,5 @@
 import { HandleType } from "../../types/handle";
-import { IRenderer } from "../../types/renderer";
+import { IRenderer } from "../../types/graphics";
 import { Circle } from "../geometry/circle";
 import { Point } from "../geometry/point";
 import { Rect } from "../geometry/rect";

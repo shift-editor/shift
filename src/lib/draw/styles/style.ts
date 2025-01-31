@@ -1,44 +1,42 @@
-import chroma from "chroma-js";
 import { HandleType } from "../../../types/handle";
 
-export enum StrokeStyle {
-  Stroke,
-  Fill,
-}
 export interface DrawStyle {
-  strokeWidth: number;
-  strokeStyle?: StrokeStyle;
-  strokeColour: chroma.Color;
+  lineWidth: number;
+  strokeStyle: string;
+  fillStyle: string;
   antialias?: boolean;
 }
 
 export const DEFAULT_STYLES: DrawStyle = {
-  strokeWidth: 0.5,
-  strokeStyle: StrokeStyle.Stroke,
-  strokeColour: chroma.rgb(0, 0, 0),
+  lineWidth: 0.5,
+  strokeStyle: "black",
+  fillStyle: "white",
   antialias: true,
 };
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   [HandleType.CORNER]: {
     antialias: false,
-    strokeWidth: 1,
-    strokeColour: chroma.rgb(76, 96, 230),
+    lineWidth: 1,
+    strokeStyle: "black",
+    fillStyle: "white",
   },
   [HandleType.SMOOTH]: {
-    strokeStyle: StrokeStyle.Fill,
-    strokeWidth: 2,
-    strokeColour: chroma.rgb(173, 255, 47),
+    strokeStyle: "green",
+    lineWidth: 2,
+    fillStyle: "white",
     antialias: false,
   },
   [HandleType.CONTROL]: {
     antialias: true,
-    strokeWidth: 1,
-    strokeColour: chroma.rgb(230, 76, 96),
+    lineWidth: 1,
+    strokeStyle: "red",
+    fillStyle: "white",
   },
   [HandleType.DIRECTION]: {
     antialias: false,
-    strokeWidth: 1,
-    strokeColour: chroma.rgb(96, 230, 76),
+    lineWidth: 1,
+    strokeStyle: "blue",
+    fillStyle: "white",
   },
 };

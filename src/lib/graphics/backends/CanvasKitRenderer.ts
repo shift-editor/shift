@@ -1,101 +1,58 @@
 import { Canvas, CanvasKit, Paint, Path, Surface } from "canvaskit-wasm";
-import { IRenderer } from "../../../types/renderer";
-import {
-  DEFAULT_STYLES,
-  DrawStyle,
-  StrokeStyle,
-} from "../../draw/styles/style";
-import { IGraphicContext } from "../GraphicContext";
-
-export class CanvasKitContext implements IGraphicContext<Surface> {
-  #ctx: CanvasKit;
-  #surface: Surface | null = null;
-
-  public constructor(ctx: CanvasKit) {
-    this.#ctx = ctx;
-  }
-
-  public get ctx(): CanvasKit {
-    return this.#ctx;
-  }
-
-  public get surface(): Surface {
-    if (!this.#surface) {
-      throw new Error("Surface not initialized");
-    }
-    return this.#surface;
-  }
-
-  public get canvas(): Canvas {
-    if (!this.#surface) {
-      throw new Error("Surface not initialized");
-    }
-    return this.#surface.getCanvas();
-  }
-
-  public createSurface(canvas: HTMLCanvasElement): void {
-    const s = this.#ctx.MakeWebGLCanvasSurface(canvas);
-    this.#surface = s;
-  }
-
-  public recreateSurface(canvas: HTMLCanvasElement): void {
-    this.surface.delete();
-    this.createSurface(canvas);
-  }
-
-  public dispose(): void {
-    this.surface.delete();
-  }
-}
+import { IGraphicContext, IRenderer } from "../../../types/graphics";
+import { DEFAULT_STYLES, DrawStyle } from "../../draw/styles/style";
+import chroma from "chroma-js";
 
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
-  #surface: Surface | null = null;
+  #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
+  #path: Path | null = null;
 
   public constructor(ctx: CanvasKitContext) {
     this.#ctx = ctx;
   }
 
-  public get ctx(): IGraphicContext<Surface> {
+  public get ctx(): CanvasKitContext {
     return this.#ctx;
   }
 
-  public createSurface(canvas: HTMLCanvasElement): void {
-    this.#ctx.createSurface(canvas);
-  }
-
-  public recreateSurface(canvas: HTMLCanvasElement): void {
-    this.#ctx.recreateSurface(canvas);
-  }
-
-  public get surface(): Surface {
-    return this.#ctx.surface;
-  }
-
   public get canvas(): Canvas {
-    if (!this.#surface) {
-      throw new Error("Surface not initialized");
-    }
-    return this.#surface.getCanvas();
+    return this.#ctx.canvas;
   }
 
-  private getStyledPainter(style: Partial<DrawStyle> = {}): Paint {
-    const finalStyle = { ...DEFAULT_STYLES, ...style };
-    const p = new this.ctx.Paint();
+  public get lineWidth(): number {
+    return this.#currentStyle.lineWidth;
+  }
 
-    p.setStrokeWidth(finalStyle.strokeWidth);
+  public get strokeStyle(): string {
+    return this.#currentStyle.strokeStyle;
+  }
 
-    const paintStyle = this.ctx.PaintStyle;
-    const strokeStyle =
-      finalStyle.strokeStyle == StrokeStyle.Fill
-        ? paintStyle.Fill
-        : paintStyle.Stroke;
+  public get fillStyle(): string {
+    return this.#currentStyle.fillStyle;
+  }
 
-    p.setStyle(strokeStyle);
-    const [r, g, b] = finalStyle.strokeColour.rgb();
-    p.setColor(this.ctx.Color4f(r / 255, g / 255, b / 255, 1.0));
+  public set lineWidth(width: number) {
+    this.#currentStyle.lineWidth = width;
+  }
 
-    p.setAntiAlias(finalStyle.antialias ?? true);
+  public set strokeStyle(style: string) {
+    this.#currentStyle.strokeStyle = style;
+  }
+
+  public set fillStyle(style: string) {
+    this.#currentStyle.fillStyle = style;
+  }
+
+  private getPaint(): Paint {
+    const p = new this.ctx.canvasKit.Paint();
+
+    p.setStrokeWidth(this.#currentStyle.lineWidth);
+
+    const [r, g, b] = chroma(this.#currentStyle.strokeStyle).rgb();
+    p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, 1.0));
+
+    p.setAntiAlias(this.#currentStyle.antialias ?? true);
 
     return p;
   }
@@ -109,57 +66,44 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   flush(): void {
-    this.surface.flush();
+    console.log("flush");
+    this.#ctx.surface.flush();
   }
 
   clear(): void {
-    this.canvas.clear(this.#ctx.WHITE);
+    this.canvas.clear(this.ctx.canvasKit.WHITE);
   }
 
   dispose(): void {
-    this.surface.delete();
+    this.#ctx.surface.delete();
     this.canvas.delete();
   }
 
-  drawLine(
-    x0: number,
-    y0: number,
-    x1: number,
-    y1: number,
-    style?: Partial<DrawStyle>
-  ): void {
-    const p = this.getStyledPainter(style);
+  drawLine(x0: number, y0: number, x1: number, y1: number): void {
+    const p = this.getPaint();
     this.canvas.drawLine(x0, y0, x1, y1, p);
+    p.delete();
   }
 
-  drawRect(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    style?: Partial<DrawStyle>
-  ): void {
-    const p = this.getStyledPainter(style);
+  drawRect(x: number, y: number, width: number, height: number): void {
+    const p = this.getPaint();
 
-    const rect = this.ctx.XYWHRect(x, y, width, height);
+    const rect = this.#ctx.canvasKit.XYWHRect(x, y, width, height);
     this.canvas.drawRect(rect, p);
+
+    p.delete();
   }
 
-  drawCircle(
-    x: number,
-    y: number,
-    radius: number,
-    style?: Partial<DrawStyle>
-  ): void {
-    const p = this.getStyledPainter(style);
+  drawCircle(x: number, y: number, radius: number): void {
+    const p = this.getPaint();
 
     this.canvas.drawCircle(x, y, radius, p);
+
+    p.delete();
   }
 
-  #path: Path | null = null;
-
   beginPath(): void {
-    this.#path = new this.ctx.Path();
+    this.#path = new this.#ctx.canvasKit.Path();
   }
 
   get path(): Path {
@@ -195,8 +139,8 @@ export class CanvasKitRenderer implements IRenderer {
     this.path.close();
   }
 
-  drawPath(style?: Partial<DrawStyle>): void {
-    const p = this.getStyledPainter(style);
+  drawPath(): void {
+    const p = this.getPaint();
     this.canvas.drawPath(this.path, p);
 
     this.path.delete();
@@ -207,5 +151,56 @@ export class CanvasKitRenderer implements IRenderer {
 
   stroke(): void {
     this.path.stroke();
+  }
+
+  scale(x: number, y: number): void {
+    this.canvas.scale(x, y);
+  }
+}
+
+export class CanvasKitContext implements IGraphicContext {
+  #canvasKit: CanvasKit;
+  #ctx: CanvasKitRenderer;
+  #surface: Surface | null = null;
+
+  public constructor(canvasKit: CanvasKit) {
+    this.#canvasKit = canvasKit;
+    this.#ctx = new CanvasKitRenderer(this);
+  }
+
+  public get canvasKit(): CanvasKit {
+    return this.#canvasKit;
+  }
+
+  public getContext(): CanvasKitRenderer {
+    return this.#ctx;
+  }
+
+  public get surface(): Surface {
+    if (!this.#surface) {
+      throw new Error("Surface not initialized");
+    }
+    return this.#surface;
+  }
+
+  public get canvas(): Canvas {
+    if (!this.#surface) {
+      throw new Error("Surface not initialized");
+    }
+    return this.#surface.getCanvas();
+  }
+
+  public createSurface(canvas: HTMLCanvasElement): void {
+    const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas);
+    this.#surface = s;
+  }
+
+  public recreateSurface(canvas: HTMLCanvasElement): void {
+    this.surface.delete();
+    this.createSurface(canvas);
+  }
+
+  public dispose(): void {
+    this.surface.delete();
   }
 }

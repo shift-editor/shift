@@ -1,15 +1,15 @@
 import { create } from "zustand";
 import { ToolName } from "../types/tool";
-import { PathManager } from "../lib/editor/PathManager";
+import { Scene } from "../lib/editor/Scene";
 
 interface AppState {
-  pathManager: PathManager;
+  scene: Scene;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
 }
 
 const AppState = create<AppState>()((set) => ({
-  pathManager: new PathManager(),
+  scene: new Scene(),
   activeTool: "select",
   setActiveTool: (tool: ToolName) => set({ activeTool: tool }),
 }));
