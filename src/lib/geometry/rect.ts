@@ -15,7 +15,7 @@ export class Rect extends Shape {
     left: number,
     top: number,
     right: number,
-    bottom: number
+    bottom: number,
   ): Rect {
     // TODO: check that it's a valid rectangle
     return new Rect(left, top, right - left, bottom - top);

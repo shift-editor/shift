@@ -12,7 +12,7 @@ export const InteractiveScene = ({ canvasRef, ctx }: InteractiveSceneProps) => {
   return (
     <canvas
       ref={canvasRef}
-      className={`w-full h-full border border-black cursor-${activeTool} absolute inset-0`}
+      className={`h-full w-full cursor-${activeTool} absolute inset-0`}
       style={{
         imageRendering: "pixelated",
       }}
@@ -20,7 +20,6 @@ export const InteractiveScene = ({ canvasRef, ctx }: InteractiveSceneProps) => {
         if (!canvasRef.current) return;
         const rect = canvasRef.current.getBoundingClientRect();
         const canvasContext = AppState.getState().canvasContext;
-        console.log(e.clientX, e.clientY);
         canvasContext.mouseX = e.clientX - rect.left;
         canvasContext.mouseY = e.clientY - rect.top;
       }}

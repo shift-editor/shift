@@ -1,7 +1,6 @@
 import { Point } from "./point";
 
 export abstract class Shape {
-  
   #x: number;
   #y: number;
   #position: Point;

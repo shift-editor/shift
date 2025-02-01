@@ -1,16 +1,17 @@
 import { useEffect, useRef } from "react";
+
 import { EditorView } from "./EditorView";
 import { Toolbar } from "./Toolbar";
 import { useGraphicsContext } from "../hooks/useGraphicsContext";
-import AppState from "../store/store";
 import { dprWH } from "../lib/utils/utils";
+import AppState from "../store/store";
 
 export const App = () => {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
   const { interactiveContextRef, staticContextRef } = useGraphicsContext(
     interactiveCanvasRef,
-    staticCanvasRef
+    staticCanvasRef,
   );
 
   useEffect(() => {

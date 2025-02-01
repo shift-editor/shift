@@ -9,7 +9,7 @@ export const StaticScene = ({ canvasRef, ctx }: StaticSceneProps) => {
   return (
     <canvas
       ref={canvasRef}
-      className="w-full h-full absolute inset-0"
+      className="absolute inset-0 h-full w-full"
       style={{ imageRendering: "pixelated" }}
     />
   );

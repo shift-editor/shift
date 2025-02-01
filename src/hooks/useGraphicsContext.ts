@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
-import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
+
 import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
-import { IGraphicContext } from "../types/graphics";
-import AppState from "../store/store";
+
+import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
 import { dprWH } from "../lib/utils/utils";
+import AppState from "../store/store";
+import { IGraphicContext } from "../types/graphics";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -13,7 +15,7 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
 
 export const useGraphicsContext = (
   staticCanvas: React.RefObject<HTMLCanvasElement | null>,
-  interactiveCanvas: React.RefObject<HTMLCanvasElement | null>
+  interactiveCanvas: React.RefObject<HTMLCanvasElement | null>,
 ): {
   interactiveContextRef: React.RefObject<IGraphicContext | null>;
   staticContextRef: React.RefObject<IGraphicContext | null>;

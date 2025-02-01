@@ -1,7 +1,7 @@
-import { HandleType } from "../../types/handle";
-import { IRenderer } from "../../types/graphics";
-import { Path } from "../core/Path";
 import { Handle } from "./Handle";
+import { IRenderer } from "../../types/graphics";
+import { HandleType } from "../../types/handle";
+import { Path } from "../core/Path";
 
 export const drawPath = (ctx: IRenderer, path: Path) => {
   if (path.points.length == 0) return;

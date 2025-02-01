@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+
 import AppState from "../store/store";
 
 export const Metrics = () => {
@@ -20,7 +21,7 @@ export const Metrics = () => {
   }, []);
 
   return (
-    <div className="absolute bottom-2 left-5 grid grid-cols-2 p-2 text-sm max-w-fit border border-black">
+    <div className="absolute bottom-2 left-5 grid max-w-fit grid-cols-2 border border-black p-2 text-sm">
       <div>x</div>
       <div ref={xRef}></div>
       <div>y</div>

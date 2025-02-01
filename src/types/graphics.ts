@@ -23,7 +23,7 @@ export interface IRenderer {
     cpx2: number,
     cpy2: number,
     x: number,
-    y: number
+    y: number,
   ): void;
 
   close(): void;

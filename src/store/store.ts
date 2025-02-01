@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import { ToolName } from "../types/tool";
-import { Scene } from "../lib/editor/Scene";
+
 import { CanvasContext } from "../lib/editor/CanvasContext";
+import { Scene } from "../lib/editor/Scene";
+import { ToolName } from "../types/tool";
 
 interface AppState {
   upm: number;

@@ -1,6 +1,6 @@
+import { EntityId, Ident } from "./EntityId";
 import { Segment } from "../../types/segments";
 import { Point } from "../geometry/point";
-import { EntityId, Ident } from "./EntityId";
 
 export type PointType = "onCurve" | "offCurve";
 export class PathPoint extends Point {

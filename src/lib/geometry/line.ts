@@ -23,7 +23,7 @@ export class Line {
     this.#endPoint = new Point(x1, y1);
 
     this.#length = Math.sqrt(
-      Math.pow(this.#x1 - this.#x0, 2) + Math.pow(this.#y0 - this.#y1, 2)
+      Math.pow(this.#x1 - this.#x0, 2) + Math.pow(this.#y0 - this.#y1, 2),
     );
   }
 

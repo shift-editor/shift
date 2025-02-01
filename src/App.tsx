@@ -4,7 +4,7 @@ import { App } from "./components/App";
 
 export const AppWrapper = () => {
   return (
-    <div className="w-screen h-screen flex items-center justify-center flex-col">
+    <div className="flex h-screen w-screen flex-col items-center justify-center">
       <App />
     </div>
   );

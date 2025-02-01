@@ -1,7 +1,7 @@
-import { IGraphicContext } from "../types/graphics";
 import { InteractiveScene } from "./InteractiveScene";
 import { Metrics } from "./Metrics";
 import { StaticScene } from "./StaticScene";
+import { IGraphicContext } from "../types/graphics";
 
 export interface EditorViewProps {
   interactiveCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -17,7 +17,7 @@ export const EditorView = ({
   staticContextRef,
 }: EditorViewProps) => {
   return (
-    <div className="w-full h-full overflow-hidden relative">
+    <div className="relative h-full w-full overflow-hidden">
       <StaticScene canvasRef={staticCanvasRef} ctx={staticContextRef} />
       <InteractiveScene
         canvasRef={interactiveCanvasRef}

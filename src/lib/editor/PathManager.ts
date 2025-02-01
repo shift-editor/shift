@@ -20,7 +20,7 @@ export class PathManager {
 
   addPoint(point: Point) {
     this.#currentPath.points.push(
-      new PathPoint(point.x, point.y, "onCurve", this.#currentPath.id)
+      new PathPoint(point.x, point.y, "onCurve", this.#currentPath.id),
     );
 
     if (

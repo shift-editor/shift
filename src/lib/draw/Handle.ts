@@ -1,5 +1,5 @@
-import { HandleType } from "../../types/handle";
 import { IRenderer } from "../../types/graphics";
+import { HandleType } from "../../types/handle";
 import { Circle } from "../geometry/circle";
 import { Point } from "../geometry/point";
 import { Rect } from "../geometry/rect";
@@ -29,7 +29,7 @@ export class Handle {
   constructor(
     position: Point,
     type: HandleType,
-    style: Partial<DrawStyle> = {}
+    style: Partial<DrawStyle> = {},
   ) {
     this.#position = position;
     this.#type = type;
@@ -68,7 +68,7 @@ export class Handle {
           this.#position.y - rect.height / 2,
           5,
           5,
-          style
+          style,
         );
         break;
 
@@ -79,7 +79,7 @@ export class Handle {
           this.#position.x,
           this.#position.y,
           circleSmooth.radius,
-          style
+          style,
         );
         break;
 
@@ -90,7 +90,7 @@ export class Handle {
           this.#position.x,
           this.#position.y,
           circleControl.radius,
-          style
+          style,
         );
         break;
 

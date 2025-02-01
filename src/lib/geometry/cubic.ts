@@ -10,7 +10,7 @@ export class Cubic {
     start: Point,
     end: Point,
     controlPointOne: Point,
-    controlPointTwo: Point
+    controlPointTwo: Point,
   ) {
     this.#start = start;
     this.#end = end;

@@ -1,9 +1,7 @@
-import { Tool } from "../../types/tool";
-
-import { ToolName } from "../../types/tool";
 import { Hand } from "./Hand";
 import { Pen } from "./Pen";
 import { Select } from "./Select";
+import { ToolName, Tool } from "../../types/tool";
 
 export const tools = new Map<ToolName, Tool>();
 

@@ -1,7 +1,8 @@
 import { Canvas, CanvasKit, Paint, Path, Surface } from "canvaskit-wasm";
+import chroma from "chroma-js";
+
 import { IGraphicContext, IRenderer } from "../../../types/graphics";
 import { DEFAULT_STYLES, DrawStyle } from "../../draw/styles/style";
-import chroma from "chroma-js";
 
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
@@ -107,7 +108,7 @@ export class CanvasKitRenderer implements IRenderer {
   get path(): Path {
     if (!this.#path) {
       console.warn(
-        "Path operation called without beginPath(), creating new path"
+        "Path operation called without beginPath(), creating new path",
       );
       this.beginPath();
     }
@@ -128,7 +129,7 @@ export class CanvasKitRenderer implements IRenderer {
     cpx2: number,
     cpy2: number,
     x: number,
-    y: number
+    y: number,
   ): void {
     this.path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }

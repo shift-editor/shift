@@ -1,7 +1,7 @@
 // debounce
 export function debounce<T extends (...args: any[]) => void>(
   func: T,
-  wait: number
+  wait: number,
 ): (...args: Parameters<T>) => void {
   let timeout: NodeJS.Timeout | null = null;
 
@@ -20,7 +20,7 @@ export function debounce<T extends (...args: any[]) => void>(
 // throttle
 export function throttle<T extends (...args: any[]) => void>(
   func: T,
-  wait: number
+  wait: number,
 ): T {
   let lastCallTime: number | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -55,7 +55,7 @@ export function throttle<T extends (...args: any[]) => void>(
 }
 
 export function throttleRAF<T extends (...args: any[]) => void>(
-  callback: T
+  callback: T,
 ): T {
   let queued = false;
   let lastArgs: Parameters<T> | null = null;
