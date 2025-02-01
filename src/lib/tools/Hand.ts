@@ -1,7 +1,7 @@
 import { Tool, ToolName } from "../../types/tool";
 
-export class Pen implements Tool {
-  public readonly name: ToolName = "pen";
+export class Hand implements Tool {
+  public readonly name: ToolName = "hand";
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {}
 

@@ -2,11 +2,7 @@ import { Segment } from "../../types/segments";
 import { Point } from "../geometry/point";
 import { EntityId, Ident } from "./EntityId";
 
-export enum PointType {
-  OnCurve,
-  OffCurve,
-}
-
+export type PointType = "onCurve" | "offCurve";
 export class PathPoint extends Point {
   #id: EntityId;
   #type: PointType;
@@ -54,7 +50,7 @@ export class Path {
     let i = 0;
     while (i < this.#points.length) {
       const point = this.#points[i];
-      if (point.type === PointType.OnCurve) {
+      if (point.type === "onCurve") {
         segments.push({
           type: "line",
           anchor: point,

@@ -2,36 +2,43 @@ import { useEffect, useRef } from "react";
 import { EditorView } from "./EditorView";
 import { Toolbar } from "./Toolbar";
 import { useGraphicsContext } from "../hooks/useGraphicsContext";
-
-const UPM = 1000;
-const CANVAS_PADDING = 200;
+import AppState from "../store/store";
+import { dprWH } from "../lib/utils/utils";
 
 export const App = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const ctx = useGraphicsContext(canvasRef);
+  const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const staticCanvasRef = useRef<HTMLCanvasElement>(null);
+  const { interactiveContextRef, staticContextRef } = useGraphicsContext(
+    interactiveCanvasRef,
+    staticCanvasRef
+  );
 
   useEffect(() => {
     const updateCanvasSize = (entries: ResizeObserverEntry[]) => {
-      if (!canvasRef.current || !ctx.current) return;
+      if (!interactiveCanvasRef.current || !interactiveContextRef.current)
+        return;
+
+      const ctx = interactiveContextRef.current;
       const rect = entries[0].contentRect;
-      const canvas = canvasRef.current;
+      const canvas = interactiveCanvasRef.current;
 
-      const dpr = window.devicePixelRatio || 1;
-      const displayWidth = Math.floor(rect.width * dpr);
-      const displayHeight = Math.floor(rect.height * dpr);
+      const { width, height, dpr } = dprWH(rect.width, rect.height);
 
-      canvas.width = displayWidth;
-      canvas.height = displayHeight;
+      canvas.width = width;
+      canvas.height = height;
 
-      ctx.current.recreateSurface(canvas);
-      const renderer = ctx.current.getContext();
+      AppState.getState().scene.width = width;
+      AppState.getState().scene.height = height;
+
+      ctx.recreateSurface(canvas);
+      const renderer = ctx.getContext();
       renderer.scale(dpr, dpr);
     };
 
-    if (!canvasRef.current) return;
+    if (!interactiveCanvasRef.current) return;
 
     const observer = new ResizeObserver(updateCanvasSize);
-    observer.observe(canvasRef.current);
+    observer.observe(interactiveCanvasRef.current);
 
     return () => {
       observer.disconnect();
@@ -41,7 +48,12 @@ export const App = () => {
   return (
     <>
       <Toolbar />
-      <EditorView canvasRef={canvasRef} ctx={ctx} />
+      <EditorView
+        interactiveCanvasRef={interactiveCanvasRef}
+        staticCanvasRef={staticCanvasRef}
+        interactiveContextRef={interactiveContextRef}
+        staticContextRef={staticContextRef}
+      />
     </>
   );
 };

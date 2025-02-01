@@ -1,5 +1,5 @@
 import { Ident } from "../core/EntityId";
-import { Path, PathPoint, PointType } from "../core/Path";
+import { Path, PathPoint } from "../core/Path";
 import { Point } from "../geometry/point";
 
 export class PathManager {
@@ -20,7 +20,7 @@ export class PathManager {
 
   addPoint(point: Point) {
     this.#currentPath.points.push(
-      new PathPoint(point.x, point.y, PointType.OnCurve, this.#currentPath.id)
+      new PathPoint(point.x, point.y, "onCurve", this.#currentPath.id)
     );
 
     if (

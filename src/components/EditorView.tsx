@@ -3,15 +3,25 @@ import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 
 export interface EditorViewProps {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  ctx: React.RefObject<IGraphicContext | null>;
+  interactiveCanvasRef: React.RefObject<HTMLCanvasElement | null>;
+  staticCanvasRef: React.RefObject<HTMLCanvasElement | null>;
+  interactiveContextRef: React.RefObject<IGraphicContext | null>;
+  staticContextRef: React.RefObject<IGraphicContext | null>;
 }
 
-export const EditorView = ({ canvasRef, ctx }: EditorViewProps) => {
+export const EditorView = ({
+  interactiveCanvasRef,
+  staticCanvasRef,
+  interactiveContextRef,
+  staticContextRef,
+}: EditorViewProps) => {
   return (
     <div className="w-full h-full overflow-hidden relative">
-      <StaticScene />
-      <InteractiveScene canvasRef={canvasRef} ctx={ctx} />
+      <StaticScene canvasRef={staticCanvasRef} ctx={staticContextRef} />
+      <InteractiveScene
+        canvasRef={interactiveCanvasRef}
+        ctx={interactiveContextRef}
+      />
     </div>
   );
 };

@@ -5,6 +5,8 @@ import { PathManager } from "./PathManager";
 
 export class Scene {
   #pathManager: PathManager;
+  #width: number = 0;
+  #height: number = 0;
 
   public constructor() {
     this.#pathManager = new PathManager();
@@ -12,6 +14,30 @@ export class Scene {
 
   public getPathManager(): PathManager {
     return this.#pathManager;
+  }
+
+  public get width(): number {
+    return this.#width;
+  }
+
+  public get height(): number {
+    return this.#height;
+  }
+
+  public set width(width: number) {
+    if (width < 0) {
+      throw new Error("Width cannot be negative");
+    }
+
+    this.#width = width;
+  }
+
+  public set height(height: number) {
+    if (height < 0) {
+      throw new Error("Height cannot be negative");
+    }
+
+    this.#height = height;
   }
 
   public activeTool(): Tool {

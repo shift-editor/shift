@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
 import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
 import { IGraphicContext } from "../types/graphics";
+import AppState from "../store/store";
+import { dprWH } from "../lib/utils/utils";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -10,35 +12,59 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
 };
 
 export const useGraphicsContext = (
-  canvas: React.RefObject<HTMLCanvasElement | null>
-): React.RefObject<IGraphicContext | null> => {
-  const contextRef = useRef<IGraphicContext | null>(null);
+  staticCanvas: React.RefObject<HTMLCanvasElement | null>,
+  interactiveCanvas: React.RefObject<HTMLCanvasElement | null>
+): {
+  interactiveContextRef: React.RefObject<IGraphicContext | null>;
+  staticContextRef: React.RefObject<IGraphicContext | null>;
+} => {
+  const interactiveContextRef = useRef<IGraphicContext | null>(null);
+  const staticContextRef = useRef<IGraphicContext | null>(null);
 
   useEffect(() => {
-    const initCanvasKitContext = async () => {
-      if (!canvas.current) return;
-      const canvasKit = await initCanvasKit();
+    const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
-      const rect = canvas.current.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
 
-      const dpr = window.devicePixelRatio || 1;
-      const displayWidth = Math.floor(rect.width * dpr);
-      const displayHeight = Math.floor(rect.height * dpr);
+      const { width, height, dpr } = dprWH(rect.width, rect.height);
 
-      canvas.current.width = displayWidth;
-      canvas.current.height = displayHeight;
+      canvas.width = width;
+      canvas.height = height;
 
-      ctx.createSurface(canvas.current);
+      AppState.getState().scene.width = width;
+      AppState.getState().scene.height = height;
+
+      ctx.createSurface(canvas);
 
       const renderer = ctx.getContext();
       renderer.scale(dpr, dpr);
 
-      contextRef.current = ctx;
+      interactiveContextRef.current = ctx;
     };
 
-    initCanvasKitContext();
+    const setUpCanvas = async ({
+      interactiveCanvas,
+      staticCanvas,
+    }: {
+      interactiveCanvas: HTMLCanvasElement;
+      staticCanvas: HTMLCanvasElement;
+    }) => {
+      const canvasKit = await initCanvasKit();
+      initCanvas(canvasKit, interactiveCanvas);
+      initCanvas(canvasKit, staticCanvas);
+    };
+
+    if (!interactiveCanvas.current || !staticCanvas.current) return;
+
+    setUpCanvas({
+      interactiveCanvas: interactiveCanvas.current,
+      staticCanvas: staticCanvas.current,
+    });
   }, []);
 
-  return contextRef;
+  return {
+    interactiveContextRef,
+    staticContextRef,
+  };
 };

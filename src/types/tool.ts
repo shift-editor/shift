@@ -1,4 +1,4 @@
-export type ToolName = "select" | "pen";
+export type ToolName = "select" | "pen" | "hand";
 export interface Tool {
   name: ToolName;
 

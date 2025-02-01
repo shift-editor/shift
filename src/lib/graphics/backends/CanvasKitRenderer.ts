@@ -96,9 +96,7 @@ export class CanvasKitRenderer implements IRenderer {
 
   drawCircle(x: number, y: number, radius: number): void {
     const p = this.getPaint();
-
     this.canvas.drawCircle(x, y, radius, p);
-
     p.delete();
   }
 

@@ -19,7 +19,10 @@ export const InteractiveScene = ({ canvasRef, ctx }: InteractiveSceneProps) => {
       onMouseDown={() => {
         if (!ctx.current) return;
         const renderer = ctx.current.getContext();
-        renderer.drawCircle(0, 0, 50);
+        const scene = AppState.getState().scene;
+        const width = scene.width;
+        const height = scene.height;
+        renderer.drawCircle(width / 2, height / 2, 50);
         renderer.flush();
       }}
     />

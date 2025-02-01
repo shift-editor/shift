@@ -18,7 +18,6 @@ export function debounce<T extends (...args: any[]) => void>(
 }
 
 // throttle
-
 export function throttle<T extends (...args: any[]) => void>(
   func: T,
   wait: number
@@ -78,3 +77,18 @@ export function throttleRAF<T extends (...args: any[]) => void>(
     }
   } as T;
 }
+
+/**
+ * Returns the width and height of the canvas, taking into account the device pixel ratio.
+ * @param w - The width of the canvas.
+ * @param h - The height of the canvas.
+ * @returns The width and height of the canvas, taking into account the device pixel ratio.
+ */
+export const dprWH = (w: number, h: number) => {
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    dpr,
+    width: w * dpr,
+    height: h * dpr,
+  };
+};
