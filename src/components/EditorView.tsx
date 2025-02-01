@@ -1,5 +1,6 @@
 import { IGraphicContext } from "../types/graphics";
 import { InteractiveScene } from "./InteractiveScene";
+import { Metrics } from "./Metrics";
 import { StaticScene } from "./StaticScene";
 
 export interface EditorViewProps {
@@ -22,6 +23,7 @@ export const EditorView = ({
         canvasRef={interactiveCanvasRef}
         ctx={interactiveContextRef}
       />
+      <Metrics />
     </div>
   );
 };

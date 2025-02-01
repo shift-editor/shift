@@ -16,14 +16,13 @@ export const InteractiveScene = ({ canvasRef, ctx }: InteractiveSceneProps) => {
       style={{
         imageRendering: "pixelated",
       }}
-      onMouseDown={() => {
-        if (!ctx.current) return;
-        const renderer = ctx.current.getContext();
-        const scene = AppState.getState().scene;
-        const width = scene.width;
-        const height = scene.height;
-        renderer.drawCircle(width / 2, height / 2, 50);
-        renderer.flush();
+      onMouseMove={(e) => {
+        if (!canvasRef.current) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const canvasContext = AppState.getState().canvasContext;
+        console.log(e.clientX, e.clientY);
+        canvasContext.mouseX = e.clientX - rect.left;
+        canvasContext.mouseY = e.clientY - rect.top;
       }}
     />
   );

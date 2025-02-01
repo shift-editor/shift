@@ -32,8 +32,8 @@ export const useGraphicsContext = (
       canvas.width = width;
       canvas.height = height;
 
-      AppState.getState().scene.width = width;
-      AppState.getState().scene.height = height;
+      AppState.getState().canvasContext.width = width;
+      AppState.getState().canvasContext.height = height;
 
       ctx.createSurface(canvas);
 
