@@ -60,50 +60,40 @@ export class Handle {
 
   draw(renderer: IRenderer): void {
     let style;
+    let rect;
+    let circle;
+    let triangle;
+
     switch (this.#type) {
       case HandleType.CORNER:
-        const rect = this.#shape as Rect;
+        rect = this.#shape as Rect;
         renderer.drawRect(
           this.#position.x - rect.width / 2,
           this.#position.y - rect.height / 2,
           5,
           5,
-          style,
         );
         break;
 
       case HandleType.SMOOTH:
-        const circleSmooth = this.#shape as Circle;
-        style = { ...HANDLE_STYLES[this.#type], ...this.#style };
-        renderer.drawCircle(
-          this.#position.x,
-          this.#position.y,
-          circleSmooth.radius,
-          style,
-        );
+        circle = this.#shape as Circle;
+        renderer.drawCircle(this.#position.x, this.#position.y, circle.radius);
         break;
 
       case HandleType.CONTROL:
-        const circleControl = this.#shape as Circle;
-        style = { ...HANDLE_STYLES[this.#type], ...this.#style };
-        renderer.drawCircle(
-          this.#position.x,
-          this.#position.y,
-          circleControl.radius,
-          style,
-        );
+        circle = this.#shape as Circle;
+        renderer.drawCircle(this.#position.x, this.#position.y, circle.radius);
         break;
 
       case HandleType.DIRECTION:
-        const triangle = this.#shape as Triangle;
-        style = { ...HANDLE_STYLES[HandleType.DIRECTION], ...this.#style };
+        triangle = this.#shape as Triangle;
 
         renderer.beginPath();
         renderer.moveTo(triangle.vertices[0].x, triangle.vertices[0].x); // tip
         renderer.lineTo(triangle.vertices[1].x, triangle.vertices[1].x); // left
         renderer.lineTo(triangle.vertices[2].x, triangle.vertices[2].x); // left
         renderer.close();
-        renderer.drawPath(style);
+        renderer.drawPath();
 
         break;
       default:

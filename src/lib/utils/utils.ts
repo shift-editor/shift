@@ -1,83 +1,6 @@
-// debounce
-export function debounce<T extends (...args: any[]) => void>(
-  func: T,
-  wait: number,
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+import { IGraphicContext } from "../../types/graphics";
 
-  return (...args: Parameters<T>) => {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-
-    timeout = setTimeout(() => {
-      func(...args);
-      timeout = null;
-    }, wait);
-  };
-}
-
-// throttle
-export function throttle<T extends (...args: any[]) => void>(
-  func: T,
-  wait: number,
-): T {
-  let lastCallTime: number | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let lastArgs: Parameters<T> | null = null;
-  let lastContext: any;
-
-  return function (this: any, ...args: Parameters<T>) {
-    const now = Date.now();
-
-    // If first call or enough time has passed, invoke the function
-    if (lastCallTime == null || now - lastCallTime >= wait) {
-      func.apply(this, args);
-      lastCallTime = now;
-    } else {
-      // Otherwise, save the arguments/context for the next available slot
-      lastArgs = args;
-      lastContext = this;
-
-      // If no timeout is active, set one that will invoke the function later
-      if (!timeoutId) {
-        const remaining = wait - (now - lastCallTime);
-        timeoutId = setTimeout(() => {
-          func.apply(lastContext, lastArgs as Parameters<T>);
-          lastArgs = null;
-          lastContext = null;
-          lastCallTime = Date.now();
-          timeoutId = null;
-        }, remaining);
-      }
-    }
-  } as T;
-}
-
-export function throttleRAF<T extends (...args: any[]) => void>(
-  callback: T,
-): T {
-  let queued = false;
-  let lastArgs: Parameters<T> | null = null;
-  let lastContext: any = null;
-
-  return function (this: any, ...args: Parameters<T>) {
-    lastArgs = args;
-    lastContext = this;
-
-    // If there's already a requestAnimationFrame queued, just update the args
-    if (!queued) {
-      queued = true;
-      requestAnimationFrame(() => {
-        callback.apply(lastContext, lastArgs as Parameters<T>);
-        queued = false;
-        lastArgs = null;
-        lastContext = null;
-      });
-    }
-  } as T;
-}
-
+// canvas
 /**
  * Returns the width and height of the canvas, taking into account the device pixel ratio.
  * @param w - The width of the canvas.
@@ -91,4 +14,25 @@ export const dprWH = (w: number, h: number) => {
     width: w * dpr,
     height: h * dpr,
   };
+};
+
+/**
+ * Scales the canvas to the device pixel ratio.
+ * @param canvas - The canvas to scale.
+ * @param ctx - The graphics context.
+ */
+export const scaleCanvasDPR = (
+  canvas: HTMLCanvasElement,
+  ctx: IGraphicContext,
+) => {
+  const rect = canvas.getBoundingClientRect();
+  const { width, height, dpr } = dprWH(rect.width, rect.height);
+
+  canvas.width = width;
+  canvas.height = height;
+
+  ctx.recreateSurface(canvas);
+
+  const renderer = ctx.getContext();
+  renderer.scale(dpr, dpr);
 };

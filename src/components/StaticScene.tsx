@@ -1,14 +1,13 @@
-import { IGraphicContext } from "../types/graphics";
+import { useContext } from "react";
 
-interface StaticSceneProps {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  ctx: React.RefObject<IGraphicContext | null>;
-}
+import { CanvasContext } from "../context/CanvasContext";
 
-export const StaticScene = ({ canvasRef, ctx }: StaticSceneProps) => {
+export const StaticScene = () => {
+  const { staticContext } = useContext(CanvasContext);
+
   return (
     <canvas
-      ref={canvasRef}
+      ref={staticContext.canvasRef}
       className="absolute inset-0 h-full w-full"
       style={{ imageRendering: "pixelated" }}
     />

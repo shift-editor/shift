@@ -3,9 +3,13 @@ import { useEffect, useRef } from "react";
 import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
 
 import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
-import { dprWH } from "../lib/utils/utils";
+import { scaleCanvasDPR } from "../lib/utils/utils";
 import AppState from "../store/store";
-import { IGraphicContext } from "../types/graphics";
+import {
+  CanvasRef,
+  GraphicsContextRef,
+  IGraphicContext,
+} from "../types/graphics";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -14,11 +18,11 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
 };
 
 export const useGraphicsContext = (
-  staticCanvas: React.RefObject<HTMLCanvasElement | null>,
-  interactiveCanvas: React.RefObject<HTMLCanvasElement | null>,
+  staticCanvas: CanvasRef,
+  interactiveCanvas: CanvasRef,
 ): {
-  interactiveContextRef: React.RefObject<IGraphicContext | null>;
-  staticContextRef: React.RefObject<IGraphicContext | null>;
+  interactiveContextRef: GraphicsContextRef;
+  staticContextRef: GraphicsContextRef;
 } => {
   const interactiveContextRef = useRef<IGraphicContext | null>(null);
   const staticContextRef = useRef<IGraphicContext | null>(null);
@@ -27,20 +31,12 @@ export const useGraphicsContext = (
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
-      const rect = canvas.getBoundingClientRect();
+      scaleCanvasDPR(canvas, ctx);
 
-      const { width, height, dpr } = dprWH(rect.width, rect.height);
-
-      canvas.width = width;
-      canvas.height = height;
-
-      AppState.getState().canvasContext.width = width;
-      AppState.getState().canvasContext.height = height;
-
-      ctx.createSurface(canvas);
-
-      const renderer = ctx.getContext();
-      renderer.scale(dpr, dpr);
+      AppState.getState().canvasContext.setDimensions(
+        canvas.width,
+        canvas.height,
+      );
 
       interactiveContextRef.current = ctx;
     };

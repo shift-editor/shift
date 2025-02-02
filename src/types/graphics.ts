@@ -40,3 +40,6 @@ export interface IGraphicContext {
 
   getContext(): IRenderer;
 }
+
+export type CanvasRef = React.RefObject<HTMLCanvasElement | null>;
+export type GraphicsContextRef = React.RefObject<IGraphicContext | null>;

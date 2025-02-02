@@ -1,4 +1,4 @@
-export class CanvasContext {
+export class CanvasManager {
   #width: number;
   #height: number;
 
@@ -54,5 +54,10 @@ export class CanvasContext {
     }
 
     this.#height = height;
+  }
+
+  public setDimensions(width: number, height: number) {
+    this.width = width;
+    this.height = height;
   }
 }

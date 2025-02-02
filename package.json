@@ -13,7 +13,8 @@
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "lint:check": "eslint \"src/**/*.{ts,tsx}\"",
-    "check-deps": "depcheck"
+    "check-deps": "depcheck",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.0.3",
