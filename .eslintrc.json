@@ -20,7 +20,21 @@
     },
     "import/resolver": {
       "typescript": {
-        "alwaysTryTypes": true
+        "alwaysTryTypes": true,
+        "project": "./tsconfig.json"
+      },
+      "alias": {
+        "map": [
+          ["@", "./src"],
+          ["@components", "./src/components"],
+          ["@lib", "./src/lib"],
+          ["@store", "./src/store"],
+          ["@types", "./src/types"],
+          ["@context", "./src/context"],
+          ["@assets", "./src/assets"],
+          ["@hooks", "./src/hooks"]
+        ],
+        "extensions": [".ts", ".tsx", ".js", ".jsx", ".json"]
       }
     }
   },

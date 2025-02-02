@@ -31,8 +31,6 @@ export const scaleCanvasDPR = (
   canvas.width = width;
   canvas.height = height;
 
-  ctx.recreateSurface(canvas);
-
   const renderer = ctx.getContext();
   renderer.scale(dpr, dpr);
 };

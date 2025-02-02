@@ -67,7 +67,6 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   flush(): void {
-    console.log("flush");
     this.#ctx.surface.flush();
   }
 

@@ -1,4 +1,4 @@
-import { createContext, useEffect, useRef } from "react";
+import { createContext, useEffect } from "react";
 
 import { useGraphicsContext } from "../hooks/useGraphicsContext";
 import { scaleCanvasDPR } from "../lib/utils/utils";
@@ -31,43 +31,39 @@ export const CanvasContextProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
-  const staticCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const { interactiveContextRef, staticContextRef } = useGraphicsContext(
-    interactiveCanvasRef,
-    staticCanvasRef,
-  );
+  const { interactiveCanvasData, staticCanvasData } = useGraphicsContext();
 
   useEffect(() => {
     const updateCanvasSize = () => {
-      if (
-        !interactiveCanvasRef.current ||
-        !interactiveContextRef.current ||
-        !staticContextRef.current ||
-        !staticCanvasRef.current
-      )
-        return;
+      for (const canvasData of [interactiveCanvasData, staticCanvasData]) {
+        if (!canvasData.canvasRef.current || !canvasData.ctxRef.current)
+          continue;
 
-      const ctx = interactiveContextRef.current;
-
-      for (const canvas of [
-        interactiveCanvasRef.current,
-        staticCanvasRef.current,
-      ]) {
+        const ctx = canvasData.ctxRef.current;
+        const canvas = canvasData.canvasRef.current;
+        ctx.recreateSurface(canvas);
         scaleCanvasDPR(canvas, ctx);
       }
 
-      AppState.getState().canvasContext.setDimensions(
-        interactiveCanvasRef.current.width,
-        interactiveCanvasRef.current.height,
-      );
+      if (!interactiveCanvasData.canvasRef.current) return;
+      const { width, height } = interactiveCanvasData.canvasRef.current;
+      AppState.getState().canvasContext.setDimensions(width, height);
+
+      if (!staticCanvasData.ctxRef.current) return;
+      const ctx = staticCanvasData.ctxRef.current.getContext();
+      ctx.drawCircle(500, 500, 50);
+      ctx.flush();
     };
 
-    if (!interactiveCanvasRef.current) return;
+    if (
+      !interactiveCanvasData.canvasRef.current ||
+      !staticCanvasData.canvasRef.current
+    )
+      return;
 
     const observer = new ResizeObserver(updateCanvasSize);
-    observer.observe(interactiveCanvasRef.current);
+    observer.observe(interactiveCanvasData.canvasRef.current);
+    observer.observe(staticCanvasData.canvasRef.current);
 
     return () => {
       observer.disconnect();
@@ -78,12 +74,12 @@ export const CanvasContextProvider = ({
     <CanvasContext.Provider
       value={{
         interactiveContext: {
-          canvasRef: interactiveCanvasRef,
-          graphicsContextRef: interactiveContextRef,
+          canvasRef: interactiveCanvasData.canvasRef,
+          graphicsContextRef: interactiveCanvasData.ctxRef,
         },
         staticContext: {
-          canvasRef: staticCanvasRef,
-          graphicsContextRef: staticContextRef,
+          canvasRef: staticCanvasData.canvasRef,
+          graphicsContextRef: staticCanvasData.ctxRef,
         },
       }}
     >

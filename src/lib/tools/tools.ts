@@ -1,10 +1,19 @@
+import HandIcon from "@/assets/toolbar/hand.svg";
+import PenIcon from "@/assets/toolbar/pen.svg";
+import SelectIcon from "@/assets/toolbar/select.svg";
+import { ToolName, Tool } from "@/types/tool";
+
 import { Hand } from "./Hand";
 import { Pen } from "./Pen";
 import { Select } from "./Select";
-import { ToolName, Tool } from "../../types/tool";
 
-export const tools = new Map<ToolName, Tool>();
+export interface ToolRegistryItem {
+  tool: Tool;
+  icon: React.FC<React.SVGProps<SVGSVGElement>>;
+}
 
-tools.set("select", new Select());
-tools.set("pen", new Pen());
-tools.set("hand", new Hand());
+export const tools = new Map<ToolName, ToolRegistryItem>();
+
+tools.set("select", { tool: new Select(), icon: SelectIcon });
+tools.set("pen", { tool: new Pen(), icon: PenIcon });
+tools.set("hand", { tool: new Hand(), icon: HandIcon });

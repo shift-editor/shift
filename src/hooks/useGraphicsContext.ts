@@ -17,13 +17,21 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
   });
 };
 
-export const useGraphicsContext = (
-  staticCanvas: CanvasRef,
-  interactiveCanvas: CanvasRef,
-): {
-  interactiveContextRef: GraphicsContextRef;
-  staticContextRef: GraphicsContextRef;
-} => {
+export interface GraphicsContextData {
+  interactiveCanvasData: {
+    canvasRef: CanvasRef;
+    ctxRef: GraphicsContextRef;
+  };
+  staticCanvasData: {
+    canvasRef: CanvasRef;
+    ctxRef: GraphicsContextRef;
+  };
+}
+
+export const useGraphicsContext = (): GraphicsContextData => {
+  const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const staticCanvasRef = useRef<HTMLCanvasElement>(null);
+
   const interactiveContextRef = useRef<IGraphicContext | null>(null);
   const staticContextRef = useRef<IGraphicContext | null>(null);
 
@@ -31,14 +39,10 @@ export const useGraphicsContext = (
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
+      ctx.createSurface(canvas);
       scaleCanvasDPR(canvas, ctx);
 
-      AppState.getState().canvasContext.setDimensions(
-        canvas.width,
-        canvas.height,
-      );
-
-      interactiveContextRef.current = ctx;
+      return ctx;
     };
 
     const setUpCanvas = async ({
@@ -49,20 +53,31 @@ export const useGraphicsContext = (
       staticCanvas: HTMLCanvasElement;
     }) => {
       const canvasKit = await initCanvasKit();
-      initCanvas(canvasKit, interactiveCanvas);
-      initCanvas(canvasKit, staticCanvas);
+      interactiveContextRef.current = initCanvas(canvasKit, interactiveCanvas);
+      staticContextRef.current = initCanvas(canvasKit, staticCanvas);
+
+      AppState.getState().canvasContext.setDimensions(
+        interactiveCanvas.width,
+        interactiveCanvas.height,
+      );
     };
 
-    if (!interactiveCanvas.current || !staticCanvas.current) return;
+    if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;
 
     setUpCanvas({
-      interactiveCanvas: interactiveCanvas.current,
-      staticCanvas: staticCanvas.current,
+      interactiveCanvas: interactiveCanvasRef.current,
+      staticCanvas: staticCanvasRef.current,
     });
   }, []);
 
   return {
-    interactiveContextRef,
-    staticContextRef,
+    interactiveCanvasData: {
+      canvasRef: interactiveCanvasRef,
+      ctxRef: interactiveContextRef,
+    },
+    staticCanvasData: {
+      canvasRef: staticCanvasRef,
+      ctxRef: staticContextRef,
+    },
   };
 };
