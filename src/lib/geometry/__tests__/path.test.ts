@@ -6,4 +6,8 @@ describe("Path", () => {
   beforeEach(() => {
     path = new Path();
   });
+
+  it("should create a new path", () => {
+    expect(path).toBeDefined();
+  });
 });

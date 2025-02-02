@@ -18,7 +18,7 @@ export class Triangle extends Shape {
     return this.#vertices;
   }
 
-  hit(point: Point): boolean {
+  hit(_: Point): boolean {
     return false;
   }
 }

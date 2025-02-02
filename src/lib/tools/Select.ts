@@ -9,11 +9,11 @@ export class Select implements Tool {
     console.log("select onMouseDown ", e.clientX - x, e.clientY - y);
   }
 
-  onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
+  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
     console.log("select onMouseUp");
   }
 
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
+  onMouseMove(_: React.MouseEvent<HTMLCanvasElement>): void {
     console.log("select onMouseMove");
   }
 }

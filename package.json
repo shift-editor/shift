@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test": "jest",
+    "clean": "rm -rf dist && cd src-tauri && cargo clean && cd ..",
+    "build:clean": "bun clean && bun tauri build",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

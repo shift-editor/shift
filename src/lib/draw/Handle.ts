@@ -5,7 +5,6 @@ import { Point } from "../geometry/point";
 import { Rect } from "../geometry/rect";
 import { Shape } from "../geometry/shape";
 import { Triangle } from "../geometry/triangle";
-import { DrawStyle, HANDLE_STYLES } from "./styles/style";
 
 const handleShape = {
   [HandleType.CORNER]: (p: Point) => new Rect(p.x, p.y, 5, 5),
@@ -20,20 +19,13 @@ const handleShape = {
 };
 
 export class Handle {
-  #selected: boolean = false;
   #type: HandleType;
   #position: Point;
-  #style: Partial<DrawStyle>;
   #shape: Shape;
 
-  constructor(
-    position: Point,
-    type: HandleType,
-    style: Partial<DrawStyle> = {},
-  ) {
+  constructor(position: Point, type: HandleType) {
     this.#position = position;
     this.#type = type;
-    this.#style = style;
 
     this.#shape = handleShape[type](position);
   }
@@ -59,7 +51,6 @@ export class Handle {
   }
 
   draw(renderer: IRenderer): void {
-    let style;
     let rect;
     let circle;
     let triangle;
