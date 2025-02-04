@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
 
@@ -35,6 +35,8 @@ export const useGraphicsContext = (): GraphicsContextData => {
   const interactiveContextRef = useRef<IGraphicContext | null>(null);
   const staticContextRef = useRef<IGraphicContext | null>(null);
 
+  const [_, setIsReady] = useState(false);
+
   useEffect(() => {
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
@@ -60,6 +62,8 @@ export const useGraphicsContext = (): GraphicsContextData => {
         interactiveCanvas.width,
         interactiveCanvas.height,
       );
+
+      setIsReady(true);
     };
 
     if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;

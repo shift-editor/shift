@@ -23,6 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 .cursorrules
-public
 .vscode
 *monopic

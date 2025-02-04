@@ -41,7 +41,9 @@ export const Toolbar = () => {
             Icon={icon}
             name={name}
             activeTool={activeTool}
-            onClick={() => setActiveTool(name)}
+            onClick={() => {
+              setActiveTool(name);
+            }}
           />
         ))}
       </section>

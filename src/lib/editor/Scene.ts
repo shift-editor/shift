@@ -21,6 +21,6 @@ export class Scene {
       throw new Error(`Tool ${activeTool} not found`);
     }
 
-    return tool;
+    return tool.tool;
   }
 }

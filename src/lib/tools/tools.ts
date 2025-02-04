@@ -4,7 +4,7 @@ import SelectIcon from "@/assets/toolbar/select.svg";
 import { ToolName, Tool } from "@/types/tool";
 
 import { Hand } from "./Hand";
-import { Pen } from "./Pen";
+import { Pen } from "./pen";
 import { Select } from "./Select";
 
 export interface ToolRegistryItem {

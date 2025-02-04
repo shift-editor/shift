@@ -84,7 +84,7 @@ export class Handle {
         renderer.lineTo(triangle.vertices[1].x, triangle.vertices[1].x); // left
         renderer.lineTo(triangle.vertices[2].x, triangle.vertices[2].x); // left
         renderer.close();
-        renderer.drawPath();
+        renderer.stroke();
 
         break;
       default:

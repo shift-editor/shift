@@ -48,11 +48,6 @@ export const CanvasContextProvider = ({
       if (!interactiveCanvasData.canvasRef.current) return;
       const { width, height } = interactiveCanvasData.canvasRef.current;
       AppState.getState().canvasContext.setDimensions(width, height);
-
-      if (!staticCanvasData.ctxRef.current) return;
-      const ctx = staticCanvasData.ctxRef.current.getContext();
-      ctx.drawCircle(500, 500, 50);
-      ctx.flush();
     };
 
     if (

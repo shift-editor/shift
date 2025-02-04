@@ -24,7 +24,6 @@ export const drawPath = (ctx: IRenderer, path: Path) => {
 
   if (path.closed) {
     ctx.close();
-    ctx.drawPath();
   }
 
   drawHandles(ctx, path);

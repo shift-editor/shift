@@ -17,7 +17,10 @@ const AppState = create<AppState>()((set) => ({
   canvasContext: new CanvasManager(),
   scene: new Scene(),
   activeTool: "select",
-  setActiveTool: (tool: ToolName) => set({ activeTool: tool }),
+  setActiveTool: (tool: ToolName) => {
+    set({ activeTool: tool });
+    console.log(tool);
+  },
 }));
 
 export default AppState;

@@ -1,16 +1,16 @@
 import { useContext } from "react";
 
 import { CanvasContext } from "../context/CanvasContext";
-import AppState from "../store/store";
+import AppState from "@/store/store";
 
 export const InteractiveScene = () => {
   const { interactiveContext } = useContext(CanvasContext);
-  const activeTool = AppState((state) => state.activeTool);
 
   return (
     <canvas
+      id="interactive-canvas"
       ref={interactiveContext.canvasRef}
-      className={`h-full w-full cursor-${activeTool} absolute inset-0`}
+      className={`absolute inset-0 z-10 h-full w-full`}
       style={{
         imageRendering: "pixelated",
       }}

@@ -27,9 +27,9 @@ export interface IRenderer {
   ): void;
 
   close(): void;
-  drawPath(): void;
 
   stroke(): void;
+  fill(): void;
 
   scale(x: number, y: number): void;
 }

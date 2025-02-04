@@ -137,8 +137,9 @@ export class CanvasKitRenderer implements IRenderer {
     this.path.close();
   }
 
-  drawPath(): void {
+  stroke(): void {
     const p = this.getPaint();
+    p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
     this.canvas.drawPath(this.path, p);
 
     this.path.delete();
@@ -147,8 +148,13 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path = null;
   }
 
-  stroke(): void {
-    this.path.stroke();
+  fill(): void {
+    const p = this.getPaint();
+    p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
+    this.canvas.drawPath(this.path, p);
+
+    this.path.delete();
+    p.delete();
   }
 
   scale(x: number, y: number): void {
