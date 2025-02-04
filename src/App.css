@@ -1,7 +1,3 @@
-.cursor-select {
-  cursor: pointer;
-}
-
 .cursor-pen {
   cursor:
     url("./cursors/pen@1.svg") 15 8,
