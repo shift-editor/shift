@@ -6,6 +6,7 @@ import { ToolName } from "../types/tool";
 
 interface AppState {
   upm: number;
+  padding: number;
   canvasContext: CanvasManager;
   scene: Scene;
   activeTool: ToolName;
@@ -14,6 +15,7 @@ interface AppState {
 
 const AppState = create<AppState>()((set) => ({
   upm: 1000,
+  padding: 100,
   canvasContext: new CanvasManager(),
   scene: new Scene(),
   activeTool: "select",

@@ -2,6 +2,8 @@ export class CanvasManager {
   #width: number;
   #height: number;
 
+  #padding: number;
+
   #mouseX: number;
   #mouseY: number;
 
@@ -10,6 +12,7 @@ export class CanvasManager {
     this.#mouseY = 0;
     this.#width = 0;
     this.#height = 0;
+    this.#padding = 0;
   }
 
   public get mouseX(): number {
@@ -38,6 +41,10 @@ export class CanvasManager {
 
   public get height(): number {
     return this.#height;
+  }
+
+  public get padding(): number {
+    return this.#padding;
   }
 
   public set width(width: number) {

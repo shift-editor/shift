@@ -160,6 +160,19 @@ export class CanvasKitRenderer implements IRenderer {
   scale(x: number, y: number): void {
     this.canvas.scale(x, y);
   }
+
+  transform(
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+  ): void {
+    const matrix = [a, c, e, b, d, f, 0, 0, 1];
+
+    this.canvas.concat(matrix);
+  }
 }
 
 export class CanvasKitContext implements IGraphicContext {

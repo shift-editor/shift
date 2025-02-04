@@ -7,6 +7,13 @@ export interface DrawStyle {
   antialias?: boolean;
 }
 
+export const GUIDE_STYLES: DrawStyle = {
+  lineWidth: 0.5,
+  strokeStyle: "red",
+  fillStyle: "transparent",
+  antialias: true,
+};
+
 export const DEFAULT_STYLES: DrawStyle = {
   lineWidth: 0.5,
   strokeStyle: "black",

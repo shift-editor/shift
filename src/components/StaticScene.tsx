@@ -1,5 +1,7 @@
 import { useContext, useEffect } from "react";
 
+import { drawStaticCanvas } from "@/lib/draw/drawStaticCanvas";
+
 import { CanvasContext } from "../context/CanvasContext";
 
 export const StaticScene = () => {
@@ -9,15 +11,7 @@ export const StaticScene = () => {
     if (!staticContext.graphicsContextRef.current) return;
     const ctx = staticContext.graphicsContextRef.current.getContext();
 
-    const draw = () => {
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(100, 100);
-      ctx.stroke();
-      ctx.flush();
-    };
-
-    draw();
+    drawStaticCanvas(ctx);
   }, [staticContext.graphicsContextRef.current]);
 
   return (

@@ -32,6 +32,23 @@ export interface IRenderer {
   fill(): void;
 
   scale(x: number, y: number): void;
+
+  /**
+   * @param a - The scale factor for the x-axis
+   * @param b - The shear factor for the x-axis
+   * @param c - The shear factor for the y-axis
+   * @param d - The scale factor for the y-axis
+   * @param e - The x-axis translation
+   * @param f - The y-axis translation
+   */
+  transform(
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+  ): void;
 }
 
 export interface IGraphicContext {
