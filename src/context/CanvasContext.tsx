@@ -39,15 +39,20 @@ export const CanvasContextProvider = ({
         if (!canvasData.canvasRef.current || !canvasData.ctxRef.current)
           continue;
 
+        const dpr = window.devicePixelRatio || 1;
         const ctx = canvasData.ctxRef.current;
         const canvas = canvasData.canvasRef.current;
-        ctx.recreateSurface(canvas);
-        scaleCanvasDPR(canvas, ctx);
-      }
+        const rect = canvas.getBoundingClientRect();
 
-      if (!interactiveCanvasData.canvasRef.current) return;
-      const { width, height } = interactiveCanvasData.canvasRef.current;
-      AppState.getState().canvasContext.setDimensions(width, height);
+        AppState.getState().viewportManager.setDimensions(
+          rect.width,
+          rect.height,
+        );
+
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.recreateSurface(canvas);
+      }
     };
 
     if (

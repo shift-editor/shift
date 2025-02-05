@@ -19,18 +19,11 @@ export const dprWH = (w: number, h: number) => {
 /**
  * Scales the canvas to the device pixel ratio.
  * @param canvas - The canvas to scale.
- * @param ctx - The graphics context.
  */
-export const scaleCanvasDPR = (
-  canvas: HTMLCanvasElement,
-  ctx: IGraphicContext,
-) => {
+export const scaleCanvasDPR = (canvas: HTMLCanvasElement) => {
   const rect = canvas.getBoundingClientRect();
-  const { width, height, dpr } = dprWH(rect.width, rect.height);
+  const { width, height } = dprWH(rect.width, rect.height);
 
   canvas.width = width;
   canvas.height = height;
-
-  const renderer = ctx.getContext();
-  renderer.scale(dpr, dpr);
 };

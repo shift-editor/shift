@@ -8,7 +8,7 @@ export const Metrics = () => {
 
   useEffect(() => {
     const updateMousePosition = () => {
-      const { x, y } = AppState.getState().canvasContext.mousePosition;
+      const { x, y } = AppState.getState().viewportManager.mousePosition();
       if (xRef.current) xRef.current.textContent = Math.round(x).toString();
       if (yRef.current) yRef.current.textContent = Math.round(y).toString();
     };
@@ -21,11 +21,13 @@ export const Metrics = () => {
   }, []);
 
   return (
-    <div className="absolute bottom-2 left-5 grid max-w-fit grid-cols-2 border border-black p-2 text-sm">
-      <div>x</div>
-      <div ref={xRef}></div>
-      <div>y</div>
-      <div ref={yRef}></div>
-    </div>
+    <>
+      <div className="absolute bottom-2 left-5 grid max-w-fit grid-cols-2 border border-black p-2 text-sm">
+        <div>x</div>
+        <div ref={xRef} />
+        <div>y</div>
+        <div ref={yRef} />
+      </div>
+    </>
   );
 };

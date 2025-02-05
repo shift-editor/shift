@@ -58,7 +58,7 @@ export const useGraphicsContext = (): GraphicsContextData => {
       interactiveContextRef.current = initCanvas(canvasKit, interactiveCanvas);
       staticContextRef.current = initCanvas(canvasKit, staticCanvas);
 
-      AppState.getState().canvasContext.setDimensions(
+      AppState.getState().viewportManager.setDimensions(
         interactiveCanvas.width,
         interactiveCanvas.height,
       );

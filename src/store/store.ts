@@ -1,13 +1,14 @@
 import { create } from "zustand";
 
-import { CanvasManager } from "../lib/editor/CanvasManager";
-import { Scene } from "../lib/editor/Scene";
+import { Scene } from "@/lib/editor/Scene";
+import { ViewportManager } from "@/lib/editor/ViewportManager";
+
 import { ToolName } from "../types/tool";
 
 interface AppState {
   upm: number;
   padding: number;
-  canvasContext: CanvasManager;
+  viewportManager: ViewportManager;
   scene: Scene;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
@@ -16,7 +17,7 @@ interface AppState {
 const AppState = create<AppState>()((set) => ({
   upm: 1000,
   padding: 100,
-  canvasContext: new CanvasManager(),
+  viewportManager: new ViewportManager(),
   scene: new Scene(),
   activeTool: "select",
   setActiveTool: (tool: ToolName) => {

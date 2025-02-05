@@ -19,9 +19,12 @@ export const InteractiveScene = () => {
         if (!interactiveContext.canvasRef.current) return;
         const rect =
           interactiveContext.canvasRef.current.getBoundingClientRect();
-        const canvasContext = AppState.getState().canvasContext;
-        canvasContext.mouseX = e.clientX - rect.left;
-        canvasContext.mouseY = e.clientY - rect.top;
+        const viewportManager = AppState.getState().viewportManager;
+
+        viewportManager.setMousePosition(
+          e.clientX - rect.left,
+          e.clientY - rect.top,
+        );
       }}
     />
   );

@@ -173,6 +173,7 @@ export class CanvasKitRenderer implements IRenderer {
 
     this.canvas.concat(matrix);
   }
+
 }
 
 export class CanvasKitContext implements IGraphicContext {
