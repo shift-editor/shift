@@ -52,8 +52,7 @@ export interface IRenderer {
 }
 
 export interface IGraphicContext {
-  createSurface(canvas: HTMLCanvasElement): void;
-  recreateSurface(canvas: HTMLCanvasElement): void;
+  resizeCanvas(canvas: HTMLCanvasElement): void;
 
   getContext(): IRenderer;
 }

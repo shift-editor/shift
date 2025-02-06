@@ -1,7 +1,8 @@
+import { tools } from "@/lib/tools/tools";
+import AppState from "@/store/store";
+import { Tool } from "@/types/tool";
+
 import { PathManager } from "./PathManager";
-import AppState from "../../store/store";
-import { Tool } from "../../types/tool";
-import { tools } from "../tools/tools";
 
 export class Scene {
   #pathManager: PathManager;
@@ -12,15 +13,5 @@ export class Scene {
 
   public getPathManager(): PathManager {
     return this.#pathManager;
-  }
-
-  public activeTool(): Tool {
-    const activeTool = AppState.getState().activeTool;
-    const tool = tools.get(activeTool);
-    if (!tool) {
-      throw new Error(`Tool ${activeTool} not found`);
-    }
-
-    return tool.tool;
   }
 }

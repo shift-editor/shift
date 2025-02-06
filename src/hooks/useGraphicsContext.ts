@@ -5,11 +5,7 @@ import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
 import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
 import { scaleCanvasDPR } from "../lib/utils/utils";
 import AppState from "../store/store";
-import {
-  CanvasRef,
-  GraphicsContextRef,
-  IGraphicContext,
-} from "../types/graphics";
+import { CanvasRef } from "../types/graphics";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -20,20 +16,15 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
 export interface GraphicsContextData {
   interactiveCanvasData: {
     canvasRef: CanvasRef;
-    ctxRef: GraphicsContextRef;
   };
   staticCanvasData: {
     canvasRef: CanvasRef;
-    ctxRef: GraphicsContextRef;
   };
 }
 
 export const useGraphicsContext = (): GraphicsContextData => {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const interactiveContextRef = useRef<IGraphicContext | null>(null);
-  const staticContextRef = useRef<IGraphicContext | null>(null);
 
   const [_, setIsReady] = useState(false);
 
@@ -42,7 +33,7 @@ export const useGraphicsContext = (): GraphicsContextData => {
       const ctx = new CanvasKitContext(canvasKit);
 
       ctx.createSurface(canvas);
-      scaleCanvasDPR(canvas, ctx);
+      scaleCanvasDPR(canvas);
 
       return ctx;
     };
@@ -55,13 +46,11 @@ export const useGraphicsContext = (): GraphicsContextData => {
       staticCanvas: HTMLCanvasElement;
     }) => {
       const canvasKit = await initCanvasKit();
-      interactiveContextRef.current = initCanvas(canvasKit, interactiveCanvas);
-      staticContextRef.current = initCanvas(canvasKit, staticCanvas);
+      const interactiveContext = initCanvas(canvasKit, interactiveCanvas);
+      const staticContext = initCanvas(canvasKit, staticCanvas);
 
-      AppState.getState().viewportManager.setDimensions(
-        interactiveCanvas.width,
-        interactiveCanvas.height,
-      );
+      AppState.getState().editor.setInteractiveContext(interactiveContext);
+      AppState.getState().editor.setStaticContext(staticContext);
 
       setIsReady(true);
     };
@@ -77,11 +66,9 @@ export const useGraphicsContext = (): GraphicsContextData => {
   return {
     interactiveCanvasData: {
       canvasRef: interactiveCanvasRef,
-      ctxRef: interactiveContextRef,
     },
     staticCanvasData: {
       canvasRef: staticCanvasRef,
-      ctxRef: staticContextRef,
     },
   };
 };

@@ -1,29 +1,24 @@
-import { createContext, useEffect } from "react";
+import { createContext, useEffect, useRef, useState } from "react";
 
-import { useGraphicsContext } from "../hooks/useGraphicsContext";
-import { scaleCanvasDPR } from "../lib/utils/utils";
+import { CanvasKit } from "canvaskit-wasm";
+
+import {
+  CanvasKitContext,
+  initCanvasKit,
+} from "@/lib/graphics/backends/CanvasKitRenderer";
+import { scaleCanvasDPR } from "@/lib/utils/utils";
+
 import AppState from "../store/store";
-import { CanvasRef, GraphicsContextRef } from "../types/graphics";
+import { CanvasRef } from "../types/graphics";
 
 interface CanvasContext {
-  canvasRef: CanvasRef;
-  graphicsContextRef: GraphicsContextRef;
+  interactiveCanvasRef: CanvasRef;
+  staticCanvasRef: CanvasRef;
 }
 
-interface CanvasContextType {
-  interactiveContext: CanvasContext;
-  staticContext: CanvasContext;
-}
-
-export const CanvasContext = createContext<CanvasContextType>({
-  interactiveContext: {
-    canvasRef: { current: null },
-    graphicsContextRef: { current: null },
-  },
-  staticContext: {
-    canvasRef: { current: null },
-    graphicsContextRef: { current: null },
-  },
+export const CanvasContext = createContext<CanvasContext>({
+  interactiveCanvasRef: { current: null },
+  staticCanvasRef: { current: null },
 });
 
 export const CanvasContextProvider = ({
@@ -31,56 +26,67 @@ export const CanvasContextProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const { interactiveCanvasData, staticCanvasData } = useGraphicsContext();
+  const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const staticCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [_, setIsReady] = useState(false);
 
   useEffect(() => {
-    const updateCanvasSize = () => {
-      for (const canvasData of [interactiveCanvasData, staticCanvasData]) {
-        if (!canvasData.canvasRef.current || !canvasData.ctxRef.current)
-          continue;
+    const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
+      const ctx = new CanvasKitContext(canvasKit);
 
-        const dpr = window.devicePixelRatio || 1;
-        const ctx = canvasData.ctxRef.current;
-        const canvas = canvasData.canvasRef.current;
-        const rect = canvas.getBoundingClientRect();
+      ctx.createSurface(canvas);
+      scaleCanvasDPR(canvas);
 
-        AppState.getState().viewportManager.setDimensions(
-          rect.width,
-          rect.height,
-        );
-
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.recreateSurface(canvas);
-      }
+      return ctx;
     };
 
-    if (
-      !interactiveCanvasData.canvasRef.current ||
-      !staticCanvasData.canvasRef.current
-    )
-      return;
+    const setUpContexts = async ({
+      interactiveCanvas,
+      staticCanvas,
+    }: {
+      interactiveCanvas: HTMLCanvasElement;
+      staticCanvas: HTMLCanvasElement;
+    }) => {
+      const canvasKit = await initCanvasKit();
+      const interactiveContext = initCanvas(canvasKit, interactiveCanvas);
+      const staticContext = initCanvas(canvasKit, staticCanvas);
 
-    const observer = new ResizeObserver(updateCanvasSize);
-    observer.observe(interactiveCanvasData.canvasRef.current);
-    observer.observe(staticCanvasData.canvasRef.current);
+      AppState.getState().editor.setInteractiveContext(interactiveContext);
+      AppState.getState().editor.setStaticContext(staticContext);
 
-    return () => {
-      observer.disconnect();
+      setIsReady(true);
+
+      const resizeCanvas = () => {
+        if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;
+
+        interactiveContext.resizeCanvas(interactiveCanvasRef.current);
+        staticContext.resizeCanvas(staticCanvasRef.current);
+      };
+
+      const observer = new ResizeObserver(resizeCanvas);
+
+      observer.observe(interactiveCanvas);
+      observer.observe(staticCanvas);
+
+      return () => {
+        observer.disconnect();
+      };
     };
+
+    if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;
+
+    setUpContexts({
+      interactiveCanvas: interactiveCanvasRef.current,
+      staticCanvas: staticCanvasRef.current,
+    });
   }, []);
 
   return (
     <CanvasContext.Provider
       value={{
-        interactiveContext: {
-          canvasRef: interactiveCanvasData.canvasRef,
-          graphicsContextRef: interactiveCanvasData.ctxRef,
-        },
-        staticContext: {
-          canvasRef: staticCanvasData.canvasRef,
-          graphicsContextRef: staticCanvasData.ctxRef,
-        },
+        interactiveCanvasRef,
+        staticCanvasRef,
       }}
     >
       {children}

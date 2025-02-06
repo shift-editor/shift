@@ -1,28 +1,19 @@
 import { create } from "zustand";
 
-import { Scene } from "@/lib/editor/Scene";
-import { ViewportManager } from "@/lib/editor/ViewportManager";
-
-import { ToolName } from "../types/tool";
+import { Editor } from "@/lib/editor/Editor";
+import { ToolName } from "@/types/tool";
 
 interface AppState {
-  upm: number;
-  padding: number;
-  viewportManager: ViewportManager;
-  scene: Scene;
+  editor: Editor;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
 }
 
 const AppState = create<AppState>()((set) => ({
-  upm: 1000,
-  padding: 100,
-  viewportManager: new ViewportManager(),
-  scene: new Scene(),
+  editor: new Editor(),
   activeTool: "select",
   setActiveTool: (tool: ToolName) => {
     set({ activeTool: tool });
-    console.log(tool);
   },
 }));
 

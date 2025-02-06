@@ -1,15 +1,15 @@
 import AppState from "@/store/store";
 import { IRenderer } from "@/types/graphics";
 
-const X_ADVANCE = 600;
-
-const GUIDES = {
-  acender: { y: 750 },
-  capHeight: { y: 700 },
-  xHeight: { y: 500 },
-  baseline: { y: 0 },
-  descender: { y: -250 },
-};
+// const X_ADVANCE = 600;
+//
+// const GUIDES = {
+//   acender: { y: 750 },
+//   capHeight: { y: 700 },
+//   xHeight: { y: 500 },
+//   baseline: { y: 0 },
+//   descender: { y: -250 },
+// };
 
 export function drawStaticCanvas(ctx: IRenderer) {
   // const { dpr, logicalHeight } = AppState.getState().viewportManager;

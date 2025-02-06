@@ -1,24 +1,10 @@
 import { useEffect, useRef } from "react";
 
-import AppState from "../store/store";
-
 export const Metrics = () => {
   const xRef = useRef<HTMLDivElement>(null);
   const yRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const updateMousePosition = () => {
-      const { x, y } = AppState.getState().viewportManager.mousePosition();
-      if (xRef.current) xRef.current.textContent = Math.round(x).toString();
-      if (yRef.current) yRef.current.textContent = Math.round(y).toString();
-    };
-
-    window.addEventListener("mousemove", updateMousePosition);
-
-    return () => {
-      window.removeEventListener("mousemove", updateMousePosition);
-    };
-  }, []);
+  useEffect(() => {}, []);
 
   return (
     <>

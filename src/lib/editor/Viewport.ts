@@ -1,6 +1,6 @@
 import { TransformMatrix } from "@/types/math";
 
-export class ViewportManager {
+export class Viewport {
   #upm: number;
   #logicalWidth: number;
   #logicalHeight: number;
@@ -10,6 +10,9 @@ export class ViewportManager {
 
   #mouseX: number;
   #mouseY: number;
+
+  #scrollX: number;
+  #scrollY: number;
 
   constructor() {
     this.#upm = 1000;
@@ -22,6 +25,9 @@ export class ViewportManager {
 
     this.#mouseX = 0;
     this.#mouseY = 0;
+
+    this.#scrollX = 0;
+    this.#scrollY = 0;
   }
 
   // **
@@ -136,5 +142,15 @@ export class ViewportManager {
       this.#logicalHeight - (this.#logicalHeight / 2 - (scale * this.upm) / 2);
 
     return [scale, 0, 0, -scale, midPointX, midPointY];
+  }
+
+  // **
+  // Pan the viewport
+  // @param x - The x position of the mouse
+  // @param y - The y position of the mouse
+  // **
+  pan(x: number, y: number) {
+    this.#scrollX += x;
+    this.#scrollY += y;
   }
 }

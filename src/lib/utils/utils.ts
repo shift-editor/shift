@@ -1,5 +1,3 @@
-import { IGraphicContext } from "../../types/graphics";
-
 // canvas
 /**
  * Returns the width and height of the canvas, taking into account the device pixel ratio.

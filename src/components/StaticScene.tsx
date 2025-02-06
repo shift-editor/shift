@@ -1,23 +1,14 @@
-import { useContext, useEffect } from "react";
-
-import { drawStaticCanvas } from "@/lib/draw/drawStaticCanvas";
+import { useContext } from "react";
 
 import { CanvasContext } from "../context/CanvasContext";
 
 export const StaticScene = () => {
-  const { staticContext } = useContext(CanvasContext);
-
-  useEffect(() => {
-    if (!staticContext.graphicsContextRef.current) return;
-    const ctx = staticContext.graphicsContextRef.current.getContext();
-
-    drawStaticCanvas(ctx);
-  }, [staticContext.graphicsContextRef.current]);
+  const { staticCanvasRef } = useContext(CanvasContext);
 
   return (
     <canvas
       id="static-canvas"
-      ref={staticContext.canvasRef}
+      ref={staticCanvasRef}
       className="pointer-events-none absolute inset-0 -z-10 h-full w-full"
       style={{ imageRendering: "pixelated" }}
     />

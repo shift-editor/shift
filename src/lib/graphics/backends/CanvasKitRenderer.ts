@@ -1,8 +1,20 @@
-import { Canvas, CanvasKit, Paint, Path, Surface } from "canvaskit-wasm";
+import InitCanvasKit, {
+  Canvas,
+  CanvasKit,
+  Paint,
+  Path,
+  Surface,
+} from "canvaskit-wasm";
 import chroma from "chroma-js";
 
 import { IGraphicContext, IRenderer } from "../../../types/graphics";
-import { DEFAULT_STYLES, DrawStyle } from "../../draw/styles/style";
+import { DEFAULT_STYLES, DrawStyle } from "../../gfx/styles/style";
+
+export const initCanvasKit = async (): Promise<CanvasKit> => {
+  return await InitCanvasKit({
+    locateFile: () => `/canvaskit.wasm`,
+  });
+};
 
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
@@ -173,7 +185,6 @@ export class CanvasKitRenderer implements IRenderer {
 
     this.canvas.concat(matrix);
   }
-
 }
 
 export class CanvasKitContext implements IGraphicContext {
@@ -206,6 +217,17 @@ export class CanvasKitContext implements IGraphicContext {
       throw new Error("Surface not initialized");
     }
     return this.#surface.getCanvas();
+  }
+
+  public resizeCanvas(canvas: HTMLCanvasElement): void {
+    const dpr = window.devicePixelRatio || 1;
+
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    this.recreateSurface(canvas);
   }
 
   public createSurface(canvas: HTMLCanvasElement): void {
