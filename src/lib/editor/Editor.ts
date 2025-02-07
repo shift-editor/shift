@@ -23,6 +23,9 @@ export class Editor {
     this.#painter = new Painter();
     this.#frameHandler = new FrameHandler();
 
+    this.#scene;
+    this.#frameHandler;
+
     this.#staticContext = null;
     this.#interactiveContext = null;
   }

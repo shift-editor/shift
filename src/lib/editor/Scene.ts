@@ -1,7 +1,3 @@
-import { tools } from "@/lib/tools/tools";
-import AppState from "@/store/store";
-import { Tool } from "@/types/tool";
-
 import { PathManager } from "./PathManager";
 
 export class Scene {
