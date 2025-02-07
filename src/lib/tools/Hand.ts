@@ -1,27 +1,36 @@
+import AppState from "@/store/store";
+
 import { Tool, ToolName } from "../../types/tool";
 
 export class Hand implements Tool {
   public readonly name: ToolName = "hand";
 
   #dragging = false;
+  #startPos = { x: 0, y: 0 };
+  #offset = { x: 0, y: 0 };
 
-  onMouseDown(_: React.MouseEvent<HTMLCanvasElement>): void {
+  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
+    this.#startPos = {
+      x: e.clientX - this.#offset.x,
+      y: e.clientY - this.#offset.y,
+    };
     this.#dragging = true;
-  }
-
-  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#dragging = false;
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (!this.#dragging) return;
+    const editor = AppState.getState().editor;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mousePosition = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+    this.#offset = {
+      x: e.clientX - this.#startPos.x,
+      y: e.clientY - this.#startPos.y,
     };
 
-    console.log(mousePosition);
+    editor.pan(this.#offset.x, this.#offset.y);
+    editor.requestRedraw();
+  }
+
+  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
+    this.#dragging = false;
   }
 }

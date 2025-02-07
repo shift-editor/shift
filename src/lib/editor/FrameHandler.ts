@@ -1,3 +1,5 @@
+type FrameRequestCallback = (time: number) => void;
+
 export class FrameHandler {
   #id: number;
 
@@ -5,10 +7,8 @@ export class FrameHandler {
     this.#id = 0;
   }
 
-  requestUpdate(): void {
-    this.#id = window.requestAnimationFrame(() => {
-      console.log("draw");
-    });
+  requestUpdate(callback: FrameRequestCallback): void {
+    this.#id = window.requestAnimationFrame(callback);
   }
 
   cancelUpdate(): void {

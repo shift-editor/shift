@@ -41,6 +41,8 @@ export const CanvasContextProvider = ({
       return ctx;
     };
 
+    const editor = AppState.getState().editor;
+
     const setUpContexts = async ({
       interactiveCanvas,
       staticCanvas,
@@ -52,8 +54,8 @@ export const CanvasContextProvider = ({
       const interactiveContext = initCanvas(canvasKit, interactiveCanvas);
       const staticContext = initCanvas(canvasKit, staticCanvas);
 
-      AppState.getState().editor.setInteractiveContext(interactiveContext);
-      AppState.getState().editor.setStaticContext(staticContext);
+      editor.setInteractiveContext(interactiveContext);
+      editor.setStaticContext(staticContext);
 
       setIsReady(true);
 
@@ -62,6 +64,8 @@ export const CanvasContextProvider = ({
 
         interactiveContext.resizeCanvas(interactiveCanvasRef.current);
         staticContext.resizeCanvas(staticCanvasRef.current);
+
+        editor.requestRedraw();
       };
 
       const observer = new ResizeObserver(resizeCanvas);
@@ -80,6 +84,10 @@ export const CanvasContextProvider = ({
       interactiveCanvas: interactiveCanvasRef.current,
       staticCanvas: staticCanvasRef.current,
     });
+
+    return () => {
+      editor.destroy();
+    };
   }, []);
 
   return (

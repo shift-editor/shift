@@ -84,6 +84,7 @@ export class CanvasKitRenderer implements IRenderer {
 
   clear(): void {
     this.canvas.clear(this.ctx.canvasKit.WHITE);
+    this.flush();
   }
 
   dispose(): void {
@@ -173,6 +174,10 @@ export class CanvasKitRenderer implements IRenderer {
     this.canvas.scale(x, y);
   }
 
+  translate(x: number, y: number): void {
+    this.canvas.translate(x, y);
+  }
+
   transform(
     a: number,
     b: number,
@@ -182,7 +187,6 @@ export class CanvasKitRenderer implements IRenderer {
     f: number,
   ): void {
     const matrix = [a, c, e, b, d, f, 0, 0, 1];
-
     this.canvas.concat(matrix);
   }
 }
@@ -224,8 +228,13 @@ export class CanvasKitContext implements IGraphicContext {
 
     const rect = canvas.getBoundingClientRect();
 
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    const width = Math.floor(rect.width * dpr);
+    const height = Math.floor(rect.height * dpr);
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.width = width;
+    canvas.height = height;
 
     this.recreateSurface(canvas);
   }
@@ -236,11 +245,20 @@ export class CanvasKitContext implements IGraphicContext {
   }
 
   public recreateSurface(canvas: HTMLCanvasElement): void {
-    this.surface.delete();
+    if (this.#surface) {
+      this.#surface.delete();
+    }
     this.createSurface(canvas);
   }
 
   public dispose(): void {
     this.surface.delete();
+  }
+
+  public destroy(): void {
+    if (this.#surface) {
+      this.#surface.delete();
+      this.#surface = null;
+    }
   }
 }

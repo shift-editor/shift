@@ -32,6 +32,7 @@ export interface IRenderer {
   fill(): void;
 
   scale(x: number, y: number): void;
+  translate(x: number, y: number): void;
 
   /**
    * @param a - The scale factor for the x-axis
@@ -55,6 +56,8 @@ export interface IGraphicContext {
   resizeCanvas(canvas: HTMLCanvasElement): void;
 
   getContext(): IRenderer;
+
+  destroy(): void;
 }
 
 export type CanvasRef = React.RefObject<HTMLCanvasElement | null>;

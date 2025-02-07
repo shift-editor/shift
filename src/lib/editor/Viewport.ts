@@ -11,8 +11,8 @@ export class Viewport {
   #mouseX: number;
   #mouseY: number;
 
-  #scrollX: number;
-  #scrollY: number;
+  #panX: number;
+  #panY: number;
 
   constructor() {
     this.#upm = 1000;
@@ -26,8 +26,8 @@ export class Viewport {
     this.#mouseX = 0;
     this.#mouseY = 0;
 
-    this.#scrollX = 0;
-    this.#scrollY = 0;
+    this.#panX = 0;
+    this.#panY = 0;
   }
 
   // **
@@ -144,13 +144,21 @@ export class Viewport {
     return [scale, 0, 0, -scale, midPointX, midPointY];
   }
 
+  get panX(): number {
+    return this.#panX;
+  }
+
+  get panY(): number {
+    return this.#panY;
+  }
+
   // **
   // Pan the viewport
   // @param x - The x position of the mouse
   // @param y - The y position of the mouse
   // **
   pan(x: number, y: number) {
-    this.#scrollX += x;
-    this.#scrollY += y;
+    this.#panX = x;
+    this.#panY = y;
   }
 }

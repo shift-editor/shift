@@ -1,16 +1,18 @@
 import AppState from "@/store/store";
 import { IGraphicContext } from "@/types/graphics";
 import { Tool } from "@/types/tool";
+import { tools } from "@lib/tools/tools";
 
+import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
-import { tools } from "../tools/tools";
 
 export class Editor {
   #viewport: Viewport;
   #scene: Scene;
   #painter: Painter;
+  #frameHandler: FrameHandler;
 
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
@@ -19,6 +21,7 @@ export class Editor {
     this.#viewport = new Viewport();
     this.#scene = new Scene();
     this.#painter = new Painter();
+    this.#frameHandler = new FrameHandler();
 
     this.#staticContext = null;
     this.#interactiveContext = null;
@@ -39,5 +42,32 @@ export class Editor {
       throw new Error(`Tool ${activeTool} not found`);
     }
     return tool.tool;
+  }
+
+  public pan(dx: number, dy: number) {
+    this.#viewport.pan(dx, dy);
+  }
+
+  public requestRedraw() {
+    if (!this.#staticContext) return;
+
+    const ctx = this.#staticContext.getContext();
+    ctx.save();
+
+    ctx.clear();
+    ctx.transform(1, 0, 0, 1, this.#viewport.panX, this.#viewport.panY);
+
+    this.#painter.draw(ctx);
+    ctx.restore();
+  }
+
+  public destroy() {
+    if (this.#staticContext) {
+      this.#staticContext.destroy();
+    }
+
+    if (this.#interactiveContext) {
+      this.#interactiveContext.destroy();
+    }
   }
 }
