@@ -1,11 +1,11 @@
-import { TransformMatrix } from "@/types/math";
+import { Point2D, TransformMatrix } from "@/types/math";
 
 export class Viewport {
   #upm: number;
   #logicalWidth: number;
   #logicalHeight: number;
 
-  #scale: number;
+  #zoom: number;
   #dpr: number;
 
   #mouseX: number;
@@ -18,7 +18,7 @@ export class Viewport {
     this.#upm = 1000;
 
     this.#dpr = window.devicePixelRatio || 1;
-    this.#scale = 1;
+    this.#zoom = 1;
 
     this.#logicalWidth = 0;
     this.#logicalHeight = 0;
@@ -87,7 +87,7 @@ export class Viewport {
   // @returns The scale of the viewport
   // **
   get scale(): number {
-    return this.#scale;
+    return this.#zoom;
   }
 
   // **
@@ -96,6 +96,10 @@ export class Viewport {
   // **
   get dpr(): number {
     return this.#dpr;
+  }
+
+  public get zoom(): number {
+    return this.#zoom;
   }
 
   // **
@@ -112,15 +116,19 @@ export class Viewport {
   // Get the mouse position of the viewport
   // @returns The mouse position of the viewport
   // **
-  mousePosition(): { x: number; y: number } {
+  public mousePosition(): Point2D {
     return { x: this.#mouseX, y: this.#mouseY };
+  }
+
+  public getCentrePoint(): Point2D {
+    return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
   }
 
   // **
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
   // **
-  upmMousePosition(): { x: number; y: number } {
+  upmMousePosition(): Point2D {
     const y = this.#mouseY + 300 + this.#logicalWidth / this.#upm;
     const x = this.#mouseX + 300 + this.#logicalHeight / this.#upm;
 
@@ -157,8 +165,16 @@ export class Viewport {
   // @param x - The x position of the mouse
   // @param y - The y position of the mouse
   // **
-  pan(x: number, y: number) {
+  pan(x: number, y: number): void {
     this.#panX = x;
     this.#panY = y;
+  }
+
+  zoomIn(): void {
+    this.#zoom += 0.5;
+  }
+
+  zoomOut(): void {
+    this.#zoom -= 0.5;
   }
 }

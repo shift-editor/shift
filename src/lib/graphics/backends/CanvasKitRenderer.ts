@@ -7,6 +7,8 @@ import InitCanvasKit, {
 } from "canvaskit-wasm";
 import chroma from "chroma-js";
 
+import AppState from "@/store/store";
+
 import { IGraphicContext, IRenderer } from "../../../types/graphics";
 import { DEFAULT_STYLES, DrawStyle } from "../../gfx/styles/style";
 
@@ -223,10 +225,22 @@ export class CanvasKitContext implements IGraphicContext {
     return this.#surface.getCanvas();
   }
 
+  public createSurface(canvas: HTMLCanvasElement): void {
+    if (this.#surface) {
+      this.#surface.delete();
+      this.#surface = null;
+    }
+
+    const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas);
+    this.#surface = s;
+  }
+
   public resizeCanvas(canvas: HTMLCanvasElement): void {
     const dpr = window.devicePixelRatio || 1;
 
     const rect = canvas.getBoundingClientRect();
+
+    AppState.getState().editor.setDimensions(rect.width, rect.height);
 
     const width = Math.floor(rect.width * dpr);
     const height = Math.floor(rect.height * dpr);
@@ -234,19 +248,8 @@ export class CanvasKitContext implements IGraphicContext {
     canvas.width = width;
     canvas.height = height;
 
-    this.recreateSurface(canvas);
-  }
-
-  public createSurface(canvas: HTMLCanvasElement): void {
-    const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas);
-    this.#surface = s;
-  }
-
-  public recreateSurface(canvas: HTMLCanvasElement): void {
-    if (this.#surface) {
-      this.#surface.delete();
-    }
     this.createSurface(canvas);
+    this.canvas.scale(dpr, dpr);
   }
 
   public dispose(): void {

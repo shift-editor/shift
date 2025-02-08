@@ -1,3 +1,5 @@
+export type Point2D = { x: number; y: number };
+
 /** X scale factor of the transformation matrix */
 export type A = number;
 

@@ -35,8 +35,7 @@ export const CanvasContextProvider = ({
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
-      ctx.createSurface(canvas);
-      scaleCanvasDPR(canvas);
+      ctx.resizeCanvas(canvas);
 
       return ctx;
     };

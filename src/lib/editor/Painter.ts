@@ -1,10 +1,17 @@
 import { IRenderer } from "@/types/graphics";
 
+import { Viewport } from "./Viewport";
+
 export class Painter {
-  constructor() {}
+  #viewport: Viewport;
+
+  constructor(viewport: Viewport) {
+    this.#viewport = viewport;
+  }
 
   drawStatic(ctx: IRenderer) {
-    ctx.drawCircle(1000, 500, 100);
+    const centrePoint = this.#viewport.getCentrePoint();
+    ctx.drawCircle(centrePoint.x, centrePoint.y, 50);
   }
 
   drawInteractive(_: IRenderer): void {}

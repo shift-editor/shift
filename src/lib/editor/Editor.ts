@@ -19,8 +19,9 @@ export class Editor {
 
   constructor() {
     this.#viewport = new Viewport();
+    this.#painter = new Painter(this.#viewport);
+
     this.#scene = new Scene();
-    this.#painter = new Painter();
     this.#frameHandler = new FrameHandler();
 
     this.#scene;
@@ -47,6 +48,10 @@ export class Editor {
     return tool.tool;
   }
 
+  public setDimensions(width: number, height: number) {
+    this.#viewport.setDimensions(width, height);
+  }
+
   public setMousePosition(x: number, y: number) {
     this.#viewport.setMousePosition(x, y);
   }
@@ -63,6 +68,18 @@ export class Editor {
     return { x: this.#viewport.panX, y: this.#viewport.panY };
   }
 
+  public zoomIn(): void {
+    this.#viewport.zoomIn();
+  }
+
+  public zoomOut(): void {
+    this.#viewport.zoomOut();
+  }
+
+  public zoom(): number {
+    return this.#viewport.zoom;
+  }
+
   public requestRedraw() {
     if (!this.#staticContext) return;
 
@@ -71,7 +88,10 @@ export class Editor {
     ctx.save();
     ctx.clear();
 
-    ctx.scale(this.#viewport.dpr, this.#viewport.dpr);
+    const centrePoints = this.#viewport.getCentrePoint();
+    ctx.translate(centrePoints.x, centrePoints.y);
+    ctx.scale(this.#viewport.zoom, this.#viewport.zoom);
+    ctx.translate(-centrePoints.x, -centrePoints.y);
 
     ctx.transform(1, 0, 0, 1, this.#viewport.panX, this.#viewport.panY);
 
