@@ -25,3 +25,14 @@ export const scaleCanvasDPR = (canvas: HTMLCanvasElement) => {
   canvas.width = width;
   canvas.height = height;
 };
+
+export const getMouseCoords = (
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+) => {
+  const x = Math.round(clientX - rect.left);
+  const y = Math.round(clientY - rect.top);
+
+  return { x, y };
+};

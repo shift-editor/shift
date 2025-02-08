@@ -231,8 +231,6 @@ export class CanvasKitContext implements IGraphicContext {
     const width = Math.floor(rect.width * dpr);
     const height = Math.floor(rect.height * dpr);
 
-    // canvas.style.width = `${width}px`;
-    // canvas.style.height = `${height}px`;
     canvas.width = width;
     canvas.height = height;
 

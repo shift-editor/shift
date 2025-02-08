@@ -47,20 +47,36 @@ export class Editor {
     return tool.tool;
   }
 
+  public setMousePosition(x: number, y: number) {
+    this.#viewport.setMousePosition(x, y);
+  }
+
+  public mousePosition(): { x: number; y: number } {
+    return this.#viewport.mousePosition();
+  }
+
   public pan(dx: number, dy: number) {
     this.#viewport.pan(dx, dy);
+  }
+
+  public getPan() {
+    return { x: this.#viewport.panX, y: this.#viewport.panY };
   }
 
   public requestRedraw() {
     if (!this.#staticContext) return;
 
     const ctx = this.#staticContext.getContext();
-    ctx.save();
 
+    ctx.save();
     ctx.clear();
+
+    ctx.scale(this.#viewport.dpr, this.#viewport.dpr);
+
     ctx.transform(1, 0, 0, 1, this.#viewport.panX, this.#viewport.panY);
 
     this.#painter.draw(ctx);
+
     ctx.restore();
   }
 

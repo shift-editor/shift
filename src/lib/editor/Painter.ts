@@ -5,7 +5,6 @@ export class Painter {
 
   drawStatic(ctx: IRenderer) {
     ctx.drawCircle(1000, 500, 100);
-    ctx.flush();
   }
 
   drawInteractive(_: IRenderer): void {}
@@ -13,5 +12,7 @@ export class Painter {
   public draw(ctx: IRenderer): void {
     this.drawStatic(ctx);
     this.drawInteractive(ctx);
+
+    ctx.flush();
   }
 }
