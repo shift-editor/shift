@@ -8,6 +8,8 @@ import { Toolbar } from "./Toolbar";
 export const App = () => {
   useEffect(() => {
     const editor = AppState.getState().editor;
+    const switchTool = AppState.getState().setActiveTool;
+
     const keyDownHandler = (e: KeyboardEvent) => {
       if (e.key == "=" && e.metaKey) {
         editor.zoomIn();
@@ -20,12 +22,24 @@ export const App = () => {
         editor.requestRedraw();
         return;
       }
+
+      if (e.key == " ") {
+        switchTool("hand");
+      }
+    };
+
+    const keyUpHandler = (e: KeyboardEvent) => {
+      if (e.key == " ") {
+        switchTool("select");
+      }
     };
 
     document.addEventListener("keydown", keyDownHandler);
+    document.addEventListener("keyup", keyUpHandler);
 
     return () => {
       document.removeEventListener("keydown", keyDownHandler);
+      document.removeEventListener("keydown", keyUpHandler);
     };
   }, []);
 

@@ -1,6 +1,7 @@
 import { Point2D, TransformMatrix } from "@/types/math";
 
 export class Viewport {
+  #padding: number;
   #upm: number;
   #logicalWidth: number;
   #logicalHeight: number;
@@ -16,6 +17,7 @@ export class Viewport {
 
   constructor() {
     this.#upm = 1000;
+    this.#padding = 300;
 
     this.#dpr = window.devicePixelRatio || 1;
     this.#zoom = 1;
@@ -46,6 +48,10 @@ export class Viewport {
   // **
   get upm(): number {
     return this.#upm;
+  }
+
+  get padding(): number {
+    return this.#padding;
   }
 
   // **
@@ -140,16 +146,27 @@ export class Viewport {
   // @returns The upm transform matrix of the viewport scaled to the device pixel ratio
   // **
   upmTransformMatrix(): TransformMatrix {
-    const upmWidth = (this.logicalWidth - 300) / this.upm;
-    const upmHeight = (this.logicalHeight - 300) / this.upm;
+    const upmW = (this.logicalWidth - this.#padding) / this.#upm;
+    const upmH = (this.logicalHeight - this.#padding) / this.#upm;
 
-    const scale = Math.min(upmWidth, upmHeight);
+    const scale = Math.min(upmH, upmW);
+    // const upmDimension = scale * this.#upm;
 
-    const midPointX = this.#logicalWidth / 2 - (scale * this.upm) / 2;
-    const midPointY =
-      this.#logicalHeight - (this.#logicalHeight / 2 - (scale * this.upm) / 2);
+    // const translateX = this.#padding;
+    // const translateY = this.logicalHeight - this.#padding;
+    //
+    const size = Math.round(scale * this.#upm);
+    const difference = (this.logicalHeight - size) / 2;
+    const difference2 = (this.logicalWidth - size) / 2;
+    console.log(
+      this.getCentrePoint(),
+      size,
+      difference,
+      difference2,
+      this.logicalHeight,
+    );
 
-    return [scale, 0, 0, -scale, midPointX, midPointY];
+    return [scale, 0, 0, -scale, difference2, this.logicalHeight - difference];
   }
 
   get panX(): number {

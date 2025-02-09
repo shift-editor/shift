@@ -64,8 +64,8 @@ export class CanvasKitRenderer implements IRenderer {
 
     p.setStrokeWidth(this.#currentStyle.lineWidth);
 
-    const [r, g, b] = chroma(this.#currentStyle.strokeStyle).rgb();
-    p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, 1.0));
+    const [r, g, b, a = 1] = chroma(this.#currentStyle.strokeStyle).rgba();
+    p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, a));
 
     p.setAntiAlias(this.#currentStyle.antialias ?? true);
 

@@ -1,5 +1,6 @@
 import AppState from "@/store/store";
 import { IGraphicContext } from "@/types/graphics";
+import { Point2D } from "@/types/math";
 import { Tool } from "@/types/tool";
 import { tools } from "@lib/tools/tools";
 
@@ -19,7 +20,7 @@ export class Editor {
 
   constructor() {
     this.#viewport = new Viewport();
-    this.#painter = new Painter(this.#viewport);
+    this.#painter = new Painter();
 
     this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
@@ -56,15 +57,22 @@ export class Editor {
     this.#viewport.setMousePosition(x, y);
   }
 
-  public mousePosition(): { x: number; y: number } {
+  public mousePosition(): Point2D {
     return this.#viewport.mousePosition();
+  }
+
+  public getUpmPosition(): Point2D {
+    return {
+      x: this.#viewport.mousePosition().x / this.#viewport.zoom,
+      y: this.#viewport.mousePosition().y / this.#viewport.zoom,
+    };
   }
 
   public pan(dx: number, dy: number) {
     this.#viewport.pan(dx, dy);
   }
 
-  public getPan() {
+  public getPan(): Point2D {
     return { x: this.#viewport.panX, y: this.#viewport.panY };
   }
 
@@ -88,14 +96,22 @@ export class Editor {
     ctx.save();
     ctx.clear();
 
-    const centrePoints = this.#viewport.getCentrePoint();
-    ctx.translate(centrePoints.x, centrePoints.y);
+    const centrePoint = this.#viewport.getCentrePoint();
+    ctx.translate(centrePoint.x, centrePoint.y);
     ctx.scale(this.#viewport.zoom, this.#viewport.zoom);
-    ctx.translate(-centrePoints.x, -centrePoints.y);
+    ctx.translate(-centrePoint.x, -centrePoint.y);
 
-    ctx.transform(1, 0, 0, 1, this.#viewport.panX, this.#viewport.panY);
+    ctx.translate(this.#viewport.panX, this.#viewport.panY);
 
-    this.#painter.draw(ctx);
+    ctx.scale(1, -1);
+    ctx.translate(0, -this.#viewport.logicalHeight);
+    ctx.translate(this.#viewport.padding, this.#viewport.padding);
+
+    // ctx.transform(...this.#viewport.upmTransformMatrix());
+
+    this.#painter.drawStatic(ctx);
+
+    ctx.flush();
 
     ctx.restore();
   }
