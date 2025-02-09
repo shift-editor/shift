@@ -6,7 +6,6 @@ import {
   CanvasKitContext,
   initCanvasKit,
 } from "@/lib/graphics/backends/CanvasKitRenderer";
-import { scaleCanvasDPR } from "@/lib/utils/utils";
 
 import AppState from "../store/store";
 import { CanvasRef } from "../types/graphics";

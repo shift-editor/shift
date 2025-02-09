@@ -6,7 +6,6 @@ import { ToolName, Tool } from "@/types/tool";
 import { Hand } from "./Hand";
 import { Pen } from "./pen";
 import { Select } from "./Select";
-import { Editor } from "../editor/Editor";
 
 export interface ToolRegistryItem {
   tool: Tool;
