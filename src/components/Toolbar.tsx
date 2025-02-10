@@ -18,8 +18,8 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
 }) => {
   return (
     <div
-      className={`rounded p-2 transition-colors duration-200 ${
-        activeTool === name ? "bg-gray-700" : "hover:bg-gray-700"
+      className={`rounded p-1 transition-colors duration-200 ${
+        activeTool === name ? "bg-[#4a4a54]" : "hover:bg-[#4a4a54]"
       }`}
       onClick={onClick}
     >
@@ -33,7 +33,7 @@ export const Toolbar = () => {
   const activeTool = AppState((state) => state.activeTool);
 
   return (
-    <main className="flex h-[10vh] w-[100vw] items-center justify-center bg-[#2d2d2d]">
+    <main className="flex h-[7.5vh] w-screen items-center justify-center bg-[#2d2d2d]">
       <section className="flex items-center justify-center gap-2">
         {Array.from(tools.entries()).map(([name, { icon }]) => (
           <ToolbarIcon

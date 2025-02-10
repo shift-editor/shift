@@ -88,13 +88,9 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
-  public requestRedraw() {
-    if (!this.#staticContext) return;
-
+  applyUserTransforms(): void {
+    if (!this.#staticContext || !this.#interactiveContext) return;
     const ctx = this.#staticContext.getContext();
-
-    ctx.save();
-    ctx.clear();
 
     const centrePoint = this.#viewport.getCentrePoint();
     ctx.translate(centrePoint.x, centrePoint.y);
@@ -102,12 +98,22 @@ export class Editor {
     ctx.translate(-centrePoint.x, -centrePoint.y);
 
     ctx.translate(this.#viewport.panX, this.#viewport.panY);
+  }
+
+  public requestRedraw() {
+    if (!this.#staticContext) return;
+
+    const ctx = this.#staticContext.getContext();
+
+    ctx.save();
+
+    this.applyUserTransforms();
+
+    ctx.clear();
 
     ctx.scale(1, -1);
     ctx.translate(0, -this.#viewport.logicalHeight);
     ctx.translate(this.#viewport.padding, this.#viewport.padding);
-
-    // ctx.transform(...this.#viewport.upmTransformMatrix());
 
     this.#painter.drawStatic(ctx);
 

@@ -3,7 +3,7 @@ import { IRenderer } from "@/types/graphics";
 const X_ADVANCE = 600;
 
 const GUIDES = {
-  acender: { y: 750 },
+  ascender: { y: 750 },
   capHeight: { y: 700 },
   xHeight: { y: 500 },
   baseline: { y: 0 },
@@ -14,7 +14,6 @@ export class Painter {
   constructor() {}
 
   public drawStatic(ctx: IRenderer) {
-    // metric guides
     ctx.strokeStyle = "rgba(76, 96, 230, 0.75)";
 
     ctx.beginPath();
@@ -36,11 +35,6 @@ export class Painter {
 
     ctx.lineTo(0, GUIDES.capHeight.y);
     ctx.lineTo(0, GUIDES.xHeight.y);
-
-    ctx.moveTo(0, GUIDES.capHeight.y);
-    ctx.lineTo(0, GUIDES.acender.y);
-    ctx.lineTo(X_ADVANCE, GUIDES.acender.y);
-    ctx.lineTo(X_ADVANCE, GUIDES.capHeight.y);
 
     ctx.stroke();
   }
