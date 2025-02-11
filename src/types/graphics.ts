@@ -1,3 +1,9 @@
+export interface Path2D {
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  closePath(): void;
+}
+
 export interface IRenderer {
   save(): void;
   restore(): void;
@@ -28,7 +34,7 @@ export interface IRenderer {
 
   close(): void;
 
-  stroke(): void;
+  stroke(path?: Path2D): void;
   fill(): void;
 
   scale(x: number, y: number): void;

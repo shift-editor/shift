@@ -7,16 +7,50 @@ import InitCanvasKit, {
 } from "canvaskit-wasm";
 import chroma from "chroma-js";
 
+import { DrawStyle, DEFAULT_STYLES } from "@/lib/gfx/styles/style";
 import AppState from "@/store/store";
-
-import { IGraphicContext, IRenderer } from "../../../types/graphics";
-import { DEFAULT_STYLES, DrawStyle } from "../../gfx/styles/style";
+import { IGraphicContext, IRenderer, Path2D } from "@/types/graphics";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
     locateFile: () => `/canvaskit.wasm`,
   });
 };
+
+class CanvasKitPath implements Path2D {
+  #path: Path;
+
+  constructor(canvasKit: CanvasKit) {
+    this.#path = new canvasKit.Path();
+  }
+
+  moveTo(x: number, y: number): void {
+    this.#path.moveTo(x, y);
+  }
+
+  lineTo(x: number, y: number): void {
+    this.#path.lineTo(x, y);
+  }
+
+  cubicTo(
+    cp1x: number,
+    cp1y: number,
+    cp2x: number,
+    cp2y: number,
+    x: number,
+    y: number,
+  ): void {
+    this.#path.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
+  }
+
+  closePath(): void {
+    this.#path.close();
+  }
+
+  _getNativePath(): Path {
+    return this.#path;
+  }
+}
 
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
@@ -152,10 +186,13 @@ export class CanvasKitRenderer implements IRenderer {
     this.path.close();
   }
 
-  stroke(): void {
+  stroke(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    this.canvas.drawPath(this.path, p);
+    this.canvas.drawPath(
+      path instanceof CanvasKitPath ? path._getNativePath() : this.path,
+      p,
+    );
 
     this.path.delete();
     p.delete();
