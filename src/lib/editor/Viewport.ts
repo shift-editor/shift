@@ -158,13 +158,6 @@ export class Viewport {
     const size = Math.round(scale * this.#upm);
     const difference = (this.logicalHeight - size) / 2;
     const difference2 = (this.logicalWidth - size) / 2;
-    console.log(
-      this.getCentrePoint(),
-      size,
-      difference,
-      difference2,
-      this.logicalHeight,
-    );
 
     return [scale, 0, 0, -scale, difference2, this.logicalHeight - difference];
   }

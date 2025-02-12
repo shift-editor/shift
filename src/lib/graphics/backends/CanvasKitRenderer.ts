@@ -9,7 +9,7 @@ import chroma from "chroma-js";
 
 import { DrawStyle, DEFAULT_STYLES } from "@/lib/gfx/styles/style";
 import AppState from "@/store/store";
-import { IGraphicContext, IRenderer, Path2D } from "@/types/graphics";
+import { IGraphicContext, IRenderer, IPath } from "@/types/graphics";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -17,7 +17,7 @@ export const initCanvasKit = async (): Promise<CanvasKit> => {
   });
 };
 
-class CanvasKitPath implements Path2D {
+export class CanvasKitPath implements IPath {
   #path: Path;
 
   constructor(canvasKit: CanvasKit) {
@@ -55,10 +55,14 @@ class CanvasKitPath implements Path2D {
 export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
   #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
-  #path: Path | null = null;
+  #path: Path;
+  #paint: Paint;
 
   public constructor(ctx: CanvasKitContext) {
     this.#ctx = ctx;
+
+    this.#path = new this.#ctx.canvasKit.Path();
+    this.#paint = new this.#ctx.canvasKit.Paint();
   }
 
   public get ctx(): CanvasKitContext {
@@ -93,17 +97,17 @@ export class CanvasKitRenderer implements IRenderer {
     this.#currentStyle.fillStyle = style;
   }
 
-  private getPaint(): Paint {
-    const p = new this.ctx.canvasKit.Paint();
-
-    p.setStrokeWidth(this.#currentStyle.lineWidth);
+  getPaint(): Paint {
+    this.#paint.setStrokeWidth(this.#currentStyle.lineWidth);
 
     const [r, g, b, a = 1] = chroma(this.#currentStyle.strokeStyle).rgba();
-    p.setColor(this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, a));
+    this.#paint.setColor(
+      this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, a),
+    );
 
-    p.setAntiAlias(this.#currentStyle.antialias ?? true);
+    this.#paint.setAntiAlias(this.#currentStyle.antialias ?? true);
 
-    return p;
+    return this.#paint;
   }
 
   save(): void {
@@ -120,7 +124,6 @@ export class CanvasKitRenderer implements IRenderer {
 
   clear(): void {
     this.canvas.clear(this.ctx.canvasKit.WHITE);
-    this.flush();
   }
 
   dispose(): void {
@@ -129,46 +132,32 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void {
-    const p = this.getPaint();
-    this.canvas.drawLine(x0, y0, x1, y1, p);
-    p.delete();
+    this.canvas.drawLine(x0, y0, x1, y1, this.getPaint());
   }
 
   drawRect(x: number, y: number, width: number, height: number): void {
-    const p = this.getPaint();
-
     const rect = this.#ctx.canvasKit.XYWHRect(x, y, width, height);
-    this.canvas.drawRect(rect, p);
-
-    p.delete();
+    this.canvas.drawRect(rect, this.getPaint());
   }
 
-  drawCircle(x: number, y: number, radius: number): void {
-    const p = this.getPaint();
-    this.canvas.drawCircle(x, y, radius, p);
-    p.delete();
+  fillCircle(x: number, y: number, radius: number): void {
+    this.canvas.drawCircle(x, y, radius, this.#paint);
+  }
+
+  createPath(): IPath {
+    return new CanvasKitPath(this.#ctx.canvasKit);
   }
 
   beginPath(): void {
-    this.#path = new this.#ctx.canvasKit.Path();
-  }
-
-  get path(): Path {
-    if (!this.#path) {
-      console.warn(
-        "Path operation called without beginPath(), creating new path",
-      );
-      this.beginPath();
-    }
-    return this.#path!;
+    this.#path.reset();
   }
 
   moveTo(x: number, y: number): void {
-    this.path.moveTo(x, y);
+    this.#path.moveTo(x, y);
   }
 
   lineTo(x: number, y: number): void {
-    this.path.lineTo(x, y);
+    this.#path.lineTo(x, y);
   }
 
   cubicTo(
@@ -179,34 +168,39 @@ export class CanvasKitRenderer implements IRenderer {
     x: number,
     y: number,
   ): void {
-    this.path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
+    this.#path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
 
-  close(): void {
-    this.path.close();
+  closePath(): void {
+    this.#path.close();
   }
 
-  stroke(path?: Path2D): void {
+  stroke(path?: IPath): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    this.canvas.drawPath(
-      path instanceof CanvasKitPath ? path._getNativePath() : this.path,
-      p,
-    );
 
-    this.path.delete();
-    p.delete();
-
-    this.#path = null;
+    if (path instanceof CanvasKitPath) {
+      this.canvas.drawPath(path._getNativePath(), p);
+      return;
+    }
+    this.canvas.drawPath(this.#path, p);
+    this.#path.reset();
   }
 
-  fill(): void {
+  fill(path?: IPath): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
-    this.canvas.drawPath(this.path, p);
 
-    this.path.delete();
-    p.delete();
+    if (path) {
+      this.canvas.drawPath(
+        path instanceof CanvasKitPath ? path._getNativePath() : this.#path,
+        p,
+      );
+      return;
+    }
+
+    this.canvas.drawPath(this.#path, p);
+    this.#path.reset();
   }
 
   scale(x: number, y: number): void {
@@ -234,6 +228,7 @@ export class CanvasKitContext implements IGraphicContext {
   #canvasKit: CanvasKit;
   #ctx: CanvasKitRenderer;
   #surface: Surface | null = null;
+  #canvas: Canvas | null = null;
 
   public constructor(canvasKit: CanvasKit) {
     this.#canvasKit = canvasKit;
@@ -256,10 +251,10 @@ export class CanvasKitContext implements IGraphicContext {
   }
 
   public get canvas(): Canvas {
-    if (!this.#surface) {
-      throw new Error("Surface not initialized");
+    if (!this.#canvas) {
+      throw new Error("Canvas not initialized");
     }
-    return this.#surface.getCanvas();
+    return this.#canvas;
   }
 
   public createSurface(canvas: HTMLCanvasElement): void {
@@ -270,6 +265,10 @@ export class CanvasKitContext implements IGraphicContext {
 
     const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas);
     this.#surface = s;
+
+    if (s) {
+      this.#canvas = s.getCanvas();
+    }
   }
 
   public resizeCanvas(canvas: HTMLCanvasElement): void {

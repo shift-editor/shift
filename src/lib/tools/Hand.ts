@@ -2,6 +2,7 @@ import AppState from "@/store/store";
 import { Point2D } from "@/types/math";
 
 import { Tool, ToolName } from "../../types/tool";
+import { Editor } from "../editor/Editor";
 import { getMouseCoords } from "../utils/utils";
 
 export class Hand implements Tool {

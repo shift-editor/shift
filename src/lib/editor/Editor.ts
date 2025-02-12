@@ -34,6 +34,8 @@ export class Editor {
 
   public setStaticContext(context: IGraphicContext) {
     this.#staticContext = context;
+
+    this.#painter.setStaticGuides(this.#staticContext.getContext());
   }
 
   public setInteractiveContext(context: IGraphicContext) {
@@ -116,6 +118,9 @@ export class Editor {
     ctx.translate(this.#viewport.padding, this.#viewport.padding);
 
     this.#painter.drawStatic(ctx);
+
+    ctx.fillStyle = "red";
+    ctx.fillCircle(0, 0, 10);
 
     ctx.flush();
 

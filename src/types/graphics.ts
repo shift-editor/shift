@@ -1,4 +1,4 @@
-export interface Path2D {
+export interface IPath {
   moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
   closePath(): void;
@@ -17,8 +17,9 @@ export interface IRenderer {
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
   drawRect(x: number, y: number, width: number, height: number): void;
-  drawCircle(x: number, y: number, radius: number): void;
+  fillCircle(x: number, y: number, radius: number): void;
 
+  createPath(): IPath;
   beginPath(): void;
   moveTo(x: number, y: number): void;
 
@@ -32,10 +33,10 @@ export interface IRenderer {
     y: number,
   ): void;
 
-  close(): void;
+  closePath(): void;
 
-  stroke(path?: Path2D): void;
-  fill(): void;
+  stroke(path?: IPath): void;
+  fill(path?: IPath): void;
 
   scale(x: number, y: number): void;
   translate(x: number, y: number): void;

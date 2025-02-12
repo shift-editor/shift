@@ -1,5 +1,7 @@
 import { IRenderer } from "@/types/graphics";
 
+import type { IPath } from "@/types/graphics";
+
 const X_ADVANCE = 600;
 
 const GUIDES = {
@@ -11,32 +13,40 @@ const GUIDES = {
 };
 
 export class Painter {
-  constructor() {}
+  #staticGuides: IPath | null = null;
+
+  setStaticGuides(ctx: IRenderer) {
+    const path = ctx.createPath();
+
+    path.moveTo(0, GUIDES.descender.y);
+    path.lineTo(X_ADVANCE, GUIDES.descender.y);
+    path.lineTo(X_ADVANCE, 200);
+
+    path.lineTo(0, 200);
+    path.lineTo(0, GUIDES.descender.y);
+
+    path.moveTo(0, 200);
+
+    path.lineTo(0, GUIDES.xHeight.y);
+    path.lineTo(X_ADVANCE, GUIDES.xHeight.y);
+    path.lineTo(X_ADVANCE, 200);
+
+    path.moveTo(X_ADVANCE, GUIDES.xHeight.y);
+    path.lineTo(X_ADVANCE, GUIDES.capHeight.y);
+
+    path.lineTo(0, GUIDES.capHeight.y);
+    path.lineTo(0, GUIDES.xHeight.y);
+
+    this.#staticGuides = path;
+  }
 
   public drawStatic(ctx: IRenderer) {
     ctx.strokeStyle = "rgba(76, 96, 230, 0.75)";
-
-    ctx.beginPath();
-    ctx.moveTo(0, GUIDES.descender.y);
-    ctx.lineTo(X_ADVANCE, GUIDES.descender.y);
-    ctx.lineTo(X_ADVANCE, 200);
-
-    ctx.lineTo(0, 200);
-    ctx.lineTo(0, GUIDES.descender.y);
-
-    ctx.moveTo(0, 200);
-
-    ctx.lineTo(0, GUIDES.xHeight.y);
-    ctx.lineTo(X_ADVANCE, GUIDES.xHeight.y);
-    ctx.lineTo(X_ADVANCE, 200);
-
-    ctx.moveTo(X_ADVANCE, GUIDES.xHeight.y);
-    ctx.lineTo(X_ADVANCE, GUIDES.capHeight.y);
-
-    ctx.lineTo(0, GUIDES.capHeight.y);
-    ctx.lineTo(0, GUIDES.xHeight.y);
-
-    ctx.stroke();
+    if (!this.#staticGuides) {
+      console.error("No static guides set");
+      return;
+    }
+    ctx.stroke(this.#staticGuides);
   }
 
   public drawInteractive(_: IRenderer): void {}
