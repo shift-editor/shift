@@ -1,5 +1,7 @@
 import { IRenderer } from "@/types/graphics";
 
+import { GUIDE_STYLES } from "../gfx/styles/style";
+
 import type { IPath } from "@/types/graphics";
 
 const X_ADVANCE = 600;
@@ -41,11 +43,12 @@ export class Painter {
   }
 
   public drawStatic(ctx: IRenderer) {
-    ctx.strokeStyle = "rgba(76, 96, 230, 0.75)";
     if (!this.#staticGuides) {
       console.error("No static guides set");
       return;
     }
+
+    ctx.setStyle(GUIDE_STYLES);
     ctx.stroke(this.#staticGuides);
   }
 

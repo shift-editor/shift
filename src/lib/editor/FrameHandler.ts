@@ -1,17 +1,31 @@
-type FrameRequestCallback = (time: number) => void;
+type FrameHandlerCallback = (...args: unknown[]) => void;
 
 export class FrameHandler {
-  #id: number;
+  #id: number | null = null;
+  #callback: FrameHandlerCallback | null = null;
 
-  constructor() {
-    this.#id = 0;
+  public requestUpdate(callback: FrameHandlerCallback): void {
+    if (this.#id) return;
+    this.#callback = callback;
+
+    this.#id = window.requestAnimationFrame(this.#update);
   }
 
-  requestUpdate(callback: FrameRequestCallback): void {
-    this.#id = window.requestAnimationFrame(callback);
-  }
+  #update = () => {
+    if (!this.#callback) return;
+    this.#callback();
+    this.#callback = null;
+    this.#id = null;
+  };
 
-  cancelUpdate(): void {
+  cleanup(): void {
+    if (!this.#id) return;
     window.cancelAnimationFrame(this.#id);
+    this.#id = null;
+    this.#callback = null;
+  }
+
+  public cancelUpdate(): void {
+    this.cleanup();
   }
 }

@@ -1,3 +1,6 @@
+import { DrawStyle } from "@/lib/gfx/styles/style";
+
+export type Colour = [number, number, number, number];
 export interface IPath {
   moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
@@ -14,6 +17,9 @@ export interface IRenderer {
   lineWidth: number;
   strokeStyle: string;
   fillStyle: string;
+  antiAlias: boolean;
+
+  setStyle(style: DrawStyle): void;
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
   drawRect(x: number, y: number, width: number, height: number): void;
@@ -60,7 +66,7 @@ export interface IRenderer {
 }
 
 export interface IGraphicContext {
-  resizeCanvas(canvas: HTMLCanvasElement): void;
+  resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRectReadOnly): void;
 
   getContext(): IRenderer;
 

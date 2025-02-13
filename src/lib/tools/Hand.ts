@@ -1,49 +1,44 @@
-import AppState from "@/store/store";
 import { Point2D } from "@/types/math";
+import { Tool, ToolName } from "@/types/tool";
 
-import { Tool, ToolName } from "../../types/tool";
 import { Editor } from "../editor/Editor";
-import { getMouseCoords } from "../utils/utils";
 
 export class Hand implements Tool {
   public readonly name: ToolName = "hand";
+
+  #editor: Editor;
+
+  constructor(editor: Editor) {
+    this.#editor = editor;
+  }
 
   #dragging: boolean = false;
   #startPos: Point2D = { x: 0, y: 0 };
   #startPan: Point2D = { x: 0, y: 0 };
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#startPos = getMouseCoords(
-      e.clientX,
-      e.clientY,
-      e.currentTarget.getBoundingClientRect(),
-    );
-
-    this.#startPan = AppState.getState().editor.getPan();
+    this.#startPos = this.#editor.mousePosition(e.clientX, e.clientY);
+    this.#startPan = this.#editor.getPan();
 
     this.#dragging = true;
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (!this.#dragging) return;
-    const { x, y } = getMouseCoords(
-      e.clientX,
-      e.clientY,
-      e.currentTarget.getBoundingClientRect(),
-    );
-    const editor = AppState.getState().editor;
+    const { x, y } = this.#editor.mousePosition(e.clientX, e.clientY);
 
-    const dx = (x - this.#startPos.x) / editor.zoom();
-    const dy = (y - this.#startPos.y) / editor.zoom();
+    const dx = (x - this.#startPos.x) / this.#editor.zoom();
+    const dy = (y - this.#startPos.y) / this.#editor.zoom();
 
     const panX = this.#startPan.x + dx;
     const panY = this.#startPan.y + dy;
-    editor.pan(panX, panY);
 
-    editor.requestRedraw();
+    this.#editor.pan(panX, panY);
+    this.#editor.requestRedraw();
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
     this.#dragging = false;
+    this.#editor.cancelRedraw();
   }
 }

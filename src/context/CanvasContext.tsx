@@ -28,13 +28,13 @@ export const CanvasContextProvider = ({
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [_, setIsReady] = useState(false);
+  const [, setIsReady] = useState(false);
 
   useEffect(() => {
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
-      ctx.resizeCanvas(canvas);
+      ctx.resizeCanvas(canvas, canvas.getBoundingClientRect());
 
       return ctx;
     };
@@ -57,13 +57,19 @@ export const CanvasContextProvider = ({
 
       setIsReady(true);
 
-      const resizeCanvas = () => {
-        if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;
+      const resizeCanvas = (entries: ResizeObserverEntry[]) => {
+        const [interactiveCanvas, staticCanvas] = entries;
 
-        interactiveContext.resizeCanvas(interactiveCanvasRef.current);
-        staticContext.resizeCanvas(staticCanvasRef.current);
+        interactiveContext.resizeCanvas(
+          interactiveCanvas.target as HTMLCanvasElement,
+          interactiveCanvas.contentRect,
+        );
+        staticContext.resizeCanvas(
+          staticCanvas.target as HTMLCanvasElement,
+          staticCanvas.contentRect,
+        );
 
-        editor.requestRedraw();
+        editor.requestImmediateRedraw();
       };
 
       const observer = new ResizeObserver(resizeCanvas);

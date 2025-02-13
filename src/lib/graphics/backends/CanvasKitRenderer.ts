@@ -3,13 +3,15 @@ import InitCanvasKit, {
   CanvasKit,
   Paint,
   Path,
+  Rect,
   Surface,
 } from "canvaskit-wasm";
 import chroma from "chroma-js";
 
 import { DrawStyle, DEFAULT_STYLES } from "@/lib/gfx/styles/style";
-import AppState from "@/store/store";
-import { IGraphicContext, IRenderer, IPath } from "@/types/graphics";
+import { getEditor } from "@/store/store";
+import { IGraphicContext, IRenderer, IPath, Colour } from "@/types/graphics";
+import { Rect2D } from "@/types/math";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -56,7 +58,10 @@ export class CanvasKitRenderer implements IRenderer {
   #ctx: CanvasKitContext;
   #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
   #path: Path;
+
   #paint: Paint;
+  #strokeColour: Colour = [0, 0, 0, 1];
+  #fillColour: Colour = [0, 0, 0, 1];
 
   public constructor(ctx: CanvasKitContext) {
     this.#ctx = ctx;
@@ -71,6 +76,16 @@ export class CanvasKitRenderer implements IRenderer {
 
   public get canvas(): Canvas {
     return this.#ctx.canvas;
+  }
+
+  public setStyle(style: DrawStyle): void {
+    this.#currentStyle = {
+      ...DEFAULT_STYLES,
+      ...style,
+    };
+
+    this.strokeStyle = this.#currentStyle.strokeStyle;
+    this.fillStyle = this.#currentStyle.fillStyle;
   }
 
   public get lineWidth(): number {
@@ -91,21 +106,47 @@ export class CanvasKitRenderer implements IRenderer {
 
   public set strokeStyle(style: string) {
     this.#currentStyle.strokeStyle = style;
+    this.#strokeColour = chroma(style).rgba();
   }
 
   public set fillStyle(style: string) {
     this.#currentStyle.fillStyle = style;
+    this.#fillColour = chroma(style).rgba();
+  }
+
+  public set antiAlias(value: boolean) {
+    this.#currentStyle.antiAlias = value;
+  }
+
+  public get antiAlias(): boolean {
+    return this.#currentStyle.antiAlias ?? true;
+  }
+
+  setStrokeColour(): void {
+    this.#paint.setColor(
+      this.ctx.canvasKit.Color4f(
+        this.#strokeColour[0] / 255,
+        this.#strokeColour[1] / 255,
+        this.#strokeColour[2] / 255,
+        this.#strokeColour[3],
+      ),
+    );
+  }
+
+  setFillColour(): void {
+    this.#paint.setColor(
+      this.ctx.canvasKit.Color4f(
+        this.#fillColour[0] / 255,
+        this.#fillColour[1] / 255,
+        this.#fillColour[2] / 255,
+        this.#fillColour[3],
+      ),
+    );
   }
 
   getPaint(): Paint {
     this.#paint.setStrokeWidth(this.#currentStyle.lineWidth);
-
-    const [r, g, b, a = 1] = chroma(this.#currentStyle.strokeStyle).rgba();
-    this.#paint.setColor(
-      this.ctx.canvasKit.Color4f(r / 255, g / 255, b / 255, a),
-    );
-
-    this.#paint.setAntiAlias(this.#currentStyle.antialias ?? true);
+    this.#paint.setAntiAlias(this.#currentStyle.antiAlias ?? true);
 
     return this.#paint;
   }
@@ -141,7 +182,7 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   fillCircle(x: number, y: number, radius: number): void {
-    this.canvas.drawCircle(x, y, radius, this.#paint);
+    this.canvas.drawCircle(x, y, radius, this.getPaint());
   }
 
   createPath(): IPath {
@@ -178,6 +219,7 @@ export class CanvasKitRenderer implements IRenderer {
   stroke(path?: IPath): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
+    this.setStrokeColour();
 
     if (path instanceof CanvasKitPath) {
       this.canvas.drawPath(path._getNativePath(), p);
@@ -263,7 +305,15 @@ export class CanvasKitContext implements IGraphicContext {
       this.#surface = null;
     }
 
-    const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas);
+    const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas, undefined, {
+      alpha: 1, // No transparency needed for font editing
+      antialias: 1, // Enable antialiasing for smooth curves
+      depth: 0, // No depth buffer needed for 2D
+      premultipliedAlpha: 0, // Since alpha is disabled
+      preserveDrawingBuffer: 1, // Important for continuous rendering during panning
+      stencil: 0, // No stencil buffer needed for basic font editing
+    });
+
     this.#surface = s;
 
     if (s) {
@@ -271,15 +321,23 @@ export class CanvasKitContext implements IGraphicContext {
     }
   }
 
-  public resizeCanvas(canvas: HTMLCanvasElement): void {
+  public resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRectReadOnly): void {
     const dpr = window.devicePixelRatio || 1;
-
-    const rect = canvas.getBoundingClientRect();
-
-    AppState.getState().editor.setDimensions(rect.width, rect.height);
 
     const width = Math.floor(rect.width * dpr);
     const height = Math.floor(rect.height * dpr);
+
+    const editor = getEditor();
+    editor.setRect({
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+    });
 
     canvas.width = width;
     canvas.height = height;

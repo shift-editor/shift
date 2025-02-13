@@ -1,6 +1,6 @@
 import AppState from "@/store/store";
 import { IGraphicContext } from "@/types/graphics";
-import { Point2D } from "@/types/math";
+import { Point2D, Rect2D } from "@/types/math";
 import { Tool } from "@/types/tool";
 import { tools } from "@lib/tools/tools";
 
@@ -51,23 +51,12 @@ export class Editor {
     return tool.tool;
   }
 
-  public setDimensions(width: number, height: number) {
-    this.#viewport.setDimensions(width, height);
+  public setRect(rect: Rect2D) {
+    this.#viewport.setRect(rect);
   }
 
-  public setMousePosition(x: number, y: number) {
-    this.#viewport.setMousePosition(x, y);
-  }
-
-  public mousePosition(): Point2D {
-    return this.#viewport.mousePosition();
-  }
-
-  public getUpmPosition(): Point2D {
-    return {
-      x: this.#viewport.mousePosition().x / this.#viewport.zoom,
-      y: this.#viewport.mousePosition().y / this.#viewport.zoom,
-    };
+  public mousePosition(clientX: number, clientY: number): Point2D {
+    return this.#viewport.mousePosition(clientX, clientY);
   }
 
   public pan(dx: number, dy: number) {
@@ -95,6 +84,7 @@ export class Editor {
     const ctx = this.#staticContext.getContext();
 
     const centrePoint = this.#viewport.getCentrePoint();
+
     ctx.translate(centrePoint.x, centrePoint.y);
     ctx.scale(this.#viewport.zoom, this.#viewport.zoom);
     ctx.translate(-centrePoint.x, -centrePoint.y);
@@ -102,7 +92,7 @@ export class Editor {
     ctx.translate(this.#viewport.panX, this.#viewport.panY);
   }
 
-  public requestRedraw() {
+  draw() {
     if (!this.#staticContext) return;
 
     const ctx = this.#staticContext.getContext();
@@ -119,12 +109,20 @@ export class Editor {
 
     this.#painter.drawStatic(ctx);
 
-    ctx.fillStyle = "red";
-    ctx.fillCircle(0, 0, 10);
-
     ctx.flush();
-
     ctx.restore();
+  }
+
+  public requestRedraw() {
+    this.#frameHandler.requestUpdate(() => this.draw());
+  }
+
+  public requestImmediateRedraw() {
+    this.draw();
+  }
+
+  public cancelRedraw() {
+    this.#frameHandler.cancelUpdate();
   }
 
   public destroy() {

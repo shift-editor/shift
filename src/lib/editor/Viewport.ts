@@ -1,10 +1,9 @@
-import { Point2D, TransformMatrix } from "@/types/math";
+import { Point2D, Rect2D, TransformMatrix } from "@/types/math";
 
 export class Viewport {
   #padding: number;
   #upm: number;
-  #logicalWidth: number;
-  #logicalHeight: number;
+  #canvasRect: Rect2D;
 
   #zoom: number;
   #dpr: number;
@@ -22,8 +21,16 @@ export class Viewport {
     this.#dpr = window.devicePixelRatio || 1;
     this.#zoom = 1;
 
-    this.#logicalWidth = 0;
-    this.#logicalHeight = 0;
+    this.#canvasRect = {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+    };
 
     this.#mouseX = 0;
     this.#mouseY = 0;
@@ -37,9 +44,8 @@ export class Viewport {
   // @param width - The width of the viewport
   // @param height - The height of the viewport
   // **
-  setDimensions(width: number, height: number) {
-    this.#logicalWidth = width;
-    this.#logicalHeight = height;
+  setRect(rect: Rect2D) {
+    this.#canvasRect = rect;
   }
 
   // **
@@ -60,7 +66,7 @@ export class Viewport {
   // @returns The device width of the viewport
   // **
   get deviceWidth(): number {
-    return this.#logicalWidth * this.#dpr;
+    return this.#canvasRect.width * this.#dpr;
   }
 
   // **
@@ -69,7 +75,7 @@ export class Viewport {
   // @returns The device height of the viewport
   // **
   get deviceHeight(): number {
-    return this.#logicalHeight * this.#dpr;
+    return this.#canvasRect.height * this.#dpr;
   }
 
   // **
@@ -77,7 +83,7 @@ export class Viewport {
   // @returns The logical width of the viewport
   // **
   get logicalWidth(): number {
-    return this.#logicalWidth;
+    return this.#canvasRect.width;
   }
 
   // **
@@ -85,7 +91,7 @@ export class Viewport {
   // @returns The logical height of the viewport
   // **
   get logicalHeight(): number {
-    return this.#logicalHeight;
+    return this.#canvasRect.height;
   }
 
   // **
@@ -109,21 +115,14 @@ export class Viewport {
   }
 
   // **
-  // Set the mouse position of the viewport
-  // @param x - The x position of the mouse
-  // @param y - The y position of the mouse
-  // **
-  setMousePosition(x: number, y: number) {
-    this.#mouseX = x;
-    this.#mouseY = y;
-  }
-
-  // **
   // Get the mouse position of the viewport
   // @returns The mouse position of the viewport
   // **
-  public mousePosition(): Point2D {
-    return { x: this.#mouseX, y: this.#mouseY };
+  public mousePosition(clientX: number, clientY: number): Point2D {
+    return {
+      x: clientX - this.#canvasRect.left,
+      y: clientY - this.#canvasRect.top,
+    };
   }
 
   public getCentrePoint(): Point2D {
@@ -135,31 +134,7 @@ export class Viewport {
   // @returns The upm mouse position of the viewport
   // **
   upmMousePosition(): Point2D {
-    const y = this.#mouseY + 300 + this.#logicalWidth / this.#upm;
-    const x = this.#mouseX + 300 + this.#logicalHeight / this.#upm;
-
-    return { x, y };
-  }
-
-  // **
-  // Get the upm transform matrix of the viewport
-  // @returns The upm transform matrix of the viewport scaled to the device pixel ratio
-  // **
-  upmTransformMatrix(): TransformMatrix {
-    const upmW = (this.logicalWidth - this.#padding) / this.#upm;
-    const upmH = (this.logicalHeight - this.#padding) / this.#upm;
-
-    const scale = Math.min(upmH, upmW);
-    // const upmDimension = scale * this.#upm;
-
-    // const translateX = this.#padding;
-    // const translateY = this.logicalHeight - this.#padding;
-    //
-    const size = Math.round(scale * this.#upm);
-    const difference = (this.logicalHeight - size) / 2;
-    const difference2 = (this.logicalWidth - size) / 2;
-
-    return [scale, 0, 0, -scale, difference2, this.logicalHeight - difference];
+    return { x: 0, y: 0 };
   }
 
   get panX(): number {

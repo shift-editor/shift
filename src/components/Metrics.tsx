@@ -7,25 +7,22 @@ export const Metrics = () => {
   const yRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  const editor = AppState.getState().editor;
-
-  useEffect(() => {
-    const updateMouseMetrics = () => {
-      if (!xRef.current || !yRef.current || !zoomRef.current) return;
-      const { x, y } = editor.mousePosition();
-
-      xRef.current.textContent = Math.round(x).toString();
-      yRef.current.textContent = Math.round(y).toString();
-
-      zoomRef.current.textContent = editor.zoom().toString();
-    };
-
-    window.addEventListener("mousemove", updateMouseMetrics);
-
-    return () => {
-      window.removeEventListener("mousemove", updateMouseMetrics);
-    };
-  }, []);
+  // useEffect(() => {
+  //   const updateMouseMetrics = () => {
+  //     if (!xRef.current || !yRef.current || !zoomRef.current) return;
+  //
+  //     xRef.current.textContent = Math.round(x).toString();
+  //     yRef.current.textContent = Math.round(y).toString();
+  //
+  //     zoomRef.current.textContent = editor.zoom().toString();
+  //   };
+  //
+  //   window.addEventListener("mousemove", updateMouseMetrics);
+  //
+  //   return () => {
+  //     window.removeEventListener("mousemove", updateMouseMetrics);
+  //   };
+  // }, []);
 
   return (
     <>

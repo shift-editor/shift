@@ -13,10 +13,7 @@ export const InteractiveScene = () => {
     <canvas
       id="interactive-canvas"
       ref={interactiveCanvasRef}
-      className={`absolute inset-0 z-10 h-full w-full`}
-      style={{
-        imageRendering: "pixelated",
-      }}
+      className="absolute inset-0 z-10 h-full w-full"
       onMouseDown={(e) => {
         activeTool.onMouseDown(e);
       }}

@@ -4,26 +4,26 @@ export interface DrawStyle {
   lineWidth: number;
   strokeStyle: string;
   fillStyle: string;
-  antialias?: boolean;
+  antiAlias?: boolean;
 }
 
 export const GUIDE_STYLES: DrawStyle = {
   lineWidth: 0.5,
-  strokeStyle: "red",
-  fillStyle: "transparent",
-  antialias: true,
+  strokeStyle: "rgb(76, 96, 230)",
+  fillStyle: "black",
+  antiAlias: false,
 };
 
 export const DEFAULT_STYLES: DrawStyle = {
   lineWidth: 0.5,
   strokeStyle: "black",
   fillStyle: "white",
-  antialias: true,
+  antiAlias: true,
 };
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   [HandleType.CORNER]: {
-    antialias: false,
+    antiAlias: false,
     lineWidth: 1,
     strokeStyle: "black",
     fillStyle: "white",
@@ -32,16 +32,16 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
     strokeStyle: "green",
     lineWidth: 2,
     fillStyle: "white",
-    antialias: false,
+    antiAlias: false,
   },
   [HandleType.CONTROL]: {
-    antialias: true,
+    antiAlias: true,
     lineWidth: 1,
     strokeStyle: "red",
     fillStyle: "white",
   },
   [HandleType.DIRECTION]: {
-    antialias: false,
+    antiAlias: false,
     lineWidth: 1,
     strokeStyle: "blue",
     fillStyle: "white",
