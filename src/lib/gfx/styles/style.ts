@@ -11,7 +11,7 @@ export const GUIDE_STYLES: DrawStyle = {
   lineWidth: 0.5,
   strokeStyle: "rgb(76, 96, 230)",
   fillStyle: "black",
-  antiAlias: false,
+  antiAlias: true,
 };
 
 export const DEFAULT_STYLES: DrawStyle = {

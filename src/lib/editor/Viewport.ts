@@ -1,4 +1,4 @@
-import { Point2D, Rect2D, TransformMatrix } from "@/types/math";
+import { Point2D, Rect2D } from "@/types/math";
 
 export class Viewport {
   #padding: number;
@@ -7,9 +7,6 @@ export class Viewport {
 
   #zoom: number;
   #dpr: number;
-
-  #mouseX: number;
-  #mouseY: number;
 
   #panX: number;
   #panY: number;
@@ -31,9 +28,6 @@ export class Viewport {
       right: 0,
       bottom: 0,
     };
-
-    this.#mouseX = 0;
-    this.#mouseY = 0;
 
     this.#panX = 0;
     this.#panY = 0;
@@ -125,16 +119,19 @@ export class Viewport {
     };
   }
 
-  public getCentrePoint(): Point2D {
-    return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
-  }
-
   // **
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
   // **
-  upmMousePosition(): Point2D {
-    return { x: 0, y: 0 };
+  public upmMousePosition(clientX: number, clientY: number): Point2D {
+    return {
+      x: clientX - this.#canvasRect.left,
+      y: clientY - this.#canvasRect.top,
+    };
+  }
+
+  public getCentrePoint(): Point2D {
+    return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
   }
 
   get panX(): number {

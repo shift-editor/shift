@@ -22,7 +22,7 @@ export interface IRenderer {
   setStyle(style: DrawStyle): void;
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
-  drawRect(x: number, y: number, width: number, height: number): void;
+  fillRect(x: number, y: number, width: number, height: number): void;
   fillCircle(x: number, y: number, radius: number): void;
 
   createPath(): IPath;

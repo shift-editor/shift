@@ -20,24 +20,16 @@ export class Painter {
   setStaticGuides(ctx: IRenderer) {
     const path = ctx.createPath();
 
+    Object.values(GUIDES).forEach(({ y }) => {
+      path.moveTo(0, y);
+      path.lineTo(X_ADVANCE, y);
+    });
+
+    // Draw vertical bounds
     path.moveTo(0, GUIDES.descender.y);
-    path.lineTo(X_ADVANCE, GUIDES.descender.y);
-    path.lineTo(X_ADVANCE, 200);
-
-    path.lineTo(0, 200);
-    path.lineTo(0, GUIDES.descender.y);
-
-    path.moveTo(0, 200);
-
-    path.lineTo(0, GUIDES.xHeight.y);
-    path.lineTo(X_ADVANCE, GUIDES.xHeight.y);
-    path.lineTo(X_ADVANCE, 200);
-
-    path.moveTo(X_ADVANCE, GUIDES.xHeight.y);
-    path.lineTo(X_ADVANCE, GUIDES.capHeight.y);
-
-    path.lineTo(0, GUIDES.capHeight.y);
-    path.lineTo(0, GUIDES.xHeight.y);
+    path.lineTo(0, GUIDES.ascender.y);
+    path.moveTo(X_ADVANCE, GUIDES.descender.y);
+    path.lineTo(X_ADVANCE, GUIDES.ascender.y);
 
     this.#staticGuides = path;
   }

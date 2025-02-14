@@ -59,6 +59,10 @@ export class Editor {
     return this.#viewport.mousePosition(clientX, clientY);
   }
 
+  public upmMousePosition(clientX: number, clientY: number): Point2D {
+    return this.#viewport.upmMousePosition(clientX, clientY);
+  }
+
   public pan(dx: number, dy: number) {
     this.#viewport.pan(dx, dy);
   }
@@ -94,23 +98,43 @@ export class Editor {
 
   draw() {
     if (!this.#staticContext) return;
-
     const ctx = this.#staticContext.getContext();
 
-    ctx.save();
-
-    this.applyUserTransforms();
-
+    ctx.save(); // Save initial state
     ctx.clear();
 
-    ctx.scale(1, -1);
-    ctx.translate(0, -this.#viewport.logicalHeight);
-    ctx.translate(this.#viewport.padding, this.#viewport.padding);
+    // 1. User view transformation matrix
+    const center = this.#viewport.getCentrePoint();
+    const zoom = this.#viewport.zoom;
+    const { panX, panY } = this.#viewport;
 
+    ctx.transform(
+      zoom, // a: scale x
+      0, // b: skew y
+      0, // c: skew x
+      zoom, // d: scale y
+      panX + center.x * (1 - zoom), // e: translate x
+      panY + center.y * (1 - zoom), // f: translate y
+    );
+
+    // 2. Transform to font coordinate space with single matrix
+    ctx.transform(
+      1, // a: scale x
+      0, // b: skew y
+      0, // c: skew x
+      -1, // d: scale y (flipped)
+      this.#viewport.padding, // e: translate x
+      this.#viewport.logicalHeight - this.#viewport.padding, // f: translate y
+    );
+
+    ctx.fillCircle(0, 0, 10);
+
+    // 3. Draw in the fully transformed space
     this.#painter.drawStatic(ctx);
+    this.#painter.drawInteractive(ctx);
 
     ctx.flush();
-    ctx.restore();
+    ctx.restore(); // Return to original state
   }
 
   public requestRedraw() {

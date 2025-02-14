@@ -144,10 +144,19 @@ export class CanvasKitRenderer implements IRenderer {
     );
   }
 
+  setFill(): void {
+    this.#paint.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
+    this.setFillColour();
+  }
+
+  setStroke(): void {
+    this.#paint.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
+    this.setStrokeColour();
+  }
+
   getPaint(): Paint {
     this.#paint.setStrokeWidth(this.#currentStyle.lineWidth);
     this.#paint.setAntiAlias(this.#currentStyle.antiAlias ?? true);
-
     return this.#paint;
   }
 
@@ -176,12 +185,14 @@ export class CanvasKitRenderer implements IRenderer {
     this.canvas.drawLine(x0, y0, x1, y1, this.getPaint());
   }
 
-  drawRect(x: number, y: number, width: number, height: number): void {
+  fillRect(x: number, y: number, width: number, height: number): void {
+    this.setFill();
     const rect = this.#ctx.canvasKit.XYWHRect(x, y, width, height);
     this.canvas.drawRect(rect, this.getPaint());
   }
 
   fillCircle(x: number, y: number, radius: number): void {
+    this.setFill();
     this.canvas.drawCircle(x, y, radius, this.getPaint());
   }
 
@@ -322,21 +333,22 @@ export class CanvasKitContext implements IGraphicContext {
   }
 
   public resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRectReadOnly): void {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio;
+    const viewportRect = canvas.getBoundingClientRect();
 
-    const width = Math.floor(rect.width * dpr);
-    const height = Math.floor(rect.height * dpr);
+    const width = Math.floor(viewportRect.width * dpr);
+    const height = Math.floor(viewportRect.height * dpr);
 
     const editor = getEditor();
     editor.setRect({
-      x: rect.left,
-      y: rect.top,
-      width: rect.width,
-      height: rect.height,
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
+      x: viewportRect.x,
+      y: viewportRect.y,
+      width: viewportRect.width,
+      height: viewportRect.height,
+      left: viewportRect.left,
+      top: viewportRect.top,
+      right: viewportRect.right,
+      bottom: viewportRect.bottom,
     });
 
     canvas.width = width;
