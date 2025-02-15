@@ -9,7 +9,29 @@ import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
 
+interface EditorState {
+  isSelecting: boolean;
+  selectionRect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export const InitialEditorState: EditorState = {
+  isSelecting: false,
+  selectionRect: {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  },
+};
+
 export class Editor {
+  #state: EditorState;
+
   #viewport: Viewport;
   #scene: Scene;
   #painter: Painter;
@@ -30,6 +52,8 @@ export class Editor {
 
     this.#staticContext = null;
     this.#interactiveContext = null;
+
+    this.#state = InitialEditorState;
   }
 
   public setStaticContext(context: IGraphicContext) {
@@ -51,7 +75,7 @@ export class Editor {
     return tool.tool;
   }
 
-  public setRect(rect: Rect2D) {
+  public setViewportRect(rect: Rect2D) {
     this.#viewport.setRect(rect);
   }
 
@@ -112,17 +136,35 @@ export class Editor {
     ctx.translate(this.#viewport.panX, this.#viewport.panY);
   }
 
+  public setSelecting(isSelecting: boolean) {
+    this.#state.isSelecting = isSelecting;
+  }
+
+  public setSelectionRect(x: number, y: number, width: number, height: number) {
+    this.#state.selectionRect = { x, y, width, height };
+  }
+
   draw() {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    ctx.save(); // Save initial state
+    ctx.save();
     ctx.clear();
 
     // 1. User view transformation matrix
     const center = this.#viewport.getCentrePoint();
     const zoom = this.#viewport.zoom;
     const { panX, panY } = this.#viewport;
+
+    if (this.#state.isSelecting) {
+      this.#painter.drawSelectionRectangle(
+        ctx,
+        this.#state.selectionRect.x,
+        this.#state.selectionRect.y,
+        this.#state.selectionRect.width,
+        this.#state.selectionRect.height,
+      );
+    }
 
     ctx.transform(
       zoom,
@@ -143,14 +185,12 @@ export class Editor {
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
-    ctx.fillCircle(0, 0, 10);
-
     // 3. Draw in the fully transformed space
     this.#painter.drawStatic(ctx);
     this.#painter.drawInteractive(ctx);
 
     ctx.flush();
-    ctx.restore(); // Return to original state
+    ctx.restore();
   }
 
   public requestRedraw() {

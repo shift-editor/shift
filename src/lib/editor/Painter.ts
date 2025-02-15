@@ -1,8 +1,8 @@
-import { IRenderer } from "@/types/graphics";
-
-import { GUIDE_STYLES } from "../gfx/styles/style";
-
-import type { IPath } from "@/types/graphics";
+import {
+  GUIDE_STYLES,
+  SELECTION_RECTANGLE_STYLES,
+} from "@/lib/gfx/styles/style";
+import { IPath, IRenderer } from "@/types/graphics";
 
 const X_ADVANCE = 600;
 
@@ -16,18 +16,28 @@ const GUIDES = {
 
 export class Painter {
   #staticGuides: IPath | null = null;
+  #pixelOffset: number;
+
+  constructor() {
+    this.#pixelOffset = 0;
+  }
+
+  setPixelOffset(lineWidth: number) {
+    if (lineWidth % 2 === 0 && Number.isInteger(lineWidth)) return;
+
+    this.#pixelOffset = lineWidth / 2;
+  }
 
   setStaticGuides(ctx: IRenderer) {
     const path = ctx.createPath();
 
     Object.values(GUIDES).forEach(({ y }) => {
-      path.moveTo(0, y);
+      path.moveTo(this.#pixelOffset, y);
       path.lineTo(X_ADVANCE, y);
     });
 
-    // Draw vertical bounds
-    path.moveTo(0, GUIDES.descender.y);
-    path.lineTo(0, GUIDES.ascender.y);
+    path.moveTo(this.#pixelOffset, GUIDES.descender.y);
+    path.lineTo(this.#pixelOffset, GUIDES.ascender.y);
     path.moveTo(X_ADVANCE, GUIDES.descender.y);
     path.lineTo(X_ADVANCE, GUIDES.ascender.y);
 
@@ -45,4 +55,30 @@ export class Painter {
   }
 
   public drawInteractive(_: IRenderer): void {}
+
+  public drawSelectionRectangle(
+    ctx: IRenderer,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void {
+    const rx = x;
+    const ry = y;
+    const rw = w;
+    const rh = h;
+
+    ctx.setStyle({
+      ...SELECTION_RECTANGLE_STYLES,
+      strokeStyle: "transparent",
+    });
+    ctx.fillRect(rx, ry, rw, rh);
+
+    // Stroke second
+    ctx.setStyle({
+      ...SELECTION_RECTANGLE_STYLES,
+      fillStyle: "transparent",
+    });
+    ctx.strokeRect(rx, ry, rw, rh);
+  }
 }

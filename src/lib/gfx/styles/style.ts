@@ -11,7 +11,7 @@ export const GUIDE_STYLES: DrawStyle = {
   lineWidth: 0.5,
   strokeStyle: "rgb(76, 96, 230)",
   fillStyle: "black",
-  antiAlias: true,
+  antiAlias: false,
 };
 
 export const DEFAULT_STYLES: DrawStyle = {
@@ -46,4 +46,11 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
     strokeStyle: "blue",
     fillStyle: "white",
   },
+};
+
+export const SELECTION_RECTANGLE_STYLES: DrawStyle = {
+  lineWidth: 1,
+  strokeStyle: "#0c8ce9",
+  fillStyle: "rgba(59, 130, 246, 0.04)",
+  antiAlias: false,
 };

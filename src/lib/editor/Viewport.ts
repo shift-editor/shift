@@ -128,12 +128,12 @@ export class Viewport {
     const mouseX = clientX - this.#canvasRect.left;
     const mouseY = clientY - this.#canvasRect.top;
 
-    this.#mouseX = mouseX;
-    this.#mouseY = mouseY;
+    this.#mouseX = Math.floor(mouseX);
+    this.#mouseY = Math.floor(mouseY);
 
     return {
-      x: mouseX,
-      y: mouseY,
+      x: this.#mouseX,
+      y: this.#mouseY,
     };
   }
 

@@ -3,7 +3,6 @@ import InitCanvasKit, {
   CanvasKit,
   Paint,
   Path,
-  Rect,
   Surface,
 } from "canvaskit-wasm";
 import chroma from "chroma-js";
@@ -11,7 +10,6 @@ import chroma from "chroma-js";
 import { DrawStyle, DEFAULT_STYLES } from "@/lib/gfx/styles/style";
 import { getEditor } from "@/store/store";
 import { IGraphicContext, IRenderer, IPath, Colour } from "@/types/graphics";
-import { Rect2D } from "@/types/math";
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -191,6 +189,12 @@ export class CanvasKitRenderer implements IRenderer {
     this.canvas.drawRect(rect, this.getPaint());
   }
 
+  strokeRect(x: number, y: number, width: number, height: number): void {
+    this.setStroke();
+    const rect = this.#ctx.canvasKit.XYWHRect(x, y, width, height);
+    this.canvas.drawRect(rect, this.getPaint());
+  }
+
   fillCircle(x: number, y: number, radius: number): void {
     this.setFill();
     this.canvas.drawCircle(x, y, radius, this.getPaint());
@@ -340,7 +344,7 @@ export class CanvasKitContext implements IGraphicContext {
     const height = Math.floor(viewportRect.height * dpr);
 
     const editor = getEditor();
-    editor.setRect({
+    editor.setViewportRect({
       x: viewportRect.x,
       y: viewportRect.y,
       width: viewportRect.width,

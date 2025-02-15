@@ -16,7 +16,7 @@ export interface ToolRegistryItem {
 export const tools = new Map<ToolName, ToolRegistryItem>();
 
 export const createToolRegistry = (editor: Editor) => {
-  tools.set("select", { tool: new Select(), icon: SelectIcon });
+  tools.set("select", { tool: new Select(editor), icon: SelectIcon });
   tools.set("pen", { tool: new Pen(), icon: PenIcon });
   tools.set("hand", { tool: new Hand(editor), icon: HandIcon });
 };
