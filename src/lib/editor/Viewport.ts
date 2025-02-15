@@ -11,12 +11,24 @@ export class Viewport {
   #panX: number;
   #panY: number;
 
+  #mouseX: number;
+  #mouseY: number;
+
+  #upmX: number;
+  #upmY: number;
+
   constructor() {
     this.#upm = 1000;
     this.#padding = 300;
 
     this.#dpr = window.devicePixelRatio || 1;
     this.#zoom = 1;
+
+    this.#mouseX = 0;
+    this.#mouseY = 0;
+
+    this.#upmX = 0;
+    this.#upmY = 0;
 
     this.#canvasRect = {
       x: 0,
@@ -112,22 +124,77 @@ export class Viewport {
   // Get the mouse position of the viewport
   // @returns The mouse position of the viewport
   // **
-  public mousePosition(clientX: number, clientY: number): Point2D {
+  calculateMousePosition(clientX: number, clientY: number): Point2D {
+    const mouseX = clientX - this.#canvasRect.left;
+    const mouseY = clientY - this.#canvasRect.top;
+
+    this.#mouseX = mouseX;
+    this.#mouseY = mouseY;
+
     return {
-      x: clientX - this.#canvasRect.left,
-      y: clientY - this.#canvasRect.top,
+      x: mouseX,
+      y: mouseY,
     };
+  }
+
+  public setMousePosition(clientX: number, clientY: number): Point2D {
+    const { x, y } = this.calculateMousePosition(clientX, clientY);
+    this.#mouseX = x;
+    this.#mouseY = y;
+
+    return { x, y };
+  }
+
+  public getMousePosition(clientX?: number, clientY?: number): Point2D {
+    if (clientX && clientY) {
+      return this.calculateMousePosition(clientX, clientY);
+    }
+
+    return { x: this.#mouseX, y: this.#mouseY };
   }
 
   // **
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
   // **
-  public upmMousePosition(clientX: number, clientY: number): Point2D {
+  calculateUpmMousePosition(clientX: number, clientY: number): Point2D {
+    // 1. Convert screen coordinates to canvas space
+    const canvasX = clientX - this.#canvasRect.left;
+    const canvasY = clientY - this.#canvasRect.top;
+
+    // 2. Apply zoom transformation (matching the Editor's transform matrix)
+    const center = this.getCentrePoint();
+    const zoomedX =
+      (canvasX - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
+    const zoomedY =
+      (canvasY - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
+
+    const upmX = Math.floor(zoomedX - this.#padding);
+    const upmY = Math.floor(-zoomedY + (this.logicalHeight - this.#padding));
+
+    this.#upmX = upmX;
+    this.#upmY = upmY;
+
     return {
-      x: clientX - this.#canvasRect.left,
-      y: clientY - this.#canvasRect.top,
+      x: upmX,
+      y: upmY,
     };
+  }
+
+  public setUpmMousePosition(clientX: number, clientY: number): Point2D {
+    const { x, y } = this.calculateUpmMousePosition(clientX, clientY);
+    this.#upmX = x;
+    this.#upmY = y;
+
+    return { x, y };
+  }
+
+  public getUpmMousePosition(clientX?: number, clientY?: number): Point2D {
+    if (clientX && clientY) {
+      return this.calculateUpmMousePosition(clientX, clientY);
+    }
+
+    return { x: this.#upmX, y: this.#upmY };
   }
 
   public getCentrePoint(): Point2D {

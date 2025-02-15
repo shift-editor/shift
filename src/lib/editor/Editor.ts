@@ -55,12 +55,28 @@ export class Editor {
     this.#viewport.setRect(rect);
   }
 
-  public mousePosition(clientX: number, clientY: number): Point2D {
-    return this.#viewport.mousePosition(clientX, clientY);
+  public getMousePosition(clientX?: number, clientY?: number): Point2D {
+    if (clientX && clientY) {
+      return this.#viewport.getMousePosition(clientX, clientY);
+    }
+
+    return this.#viewport.getMousePosition();
   }
 
-  public upmMousePosition(clientX: number, clientY: number): Point2D {
-    return this.#viewport.upmMousePosition(clientX, clientY);
+  public setMousePosition(clientX: number, clientY: number): Point2D {
+    return this.#viewport.setMousePosition(clientX, clientY);
+  }
+
+  public getUpmMousePosition(clientX?: number, clientY?: number): Point2D {
+    if (clientX && clientY) {
+      return this.#viewport.getUpmMousePosition(clientX, clientY);
+    }
+
+    return this.#viewport.getUpmMousePosition();
+  }
+
+  public setUpmMousePosition(clientX: number, clientY: number): Point2D {
+    return this.#viewport.setUpmMousePosition(clientX, clientY);
   }
 
   public pan(dx: number, dy: number) {
@@ -109,22 +125,22 @@ export class Editor {
     const { panX, panY } = this.#viewport;
 
     ctx.transform(
-      zoom, // a: scale x
-      0, // b: skew y
-      0, // c: skew x
-      zoom, // d: scale y
-      panX + center.x * (1 - zoom), // e: translate x
-      panY + center.y * (1 - zoom), // f: translate y
+      zoom,
+      0,
+      0,
+      zoom,
+      panX + center.x * (1 - zoom),
+      panY + center.y * (1 - zoom),
     );
 
     // 2. Transform to font coordinate space with single matrix
     ctx.transform(
-      1, // a: scale x
-      0, // b: skew y
-      0, // c: skew x
-      -1, // d: scale y (flipped)
-      this.#viewport.padding, // e: translate x
-      this.#viewport.logicalHeight - this.#viewport.padding, // f: translate y
+      1,
+      0,
+      0,
+      -1,
+      this.#viewport.padding,
+      this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
     ctx.fillCircle(0, 0, 10);

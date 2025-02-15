@@ -15,8 +15,8 @@ export const EditorView = () => {
 
     const pan = editor.getPan();
 
-    const dx = (e.deltaX * 1.25) / editor.zoom();
-    const dy = (e.deltaY * 1.25) / editor.zoom();
+    const dx = e.deltaX;
+    const dy = e.deltaY;
 
     editor.pan(pan.x - dx, pan.y - dy);
     editor.requestRedraw();
@@ -27,8 +27,7 @@ export const EditorView = () => {
       className={`relative h-full w-full overflow-hidden cursor-${activeTool}`}
       onWheel={onWheel}
       onMouseMove={(e) => {
-        const mousePos = editor.upmMousePosition(e.clientX, e.clientY);
-        console.log(mousePos);
+        editor.setUpmMousePosition(e.clientX, e.clientY);
       }}
     >
       <StaticScene />

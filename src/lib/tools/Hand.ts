@@ -17,7 +17,7 @@ export class Hand implements Tool {
   #startPan: Point2D = { x: 0, y: 0 };
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#startPos = this.#editor.mousePosition(e.clientX, e.clientY);
+    this.#startPos = this.#editor.setMousePosition(e.clientX, e.clientY);
     this.#startPan = this.#editor.getPan();
 
     this.#dragging = true;
@@ -25,10 +25,10 @@ export class Hand implements Tool {
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (!this.#dragging) return;
-    const { x, y } = this.#editor.mousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.setMousePosition(e.clientX, e.clientY);
 
-    const dx = (x - this.#startPos.x) / this.#editor.zoom();
-    const dy = (y - this.#startPos.y) / this.#editor.zoom();
+    const dx = x - this.#startPos.x;
+    const dy = y - this.#startPos.y;
 
     const panX = this.#startPan.x + dx;
     const panY = this.#startPan.y + dy;

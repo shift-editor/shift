@@ -1,28 +1,29 @@
 import { useEffect, useRef } from "react";
 
-import AppState from "@/store/store";
+import { getEditor } from "@/store/store";
 
 export const Metrics = () => {
   const xRef = useRef<HTMLDivElement>(null);
   const yRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLDivElement>(null);
+  const editor = getEditor();
 
-  // useEffect(() => {
-  //   const updateMouseMetrics = () => {
-  //     if (!xRef.current || !yRef.current || !zoomRef.current) return;
-  //
-  //     xRef.current.textContent = Math.round(x).toString();
-  //     yRef.current.textContent = Math.round(y).toString();
-  //
-  //     zoomRef.current.textContent = editor.zoom().toString();
-  //   };
-  //
-  //   window.addEventListener("mousemove", updateMouseMetrics);
-  //
-  //   return () => {
-  //     window.removeEventListener("mousemove", updateMouseMetrics);
-  //   };
-  // }, []);
+  useEffect(() => {
+    const updateMouseMetrics = () => {
+      if (!xRef.current || !yRef.current || !zoomRef.current) return;
+
+      const { x, y } = editor.getUpmMousePosition();
+
+      xRef.current.textContent = Math.round(x).toString();
+      yRef.current.textContent = Math.round(y).toString();
+    };
+
+    window.addEventListener("mousemove", updateMouseMetrics);
+
+    return () => {
+      window.removeEventListener("mousemove", updateMouseMetrics);
+    };
+  }, []);
 
   return (
     <>
