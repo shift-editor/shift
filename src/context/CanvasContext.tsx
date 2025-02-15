@@ -34,7 +34,7 @@ export const CanvasContextProvider = ({
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
 
-      ctx.resizeCanvas(canvas, canvas.getBoundingClientRect());
+      ctx.resizeCanvas(canvas);
 
       return ctx;
     };
@@ -62,12 +62,8 @@ export const CanvasContextProvider = ({
 
         interactiveContext.resizeCanvas(
           interactiveCanvas.target as HTMLCanvasElement,
-          interactiveCanvas.contentRect,
         );
-        staticContext.resizeCanvas(
-          staticCanvas.target as HTMLCanvasElement,
-          staticCanvas.contentRect,
-        );
+        staticContext.resizeCanvas(staticCanvas.target as HTMLCanvasElement);
 
         editor.requestImmediateRedraw();
       };

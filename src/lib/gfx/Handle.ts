@@ -58,7 +58,7 @@ export class Handle {
     switch (this.#type) {
       case HandleType.CORNER:
         rect = this.#shape as Rect;
-        renderer.drawRect(
+        renderer.strokeRect(
           this.#position.x - rect.width / 2,
           this.#position.y - rect.height / 2,
           5,
@@ -68,12 +68,20 @@ export class Handle {
 
       case HandleType.SMOOTH:
         circle = this.#shape as Circle;
-        renderer.drawCircle(this.#position.x, this.#position.y, circle.radius);
+        renderer.strokeCircle(
+          this.#position.x,
+          this.#position.y,
+          circle.radius,
+        );
         break;
 
       case HandleType.CONTROL:
         circle = this.#shape as Circle;
-        renderer.drawCircle(this.#position.x, this.#position.y, circle.radius);
+        renderer.strokeCircle(
+          this.#position.x,
+          this.#position.y,
+          circle.radius,
+        );
         break;
 
       case HandleType.DIRECTION:
@@ -83,7 +91,7 @@ export class Handle {
         renderer.moveTo(triangle.vertices[0].x, triangle.vertices[0].x); // tip
         renderer.lineTo(triangle.vertices[1].x, triangle.vertices[1].x); // left
         renderer.lineTo(triangle.vertices[2].x, triangle.vertices[2].x); // left
-        renderer.close();
+        renderer.closePath();
         renderer.stroke();
 
         break;

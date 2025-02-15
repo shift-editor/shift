@@ -25,7 +25,7 @@ export interface IRenderer {
   fillRect(x: number, y: number, width: number, height: number): void;
   strokeRect(x: number, y: number, width: number, height: number): void;
   fillCircle(x: number, y: number, radius: number): void;
-
+  strokeCircle(x: number, y: number, radius: number): void;
   createPath(): IPath;
   beginPath(): void;
   moveTo(x: number, y: number): void;

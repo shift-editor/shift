@@ -1,4 +1,4 @@
-import { Point2D, Rect2D } from "@/types/math";
+import { Point2D } from "@/types/math";
 
 import { Tool, ToolName } from "../../types/tool";
 import { Editor } from "../editor/Editor";

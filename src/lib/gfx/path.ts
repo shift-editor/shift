@@ -23,7 +23,7 @@ export const drawPath = (ctx: IRenderer, path: Path) => {
   }
 
   if (path.closed) {
-    ctx.close();
+    ctx.closePath();
   }
 
   drawHandles(ctx, path);

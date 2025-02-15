@@ -200,6 +200,11 @@ export class CanvasKitRenderer implements IRenderer {
     this.canvas.drawCircle(x, y, radius, this.getPaint());
   }
 
+  strokeCircle(x: number, y: number, radius: number): void {
+    this.setStroke();
+    this.canvas.drawCircle(x, y, radius, this.getPaint());
+  }
+
   createPath(): IPath {
     return new CanvasKitPath(this.#ctx.canvasKit);
   }
@@ -336,7 +341,7 @@ export class CanvasKitContext implements IGraphicContext {
     }
   }
 
-  public resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRectReadOnly): void {
+  public resizeCanvas(canvas: HTMLCanvasElement): void {
     const dpr = window.devicePixelRatio;
     const viewportRect = canvas.getBoundingClientRect();
 
