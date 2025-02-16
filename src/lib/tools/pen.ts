@@ -1,9 +1,18 @@
-import { Tool, ToolName } from "../../types/tool";
+import { Editor } from "@/lib/editor/Editor";
+import { Tool, ToolName } from "@/types/tool";
 
 export class Pen implements Tool {
   public readonly name: ToolName = "pen";
 
-  onMouseDown(_: React.MouseEvent<HTMLCanvasElement>): void {}
+  #editor: Editor;
+
+  public constructor(editor: Editor) {
+    this.#editor = editor;
+  }
+
+  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
+    this.#editor.addPoint(e.clientX, e.clientY);
+  }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {}
 

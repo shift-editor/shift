@@ -3,7 +3,7 @@ import { Segment } from "../../types/segments";
 import { Point } from "../geometry/point";
 
 export type PointType = "onCurve" | "offCurve";
-export class PathPoint extends Point {
+export class ContourPoint extends Point {
   #id: EntityId;
   #type: PointType;
 
@@ -23,20 +23,20 @@ export class PathPoint extends Point {
   }
 }
 
-export class Path {
+export class Contour {
   #id: EntityId;
-  #points: PathPoint[] = [];
+  #points: ContourPoint[] = [];
   #closed: boolean = false;
 
   constructor() {
     this.#id = new EntityId();
   }
 
-  get points(): PathPoint[] {
+  get points(): ContourPoint[] {
     return this.#points;
   }
 
-  get lastPoint(): PathPoint {
+  get lastPoint(): ContourPoint {
     return this.#points[this.#points.length - 1];
   }
 

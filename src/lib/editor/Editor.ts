@@ -47,9 +47,6 @@ export class Editor {
     this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
 
-    this.#scene;
-    this.#frameHandler;
-
     this.#staticContext = null;
     this.#interactiveContext = null;
 
@@ -59,7 +56,7 @@ export class Editor {
   public setStaticContext(context: IGraphicContext) {
     this.#staticContext = context;
 
-    this.#painter.setStaticGuides(this.#staticContext.getContext());
+    this.#scene.setStaticGuides(this.#staticContext.getContext());
   }
 
   public setInteractiveContext(context: IGraphicContext) {
@@ -123,6 +120,11 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
+  public addPoint(clientX: number, clientY: number): void {
+    const { x, y } = this.getUpmMousePosition(clientX, clientY);
+    this.#scene.addPoint(x, y);
+  }
+
   applyUserTransforms(): void {
     if (!this.#staticContext || !this.#interactiveContext) return;
     const ctx = this.#staticContext.getContext();
@@ -144,7 +146,7 @@ export class Editor {
     this.#state.selectionRect = { x, y, width, height };
   }
 
-  draw() {
+  #draw() {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
@@ -186,7 +188,7 @@ export class Editor {
     );
 
     // 3. Draw in the fully transformed space
-    this.#painter.drawStatic(ctx);
+    this.#painter.drawMetrics(ctx, this.#scene.getStaticGuidesPath());
     this.#painter.drawInteractive(ctx);
 
     ctx.flush();
@@ -194,11 +196,11 @@ export class Editor {
   }
 
   public requestRedraw() {
-    this.#frameHandler.requestUpdate(() => this.draw());
+    this.#frameHandler.requestUpdate(() => this.#draw());
   }
 
   public requestImmediateRedraw() {
-    this.draw();
+    this.#draw();
   }
 
   public cancelRedraw() {

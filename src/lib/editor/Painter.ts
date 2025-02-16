@@ -4,54 +4,16 @@ import {
 } from "@/lib/gfx/styles/style";
 import { IPath, IRenderer } from "@/types/graphics";
 
-const X_ADVANCE = 600;
-
-const GUIDES = {
-  ascender: { y: 750 },
-  capHeight: { y: 700 },
-  xHeight: { y: 500 },
-  baseline: { y: 0 },
-  descender: { y: -200 },
-};
+import { Contour } from "../core/Contour";
 
 export class Painter {
-  #staticGuides: IPath | null = null;
-  #pixelOffset: number;
-
-  constructor() {
-    this.#pixelOffset = 0;
-  }
-
-  setPixelOffset(lineWidth: number) {
-    if (lineWidth % 2 === 0 && Number.isInteger(lineWidth)) return;
-
-    this.#pixelOffset = lineWidth / 2;
-  }
-
-  setStaticGuides(ctx: IRenderer) {
-    const path = ctx.createPath();
-
-    Object.values(GUIDES).forEach(({ y }) => {
-      path.moveTo(this.#pixelOffset, y);
-      path.lineTo(X_ADVANCE, y);
-    });
-
-    path.moveTo(this.#pixelOffset, GUIDES.descender.y);
-    path.lineTo(this.#pixelOffset, GUIDES.ascender.y);
-    path.moveTo(X_ADVANCE, GUIDES.descender.y);
-    path.lineTo(X_ADVANCE, GUIDES.ascender.y);
-
-    this.#staticGuides = path;
-  }
-
-  public drawStatic(ctx: IRenderer) {
-    if (!this.#staticGuides) {
-      console.error("No static guides set");
-      return;
-    }
-
+  public drawMetrics(ctx: IRenderer, path: IPath) {
     ctx.setStyle(GUIDE_STYLES);
-    ctx.stroke(this.#staticGuides);
+    ctx.stroke(path);
+  }
+
+  public drawContour(ctx: IRenderer, contour: Contour): void {
+    ctx.setStyle(GUIDE_STYLES);
   }
 
   public drawInteractive(_: IRenderer): void {}

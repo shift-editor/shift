@@ -1,10 +1,10 @@
-import { Path } from "../../core/Path";
+import { Contour } from "../../core/Contour";
 
 describe("Path", () => {
-  let path: Path;
+  let path: Contour;
 
   beforeEach(() => {
-    path = new Path();
+    path = new Contour();
   });
 
   it("should create a new path", () => {

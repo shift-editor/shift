@@ -1,9 +1,9 @@
-import { PathPoint } from "../lib/core/Path";
+import { ContourPoint } from "../lib/core/Contour";
 
 export type SegmentType = "line" | "quadratic" | "cubic";
 export type Segment = {
   type: SegmentType;
-  anchor: PathPoint;
-  trailingHandle?: PathPoint;
-  leadingHandle?: PathPoint;
+  anchor: ContourPoint;
+  trailingHandle?: ContourPoint;
+  leadingHandle?: ContourPoint;
 };
