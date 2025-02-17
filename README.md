@@ -14,7 +14,7 @@ Shift uses the Tauri framework:
 * Backend: Rust for high-intensive operations and font related processing
 
 ## Development Roadmap
-We aim to implement the typical features present font editors such as FontForge, Glyphs, RobotFont etc.
+We aim to implement the typical features present in font editors such as FontForge, Glyphs, RobotFont etc.
 
 ## License
 GNU General Public License (GPL) v3.0
