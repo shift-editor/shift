@@ -1,4 +1,6 @@
+import { EventEmitter, EventHandler } from "@/lib/core/EventEmitter";
 import AppState from "@/store/store";
+import { EditorEvent } from "@/types/events";
 import { IGraphicContext } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 import { Tool } from "@/types/tool";
@@ -36,6 +38,7 @@ export class Editor {
   #scene: Scene;
   #painter: Painter;
   #frameHandler: FrameHandler;
+  #eventEmitter: EventEmitter;
 
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
@@ -46,6 +49,8 @@ export class Editor {
 
     this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
+
+    this.#eventEmitter = new EventEmitter();
 
     this.#staticContext = null;
     this.#interactiveContext = null;
@@ -70,6 +75,18 @@ export class Editor {
       throw new Error(`Tool ${activeTool} not found`);
     }
     return tool.tool;
+  }
+
+  public on(event: EditorEvent, handler: EventHandler) {
+    this.#eventEmitter.on(event, handler);
+  }
+
+  public off(event: EditorEvent, handler: EventHandler) {
+    this.#eventEmitter.off(event, handler);
+  }
+
+  public emit(event: EditorEvent, ...args: unknown[]) {
+    this.#eventEmitter.emit(event, ...args);
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -187,7 +204,7 @@ export class Editor {
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
-    // 3. Draw in the fully transformed space
+    const renderables = this.#scene.getRenderablePaths(ctx);
     this.#painter.drawMetrics(ctx, this.#scene.getStaticGuidesPath());
     this.#painter.drawInteractive(ctx);
 

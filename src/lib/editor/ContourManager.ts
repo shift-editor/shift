@@ -1,4 +1,4 @@
-import { IPath } from "@/types/graphics";
+import { IPath, IRenderer } from "@/types/graphics";
 
 import { Contour, ContourPoint } from "../core/Contour";
 import { Ident } from "../core/EntityId";
@@ -31,7 +31,7 @@ export class ContourManager {
 
   addContour(): Ident {
     const c = new Contour();
-    const node = { contour: c, renderPath: new Path2D() };
+    const node = { contour: c };
     this.#contours.set(c.id, node);
 
     return c.id;
@@ -56,5 +56,9 @@ export class ContourManager {
 
   get currentPath(): Contour {
     return this.currentContour.contour;
+  }
+
+  rebuildRenderPaths(ctx: IRenderer): IPath[] {
+    return [];
   }
 }

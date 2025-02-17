@@ -51,4 +51,8 @@ export class Scene {
   public getNodes(): ContourNode[] {
     return this.#contourManager.nodes;
   }
+
+  public getRenderablePaths(ctx: IRenderer): IPath[] {
+    return this.#contourManager.rebuildRenderPaths(ctx);
+  }
 }
