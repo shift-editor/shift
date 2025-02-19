@@ -1,17 +1,23 @@
-import { EntityId, Ident } from "./EntityId";
-import { Segment } from "../../types/segments";
-import { Point } from "../geometry/point";
+import { EntityId, Ident } from "@/lib/core/EntityId";
+import { Point } from "@/lib/geometry/point";
+import { Point2D } from "@/types/math";
+import { Segment } from "@/types/segments";
 
 export type PointType = "onCurve" | "offCurve";
 export class ContourPoint extends Point {
   #id: EntityId;
   #type: PointType;
+  #smooth: boolean = false;
 
   constructor(x: number, y: number, pointType: PointType, parentId: Ident) {
     super(x, y);
 
     this.#type = pointType;
     this.#id = new EntityId(parentId);
+  }
+
+  static fromPoint2D(point: Point2D, pointType: PointType, parentId: Ident) {
+    return new ContourPoint(point.x, point.y, pointType, parentId);
   }
 
   get id(): Ident {
@@ -21,7 +27,29 @@ export class ContourPoint extends Point {
   get type(): PointType {
     return this.#type;
   }
+
+  get smooth(): boolean {
+    return this.#smooth;
+  }
 }
+
+// class SegmentIterator implements Iterator<Segment> {
+//   #points: ContourPoint[];
+//   #index: number = 0;
+
+//   public constructor(points: ContourPoint[]) {
+//     this.#points = points;
+//   }
+
+//   public next(): IteratorResult<Segment> {
+//     if (this.#points.length < 2) {
+//       return {
+//         done: true,
+//         value: {},
+//       };
+//     }
+//   }
+// }
 
 export class Contour {
   #id: EntityId;
@@ -42,25 +70,6 @@ export class Contour {
 
   get id(): Ident {
     return this.#id.id;
-  }
-
-  segments(): Segment[] {
-    const segments: Segment[] = [];
-
-    let i = 0;
-    while (i < this.#points.length) {
-      const point = this.#points[i];
-      if (point.type === "onCurve") {
-        segments.push({
-          type: "line",
-          anchor: point,
-        });
-      }
-
-      i += 1;
-    }
-
-    return segments;
   }
 
   get closed(): boolean {

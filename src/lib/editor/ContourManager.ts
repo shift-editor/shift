@@ -1,7 +1,7 @@
+import { Contour, ContourPoint } from "@/lib/core/Contour";
+import { Ident } from "@/lib/core/EntityId";
 import { IPath, IRenderer } from "@/types/graphics";
-
-import { Contour, ContourPoint } from "../core/Contour";
-import { Ident } from "../core/EntityId";
+import { Segment } from "@/types/segments";
 
 export interface ContourNode {
   contour: Contour;
@@ -37,18 +37,7 @@ export class ContourManager {
     return c.id;
   }
 
-  addPoint(x: number, y: number) {
-    const newPoint = new ContourPoint(x, y, "onCurve", this.#currentContourId);
-    this.currentContour.contour.points.push(newPoint);
-
-    if (
-      this.currentContour.contour.points.length > 1 &&
-      newPoint.distance(this.currentContour.contour.points[0]) < 8
-    ) {
-      this.currentContour.contour.close();
-      this.#currentContourId = this.addContour();
-    }
-  }
+  addSegment(segment: Segment) {}
 
   get nodes(): ContourNode[] {
     return Array.from(this.#contours.values());
@@ -59,6 +48,11 @@ export class ContourManager {
   }
 
   rebuildRenderPaths(ctx: IRenderer): IPath[] {
-    return [];
+    const paths: IPath[] = [];
+    for (const node of this.nodes) {
+      const path = ctx.createPath();
+    }
+
+    return paths;
   }
 }

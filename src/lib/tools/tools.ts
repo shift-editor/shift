@@ -5,7 +5,7 @@ import { Editor } from "@/lib/editor/Editor";
 import { ToolName, Tool } from "@/types/tool";
 
 import { Hand } from "./Hand";
-import { Pen } from "./Pen";
+import { Pen } from "./pen";
 import { Select } from "./Select";
 
 export interface ToolRegistryItem {
@@ -17,6 +17,6 @@ export const tools = new Map<ToolName, ToolRegistryItem>();
 
 export const createToolRegistry = (editor: Editor) => {
   tools.set("select", { tool: new Select(editor), icon: SelectIcon });
-  tools.set("pen", { tool: new Pen(), icon: PenIcon });
+  tools.set("pen", { tool: new Pen(editor), icon: PenIcon });
   tools.set("hand", { tool: new Hand(editor), icon: HandIcon });
 };
