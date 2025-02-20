@@ -11,10 +11,10 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 ## Architecture
 Shift uses the Tauri framework:
 
-* UI: Uses React and Vite for components around the canvas
-* Rendering: Webview based UI utilising the HTML canvas and rendered with CanvasKit (Skia) for high-quality graphics
-* State management: Zustland for global React state mangement
-* Backend: Rust for high-intensive operations and font related processing
+* __UI__: Uses React and Vite for components around the canvas
+* __Rendering__: Webview based UI utilising the HTML canvas and rendered with CanvasKit (Skia) for high-quality graphics
+* __State management__: Zustland for global React state mangement
+* __Backend__: Rust for high-intensive operations and font related processing
 
 ## Development Roadmap
 We aim to implement the typical features present in font editors such as FontForge, Glyphs, RobotFont etc.
