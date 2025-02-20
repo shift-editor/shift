@@ -1,4 +1,4 @@
-import { DrawStyle } from "@/lib/gfx/styles/style";
+import { DrawStyle } from "@/lib/styles/style";
 
 export type Colour = [number, number, number, number];
 export interface IPath {

@@ -1,4 +1,4 @@
-import { Contour } from "../../core/Contour";
+import { Contour } from "@/lib/core/Contour";
 
 describe("Path", () => {
   let path: Contour;

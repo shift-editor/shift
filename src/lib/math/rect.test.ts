@@ -1,5 +1,5 @@
-import { Point } from "../point";
-import { Rect } from "../rect";
+import { Point } from "@/lib/math/point";
+import { Rect } from "@/lib/math/rect";
 
 describe("Rect", () => {
   describe("initilisation", () => {

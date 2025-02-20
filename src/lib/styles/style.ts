@@ -1,4 +1,4 @@
-import { HandleType } from "../../../types/handle";
+import { HandleType } from "@/types/handle";
 
 export interface DrawStyle {
   lineWidth: number;

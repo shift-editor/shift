@@ -1,3 +1,5 @@
+import { Point2D } from "@/types/math";
+
 import { Point } from "./point";
 
 export class Line {
@@ -37,5 +39,12 @@ export class Line {
 
   get length(): number {
     return this.#length;
+  }
+
+  static lerp(p1: Point2D, p2: Point2D, t: number): Point2D {
+    return {
+      x: p1.x + t * (p2.x - p1.x),
+      y: p1.y + t * (p2.y - p1.y),
+    };
   }
 }

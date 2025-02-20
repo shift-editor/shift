@@ -7,7 +7,7 @@ import InitCanvasKit, {
 } from "canvaskit-wasm";
 import chroma from "chroma-js";
 
-import { DrawStyle, DEFAULT_STYLES } from "@/lib/gfx/styles/style";
+import { DEFAULT_STYLES, DrawStyle } from "@/lib/styles/style";
 import { getEditor } from "@/store/store";
 import { IGraphicContext, IRenderer, IPath, Colour } from "@/types/graphics";
 

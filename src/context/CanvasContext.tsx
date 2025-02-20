@@ -6,9 +6,8 @@ import {
   CanvasKitContext,
   initCanvasKit,
 } from "@/lib/graphics/backends/CanvasKitRenderer";
-
-import AppState from "../store/store";
-import { CanvasRef } from "../types/graphics";
+import AppState from "@/store/store";
+import { CanvasRef } from "@/types/graphics";
 
 interface CanvasContext {
   interactiveCanvasRef: CanvasRef;

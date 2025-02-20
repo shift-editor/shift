@@ -1,5 +1,5 @@
 import { EntityId, Ident } from "@/lib/core/EntityId";
-import { Point } from "@/lib/geometry/point";
+import { Point } from "@/lib/math/point";
 import { Point2D } from "@/types/math";
 import { CubicSegment, LineSegment, Segment } from "@/types/segments";
 
@@ -49,10 +49,10 @@ class SegmentIterator implements Iterator<Segment> {
       };
     }
 
-    if (this.#index >= this.#points.length) {
+    if (this.#index >= this.#points.length - 1) {
       return {
         done: true,
-        value: {},
+        value: undefined,
       };
     }
 
@@ -62,11 +62,11 @@ class SegmentIterator implements Iterator<Segment> {
     if (p1.type === "onCurve" && p2.type === "onCurve") {
       const segment: LineSegment = {
         type: "line",
-        anchor0: p1,
-        anchor1: p2,
+        anchor1: p1,
+        anchor2: p2,
       };
 
-      this.#index += 2;
+      this.#index += 1;
 
       return {
         done: false,
@@ -80,13 +80,13 @@ class SegmentIterator implements Iterator<Segment> {
 
       const segment: CubicSegment = {
         type: "cubic",
-        anchor0: p1,
-        control0: p2,
-        control1: p3,
-        anchor1: p4,
+        anchor1: p1,
+        control1: p2,
+        control2: p3,
+        anchor2: p4,
       };
 
-      this.#index += 3;
+      this.#index += 2;
 
       return {
         done: false,
@@ -114,12 +114,24 @@ export class Contour {
     return this.#points;
   }
 
-  addPoint(point: Point2D) {
-    this.#points.push(ContourPoint.fromPoint2D(point, "onCurve", this.#id.id));
+  addPoint(point: Point2D): Ident {
+    const p = ContourPoint.fromPoint2D(point, "onCurve", this.#id.id);
+    this.#points.push(p);
+    return p.id;
   }
 
-  upgradeLineSegment(id: Ident) {
+  upgradeLineSegment(id: Ident): void {
     const index = this.#points.findIndex((p) => p.id === id);
+    const p1 = this.#points[index - 1];
+    const p2 = this.#points[index];
+
+    const c1 = p1.lerp(p2, 1.0 / 3.0);
+    const c2 = p2.lerp(p1, 2.0 / 3.0);
+
+    const control1 = new ContourPoint(c1.x, c1.y, "offCurve", this.#id.id);
+    const control2 = new ContourPoint(c2.x, c2.y, "offCurve", this.#id.id);
+
+    this.#points.splice(index, 0, control1, control2);
   }
 
   [Symbol.iterator](): Iterator<Segment> {
