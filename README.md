@@ -20,6 +20,6 @@ Shift uses the Tauri framework:
 We aim to implement the typical features present in font editors such as FontForge, Glyphs, RobotFont etc.
 
 ## License
-GNU General Public License (GPL) v3.0
+[GNU General Public License (GPL) v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
 Copyright © 2025 Kostya Farber. All rights reserved.
