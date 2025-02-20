@@ -3,32 +3,35 @@ import { Point2D } from "@/types/math";
 import { Tool, ToolName } from "../../types/tool";
 import { Editor } from "../editor/Editor";
 
+type SelectState = "idle" | "dragging" | "done";
+
 export class Select implements Tool {
   public readonly name: ToolName = "select";
 
   #editor: Editor;
   #startPos: Point2D;
-  #dragging: boolean;
+  #state: SelectState;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
     this.#startPos = { x: 0, y: 0 };
-    this.#dragging = false;
+    this.#state = "idle";
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#dragging = true;
+    this.#state = "dragging";
     this.#startPos = this.#editor.getMousePosition(e.clientX, e.clientY);
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#dragging = false;
+    this.#state = "done";
     this.#editor.setSelecting(false);
     this.#editor.requestRedraw();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (!this.#dragging) return;
+    if (this.#state !== "dragging") return;
+
     const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
 
     const width = x - this.#startPos.x;

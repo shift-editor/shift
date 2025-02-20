@@ -60,8 +60,6 @@ export class Editor {
 
   public setStaticContext(context: IGraphicContext) {
     this.#staticContext = context;
-
-    this.#scene.setStaticGuides(this.#staticContext.getContext());
   }
 
   public setInteractiveContext(context: IGraphicContext) {
@@ -205,7 +203,8 @@ export class Editor {
     );
 
     this.#painter.drawMetrics(ctx, this.#scene.getStaticGuidesPath());
-    this.#painter.drawInteractive(ctx);
+    const nodes = this.#scene.getNodes();
+    this.#painter.drawInteractive(ctx, nodes);
 
     ctx.flush();
     ctx.restore();

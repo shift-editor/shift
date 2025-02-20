@@ -240,6 +240,35 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path.close();
   }
 
+  constructPath(path: Path2D): Path {
+    const nativePath = new this.ctx.canvasKit.Path();
+    for (const command of path.commands) {
+      switch (command.type) {
+        case "moveTo":
+          nativePath.moveTo(command.x, command.y);
+          break;
+        case "lineTo":
+          nativePath.lineTo(command.x, command.y);
+          break;
+        case "cubicTo":
+          nativePath.cubicTo(
+            command.cp1x,
+            command.cp1y,
+            command.cp2x,
+            command.cp2y,
+            command.x,
+            command.y,
+          );
+          break;
+        case "close":
+          nativePath.close();
+          break;
+      }
+    }
+
+    return nativePath;
+  }
+
   stroke(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
@@ -254,34 +283,9 @@ export class CanvasKitRenderer implements IRenderer {
         return;
       }
 
-      const nativePath = new this.ctx.canvasKit.Path();
-      for (const command of path.commands) {
-        switch (command.type) {
-          case "moveTo":
-            nativePath.moveTo(command.x, command.y);
-            break;
-          case "lineTo":
-            nativePath.lineTo(command.x, command.y);
-            break;
-          case "cubicTo":
-            nativePath.cubicTo(
-              command.cp1x,
-              command.cp1y,
-              command.cp2x,
-              command.cp2y,
-              command.x,
-              command.y,
-            );
-            break;
-          case "close":
-            nativePath.close();
-            break;
-        }
-      }
-
+      const nativePath = this.constructPath(path);
       this.#cachedPaths.set(id, nativePath);
-
-      return;
+      this.canvas.drawPath(nativePath, p);
     }
 
     this.canvas.drawPath(this.#path, p);
@@ -301,32 +305,9 @@ export class CanvasKitRenderer implements IRenderer {
         return;
       }
 
-      const nativePath = new this.ctx.canvasKit.Path();
-      for (const command of path.commands) {
-        switch (command.type) {
-          case "moveTo":
-            nativePath.moveTo(command.x, command.y);
-            break;
-          case "lineTo":
-            nativePath.lineTo(command.x, command.y);
-            break;
-          case "cubicTo":
-            nativePath.cubicTo(
-              command.cp1x,
-              command.cp1y,
-              command.cp2x,
-              command.cp2y,
-              command.x,
-              command.y,
-            );
-            break;
-          case "close":
-            nativePath.close();
-            break;
-        }
-      }
-
+      const nativePath = this.constructPath(path);
       this.#cachedPaths.set(id, nativePath);
+      this.canvas.drawPath(nativePath, p);
 
       return;
     }

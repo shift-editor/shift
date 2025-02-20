@@ -1,12 +1,17 @@
-import { Contour } from "@/lib/core/Contour";
 import { Circle } from "@/lib/math/circle";
 import { Point } from "@/lib/math/point";
 import { Rect } from "@/lib/math/rect";
 import { Shape } from "@/lib/math/shape";
 import { Triangle } from "@/lib/math/triangle";
-import { GUIDE_STYLES, SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
+import {
+  DEFAULT_STYLES,
+  GUIDE_STYLES,
+  SELECTION_RECTANGLE_STYLES,
+} from "@/lib/styles/style";
 import { IPath, IRenderer } from "@/types/graphics";
 import { HandleType } from "@/types/handle";
+
+import { ContourNode } from "./ContourManager";
 
 export class Painter {
   public drawMetrics(ctx: IRenderer, path: IPath) {
@@ -14,11 +19,12 @@ export class Painter {
     ctx.stroke(path);
   }
 
-  public drawContour(ctx: IRenderer, contour: Contour): void {
-    ctx.setStyle(GUIDE_STYLES);
+  public drawInteractive(ctx: IRenderer, nodes: ContourNode[]): void {
+    ctx.setStyle(DEFAULT_STYLES);
+    for (const node of nodes) {
+      ctx.stroke(node.renderPath);
+    }
   }
-
-  public drawInteractive(_: IRenderer): void {}
 
   public drawSelectionRectangle(
     ctx: IRenderer,
@@ -48,10 +54,10 @@ export class Painter {
 }
 
 const handleShape = {
-  [HandleType.CORNER]: (p: Point) => new Rect(p.x, p.y, 5, 5),
-  [HandleType.CONTROL]: (p: Point) => new Circle(p.x, p.y, 2.5),
-  [HandleType.SMOOTH]: (p: Point) => new Circle(p.x, p.y, 2.5),
-  [HandleType.DIRECTION]: (p: Point) =>
+  corner: (p: Point) => new Rect(p.x, p.y, 5, 5),
+  control: (p: Point) => new Circle(p.x, p.y, 2.5),
+  smooth: (p: Point) => new Circle(p.x, p.y, 2.5),
+  direction: (p: Point) =>
     new Triangle([
       new Point(p.x, p.y),
       new Point(p.x - 4, p.y + 6),
@@ -97,7 +103,7 @@ export class Handle {
     let triangle;
 
     switch (this.#type) {
-      case HandleType.CORNER:
+      case "corner":
         rect = this.#shape as Rect;
         renderer.strokeRect(
           this.#position.x - rect.width / 2,
@@ -107,7 +113,7 @@ export class Handle {
         );
         break;
 
-      case HandleType.SMOOTH:
+      case "smooth":
         circle = this.#shape as Circle;
         renderer.strokeCircle(
           this.#position.x,
@@ -116,7 +122,7 @@ export class Handle {
         );
         break;
 
-      case HandleType.CONTROL:
+      case "control":
         circle = this.#shape as Circle;
         renderer.strokeCircle(
           this.#position.x,
@@ -125,7 +131,7 @@ export class Handle {
         );
         break;
 
-      case HandleType.DIRECTION:
+      case "direction":
         triangle = this.#shape as Triangle;
 
         renderer.beginPath();

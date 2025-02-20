@@ -22,25 +22,25 @@ export const DEFAULT_STYLES: DrawStyle = {
 };
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
-  [HandleType.CORNER]: {
+  corner: {
     antiAlias: false,
     lineWidth: 1,
     strokeStyle: "black",
     fillStyle: "white",
   },
-  [HandleType.SMOOTH]: {
+  smooth: {
     strokeStyle: "green",
     lineWidth: 2,
     fillStyle: "white",
     antiAlias: false,
   },
-  [HandleType.CONTROL]: {
+  control: {
     antiAlias: true,
     lineWidth: 1,
     strokeStyle: "red",
     fillStyle: "white",
   },
-  [HandleType.DIRECTION]: {
+  direction: {
     antiAlias: false,
     lineWidth: 1,
     strokeStyle: "blue",

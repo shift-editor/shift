@@ -1,7 +1,7 @@
-import { IPath, IRenderer } from "@/types/graphics";
 import { Point2D } from "@/types/math";
 
 import { ContourManager, ContourNode } from "./ContourManager";
+import { Path2D } from "../graphics/Path";
 
 const X_ADVANCE = 600;
 
@@ -15,33 +15,24 @@ const GUIDES = {
 
 export class Scene {
   #contourManager: ContourManager;
-  #staticGuides: IPath | null = null;
+  #staticGuides: Path2D;
 
   public constructor() {
     this.#contourManager = new ContourManager();
-  }
-
-  setStaticGuides(ctx: IRenderer) {
-    const path = ctx.createPath();
+    this.#staticGuides = new Path2D();
 
     Object.values(GUIDES).forEach(({ y }) => {
-      path.moveTo(0, y);
-      path.lineTo(X_ADVANCE, y);
+      this.#staticGuides.moveTo(0, y);
+      this.#staticGuides.lineTo(X_ADVANCE, y);
     });
 
-    path.moveTo(0, GUIDES.descender.y);
-    path.lineTo(0, GUIDES.ascender.y);
-    path.moveTo(X_ADVANCE, GUIDES.descender.y);
-    path.lineTo(X_ADVANCE, GUIDES.ascender.y);
-
-    this.#staticGuides = path;
+    this.#staticGuides.moveTo(0, GUIDES.descender.y);
+    this.#staticGuides.lineTo(0, GUIDES.ascender.y);
+    this.#staticGuides.moveTo(X_ADVANCE, GUIDES.descender.y);
+    this.#staticGuides.lineTo(X_ADVANCE, GUIDES.ascender.y);
   }
 
-  getStaticGuidesPath(): IPath {
-    if (!this.#staticGuides) {
-      throw new Error("Static guides not set");
-    }
-
+  public getStaticGuidesPath(): Path2D {
     return this.#staticGuides;
   }
 

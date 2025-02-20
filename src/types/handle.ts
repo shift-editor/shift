@@ -1,6 +1,1 @@
-export enum HandleType {
-  CORNER,
-  SMOOTH,
-  CONTROL,
-  DIRECTION,
-}
+export type HandleType = "corner" | "smooth" | "control" | "direction";

@@ -5,7 +5,7 @@ import { Point2D } from "@/types/math";
 
 export interface ContourNode {
   contour: Contour;
-  renderPath?: Path2D;
+  renderPath: Path2D;
 }
 
 export class ContourManager {
@@ -36,13 +36,44 @@ export class ContourManager {
 
   addContour(): Ident {
     const c = new Contour();
-    const node = { contour: c };
+    const node = { contour: c, renderPath: new Path2D() };
     this.#contours.set(c.id, node);
 
     return c.id;
   }
 
+  buildRenderPaths(): void {
+    for (const node of this.#contours.values()) {
+      if (node.contour.points.length < 2) {
+        continue;
+      }
+
+      const segments = node.contour.segments();
+
+      node.renderPath = new Path2D();
+      node.renderPath.moveTo(segments[0].anchor1.x, segments[0].anchor1.y);
+
+      for (const segment of segments) {
+        switch (segment.type) {
+          case "line":
+            node.renderPath.lineTo(segment.anchor2.x, segment.anchor2.y);
+            break;
+          case "cubic":
+            node.renderPath.cubicTo(
+              segment.control1.x,
+              segment.control1.y,
+              segment.control2.x,
+              segment.control2.y,
+              segment.anchor2.x,
+              segment.anchor2.y,
+            );
+        }
+      }
+    }
+  }
+
   get nodes(): ContourNode[] {
+    this.buildRenderPaths();
     return Array.from(this.#contours.values());
   }
 

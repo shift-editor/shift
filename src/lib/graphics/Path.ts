@@ -35,4 +35,8 @@ export class Path2D implements IPath {
   get commands(): ReadonlyArray<PathCommand> {
     return this.#commands;
   }
+
+  clear(): void {
+    this.#commands = [];
+  }
 }
