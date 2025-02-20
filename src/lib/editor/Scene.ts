@@ -1,4 +1,5 @@
 import { IPath, IRenderer } from "@/types/graphics";
+import { Point2D } from "@/types/math";
 
 import { ContourManager, ContourNode } from "./ContourManager";
 
@@ -44,15 +45,11 @@ export class Scene {
     return this.#staticGuides;
   }
 
-  public addPoint(x: number, y: number): void {
-    this.#contourManager.addPoint(x, y);
+  public addPoint(point: Point2D): void {
+    this.#contourManager.addPoint(point);
   }
 
   public getNodes(): ContourNode[] {
     return this.#contourManager.nodes;
-  }
-
-  public getRenderablePaths(ctx: IRenderer): IPath[] {
-    return this.#contourManager.rebuildRenderPaths(ctx);
   }
 }

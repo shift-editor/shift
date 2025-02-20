@@ -139,7 +139,7 @@ export class Editor {
 
   public addPoint(clientX: number, clientY: number): void {
     const { x, y } = this.getUpmMousePosition(clientX, clientY);
-    this.#scene.addPoint(x, y);
+    this.#scene.addPoint({ x, y });
   }
 
   applyUserTransforms(): void {
@@ -204,7 +204,6 @@ export class Editor {
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
-    const renderables = this.#scene.getRenderablePaths(ctx);
     this.#painter.drawMetrics(ctx, this.#scene.getStaticGuidesPath());
     this.#painter.drawInteractive(ctx);
 

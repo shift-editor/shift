@@ -11,6 +11,8 @@ import { DEFAULT_STYLES, DrawStyle } from "@/lib/styles/style";
 import { getEditor } from "@/store/store";
 import { IGraphicContext, IRenderer, IPath, Colour } from "@/types/graphics";
 
+import { Path2D } from "../Path";
+
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
     locateFile: () => `/canvaskit.wasm`,
@@ -60,6 +62,8 @@ export class CanvasKitRenderer implements IRenderer {
   #paint: Paint;
   #strokeColour: Colour = [0, 0, 0, 1];
   #fillColour: Colour = [0, 0, 0, 1];
+
+  #cachedPaths: Map<number, Path> = new Map();
 
   public constructor(ctx: CanvasKitContext) {
     this.#ctx = ctx;
@@ -236,28 +240,94 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path.close();
   }
 
-  stroke(path?: IPath): void {
+  stroke(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
     this.setStrokeColour();
 
-    if (path instanceof CanvasKitPath) {
-      this.canvas.drawPath(path._getNativePath(), p);
+    if (path) {
+      const id = path.id;
+      const cachedPath = this.#cachedPaths.get(id);
+
+      if (cachedPath) {
+        this.canvas.drawPath(cachedPath, p);
+        return;
+      }
+
+      const nativePath = new this.ctx.canvasKit.Path();
+      for (const command of path.commands) {
+        switch (command.type) {
+          case "moveTo":
+            nativePath.moveTo(command.x, command.y);
+            break;
+          case "lineTo":
+            nativePath.lineTo(command.x, command.y);
+            break;
+          case "cubicTo":
+            nativePath.cubicTo(
+              command.cp1x,
+              command.cp1y,
+              command.cp2x,
+              command.cp2y,
+              command.x,
+              command.y,
+            );
+            break;
+          case "close":
+            nativePath.close();
+            break;
+        }
+      }
+
+      this.#cachedPaths.set(id, nativePath);
+
       return;
     }
+
     this.canvas.drawPath(this.#path, p);
     this.#path.reset();
   }
 
-  fill(path?: IPath): void {
+  fill(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
 
     if (path) {
-      this.canvas.drawPath(
-        path instanceof CanvasKitPath ? path._getNativePath() : this.#path,
-        p,
-      );
+      const id = path.id;
+      const cachedPath = this.#cachedPaths.get(id);
+
+      if (cachedPath) {
+        this.canvas.drawPath(cachedPath, p);
+        return;
+      }
+
+      const nativePath = new this.ctx.canvasKit.Path();
+      for (const command of path.commands) {
+        switch (command.type) {
+          case "moveTo":
+            nativePath.moveTo(command.x, command.y);
+            break;
+          case "lineTo":
+            nativePath.lineTo(command.x, command.y);
+            break;
+          case "cubicTo":
+            nativePath.cubicTo(
+              command.cp1x,
+              command.cp1y,
+              command.cp2x,
+              command.cp2y,
+              command.x,
+              command.y,
+            );
+            break;
+          case "close":
+            nativePath.close();
+            break;
+        }
+      }
+
+      this.#cachedPaths.set(id, nativePath);
+
       return;
     }
 
