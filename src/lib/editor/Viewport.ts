@@ -158,11 +158,9 @@ export class Viewport {
   // @returns The upm mouse position of the viewport
   // **
   calculateUpmMousePosition(clientX: number, clientY: number): Point2D {
-    // 1. Convert screen coordinates to canvas space
     const canvasX = clientX - this.#canvasRect.left;
     const canvasY = clientY - this.#canvasRect.top;
 
-    // 2. Apply zoom transformation (matching the Editor's transform matrix)
     const center = this.getCentrePoint();
     const zoomedX =
       (canvasX - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;

@@ -15,7 +15,7 @@ export const GUIDE_STYLES: DrawStyle = {
 };
 
 export const DEFAULT_STYLES: DrawStyle = {
-  lineWidth: 0.5,
+  lineWidth: 0.75,
   strokeStyle: "black",
   fillStyle: "white",
   antiAlias: false,
@@ -23,8 +23,8 @@ export const DEFAULT_STYLES: DrawStyle = {
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   corner: {
+    lineWidth: 0.75,
     antiAlias: false,
-    lineWidth: 1,
     strokeStyle: "blue",
     fillStyle: "white",
   },

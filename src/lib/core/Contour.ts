@@ -36,12 +36,21 @@ export class ContourPoint extends Point {
 class SegmentIterator implements Iterator<Segment> {
   #points: ContourPoint[];
   #index: number = 0;
+  #closed: boolean = false;
 
-  public constructor(points: ContourPoint[]) {
+  public constructor(points: ContourPoint[], closed: boolean) {
+    this.#closed = closed;
     this.#points = points;
   }
 
   public next(): IteratorResult<Segment> {
+    if (this.#index === -1) {
+      return {
+        done: true,
+        value: undefined,
+      };
+    }
+
     if (this.#points.length < 2) {
       return {
         done: true,
@@ -50,6 +59,24 @@ class SegmentIterator implements Iterator<Segment> {
     }
 
     if (this.#index >= this.#points.length - 1) {
+      if (this.#closed) {
+        const p1 = this.#points[this.#index];
+        const p2 = this.#points[(this.#index + 1) % this.#points.length];
+
+        const segment: LineSegment = {
+          type: "line",
+          anchor1: p1,
+          anchor2: p2,
+        };
+
+        this.#index = -1;
+
+        return {
+          done: false,
+          value: segment,
+        };
+      }
+
       return {
         done: true,
         value: undefined,
@@ -96,7 +123,7 @@ class SegmentIterator implements Iterator<Segment> {
 
     return {
       done: true,
-      value: {},
+      value: undefined,
     };
   }
 }
@@ -116,8 +143,21 @@ export class Contour {
 
   addPoint(point: Point2D): Ident {
     const p = ContourPoint.fromPoint2D(point, "onCurve", this.#id.id);
+    if (this.pointClosesPath(p)) {
+      this.#closed = true;
+      return this.#points[0].id;
+    }
+
     this.#points.push(p);
     return p.id;
+  }
+
+  pointClosesPath(point: ContourPoint): boolean {
+    if (this.#points.length > 1) {
+      return point.distance(this.#points[0]) < 6;
+    }
+
+    return false;
   }
 
   upgradeLineSegment(id: Ident): void {
@@ -135,7 +175,7 @@ export class Contour {
   }
 
   [Symbol.iterator](): Iterator<Segment> {
-    return new SegmentIterator(this.#points);
+    return new SegmentIterator(this.#points, this.#closed);
   }
 
   segments(): Segment[] {
@@ -144,6 +184,10 @@ export class Contour {
 
   lastPoint(): ContourPoint {
     return this.#points[this.#points.length - 1];
+  }
+
+  firstPoint(): ContourPoint {
+    return this.#points[0];
   }
 
   get id(): Ident {
@@ -155,7 +199,6 @@ export class Contour {
   }
 
   close() {
-    this.#points.pop();
     this.#closed = true;
   }
 }

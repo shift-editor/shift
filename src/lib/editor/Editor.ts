@@ -10,7 +10,7 @@ import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
-import { DEFAULT_STYLES, HANDLE_STYLES } from "../styles/style";
+import { DEFAULT_STYLES, GUIDE_STYLES, HANDLE_STYLES } from "../styles/style";
 
 interface EditorState {
   isSelecting: boolean;
@@ -154,14 +154,14 @@ export class Editor {
     const ctx = this.#staticContext.getContext();
     const nodes = this.#scene.getNodes();
 
-    ctx.save();
     ctx.clear();
+    ctx.save();
 
-    // 1. User view transformation matrix
     const center = this.#viewport.getCentrePoint();
     const zoom = this.#viewport.zoom;
     const { panX, panY } = this.#viewport;
 
+    // TODO: we can transform these coords to UPM and move the after the transforms
     if (this.#state.isSelecting) {
       this.#painter.drawSelectionRectangle(
         ctx,
@@ -190,11 +190,47 @@ export class Editor {
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
+    ctx.setStyle(GUIDE_STYLES);
+    ctx.lineWidth = GUIDE_STYLES.lineWidth / zoom;
     this.#painter.drawGuides(ctx, this.#scene.getStaticGuidesPath());
 
-    this.#painter.drawHandles(ctx, nodes);
+    // draw contours
+    ctx.setStyle(DEFAULT_STYLES);
+    ctx.lineWidth = DEFAULT_STYLES.lineWidth / zoom;
+    for (const node of nodes) {
+      ctx.stroke(node.renderPath);
+    }
 
-    this.#painter.drawContours(ctx, nodes);
+    ctx.restore();
+    ctx.save();
+
+    // draw handles
+    for (const node of nodes) {
+      const points = node.contour.points();
+      for (const point of points) {
+        // 1. Start with UPM coordinates and add padding
+        let x = point.x + this.#viewport.padding;
+        let y = point.y;
+
+        // 2. Flip Y and apply padding
+        y = -(y - (this.#viewport.logicalHeight - this.#viewport.padding));
+
+        // 3. Apply ONLY the pan and center offset (no zoom scaling)
+        x = x * zoom + (panX + center.x * (1 - zoom));
+        y = y * zoom + (panY + center.y * (1 - zoom));
+
+        switch (point.type) {
+          case "onCurve":
+            ctx.setStyle(HANDLE_STYLES.corner);
+            this.#painter.drawCornerHandle(ctx, x, y);
+            break;
+          case "offCurve":
+            ctx.setStyle(HANDLE_STYLES.control);
+            this.#painter.drawControlHandle(ctx, x, y);
+            break;
+        }
+      }
+    }
 
     ctx.flush();
     ctx.restore();

@@ -1,16 +1,9 @@
-import {
-  DEFAULT_STYLES,
-  GUIDE_STYLES,
-  HANDLE_STYLES,
-  SELECTION_RECTANGLE_STYLES,
-} from "@/lib/styles/style";
+import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { IPath, IRenderer } from "@/types/graphics";
-
-import { ContourNode } from "./ContourManager";
 
 const HANDLE_SHAPES = {
   corner: {
-    size: 5,
+    size: 6,
   },
   control: {
     radius: 2.5,
@@ -25,15 +18,7 @@ const HANDLE_SHAPES = {
 
 export class Painter {
   public drawGuides(ctx: IRenderer, path: IPath) {
-    ctx.setStyle(GUIDE_STYLES);
     ctx.stroke(path);
-  }
-
-  public drawContours(ctx: IRenderer, nodes: ContourNode[]): void {
-    ctx.setStyle(DEFAULT_STYLES);
-    for (const node of nodes) {
-      ctx.stroke(node.renderPath);
-    }
   }
 
   public drawCornerHandle(ctx: IRenderer, x: number, y: number): void {
@@ -51,24 +36,6 @@ export class Painter {
 
   public drawDirectionHandle(ctx: IRenderer, x: number, y: number): void {}
 
-  public drawHandles(ctx: IRenderer, nodes: ContourNode[]): void {
-    for (const node of nodes) {
-      const points = node.contour.points();
-      for (const point of points) {
-        switch (point.type) {
-          case "onCurve":
-            ctx.setStyle(HANDLE_STYLES.corner);
-            this.drawCornerHandle(ctx, point.x, point.y);
-            break;
-          case "offCurve":
-            ctx.setStyle(HANDLE_STYLES.control);
-            this.drawControlHandle(ctx, point.x, point.y);
-            break;
-        }
-      }
-    }
-  }
-
   public drawSelectionRectangle(
     ctx: IRenderer,
     x: number,
@@ -81,6 +48,7 @@ export class Painter {
     const rw = w;
     const rh = h;
 
+    // TODO: these maybe need to be set in the editor
     ctx.setStyle({
       ...SELECTION_RECTANGLE_STYLES,
       strokeStyle: "transparent",

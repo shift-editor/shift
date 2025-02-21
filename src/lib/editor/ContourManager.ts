@@ -31,7 +31,13 @@ export class ContourManager {
   }
 
   addPoint(point: Point2D): Ident {
-    return this.currentContour.contour.addPoint(point);
+    const id = this.currentContour.contour.addPoint(point);
+    if (this.currentContour.contour.closed()) {
+      this.#currentContourId = this.addContour();
+      return this.#currentContourId;
+    }
+
+    return id;
   }
 
   addContour(): Ident {

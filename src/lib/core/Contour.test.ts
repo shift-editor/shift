@@ -51,4 +51,18 @@ describe("Contour", () => {
     expect(segments.length).toBe(1);
     expect(segments[0].type).toBe("cubic");
   });
+
+  it("adding three points with the last closing the contour should create three line segments and a closed contour", () => {
+    contour.addPoint({ x: 0, y: 0 });
+    contour.addPoint({ x: 10, y: 10 });
+    contour.addPoint({ x: 20, y: 20 });
+    contour.addPoint({ x: 0, y: 0 });
+    const segments = contour.segments();
+
+    expect(contour.closed()).toBe(true);
+    expect(segments.length).toBe(3);
+    expect(segments[2].type).toBe("line");
+    expect(segments[2].anchor2).toEqual(segments[0].anchor1);
+    expect(segments[2].anchor2).toEqual(segments[1].anchor1);
+  });
 });

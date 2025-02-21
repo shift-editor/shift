@@ -36,6 +36,10 @@ export class Path2D implements IPath {
     return this.#commands;
   }
 
+  isEmpty(): boolean {
+    return this.#commands.length === 0;
+  }
+
   clear(): void {
     this.#commands = [];
   }
