@@ -23,9 +23,9 @@ export const DEFAULT_STYLES: DrawStyle = {
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   corner: {
-    lineWidth: 0.75,
+    lineWidth: 1,
     antiAlias: false,
-    strokeStyle: "blue",
+    strokeStyle: "#E066A6",
     fillStyle: "white",
   },
   smooth: {
@@ -41,10 +41,10 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
     fillStyle: "white",
   },
   direction: {
-    antiAlias: false,
+    antiAlias: true,
     lineWidth: 1,
     strokeStyle: "blue",
-    fillStyle: "white",
+    fillStyle: "blue",
   },
 };
 

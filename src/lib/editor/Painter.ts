@@ -12,7 +12,7 @@ const HANDLE_SHAPES = {
     radius: 2.5,
   },
   direction: {
-    size: 8,
+    size: 12,
   },
 } as const;
 
@@ -34,7 +34,18 @@ export class Painter {
     ctx.strokeCircle(x, y, HANDLE_SHAPES.control.radius);
   }
 
-  public drawDirectionHandle(ctx: IRenderer, x: number, y: number): void {}
+  public drawDirectionHandle(ctx: IRenderer, x: number, y: number): void {
+    const size = HANDLE_SHAPES.direction.size;
+    const halfSize = size / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(x - halfSize, y - halfSize);
+    ctx.lineTo(x + halfSize, y);
+    ctx.lineTo(x - halfSize, y + halfSize);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
 
   public drawSelectionRectangle(
     ctx: IRenderer,
@@ -43,23 +54,18 @@ export class Painter {
     w: number,
     h: number,
   ): void {
-    const rx = x;
-    const ry = y;
-    const rw = w;
-    const rh = h;
-
     // TODO: these maybe need to be set in the editor
     ctx.setStyle({
       ...SELECTION_RECTANGLE_STYLES,
       strokeStyle: "transparent",
     });
-    ctx.fillRect(rx, ry, rw, rh);
+    ctx.fillRect(x, y, w, h);
 
     // Stroke second
     ctx.setStyle({
       ...SELECTION_RECTANGLE_STYLES,
       fillStyle: "transparent",
     });
-    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.strokeRect(x, y, w, h);
   }
 }

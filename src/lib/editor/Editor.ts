@@ -20,10 +20,12 @@ interface EditorState {
     width: number;
     height: number;
   };
+  fillContour: boolean;
 }
 
 export const InitialEditorState: EditorState = {
   isSelecting: false,
+  fillContour: false,
   selectionRect: {
     x: 0,
     y: 0,
@@ -149,6 +151,10 @@ export class Editor {
     this.#state.selectionRect = { x, y, width, height };
   }
 
+  public setFillContour(fillContour: boolean) {
+    this.#state.fillContour = fillContour;
+  }
+
   #draw() {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
@@ -161,7 +167,6 @@ export class Editor {
     const zoom = this.#viewport.zoom;
     const { panX, panY } = this.#viewport;
 
-    // TODO: we can transform these coords to UPM and move the after the transforms
     if (this.#state.isSelecting) {
       this.#painter.drawSelectionRectangle(
         ctx,
@@ -199,35 +204,36 @@ export class Editor {
     ctx.lineWidth = DEFAULT_STYLES.lineWidth / zoom;
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
+      if (this.#state.fillContour) {
+        ctx.fill(node.renderPath);
+      }
     }
 
     ctx.restore();
     ctx.save();
 
-    // draw handles
-    for (const node of nodes) {
-      const points = node.contour.points();
-      for (const point of points) {
-        // 1. Start with UPM coordinates and add padding
-        let x = point.x + this.#viewport.padding;
-        let y = point.y;
+    if (!this.#state.fillContour) {
+      for (const node of nodes) {
+        const points = node.contour.points();
+        for (const point of points) {
+          const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
-        // 2. Flip Y and apply padding
-        y = -(y - (this.#viewport.logicalHeight - this.#viewport.padding));
+          if (node.contour.closed() && node.contour.firstPoint() === point) {
+            ctx.setStyle(HANDLE_STYLES.direction);
+            this.#painter.drawDirectionHandle(ctx, x, y);
+            continue;
+          }
 
-        // 3. Apply ONLY the pan and center offset (no zoom scaling)
-        x = x * zoom + (panX + center.x * (1 - zoom));
-        y = y * zoom + (panY + center.y * (1 - zoom));
-
-        switch (point.type) {
-          case "onCurve":
-            ctx.setStyle(HANDLE_STYLES.corner);
-            this.#painter.drawCornerHandle(ctx, x, y);
-            break;
-          case "offCurve":
-            ctx.setStyle(HANDLE_STYLES.control);
-            this.#painter.drawControlHandle(ctx, x, y);
-            break;
+          switch (point.type) {
+            case "onCurve":
+              ctx.setStyle(HANDLE_STYLES.corner);
+              this.#painter.drawCornerHandle(ctx, x, y);
+              break;
+            case "offCurve":
+              ctx.setStyle(HANDLE_STYLES.control);
+              this.#painter.drawControlHandle(ctx, x, y);
+              break;
+          }
         }
       }
     }

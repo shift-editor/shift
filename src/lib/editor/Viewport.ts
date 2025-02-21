@@ -1,3 +1,4 @@
+import { clamp } from "@/lib/utils/utils";
 import { Point2D, Rect2D } from "@/types/math";
 
 export class Viewport {
@@ -153,6 +154,33 @@ export class Viewport {
     return { x: this.#mouseX, y: this.#mouseY };
   }
 
+  projectScreenToUpm(x: number, y: number) {
+    const center = this.getCentrePoint();
+    const zoomedX =
+      (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
+    const zoomedY =
+      (y - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
+
+    const upmX = Math.floor(zoomedX - this.#padding);
+    const upmY = Math.floor(-zoomedY + (this.logicalHeight - this.#padding));
+
+    return { x: upmX, y: upmY };
+  }
+
+  projectUpmToScreen(x: number, y: number) {
+    x = x + this.#padding;
+
+    y = -(y - (this.logicalHeight - this.#padding));
+
+    const panX = this.#panX + this.getCentrePoint().x * (1 - this.#zoom);
+    const panY = this.#panY + this.getCentrePoint().y * (1 - this.#zoom);
+
+    x = x * this.#zoom + panX;
+    y = y * this.#zoom + panY;
+
+    return { x, y };
+  }
+
   // **
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
@@ -161,22 +189,10 @@ export class Viewport {
     const canvasX = clientX - this.#canvasRect.left;
     const canvasY = clientY - this.#canvasRect.top;
 
-    const center = this.getCentrePoint();
-    const zoomedX =
-      (canvasX - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
-    const zoomedY =
-      (canvasY - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
+    const { x, y } = this.projectScreenToUpm(canvasX, canvasY);
+    this.#upmX = x;
 
-    const upmX = Math.floor(zoomedX - this.#padding);
-    const upmY = Math.floor(-zoomedY + (this.logicalHeight - this.#padding));
-
-    this.#upmX = upmX;
-    this.#upmY = upmY;
-
-    return {
-      x: upmX,
-      y: upmY,
-    };
+    return { x, y };
   }
 
   public setUpmMousePosition(clientX: number, clientY: number): Point2D {
@@ -218,10 +234,10 @@ export class Viewport {
   }
 
   zoomIn(): void {
-    this.#zoom += 0.5;
+    this.#zoom = clamp(this.#zoom + 0.5, 0.1, 6);
   }
 
   zoomOut(): void {
-    this.#zoom -= 0.5;
+    this.#zoom = clamp(this.#zoom - 0.5, 0.1, 6);
   }
 }

@@ -25,12 +25,16 @@ export const App = () => {
 
       if (e.key == " ") {
         switchTool("hand");
+        editor.setFillContour(true);
+        editor.requestRedraw();
       }
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
       if (e.key == " ") {
         switchTool("select");
+        editor.setFillContour(false);
+        editor.requestRedraw();
       }
     };
 

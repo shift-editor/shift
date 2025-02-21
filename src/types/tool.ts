@@ -1,4 +1,5 @@
-export type ToolName = "select" | "pen" | "hand";
+export type ToolName = "select" | "pen" | "hand" | "shape";
+export type ToolState = "idle" | "dragging" | "done";
 export interface Tool {
   name: ToolName;
 

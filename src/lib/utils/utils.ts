@@ -1,4 +1,3 @@
-// canvas
 /**
  * Returns the width and height of the canvas, taking into account the device pixel ratio.
  * @param w - The width of the canvas.
@@ -26,13 +25,6 @@ export const scaleCanvasDPR = (canvas: HTMLCanvasElement) => {
   canvas.height = height;
 };
 
-export const getMouseCoords = (
-  clientX: number,
-  clientY: number,
-  rect: DOMRect,
-) => {
-  const x = Math.round(clientX - rect.left);
-  const y = Math.round(clientY - rect.top);
-
-  return { x, y };
+export const clamp = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max);
 };
