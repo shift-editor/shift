@@ -44,7 +44,7 @@ export class ContourManager {
 
   buildRenderPaths(): void {
     for (const node of this.#contours.values()) {
-      if (node.contour.points.length < 2) {
+      if (node.contour.points().length < 2) {
         continue;
       }
 
@@ -72,7 +72,7 @@ export class ContourManager {
     }
   }
 
-  get nodes(): ContourNode[] {
+  nodes(): ContourNode[] {
     this.buildRenderPaths();
     return Array.from(this.#contours.values());
   }

@@ -10,6 +10,7 @@ import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
+import { DEFAULT_STYLES, HANDLE_STYLES } from "../styles/style";
 
 interface EditorState {
   isSelecting: boolean;
@@ -140,19 +141,6 @@ export class Editor {
     this.#scene.addPoint({ x, y });
   }
 
-  applyUserTransforms(): void {
-    if (!this.#staticContext || !this.#interactiveContext) return;
-    const ctx = this.#staticContext.getContext();
-
-    const centrePoint = this.#viewport.getCentrePoint();
-
-    ctx.translate(centrePoint.x, centrePoint.y);
-    ctx.scale(this.#viewport.zoom, this.#viewport.zoom);
-    ctx.translate(-centrePoint.x, -centrePoint.y);
-
-    ctx.translate(this.#viewport.panX, this.#viewport.panY);
-  }
-
   public setSelecting(isSelecting: boolean) {
     this.#state.isSelecting = isSelecting;
   }
@@ -164,6 +152,7 @@ export class Editor {
   #draw() {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
+    const nodes = this.#scene.getNodes();
 
     ctx.save();
     ctx.clear();
@@ -192,7 +181,6 @@ export class Editor {
       panY + center.y * (1 - zoom),
     );
 
-    // 2. Transform to font coordinate space with single matrix
     ctx.transform(
       1,
       0,
@@ -202,9 +190,11 @@ export class Editor {
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
 
-    this.#painter.drawMetrics(ctx, this.#scene.getStaticGuidesPath());
-    const nodes = this.#scene.getNodes();
-    this.#painter.drawInteractive(ctx, nodes);
+    this.#painter.drawGuides(ctx, this.#scene.getStaticGuidesPath());
+
+    this.#painter.drawHandles(ctx, nodes);
+
+    this.#painter.drawContours(ctx, nodes);
 
     ctx.flush();
     ctx.restore();

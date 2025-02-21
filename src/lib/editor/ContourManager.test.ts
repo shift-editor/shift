@@ -1,14 +1,14 @@
 import { ContourManager } from "./ContourManager";
 
-describe("PathManager", () => {
-  let pm: ContourManager;
+describe("ContourManager", () => {
+  let cm: ContourManager;
   beforeEach(() => {
-    pm = new ContourManager();
+    cm = new ContourManager();
   });
 
-  describe("new path manager", () => {
-    it("should have one empty path", () => {
-      expect(pm.nodes.length).toBe(1);
+  describe("new contour manager", () => {
+    it("should have one empty contour", () => {
+      expect(cm.nodes().length).toBe(1);
     });
   });
 });

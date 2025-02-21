@@ -18,14 +18,14 @@ export const DEFAULT_STYLES: DrawStyle = {
   lineWidth: 0.5,
   strokeStyle: "black",
   fillStyle: "white",
-  antiAlias: true,
+  antiAlias: false,
 };
 
 export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   corner: {
     antiAlias: false,
     lineWidth: 1,
-    strokeStyle: "black",
+    strokeStyle: "blue",
     fillStyle: "white",
   },
   smooth: {

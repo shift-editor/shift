@@ -15,7 +15,7 @@ describe("Contour", () => {
     contour.addPoint({ x: 0, y: 0 });
     expect(contour.segments().length).toBe(0);
 
-    expect(contour.points.length).toBe(1);
+    expect(contour.points().length).toBe(1);
   });
 
   it("adding two points to an empty contour should create one line segment", () => {

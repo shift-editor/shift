@@ -110,7 +110,7 @@ export class Contour {
     this.#id = new EntityId();
   }
 
-  get points(): ContourPoint[] {
+  points(): ContourPoint[] {
     return this.#points;
   }
 
@@ -142,7 +142,7 @@ export class Contour {
     return [...this];
   }
 
-  get lastPoint(): ContourPoint {
+  lastPoint(): ContourPoint {
     return this.#points[this.#points.length - 1];
   }
 
@@ -150,7 +150,7 @@ export class Contour {
     return this.#id.id;
   }
 
-  get closed(): boolean {
+  closed(): boolean {
     return this.#closed;
   }
 

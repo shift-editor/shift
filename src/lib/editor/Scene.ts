@@ -41,6 +41,6 @@ export class Scene {
   }
 
   public getNodes(): ContourNode[] {
-    return this.#contourManager.nodes;
+    return this.#contourManager.nodes();
   }
 }
