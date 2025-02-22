@@ -1,7 +1,9 @@
-import { Point2D } from "@/types/math";
+import { IRenderer } from "@/types/graphics";
+import { Point2D, Rect2D } from "@/types/math";
 
 import { Tool, ToolName } from "../../types/tool";
 import { Editor } from "../editor/Editor";
+import { SELECTION_RECTANGLE_STYLES } from "../styles/style";
 
 type SelectState = "idle" | "dragging" | "done";
 
@@ -11,11 +13,13 @@ export class Select implements Tool {
   #editor: Editor;
   #startPos: Point2D;
   #state: SelectState;
+  #selectionRect: Rect2D;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
     this.#startPos = { x: 0, y: 0 };
     this.#state = "idle";
+    this.#selectionRect = { x: 0, y: 0, width: 0, height: 0 };
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -24,8 +28,8 @@ export class Select implements Tool {
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
+    // TODO: should tool done be handled in an event handler instead?
     this.#state = "done";
-    this.#editor.setSelecting(false);
     this.#editor.requestRedraw();
   }
 
@@ -37,13 +41,38 @@ export class Select implements Tool {
     const width = x - this.#startPos.x;
     const height = y - this.#startPos.y;
 
-    this.#editor.setSelecting(true);
-    this.#editor.setSelectionRect(
-      this.#startPos.x,
-      this.#startPos.y,
+    this.#selectionRect = {
+      x: this.#startPos.x,
+      y: this.#startPos.y,
       width,
       height,
-    );
+    };
+
     this.#editor.requestRedraw();
+  }
+
+  draw(ctx: IRenderer): void {
+    if (this.#state !== "dragging") return;
+    ctx.setStyle({
+      ...SELECTION_RECTANGLE_STYLES,
+      strokeStyle: "transparent",
+    });
+    ctx.fillRect(
+      this.#selectionRect.x,
+      this.#selectionRect.y,
+      this.#selectionRect.width,
+      this.#selectionRect.height,
+    );
+
+    ctx.setStyle({
+      ...SELECTION_RECTANGLE_STYLES,
+      fillStyle: "transparent",
+    });
+    ctx.strokeRect(
+      this.#selectionRect.x,
+      this.#selectionRect.y,
+      this.#selectionRect.width,
+      this.#selectionRect.height,
+    );
   }
 }

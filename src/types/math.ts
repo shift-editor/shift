@@ -5,10 +5,10 @@ export type Rect2D = {
   y: number;
   width: number;
   height: number;
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
 };
 
 /** X scale factor of the transformation matrix */

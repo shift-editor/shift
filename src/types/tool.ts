@@ -1,3 +1,5 @@
+import { IRenderer } from "./graphics";
+
 export type ToolName = "select" | "pen" | "hand" | "shape";
 export type ToolState = "idle" | "dragging" | "done";
 export interface Tool {
@@ -6,4 +8,6 @@ export interface Tool {
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void;
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void;
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void;
+
+  draw?(ctx: IRenderer): void;
 }

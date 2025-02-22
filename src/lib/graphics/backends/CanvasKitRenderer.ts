@@ -175,7 +175,7 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   clear(): void {
-    this.canvas.clear(this.ctx.canvasKit.WHITE);
+    this.canvas.clear(this.ctx.canvasKit.TRANSPARENT);
   }
 
   dispose(): void {
@@ -380,7 +380,7 @@ export class CanvasKitContext implements IGraphicContext {
       alpha: 1, // No transparency needed for font editing
       antialias: 1, // Enable antialiasing for smooth curves
       depth: 0, // No depth buffer needed for 2D
-      premultipliedAlpha: 0, // Since alpha is disabled
+      premultipliedAlpha: 1, // Since alpha is disabled
       preserveDrawingBuffer: 1, // Important for continuous rendering during panning
       stencil: 0, // No stencil buffer needed for basic font editing
     });

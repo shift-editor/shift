@@ -1,7 +1,7 @@
 import { EventEmitter, EventHandler } from "@/lib/core/EventEmitter";
 import AppState from "@/store/store";
 import { EditorEvent } from "@/types/events";
-import { IGraphicContext } from "@/types/graphics";
+import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 import { Tool } from "@/types/tool";
 import { tools } from "@lib/tools/tools";
@@ -13,25 +13,11 @@ import { Viewport } from "./Viewport";
 import { DEFAULT_STYLES, GUIDE_STYLES, HANDLE_STYLES } from "../styles/style";
 
 interface EditorState {
-  isSelecting: boolean;
-  selectionRect: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
   fillContour: boolean;
 }
 
 export const InitialEditorState: EditorState = {
-  isSelecting: false,
   fillContour: false,
-  selectionRect: {
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-  },
 };
 
 export class Editor {
@@ -143,39 +129,14 @@ export class Editor {
     this.#scene.addPoint({ x, y });
   }
 
-  public setSelecting(isSelecting: boolean) {
-    this.#state.isSelecting = isSelecting;
-  }
-
-  public setSelectionRect(x: number, y: number, width: number, height: number) {
-    this.#state.selectionRect = { x, y, width, height };
-  }
-
   public setFillContour(fillContour: boolean) {
     this.#state.fillContour = fillContour;
   }
 
-  #draw() {
-    if (!this.#staticContext) return;
-    const ctx = this.#staticContext.getContext();
-    const nodes = this.#scene.getNodes();
-
-    ctx.clear();
-    ctx.save();
-
+  #applyUserTransforms(ctx: IRenderer) {
     const center = this.#viewport.getCentrePoint();
     const zoom = this.#viewport.zoom;
     const { panX, panY } = this.#viewport;
-
-    if (this.#state.isSelecting) {
-      this.#painter.drawSelectionRectangle(
-        ctx,
-        this.#state.selectionRect.x,
-        this.#state.selectionRect.y,
-        this.#state.selectionRect.width,
-        this.#state.selectionRect.height,
-      );
-    }
 
     ctx.transform(
       zoom,
@@ -185,7 +146,9 @@ export class Editor {
       panX + center.x * (1 - zoom),
       panY + center.y * (1 - zoom),
     );
+  }
 
+  #applyUpmTransforms(ctx: IRenderer) {
     ctx.transform(
       1,
       0,
@@ -194,14 +157,50 @@ export class Editor {
       this.#viewport.padding,
       this.#viewport.logicalHeight - this.#viewport.padding,
     );
+  }
+
+  #prepareCanvas(ctx: IRenderer) {
+    this.#applyUserTransforms(ctx);
+    this.#applyUpmTransforms(ctx);
+  }
+
+  #drawInteractive() {
+    if (!this.#interactiveContext) return;
+    const ctx = this.#interactiveContext.getContext();
+    ctx.clear();
+    ctx.save();
+
+    // this.#prepareCanvas(ctx);
+    console.log("IN INTERACTIVE");
+    const tool = this.activeTool();
+    if (tool.draw) {
+      console.log("drawing interactive");
+      tool.draw(ctx);
+    }
+    ctx.restore();
+
+    ctx.fillCircle(100, 100, 10);
+    ctx.flush();
+  }
+
+  #drawStatic() {
+    if (!this.#staticContext) return;
+    const ctx = this.#staticContext.getContext();
+
+    const nodes = this.#scene.getNodes();
+
+    ctx.clear();
+    ctx.save();
+
+    this.#prepareCanvas(ctx);
 
     ctx.setStyle(GUIDE_STYLES);
-    ctx.lineWidth = GUIDE_STYLES.lineWidth / zoom;
+    ctx.lineWidth = GUIDE_STYLES.lineWidth / this.#viewport.zoom;
     this.#painter.drawGuides(ctx, this.#scene.getStaticGuidesPath());
 
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
-    ctx.lineWidth = DEFAULT_STYLES.lineWidth / zoom;
+    ctx.lineWidth = DEFAULT_STYLES.lineWidth / this.#viewport.zoom;
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour) {
@@ -238,8 +237,21 @@ export class Editor {
       }
     }
 
-    ctx.flush();
     ctx.restore();
+    ctx.flush();
+  }
+
+  #flush() {
+    if (!this.#staticContext || !this.#interactiveContext) return;
+    this.#staticContext.getContext().flush();
+    this.#interactiveContext.getContext().flush();
+  }
+
+  #draw() {
+    this.#drawInteractive();
+    this.#drawStatic();
+
+    // this.#flush();
   }
 
   public requestRedraw() {

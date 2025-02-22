@@ -1,4 +1,3 @@
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { IPath, IRenderer } from "@/types/graphics";
 
 const HANDLE_SHAPES = {
@@ -45,27 +44,5 @@ export class Painter {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-  }
-
-  public drawSelectionRectangle(
-    ctx: IRenderer,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ): void {
-    // TODO: these maybe need to be set in the editor
-    ctx.setStyle({
-      ...SELECTION_RECTANGLE_STYLES,
-      strokeStyle: "transparent",
-    });
-    ctx.fillRect(x, y, w, h);
-
-    // Stroke second
-    ctx.setStyle({
-      ...SELECTION_RECTANGLE_STYLES,
-      fillStyle: "transparent",
-    });
-    ctx.strokeRect(x, y, w, h);
   }
 }

@@ -1,4 +1,5 @@
 import { Editor } from "@/lib/editor/Editor";
+import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
 
 export class Shape implements Tool {
@@ -14,4 +15,6 @@ export class Shape implements Tool {
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {}
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {}
+
+  draw(ctx: IRenderer): void {}
 }
