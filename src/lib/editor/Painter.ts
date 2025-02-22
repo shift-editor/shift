@@ -1,4 +1,6 @@
-import { IPath, IRenderer } from "@/types/graphics";
+import { IRenderer } from "@/types/graphics";
+
+import { Path2D } from "../graphics/Path";
 
 const HANDLE_SHAPES = {
   corner: {
@@ -16,7 +18,7 @@ const HANDLE_SHAPES = {
 } as const;
 
 export class Painter {
-  public drawGuides(ctx: IRenderer, path: IPath) {
+  public drawGuides(ctx: IRenderer, path: Path2D) {
     ctx.stroke(path);
   }
 

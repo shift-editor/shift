@@ -1,28 +1,30 @@
 import { Contour } from "@/lib/core/Contour";
-import { Ident } from "@/lib/core/EntityId";
+import { EntityId, Ident } from "@/lib/core/EntityId";
 import { Path2D } from "@/lib/graphics/Path";
 import { Point2D } from "@/types/math";
 
 export interface ContourNode {
   contour: Contour;
   renderPath: Path2D;
+  invalidated: boolean;
 }
 
 export class ContourManager {
-  #currentContourId: Ident;
+  #currentContourId: EntityId;
   #contours: Map<Ident, ContourNode> = new Map();
 
   constructor() {
     const c = new Contour();
-    this.#contours.set(c.id, {
+    this.#contours.set(c.entityId.id, {
       contour: c,
       renderPath: new Path2D(),
+      invalidated: false,
     });
-    this.#currentContourId = c.id;
+    this.#currentContourId = c.entityId;
   }
 
   get currentContour(): ContourNode {
-    const c = this.#contours.get(this.#currentContourId);
+    const c = this.#contours.get(this.#currentContourId.id);
     if (!c) {
       throw new Error("Current contour not found");
     }
@@ -30,7 +32,7 @@ export class ContourManager {
     return c;
   }
 
-  addPoint(point: Point2D): Ident {
+  addPoint(point: Point2D): EntityId {
     const id = this.currentContour.contour.addPoint(point);
     if (this.currentContour.contour.closed()) {
       this.#currentContourId = this.addContour();
@@ -40,12 +42,12 @@ export class ContourManager {
     return id;
   }
 
-  addContour(): Ident {
+  addContour(): EntityId {
     const c = new Contour();
-    const node = { contour: c, renderPath: new Path2D() };
-    this.#contours.set(c.id, node);
+    const node = { contour: c, renderPath: new Path2D(), invalidated: false };
+    this.#contours.set(c.entityId.id, node);
 
-    return c.id;
+    return c.entityId;
   }
 
   buildRenderPaths(): void {
@@ -55,8 +57,8 @@ export class ContourManager {
       }
 
       const segments = node.contour.segments();
-
       node.renderPath = new Path2D();
+
       node.renderPath.moveTo(segments[0].anchor1.x, segments[0].anchor1.y);
 
       for (const segment of segments) {

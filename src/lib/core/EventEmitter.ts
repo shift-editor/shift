@@ -1,29 +1,37 @@
-import { EditorEvent } from "@/types/events";
+import { EditorEvent, EditorEventMap } from "@/types/events";
 
-export type EventHandler = (...args: unknown[]) => void;
+export type EventHandler<T> = (data: T) => void;
 
 export class EventEmitter {
-  #events: Map<EditorEvent, EventHandler[]>;
+  #events: Map<EditorEvent, EventHandler<any>[]>;
 
   constructor() {
     this.#events = new Map();
   }
 
-  on(event: EditorEvent, handler: EventHandler) {
-    this.#events.set(event, [...(this.#events.get(event) || []), handler]);
+  on<E extends EditorEvent>(
+    event: E,
+    handler: EventHandler<EditorEventMap[E]>,
+  ) {
+    const handlers = this.#events.get(event) || [];
+    handlers.push(handler as EventHandler<any>);
+    this.#events.set(event, handlers);
   }
 
-  emit(event: EditorEvent, ...args: unknown[]) {
+  emit<E extends EditorEvent>(event: E, data: EditorEventMap[E]) {
     const handlers = this.#events.get(event);
 
     if (!handlers) {
       return;
     }
 
-    handlers.forEach((handler) => handler(...args));
+    handlers.forEach((handler) => handler(data));
   }
 
-  off(event: EditorEvent, handler: EventHandler) {
+  off<E extends EditorEvent>(
+    event: E,
+    handler: EventHandler<EditorEventMap[E]>,
+  ) {
     const handlers = this.#events.get(event);
 
     if (!handlers) {

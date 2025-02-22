@@ -20,8 +20,8 @@ export class ContourPoint extends Point {
     return new ContourPoint(point.x, point.y, pointType, parentId);
   }
 
-  get id(): Ident {
-    return this.#id.id;
+  get entityId(): EntityId {
+    return this.#id;
   }
 
   get type(): PointType {
@@ -141,15 +141,15 @@ export class Contour {
     return this.#points;
   }
 
-  addPoint(point: Point2D): Ident {
+  addPoint(point: Point2D): EntityId {
     const p = ContourPoint.fromPoint2D(point, "onCurve", this.#id.id);
     if (this.pointClosesPath(p)) {
       this.#closed = true;
-      return this.#points[0].id;
+      return p.entityId;
     }
 
     this.#points.push(p);
-    return p.id;
+    return p.entityId;
   }
 
   pointClosesPath(point: ContourPoint): boolean {
@@ -161,7 +161,12 @@ export class Contour {
   }
 
   upgradeLineSegment(id: Ident): void {
-    const index = this.#points.findIndex((p) => p.id === id);
+    const index = this.#points.findIndex((p) => p.entityId.id === id);
+
+    if (index === -1) {
+      return;
+    }
+
     const p1 = this.#points[index];
     const p3 = this.#points[index + 1];
 
@@ -190,8 +195,8 @@ export class Contour {
     return this.#points[0];
   }
 
-  get id(): Ident {
-    return this.#id.id;
+  get entityId(): EntityId {
+    return this.#id;
   }
 
   closed(): boolean {

@@ -9,5 +9,5 @@ export interface Tool {
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void;
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void;
 
-  draw?(ctx: IRenderer): void;
+  drawInteractive?(ctx: IRenderer): void;
 }

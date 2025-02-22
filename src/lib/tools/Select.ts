@@ -1,18 +1,16 @@
 import { IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 
-import { Tool, ToolName } from "../../types/tool";
+import { Tool, ToolName, ToolState } from "../../types/tool";
 import { Editor } from "../editor/Editor";
 import { SELECTION_RECTANGLE_STYLES } from "../styles/style";
-
-type SelectState = "idle" | "dragging" | "done";
 
 export class Select implements Tool {
   public readonly name: ToolName = "select";
 
   #editor: Editor;
   #startPos: Point2D;
-  #state: SelectState;
+  #state: ToolState;
   #selectionRect: Rect2D;
 
   public constructor(editor: Editor) {
@@ -28,7 +26,6 @@ export class Select implements Tool {
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    // TODO: should tool done be handled in an event handler instead?
     this.#state = "done";
     this.#editor.requestRedraw();
   }
@@ -51,7 +48,7 @@ export class Select implements Tool {
     this.#editor.requestRedraw();
   }
 
-  draw(ctx: IRenderer): void {
+  drawInteractive(ctx: IRenderer): void {
     if (this.#state !== "dragging") return;
     ctx.setStyle({
       ...SELECTION_RECTANGLE_STYLES,

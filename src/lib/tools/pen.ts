@@ -14,7 +14,7 @@ export class Pen implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#toolState = "dragging";
-    this.#editor.addPoint(e.clientX, e.clientY);
+    const id = this.#editor.addPoint(e.clientX, e.clientY);
     this.#editor.requestRedraw();
   }
 

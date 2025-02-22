@@ -1,6 +1,6 @@
 import { EventEmitter, EventHandler } from "@/lib/core/EventEmitter";
 import AppState from "@/store/store";
-import { EditorEvent } from "@/types/events";
+import { EditorEvent, EditorEventMap } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 import { Tool } from "@/types/tool";
@@ -10,6 +10,7 @@ import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
+import { EntityId, Ident } from "../core/EntityId";
 import { DEFAULT_STYLES, GUIDE_STYLES, HANDLE_STYLES } from "../styles/style";
 
 interface EditorState {
@@ -41,6 +42,10 @@ export class Editor {
 
     this.#eventEmitter = new EventEmitter();
 
+    this.#eventEmitter.on("contour:updated", ({ contourId }) => {
+      console.log("contour:updated", contourId);
+    });
+
     this.#staticContext = null;
     this.#interactiveContext = null;
 
@@ -64,16 +69,22 @@ export class Editor {
     return tool.tool;
   }
 
-  public on(event: EditorEvent, handler: EventHandler) {
+  public on<E extends EditorEvent>(
+    event: E,
+    handler: EventHandler<EditorEventMap[E]>,
+  ) {
     this.#eventEmitter.on(event, handler);
   }
 
-  public off(event: EditorEvent, handler: EventHandler) {
+  public off<E extends EditorEvent>(
+    event: E,
+    handler: EventHandler<EditorEventMap[E]>,
+  ) {
     this.#eventEmitter.off(event, handler);
   }
 
-  public emit(event: EditorEvent, ...args: unknown[]) {
-    this.#eventEmitter.emit(event, ...args);
+  public emit<E extends EditorEvent>(event: E, data: EditorEventMap[E]) {
+    this.#eventEmitter.emit(event, data);
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -124,9 +135,9 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
-  public addPoint(clientX: number, clientY: number): void {
+  public addPoint(clientX: number, clientY: number): EntityId {
     const { x, y } = this.getUpmMousePosition(clientX, clientY);
-    this.#scene.addPoint({ x, y });
+    return this.#scene.addPoint({ x, y });
   }
 
   public setFillContour(fillContour: boolean) {
@@ -170,16 +181,12 @@ export class Editor {
     ctx.clear();
     ctx.save();
 
-    // this.#prepareCanvas(ctx);
-    console.log("IN INTERACTIVE");
     const tool = this.activeTool();
-    if (tool.draw) {
-      console.log("drawing interactive");
-      tool.draw(ctx);
+    if (tool.drawInteractive) {
+      tool.drawInteractive(ctx);
     }
-    ctx.restore();
 
-    ctx.fillCircle(100, 100, 10);
+    ctx.restore();
     ctx.flush();
   }
 
@@ -250,8 +257,6 @@ export class Editor {
   #draw() {
     this.#drawInteractive();
     this.#drawStatic();
-
-    // this.#flush();
   }
 
   public requestRedraw() {

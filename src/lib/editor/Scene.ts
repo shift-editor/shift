@@ -1,3 +1,4 @@
+import { EntityId, Ident } from "@/lib/core/EntityId";
 import { Point2D } from "@/types/math";
 
 import { ContourManager, ContourNode } from "./ContourManager";
@@ -36,8 +37,8 @@ export class Scene {
     return this.#staticGuides;
   }
 
-  public addPoint(point: Point2D): void {
-    this.#contourManager.addPoint(point);
+  public addPoint(point: Point2D): EntityId {
+    return this.#contourManager.addPoint(point);
   }
 
   public getNodes(): ContourNode[] {
