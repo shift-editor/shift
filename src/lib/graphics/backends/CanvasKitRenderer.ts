@@ -63,7 +63,7 @@ export class CanvasKitRenderer implements IRenderer {
   #strokeColour: Colour = [0, 0, 0, 1];
   #fillColour: Colour = [0, 0, 0, 1];
 
-  #cachedPaths: Map<number, Path> = new Map();
+  #cachedPaths: Map<Path2D, Path> = new Map();
 
   public constructor(ctx: CanvasKitContext) {
     this.#ctx = ctx;
@@ -240,8 +240,7 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path.close();
   }
 
-  constructPath(path: Path2D): Path {
-    const nativePath = new this.ctx.canvasKit.Path();
+  constructPath(path: Path2D, nativePath: Path): Path {
     for (const command of path.commands) {
       switch (command.type) {
         case "moveTo":
@@ -275,21 +274,28 @@ export class CanvasKitRenderer implements IRenderer {
     this.setStrokeColour();
 
     if (path) {
-      const id = path.id;
-      const cachedPath = this.#cachedPaths.get(id);
+      let cachedPath = this.#cachedPaths.get(path);
 
       if (cachedPath) {
+        if (path.invalidated) {
+          cachedPath.reset();
+          cachedPath = this.constructPath(path, cachedPath);
+          this.#cachedPaths.set(path, cachedPath);
+          path.invalidated = false;
+        }
+
         this.canvas.drawPath(cachedPath, p);
         return;
       }
 
-      const nativePath = this.constructPath(path);
-      this.#cachedPaths.set(id, nativePath);
+      const newPath = new this.ctx.canvasKit.Path();
+      const nativePath = this.constructPath(path, newPath);
+      this.#cachedPaths.set(path, nativePath);
       this.canvas.drawPath(nativePath, p);
+      return;
     }
 
     this.canvas.drawPath(this.#path, p);
-    this.#path.reset();
   }
 
   fill(path?: Path2D): void {
@@ -297,23 +303,31 @@ export class CanvasKitRenderer implements IRenderer {
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
 
     if (path) {
-      const id = path.id;
-      const cachedPath = this.#cachedPaths.get(id);
+      let cachedPath = this.#cachedPaths.get(path);
 
       if (cachedPath) {
+        if (path.invalidated) {
+          cachedPath.reset();
+          cachedPath = this.constructPath(path, cachedPath);
+          this.#cachedPaths.set(path, cachedPath);
+          path.invalidated = false;
+
+          this.canvas.drawPath(cachedPath, p);
+          return;
+        }
+
         this.canvas.drawPath(cachedPath, p);
         return;
       }
 
-      const nativePath = this.constructPath(path);
-      this.#cachedPaths.set(id, nativePath);
+      const newPath = new this.ctx.canvasKit.Path();
+      const nativePath = this.constructPath(path, newPath);
+      this.#cachedPaths.set(path, nativePath);
       this.canvas.drawPath(nativePath, p);
-
       return;
     }
 
     this.canvas.drawPath(this.#path, p);
-    this.#path.reset();
   }
 
   scale(x: number, y: number): void {

@@ -145,7 +145,7 @@ export class Contour {
     const p = ContourPoint.fromPoint2D(point, "onCurve", this.#id.id);
     if (this.pointClosesPath(p)) {
       this.#closed = true;
-      return p.entityId;
+      return this.firstPoint().entityId;
     }
 
     this.#points.push(p);

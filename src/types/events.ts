@@ -1,11 +1,16 @@
-import { Ident } from "@/lib/core/EntityId";
+import { EntityId } from "@/lib/core/EntityId";
 
-export type EditorEventMap = {
-  "contour:updated": { contourId: Ident };
-  "point:added": { pointId: Ident; position: { x: number; y: number } };
-  "point:moved": { pointId: Ident; position: { x: number; y: number } };
-  "point:removed": { pointId: Ident };
-  "selection:changed": { selectedIds: Ident[] };
+export interface PointIdentifier {
+  pointId: EntityId;
+}
+
+export type EventData = {
+  "point:added": PointIdentifier;
+  "point:moved": PointIdentifier;
+  "point:removed": PointIdentifier;
 };
 
-export type EditorEvent = keyof EditorEventMap;
+export type Event = keyof EventData;
+export type EventHandler<T extends Event = Event> = (
+  data: EventData[T],
+) => void;

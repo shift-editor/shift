@@ -1,25 +1,20 @@
-import { EditorEvent, EditorEventMap } from "@/types/events";
-
-export type EventHandler<T> = (data: T) => void;
+import { Event, EventData, EventHandler } from "@/types/events";
 
 export class EventEmitter {
-  #events: Map<EditorEvent, EventHandler<any>[]>;
+  #eventHandlers: Map<Event, EventHandler<Event>[]>;
 
   constructor() {
-    this.#events = new Map();
+    this.#eventHandlers = new Map();
   }
 
-  on<E extends EditorEvent>(
-    event: E,
-    handler: EventHandler<EditorEventMap[E]>,
-  ) {
-    const handlers = this.#events.get(event) || [];
-    handlers.push(handler as EventHandler<any>);
-    this.#events.set(event, handlers);
+  on<E extends Event>(event: E, handler: EventHandler) {
+    const handlers = this.#eventHandlers.get(event) || [];
+    handlers.push(handler);
+    this.#eventHandlers.set(event, handlers);
   }
 
-  emit<E extends EditorEvent>(event: E, data: EditorEventMap[E]) {
-    const handlers = this.#events.get(event);
+  emit<E extends Event>(event: E, data: EventData[E]) {
+    const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {
       return;
@@ -28,17 +23,14 @@ export class EventEmitter {
     handlers.forEach((handler) => handler(data));
   }
 
-  off<E extends EditorEvent>(
-    event: E,
-    handler: EventHandler<EditorEventMap[E]>,
-  ) {
-    const handlers = this.#events.get(event);
+  off<E extends Event>(event: E, handler: EventHandler<E>) {
+    const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {
       return;
     }
 
-    this.#events.set(
+    this.#eventHandlers.set(
       event,
       handlers.filter((h) => h !== handler),
     );

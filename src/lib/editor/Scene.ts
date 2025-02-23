@@ -41,6 +41,10 @@ export class Scene {
     return this.#contourManager.addPoint(point);
   }
 
+  public invalidateContour(id: Ident): void {
+    this.#contourManager.invalidateContour(id);
+  }
+
   public getNodes(): ContourNode[] {
     return this.#contourManager.nodes();
   }

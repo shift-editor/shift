@@ -1,6 +1,12 @@
-import { EventEmitter, EventHandler } from "@/lib/core/EventEmitter";
+import { EntityId, Ident } from "@/lib/core/EntityId";
+import { EventEmitter } from "@/lib/core/EventEmitter";
+import {
+  DEFAULT_STYLES,
+  GUIDE_STYLES,
+  HANDLE_STYLES,
+} from "@/lib/styles/style";
 import AppState from "@/store/store";
-import { EditorEvent, EditorEventMap } from "@/types/events";
+import { Event, EventData, EventHandler } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 import { Tool } from "@/types/tool";
@@ -10,8 +16,6 @@ import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
-import { EntityId, Ident } from "../core/EntityId";
-import { DEFAULT_STYLES, GUIDE_STYLES, HANDLE_STYLES } from "../styles/style";
 
 interface EditorState {
   fillContour: boolean;
@@ -42,10 +46,6 @@ export class Editor {
 
     this.#eventEmitter = new EventEmitter();
 
-    this.#eventEmitter.on("contour:updated", ({ contourId }) => {
-      console.log("contour:updated", contourId);
-    });
-
     this.#staticContext = null;
     this.#interactiveContext = null;
 
@@ -69,21 +69,15 @@ export class Editor {
     return tool.tool;
   }
 
-  public on<E extends EditorEvent>(
-    event: E,
-    handler: EventHandler<EditorEventMap[E]>,
-  ) {
+  public on<E extends Event>(event: E, handler: EventHandler) {
     this.#eventEmitter.on(event, handler);
   }
 
-  public off<E extends EditorEvent>(
-    event: E,
-    handler: EventHandler<EditorEventMap[E]>,
-  ) {
+  public off<E extends Event>(event: E, handler: EventHandler<E>) {
     this.#eventEmitter.off(event, handler);
   }
 
-  public emit<E extends EditorEvent>(event: E, data: EditorEventMap[E]) {
+  public emit<E extends Event>(event: E, data: EventData[E]) {
     this.#eventEmitter.emit(event, data);
   }
 
@@ -133,6 +127,10 @@ export class Editor {
 
   public zoom(): number {
     return this.#viewport.zoom;
+  }
+
+  public invalidateContour(id: Ident) {
+    this.#scene.invalidateContour(id);
   }
 
   public addPoint(clientX: number, clientY: number): EntityId {

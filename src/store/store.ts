@@ -14,6 +14,23 @@ const AppState = create<AppState>()((set) => {
   const editor = new Editor();
   createToolRegistry(editor);
 
+  editor.on("point:added", ({ pointId }) => {
+    console.log("point:added", pointId);
+
+    editor.invalidateContour(pointId.parentId);
+    editor.requestRedraw();
+  });
+
+  editor.on("point:moved", ({ pointId }) => {
+    console.log("point:moved", pointId);
+    editor.requestRedraw();
+  });
+
+  editor.on("point:removed", ({ pointId }) => {
+    console.log("point:removed", pointId);
+    editor.requestRedraw();
+  });
+
   return {
     editor,
     activeTool: "select",
