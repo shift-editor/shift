@@ -83,8 +83,6 @@ export class ContourManager {
             );
         }
       }
-
-      console.log("node.renderPath", node.renderPath);
     }
   }
 
