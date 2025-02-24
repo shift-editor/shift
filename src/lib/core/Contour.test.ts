@@ -43,8 +43,8 @@ describe("Contour", () => {
   });
 
   it("adding two points and then upgrading the line segment should create a cubic segment", () => {
-    const id = contour.addPoint({ x: 0, y: 0 });
-    contour.addPoint({ x: 10, y: 10 });
+    contour.addPoint({ x: 0, y: 0 });
+    const id = contour.addPoint({ x: 10, y: 10 });
     contour.upgradeLineSegment(id.id);
     const segments = contour.segments();
 

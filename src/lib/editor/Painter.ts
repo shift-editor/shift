@@ -7,7 +7,7 @@ const HANDLE_SHAPES = {
     size: 6,
   },
   control: {
-    radius: 2.5,
+    radius: 3,
   },
   smooth: {
     radius: 2.5,

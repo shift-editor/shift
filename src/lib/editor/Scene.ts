@@ -41,11 +41,35 @@ export class Scene {
     return this.#contourManager.addPoint(point);
   }
 
+  public upgradeLineSegment(id: Ident): void {
+    this.#contourManager.upgradeLineSegment(id);
+  }
+
   public invalidateContour(id: Ident): void {
     this.#contourManager.invalidateContour(id);
   }
 
-  public getNodes(): ContourNode[] {
+  // TODO: perhaps make this into a single functions where
+  // you can pass optional IDs and if not it returns all points
+  public getAllPoints() {
+    return this.#contourManager
+      .nodes()
+      .map((c) => {
+        return c.contour.points();
+      })
+      .flat();
+  }
+
+  public getAllContours() {
+    return this.#contourManager
+      .nodes()
+      .map((c) => {
+        return c.contour;
+      })
+      .flat();
+  }
+
+  nodes(): ContourNode[] {
     return this.#contourManager.nodes();
   }
 }

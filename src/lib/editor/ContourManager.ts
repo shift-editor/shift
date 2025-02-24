@@ -56,6 +56,10 @@ export class ContourManager {
     node.renderPath.invalidated = true;
   }
 
+  upgradeLineSegment(id: Ident): void {
+    this.currentContour.contour.upgradeLineSegment(id);
+  }
+
   buildRenderPaths(): void {
     for (const node of this.#contours.values()) {
       if (node.contour.points().length < 2) {
@@ -81,6 +85,7 @@ export class ContourManager {
               segment.anchor2.x,
               segment.anchor2.y,
             );
+            break;
         }
       }
     }

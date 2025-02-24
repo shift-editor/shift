@@ -138,6 +138,14 @@ export class Editor {
     return this.#scene.addPoint({ x, y });
   }
 
+  public getAllPoints() {
+    return this.#scene.getAllPoints();
+  }
+
+  public upgradeLineSegment(id: Ident) {
+    this.#scene.upgradeLineSegment(id);
+  }
+
   public setFillContour(fillContour: boolean) {
     this.#state.fillContour = fillContour;
   }
@@ -192,7 +200,7 @@ export class Editor {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    const nodes = this.#scene.getNodes();
+    const nodes = this.#scene.nodes();
 
     ctx.clear();
     ctx.save();
@@ -253,6 +261,7 @@ export class Editor {
   }
 
   #draw() {
+    console.log(this.#scene.getAllContours());
     this.#drawInteractive();
     this.#drawStatic();
   }

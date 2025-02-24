@@ -154,7 +154,7 @@ export class Contour {
 
   pointClosesPath(point: ContourPoint): boolean {
     if (this.#points.length > 1) {
-      return point.distance(this.#points[0]) < 6;
+      return point.distance(this.#points[0].x, this.#points[0].y) < 6;
     }
 
     return false;
@@ -167,8 +167,8 @@ export class Contour {
       return;
     }
 
-    const p1 = this.#points[index];
-    const p3 = this.#points[index + 1];
+    const p1 = this.#points[index - 1];
+    const p3 = this.#points[index];
 
     const c1 = p1.lerp(p3, 1.0 / 3.0);
     const c2 = p1.lerp(p3, 2.0 / 3.0);
@@ -176,7 +176,7 @@ export class Contour {
     const control1 = new ContourPoint(c1.x, c1.y, "offCurve", this.#id.id);
     const control2 = new ContourPoint(c2.x, c2.y, "offCurve", this.#id.id);
 
-    this.#points.splice(index + 1, 0, control1, control2);
+    this.#points.splice(index, 0, control1, control2);
   }
 
   [Symbol.iterator](): Iterator<Segment> {

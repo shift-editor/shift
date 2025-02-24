@@ -31,14 +31,14 @@ export class Point {
     this.#y = y;
   }
 
-  public distance(point: Point): number {
-    return Math.hypot(this.#x - point.x, this.#y - point.y);
+  public distance(x: number, y: number): number {
+    return Math.hypot(this.#x - x, this.#y - y);
   }
 
   public lerp(p: Point, t: number): Point {
     return new Point(
-      this.#x + t * (p.x - this.#x),
-      this.#y + t * (p.y - this.#y),
+      Math.floor(this.#x + t * (p.x - this.#x)),
+      Math.floor(this.#y + t * (p.y - this.#y)),
     );
   }
 }

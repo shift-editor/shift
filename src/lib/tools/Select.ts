@@ -31,21 +31,27 @@ export class Select implements Tool {
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state !== "dragging") return;
+    if (this.#state === "dragging") {
+      const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
+      const width = x - this.#startPos.x;
+      const height = y - this.#startPos.y;
 
-    const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
+      this.#selectionRect = {
+        x: this.#startPos.x,
+        y: this.#startPos.y,
+        width,
+        height,
+      };
 
-    const width = x - this.#startPos.x;
-    const height = y - this.#startPos.y;
+      this.#editor.requestRedraw();
+    }
 
-    this.#selectionRect = {
-      x: this.#startPos.x,
-      y: this.#startPos.y,
-      width,
-      height,
-    };
-
-    this.#editor.requestRedraw();
+    const { x, y } = this.#editor.getUpmMousePosition(e.clientX, e.clientY);
+    for (const p of this.#editor.getAllPoints()) {
+      if (p.distance(x, y) < 6) {
+        console.log("HIT");
+      }
+    }
   }
 
   drawInteractive(ctx: IRenderer): void {
