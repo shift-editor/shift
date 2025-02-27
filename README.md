@@ -6,11 +6,11 @@
   </p>
 </div>
 
-> [!IMPORTANT]
-> Shift is in a pre-alpha state and is currently only suitable for developers interested in contributing to the project
-
 ## Why Shift?
 Shift aims to redefine font editing by combining the power of Rust for performance-critical tasks with the flexibility of web-based UI technologies. Whether you're a type designer or a developer, Shift offers a fresh approach to creating and editing fonts with a focus on speed, precision, and extensibility.
+
+> [!IMPORTANT]
+> Shift is in a pre-alpha state and is currently only suitable for developers interested in contributing to the project
 
 ## Architecture
 Shift uses the Tauri framework:
