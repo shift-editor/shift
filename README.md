@@ -1,9 +1,13 @@
-# Shift
+<div align="center">
+  <p align="center">
+    <img width=150 src="https://github.com/user-attachments/assets/4cd8177f-b43d-473d-9907-d7d4d9c95b8c" />
+    <h1 align="center"><b>Shift</b></h1>
+    <p>A modern, cross-platform font editor built with Rust and web technologies, focused on bringing contemporary technologies and design principles to type design.</p>
+  </p>
+</div>
 
 > [!IMPORTANT]
 > Shift is in a pre-alpha state and is currently only suitable for developers interested in contributing to the project
-
-A modern, cross-platform font editor built with Rust and web technologies, focused on bringing contemporary technologies and design principles to type design.
 
 ## Why Shift?
 Shift aims to redefine font editing by combining the power of Rust for performance-critical tasks with the flexibility of web-based UI technologies. Whether you're a type designer or a developer, Shift offers a fresh approach to creating and editing fonts with a focus on speed, precision, and extensibility.
