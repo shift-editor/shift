@@ -2,6 +2,7 @@ import { EntityId, Ident } from "@/lib/core/EntityId";
 import { Point2D } from "@/types/math";
 
 import { ContourManager, ContourNode } from "./ContourManager";
+import { ContourPoint } from "../core/Contour";
 import { Path2D } from "../graphics/Path";
 
 const X_ADVANCE = 600;
@@ -41,6 +42,10 @@ export class Scene {
     return this.#contourManager.addPoint(point);
   }
 
+  public movePointTo(point: Point2D, id: EntityId) {
+    this.#contourManager.movePointTo(point, id);
+  }
+
   public upgradeLineSegment(id: Ident): void {
     this.#contourManager.upgradeLineSegment(id);
   }
@@ -51,7 +56,7 @@ export class Scene {
 
   // TODO: perhaps make this into a single functions where
   // you can pass optional IDs and if not it returns all points
-  public getAllPoints() {
+  public getAllPoints(): ReadonlyArray<ContourPoint> {
     return this.#contourManager
       .nodes()
       .map((c) => {

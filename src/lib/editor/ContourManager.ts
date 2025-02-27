@@ -39,6 +39,25 @@ export class ContourManager {
     return id;
   }
 
+  movePointTo(point: Point2D, id: EntityId) {
+    const c = this.#contours.get(id.parentId);
+    if (!c) {
+      console.error("No parentId for point");
+      return;
+    }
+
+    const p = c.contour.points().find((p) => {
+      return p.entityId.id == id.id;
+    });
+
+    if (!p) {
+      console.error("point not found");
+      return;
+    }
+
+    p.movePointTo(point.x, point.y);
+  }
+
   addContour(): EntityId {
     const c = new Contour();
     const node = { contour: c, renderPath: new Path2D(), invalidated: false };

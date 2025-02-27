@@ -20,6 +20,11 @@ export class ContourPoint extends Point {
     return new ContourPoint(point.x, point.y, pointType, parentId);
   }
 
+  movePointTo(x: number, y: number) {
+    this.set_x(x);
+    this.set_y(y);
+  }
+
   get entityId(): EntityId {
     return this.#id;
   }
@@ -30,6 +35,10 @@ export class ContourPoint extends Point {
 
   get smooth(): boolean {
     return this.#smooth;
+  }
+
+  toggleSmooth() {
+    this.#smooth = true;
   }
 }
 

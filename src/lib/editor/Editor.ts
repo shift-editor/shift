@@ -16,6 +16,7 @@ import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
+import { ContourPoint } from "../core/Contour";
 
 interface EditorState {
   fillContour: boolean;
@@ -138,7 +139,11 @@ export class Editor {
     return this.#scene.addPoint({ x, y });
   }
 
-  public getAllPoints() {
+  public movePointTo(x: number, y: number) {
+    this.#scene.mo
+  }
+
+  public getAllPoints(): ReadonlyArray<ContourPoint> {
     return this.#scene.getAllPoints();
   }
 

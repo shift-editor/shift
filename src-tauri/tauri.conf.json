@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "font-editor",
+  "productName": "Shift",
   "version": "0.1.0",
-  "identifier": "com.font-editor.app",
+  "identifier": "com.shift.app",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -15,7 +15,8 @@
         "title": "",
         "width": 800,
         "height": 600,
-        "titleBarStyle": "Overlay"
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
