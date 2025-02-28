@@ -19,10 +19,12 @@ import { Viewport } from "./Viewport";
 import { ContourPoint } from "../core/Contour";
 
 interface EditorState {
+  selectedPoints: ContourPoint[];
   fillContour: boolean;
 }
 
 export const InitialEditorState: EditorState = {
+  selectedPoints: [],
   fillContour: false,
 };
 
@@ -86,28 +88,24 @@ export class Editor {
     this.#viewport.setRect(rect);
   }
 
-  public getMousePosition(clientX?: number, clientY?: number): Point2D {
-    if (clientX && clientY) {
-      return this.#viewport.getMousePosition(clientX, clientY);
+  public getMousePosition(x?: number, y?: number): Point2D {
+    if (x === undefined || y === undefined) {
+      return this.#viewport.getMousePosition();
     }
 
-    return this.#viewport.getMousePosition();
+    return this.#viewport.getMousePosition(x, y);
   }
 
-  public setMousePosition(clientX: number, clientY: number): Point2D {
-    return this.#viewport.setMousePosition(clientX, clientY);
-  }
-
-  public getUpmMousePosition(clientX?: number, clientY?: number): Point2D {
-    if (clientX && clientY) {
-      return this.#viewport.getUpmMousePosition(clientX, clientY);
+  public getUpmMousePosition(x?: number, y?: number): Point2D {
+    if (x === undefined || y === undefined) {
+      return this.#viewport.getUpmMousePosition();
     }
 
-    return this.#viewport.getUpmMousePosition();
+    return this.#viewport.getUpmMousePosition(x, y);
   }
 
-  public setUpmMousePosition(clientX: number, clientY: number): Point2D {
-    return this.#viewport.setUpmMousePosition(clientX, clientY);
+  public setUpmMousePosition(x: number, y: number) {
+    this.#viewport.setUpmMousePosition(x, y);
   }
 
   public pan(dx: number, dy: number) {
@@ -134,14 +132,36 @@ export class Editor {
     this.#scene.invalidateContour(id);
   }
 
-  public addPoint(clientX: number, clientY: number): EntityId {
-    const { x, y } = this.getUpmMousePosition(clientX, clientY);
-    return this.#scene.addPoint({ x, y });
+  public get selectedPoints(): ContourPoint[] {
+    return this.#state.selectedPoints;
   }
 
-  public movePointTo(x: number, y: number) {
-    this.#scene.mo
+  // **
+  // Add a point to the scene
+  // @param x - The screen x position of the point in the viewport
+  // @param y - The screen y position of the point in the viewport
+  // @returns The id of the point
+  // **
+  public addPoint(x: number, y: number): EntityId {
+    const { x: upmX, y: upmY } = this.#viewport.projectScreenToUpm(x, y);
+
+    return this.#scene.addPoint(upmX, upmY);
   }
+
+  public closeContour(): EntityId {
+    return this.#scene.closeContour();
+  }
+
+  public addRect(rect: Rect2D): EntityId {
+    const id = this.#scene.addPoint(rect.x, rect.y);
+    this.#scene.addPoint(rect.x + rect.width, rect.y);
+    this.#scene.addPoint(rect.x + rect.width, rect.y + rect.height);
+    this.#scene.addPoint(rect.x, rect.y + rect.height);
+
+    return id;
+  }
+
+  public movePointTo(x: number, y: number) {}
 
   public getAllPoints(): ReadonlyArray<ContourPoint> {
     return this.#scene.getAllPoints();
@@ -222,6 +242,7 @@ export class Editor {
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour) {
+        ctx.fillStyle = "black";
         ctx.fill(node.renderPath);
       }
     }
@@ -231,7 +252,7 @@ export class Editor {
 
     if (!this.#state.fillContour) {
       for (const node of nodes) {
-        const points = node.contour.points();
+        const points = node.contour.points;
         for (const point of points) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
@@ -266,7 +287,6 @@ export class Editor {
   }
 
   #draw() {
-    console.log(this.#scene.getAllContours());
     this.#drawInteractive();
     this.#drawStatic();
   }

@@ -2,7 +2,6 @@ import { IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
 
 import { Tool, ToolName } from "../../types/tool";
-import { ContourPoint } from "../core/Contour";
 import { Editor } from "../editor/Editor";
 import { SELECTION_RECTANGLE_STYLES } from "../styles/style";
 
@@ -14,30 +13,28 @@ export class Select implements Tool {
   #startPos: Point2D;
   #state: SelectState;
   #selectionRect: Rect2D;
-  #selectedPoints: ContourPoint[];
+
+  #boundingRect: Rect2D;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
     this.#startPos = { x: 0, y: 0 };
     this.#state = "idle";
     this.#selectionRect = { x: 0, y: 0, width: 0, height: 0 };
-    this.#selectedPoints = [];
+    this.#boundingRect = { x: 0, y: 0, width: 0, height: 0 };
   }
 
-  isDraggingSelectedPoint(x: number, y: number): boolean {
-    for (const p of this.#selectedPoints) {
-      return p.distance(x, y) < 6;
-    }
-
-    return false;
-  }
+  //  you can either be dragging:
+  //  corner point
+  //  bounding box
+  //  handles on the bounding box
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "dragging";
     const { x, y } = this.#editor.getUpmMousePosition(e.clientX, e.clientY);
     for (const p of this.#editor.getAllPoints()) {
       if (p.distance(x, y) < 6) {
-        this.#selectedPoints.push(p);
+        this.#editor.selectedPoints.push(p);
       }
     }
 

@@ -25,9 +25,8 @@ export class Pen implements Tool {
     this.#toolState = "dragging";
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    this.#firstPoint = new Point(position.x, position.y);
 
-    const id = this.#editor.addPoint(e.clientX, e.clientY);
+    const id = this.#editor.addPoint(position.x, position.y);
     this.#addedPoint = id.id;
     this.#editor.emit("point:added", { pointId: id });
   }

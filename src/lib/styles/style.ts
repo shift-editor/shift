@@ -35,16 +35,16 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
     antiAlias: false,
   },
   control: {
-    antiAlias: true,
     lineWidth: 1,
     strokeStyle: "red",
     fillStyle: "white",
+    antiAlias: true,
   },
   direction: {
     antiAlias: true,
     lineWidth: 1,
-    strokeStyle: "blue",
-    fillStyle: "blue",
+    strokeStyle: "#E066A6",
+    fillStyle: "#E066A6",
   },
 };
 

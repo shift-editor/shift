@@ -1,4 +1,4 @@
-import { Contour } from "@/lib/core/Contour";
+import { Contour, ContourPoint } from "@/lib/core/Contour";
 import { EntityId, Ident } from "@/lib/core/EntityId";
 import { Path2D } from "@/lib/graphics/Path";
 import { Point2D } from "@/types/math";
@@ -30,13 +30,30 @@ export class ContourManager {
     return c;
   }
 
-  addPoint(point: Point2D): EntityId {
-    const id = this.currentContour.contour.addPoint(point);
-    if (this.currentContour.contour.closed()) {
-      this.#currentContourId = this.addContour();
+  addPoint(x: number, y: number): EntityId {
+    if (this.pointClosesPath(x, y)) {
+      return this.closeContour();
     }
 
-    return id;
+    return this.currentContour.contour.addPoint(x, y);
+  }
+
+  pointClosesPath(x: number, y: number): boolean {
+    if (this.currentContour.contour.points.length > 1) {
+      const firstPoint = this.currentContour.contour.firstPoint();
+      return firstPoint.distance(x, y) < 6;
+    }
+
+    return false;
+  }
+
+  closeContour(): EntityId {
+    const firstPoint = this.currentContour.contour.firstPoint();
+
+    this.currentContour.contour.close();
+    this.#currentContourId = this.addContour();
+
+    return firstPoint.entityId;
   }
 
   movePointTo(point: Point2D, id: EntityId) {
@@ -46,7 +63,7 @@ export class ContourManager {
       return;
     }
 
-    const p = c.contour.points().find((p) => {
+    const p = c.contour.points.find((p) => {
       return p.entityId.id == id.id;
     });
 
@@ -81,7 +98,7 @@ export class ContourManager {
 
   buildRenderPaths(): void {
     for (const node of this.#contours.values()) {
-      if (node.contour.points().length < 2) {
+      if (node.contour.points.length < 2) {
         continue;
       }
 

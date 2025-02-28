@@ -44,7 +44,7 @@ export class Painter {
     ctx.lineTo(x + halfSize, y);
     ctx.lineTo(x - halfSize, y + halfSize);
     ctx.closePath();
-    ctx.fill();
     ctx.stroke();
+    ctx.fill();
   }
 }

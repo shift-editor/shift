@@ -6,4 +6,6 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 
+icons
+
 .vscode

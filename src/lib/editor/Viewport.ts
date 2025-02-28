@@ -125,7 +125,7 @@ export class Viewport {
   // Get the mouse position of the viewport
   // @returns The mouse position of the viewport
   // **
-  calculateMousePosition(clientX: number, clientY: number): Point2D {
+  #calculateMousePosition(clientX: number, clientY: number): Point2D {
     const mouseX = clientX - this.#canvasRect.left;
     const mouseY = clientY - this.#canvasRect.top;
 
@@ -138,23 +138,20 @@ export class Viewport {
     };
   }
 
-  public setMousePosition(clientX: number, clientY: number): Point2D {
-    const { x, y } = this.calculateMousePosition(clientX, clientY);
-    this.#mouseX = x;
-    this.#mouseY = y;
-
-    return { x, y };
-  }
-
-  public getMousePosition(clientX?: number, clientY?: number): Point2D {
-    if (clientX && clientY) {
-      return this.calculateMousePosition(clientX, clientY);
+  public getMousePosition(x?: number, y?: number): Point2D {
+    if (x === undefined || y === undefined) {
+      return this.#calculateMousePosition(this.#mouseX, this.#mouseY);
     }
 
-    return { x: this.#mouseX, y: this.#mouseY };
+    return this.#calculateMousePosition(x, y);
   }
 
-  projectScreenToUpm(x: number, y: number) {
+  public setMousePosition(x: number, y: number): void {
+    this.#mouseX = x;
+    this.#mouseY = y;
+  }
+
+  public projectScreenToUpm(x: number, y: number) {
     const center = this.getCentrePoint();
     const zoomedX =
       (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
@@ -167,7 +164,7 @@ export class Viewport {
     return { x: upmX, y: upmY };
   }
 
-  projectUpmToScreen(x: number, y: number) {
+  public projectUpmToScreen(x: number, y: number) {
     x = x + this.#padding;
 
     y = -(y - (this.logicalHeight - this.#padding));
@@ -185,30 +182,17 @@ export class Viewport {
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
   // **
-  calculateUpmMousePosition(clientX: number, clientY: number): Point2D {
-    const canvasX = clientX - this.#canvasRect.left;
-    const canvasY = clientY - this.#canvasRect.top;
-
-    const { x, y } = this.projectScreenToUpm(canvasX, canvasY);
-    this.#upmX = x;
-
-    return { x, y };
-  }
-
-  public setUpmMousePosition(clientX: number, clientY: number): Point2D {
-    const { x, y } = this.calculateUpmMousePosition(clientX, clientY);
-    this.#upmX = x;
-    this.#upmY = y;
-
-    return { x, y };
-  }
-
-  public getUpmMousePosition(clientX?: number, clientY?: number): Point2D {
-    if (clientX && clientY) {
-      return this.calculateUpmMousePosition(clientX, clientY);
+  getUpmMousePosition(mouseX?: number, mouseY?: number): Point2D {
+    if (mouseX && mouseY) {
+      return this.projectScreenToUpm(mouseX, mouseY);
     }
 
     return { x: this.#upmX, y: this.#upmY };
+  }
+
+  setUpmMousePosition(x: number, y: number): void {
+    this.#upmX = x;
+    this.#upmY = y;
   }
 
   public getCentrePoint(): Point2D {

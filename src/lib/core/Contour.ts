@@ -146,27 +146,14 @@ export class Contour {
     this.#id = new EntityId();
   }
 
-  points(): ContourPoint[] {
+  get points(): ContourPoint[] {
     return this.#points;
   }
 
-  addPoint(point: Point2D): EntityId {
-    const p = ContourPoint.fromPoint2D(point, "onCurve", this.#id.id);
-    if (this.pointClosesPath(p)) {
-      this.#closed = true;
-      return this.firstPoint().entityId;
-    }
-
+  addPoint(x: number, y: number): EntityId {
+    const p = new ContourPoint(x, y, "onCurve", this.#id.id);
     this.#points.push(p);
     return p.entityId;
-  }
-
-  pointClosesPath(point: ContourPoint): boolean {
-    if (this.#points.length > 1) {
-      return point.distance(this.#points[0].x, this.#points[0].y) < 6;
-    }
-
-    return false;
   }
 
   upgradeLineSegment(id: Ident): void {
@@ -214,5 +201,9 @@ export class Contour {
 
   close() {
     this.#closed = true;
+  }
+
+  isEmpty(): boolean {
+    return this.#points.length === 0;
   }
 }

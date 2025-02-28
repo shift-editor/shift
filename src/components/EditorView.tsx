@@ -27,7 +27,8 @@ export const EditorView = () => {
       className={`relative z-20 h-full w-full overflow-hidden cursor-${activeTool}`}
       onWheel={onWheel}
       onMouseMove={(e) => {
-        editor.setUpmMousePosition(e.clientX, e.clientY);
+        const { x, y } = editor.getUpmMousePosition(e.clientX, e.clientY);
+        editor.setUpmMousePosition(x, y);
       }}
     >
       <StaticScene />

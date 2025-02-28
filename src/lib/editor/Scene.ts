@@ -38,8 +38,12 @@ export class Scene {
     return this.#staticGuides;
   }
 
-  public addPoint(point: Point2D): EntityId {
-    return this.#contourManager.addPoint(point);
+  public addPoint(x: number, y: number): EntityId {
+    return this.#contourManager.addPoint(x, y);
+  }
+
+  public closeContour(): EntityId {
+    return this.#contourManager.closeContour();
   }
 
   public movePointTo(point: Point2D, id: EntityId) {
@@ -60,7 +64,7 @@ export class Scene {
     return this.#contourManager
       .nodes()
       .map((c) => {
-        return c.contour.points();
+        return c.contour.points;
       })
       .flat();
   }

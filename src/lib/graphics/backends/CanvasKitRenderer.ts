@@ -301,6 +301,7 @@ export class CanvasKitRenderer implements IRenderer {
   fill(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
+    this.setFillColour();
 
     if (path) {
       let cachedPath = this.#cachedPaths.get(path);
