@@ -1,7 +1,8 @@
 <div align="center">
   <p align="center">
-    <img width=150 src="https://github.com/user-attachments/assets/4cd8177f-b43d-473d-9907-d7d4d9c95b8c" />
-    <h1 align="center"><b>Shift</b></h1>
+    <img width=150 src="https://github.com/user-attachments/assets/521e2732-341d-441d-bb6d-bf7bcdccf764" />
+    <h1 align="center"><b>Shift</b></h1
+>
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
   </p>
 </div>
