@@ -41,7 +41,7 @@ export class Pen implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const distance = this.#firstPoint.distance(position.x, position.y);
 
-    if (distance > 10 && this.#addedPoint) {
+    if (distance > 2 && this.#addedPoint) {
       this.#editor.upgradeLineSegment(this.#addedPoint);
       this.#toolState = "draggingHandle";
     }

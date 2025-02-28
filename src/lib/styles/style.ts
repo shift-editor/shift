@@ -25,8 +25,8 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   corner: {
     lineWidth: 1,
     antiAlias: false,
-    strokeStyle: "#E066A6",
-    fillStyle: "white",
+    strokeStyle: "rgb(76, 96, 230)",
+    fillStyle: "rgb(76, 96, 230)",
   },
   smooth: {
     strokeStyle: "green",
