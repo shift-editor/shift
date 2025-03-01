@@ -10,6 +10,7 @@ export const App = () => {
     const editor = AppState.getState().editor;
     const switchTool = AppState.getState().setActiveTool;
 
+    // TODO: Make tool specific key handlers
     const keyDownHandler = (e: KeyboardEvent) => {
       if (e.key == "=" && e.metaKey) {
         editor.zoomIn();

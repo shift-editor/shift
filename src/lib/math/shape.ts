@@ -16,9 +16,12 @@ export abstract class Shape {
     return this.#position;
   }
 
-  set position(pos: Point) {
-    this.#position.set_x(pos.x);
-    this.#position.set_y(pos.y);
+  public reposition(x: number, y: number) {
+    this.#x = x;
+    this.#y = y;
+
+    this.#position.set_x(x);
+    this.#position.set_y(y);
   }
 
   get x(): number {
@@ -29,5 +32,5 @@ export abstract class Shape {
     return this.#y;
   }
 
-  abstract hit(point: Point): boolean;
+  abstract hit(x: number, y: number): boolean;
 }

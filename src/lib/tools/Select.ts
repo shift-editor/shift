@@ -1,8 +1,12 @@
 import { ContourPoint } from "@/lib/core/Contour";
 import { Editor } from "@/lib/editor/Editor";
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
+import { getBoundingRectPoints, Rect } from "@/lib/math/rect";
+import {
+  BOUNDING_RECTANGLE_STYLES,
+  SELECTION_RECTANGLE_STYLES,
+} from "@/lib/styles/style";
 import { IRenderer } from "@/types/graphics";
-import { Point2D, Rect2D } from "@/types/math";
+import { Point2D } from "@/types/math";
 import { Tool, ToolName } from "@/types/tool";
 
 export type SelectState = "idle" | "dragging" | "done";
@@ -12,51 +16,48 @@ export class Select implements Tool {
   #editor: Editor;
   #startPos: Point2D;
   #state: SelectState;
-  #selectionRect: Rect2D;
+  #selectedPoints: Set<ContourPoint>;
 
-  #boundingRect: Rect2D;
-  #selectedPoints: ContourPoint[];
+  #selectionRect: Rect;
+  #boundingRect: Rect;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
     this.#startPos = { x: 0, y: 0 };
     this.#state = "idle";
-    this.#selectionRect = {
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      left: 0,
-      top: 0,
-      right: 0,
-      bottom: 0,
-    };
-    this.#boundingRect = {
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      left: 0,
-      top: 0,
-      right: 0,
-      bottom: 0,
-    };
-    this.#selectedPoints = [];
+    this.#selectionRect = new Rect(0, 0, 0, 0);
+    this.#boundingRect = new Rect(0, 0, 0, 0);
+    this.#selectedPoints = new Set();
   }
 
   //  you can either be dragging:
   //  corner point
   //  bounding box
+  //  handles
   //  handles on the bounding box
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "dragging";
-    const { x, y } = this.#editor.getUpmMousePosition(e.clientX, e.clientY);
+    const { x: mouseX, y: mouseY } = this.#editor.getMousePosition(
+      e.clientX,
+      e.clientY,
+    );
+    const { x, y } = this.#editor.getUpmMousePosition(mouseX, mouseY);
+
     for (const p of this.#editor.getAllPoints()) {
-      if (p.distance(x, y) < 6) {
-        this.#editor.selectedPoints.push(p);
+      if (!this.#selectedPoints.has(p) && p.distance(x, y) < 6) {
+        this.#selectedPoints.add(p);
       }
     }
+
+    const {
+      x: bbX,
+      y: bbY,
+      width,
+      height,
+    } = getBoundingRectPoints(Array.from(this.#selectedPoints));
+    this.#boundingRect.reposition(bbX, bbY);
+    this.#boundingRect.resize(width, height);
 
     this.#startPos = this.#editor.getMousePosition(e.clientX, e.clientY);
   }
@@ -73,16 +74,8 @@ export class Select implements Tool {
     const width = x - this.#startPos.x;
     const height = y - this.#startPos.y;
 
-    this.#selectionRect = {
-      x: this.#startPos.x,
-      y: this.#startPos.y,
-      width,
-      height,
-      left: this.#startPos.x,
-      top: this.#startPos.y,
-      right: x,
-      bottom: y,
-    };
+    this.#selectionRect.reposition(this.#startPos.x, this.#startPos.y);
+    this.#selectionRect.resize(width, height);
 
     this.#editor.requestRedraw();
   }
@@ -113,6 +106,16 @@ export class Select implements Tool {
         );
         break;
       case "done":
+        ctx.setStyle({
+          ...BOUNDING_RECTANGLE_STYLES,
+          fillStyle: "transparent",
+        });
+        ctx.strokeRect(
+          this.#boundingRect.x,
+          this.#boundingRect.y,
+          this.#boundingRect.width,
+          this.#boundingRect.height,
+        );
         break;
     }
   }

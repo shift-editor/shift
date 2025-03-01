@@ -26,11 +26,11 @@ describe("Rect", () => {
     const rect = new Rect(5, 5, 25, 25);
 
     it("on point (10, 10) is true", () => {
-      expect(rect.hit(new Point(27, 26))).toBe(true);
+      expect(rect.hit(27, 26)).toBe(true);
     });
 
     it("on point (35, 35) is false", () => {
-      expect(rect.hit(new Point(35, 35))).toBe(false);
+      expect(rect.hit(35, 35)).toBe(false);
     });
   });
 });

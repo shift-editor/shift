@@ -1,3 +1,5 @@
+import { Point2D, Rect2D } from "@/types/math";
+
 import { Point } from "./point";
 import { Shape } from "./shape";
 
@@ -29,6 +31,16 @@ export class Rect extends Shape {
     return new Point(this.x - this.width / 2, this.y - this.height / 2);
   }
 
+  // **
+  // Resize the rectangle
+  // @param width - The new width of the rectangle
+  // @param height - The new height of the rectangle
+  // **
+  public resize(width: number, height: number): void {
+    this.#width = width;
+    this.#height = height;
+  }
+
   get left(): number {
     return this.x;
   }
@@ -53,12 +65,30 @@ export class Rect extends Shape {
     return this.#height;
   }
 
-  hit(point: Point): boolean {
+  hit(x: number, y: number): boolean {
     return (
-      this.x <= point.x &&
-      point.x <= this.x + this.width &&
-      this.y <= point.y &&
-      point.y <= this.y + this.#height
+      this.x <= x &&
+      x <= this.x + this.width &&
+      this.y <= y &&
+      y <= this.y + this.#height
     );
   }
+}
+
+export function getBoundingRectPoints(points: Point[]): Rect2D {
+  const minX = Math.min(...points.map((p) => p.x));
+  const minY = Math.min(...points.map((p) => p.y));
+  const maxX = Math.max(...points.map((p) => p.x));
+  const maxY = Math.max(...points.map((p) => p.y));
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    left: minX,
+    top: minY,
+    right: maxX,
+    bottom: maxY,
+  };
 }

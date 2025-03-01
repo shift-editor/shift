@@ -22,6 +22,7 @@ export class Pen implements Tool {
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
+    if (e.button !== 0) return;
     this.#toolState = "dragging";
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);

@@ -54,3 +54,10 @@ export const SELECTION_RECTANGLE_STYLES: DrawStyle = {
   fillStyle: "rgba(59, 130, 246, 0.04)",
   antiAlias: false,
 };
+
+export const BOUNDING_RECTANGLE_STYLES: DrawStyle = {
+  lineWidth: 1,
+  strokeStyle: "rgb(76, 96, 230)",
+  fillStyle: "transparent",
+  antiAlias: false,
+};
