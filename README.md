@@ -21,6 +21,50 @@ Shift uses the Tauri framework:
 * __State management__: Zustland for global React state mangement
 * __Backend__: Rust for high-intensive operations and font related processing
 
+## Getting Started
+
+### Prerequisites
+
+- **Rust** (1.70 or later): [Install Rust](https://www.rust-lang.org/tools/install)
+- **Bun** (1.0 or later): [Install Bun](https://bun.sh/docs/installation)
+- **System Dependencies**:
+  - **Windows**: Microsoft Visual C++ Build Tools, WebView2
+  - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
+  - **Linux**: WebKit2GTK (`libwebkit2gtk-4.0-dev`) and build essentials
+
+### Quick Start
+
+1. **Clone the repository**:
+
+```bash
+git clone https://github.com/kostyafarber/shift.git
+cd shift
+```
+
+2. **Install dependencies**:
+
+```bash
+bun install
+```
+
+3. **Run the development server**:
+
+```bash
+bun run tauri dev
+```
+
+### Build for Production
+
+```bash
+bun run tauri build
+```
+
+### Common Issues
+
+- If you encounter build errors, ensure you have all system dependencies installed
+- For Linux users, make sure WebKit2GTK development libraries are installed
+- For detailed troubleshooting, check the [Tauri docs](https://v1.tauri.app/v1/guides/getting-started/prerequisites/)
+
 ## Development Roadmap
 We aim to implement the typical features present in font editors such as FontForge, Glyphs, RobotFont etc.
 
