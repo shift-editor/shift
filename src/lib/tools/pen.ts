@@ -26,8 +26,9 @@ export class Pen implements Tool {
     this.#toolState = "dragging";
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const id = this.#editor.addPoint(position.x, position.y);
+    const id = this.#editor.addPoint(x, y);
     this.#addedPoint = id.id;
     this.#editor.emit("point:added", { pointId: id });
   }
@@ -40,7 +41,9 @@ export class Pen implements Tool {
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#toolState !== "dragging") return;
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const distance = this.#firstPoint.distance(position.x, position.y);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    const distance = this.#firstPoint.distance(x, y);
 
     if (distance > 2 && this.#addedPoint) {
       this.#editor.upgradeLineSegment(this.#addedPoint);

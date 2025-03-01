@@ -96,12 +96,12 @@ export class Editor {
     return this.#viewport.getMousePosition(x, y);
   }
 
-  public getUpmMousePosition(x?: number, y?: number): Point2D {
-    if (x === undefined || y === undefined) {
-      return this.#viewport.getUpmMousePosition();
-    }
+  public getUpmMousePosition(): Point2D {
+    return this.#viewport.getUpmMousePosition();
+  }
 
-    return this.#viewport.getUpmMousePosition(x, y);
+  public projectScreenToUpm(x: number, y: number): Point2D {
+    return this.#viewport.projectScreenToUpm(x, y);
   }
 
   public setUpmMousePosition(x: number, y: number) {
@@ -143,9 +143,7 @@ export class Editor {
   // @returns The id of the point
   // **
   public addPoint(x: number, y: number): EntityId {
-    const { x: upmX, y: upmY } = this.#viewport.projectScreenToUpm(x, y);
-
-    return this.#scene.addPoint(upmX, upmY);
+    return this.#scene.addPoint(x, y);
   }
 
   public closeContour(): EntityId {
@@ -211,6 +209,8 @@ export class Editor {
     const ctx = this.#interactiveContext.getContext();
     ctx.clear();
     ctx.save();
+
+    this.#prepareCanvas(ctx);
 
     const tool = this.activeTool();
     if (tool.drawInteractive) {

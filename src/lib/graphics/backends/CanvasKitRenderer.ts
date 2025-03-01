@@ -392,12 +392,12 @@ export class CanvasKitContext implements IGraphicContext {
     }
 
     const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas, undefined, {
-      alpha: 1, // No transparency needed for font editing
-      antialias: 1, // Enable antialiasing for smooth curves
-      depth: 0, // No depth buffer needed for 2D
-      premultipliedAlpha: 1, // Since alpha is disabled
-      preserveDrawingBuffer: 1, // Important for continuous rendering during panning
-      stencil: 0, // No stencil buffer needed for basic font editing
+      alpha: 1,
+      antialias: 1,
+      depth: 0,
+      premultipliedAlpha: 1,
+      preserveDrawingBuffer: 1,
+      stencil: 0,
     });
 
     this.#surface = s;

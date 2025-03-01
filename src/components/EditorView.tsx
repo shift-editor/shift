@@ -27,12 +27,8 @@ export const EditorView = () => {
       className={`relative z-20 h-full w-full overflow-hidden cursor-${activeTool}`}
       onWheel={onWheel}
       onMouseMove={(e) => {
-        const { x: mouseX, y: mouseY } = editor.getMousePosition(
-          e.clientX,
-          e.clientY,
-        );
-
-        const { x, y } = editor.getUpmMousePosition(mouseX, mouseY);
+        const position = editor.getMousePosition(e.clientX, e.clientY);
+        const { x, y } = editor.projectScreenToUpm(position.x, position.y);
         editor.setUpmMousePosition(x, y);
       }}
     >

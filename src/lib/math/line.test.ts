@@ -1,3 +1,0 @@
-describe("Line", () => {
-  describe("initialise", () => {});
-});

@@ -24,9 +24,28 @@ export const App = () => {
         return;
       }
 
-      if (e.key == " ") {
+      if (e.key == "h") {
         switchTool("hand");
+        editor.requestRedraw();
+      }
+
+      if (e.key == " ") {
         editor.setFillContour(true);
+        editor.requestRedraw();
+      }
+
+      if (e.key == "p") {
+        switchTool("pen");
+        editor.requestRedraw();
+      }
+
+      if (e.key == "s") {
+        switchTool("shape");
+        editor.requestRedraw();
+      }
+
+      if (e.key == "v") {
+        switchTool("select");
         editor.requestRedraw();
       }
     };

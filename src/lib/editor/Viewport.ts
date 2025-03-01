@@ -182,11 +182,7 @@ export class Viewport {
   // Get the upm mouse position of the viewport
   // @returns The upm mouse position of the viewport
   // **
-  getUpmMousePosition(mouseX?: number, mouseY?: number): Point2D {
-    if (mouseX && mouseY) {
-      return this.projectScreenToUpm(mouseX, mouseY);
-    }
-
+  getUpmMousePosition(): Point2D {
     return { x: this.#upmX, y: this.#upmY };
   }
 

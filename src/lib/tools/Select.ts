@@ -38,11 +38,8 @@ export class Select implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "dragging";
-    const { x: mouseX, y: mouseY } = this.#editor.getMousePosition(
-      e.clientX,
-      e.clientY,
-    );
-    const { x, y } = this.#editor.getUpmMousePosition(mouseX, mouseY);
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
     for (const p of this.#editor.getAllPoints()) {
       if (!this.#selectedPoints.has(p) && p.distance(x, y) < 6) {
@@ -56,10 +53,11 @@ export class Select implements Tool {
       width,
       height,
     } = getBoundingRectPoints(Array.from(this.#selectedPoints));
+
     this.#boundingRect.reposition(bbX, bbY);
     this.#boundingRect.resize(width, height);
 
-    this.#startPos = this.#editor.getMousePosition(e.clientX, e.clientY);
+    this.#startPos = { x, y };
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
@@ -69,7 +67,8 @@ export class Select implements Tool {
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#state !== "dragging") return;
-    const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
     const width = x - this.#startPos.x;
     const height = y - this.#startPos.y;

@@ -30,7 +30,10 @@ export class Shape implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "dragging";
-    this.#startPos = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    this.#startPos = { x, y };
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -51,7 +54,8 @@ export class Shape implements Tool {
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#state !== "dragging") return;
 
-    const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
     const width = x - this.#startPos.x;
     const height = y - this.#startPos.y;

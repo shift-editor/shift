@@ -1,3 +1,0 @@
-describe("Segment", () => {
-  describe("initialise", () => {});
-});
