@@ -19,12 +19,12 @@ import { Viewport } from "./Viewport";
 import { ContourPoint } from "../core/Contour";
 
 interface EditorState {
-  selectedPoints: ContourPoint[];
+  selectedPoints: Set<ContourPoint>;
   fillContour: boolean;
 }
 
 export const InitialEditorState: EditorState = {
-  selectedPoints: [],
+  selectedPoints: new Set(),
   fillContour: false,
 };
 
@@ -132,8 +132,16 @@ export class Editor {
     this.#scene.invalidateContour(id);
   }
 
-  public get selectedPoints(): ContourPoint[] {
+  public get selectedPoints(): ReadonlySet<ContourPoint> {
     return this.#state.selectedPoints;
+  }
+
+  public addToSelectedPoints(p: ContourPoint) {
+    return this.#state.selectedPoints.add(p);
+  }
+
+  public clearSelectedPoints() {
+    this.#state.selectedPoints.clear();
   }
 
   // **
@@ -265,11 +273,16 @@ export class Editor {
           switch (point.type) {
             case "onCurve":
               ctx.setStyle(HANDLE_STYLES.corner);
-              this.#painter.drawCornerHandle(ctx, x, y);
+              this.#state.selectedPoints.has(point)
+                ? this.#painter.drawSelectedCornerHandle(ctx, x, y)
+                : this.#painter.drawCornerHandle(ctx, x, y);
               break;
+
             case "offCurve":
               ctx.setStyle(HANDLE_STYLES.control);
-              this.#painter.drawControlHandle(ctx, x, y);
+              this.#state.selectedPoints.has(point)
+                ? this.#painter.drawSelectedControlHandle(ctx, x, y)
+                : this.#painter.drawControlHandle(ctx, x, y);
               break;
           }
         }

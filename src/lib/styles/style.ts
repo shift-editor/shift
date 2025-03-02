@@ -37,7 +37,7 @@ export const HANDLE_STYLES: Record<HandleType, DrawStyle> = {
   control: {
     lineWidth: 1,
     strokeStyle: "red",
-    fillStyle: "white",
+    fillStyle: "red",
     antiAlias: true,
   },
   direction: {

@@ -35,6 +35,15 @@ export class Point {
     return Math.hypot(this.#x - x, this.#y - y);
   }
 
+  public static distance(
+    x0: number,
+    x1: number,
+    y0: number,
+    y1: number,
+  ): number {
+    return Math.hypot(x1 - x0, y1 - y0);
+  }
+
   public lerp(p: Point, t: number): Point {
     return new Point(
       Math.floor(this.#x + t * (p.x - this.#x)),

@@ -2,7 +2,8 @@ import { IRenderer } from "@/types/graphics";
 
 import { Path2D } from "../graphics/Path";
 
-const HANDLE_SHAPES = {
+const SELECTED_HANDLE_SCALE = 2;
+const HANDLE_SIZES = {
   corner: {
     size: 6,
   },
@@ -24,19 +25,48 @@ export class Painter {
 
   public drawCornerHandle(ctx: IRenderer, x: number, y: number): void {
     ctx.strokeRect(
-      x - HANDLE_SHAPES.corner.size / 2,
-      y - HANDLE_SHAPES.corner.size / 2,
-      HANDLE_SHAPES.corner.size,
-      HANDLE_SHAPES.corner.size,
+      x - HANDLE_SIZES.corner.size / 2,
+      y - HANDLE_SIZES.corner.size / 2,
+      HANDLE_SIZES.corner.size,
+      HANDLE_SIZES.corner.size,
+    );
+  }
+
+  public drawSelectedCornerHandle(ctx: IRenderer, x: number, y: number): void {
+    ctx.fillRect(
+      x - (HANDLE_SIZES.corner.size * SELECTED_HANDLE_SCALE) / 2,
+      y - (HANDLE_SIZES.corner.size * SELECTED_HANDLE_SCALE) / 2,
+      HANDLE_SIZES.corner.size * SELECTED_HANDLE_SCALE,
+      HANDLE_SIZES.corner.size * SELECTED_HANDLE_SCALE,
     );
   }
 
   public drawControlHandle(ctx: IRenderer, x: number, y: number): void {
-    ctx.strokeCircle(x, y, HANDLE_SHAPES.control.radius);
+    ctx.strokeCircle(x, y, HANDLE_SIZES.control.radius);
+  }
+
+  public drawSelectedControlHandle(ctx: IRenderer, x: number, y: number): void {
+    ctx.fillCircle(x, y, HANDLE_SIZES.control.radius * SELECTED_HANDLE_SCALE);
   }
 
   public drawDirectionHandle(ctx: IRenderer, x: number, y: number): void {
-    const size = HANDLE_SHAPES.direction.size;
+    const size = HANDLE_SIZES.direction.size;
+    const halfSize = size / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(x - halfSize, y - halfSize);
+    ctx.lineTo(x + halfSize, y);
+    ctx.lineTo(x - halfSize, y + halfSize);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  public drawSelectedDirectionHandle(
+    ctx: IRenderer,
+    x: number,
+    y: number,
+  ): void {
+    const size = HANDLE_SIZES.direction.size * SELECTED_HANDLE_SCALE;
     const halfSize = size / 2;
 
     ctx.beginPath();

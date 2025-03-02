@@ -1,4 +1,4 @@
-import { Point2D, Rect2D } from "@/types/math";
+import { Rect2D } from "@/types/math";
 
 import { Point } from "./point";
 import { Shape } from "./shape";
@@ -39,6 +39,12 @@ export class Rect extends Shape {
   public resize(width: number, height: number): void {
     this.#width = width;
     this.#height = height;
+  }
+
+  public clear(): void {
+    this.#height = 0;
+    this.#width = 0;
+    this.reposition(0, 0);
   }
 
   get left(): number {

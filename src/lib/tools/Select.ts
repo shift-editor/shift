@@ -9,6 +9,8 @@ import { IRenderer } from "@/types/graphics";
 import { Point2D } from "@/types/math";
 import { Tool, ToolName } from "@/types/tool";
 
+import { Point } from "../math/point";
+
 export type SelectState = "idle" | "dragging" | "done";
 export class Select implements Tool {
   public readonly name: ToolName = "select";
@@ -16,7 +18,6 @@ export class Select implements Tool {
   #editor: Editor;
   #startPos: Point2D;
   #state: SelectState;
-  #selectedPoints: Set<ContourPoint>;
 
   #selectionRect: Rect;
   #boundingRect: Rect;
@@ -27,41 +28,46 @@ export class Select implements Tool {
     this.#state = "idle";
     this.#selectionRect = new Rect(0, 0, 0, 0);
     this.#boundingRect = new Rect(0, 0, 0, 0);
-    this.#selectedPoints = new Set();
   }
 
-  //  you can either be dragging:
-  //  corner point
-  //  bounding box
-  //  handles
-  //  handles on the bounding box
+  processHitPoints(hitTest: (p: ContourPoint) => boolean): void {
+    const hitPoints = this.#editor.getAllPoints().filter(hitTest);
+
+    hitPoints.length !== 0
+      ? hitPoints.map((p) => this.#editor.addToSelectedPoints(p))
+      : this.#editor.clearSelectedPoints();
+  }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "dragging";
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    this.#startPos = { x, y };
 
-    for (const p of this.#editor.getAllPoints()) {
-      if (!this.#selectedPoints.has(p) && p.distance(x, y) < 6) {
-        this.#selectedPoints.add(p);
-      }
-    }
+    this.processHitPoints((p) => p.distance(x, y) < 3);
 
     const {
       x: bbX,
       y: bbY,
       width,
       height,
-    } = getBoundingRectPoints(Array.from(this.#selectedPoints));
+    } = getBoundingRectPoints(Array.from(this.#editor.selectedPoints));
 
     this.#boundingRect.reposition(bbX, bbY);
     this.#boundingRect.resize(width, height);
-
-    this.#startPos = { x, y };
   }
 
-  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
+  onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = "done";
+
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    if (!(Point.distance(this.#startPos.x, x, this.#startPos.y, y) < 3)) {
+      this.processHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
+      this.#selectionRect.clear();
+    }
+
     this.#editor.requestRedraw();
   }
 
@@ -70,11 +76,16 @@ export class Select implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const width = x - this.#startPos.x;
-    const height = y - this.#startPos.y;
+    const startX = this.#startPos.x;
+    const startY = this.#startPos.y;
 
-    this.#selectionRect.reposition(this.#startPos.x, this.#startPos.y);
-    this.#selectionRect.resize(width, height);
+    const normalizedX = Math.min(startX, x);
+    const normalizedY = Math.min(startY, y);
+    const normalizedWidth = Math.abs(x - startX);
+    const normalizedHeight = Math.abs(y - startY);
+
+    this.#selectionRect.reposition(normalizedX, normalizedY);
+    this.#selectionRect.resize(normalizedWidth, normalizedHeight);
 
     this.#editor.requestRedraw();
   }
