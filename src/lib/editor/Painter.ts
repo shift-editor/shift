@@ -46,7 +46,11 @@ export class Painter {
   }
 
   public drawSelectedControlHandle(ctx: IRenderer, x: number, y: number): void {
-    ctx.fillCircle(x, y, HANDLE_SIZES.control.radius * SELECTED_HANDLE_SCALE);
+    ctx.fillCircle(
+      x,
+      y,
+      HANDLE_SIZES.control.radius * SELECTED_HANDLE_SCALE * 0.75,
+    );
   }
 
   public drawDirectionHandle(ctx: IRenderer, x: number, y: number): void {

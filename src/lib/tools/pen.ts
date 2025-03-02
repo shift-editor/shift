@@ -1,63 +1,139 @@
 import { Editor } from "@/lib/editor/Editor";
 import { IRenderer } from "@/types/graphics";
+import { Point2D } from "@/types/math";
 import { Tool, ToolName } from "@/types/tool";
 
-import { Ident } from "../core/EntityId";
+import { EntityId } from "../core/EntityId";
 import { Point } from "../math/point";
+import { DEFAULT_STYLES } from "../styles/style";
 
-export type PenState = "idle" | "dragging" | "draggingHandle" | "done";
+interface AddedPoint {
+  point: Point2D;
+  entityId: EntityId;
+}
+
+export type PenState =
+  | { type: "ready" }
+  | { type: "idle" }
+  | { type: "dragging"; point: AddedPoint }
+  | {
+      type: "draggingHandle";
+      cornerPoint: Point2D;
+      segmentId: EntityId;
+      trailingPoint: Point2D;
+    };
+
 export class Pen implements Tool {
   public readonly name: ToolName = "pen";
 
   #editor: Editor;
   #toolState: PenState;
 
-  #firstPoint: Point;
-  #addedPoint: Ident | null = null;
-
   public constructor(editor: Editor) {
     this.#editor = editor;
-    this.#toolState = "idle";
-    this.#firstPoint = new Point(0, 0);
+    this.#toolState = { type: "ready" };
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (e.button !== 0) return;
-    this.#toolState = "dragging";
+    if (this.#toolState.type !== "ready") return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const addedPointId = this.#editor.addPoint(x, y);
 
-    const id = this.#editor.addPoint(x, y);
-    this.#addedPoint = id.id;
-    this.#editor.emit("point:added", { pointId: id });
+    this.#toolState = {
+      type: "dragging",
+      point: {
+        point: { x, y },
+        entityId: addedPointId,
+      },
+    };
+
+    this.#editor.emit("point:added", { pointId: addedPointId });
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
     // TODO: properly commit the handle point here with a point moved event
-    this.#toolState = "done";
-  }
-
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#toolState !== "dragging") return;
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-
-    const distance = this.#firstPoint.distance(x, y);
-
-    if (distance > 2 && this.#addedPoint) {
-      this.#editor.upgradeLineSegment(this.#addedPoint);
-      this.#toolState = "draggingHandle";
-    }
-
-    // TODO: we can move the point around here but not actually send a move point event
-    // that way we can re-draw the contour but then send an event to "commit" the final point
-    // which I anticipate will be useful for undo/redo
+    this.#toolState = { type: "ready" };
     this.#editor.requestRedraw();
   }
 
+  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    switch (this.#toolState.type) {
+      case "dragging":
+        {
+          const distance = Point.distance(
+            this.#toolState.point.point.x,
+            this.#toolState.point.point.y,
+            x,
+            y,
+          );
+
+          if (this.#toolState.point.entityId && distance > 3) {
+            const id = this.#editor.upgradeLineSegment(
+              this.#toolState.point.entityId,
+            );
+
+            this.#toolState = {
+              type: "draggingHandle",
+              trailingPoint: { x, y },
+              cornerPoint: this.#toolState.point.point,
+              segmentId: id,
+            };
+          }
+        }
+        break;
+
+      case "draggingHandle": {
+        this.#toolState = {
+          ...this.#toolState,
+          trailingPoint: { x, y },
+        };
+
+        const segment = this.#editor.getCubicSegment(this.#toolState.segmentId);
+
+        if (segment) {
+          const c2 = segment.points.control2;
+          const anchorX = this.#toolState.cornerPoint.x;
+          const anchorY = this.#toolState.cornerPoint.y;
+          const oppositeX = 2 * anchorX - x;
+          const oppositeY = 2 * anchorY - y;
+
+          this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
+          this.#editor.invalidateContour(this.#toolState.segmentId.parentId);
+        }
+      }
+    }
+
+    this.#editor.requestRedraw();
+  }
+
+  drawTrailingHandle(ctx: IRenderer, x: number, y: number) {
+    this.#editor.paintHandle(ctx, x, y, "control");
+  }
+
   drawInteractive(ctx: IRenderer): void {
-    // TODO: draw the trailing handle
-    if (this.#toolState !== "draggingHandle") return;
+    if (this.#toolState.type !== "draggingHandle") return;
+
+    ctx.setStyle({
+      ...DEFAULT_STYLES,
+    });
+
+    ctx.beginPath();
+    ctx.moveTo(
+      this.#toolState.trailingPoint.x,
+      this.#toolState.trailingPoint.y,
+    );
+    ctx.lineTo(this.#toolState.cornerPoint.x, this.#toolState.cornerPoint.y);
+    ctx.stroke();
+    this.drawTrailingHandle(
+      ctx,
+      this.#toolState.trailingPoint.x,
+      this.#toolState.trailingPoint.y,
+    );
   }
 }

@@ -74,8 +74,10 @@ class SegmentIterator implements Iterator<Segment> {
 
         const segment: LineSegment = {
           type: "line",
-          anchor1: p1,
-          anchor2: p2,
+          points: {
+            anchor1: p1,
+            anchor2: p2,
+          },
         };
 
         this.#index = -1;
@@ -98,8 +100,10 @@ class SegmentIterator implements Iterator<Segment> {
     if (p1.type === "onCurve" && p2.type === "onCurve") {
       const segment: LineSegment = {
         type: "line",
-        anchor1: p1,
-        anchor2: p2,
+        points: {
+          anchor1: p1,
+          anchor2: p2,
+        },
       };
 
       this.#index += 1;
@@ -116,10 +120,12 @@ class SegmentIterator implements Iterator<Segment> {
 
       const segment: CubicSegment = {
         type: "cubic",
-        anchor1: p1,
-        control1: p2,
-        control2: p3,
-        anchor2: p4,
+        points: {
+          anchor1: p1,
+          control1: p2,
+          control2: p3,
+          anchor2: p4,
+        },
       };
 
       this.#index += 3;
@@ -156,11 +162,12 @@ export class Contour {
     return p.entityId;
   }
 
-  upgradeLineSegment(id: Ident): void {
-    const index = this.#points.findIndex((p) => p.entityId.id === id);
+  upgradeLineSegment(id: EntityId): EntityId {
+    const index = this.#points.findIndex((p) => p.entityId.id === id.id);
 
     if (index === -1) {
-      return;
+      console.error("No index found for point");
+      return id;
     }
 
     const p1 = this.#points[index - 1];
@@ -173,6 +180,8 @@ export class Contour {
     const control2 = new ContourPoint(c2.x, c2.y, "offCurve", this.#id.id);
 
     this.#points.splice(index, 0, control1, control2);
+
+    return p1.entityId;
   }
 
   [Symbol.iterator](): Iterator<Segment> {

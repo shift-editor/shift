@@ -115,18 +115,16 @@ export class Select implements Tool {
           this.#selectionRect.height,
         );
         break;
-      case "done":
-        ctx.setStyle({
-          ...BOUNDING_RECTANGLE_STYLES,
-          fillStyle: "transparent",
-        });
-        ctx.strokeRect(
-          this.#boundingRect.x,
-          this.#boundingRect.y,
-          this.#boundingRect.width,
-          this.#boundingRect.height,
-        );
-        break;
     }
+    ctx.setStyle({
+      ...BOUNDING_RECTANGLE_STYLES,
+      fillStyle: "transparent",
+    });
+    ctx.strokeRect(
+      this.#boundingRect.x,
+      this.#boundingRect.y,
+      this.#boundingRect.width,
+      this.#boundingRect.height,
+    );
   }
 }

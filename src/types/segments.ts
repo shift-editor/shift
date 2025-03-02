@@ -1,19 +1,23 @@
-import { Point2D } from "./math";
+import { ContourPoint } from "@/lib/core/Contour";
 
 export type SegmentType = "line" | "cubic";
 
 export type LineSegment = {
   type: "line";
-  anchor1: Point2D;
-  anchor2: Point2D;
+  points: {
+    anchor1: ContourPoint;
+    anchor2: ContourPoint;
+  };
 };
 
 export type CubicSegment = {
   type: "cubic";
-  anchor1: Point2D;
-  control1: Point2D;
-  control2: Point2D;
-  anchor2: Point2D;
+  points: {
+    anchor1: ContourPoint;
+    control1: ContourPoint;
+    control2: ContourPoint;
+    anchor2: ContourPoint;
+  };
 };
 
 export type Segment = LineSegment | CubicSegment;

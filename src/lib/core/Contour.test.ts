@@ -39,13 +39,13 @@ describe("Contour", () => {
     expect(segments[0].type).toBe("line");
     expect(segments[1].type).toBe("line");
 
-    expect(segments[1].anchor2).toEqual(segments[0].anchor1);
+    expect(segments[1].points.anchor2).toEqual(segments[0].points.anchor1);
   });
 
   it("adding two points and then upgrading the line segment should create a cubic segment", () => {
     contour.addPoint(0, 0);
     const id = contour.addPoint(10, 10);
-    contour.upgradeLineSegment(id.id);
+    contour.upgradeLineSegment(id);
     const segments = contour.segments();
 
     expect(segments.length).toBe(1);
@@ -62,7 +62,7 @@ describe("Contour", () => {
     expect(contour.closed()).toBe(true);
     expect(segments.length).toBe(3);
     expect(segments[2].type).toBe("line");
-    expect(segments[2].anchor2).toEqual(segments[0].anchor1);
-    expect(segments[2].anchor2).toEqual(segments[1].anchor1);
+    expect(segments[2].points.anchor2).toEqual(segments[0].points.anchor1);
+    expect(segments[2].points.anchor2).toEqual(segments[1].points.anchor1);
   });
 });

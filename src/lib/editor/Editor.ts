@@ -8,7 +8,9 @@ import {
 import AppState from "@/store/store";
 import { Event, EventData, EventHandler } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
+import { HandleType } from "@/types/handle";
 import { Point2D, Rect2D } from "@/types/math";
+import { CubicSegment, Segment } from "@/types/segments";
 import { Tool } from "@/types/tool";
 import { tools } from "@lib/tools/tools";
 
@@ -128,6 +130,32 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
+  public paintHandle(
+    ctx: IRenderer,
+    x: number,
+    y: number,
+    handleType: HandleType,
+  ) {
+    ctx.setStyle(HANDLE_STYLES[handleType]);
+
+    switch (handleType) {
+      case "corner":
+        this.#painter.drawCornerHandle(ctx, x, y);
+        break;
+
+      case "control":
+        this.#painter.drawControlHandle(ctx, x, y);
+        break;
+
+      case "smooth":
+        break;
+
+      case "direction":
+        this.#painter.drawDirectionHandle(ctx, x, y);
+        break;
+    }
+  }
+
   public invalidateContour(id: Ident) {
     this.#scene.invalidateContour(id);
   }
@@ -167,14 +195,20 @@ export class Editor {
     return id;
   }
 
-  public movePointTo(x: number, y: number) {}
+  public movePointTo(id: EntityId, x: number, y: number) {
+    this.#scene.movePointTo({ x, y }, id);
+  }
 
   public getAllPoints(): ReadonlyArray<ContourPoint> {
     return this.#scene.getAllPoints();
   }
 
-  public upgradeLineSegment(id: Ident) {
-    this.#scene.upgradeLineSegment(id);
+  public upgradeLineSegment(id: EntityId): EntityId {
+    return this.#scene.upgradeLineSegment(id);
+  }
+
+  public getCubicSegment(id: EntityId): CubicSegment | undefined {
+    return this.#scene.getCubicSegment(id);
   }
 
   public setFillContour(fillContour: boolean) {
@@ -261,7 +295,7 @@ export class Editor {
     if (!this.#state.fillContour) {
       for (const node of nodes) {
         const points = node.contour.points;
-        for (const point of points) {
+        for (const [index, point] of points.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
           if (node.contour.closed() && node.contour.firstPoint() === point) {
@@ -278,12 +312,12 @@ export class Editor {
                 : this.#painter.drawCornerHandle(ctx, x, y);
               break;
 
-            case "offCurve":
-              ctx.setStyle(HANDLE_STYLES.control);
+            case "offCurve": {
               this.#state.selectedPoints.has(point)
                 ? this.#painter.drawSelectedControlHandle(ctx, x, y)
                 : this.#painter.drawControlHandle(ctx, x, y);
               break;
+            }
           }
         }
       }

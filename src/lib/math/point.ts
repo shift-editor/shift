@@ -37,8 +37,8 @@ export class Point {
 
   public static distance(
     x0: number,
-    x1: number,
     y0: number,
+    x1: number,
     y1: number,
   ): number {
     return Math.hypot(x1 - x0, y1 - y0);
