@@ -54,7 +54,6 @@ export class Pen implements Tool {
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    // TODO: properly commit the handle point here with a point moved event
     this.#toolState = { type: "ready" };
     this.#editor.requestRedraw();
   }
@@ -104,7 +103,7 @@ export class Pen implements Tool {
           const oppositeY = 2 * anchorY - y;
 
           this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
-          this.#editor.invalidateContour(this.#toolState.segmentId.parentId);
+          this.#editor.redrawContour(c2.entityId);
         }
       }
     }

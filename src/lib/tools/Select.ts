@@ -44,7 +44,7 @@ export class Select implements Tool {
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
     this.#startPos = { x, y };
 
-    this.processHitPoints((p) => p.distance(x, y) < 3);
+    this.processHitPoints((p) => p.distance(x, y) < 4);
 
     const {
       x: bbX,
@@ -63,10 +63,12 @@ export class Select implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    if (!(Point.distance(this.#startPos.x, x, this.#startPos.y, y) < 3)) {
+    if (Point.distance(this.#startPos.x, this.#startPos.y, x, y) > 3) {
       this.processHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
       this.#selectionRect.clear();
     }
+
+    console.log(this.#editor.selectedPoints);
 
     this.#editor.requestRedraw();
   }

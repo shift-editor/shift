@@ -8,6 +8,7 @@ export type EventData = {
   "point:added": PointIdentifier;
   "point:moved": PointIdentifier;
   "point:removed": PointIdentifier;
+  "segment:upgraded": PointIdentifier;
 };
 
 export type Event = keyof EventData;

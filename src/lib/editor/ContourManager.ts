@@ -103,6 +103,7 @@ export class ContourManager {
     return c.contour.upgradeLineSegment(id);
   }
 
+  // TODO: Add tests
   getCubicSegment(id: EntityId): CubicSegment | undefined {
     const c = this.#contours.get(id.parentId);
     if (!c) {
@@ -111,14 +112,8 @@ export class ContourManager {
     }
 
     for (const segment of c.contour.segments()) {
-      if (segment.type === "cubic") {
-        const p = Object.values(segment.points).filter((p) => {
-          return p.entityId.id === id.id;
-        });
-
-        if (p.length > 0) {
-          return segment;
-        }
+      if (segment.type === "cubic" && segment.points.anchor1.entityId === id) {
+        return segment;
       }
     }
   }

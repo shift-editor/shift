@@ -241,6 +241,11 @@ export class Editor {
     );
   }
 
+  public redrawContour(id: EntityId) {
+    this.invalidateContour(id.parentId);
+    this.requestRedraw();
+  }
+
   #prepareCanvas(ctx: IRenderer) {
     this.#applyUserTransforms(ctx);
     this.#applyUpmTransforms(ctx);
@@ -292,15 +297,18 @@ export class Editor {
     ctx.restore();
     ctx.save();
 
+    // handles
     if (!this.#state.fillContour) {
       for (const node of nodes) {
         const points = node.contour.points;
-        for (const [index, point] of points.entries()) {
+        for (const [idx, point] of points.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
           if (node.contour.closed() && node.contour.firstPoint() === point) {
             ctx.setStyle(HANDLE_STYLES.direction);
-            this.#painter.drawDirectionHandle(ctx, x, y);
+            this.#state.selectedPoints.has(point)
+              ? this.#painter.drawSelectedDirectionHandle(ctx, x, y)
+              : this.#painter.drawDirectionHandle(ctx, x, y);
             continue;
           }
 
@@ -313,9 +321,21 @@ export class Editor {
               break;
 
             case "offCurve": {
+              ctx.setStyle(HANDLE_STYLES.control);
+              const anchor =
+                points[idx + 1].type == "offCurve"
+                  ? points[idx - 1]
+                  : points[idx + 1];
+
+              const { x: anchorX, y: anchorY } =
+                this.#viewport.projectUpmToScreen(anchor.x, anchor.y);
+
               this.#state.selectedPoints.has(point)
                 ? this.#painter.drawSelectedControlHandle(ctx, x, y)
                 : this.#painter.drawControlHandle(ctx, x, y);
+
+              ctx.setStyle({ ...DEFAULT_STYLES });
+              ctx.drawLine(anchorX, anchorY, x, y);
               break;
             }
           }

@@ -184,6 +184,7 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void {
+    this.setStroke();
     this.canvas.drawLine(x0, y0, x1, y1, this.getPaint());
   }
 

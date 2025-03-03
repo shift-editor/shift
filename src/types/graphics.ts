@@ -46,6 +46,7 @@ export interface IRenderer {
   moveTo(x: number, y: number): void;
 
   lineTo(x: number, y: number): void;
+  drawLine(x0: number, y0: number, x1: number, y1: number): void;
   cubicTo(
     cpx1: number,
     cpy1: number,

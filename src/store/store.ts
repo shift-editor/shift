@@ -17,13 +17,13 @@ const AppState = create<AppState>()((set) => {
   editor.on("point:added", ({ pointId }) => {
     console.log("point:added", pointId);
 
-    editor.invalidateContour(pointId.parentId);
-    editor.requestRedraw();
+    editor.redrawContour(pointId);
   });
 
   editor.on("point:moved", ({ pointId }) => {
     console.log("point:moved", pointId);
-    editor.requestRedraw();
+
+    editor.redrawContour(pointId);
   });
 
   editor.on("point:removed", ({ pointId }) => {
