@@ -24,24 +24,28 @@ export class Select implements Tool {
     this.#selectionRect = new UPMRect(0, 0, 0, 0);
   }
 
-  processHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {
-    const hitPoints = this.#editor.getAllPoints().filter(hitTest);
+  gatherHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {
+    return this.#editor.getAllPoints().filter(hitTest);
+  }
 
+  commitHitPoints(hitPoints: ContourPoint[]): void {
     hitPoints.map((p) => this.#editor.addToSelectedPoints(p));
-
-    return hitPoints;
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const hitPoints = this.processHitPoints((p) => p.distance(x, y) < 4);
+    // TODO:  this could return multiple values if the points are very close
+    //        we need to think about how to handle this
+    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
+    const firstHitPoint = hitPoints[0];
 
     switch (this.#state.type) {
       case "ready":
         if (hitPoints.length === 1) {
-          this.#state = { type: "modifying", selectedPoint: hitPoints[0] };
+          this.#state = { type: "modifying", selectedPoint: firstHitPoint };
+          this.commitHitPoints(hitPoints);
           break;
         }
 
@@ -54,7 +58,16 @@ export class Select implements Tool {
           break;
         }
 
-        this.#state.selectedPoint = hitPoints[0];
+        if (!this.#editor.selectedPoints.has(firstHitPoint)) {
+          if (this.#state.multiSelect) {
+            this.commitHitPoints(hitPoints);
+          } else {
+            this.#editor.clearSelectedPoints();
+            this.commitHitPoints(hitPoints);
+          }
+        }
+
+        this.#state.selectedPoint = firstHitPoint;
         break;
     }
 
@@ -73,13 +86,14 @@ export class Select implements Tool {
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#state.type === "selecting") {
-      const hitPoints = this.processHitPoints((p) =>
+      const hitPoints = this.gatherHitPoints((p) =>
         this.#selectionRect.hit(p.x, p.y),
       );
 
       if (hitPoints.length === 0) {
         this.#state = { type: "ready" };
       } else {
+        this.commitHitPoints(hitPoints);
         this.#state = { type: "modifying" };
       }
 
@@ -159,14 +173,12 @@ export class Select implements Tool {
   keyDownHandler(e: KeyboardEvent) {
     if (this.#state.type === "modifying" && e.shiftKey) {
       this.#state.multiSelect = true;
-      console.log("keyDownHandler", this.#state.multiSelect);
     }
   }
 
-  keyUpHandler(e: KeyboardEvent) {
+  keyUpHandler(_: KeyboardEvent) {
     if (this.#state.type === "modifying") {
       this.#state.multiSelect = false;
-      console.log("keyUpHandler", this.#state.multiSelect);
     }
   }
 }

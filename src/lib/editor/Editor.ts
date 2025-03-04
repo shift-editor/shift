@@ -1,6 +1,7 @@
 import { EntityId, Ident } from "@/lib/core/EntityId";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 import {
+  BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
   HANDLE_STYLES,
@@ -288,7 +289,7 @@ export class Editor {
     ctx.lineWidth = DEFAULT_STYLES.lineWidth / this.#viewport.zoom;
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
-      if (this.#state.fillContour) {
+      if (this.#state.fillContour && node.contour.closed()) {
         ctx.fillStyle = "black";
         ctx.fill(node.renderPath);
       }
@@ -334,7 +335,7 @@ export class Editor {
                 ? this.#painter.drawSelectedControlHandle(ctx, x, y)
                 : this.#painter.drawControlHandle(ctx, x, y);
 
-              ctx.setStyle({ ...DEFAULT_STYLES });
+              ctx.setStyle(DEFAULT_STYLES);
               ctx.drawLine(anchorX, anchorY, x, y);
               break;
             }

@@ -72,7 +72,7 @@ export class Painter {
     y: number,
   ): void {
     const size = HANDLE_SIZES.direction.size * SELECTED_HANDLE_SCALE;
-    const halfSize = size / 2;
+    const halfSize = size / 2.5;
 
     ctx.beginPath();
     ctx.moveTo(x - halfSize, y - halfSize);

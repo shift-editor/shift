@@ -33,6 +33,7 @@ export interface IRenderer {
   strokeStyle: string;
   fillStyle: string;
   antiAlias: boolean;
+  dashPattern: number[];
 
   setStyle(style: DrawStyle): void;
 

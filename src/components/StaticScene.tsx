@@ -1,6 +1,6 @@
 import { useContext } from "react";
 
-import { CanvasContext } from "../context/CanvasContext";
+import { CanvasContext } from "@/context/CanvasContext";
 
 export const StaticScene = () => {
   const { staticCanvasRef } = useContext(CanvasContext);

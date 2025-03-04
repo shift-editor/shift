@@ -31,6 +31,7 @@ export const App = () => {
       }
 
       if (e.key == " ") {
+        switchTool("hand");
         editor.setFillContour(true);
         editor.requestRedraw();
       }

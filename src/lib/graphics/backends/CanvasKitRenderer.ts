@@ -81,10 +81,7 @@ export class CanvasKitRenderer implements IRenderer {
   }
 
   public setStyle(style: DrawStyle): void {
-    this.#currentStyle = {
-      ...DEFAULT_STYLES,
-      ...style,
-    };
+    this.#currentStyle = style;
 
     this.strokeStyle = this.#currentStyle.strokeStyle;
     this.fillStyle = this.#currentStyle.fillStyle;
@@ -124,6 +121,14 @@ export class CanvasKitRenderer implements IRenderer {
     return this.#currentStyle.antiAlias ?? true;
   }
 
+  public set dashPattern(pattern: number[]) {
+    this.#currentStyle.dashPattern = pattern;
+  }
+
+  public get dashPattern(): number[] {
+    return this.#currentStyle.dashPattern;
+  }
+
   setStrokeColour(): void {
     this.#paint.setColor(
       this.ctx.canvasKit.Color4f(
@@ -154,6 +159,16 @@ export class CanvasKitRenderer implements IRenderer {
   setStroke(): void {
     this.#paint.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
     this.setStrokeColour();
+
+    this.#paint.setPathEffect(null);
+    if (this.#currentStyle.dashPattern.length > 0) {
+      this.#paint.setPathEffect(
+        this.ctx.canvasKit.PathEffect.MakeDash(
+          this.#currentStyle.dashPattern,
+          0,
+        ),
+      );
+    }
   }
 
   getPaint(): Paint {
@@ -273,6 +288,7 @@ export class CanvasKitRenderer implements IRenderer {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
     this.setStrokeColour();
+    this.setStroke();
 
     if (path) {
       let cachedPath = this.#cachedPaths.get(path);
@@ -303,6 +319,7 @@ export class CanvasKitRenderer implements IRenderer {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
     this.setFillColour();
+    this.setFill();
 
     if (path) {
       let cachedPath = this.#cachedPaths.get(path);

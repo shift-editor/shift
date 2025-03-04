@@ -10,7 +10,7 @@ export interface ContourNode {
 }
 
 export class ContourManager {
-  #currentContourId: EntityId;
+  #activeContourId: EntityId;
   #contours: Map<Ident, ContourNode> = new Map();
 
   constructor() {
@@ -19,11 +19,11 @@ export class ContourManager {
       contour: c,
       renderPath: new Path2D(),
     });
-    this.#currentContourId = c.entityId;
+    this.#activeContourId = c.entityId;
   }
 
   get currentContour(): ContourNode {
-    const c = this.#contours.get(this.#currentContourId.id);
+    const c = this.#contours.get(this.#activeContourId.id);
     if (!c) {
       throw new Error("Current contour not found");
     }
@@ -52,7 +52,7 @@ export class ContourManager {
     const firstPoint = this.currentContour.contour.firstPoint();
 
     this.currentContour.contour.close();
-    this.#currentContourId = this.addContour();
+    this.#activeContourId = this.addContour();
 
     return firstPoint.entityId;
   }
