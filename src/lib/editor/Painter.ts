@@ -1,6 +1,7 @@
 import { IRenderer } from "@/types/graphics";
 
 import { Path2D } from "../graphics/Path";
+import { DEFAULT_STYLES } from "../styles/style";
 
 const SELECTED_HANDLE_SCALE = 2;
 const HANDLE_SIZES = {

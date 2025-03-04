@@ -41,10 +41,16 @@ export class Rect extends Shape {
     this.#height = height;
   }
 
+  public changeOrigin(x: number, y: number): void {
+    this.position.set_x(x);
+    this.position.set_y(y);
+  }
+
   public clear(): void {
     this.#height = 0;
     this.#width = 0;
-    this.reposition(0, 0);
+    this.position.set_x(0);
+    this.position.set_y(0);
   }
 
   get left(): number {
@@ -81,7 +87,27 @@ export class Rect extends Shape {
   }
 }
 
-export function getBoundingRectPoints(points: Point[]): Rect2D {
+export class UPMRect extends Rect {
+  constructor(x: number, y: number, width: number, height: number) {
+    super(x, y, width, height);
+  }
+
+  public resize(width: number, height: number) {
+    if (width < 0) {
+      const dx = this.x + width;
+      this.position.set_x(dx);
+    }
+
+    if (height < 0) {
+      const dy = this.y + height;
+      this.position.set_y(dy);
+    }
+
+    super.resize(Math.abs(width), Math.abs(height));
+  }
+}
+
+export function getBoundingRect(points: Point[]): Rect2D {
   const minX = Math.min(...points.map((p) => p.x));
   const minY = Math.min(...points.map((p) => p.y));
   const maxX = Math.max(...points.map((p) => p.x));

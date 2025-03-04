@@ -1,100 +1,126 @@
 import { ContourPoint } from "@/lib/core/Contour";
 import { Editor } from "@/lib/editor/Editor";
-import { getBoundingRectPoints, Rect } from "@/lib/math/rect";
-import {
-  BOUNDING_RECTANGLE_STYLES,
-  SELECTION_RECTANGLE_STYLES,
-} from "@/lib/styles/style";
+import { UPMRect } from "@/lib/math/rect";
+import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { IRenderer } from "@/types/graphics";
 import { Point2D } from "@/types/math";
 import { Tool, ToolName } from "@/types/tool";
 
-import { Point } from "../math/point";
+export type SelectState =
+  | { type: "ready" }
+  | { type: "selecting"; startPos: Point2D }
+  | { type: "modifying"; selectedPoint?: ContourPoint; multiSelect?: boolean };
 
-export type SelectState = "idle" | "dragging" | "done";
 export class Select implements Tool {
   public readonly name: ToolName = "select";
 
   #editor: Editor;
-  #startPos: Point2D;
   #state: SelectState;
-
-  #selectionRect: Rect;
-  #boundingRect: Rect;
+  #selectionRect: UPMRect;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
-    this.#startPos = { x: 0, y: 0 };
-    this.#state = "idle";
-    this.#selectionRect = new Rect(0, 0, 0, 0);
-    this.#boundingRect = new Rect(0, 0, 0, 0);
+    this.#state = { type: "ready" };
+    this.#selectionRect = new UPMRect(0, 0, 0, 0);
   }
 
-  processHitPoints(hitTest: (p: ContourPoint) => boolean): void {
+  processHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {
     const hitPoints = this.#editor.getAllPoints().filter(hitTest);
 
-    hitPoints.length !== 0
-      ? hitPoints.map((p) => this.#editor.addToSelectedPoints(p))
-      : this.#editor.clearSelectedPoints();
+    hitPoints.map((p) => this.#editor.addToSelectedPoints(p));
+
+    return hitPoints;
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = "dragging";
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-    this.#startPos = { x, y };
 
-    this.processHitPoints((p) => p.distance(x, y) < 4);
+    const hitPoints = this.processHitPoints((p) => p.distance(x, y) < 4);
 
-    const {
-      x: bbX,
-      y: bbY,
-      width,
-      height,
-    } = getBoundingRectPoints(Array.from(this.#editor.selectedPoints));
+    switch (this.#state.type) {
+      case "ready":
+        if (hitPoints.length === 1) {
+          this.#state = { type: "modifying", selectedPoint: hitPoints[0] };
+          break;
+        }
 
-    this.#boundingRect.reposition(bbX, bbY);
-    this.#boundingRect.resize(width, height);
+        this.#state = { type: "selecting", startPos: { x, y } };
+        break;
+      case "modifying":
+        if (hitPoints.length === 0) {
+          this.#state = { type: "ready" };
+          this.#editor.clearSelectedPoints();
+          break;
+        }
+
+        this.#state.selectedPoint = hitPoints[0];
+        break;
+    }
+
+    this.#editor.requestRedraw();
+    // TODO: move bounding box rect to editor
+    // const {
+    //   x: bbX,
+    //   y: bbY,
+    //   width,
+    //   height,
+    // } = getBoundingRectPoints(Array.from(this.#editor.selectedPoints));
+    //
+    // this.#boundingRect.reposition(bbX, bbY);
+    // this.#boundingRect.resize(width, height);
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = "done";
+    if (this.#state.type === "selecting") {
+      const hitPoints = this.processHitPoints((p) =>
+        this.#selectionRect.hit(p.x, p.y),
+      );
 
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+      if (hitPoints.length === 0) {
+        this.#state = { type: "ready" };
+      } else {
+        this.#state = { type: "modifying" };
+      }
 
-    if (Point.distance(this.#startPos.x, this.#startPos.y, x, y) > 3) {
-      this.processHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
       this.#selectionRect.clear();
     }
 
-    console.log(this.#editor.selectedPoints);
+    if (this.#state.type === "modifying") {
+      this.#state.selectedPoint = undefined;
+    }
 
     this.#editor.requestRedraw();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state !== "dragging") return;
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const startX = this.#startPos.x;
-    const startY = this.#startPos.y;
+    if (this.#state.type === "selecting") {
+      const width = x - this.#state.startPos.x;
+      const height = y - this.#state.startPos.y;
 
-    const normalizedX = Math.min(startX, x);
-    const normalizedY = Math.min(startY, y);
-    const normalizedWidth = Math.abs(x - startX);
-    const normalizedHeight = Math.abs(y - startY);
+      this.#selectionRect.changeOrigin(
+        this.#state.startPos.x,
+        this.#state.startPos.y,
+      );
+      this.#selectionRect.resize(width, height);
+    }
 
-    this.#selectionRect.reposition(normalizedX, normalizedY);
-    this.#selectionRect.resize(normalizedWidth, normalizedHeight);
+    // move the point, if it's an active handle move all points by delta
+    // otherwise we need to move proportional to an anchor point
+    if (this.#state.type === "modifying" && this.#state.selectedPoint) {
+      this.#editor.movePointTo(this.#state.selectedPoint.entityId, x, y);
+      this.#editor.redrawContour(this.#state.selectedPoint.entityId);
+    }
 
     this.#editor.requestRedraw();
   }
 
   drawInteractive(ctx: IRenderer): void {
-    switch (this.#state) {
-      case "dragging":
+    switch (this.#state.type) {
+      case "selecting":
         ctx.setStyle({
           ...SELECTION_RECTANGLE_STYLES,
           strokeStyle: "transparent",
@@ -118,15 +144,29 @@ export class Select implements Tool {
         );
         break;
     }
-    ctx.setStyle({
-      ...BOUNDING_RECTANGLE_STYLES,
-      fillStyle: "transparent",
-    });
-    ctx.strokeRect(
-      this.#boundingRect.x,
-      this.#boundingRect.y,
-      this.#boundingRect.width,
-      this.#boundingRect.height,
-    );
+    // ctx.setStyle({
+    //   ...BOUNDING_RECTANGLE_STYLES,
+    //   fillStyle: "transparent",
+    // });
+    // ctx.strokeRect(
+    //   this.#boundingRect.x,
+    //   this.#boundingRect.y,
+    //   this.#boundingRect.width,
+    //   this.#boundingRect.height,
+    // );
+  }
+
+  keyDownHandler(e: KeyboardEvent) {
+    if (this.#state.type === "modifying" && e.shiftKey) {
+      this.#state.multiSelect = true;
+      console.log("keyDownHandler", this.#state.multiSelect);
+    }
+  }
+
+  keyUpHandler(e: KeyboardEvent) {
+    if (this.#state.type === "modifying") {
+      this.#state.multiSelect = false;
+      console.log("keyUpHandler", this.#state.multiSelect);
+    }
   }
 }

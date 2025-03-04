@@ -9,6 +9,7 @@ export const App = () => {
   useEffect(() => {
     const editor = AppState.getState().editor;
     const switchTool = AppState.getState().setActiveTool;
+    const activeTool = editor.activeTool();
 
     // TODO: Make tool specific key handlers
     const keyDownHandler = (e: KeyboardEvent) => {
@@ -48,6 +49,10 @@ export const App = () => {
         switchTool("select");
         editor.requestRedraw();
       }
+
+      if (activeTool.keyDownHandler) {
+        activeTool.keyDownHandler(e);
+      }
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
@@ -56,6 +61,10 @@ export const App = () => {
         editor.setFillContour(false);
         editor.requestRedraw();
       }
+
+      if (activeTool.keyUpHandler) {
+        activeTool.keyUpHandler(e);
+      }
     };
 
     document.addEventListener("keydown", keyDownHandler);
@@ -63,7 +72,7 @@ export const App = () => {
 
     return () => {
       document.removeEventListener("keydown", keyDownHandler);
-      document.removeEventListener("keydown", keyUpHandler);
+      document.removeEventListener("keyup", keyUpHandler);
     };
   }, []);
 
