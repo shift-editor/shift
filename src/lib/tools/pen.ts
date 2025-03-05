@@ -112,7 +112,7 @@ export class Pen implements Tool {
   }
 
   drawTrailingHandle(ctx: IRenderer, x: number, y: number) {
-    this.#editor.paintHandle(ctx, x, y, "control");
+    this.#editor.paintHandle(ctx, x, y, "control", "idle");
   }
 
   drawInteractive(ctx: IRenderer): void {

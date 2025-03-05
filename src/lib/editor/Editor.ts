@@ -9,7 +9,7 @@ import {
 import AppState from "@/store/store";
 import { Event, EventData, EventHandler } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
-import { HandleType } from "@/types/handle";
+import { HandleState, HandleType } from "@/types/handle";
 import { Point2D, Rect2D } from "@/types/math";
 import { CubicSegment } from "@/types/segments";
 import { Tool } from "@/types/tool";
@@ -24,11 +24,13 @@ import { getBoundingRect } from "../math/rect";
 
 interface EditorState {
   selectedPoints: Set<ContourPoint>;
+  hoveredPoint: ContourPoint | null;
   fillContour: boolean;
 }
 
 export const InitialEditorState: EditorState = {
   selectedPoints: new Set(),
+  hoveredPoint: null,
   fillContour: false,
 };
 
@@ -132,34 +134,91 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
+  public getHandleState(p: ContourPoint): HandleState {
+    if (this.#state.selectedPoints.has(p)) {
+      return "selected";
+    }
+
+    if (this.#state.hoveredPoint === p) {
+      return "hovered";
+    }
+
+    return "idle";
+  }
+
   public paintHandle(
     ctx: IRenderer,
     x: number,
     y: number,
     handleType: HandleType,
+    state: HandleState,
   ) {
-    ctx.setStyle(HANDLE_STYLES[handleType]);
+    ctx.setStyle(HANDLE_STYLES[handleType][state]);
 
     switch (handleType) {
       case "corner":
-        this.#painter.drawCornerHandle(ctx, x, y);
+        switch (state) {
+          case "idle":
+            this.#painter.drawCornerHandle(ctx, x, y);
+            break;
+          case "selected":
+            this.#painter.drawSelectedCornerHandle(ctx, x, y);
+            break;
+          case "hovered":
+            this.#painter.drawHoveredCornerHandle(ctx, x, y);
+            break;
+        }
         break;
 
       case "control":
-        this.#painter.drawControlHandle(ctx, x, y);
+        switch (state) {
+          case "idle":
+            this.#painter.drawControlHandle(ctx, x, y);
+            break;
+          case "selected":
+            this.#painter.drawSelectedControlHandle(ctx, x, y);
+            break;
+          case "hovered":
+            break;
+        }
         break;
 
       case "smooth":
+        switch (state) {
+          case "idle":
+            break;
+          case "selected":
+            break;
+          case "hovered":
+            break;
+        }
         break;
 
       case "direction":
-        this.#painter.drawDirectionHandle(ctx, x, y);
+        switch (state) {
+          case "idle":
+            this.#painter.drawDirectionHandle(ctx, x, y);
+            break;
+          case "selected":
+            this.#painter.drawSelectedDirectionHandle(ctx, x, y);
+            break;
+          case "hovered":
+            break;
+        }
         break;
     }
   }
 
   public invalidateContour(id: Ident) {
     this.#scene.invalidateContour(id);
+  }
+
+  public setHoveredPoint(point: ContourPoint) {
+    this.#state.hoveredPoint = point;
+  }
+
+  public clearHoveredPoint() {
+    this.#state.hoveredPoint = null;
   }
 
   public get selectedPoints(): ReadonlySet<ContourPoint> {
@@ -284,12 +343,10 @@ export class Editor {
     this.#prepareCanvas(ctx);
 
     ctx.setStyle(GUIDE_STYLES);
-    ctx.lineWidth = GUIDE_STYLES.lineWidth / this.#viewport.zoom;
     this.#painter.drawGuides(ctx, this.#scene.getStaticGuidesPath());
 
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
-    ctx.lineWidth = DEFAULT_STYLES.lineWidth / this.#viewport.zoom;
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour && node.contour.closed()) {
@@ -316,24 +373,19 @@ export class Editor {
         for (const [idx, point] of points.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
+          const handleState = this.getHandleState(point);
+
           if (node.contour.closed() && node.contour.firstPoint() === point) {
-            ctx.setStyle(HANDLE_STYLES.direction);
-            this.#state.selectedPoints.has(point)
-              ? this.#painter.drawSelectedDirectionHandle(ctx, x, y)
-              : this.#painter.drawDirectionHandle(ctx, x, y);
+            this.paintHandle(ctx, x, y, "corner", handleState);
             continue;
           }
 
           switch (point.type) {
             case "onCurve":
-              ctx.setStyle(HANDLE_STYLES.corner);
-              this.#state.selectedPoints.has(point)
-                ? this.#painter.drawSelectedCornerHandle(ctx, x, y)
-                : this.#painter.drawCornerHandle(ctx, x, y);
+              this.paintHandle(ctx, x, y, "corner", handleState);
               break;
 
             case "offCurve": {
-              ctx.setStyle(HANDLE_STYLES.control);
               const anchor =
                 points[idx + 1].type == "offCurve"
                   ? points[idx - 1]
@@ -342,9 +394,7 @@ export class Editor {
               const { x: anchorX, y: anchorY } =
                 this.#viewport.projectUpmToScreen(anchor.x, anchor.y);
 
-              this.#state.selectedPoints.has(point)
-                ? this.#painter.drawSelectedControlHandle(ctx, x, y)
-                : this.#painter.drawControlHandle(ctx, x, y);
+              this.paintHandle(ctx, x, y, "control", handleState);
 
               ctx.setStyle(DEFAULT_STYLES);
               ctx.drawLine(anchorX, anchorY, x, y);

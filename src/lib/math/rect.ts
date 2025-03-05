@@ -107,6 +107,17 @@ export class UPMRect extends Rect {
   }
 }
 
+export class UPMBoundingRect extends Rect {
+  constructor(points: Point2D[]) {
+    const minX = Math.min(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const maxY = Math.max(...points.map((p) => p.y));
+
+    super(minX, minY, maxX - minX, maxY - minY);
+  }
+}
+
 export function getBoundingRect(points: Point2D[]): Rect2D {
   const minX = Math.min(...points.map((p) => p.x));
   const minY = Math.min(...points.map((p) => p.y));

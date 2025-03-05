@@ -9,7 +9,12 @@ import { Tool, ToolName } from "@/types/tool";
 export type SelectState =
   | { type: "ready" }
   | { type: "selecting"; startPos: Point2D }
-  | { type: "modifying"; selectedPoint?: ContourPoint; multiSelect?: boolean };
+  | {
+      type: "modifying";
+      selectedPoint?: ContourPoint;
+      shiftModifierOn?: boolean;
+      nudge?: number;
+    };
 
 export class Select implements Tool {
   public readonly name: ToolName = "select";
@@ -59,7 +64,7 @@ export class Select implements Tool {
         }
 
         if (!this.#editor.selectedPoints.has(firstHitPoint)) {
-          if (this.#state.multiSelect) {
+          if (this.#state.shiftModifierOn) {
             this.commitHitPoints(hitPoints);
           } else {
             this.#editor.clearSelectedPoints();
@@ -131,6 +136,14 @@ export class Select implements Tool {
       );
     }
 
+    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
+
+    if (hitPoints.length > 0) {
+      this.#editor.setHoveredPoint(hitPoints[0]);
+    } else {
+      this.#editor.clearHoveredPoint();
+    }
+
     this.#editor.requestRedraw();
   }
 
@@ -163,14 +176,29 @@ export class Select implements Tool {
   }
 
   keyDownHandler(e: KeyboardEvent) {
-    if (this.#state.type === "modifying" && e.shiftKey) {
-      this.#state.multiSelect = true;
+    if (this.#state.type === "modifying") {
+      switch (e.key) {
+        case "Shift":
+          this.#state.shiftModifierOn = true;
+          break;
+      }
     }
   }
 
-  keyUpHandler(_: KeyboardEvent) {
+  keyUpHandler(e: KeyboardEvent) {
     if (this.#state.type === "modifying") {
-      this.#state.multiSelect = false;
+      this.#state.shiftModifierOn = e.shiftKey;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          this.#state.nudge = 1;
+          break;
+        case "ArrowRight":
+        case "ArrowUp":
+        case "ArrowDown":
+          this.#state.nudge = -1;
+          break;
+      }
     }
   }
 }
