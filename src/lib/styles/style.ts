@@ -65,7 +65,7 @@ export const SELECTION_RECTANGLE_STYLES: DrawStyle = {
 
 export const BOUNDING_RECTANGLE_STYLES: DrawStyle = {
   lineWidth: 0.75,
-  strokeStyle: "black",
+  strokeStyle: "#353535",
   fillStyle: "transparent",
   antiAlias: false,
   dashPattern: [5, 5],

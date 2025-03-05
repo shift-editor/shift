@@ -50,7 +50,7 @@ export class Pen implements Tool {
       },
     };
 
-    this.#editor.emit("point:added", { pointId: addedPointId });
+    this.#editor.emit("points:added", [addedPointId]);
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
@@ -103,7 +103,7 @@ export class Pen implements Tool {
           const oppositeY = 2 * anchorY - y;
 
           this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
-          this.#editor.redrawContour(c2.entityId);
+          this.#editor.redrawContours([c2.entityId]);
         }
       }
     }

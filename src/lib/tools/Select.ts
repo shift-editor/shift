@@ -126,7 +126,7 @@ export class Select implements Tool {
     // otherwise we need to move proportional to an anchor point
     if (this.#state.type === "modifying" && this.#state.selectedPoint) {
       this.#editor.movePointTo(this.#state.selectedPoint.entityId, x, y);
-      this.#editor.redrawContour(this.#state.selectedPoint.entityId);
+      this.#editor.redrawContours([this.#state.selectedPoint.entityId]);
     }
 
     this.#editor.requestRedraw();

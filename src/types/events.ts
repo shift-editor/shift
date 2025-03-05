@@ -1,14 +1,10 @@
 import { EntityId } from "@/lib/core/EntityId";
 
-export interface PointIdentifier {
-  pointId: EntityId;
-}
-
 export type EventData = {
-  "point:added": PointIdentifier;
-  "point:moved": PointIdentifier;
-  "point:removed": PointIdentifier;
-  "segment:upgraded": PointIdentifier;
+  "points:added": EntityId[];
+  "points:moved": EntityId[];
+  "points:removed": EntityId[];
+  "segment:upgraded": EntityId[];
 };
 
 export type Event = keyof EventData;

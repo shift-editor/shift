@@ -14,20 +14,20 @@ const AppState = create<AppState>()((set) => {
   const editor = new Editor();
   createToolRegistry(editor);
 
-  editor.on("point:added", ({ pointId }) => {
-    console.log("point:added", pointId);
+  editor.on("points:added", (pointIds) => {
+    console.log("points:added", pointIds);
 
-    editor.redrawContour(pointId);
+    editor.redrawContours(pointIds);
   });
 
-  editor.on("point:moved", ({ pointId }) => {
-    console.log("point:moved", pointId);
+  editor.on("points:moved", (pointIds) => {
+    console.log("points:moved", pointIds);
 
-    editor.redrawContour(pointId);
+    editor.redrawContours(pointIds);
   });
 
-  editor.on("point:removed", ({ pointId }) => {
-    console.log("point:removed", pointId);
+  editor.on("points:removed", (pointIds) => {
+    console.log("points:removed", pointIds);
     editor.requestRedraw();
   });
 

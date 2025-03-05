@@ -48,7 +48,7 @@ export class Shape implements Tool {
     this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height);
     this.#editor.closeContour();
 
-    this.#editor.emit("point:added", { pointId: id });
+    this.#editor.emit("points:added", [id]);
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {

@@ -11,7 +11,7 @@ import { Event, EventData, EventHandler } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleType } from "@/types/handle";
 import { Point2D, Rect2D } from "@/types/math";
-import { CubicSegment, Segment } from "@/types/segments";
+import { CubicSegment } from "@/types/segments";
 import { Tool } from "@/types/tool";
 import { tools } from "@lib/tools/tools";
 
@@ -20,6 +20,7 @@ import { Painter } from "./Painter";
 import { Scene } from "./Scene";
 import { Viewport } from "./Viewport";
 import { ContourPoint } from "../core/Contour";
+import { getBoundingRect } from "../math/rect";
 
 interface EditorState {
   selectedPoints: Set<ContourPoint>;
@@ -242,8 +243,10 @@ export class Editor {
     );
   }
 
-  public redrawContour(id: EntityId) {
-    this.invalidateContour(id.parentId);
+  public redrawContours(ids: EntityId[]) {
+    for (const id of ids) {
+      this.invalidateContour(id.parentId);
+    }
     this.requestRedraw();
   }
 
@@ -293,6 +296,14 @@ export class Editor {
         ctx.fillStyle = "black";
         ctx.fill(node.renderPath);
       }
+    }
+
+    if (this.#state.selectedPoints.size > 0) {
+      const bbRect = getBoundingRect([...this.selectedPoints.values()]);
+      console.log([...this.selectedPoints.values()]);
+      console.log(bbRect);
+      ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
+      ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
     }
 
     ctx.restore();

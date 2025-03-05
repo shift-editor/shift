@@ -1,4 +1,4 @@
-import { Rect2D } from "@/types/math";
+import { Point2D, Rect2D } from "@/types/math";
 
 import { Point } from "./point";
 import { Shape } from "./shape";
@@ -107,7 +107,7 @@ export class UPMRect extends Rect {
   }
 }
 
-export function getBoundingRect(points: Point[]): Rect2D {
+export function getBoundingRect(points: Point2D[]): Rect2D {
   const minX = Math.min(...points.map((p) => p.x));
   const minY = Math.min(...points.map((p) => p.y));
   const maxX = Math.max(...points.map((p) => p.x));
