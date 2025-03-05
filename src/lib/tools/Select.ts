@@ -72,16 +72,6 @@ export class Select implements Tool {
     }
 
     this.#editor.requestRedraw();
-    // TODO: move bounding box rect to editor
-    // const {
-    //   x: bbX,
-    //   y: bbY,
-    //   width,
-    //   height,
-    // } = getBoundingRectPoints(Array.from(this.#editor.selectedPoints));
-    //
-    // this.#boundingRect.reposition(bbX, bbY);
-    // this.#boundingRect.resize(width, height);
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -125,8 +115,20 @@ export class Select implements Tool {
     // move the point, if it's an active handle move all points by delta
     // otherwise we need to move proportional to an anchor point
     if (this.#state.type === "modifying" && this.#state.selectedPoint) {
-      this.#editor.movePointTo(this.#state.selectedPoint.entityId, x, y);
-      this.#editor.redrawContours([this.#state.selectedPoint.entityId]);
+      const deltaX = x - this.#state.selectedPoint.x;
+      const deltaY = y - this.#state.selectedPoint.y;
+
+      for (const point of this.#editor.selectedPoints) {
+        this.#editor.movePointTo(
+          point.entityId,
+          point.x + deltaX,
+          point.y + deltaY,
+        );
+      }
+
+      this.#editor.redrawContours(
+        Array.from(this.#editor.selectedPoints).map((p) => p.entityId),
+      );
     }
 
     this.#editor.requestRedraw();
@@ -158,16 +160,6 @@ export class Select implements Tool {
         );
         break;
     }
-    // ctx.setStyle({
-    //   ...BOUNDING_RECTANGLE_STYLES,
-    //   fillStyle: "transparent",
-    // });
-    // ctx.strokeRect(
-    //   this.#boundingRect.x,
-    //   this.#boundingRect.y,
-    //   this.#boundingRect.width,
-    //   this.#boundingRect.height,
-    // );
   }
 
   keyDownHandler(e: KeyboardEvent) {
