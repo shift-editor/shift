@@ -4,6 +4,7 @@ import { UPMRect } from "@/lib/math/rect";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { IRenderer } from "@/types/graphics";
 import { Point2D } from "@/types/math";
+import { NUDGES_VALUES } from "@/types/nudge";
 import { Tool, ToolName } from "@/types/tool";
 
 export type SelectState =
@@ -13,7 +14,6 @@ export type SelectState =
       type: "modifying";
       selectedPoint?: ContourPoint;
       shiftModifierOn?: boolean;
-      nudge?: number;
     };
 
 export class Select implements Tool {
@@ -36,6 +36,14 @@ export class Select implements Tool {
   commitHitPoints(hitPoints: ContourPoint[]): void {
     hitPoints.map((p) => this.#editor.addToSelectedPoints(p));
   }
+
+  moveSelectedPoints(dx: number, dy: number): void {
+    for (const point of this.#editor.selectedPoints) {
+      this.#editor.movePointTo(point.entityId, point.x + dx, point.y + dy);
+    }
+  }
+
+  commitSelectedPoints(): void {}
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
@@ -63,7 +71,7 @@ export class Select implements Tool {
           break;
         }
 
-        if (!this.#editor.selectedPoints.has(firstHitPoint)) {
+        if (!this.#editor.isPointSelected(firstHitPoint)) {
           if (this.#state.shiftModifierOn) {
             this.commitHitPoints(hitPoints);
           } else {
@@ -120,16 +128,10 @@ export class Select implements Tool {
     // move the point, if it's an active handle move all points by delta
     // otherwise we need to move proportional to an anchor point
     if (this.#state.type === "modifying" && this.#state.selectedPoint) {
-      const deltaX = x - this.#state.selectedPoint.x;
-      const deltaY = y - this.#state.selectedPoint.y;
+      const dx = x - this.#state.selectedPoint.x;
+      const dy = y - this.#state.selectedPoint.y;
 
-      for (const point of this.#editor.selectedPoints) {
-        this.#editor.movePointTo(
-          point.entityId,
-          point.x + deltaX,
-          point.y + deltaY,
-        );
-      }
+      this.moveSelectedPoints(dx, dy);
 
       this.#editor.redrawContours(
         Array.from(this.#editor.selectedPoints).map((p) => p.entityId),
@@ -177,9 +179,30 @@ export class Select implements Tool {
 
   keyDownHandler(e: KeyboardEvent) {
     if (this.#state.type === "modifying") {
+      const selectedPointIds = Array.from(this.#editor.selectedPoints).map(
+        (p) => p.entityId,
+      );
+
+      this.#state.shiftModifierOn = e.shiftKey;
+      const modifier = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
+      const nudge = NUDGES_VALUES[modifier];
+
       switch (e.key) {
-        case "Shift":
-          this.#state.shiftModifierOn = true;
+        case "ArrowLeft":
+          this.moveSelectedPoints(-nudge, 0);
+          this.#editor.emit("points:moved", selectedPointIds);
+          break;
+        case "ArrowRight":
+          this.moveSelectedPoints(nudge, 0);
+          this.#editor.emit("points:moved", selectedPointIds);
+          break;
+        case "ArrowUp":
+          this.moveSelectedPoints(0, nudge);
+          this.#editor.emit("points:moved", selectedPointIds);
+          break;
+        case "ArrowDown":
+          this.moveSelectedPoints(0, -nudge);
+          this.#editor.emit("points:moved", selectedPointIds);
           break;
       }
     }
@@ -187,18 +210,7 @@ export class Select implements Tool {
 
   keyUpHandler(e: KeyboardEvent) {
     if (this.#state.type === "modifying") {
-      this.#state.shiftModifierOn = e.shiftKey;
-
-      switch (e.key) {
-        case "ArrowLeft":
-          this.#state.nudge = 1;
-          break;
-        case "ArrowRight":
-        case "ArrowUp":
-        case "ArrowDown":
-          this.#state.nudge = -1;
-          break;
-      }
+      this.#state.shiftModifierOn = false;
     }
   }
 }

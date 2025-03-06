@@ -221,8 +221,12 @@ export class Editor {
     this.#state.hoveredPoint = null;
   }
 
-  public get selectedPoints(): ReadonlySet<ContourPoint> {
-    return this.#state.selectedPoints;
+  public get selectedPoints(): ContourPoint[] {
+    return [...this.#state.selectedPoints.values()];
+  }
+
+  public isPointSelected(p: ContourPoint) {
+    return this.#state.selectedPoints.has(p);
   }
 
   public addToSelectedPoints(p: ContourPoint) {
@@ -343,10 +347,15 @@ export class Editor {
     this.#prepareCanvas(ctx);
 
     ctx.setStyle(GUIDE_STYLES);
-    this.#painter.drawGuides(ctx, this.#scene.getStaticGuidesPath());
+
+    ctx.lineWidth = Math.floor(GUIDE_STYLES.lineWidth / this.#viewport.zoom);
+    const guides = this.#scene.getStaticGuidesPath();
+    this.#painter.drawGuides(ctx, guides);
 
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
+    ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
+    console.log(ctx.lineWidth, this.#viewport.zoom);
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour && node.contour.closed()) {
@@ -357,8 +366,6 @@ export class Editor {
 
     if (this.#state.selectedPoints.size > 0) {
       const bbRect = getBoundingRect([...this.selectedPoints.values()]);
-      console.log([...this.selectedPoints.values()]);
-      console.log(bbRect);
       ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
       ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
     }
@@ -407,12 +414,6 @@ export class Editor {
 
     ctx.restore();
     ctx.flush();
-  }
-
-  #flush() {
-    if (!this.#staticContext || !this.#interactiveContext) return;
-    this.#staticContext.getContext().flush();
-    this.#interactiveContext.getContext().flush();
   }
 
   #draw() {

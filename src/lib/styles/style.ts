@@ -47,15 +47,15 @@ export const HANDLE_STYLES: Record<HandleType, HandleStyles> = {
       dashPattern: [],
     },
     hovered: {
-      size: 6,
+      size: 8,
       lineWidth: 1,
       antiAlias: false,
       strokeStyle: "rgb(76, 96, 230)",
-      fillStyle: "rgb(76, 96, 230)",
+      fillStyle: "transparent",
       dashPattern: [],
     },
     selected: {
-      size: 6,
+      size: 12,
       lineWidth: 1,
       antiAlias: false,
       strokeStyle: "rgb(76, 96, 230)",
@@ -150,7 +150,7 @@ export const SELECTION_RECTANGLE_STYLES: DrawStyle = {
 };
 
 export const BOUNDING_RECTANGLE_STYLES: DrawStyle = {
-  lineWidth: 0.75,
+  lineWidth: 0.5,
   strokeStyle: "#353535",
   fillStyle: "transparent",
   antiAlias: false,
