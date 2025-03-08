@@ -52,13 +52,14 @@ bun install
 3. **Run the development server**:
 
 ```bash
-bun run tauri dev
+bun dev:app
 ```
 
 ### Build for Production
 
 ```bash
-bun run tauri build
+bun build:app
+
 ```
 
 ### Common Issues

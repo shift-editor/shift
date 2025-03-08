@@ -21,18 +21,18 @@
     "import/resolver": {
       "typescript": {
         "alwaysTryTypes": true,
-        "project": "./tsconfig.json"
+        "project": "./ui/tsconfig.json"
       },
       "alias": {
         "map": [
-          ["@", "./src"],
-          ["@components", "./src/components"],
-          ["@lib", "./src/lib"],
-          ["@store", "./src/store"],
-          ["@types", "./src/types"],
-          ["@context", "./src/context"],
-          ["@assets", "./src/assets"],
-          ["@hooks", "./src/hooks"]
+          ["@", "./ui"],
+          ["@/components", "./ui/components"],
+          ["@/lib", "./ui/lib"],
+          ["@/store", "./ui/store"],
+          ["@/types", "./ui/types"],
+          ["@/context", "./ui/context"],
+          ["@/assets", "./ui/assets"],
+          ["@/hooks", "./ui/hooks"]
         ],
         "extensions": [".ts", ".tsx", ".js", ".jsx", ".json"]
       }
@@ -59,7 +59,7 @@
             "position": "before"
           },
           {
-            "pattern": "@tauri-apps/**",
+            "pattern": "@tauri-uis/**",
             "group": "external",
             "position": "after"
           }

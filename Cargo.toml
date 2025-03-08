@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+
+[workspace.dependencies]
+shift-fonts = { path = "crates/shift-fonts" }
