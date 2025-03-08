@@ -9,11 +9,12 @@ fn main() {
             menu::create_menu(app).unwrap();
 
             app.on_menu_event(move |_app, event| {
-                menu::handle_menu_event(&event);
+                menu::handle_menu_event(_app, &event);
             });
 
             Ok(())
         })
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler!(commands::load_font))

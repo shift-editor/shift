@@ -4,6 +4,11 @@ use crate::contour::{Contour, ContourPoint};
 
 use super::contour::PointType;
 
+pub fn load_ufo(path: String) -> Font {
+    let font = Font::load(path).expect("Failed to load UFO");
+    font
+}
+
 pub fn from_ufo(font: Font) -> Vec<Contour> {
     let glyph = font.get_glyph("A").unwrap();
     let contours = glyph.contours.clone();
