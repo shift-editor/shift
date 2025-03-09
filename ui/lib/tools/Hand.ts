@@ -1,10 +1,10 @@
-import { Point2D } from "@/types/math";
-import { Tool, ToolName } from "@/types/tool";
+import { Point2D } from '@/types/math';
+import { Tool, ToolName } from '@/types/tool';
 
-import { Editor } from "../editor/Editor";
+import { Editor } from '../editor/Editor';
 
 export class Hand implements Tool {
-  public readonly name: ToolName = "hand";
+  public readonly name: ToolName = 'hand';
 
   #editor: Editor;
 

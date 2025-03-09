@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react';
 
-import InitCanvasKit, { CanvasKit } from "canvaskit-wasm";
+import InitCanvasKit, { CanvasKit } from 'canvaskit-wasm';
 
-import { CanvasKitContext } from "../lib/graphics/backends/CanvasKitRenderer";
-import { scaleCanvasDPR } from "../lib/utils/utils";
-import AppState from "../store/store";
-import { CanvasRef } from "../types/graphics";
+import { CanvasKitContext } from '../lib/graphics/backends/CanvasKitRenderer';
+import { scaleCanvasDPR } from '../lib/utils/utils';
+import AppState from '../store/store';
+import { CanvasRef } from '../types/graphics';
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({

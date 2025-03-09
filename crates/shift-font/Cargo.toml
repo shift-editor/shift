@@ -1,5 +1,5 @@
 [package]
-name = "shift-fonts"
+name = "shift-font"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,4 +8,3 @@ write-fonts = { version = "0.36.3", features = ["read"] }
 skrifa = "0.28.1"
 norad = "0.15.0"
 serde = { version = "1", features = ["derive"] }
-

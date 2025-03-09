@@ -1,8 +1,8 @@
-import { Rect } from "@/lib/math/rect";
+import { Rect } from '@/lib/math/rect';
 
-describe("Rect", () => {
-  describe("initilisation", () => {
-    it("with x, y and size", () => {
+describe('Rect', () => {
+  describe('initilisation', () => {
+    it('with x, y and size', () => {
       const rect = new Rect(10, 10, 100, 100);
 
       expect(rect.x).toBe(10);
@@ -11,7 +11,7 @@ describe("Rect", () => {
       expect(rect.height).toBe(100);
     });
 
-    it("from bounds", () => {
+    it('from bounds', () => {
       const rect = Rect.fromBounds(10, 20, 50, 50);
 
       expect(rect.x).toBe(10);
@@ -21,14 +21,14 @@ describe("Rect", () => {
     });
   });
 
-  describe("hit for rectangle at (5, 5) with width 25 and height 25", () => {
+  describe('hit for rectangle at (5, 5) with width 25 and height 25', () => {
     const rect = new Rect(5, 5, 25, 25);
 
-    it("on point (10, 10) is true", () => {
+    it('on point (10, 10) is true', () => {
       expect(rect.hit(27, 26)).toBe(true);
     });
 
-    it("on point (35, 35) is false", () => {
+    it('on point (35, 35) is false', () => {
       expect(rect.hit(35, 35)).toBe(false);
     });
   });

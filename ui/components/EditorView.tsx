@@ -1,12 +1,12 @@
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core';
 
-import AppState, { getEditor } from "@/store/store";
+import AppState, { getEditor } from '@/store/store';
 
-import { InteractiveScene } from "./InteractiveScene";
-import { Metrics } from "./Metrics";
-import { StaticScene } from "./StaticScene";
+import { InteractiveScene } from './InteractiveScene';
+import { Metrics } from './Metrics';
+import { StaticScene } from './StaticScene';
 
 export const EditorView = () => {
   const activeTool = AppState((state) => state.activeTool);
@@ -26,7 +26,7 @@ export const EditorView = () => {
 
   useEffect(() => {
     const sendGlyph = async () => {
-      const glyph = await invoke("get_contours");
+      const glyph = await invoke('get_contours');
       console.log(glyph);
     };
 

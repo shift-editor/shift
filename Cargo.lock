@@ -3674,7 +3674,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shift-fonts"
+name = "shift-font"
 version = "0.1.0"
 dependencies = [
  "norad",
@@ -3690,7 +3690,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "shift-fonts",
+ "shift-font",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

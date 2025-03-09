@@ -1,4 +1,4 @@
-import { Contour } from "./Contour";
+import { Contour } from './Contour';
 
 export class Glyph {
   #name: string;

@@ -1,7 +1,7 @@
-import { Point2D, Rect2D } from "@/types/math";
+import { Point2D, Rect2D } from '@/types/math';
 
-import { Point } from "./point";
-import { Shape } from "./shape";
+import { Point } from './point';
+import { Shape } from './shape';
 
 export class Rect extends Shape {
   #width: number;
@@ -13,12 +13,7 @@ export class Rect extends Shape {
     this.#height = height;
   }
 
-  public static fromBounds(
-    left: number,
-    top: number,
-    right: number,
-    bottom: number,
-  ): Rect {
+  public static fromBounds(left: number, top: number, right: number, bottom: number): Rect {
     // TODO: check that it's a valid rectangle
     return new Rect(left, top, right - left, bottom - top);
   }
@@ -78,12 +73,7 @@ export class Rect extends Shape {
   }
 
   hit(x: number, y: number): boolean {
-    return (
-      this.x <= x &&
-      x <= this.x + this.width &&
-      this.y <= y &&
-      y <= this.y + this.#height
-    );
+    return this.x <= x && x <= this.x + this.width && this.y <= y && y <= this.y + this.#height;
   }
 }
 

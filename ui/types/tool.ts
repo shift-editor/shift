@@ -1,6 +1,6 @@
-import { IRenderer } from "./graphics";
+import { IRenderer } from './graphics';
 
-export type ToolName = "select" | "pen" | "hand" | "shape";
+export type ToolName = 'select' | 'pen' | 'hand' | 'shape';
 export interface Tool {
   name: ToolName;
 

@@ -1,7 +1,7 @@
-import { IRenderer } from "@/types/graphics";
+import { IRenderer } from '@/types/graphics';
 
-import { Path2D } from "../graphics/Path";
-import { HANDLE_STYLES } from "../styles/style";
+import { Path2D } from '../graphics/Path';
+import { HANDLE_STYLES } from '../styles/style';
 
 export class Painter {
   public drawGuides(ctx: IRenderer, path: Path2D) {
@@ -14,7 +14,7 @@ export class Painter {
       x - HANDLE_STYLES.corner.idle.size / 2,
       y - HANDLE_STYLES.corner.idle.size / 2,
       HANDLE_STYLES.corner.idle.size,
-      HANDLE_STYLES.corner.idle.size,
+      HANDLE_STYLES.corner.idle.size
     );
   }
 
@@ -24,13 +24,13 @@ export class Painter {
       x - HANDLE_STYLES.corner.hovered.size / 2,
       y - HANDLE_STYLES.corner.hovered.size / 2,
       HANDLE_STYLES.corner.hovered.size,
-      HANDLE_STYLES.corner.hovered.size,
+      HANDLE_STYLES.corner.hovered.size
     );
     ctx.fillRect(
       x - HANDLE_STYLES.corner.hovered.size / 2,
       y - HANDLE_STYLES.corner.hovered.size / 2,
       HANDLE_STYLES.corner.hovered.size,
-      HANDLE_STYLES.corner.hovered.size,
+      HANDLE_STYLES.corner.hovered.size
     );
   }
 
@@ -40,7 +40,7 @@ export class Painter {
       x - HANDLE_STYLES.corner.selected.size / 2,
       y - HANDLE_STYLES.corner.selected.size / 2,
       HANDLE_STYLES.corner.selected.size,
-      HANDLE_STYLES.corner.selected.size,
+      HANDLE_STYLES.corner.selected.size
     );
   }
 
@@ -66,11 +66,7 @@ export class Painter {
     ctx.stroke();
   }
 
-  public drawHoveredDirectionHandle(
-    ctx: IRenderer,
-    x: number,
-    y: number,
-  ): void {
+  public drawHoveredDirectionHandle(ctx: IRenderer, x: number, y: number): void {
     const size = HANDLE_STYLES.direction.hovered.size;
     ctx.setStyle(HANDLE_STYLES.direction.hovered);
     ctx.beginPath();
@@ -81,11 +77,7 @@ export class Painter {
     ctx.stroke();
   }
 
-  public drawSelectedDirectionHandle(
-    ctx: IRenderer,
-    x: number,
-    y: number,
-  ): void {
+  public drawSelectedDirectionHandle(ctx: IRenderer, x: number, y: number): void {
     const size = HANDLE_STYLES.direction.selected.size;
     ctx.setStyle(HANDLE_STYLES.direction.selected);
 

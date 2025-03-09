@@ -1,4 +1,4 @@
-import { Event, EventData, EventHandler } from "@/types/events";
+import { Event, EventData, EventHandler } from '@/types/events';
 
 export class EventEmitter {
   #eventHandlers: Map<Event, EventHandler<Event>[]>;
@@ -32,7 +32,7 @@ export class EventEmitter {
 
     this.#eventHandlers.set(
       event,
-      handlers.filter((h) => h !== handler),
+      handlers.filter((h) => h !== handler)
     );
   }
 }

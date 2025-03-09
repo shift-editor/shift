@@ -1,23 +1,23 @@
-import { ContourPoint } from "@/lib/core/Contour";
-import { Editor } from "@/lib/editor/Editor";
-import { UPMRect } from "@/lib/math/rect";
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
-import { IRenderer } from "@/types/graphics";
-import { Point2D } from "@/types/math";
-import { NUDGES_VALUES } from "@/types/nudge";
-import { Tool, ToolName } from "@/types/tool";
+import { ContourPoint } from '@/lib/core/Contour';
+import { Editor } from '@/lib/editor/Editor';
+import { UPMRect } from '@/lib/math/rect';
+import { SELECTION_RECTANGLE_STYLES } from '@/lib/styles/style';
+import { IRenderer } from '@/types/graphics';
+import { Point2D } from '@/types/math';
+import { NUDGES_VALUES } from '@/types/nudge';
+import { Tool, ToolName } from '@/types/tool';
 
 export type SelectState =
-  | { type: "ready" }
-  | { type: "selecting"; startPos: Point2D }
+  | { type: 'ready' }
+  | { type: 'selecting'; startPos: Point2D }
   | {
-      type: "modifying";
+      type: 'modifying';
       selectedPoint?: ContourPoint;
       shiftModifierOn?: boolean;
     };
 
 export class Select implements Tool {
-  public readonly name: ToolName = "select";
+  public readonly name: ToolName = 'select';
 
   #editor: Editor;
   #state: SelectState;
@@ -25,7 +25,7 @@ export class Select implements Tool {
 
   public constructor(editor: Editor) {
     this.#editor = editor;
-    this.#state = { type: "ready" };
+    this.#state = { type: 'ready' };
     this.#selectionRect = new UPMRect(0, 0, 0, 0);
   }
 
@@ -56,18 +56,18 @@ export class Select implements Tool {
     const firstHitPoint = hitPoints[0];
 
     switch (this.#state.type) {
-      case "ready":
+      case 'ready':
         if (hitPoints.length === 1) {
-          this.#state = { type: "modifying", selectedPoint: firstHitPoint };
+          this.#state = { type: 'modifying', selectedPoint: firstHitPoint };
           this.commitHitPoints(hitPoints);
           break;
         }
 
-        this.#state = { type: "selecting", startPos: { x, y } };
+        this.#state = { type: 'selecting', startPos: { x, y } };
         break;
-      case "modifying":
+      case 'modifying':
         if (hitPoints.length === 0) {
-          this.#state = { type: "ready" };
+          this.#state = { type: 'ready' };
           this.#editor.clearSelectedPoints();
           break;
         }
@@ -89,22 +89,20 @@ export class Select implements Tool {
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state.type === "selecting") {
-      const hitPoints = this.gatherHitPoints((p) =>
-        this.#selectionRect.hit(p.x, p.y),
-      );
+    if (this.#state.type === 'selecting') {
+      const hitPoints = this.gatherHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
 
       if (hitPoints.length === 0) {
-        this.#state = { type: "ready" };
+        this.#state = { type: 'ready' };
       } else {
         this.commitHitPoints(hitPoints);
-        this.#state = { type: "modifying" };
+        this.#state = { type: 'modifying' };
       }
 
       this.#selectionRect.clear();
     }
 
-    if (this.#state.type === "modifying") {
+    if (this.#state.type === 'modifying') {
       this.#state.selectedPoint = undefined;
     }
 
@@ -115,28 +113,23 @@ export class Select implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    if (this.#state.type === "selecting") {
+    if (this.#state.type === 'selecting') {
       const width = x - this.#state.startPos.x;
       const height = y - this.#state.startPos.y;
 
-      this.#selectionRect.changeOrigin(
-        this.#state.startPos.x,
-        this.#state.startPos.y,
-      );
+      this.#selectionRect.changeOrigin(this.#state.startPos.x, this.#state.startPos.y);
       this.#selectionRect.resize(width, height);
     }
 
     // move the point, if it's an active handle move all points by delta
     // otherwise we need to move proportional to an anchor point
-    if (this.#state.type === "modifying" && this.#state.selectedPoint) {
+    if (this.#state.type === 'modifying' && this.#state.selectedPoint) {
       const dx = x - this.#state.selectedPoint.x;
       const dy = y - this.#state.selectedPoint.y;
 
       this.moveSelectedPoints(dx, dy);
 
-      this.#editor.redrawContours(
-        Array.from(this.#editor.selectedPoints).map((p) => p.entityId),
-      );
+      this.#editor.redrawContours(Array.from(this.#editor.selectedPoints).map((p) => p.entityId));
     }
 
     const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
@@ -152,65 +145,63 @@ export class Select implements Tool {
 
   drawInteractive(ctx: IRenderer): void {
     switch (this.#state.type) {
-      case "selecting":
+      case 'selecting':
         ctx.setStyle({
           ...SELECTION_RECTANGLE_STYLES,
-          strokeStyle: "transparent",
+          strokeStyle: 'transparent',
         });
         ctx.fillRect(
           this.#selectionRect.x,
           this.#selectionRect.y,
           this.#selectionRect.width,
-          this.#selectionRect.height,
+          this.#selectionRect.height
         );
 
         ctx.setStyle({
           ...SELECTION_RECTANGLE_STYLES,
-          fillStyle: "transparent",
+          fillStyle: 'transparent',
         });
         ctx.strokeRect(
           this.#selectionRect.x,
           this.#selectionRect.y,
           this.#selectionRect.width,
-          this.#selectionRect.height,
+          this.#selectionRect.height
         );
         break;
     }
   }
 
   keyDownHandler(e: KeyboardEvent) {
-    if (this.#state.type === "modifying") {
-      const selectedPointIds = Array.from(this.#editor.selectedPoints).map(
-        (p) => p.entityId,
-      );
+    if (this.#state.type === 'modifying') {
+      const selectedPointIds = Array.from(this.#editor.selectedPoints).map((p) => p.entityId);
 
       this.#state.shiftModifierOn = e.shiftKey;
-      const modifier = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
+      const modifier = e.metaKey ? 'large' : e.shiftKey ? 'medium' : 'small';
       const nudge = NUDGES_VALUES[modifier];
 
       switch (e.key) {
-        case "ArrowLeft":
+        case 'ArrowLeft':
           this.moveSelectedPoints(-nudge, 0);
-          this.#editor.emit("points:moved", selectedPointIds);
+          this.#editor.emit('points:moved', selectedPointIds);
           break;
-        case "ArrowRight":
+        case 'ArrowRight':
           this.moveSelectedPoints(nudge, 0);
-          this.#editor.emit("points:moved", selectedPointIds);
+          this.#editor.emit('points:moved', selectedPointIds);
           break;
-        case "ArrowUp":
+        case 'ArrowUp':
           this.moveSelectedPoints(0, nudge);
-          this.#editor.emit("points:moved", selectedPointIds);
+          this.#editor.emit('points:moved', selectedPointIds);
           break;
-        case "ArrowDown":
+        case 'ArrowDown':
           this.moveSelectedPoints(0, -nudge);
-          this.#editor.emit("points:moved", selectedPointIds);
+          this.#editor.emit('points:moved', selectedPointIds);
           break;
       }
     }
   }
 
   keyUpHandler(_: KeyboardEvent) {
-    if (this.#state.type === "modifying") {
+    if (this.#state.type === 'modifying') {
       this.#state.shiftModifierOn = false;
     }
   }

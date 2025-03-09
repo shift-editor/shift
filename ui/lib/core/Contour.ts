@@ -1,9 +1,9 @@
-import { EntityId, Ident } from "@/lib/core/EntityId";
-import { Point } from "@/lib/math/point";
-import { Point2D } from "@/types/math";
-import { CubicSegment, LineSegment, Segment } from "@/types/segments";
+import { EntityId, Ident } from '@/lib/core/EntityId';
+import { Point } from '@/lib/math/point';
+import { Point2D } from '@/types/math';
+import { CubicSegment, LineSegment, Segment } from '@/types/segments';
 
-export type PointType = "onCurve" | "offCurve";
+export type PointType = 'onCurve' | 'offCurve';
 export class ContourPoint extends Point {
   #id: EntityId;
   #type: PointType;
@@ -73,7 +73,7 @@ class SegmentIterator implements Iterator<Segment> {
         const p2 = this.#points[(this.#index + 1) % this.#points.length];
 
         const segment: LineSegment = {
-          type: "line",
+          type: 'line',
           points: {
             anchor1: p1,
             anchor2: p2,
@@ -97,9 +97,9 @@ class SegmentIterator implements Iterator<Segment> {
     const p1 = this.#points[this.#index];
     const p2 = this.#points[this.#index + 1];
 
-    if (p1.type === "onCurve" && p2.type === "onCurve") {
+    if (p1.type === 'onCurve' && p2.type === 'onCurve') {
       const segment: LineSegment = {
-        type: "line",
+        type: 'line',
         points: {
           anchor1: p1,
           anchor2: p2,
@@ -114,12 +114,12 @@ class SegmentIterator implements Iterator<Segment> {
       };
     }
 
-    if (p1.type === "onCurve" && p2.type === "offCurve") {
+    if (p1.type === 'onCurve' && p2.type === 'offCurve') {
       const p3 = this.#points[this.#index + 2];
       const p4 = this.#points[this.#index + 3];
 
       const segment: CubicSegment = {
-        type: "cubic",
+        type: 'cubic',
         points: {
           anchor1: p1,
           control1: p2,
@@ -157,7 +157,7 @@ export class Contour {
   }
 
   addPoint(x: number, y: number): EntityId {
-    const p = new ContourPoint(x, y, "onCurve", this.#id.id);
+    const p = new ContourPoint(x, y, 'onCurve', this.#id.id);
     this.#points.push(p);
     return p.entityId;
   }
@@ -166,7 +166,7 @@ export class Contour {
     const index = this.#points.findIndex((p) => p.entityId.id === id.id);
 
     if (index === -1) {
-      console.error("No index found for point");
+      console.error('No index found for point');
       return id;
     }
 
@@ -176,8 +176,8 @@ export class Contour {
     const c1 = p1.lerp(p3, 1.0 / 3.0);
     const c2 = p1.lerp(p3, 2.0 / 3.0);
 
-    const control1 = new ContourPoint(c1.x, c1.y, "offCurve", this.#id.id);
-    const control2 = new ContourPoint(c2.x, c2.y, "offCurve", this.#id.id);
+    const control1 = new ContourPoint(c1.x, c1.y, 'offCurve', this.#id.id);
+    const control2 = new ContourPoint(c2.x, c2.y, 'offCurve', this.#id.id);
 
     this.#points.splice(index, 0, control1, control2);
 

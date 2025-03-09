@@ -1,10 +1,10 @@
-import { EntityId, Ident } from "@/lib/core/EntityId";
-import { Point2D } from "@/types/math";
-import { CubicSegment } from "@/types/segments";
+import { EntityId, Ident } from '@/lib/core/EntityId';
+import { Point2D } from '@/types/math';
+import { CubicSegment } from '@/types/segments';
 
-import { ContourManager, ContourNode } from "./ContourManager";
-import { ContourPoint } from "../core/Contour";
-import { Path2D } from "../graphics/Path";
+import { ContourManager, ContourNode } from './ContourManager';
+import { ContourPoint } from '../core/Contour';
+import { Path2D } from '../graphics/Path';
 
 const X_ADVANCE = 600;
 

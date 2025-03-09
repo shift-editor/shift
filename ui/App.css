@@ -4,10 +4,10 @@ html {
 
 .cursor-pen {
   cursor:
-    url("/cursors/pen@1.svg") 15 8,
+    url('/cursors/pen@1.svg') 15 8,
     pointer;
   cursor:
-    -webkit-image-set(url("/cursors/pen@2.svg") 2x) 15 8,
+    -webkit-image-set(url('/cursors/pen@2.svg') 2x) 15 8,
     pointer;
 }
 

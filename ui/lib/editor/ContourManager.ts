@@ -1,8 +1,8 @@
-import { Contour } from "@/lib/core/Contour";
-import { EntityId, Ident } from "@/lib/core/EntityId";
-import { Path2D } from "@/lib/graphics/Path";
-import { Point2D } from "@/types/math";
-import { CubicSegment } from "@/types/segments";
+import { Contour } from '@/lib/core/Contour';
+import { EntityId, Ident } from '@/lib/core/EntityId';
+import { Path2D } from '@/lib/graphics/Path';
+import { Point2D } from '@/types/math';
+import { CubicSegment } from '@/types/segments';
 
 export interface ContourNode {
   contour: Contour;
@@ -25,7 +25,7 @@ export class ContourManager {
   get currentContour(): ContourNode {
     const c = this.#contours.get(this.#activeContourId.id);
     if (!c) {
-      throw new Error("Current contour not found");
+      throw new Error('Current contour not found');
     }
 
     return c;
@@ -60,7 +60,7 @@ export class ContourManager {
   movePointTo(point: Point2D, id: EntityId) {
     const c = this.#contours.get(id.parentId);
     if (!c) {
-      console.error("No parentId for point");
+      console.error('No parentId for point');
       return;
     }
 
@@ -69,7 +69,7 @@ export class ContourManager {
     });
 
     if (!p) {
-      console.error("point not found");
+      console.error('point not found');
       return;
     }
 
@@ -96,7 +96,7 @@ export class ContourManager {
   upgradeLineSegment(id: EntityId): EntityId {
     const c = this.#contours.get(id.parentId);
     if (!c) {
-      console.error("No parentId for point");
+      console.error('No parentId for point');
       return id;
     }
 
@@ -107,12 +107,12 @@ export class ContourManager {
   getCubicSegment(id: EntityId): CubicSegment | undefined {
     const c = this.#contours.get(id.parentId);
     if (!c) {
-      console.error("No parentId for point");
+      console.error('No parentId for point');
       return undefined;
     }
 
     for (const segment of c.contour.segments()) {
-      if (segment.type === "cubic" && segment.points.anchor1.entityId === id) {
+      if (segment.type === 'cubic' && segment.points.anchor1.entityId === id) {
         return segment;
       }
     }
@@ -127,27 +127,21 @@ export class ContourManager {
       node.renderPath.clear();
 
       const segments = node.contour.segments();
-      node.renderPath.moveTo(
-        segments[0].points.anchor1.x,
-        segments[0].points.anchor1.y,
-      );
+      node.renderPath.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
 
       for (const segment of segments) {
         switch (segment.type) {
-          case "line":
-            node.renderPath.lineTo(
-              segment.points.anchor2.x,
-              segment.points.anchor2.y,
-            );
+          case 'line':
+            node.renderPath.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
             break;
-          case "cubic":
+          case 'cubic':
             node.renderPath.cubicTo(
               segment.points.control1.x,
               segment.points.control1.y,
               segment.points.control2.x,
               segment.points.control2.y,
               segment.points.anchor2.x,
-              segment.points.anchor2.y,
+              segment.points.anchor2.y
             );
             break;
         }

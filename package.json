@@ -9,6 +9,7 @@
   "scripts": {
     "dev:tauri": "turbo run dev",
     "dev:app": "tauri dev",
+    "clean": "./scripts/clean.sh",
     "build:tauri": "turbo run build --no-daemon",
     "build:app": "tauri build",
     "tauri": "tauri",

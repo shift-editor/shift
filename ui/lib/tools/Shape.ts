@@ -1,12 +1,12 @@
-import { Editor } from "@/lib/editor/Editor";
-import { DEFAULT_STYLES } from "@/lib/styles/style";
-import { IRenderer } from "@/types/graphics";
-import { Point2D, Rect2D } from "@/types/math";
-import { Tool, ToolName } from "@/types/tool";
+import { Editor } from '@/lib/editor/Editor';
+import { DEFAULT_STYLES } from '@/lib/styles/style';
+import { IRenderer } from '@/types/graphics';
+import { Point2D, Rect2D } from '@/types/math';
+import { Tool, ToolName } from '@/types/tool';
 
-type ShapeState = "idle" | "dragging";
+type ShapeState = 'idle' | 'dragging';
 export class Shape implements Tool {
-  public readonly name: ToolName = "shape";
+  public readonly name: ToolName = 'shape';
   #editor: Editor;
   #startPos: Point2D;
   #state: ShapeState;
@@ -15,7 +15,7 @@ export class Shape implements Tool {
   constructor(editor: Editor) {
     this.#editor = editor;
     this.#startPos = { x: 0, y: 0 };
-    this.#state = "idle";
+    this.#state = 'idle';
     this.#rect = {
       x: 0,
       y: 0,
@@ -29,7 +29,7 @@ export class Shape implements Tool {
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = "dragging";
+    this.#state = 'dragging';
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
@@ -37,22 +37,19 @@ export class Shape implements Tool {
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = "idle";
+    this.#state = 'idle';
 
     const id = this.#editor.addPoint(this.#rect.x, this.#rect.y);
     this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y);
-    this.#editor.addPoint(
-      this.#rect.x + this.#rect.width,
-      this.#rect.y + this.#rect.height,
-    );
+    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y + this.#rect.height);
     this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height);
     this.#editor.closeContour();
 
-    this.#editor.emit("points:added", [id]);
+    this.#editor.emit('points:added', [id]);
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state !== "dragging") return;
+    if (this.#state !== 'dragging') return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -75,18 +72,13 @@ export class Shape implements Tool {
   }
 
   drawInteractive(ctx: IRenderer): void {
-    if (this.#state !== "dragging") return;
+    if (this.#state !== 'dragging') return;
 
     ctx.setStyle({
       ...DEFAULT_STYLES,
-      fillStyle: "transparent",
+      fillStyle: 'transparent',
     });
 
-    ctx.strokeRect(
-      this.#rect.x,
-      this.#rect.y,
-      this.#rect.width,
-      this.#rect.height,
-    );
+    ctx.strokeRect(this.#rect.x, this.#rect.y, this.#rect.width, this.#rect.height);
   }
 }

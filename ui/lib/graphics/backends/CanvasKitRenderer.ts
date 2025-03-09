@@ -1,17 +1,11 @@
-import InitCanvasKit, {
-  Canvas,
-  CanvasKit,
-  Paint,
-  Path,
-  Surface,
-} from "canvaskit-wasm";
-import chroma from "chroma-js";
+import InitCanvasKit, { Canvas, CanvasKit, Paint, Path, Surface } from 'canvaskit-wasm';
+import chroma from 'chroma-js';
 
-import { DEFAULT_STYLES, DrawStyle } from "@/lib/styles/style";
-import { getEditor } from "@/store/store";
-import { IGraphicContext, IRenderer, IPath, Colour } from "@/types/graphics";
+import { DEFAULT_STYLES, DrawStyle } from '@/lib/styles/style';
+import { getEditor } from '@/store/store';
+import { IGraphicContext, IRenderer, IPath, Colour } from '@/types/graphics';
 
-import { Path2D } from "../Path";
+import { Path2D } from '../Path';
 
 export const initCanvasKit = async (): Promise<CanvasKit> => {
   return await InitCanvasKit({
@@ -34,14 +28,7 @@ export class CanvasKitPath implements IPath {
     this.#path.lineTo(x, y);
   }
 
-  cubicTo(
-    cp1x: number,
-    cp1y: number,
-    cp2x: number,
-    cp2y: number,
-    x: number,
-    y: number,
-  ): void {
+  cubicTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number): void {
     this.#path.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
   }
 
@@ -135,8 +122,8 @@ export class CanvasKitRenderer implements IRenderer {
         this.#strokeColour[0] / 255,
         this.#strokeColour[1] / 255,
         this.#strokeColour[2] / 255,
-        this.#strokeColour[3],
-      ),
+        this.#strokeColour[3]
+      )
     );
   }
 
@@ -146,8 +133,8 @@ export class CanvasKitRenderer implements IRenderer {
         this.#fillColour[0] / 255,
         this.#fillColour[1] / 255,
         this.#fillColour[2] / 255,
-        this.#fillColour[3],
-      ),
+        this.#fillColour[3]
+      )
     );
   }
 
@@ -163,10 +150,7 @@ export class CanvasKitRenderer implements IRenderer {
     this.#paint.setPathEffect(null);
     if (this.#currentStyle.dashPattern.length > 0) {
       this.#paint.setPathEffect(
-        this.ctx.canvasKit.PathEffect.MakeDash(
-          this.#currentStyle.dashPattern,
-          0,
-        ),
+        this.ctx.canvasKit.PathEffect.MakeDash(this.#currentStyle.dashPattern, 0)
       );
     }
   }
@@ -245,14 +229,7 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path.quadTo(cpx, cpy, x, y);
   }
 
-  cubicTo(
-    cpx1: number,
-    cpy1: number,
-    cpx2: number,
-    cpy2: number,
-    x: number,
-    y: number,
-  ): void {
+  cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void {
     this.#path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
 
@@ -263,23 +240,23 @@ export class CanvasKitRenderer implements IRenderer {
   constructPath(path: Path2D, nativePath: Path): Path {
     for (const command of path.commands) {
       switch (command.type) {
-        case "moveTo":
+        case 'moveTo':
           nativePath.moveTo(command.x, command.y);
           break;
-        case "lineTo":
+        case 'lineTo':
           nativePath.lineTo(command.x, command.y);
           break;
-        case "cubicTo":
+        case 'cubicTo':
           nativePath.cubicTo(
             command.cp1x,
             command.cp1y,
             command.cp2x,
             command.cp2y,
             command.x,
-            command.y,
+            command.y
           );
           break;
-        case "close":
+        case 'close':
           nativePath.close();
           break;
       }
@@ -361,14 +338,7 @@ export class CanvasKitRenderer implements IRenderer {
     this.canvas.translate(x, y);
   }
 
-  transform(
-    a: number,
-    b: number,
-    c: number,
-    d: number,
-    e: number,
-    f: number,
-  ): void {
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): void {
     const matrix = [a, c, e, b, d, f, 0, 0, 1];
     this.canvas.concat(matrix);
   }
@@ -395,14 +365,14 @@ export class CanvasKitContext implements IGraphicContext {
 
   public get surface(): Surface {
     if (!this.#surface) {
-      throw new Error("Surface not initialized");
+      throw new Error('Surface not initialized');
     }
     return this.#surface;
   }
 
   public get canvas(): Canvas {
     if (!this.#canvas) {
-      throw new Error("Canvas not initialized");
+      throw new Error('Canvas not initialized');
     }
     return this.#canvas;
   }

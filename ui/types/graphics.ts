@@ -1,13 +1,13 @@
-import { DrawStyle } from "@/lib/styles/style";
+import { DrawStyle } from '@/lib/styles/style';
 
 export type Colour = [number, number, number, number];
 
 export type PathCommand =
-  | { type: "moveTo"; x: number; y: number }
-  | { type: "lineTo"; x: number; y: number }
-  | { type: "quadTo"; cp1x: number; cp1y: number; x: number; y: number }
+  | { type: 'moveTo'; x: number; y: number }
+  | { type: 'lineTo'; x: number; y: number }
+  | { type: 'quadTo'; cp1x: number; cp1y: number; x: number; y: number }
   | {
-      type: "cubicTo";
+      type: 'cubicTo';
       cp1x: number;
       cp1y: number;
       cp2x: number;
@@ -15,7 +15,7 @@ export type PathCommand =
       x: number;
       y: number;
     }
-  | { type: "close" };
+  | { type: 'close' };
 
 export interface IPath {
   moveTo(x: number, y: number): void;
@@ -49,14 +49,7 @@ export interface IRenderer {
 
   lineTo(x: number, y: number): void;
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
-  cubicTo(
-    cpx1: number,
-    cpy1: number,
-    cpx2: number,
-    cpy2: number,
-    x: number,
-    y: number,
-  ): void;
+  cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void;
 
   closePath(): void;
 
@@ -74,14 +67,7 @@ export interface IRenderer {
    * @param e - The x-axis translation
    * @param f - The y-axis translation
    */
-  transform(
-    a: number,
-    b: number,
-    c: number,
-    d: number,
-    e: number,
-    f: number,
-  ): void;
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): void;
 }
 
 export interface IGraphicContext {

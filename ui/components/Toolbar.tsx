@@ -1,8 +1,8 @@
-import { FC } from "react";
+import { FC } from 'react';
 
-import { tools } from "@/lib/tools/tools";
-import AppState from "@/store/store";
-import { ToolName } from "@/types/tool";
+import { tools } from '@/lib/tools/tools';
+import AppState from '@/store/store';
+import { ToolName } from '@/types/tool';
 
 interface ToolbarIconProps {
   Icon: React.FC<React.SVGProps<SVGSVGElement>>;
@@ -10,16 +10,11 @@ interface ToolbarIconProps {
   activeTool: ToolName;
   onClick: () => void;
 }
-export const ToolbarIcon: FC<ToolbarIconProps> = ({
-  Icon,
-  name,
-  activeTool,
-  onClick,
-}) => {
+export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, activeTool, onClick }) => {
   return (
     <div
       className={`rounded p-1 transition-colors duration-200 ${
-        activeTool === name ? "bg-[#4a4a54]" : "hover:bg-[#4a4a54]"
+        activeTool === name ? 'bg-[#4a4a54]' : 'hover:bg-[#4a4a54]'
       }`}
       onClick={onClick}
     >

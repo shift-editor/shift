@@ -1,26 +1,26 @@
-import { EntityId, Ident } from "@/lib/core/EntityId";
-import { EventEmitter } from "@/lib/core/EventEmitter";
+import { EntityId, Ident } from '@/lib/core/EntityId';
+import { EventEmitter } from '@/lib/core/EventEmitter';
 import {
   BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
   HANDLE_STYLES,
-} from "@/lib/styles/style";
-import { tools } from "@/lib/tools/tools";
-import AppState from "@/store/store";
-import { Event, EventData, EventHandler } from "@/types/events";
-import { IGraphicContext, IRenderer } from "@/types/graphics";
-import { HandleState, HandleType } from "@/types/handle";
-import { Point2D, Rect2D } from "@/types/math";
-import { CubicSegment } from "@/types/segments";
-import { Tool } from "@/types/tool";
+} from '@/lib/styles/style';
+import { tools } from '@/lib/tools/tools';
+import AppState from '@/store/store';
+import { Event, EventData, EventHandler } from '@/types/events';
+import { IGraphicContext, IRenderer } from '@/types/graphics';
+import { HandleState, HandleType } from '@/types/handle';
+import { Point2D, Rect2D } from '@/types/math';
+import { CubicSegment } from '@/types/segments';
+import { Tool } from '@/types/tool';
 
-import { FrameHandler } from "./FrameHandler";
-import { Painter } from "./Painter";
-import { Scene } from "./Scene";
-import { Viewport } from "./Viewport";
-import { ContourPoint } from "../core/Contour";
-import { getBoundingRect } from "../math/rect";
+import { FrameHandler } from './FrameHandler';
+import { Painter } from './Painter';
+import { Scene } from './Scene';
+import { Viewport } from './Viewport';
+import { ContourPoint } from '../core/Contour';
+import { getBoundingRect } from '../math/rect';
 
 interface EditorState {
   selectedPoints: Set<ContourPoint>;
@@ -136,14 +136,14 @@ export class Editor {
 
   public getHandleState(p: ContourPoint): HandleState {
     if (this.#state.selectedPoints.has(p)) {
-      return "selected";
+      return 'selected';
     }
 
     if (this.#state.hoveredPoint === p) {
-      return "hovered";
+      return 'hovered';
     }
 
-    return "idle";
+    return 'idle';
   }
 
   public paintHandle(
@@ -151,58 +151,58 @@ export class Editor {
     x: number,
     y: number,
     handleType: HandleType,
-    state: HandleState,
+    state: HandleState
   ) {
     ctx.setStyle(HANDLE_STYLES[handleType][state]);
 
     switch (handleType) {
-      case "corner":
+      case 'corner':
         switch (state) {
-          case "idle":
+          case 'idle':
             this.#painter.drawCornerHandle(ctx, x, y);
             break;
-          case "selected":
+          case 'selected':
             this.#painter.drawSelectedCornerHandle(ctx, x, y);
             break;
-          case "hovered":
+          case 'hovered':
             this.#painter.drawHoveredCornerHandle(ctx, x, y);
             break;
         }
         break;
 
-      case "control":
+      case 'control':
         switch (state) {
-          case "idle":
+          case 'idle':
             this.#painter.drawControlHandle(ctx, x, y);
             break;
-          case "selected":
+          case 'selected':
             this.#painter.drawSelectedControlHandle(ctx, x, y);
             break;
-          case "hovered":
+          case 'hovered':
             break;
         }
         break;
 
-      case "smooth":
+      case 'smooth':
         switch (state) {
-          case "idle":
+          case 'idle':
             break;
-          case "selected":
+          case 'selected':
             break;
-          case "hovered":
+          case 'hovered':
             break;
         }
         break;
 
-      case "direction":
+      case 'direction':
         switch (state) {
-          case "idle":
+          case 'idle':
             this.#painter.drawDirectionHandle(ctx, x, y);
             break;
-          case "selected":
+          case 'selected':
             this.#painter.drawSelectedDirectionHandle(ctx, x, y);
             break;
-          case "hovered":
+          case 'hovered':
             this.#painter.drawHoveredDirectionHandle(ctx, x, y);
             break;
         }
@@ -286,14 +286,7 @@ export class Editor {
     const zoom = this.#viewport.zoom;
     const { panX, panY } = this.#viewport;
 
-    ctx.transform(
-      zoom,
-      0,
-      0,
-      zoom,
-      panX + center.x * (1 - zoom),
-      panY + center.y * (1 - zoom),
-    );
+    ctx.transform(zoom, 0, 0, zoom, panX + center.x * (1 - zoom), panY + center.y * (1 - zoom));
   }
 
   #applyUpmTransforms(ctx: IRenderer) {
@@ -303,7 +296,7 @@ export class Editor {
       0,
       -1,
       this.#viewport.padding,
-      this.#viewport.logicalHeight - this.#viewport.padding,
+      this.#viewport.logicalHeight - this.#viewport.padding
     );
   }
 
@@ -360,7 +353,7 @@ export class Editor {
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour && node.contour.closed()) {
-        ctx.fillStyle = "black";
+        ctx.fillStyle = 'black';
         ctx.fill(node.renderPath);
       }
     }
@@ -384,25 +377,24 @@ export class Editor {
           const handleState = this.getHandleState(point);
 
           if (node.contour.closed() && node.contour.firstPoint() === point) {
-            this.paintHandle(ctx, x, y, "direction", handleState);
+            this.paintHandle(ctx, x, y, 'direction', handleState);
             continue;
           }
 
           switch (point.type) {
-            case "onCurve":
-              this.paintHandle(ctx, x, y, "corner", handleState);
+            case 'onCurve':
+              this.paintHandle(ctx, x, y, 'corner', handleState);
               break;
 
-            case "offCurve": {
-              const anchor =
-                points[idx + 1].type == "offCurve"
-                  ? points[idx - 1]
-                  : points[idx + 1];
+            case 'offCurve': {
+              const anchor = points[idx + 1].type == 'offCurve' ? points[idx - 1] : points[idx + 1];
 
-              const { x: anchorX, y: anchorY } =
-                this.#viewport.projectUpmToScreen(anchor.x, anchor.y);
+              const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
+                anchor.x,
+                anchor.y
+              );
 
-              this.paintHandle(ctx, x, y, "control", handleState);
+              this.paintHandle(ctx, x, y, 'control', handleState);
 
               ctx.setStyle(DEFAULT_STYLES);
               ctx.drawLine(anchorX, anchorY, x, y);

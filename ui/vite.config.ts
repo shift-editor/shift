@@ -1,16 +1,16 @@
-import path from "path";
+import path from 'path';
 
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import svgr from "vite-plugin-svgr";
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+import svgr from 'vite-plugin-svgr';
 
 const host = process.env.TAURI_DEV_HOST;
 
 // Add this plugin to log path resolution
 const logResolve = () => {
   return {
-    name: "vite:log-resolve",
+    name: 'vite:log-resolve',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         console.log(`[Path Request] ${req.url}`);
@@ -18,7 +18,7 @@ const logResolve = () => {
       });
     },
     resolveId(id, importer) {
-      if (id.startsWith("@")) {
+      if (id.startsWith('@')) {
         console.log(`[Resolve] ${id} from ${importer}`);
       }
       return null;
@@ -33,21 +33,21 @@ export default defineConfig(async () => ({
     react(),
     tailwindcss(),
     svgr({
-      include: "**/*.svg",
+      include: '**/*.svg',
     }),
   ],
   root: __dirname,
-  publicDir: path.resolve(__dirname, "public"),
+  publicDir: path.resolve(__dirname, 'public'),
   resolve: {
     alias: {
-      "@": __dirname,
-      "@/store": path.resolve(__dirname, "store"),
-      "@/lib": path.resolve(__dirname, "lib"),
-      "@/components": path.resolve(__dirname, "components"),
-      "@/context": path.resolve(__dirname, "context"),
-      "@/types": path.resolve(__dirname, "types"),
-      "@/assets": path.resolve(__dirname, "assets"),
-      "@/hooks": path.resolve(__dirname, "hooks"),
+      '@': __dirname,
+      '@/store': path.resolve(__dirname, 'store'),
+      '@/lib': path.resolve(__dirname, 'lib'),
+      '@/components': path.resolve(__dirname, 'components'),
+      '@/context': path.resolve(__dirname, 'context'),
+      '@/types': path.resolve(__dirname, 'types'),
+      '@/assets': path.resolve(__dirname, 'assets'),
+      '@/hooks': path.resolve(__dirname, 'hooks'),
     },
   },
 
@@ -62,14 +62,14 @@ export default defineConfig(async () => ({
     host: host || false,
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: 'ws',
           host,
           port: 1421,
         }
       : undefined,
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ['**/src-tauri/**'],
     },
   },
 }));

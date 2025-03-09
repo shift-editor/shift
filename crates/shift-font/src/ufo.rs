@@ -1,24 +1,26 @@
 use norad::Font;
 
-use crate::contour::{Contour, ContourPoint};
-
-use super::contour::PointType;
+use crate::contour::{Contour, ContourPoint, PointType};
 
 pub fn load_ufo(path: String) -> Font {
     let font = Font::load(path).expect("Failed to load UFO");
     font
 }
 
-pub fn from_ufo(font: Font) -> Vec<Contour> {
-    let glyph = font.get_glyph("A").unwrap();
-    let contours = glyph.contours.clone();
+pub fn get_contours(font: Font, name: &str) -> Vec<Contour> {
+    let glyph = font.get_glyph(name).unwrap();
+    from_ufo(&glyph.contours)
+}
 
+fn from_ufo(contours: &Vec<norad::Contour>) -> Vec<Contour> {
     let mut shift_contours = Vec::<Contour>::new();
     for contour in contours {
         let mut c = Contour::new();
+        let mut closed = true;
         contour.points.iter().for_each(|p| match p.typ {
             norad::PointType::Move => {
                 c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, false));
+                closed = false;
             }
 
             norad::PointType::Line => {
@@ -36,6 +38,10 @@ pub fn from_ufo(font: Font) -> Vec<Contour> {
             _ => {}
         });
 
+        if closed {
+            c.close();
+        }
+
         shift_contours.push(c);
     }
 
@@ -46,7 +52,7 @@ pub fn from_ufo(font: Font) -> Vec<Contour> {
 mod tests {
     use super::*;
 
-    use norad::{Anchor, Contour, ContourPoint, Glyph, Layer, Name};
+    use norad::{Contour, ContourPoint, Glyph};
 
     fn create_test_ufo() -> Font {
         let mut font = Font::new();

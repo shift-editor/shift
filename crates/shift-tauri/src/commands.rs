@@ -1,4 +1,4 @@
 #[tauri::command]
-pub fn load_font(path: String) -> Result<(), String> {
+pub fn get_glyph(char: String) -> Result<(), String> {
     Ok(())
 }

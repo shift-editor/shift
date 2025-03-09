@@ -1,6 +1,6 @@
-import { Point2D } from "@/types/math";
+import { Point2D } from '@/types/math';
 
-import { Point } from "./point";
+import { Point } from './point';
 
 export class Line {
   #x0: number;
@@ -24,9 +24,7 @@ export class Line {
     this.#startPoint = new Point(x0, y0);
     this.#endPoint = new Point(x1, y1);
 
-    this.#length = Math.sqrt(
-      Math.pow(this.#x1 - this.#x0, 2) + Math.pow(this.#y0 - this.#y1, 2),
-    );
+    this.#length = Math.sqrt(Math.pow(this.#x1 - this.#x0, 2) + Math.pow(this.#y0 - this.#y1, 2));
   }
 
   get startPoint(): Point {

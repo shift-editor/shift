@@ -1,5 +1,5 @@
-import { clamp } from "@/lib/utils/utils";
-import { Point2D, Rect2D } from "@/types/math";
+import { clamp } from '@/lib/utils/utils';
+import { Point2D, Rect2D } from '@/types/math';
 
 export class Viewport {
   #padding: number;
@@ -153,10 +153,8 @@ export class Viewport {
 
   public projectScreenToUpm(x: number, y: number) {
     const center = this.getCentrePoint();
-    const zoomedX =
-      (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
-    const zoomedY =
-      (y - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
+    const zoomedX = (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
+    const zoomedY = (y - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
 
     const upmX = Math.floor(zoomedX - this.#padding);
     const upmY = Math.floor(-zoomedY + (this.logicalHeight - this.#padding));

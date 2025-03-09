@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
-import AppState from "@/store/store";
+import AppState from '@/store/store';
 
-import { EditorView } from "./EditorView";
-import { Toolbar } from "./Toolbar";
+import { EditorView } from './EditorView';
+import { Toolbar } from './Toolbar';
 
 export const App = () => {
   useEffect(() => {
@@ -13,41 +13,41 @@ export const App = () => {
 
     // TODO: Make tool specific key handlers
     const keyDownHandler = (e: KeyboardEvent) => {
-      if (e.key == "=" && e.metaKey) {
+      if (e.key == '=' && e.metaKey) {
         editor.zoomIn();
         editor.requestRedraw();
         return;
       }
 
-      if (e.key == "-" && e.metaKey) {
+      if (e.key == '-' && e.metaKey) {
         editor.zoomOut();
         editor.requestRedraw();
         return;
       }
 
-      if (e.key == "h") {
-        switchTool("hand");
+      if (e.key == 'h') {
+        switchTool('hand');
         editor.requestRedraw();
       }
 
-      if (e.key == " ") {
-        switchTool("hand");
+      if (e.key == ' ') {
+        switchTool('hand');
         editor.setFillContour(true);
         editor.requestRedraw();
       }
 
-      if (e.key == "p") {
-        switchTool("pen");
+      if (e.key == 'p') {
+        switchTool('pen');
         editor.requestRedraw();
       }
 
-      if (e.key == "s") {
-        switchTool("shape");
+      if (e.key == 's') {
+        switchTool('shape');
         editor.requestRedraw();
       }
 
-      if (e.key == "v") {
-        switchTool("select");
+      if (e.key == 'v') {
+        switchTool('select');
         editor.requestRedraw();
       }
 
@@ -57,8 +57,8 @@ export const App = () => {
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
-      if (e.key == " ") {
-        switchTool("select");
+      if (e.key == ' ') {
+        switchTool('select');
         editor.setFillContour(false);
         editor.requestRedraw();
       }
@@ -68,12 +68,12 @@ export const App = () => {
       }
     };
 
-    document.addEventListener("keydown", keyDownHandler);
-    document.addEventListener("keyup", keyUpHandler);
+    document.addEventListener('keydown', keyDownHandler);
+    document.addEventListener('keyup', keyUpHandler);
 
     return () => {
-      document.removeEventListener("keydown", keyDownHandler);
-      document.removeEventListener("keyup", keyUpHandler);
+      document.removeEventListener('keydown', keyDownHandler);
+      document.removeEventListener('keyup', keyUpHandler);
     };
   }, []);
 

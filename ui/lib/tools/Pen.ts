@@ -1,11 +1,11 @@
-import { Editor } from "@/lib/editor/Editor";
-import { IRenderer } from "@/types/graphics";
-import { Point2D } from "@/types/math";
-import { Tool, ToolName } from "@/types/tool";
+import { Editor } from '@/lib/editor/Editor';
+import { IRenderer } from '@/types/graphics';
+import { Point2D } from '@/types/math';
+import { Tool, ToolName } from '@/types/tool';
 
-import { EntityId } from "../core/EntityId";
-import { Point } from "../math/point";
-import { DEFAULT_STYLES } from "../styles/style";
+import { EntityId } from '../core/EntityId';
+import { Point } from '../math/point';
+import { DEFAULT_STYLES } from '../styles/style';
 
 interface AddedPoint {
   point: Point2D;
@@ -13,48 +13,48 @@ interface AddedPoint {
 }
 
 export type PenState =
-  | { type: "ready" }
-  | { type: "idle" }
-  | { type: "dragging"; point: AddedPoint }
+  | { type: 'ready' }
+  | { type: 'idle' }
+  | { type: 'dragging'; point: AddedPoint }
   | {
-      type: "draggingHandle";
+      type: 'draggingHandle';
       cornerPoint: Point2D;
       segmentId: EntityId;
       trailingPoint: Point2D;
     };
 
 export class Pen implements Tool {
-  public readonly name: ToolName = "pen";
+  public readonly name: ToolName = 'pen';
 
   #editor: Editor;
   #toolState: PenState;
 
   public constructor(editor: Editor) {
     this.#editor = editor;
-    this.#toolState = { type: "ready" };
+    this.#toolState = { type: 'ready' };
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (e.button !== 0) return;
-    if (this.#toolState.type !== "ready") return;
+    if (this.#toolState.type !== 'ready') return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
     const addedPointId = this.#editor.addPoint(x, y);
 
     this.#toolState = {
-      type: "dragging",
+      type: 'dragging',
       point: {
         point: { x, y },
         entityId: addedPointId,
       },
     };
 
-    this.#editor.emit("points:added", [addedPointId]);
+    this.#editor.emit('points:added', [addedPointId]);
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#toolState = { type: "ready" };
+    this.#toolState = { type: 'ready' };
     this.#editor.requestRedraw();
   }
 
@@ -63,22 +63,20 @@ export class Pen implements Tool {
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
     switch (this.#toolState.type) {
-      case "dragging":
+      case 'dragging':
         {
           const distance = Point.distance(
             this.#toolState.point.point.x,
             this.#toolState.point.point.y,
             x,
-            y,
+            y
           );
 
           if (this.#toolState.point.entityId && distance > 3) {
-            const id = this.#editor.upgradeLineSegment(
-              this.#toolState.point.entityId,
-            );
+            const id = this.#editor.upgradeLineSegment(this.#toolState.point.entityId);
 
             this.#toolState = {
-              type: "draggingHandle",
+              type: 'draggingHandle',
               trailingPoint: { x, y },
               cornerPoint: this.#toolState.point.point,
               segmentId: id,
@@ -87,7 +85,7 @@ export class Pen implements Tool {
         }
         break;
 
-      case "draggingHandle": {
+      case 'draggingHandle': {
         this.#toolState = {
           ...this.#toolState,
           trailingPoint: { x, y },
@@ -112,27 +110,20 @@ export class Pen implements Tool {
   }
 
   drawTrailingHandle(ctx: IRenderer, x: number, y: number) {
-    this.#editor.paintHandle(ctx, x, y, "control", "idle");
+    this.#editor.paintHandle(ctx, x, y, 'control', 'idle');
   }
 
   drawInteractive(ctx: IRenderer): void {
-    if (this.#toolState.type !== "draggingHandle") return;
+    if (this.#toolState.type !== 'draggingHandle') return;
 
     ctx.setStyle({
       ...DEFAULT_STYLES,
     });
 
     ctx.beginPath();
-    ctx.moveTo(
-      this.#toolState.trailingPoint.x,
-      this.#toolState.trailingPoint.y,
-    );
+    ctx.moveTo(this.#toolState.trailingPoint.x, this.#toolState.trailingPoint.y);
     ctx.lineTo(this.#toolState.cornerPoint.x, this.#toolState.cornerPoint.y);
     ctx.stroke();
-    this.drawTrailingHandle(
-      ctx,
-      this.#toolState.trailingPoint.x,
-      this.#toolState.trailingPoint.y,
-    );
+    this.drawTrailingHandle(ctx, this.#toolState.trailingPoint.x, this.#toolState.trailingPoint.y);
   }
 }

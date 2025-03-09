@@ -46,7 +46,7 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
             let data = match file_path.extension() {
                 Some(ext) => {
                     if ext == "ufo" {
-                        Some(shift_fonts::ufo::load_ufo(
+                        Some(shift_font::ufo::load_ufo(
                             file_path.to_str().unwrap().to_string(),
                         ))
                     } else {
