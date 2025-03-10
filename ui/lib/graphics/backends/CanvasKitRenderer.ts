@@ -379,8 +379,11 @@ export class CanvasKitContext implements IGraphicContext {
 
   public createSurface(canvas: HTMLCanvasElement): void {
     if (this.#surface) {
+      this.#surface.flush();
       this.#surface.delete();
+
       this.#surface = null;
+      this.#canvas = null;
     }
 
     const s = this.#canvasKit.MakeWebGLCanvasSurface(canvas, undefined, {
@@ -392,11 +395,12 @@ export class CanvasKitContext implements IGraphicContext {
       stencil: 0,
     });
 
-    this.#surface = s;
-
-    if (s) {
-      this.#canvas = s.getCanvas();
+    if (!s) {
+      throw new Error('Failed to create surface');
     }
+
+    this.#surface = s;
+    this.#canvas = s.getCanvas();
   }
 
   public resizeCanvas(canvas: HTMLCanvasElement): void {

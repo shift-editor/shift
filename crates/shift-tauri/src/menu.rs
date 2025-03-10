@@ -22,9 +22,15 @@ pub fn create_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
 
+    let quit = MenuItemBuilder::new("Quit")
+        .id("quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+
     let file = SubmenuBuilder::new(app, "File")
         .item(&new)
         .item(&open)
+        .item(&quit)
         .build()?;
 
     let menu = MenuBuilder::new(app).item(&app_menu).item(&file).build()?;
@@ -37,6 +43,11 @@ pub fn create_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     if event.id() == "new" {
         println!("New clicked");
+        return;
+    }
+
+    if event.id() == "quit" {
+        app.exit(0);
         return;
     }
 

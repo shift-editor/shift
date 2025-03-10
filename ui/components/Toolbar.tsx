@@ -1,7 +1,7 @@
 import { FC } from 'react';
 
 import { tools } from '@/lib/tools/tools';
-import AppState from '@/store/store';
+import AppState, { getEditor } from '@/store/store';
 import { ToolName } from '@/types/tool';
 
 interface ToolbarIconProps {
@@ -26,6 +26,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, activeTool, onCl
 export const Toolbar = () => {
   const setActiveTool = AppState((state) => state.setActiveTool);
   const activeTool = AppState((state) => state.activeTool);
+  const editor = getEditor();
 
   return (
     <main className="flex h-[7.5vh] w-screen items-center justify-center bg-[#2d2d2d]">
@@ -38,6 +39,7 @@ export const Toolbar = () => {
             activeTool={activeTool}
             onClick={() => {
               setActiveTool(name);
+              editor.activeTool().setReady();
             }}
           />
         ))}

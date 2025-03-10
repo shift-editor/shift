@@ -1,17 +1,20 @@
-import { useEffect } from 'react';
+import { FC, useEffect } from 'react';
+
+import { useParams } from 'react-router-dom';
 
 import AppState from '@/store/store';
 
-import { EditorView } from './EditorView';
-import { Toolbar } from './Toolbar';
+import { EditorView } from '../components/EditorView';
+import { Toolbar } from '../components/Toolbar';
 
-export const App = () => {
+export const Editor = () => {
+  const { glyphId } = useParams();
+
   useEffect(() => {
     const editor = AppState.getState().editor;
     const switchTool = AppState.getState().setActiveTool;
     const activeTool = editor.activeTool();
 
-    // TODO: Make tool specific key handlers
     const keyDownHandler = (e: KeyboardEvent) => {
       if (e.key == '=' && e.metaKey) {
         editor.zoomIn();
@@ -75,12 +78,12 @@ export const App = () => {
       document.removeEventListener('keydown', keyDownHandler);
       document.removeEventListener('keyup', keyUpHandler);
     };
-  }, []);
+  }, [glyphId]);
 
   return (
     <div className="flex h-screen w-screen flex-col items-center justify-center">
       <Toolbar />
-      <EditorView />
+      <EditorView glyphId={glyphId} />
     </div>
   );
 };

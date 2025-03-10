@@ -8,6 +8,7 @@ import { NUDGES_VALUES } from '@/types/nudge';
 import { Tool, ToolName } from '@/types/tool';
 
 export type SelectState =
+  | { type: 'idle' }
   | { type: 'ready' }
   | { type: 'selecting'; startPos: Point2D }
   | {
@@ -25,8 +26,16 @@ export class Select implements Tool {
 
   public constructor(editor: Editor) {
     this.#editor = editor;
-    this.#state = { type: 'ready' };
+    this.#state = { type: 'idle' };
     this.#selectionRect = new UPMRect(0, 0, 0, 0);
+  }
+
+  setIdle(): void {
+    this.#state = { type: 'idle' };
+  }
+
+  setReady(): void {
+    this.#state = { type: 'ready' };
   }
 
   gatherHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {

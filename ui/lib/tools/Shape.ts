@@ -4,18 +4,20 @@ import { IRenderer } from '@/types/graphics';
 import { Point2D, Rect2D } from '@/types/math';
 import { Tool, ToolName } from '@/types/tool';
 
-type ShapeState = 'idle' | 'dragging';
+export type ShapeState =
+  | { type: 'idle' }
+  | { type: 'ready' }
+  | { type: 'dragging'; startPos: Point2D };
+
 export class Shape implements Tool {
   public readonly name: ToolName = 'shape';
   #editor: Editor;
-  #startPos: Point2D;
   #state: ShapeState;
   #rect: Rect2D;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#startPos = { x: 0, y: 0 };
-    this.#state = 'idle';
+    this.#state = { type: 'idle' };
     this.#rect = {
       x: 0,
       y: 0,
@@ -28,16 +30,22 @@ export class Shape implements Tool {
     };
   }
 
+  setIdle(): void {
+    this.#state = { type: 'idle' };
+  }
+
+  setReady(): void {
+    this.#state = { type: 'ready' };
+  }
+
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = 'dragging';
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-
-    this.#startPos = { x, y };
+    this.#state = { type: 'dragging', startPos: { x, y } };
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = 'idle';
+    this.#state = { type: 'ready' };
 
     const id = this.#editor.addPoint(this.#rect.x, this.#rect.y);
     this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y);
@@ -49,30 +57,30 @@ export class Shape implements Tool {
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state !== 'dragging') return;
+    if (this.#state.type !== 'dragging') return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const width = x - this.#startPos.x;
-    const height = y - this.#startPos.y;
+    const width = x - this.#state.startPos.x;
+    const height = y - this.#state.startPos.y;
 
     this.#rect = {
-      x: this.#startPos.x,
-      y: this.#startPos.y,
+      x: this.#state.startPos.x,
+      y: this.#state.startPos.y,
       width,
       height,
-      left: this.#startPos.x,
-      top: this.#startPos.y,
-      right: this.#startPos.x + width,
-      bottom: this.#startPos.y + height,
+      left: this.#state.startPos.x,
+      top: this.#state.startPos.y,
+      right: this.#state.startPos.x + width,
+      bottom: this.#state.startPos.y + height,
     };
 
     this.#editor.requestRedraw();
   }
 
   drawInteractive(ctx: IRenderer): void {
-    if (this.#state !== 'dragging') return;
+    if (this.#state.type !== 'dragging') return;
 
     ctx.setStyle({
       ...DEFAULT_STYLES,

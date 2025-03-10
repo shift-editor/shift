@@ -20,8 +20,6 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [, setIsReady] = useState(false);
-
   useEffect(() => {
     const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
       const ctx = new CanvasKitContext(canvasKit);
@@ -46,8 +44,6 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
 
       editor.setInteractiveContext(interactiveContext);
       editor.setStaticContext(staticContext);
-
-      setIsReady(true);
 
       const resizeCanvas = (entries: ResizeObserverEntry[]) => {
         const [interactiveCanvas, staticCanvas] = entries;
@@ -74,10 +70,6 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       interactiveCanvas: interactiveCanvasRef.current,
       staticCanvas: staticCanvasRef.current,
     });
-
-    return () => {
-      editor.destroy();
-    };
   }, []);
 
   return (

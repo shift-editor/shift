@@ -1,16 +1,33 @@
-import { useEffect } from 'react';
+import { FC, useEffect } from 'react';
 
-import { invoke } from '@tauri-apps/api/core';
+import { useLocation } from 'react-router-dom';
 
+import { CanvasContextProvider } from '@/context/CanvasContext';
 import AppState, { getEditor } from '@/store/store';
 
 import { InteractiveScene } from './InteractiveScene';
 import { Metrics } from './Metrics';
 import { StaticScene } from './StaticScene';
 
-export const EditorView = () => {
+interface EditorViewProps {
+  glyphId: string | undefined;
+}
+
+export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const activeTool = AppState((state) => state.activeTool);
   const editor = getEditor();
+
+  useEffect(() => {
+    if (glyphId) {
+      console.log('Glyph ID', glyphId);
+    }
+
+    editor.activeTool().setReady();
+
+    return () => {
+      editor.activeTool().setIdle();
+    };
+  }, [glyphId]);
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -24,15 +41,6 @@ export const EditorView = () => {
     editor.requestRedraw();
   };
 
-  useEffect(() => {
-    const sendGlyph = async () => {
-      const glyph = await invoke('get_contours');
-      console.log(glyph);
-    };
-
-    sendGlyph();
-  }, []);
-
   return (
     <div
       className={`relative z-20 h-full w-full overflow-hidden cursor-${activeTool}`}
@@ -43,8 +51,10 @@ export const EditorView = () => {
         editor.setUpmMousePosition(x, y);
       }}
     >
-      <StaticScene />
-      <InteractiveScene />
+      <CanvasContextProvider>
+        <StaticScene />
+        <InteractiveScene />
+      </CanvasContextProvider>
       <Metrics />
     </div>
   );

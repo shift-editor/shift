@@ -31,6 +31,14 @@ export class Pen implements Tool {
 
   public constructor(editor: Editor) {
     this.#editor = editor;
+    this.#toolState = { type: 'idle' };
+  }
+
+  setIdle(): void {
+    this.#toolState = { type: 'idle' };
+  }
+
+  setReady(): void {
     this.#toolState = { type: 'ready' };
   }
 
