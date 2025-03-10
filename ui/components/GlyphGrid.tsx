@@ -41,7 +41,7 @@ export const GlyphGrid: FC<GlyphGridProps> = ({ onSelectGlyph, className = '' })
       {allLetters.map(({ char, code }) => (
         <button
           key={code}
-          className="bg-secondary-100 dark:bg-secondary-800 border-secondary-200 flex aspect-square items-center justify-center rounded-md text-[5rem] font-medium transition-colors duration-200 hover:bg-[#868686]"
+          className="border-secondary-200 text-black/30 flex aspect-square items-center justify-center rounded-md bg-[#ededed] text-[5rem] font-medium transition-colors duration-200 hover:bg-[#868686]"
           onClick={() => handleGlyphClick(char, code)}
         >
           {char}
