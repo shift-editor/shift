@@ -1,5 +1,8 @@
 import { FC } from 'react';
 
+import { useNavigate } from 'react-router-dom';
+
+import GridSvg from '@/assets/toolbar/grid.svg';
 import { tools } from '@/lib/tools/tools';
 import AppState, { getEditor } from '@/store/store';
 import { ToolName } from '@/types/tool';
@@ -28,8 +31,15 @@ export const Toolbar = () => {
   const activeTool = AppState((state) => state.activeTool);
   const editor = getEditor();
 
+  const navigate = useNavigate();
+
   return (
     <main className="flex h-[7.5vh] w-screen items-center justify-center bg-[#2d2d2d]">
+      <div className="ml-22 flex-1">
+        <div className="h-fit w-fit rounded-sm hover:bg-[#4a4a54]" onClick={() => navigate('/')}>
+          <GridSvg />
+        </div>
+      </div>
       <section className="flex items-center justify-center gap-2">
         {Array.from(tools.entries()).map(([name, { icon }]) => (
           <ToolbarIcon
@@ -44,6 +54,7 @@ export const Toolbar = () => {
           />
         ))}
       </section>
+      <div className="flex-1" />
     </main>
   );
 };

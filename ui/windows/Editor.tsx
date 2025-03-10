@@ -16,6 +16,8 @@ export const Editor = () => {
     const activeTool = editor.activeTool();
 
     const keyDownHandler = (e: KeyboardEvent) => {
+      e.preventDefault();
+
       if (e.key == '=' && e.metaKey) {
         editor.zoomIn();
         editor.requestRedraw();
