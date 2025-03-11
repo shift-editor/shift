@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use norad::Font as NoradFont;
 
 use crate::contour::{Contour, ContourPoint, PointType};
-use crate::font::{Font, FontMetadata};
+use crate::font::{Font, FontMetadata, Metrics};
 use crate::font_service::FontAdaptor;
 
 pub fn load_ufo(path: String) -> NoradFont {
@@ -13,10 +13,10 @@ pub fn load_ufo(path: String) -> NoradFont {
 
 pub fn get_contours(font: NoradFont, name: &str) -> Vec<Contour> {
     let glyph = font.get_glyph(name).unwrap();
-    from_ufo(&glyph.contours)
+    from_ufo_contours(&glyph.contours)
 }
 
-fn from_ufo(contours: &Vec<norad::Contour>) -> Vec<Contour> {
+fn from_ufo_contours(contours: &Vec<norad::Contour>) -> Vec<Contour> {
     let mut shift_contours = Vec::<Contour>::new();
     for contour in contours {
         let mut c = Contour::new();
@@ -59,6 +59,15 @@ impl From<NoradFont> for Font {
         Font {
             metadata: FontMetadata {
                 family: font.font_info.family_name.unwrap(),
+                style_name: font.font_info.style_name.unwrap(),
+                version: font.font_info.version_major.unwrap(),
+            },
+            metrics: Metrics {
+                units_per_em: *font.font_info.units_per_em.unwrap(),
+                ascender: font.font_info.ascender.unwrap(),
+                descender: font.font_info.descender.unwrap(),
+                cap_height: font.font_info.cap_height.unwrap(),
+                x_height: font.font_info.x_height.unwrap(),
             },
             glyphs: HashMap::new(),
         }

@@ -1,11 +1,33 @@
+import { useEffect, useState } from 'react';
+
+import { invoke } from '@tauri-apps/api/core';
+
 import { Toolbar } from '@/components/Toolbar';
+import { Metrics } from '@/lib/core/Font';
 
 export const FontInfo = () => {
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+
+  useEffect(() => {
+    const fetchFontMetrics = async () => {
+      const metrics = await invoke<Metrics>('get_font_metrics');
+      setMetrics(metrics);
+    };
+
+    fetchFontMetrics();
+  }, []);
+
   return (
     <>
       <Toolbar />
       <main className="flex h-screen w-screen flex-col items-center justify-center">
         <h1>Font Info</h1>
+        <div>
+          <p>Units per em: {metrics?.unitsPerEm}</p>
+          <p>Ascender: {metrics?.ascender}</p>
+          <p>Descender: {metrics?.descender}</p>
+          <p>Cap height: {metrics?.capHeight}</p>
+        </div>
       </main>
     </>
   );
