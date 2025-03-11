@@ -1,9 +1,11 @@
 import { GlyphGrid } from '@/components/GlyphGrid';
+import { Toolbar } from '@/components/Toolbar';
 
 export const Home = () => {
   return (
-    <main className="flex h-screen flex-col items-center justify-center">
+    <>
+      <Toolbar />
       <GlyphGrid />
-    </main>
+    </>
   );
 };

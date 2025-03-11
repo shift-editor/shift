@@ -1,11 +1,11 @@
-import { FC, useEffect } from 'react';
+import { useEffect } from 'react';
 
 import { useParams } from 'react-router-dom';
 
+import { Toolbar } from '@/components/Toolbar';
 import AppState from '@/store/store';
 
 import { EditorView } from '../components/EditorView';
-import { Toolbar } from '../components/Toolbar';
 
 export const Editor = () => {
   const { glyphId } = useParams();
