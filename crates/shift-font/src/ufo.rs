@@ -1,13 +1,17 @@
-use norad::Font;
+use std::collections::HashMap;
+
+use norad::Font as NoradFont;
 
 use crate::contour::{Contour, ContourPoint, PointType};
+use crate::font::{Font, FontMetadata};
+use crate::font_service::FontAdaptor;
 
-pub fn load_ufo(path: String) -> Font {
-    let font = Font::load(path).expect("Failed to load UFO");
+pub fn load_ufo(path: String) -> NoradFont {
+    let font = NoradFont::load(path).expect("Failed to load UFO");
     font
 }
 
-pub fn get_contours(font: Font, name: &str) -> Vec<Contour> {
+pub fn get_contours(font: NoradFont, name: &str) -> Vec<Contour> {
     let glyph = font.get_glyph(name).unwrap();
     from_ufo(&glyph.contours)
 }
@@ -48,14 +52,42 @@ fn from_ufo(contours: &Vec<norad::Contour>) -> Vec<Contour> {
     return shift_contours;
 }
 
+pub struct UfoFontAdaptor;
+
+impl From<NoradFont> for Font {
+    fn from(font: NoradFont) -> Self {
+        Font {
+            metadata: FontMetadata {
+                family: font.font_info.family_name.unwrap(),
+            },
+            glyphs: HashMap::new(),
+        }
+    }
+}
+
+impl FontAdaptor for UfoFontAdaptor {
+    fn extension(&self) -> &str {
+        "ufo"
+    }
+
+    fn read_font(&self, path: &str) -> Result<Font, String> {
+        let font = load_ufo(path.to_string());
+        Ok(font.into())
+    }
+
+    fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use norad::{Contour, ContourPoint, Glyph};
 
-    fn create_test_ufo() -> Font {
-        let mut font = Font::new();
+    fn create_test_ufo() -> NoradFont {
+        let mut font = NoradFont::new();
 
         let mut a_glyph = Glyph::new("A");
         a_glyph.width = 1628.0;

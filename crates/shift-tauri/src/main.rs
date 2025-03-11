@@ -1,5 +1,9 @@
+use std::sync::Mutex;
+
+use shift_editor::editor::Editor;
 use shift_tauri::commands;
 use shift_tauri::menu;
+use tauri::Manager;
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -8,9 +12,12 @@ fn main() {
         .setup(|app| {
             menu::create_menu(app).unwrap();
 
+            app.manage(Mutex::new(Editor::new()));
+
             app.on_menu_event(move |_app, event| {
                 menu::handle_menu_event(_app, &event);
             });
+
 
             Ok(())
         })

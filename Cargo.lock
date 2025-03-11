@@ -3674,6 +3674,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-editor"
+version = "0.1.0"
+dependencies = [
+ "shift-font",
+]
+
+[[package]]
 name = "shift-font"
 version = "0.1.0"
 dependencies = [
@@ -3690,6 +3697,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "shift-editor",
  "shift-font",
  "tauri",
  "tauri-build",

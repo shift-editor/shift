@@ -1,6 +1,9 @@
+use std::sync::Mutex;
+
+use shift_editor::editor::Editor;
 use tauri::{
     menu::{AboutMetadataBuilder, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder},
-    App, AppHandle,
+    App, AppHandle, Manager,
 };
 
 use tauri_plugin_dialog::DialogExt;
@@ -41,8 +44,9 @@ pub fn create_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
+    let editor = app.state::<Mutex<Editor>>();
+
     if event.id() == "new" {
-        println!("New clicked");
         return;
     }
 
@@ -52,28 +56,27 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     }
 
     if event.id() == "open" {
-        app.dialog().file().pick_file(|file_path| {
+        let app_handle = app.clone();
+
+        app.dialog().file().pick_file(move |file_path| {
+            let editor = app_handle.state::<Mutex<Editor>>();
             let file_path = file_path.unwrap().into_path().unwrap();
-            let data = match file_path.extension() {
-                Some(ext) => {
-                    if ext == "ufo" {
-                        Some(shift_font::ufo::load_ufo(
-                            file_path.to_str().unwrap().to_string(),
-                        ))
-                    } else {
-                        None
-                    }
-                }
-                None => {
-                    println!("Unknown file type");
-                    None
-                }
-            };
+            editor
+                .lock()
+                .unwrap()
+                .read_font(&file_path.to_str().unwrap());
 
-            println!("Data: {:?}", data.unwrap().font_info);
+            println!(
+                "Font: {:?}",
+                editor
+                    .lock()
+                    .unwrap()
+                    .current_font()
+                    .unwrap()
+                    .metadata
+                    .family
+            );
         });
-
-        return;
     }
 
     return;
