@@ -39,7 +39,7 @@ Shift uses the Tauri framework:
 1. **Clone the repository**:
 
 ```bash
-git clone https://github.com/kostyafarber/shift.git
+git clone https://github.com/shift-editor/shift.git
 cd shift
 ```
 
