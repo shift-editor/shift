@@ -21,18 +21,18 @@
     "import/resolver": {
       "typescript": {
         "alwaysTryTypes": true,
-        "project": "./ui/tsconfig.json"
+        "project": "./apps/desktop/tsconfig.json"
       },
       "alias": {
         "map": [
-          ["@", "./ui"],
-          ["@/components", "./ui/components"],
-          ["@/lib", "./ui/lib"],
-          ["@/store", "./ui/store"],
-          ["@/types", "./ui/types"],
-          ["@/context", "./ui/context"],
-          ["@/assets", "./ui/assets"],
-          ["@/hooks", "./ui/hooks"]
+          ["@", "./apps/desktop"],
+          ["@/components", "./apps/desktop/components"],
+          ["@/lib", "./apps/desktop/lib"],
+          ["@/store", "./apps/desktop/store"],
+          ["@/types", "./apps/desktop/types"],
+          ["@/context", "./apps/desktop/context"],
+          ["@/assets", "./apps/desktop/assets"],
+          ["@/hooks", "./apps/desktop/hooks"]
         ],
         "extensions": [".ts", ".tsx", ".js", ".jsx", ".json"]
       }

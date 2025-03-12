@@ -46,19 +46,19 @@ cd shift
 2. **Install dependencies**:
 
 ```bash
-bun install
+pnpm install
 ```
 
 3. **Run the development server**:
 
 ```bash
-bun dev:app
+pnpm dev:app
 ```
 
 ### Build for Production
 
 ```bash
-bun build:app
+pnpm build:app
 
 ```
 

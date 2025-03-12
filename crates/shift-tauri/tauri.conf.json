@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.shift.app",
   "build": {
-    "beforeDevCommand": "bun run dev:tauri",
+    "beforeDevCommand": "pnpm run dev:tauri",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build:tauri",
-    "frontendDist": "../../ui/dist"
+    "beforeBuildCommand": "pnpm run build:tauri",
+    "frontendDist": "../../apps/desktop/dist"
   },
   "app": {
     "windows": [

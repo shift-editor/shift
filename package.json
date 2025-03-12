@@ -3,23 +3,26 @@
   "private": true,
   "type": "module",
   "repository": "https://github.com/shift-editor/shift",
-  "workspaces": [
-    "ui"
-  ],
   "scripts": {
     "dev:tauri": "turbo run dev",
-    "dev:app": "tauri dev",
+    "dev:app": "pnpm tauri dev",
     "clean": "./scripts/clean.sh",
     "build:tauri": "turbo run build --no-daemon",
     "build:app": "tauri build",
     "tauri": "tauri",
     "test": "bun test",
-    "format": "prettier --write \"ui/**/*.{js,jsx,ts,tsx,css,md,json}\"",
-    "format:check": "prettier --check \"ui/**/*.{js,jsx,ts,tsx,css,md,json}\"",
-    "lint": "eslint \"ui/**/*.{ts,tsx}\" --fix",
-    "lint:check": "eslint \"ui/**/*.{ts,tsx}\"",
-    "check-deps": "depcheck",
-    "prepare": "husky"
+    "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
+    "format:check": "prettier --check \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" --fix",
+    "lint:check": "eslint \"apps/**/*.{ts,tsx}\"",
+    "check-deps": "depcheck"
   },
-  "packageManager": "bun@1.2.3"
+  "packageManager": "pnpm@10.2.0",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.26.1",
+    "eslint": "^8.57.1",
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "^0.6.11"
+  }
 }
