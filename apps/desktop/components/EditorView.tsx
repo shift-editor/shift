@@ -19,7 +19,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
   useEffect(() => {
     if (glyphId) {
-      console.log('Glyph ID', glyphId);
+      //
     }
 
     editor.activeTool().setReady();

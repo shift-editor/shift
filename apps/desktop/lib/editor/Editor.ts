@@ -1,11 +1,6 @@
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { EventEmitter } from '@/lib/core/EventEmitter';
-import {
-  BOUNDING_RECTANGLE_STYLES,
-  DEFAULT_STYLES,
-  GUIDE_STYLES,
-  HANDLE_STYLES,
-} from '@/lib/styles/style';
+import { BOUNDING_RECTANGLE_STYLES, DEFAULT_STYLES, GUIDE_STYLES } from '@/lib/styles/style';
 import { tools } from '@/lib/tools/tools';
 import AppState from '@/store/store';
 import { Event, EventData, EventHandler } from '@/types/events';
@@ -151,61 +146,23 @@ export class Editor {
     x: number,
     y: number,
     handleType: HandleType,
-    state: HandleState
+    state: HandleState,
+    isCounterClockWise?: boolean
   ) {
-    ctx.setStyle(HANDLE_STYLES[handleType][state]);
-
     switch (handleType) {
+      case 'first':
+        this.#painter.drawFirstHandle(ctx, x, y, state);
+        break;
       case 'corner':
-        switch (state) {
-          case 'idle':
-            this.#painter.drawCornerHandle(ctx, x, y);
-            break;
-          case 'selected':
-            this.#painter.drawSelectedCornerHandle(ctx, x, y);
-            break;
-          case 'hovered':
-            this.#painter.drawHoveredCornerHandle(ctx, x, y);
-            break;
-        }
+        this.#painter.drawCornerHandle(ctx, x, y, state);
         break;
-
       case 'control':
-        switch (state) {
-          case 'idle':
-            this.#painter.drawControlHandle(ctx, x, y);
-            break;
-          case 'selected':
-            this.#painter.drawSelectedControlHandle(ctx, x, y);
-            break;
-          case 'hovered':
-            break;
-        }
+        this.#painter.drawControlHandle(ctx, x, y, state);
         break;
-
       case 'smooth':
-        switch (state) {
-          case 'idle':
-            break;
-          case 'selected':
-            break;
-          case 'hovered':
-            break;
-        }
         break;
-
       case 'direction':
-        switch (state) {
-          case 'idle':
-            this.#painter.drawDirectionHandle(ctx, x, y);
-            break;
-          case 'selected':
-            this.#painter.drawSelectedDirectionHandle(ctx, x, y);
-            break;
-          case 'hovered':
-            this.#painter.drawHoveredDirectionHandle(ctx, x, y);
-            break;
-        }
+        this.#painter.drawDirectionHandle(ctx, x, y, state, isCounterClockWise);
         break;
     }
   }
@@ -349,7 +306,6 @@ export class Editor {
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
     ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
-    console.log(ctx.lineWidth, this.#viewport.zoom);
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
       if (this.#state.fillContour && node.contour.closed()) {
@@ -376,8 +332,26 @@ export class Editor {
 
           const handleState = this.getHandleState(point);
 
-          if (node.contour.closed() && node.contour.firstPoint() === point) {
-            this.paintHandle(ctx, x, y, 'direction', handleState);
+          if (points.length === 1) {
+            this.paintHandle(ctx, x, y, 'corner', handleState);
+            continue;
+          }
+
+          if (node.contour.firstPoint() === point) {
+            if (node.contour.closed()) {
+              this.paintHandle(ctx, x, y, 'direction', handleState, true);
+            } else {
+              this.paintHandle(ctx, x, y, 'first', handleState);
+            }
+
+            continue;
+          }
+
+          if (!node.contour.closed() && node.contour.lastPoint() === point) {
+            const p2 = points[idx - 1];
+            const { x: px, y: py } = this.#viewport.projectUpmToScreen(p2.x, p2.y);
+
+            this.#painter.drawLastHandle(ctx, x, y, px, py, handleState);
             continue;
           }
 

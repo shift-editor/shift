@@ -50,6 +50,14 @@ export interface IRenderer {
   lineTo(x: number, y: number): void;
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
   cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void;
+  arcTo(
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+    isCounterClockwise?: boolean
+  ): void;
 
   closePath(): void;
 

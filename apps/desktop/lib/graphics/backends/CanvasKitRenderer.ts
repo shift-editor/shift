@@ -32,6 +32,17 @@ export class CanvasKitPath implements IPath {
     this.#path.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
   }
 
+  arcTo(
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+    isCounterClockwise?: boolean
+  ): void {
+    this.#path.arc(x, y, radius, startAngle, endAngle, isCounterClockwise);
+  }
+
   closePath(): void {
     this.#path.close();
   }
@@ -158,6 +169,7 @@ export class CanvasKitRenderer implements IRenderer {
   getPaint(): Paint {
     this.#paint.setStrokeWidth(this.#currentStyle.lineWidth);
     this.#paint.setAntiAlias(this.#currentStyle.antiAlias ?? true);
+
     return this.#paint;
   }
 
@@ -233,6 +245,17 @@ export class CanvasKitRenderer implements IRenderer {
     this.#path.cubicTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
 
+  arcTo(
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+    isCounterClockwise?: boolean
+  ): void {
+    this.#path.arc(x, y, radius, startAngle, endAngle, isCounterClockwise);
+  }
+
   closePath(): void {
     this.#path.close();
   }
@@ -268,7 +291,6 @@ export class CanvasKitRenderer implements IRenderer {
   stroke(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Stroke);
-    this.setStrokeColour();
     this.setStroke();
 
     if (path) {
@@ -299,7 +321,6 @@ export class CanvasKitRenderer implements IRenderer {
   fill(path?: Path2D): void {
     const p = this.getPaint();
     p.setStyle(this.ctx.canvasKit.PaintStyle.Fill);
-    this.setFillColour();
     this.setFill();
 
     if (path) {

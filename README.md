@@ -28,7 +28,7 @@ Shift uses the Tauri framework:
 ### Prerequisites
 
 - **Rust** (1.70 or later): [Install Rust](https://www.rust-lang.org/tools/install)
-- **Bun** (1.0 or later): [Install Bun](https://bun.sh/docs/installation)
+- **pnpm** (1.0 or later): [Install pnpm](https://pnpm.io/installation)
 - **System Dependencies**:
   - **Windows**: Microsoft Visual C++ Build Tools, WebView2
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
