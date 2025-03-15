@@ -3,6 +3,8 @@ import { Point } from '@/lib/math/point';
 import { Point2D } from '@/types/math';
 import { CubicSegment, LineSegment, Segment } from '@/types/segments';
 
+import { Shape } from '../math/shape';
+
 export type PointType = 'onCurve' | 'offCurve';
 export class ContourPoint extends Point {
   #id: EntityId;
@@ -214,5 +216,9 @@ export class Contour {
 
   isEmpty(): boolean {
     return this.#points.length === 0;
+  }
+
+  isClockwise(): boolean {
+    return Shape.shoelace(this.#points) > 0;
   }
 }

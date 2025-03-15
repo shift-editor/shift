@@ -339,7 +339,7 @@ export class Editor {
 
           if (node.contour.firstPoint() === point) {
             if (node.contour.closed()) {
-              this.paintHandle(ctx, x, y, 'direction', handleState, true);
+              this.paintHandle(ctx, x, y, 'direction', handleState, node.contour.isClockwise());
             } else {
               this.paintHandle(ctx, x, y, 'first', handleState);
             }
