@@ -1,6 +1,6 @@
 import { FC, useEffect } from 'react';
 
-import { useLocation } from 'react-router-dom';
+import { invoke } from '@tauri-apps/api/core';
 
 import { CanvasContextProvider } from '@/context/CanvasContext';
 import AppState, { getEditor } from '@/store/store';
@@ -18,9 +18,9 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
 
   useEffect(() => {
-    if (glyphId) {
-      //
-    }
+    invoke('get_glyph', { char: 'C' }).then((glyph) => {
+      console.log(glyph);
+    });
 
     editor.activeTool().setReady();
 

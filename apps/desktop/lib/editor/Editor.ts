@@ -279,6 +279,7 @@ export class Editor {
 
     const tool = this.activeTool();
     if (tool.drawInteractive) {
+      ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
       tool.drawInteractive(ctx);
     }
 

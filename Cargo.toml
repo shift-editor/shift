@@ -6,3 +6,4 @@ members = ["crates/*"]
 [workspace.dependencies]
 shift-font = { path = "crates/shift-font" }
 shift-editor = { path = "crates/shift-editor" }
+shift-unicode = { path = "crates/shift-unicode" }

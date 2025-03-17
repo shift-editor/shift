@@ -1,4 +1,3 @@
-// Re-export modules
 pub mod contour;
 pub mod font;
 pub mod font_service;

@@ -5,6 +5,7 @@ use norad::Font as NoradFont;
 use crate::contour::{Contour, ContourPoint, PointType};
 use crate::font::{Font, FontMetadata, Metrics};
 use crate::font_service::FontAdaptor;
+use crate::glyph::Glyph;
 
 pub fn load_ufo(path: String) -> NoradFont {
     let font = NoradFont::load(path).expect("Failed to load UFO");
@@ -56,6 +57,19 @@ pub struct UfoFontAdaptor;
 
 impl From<NoradFont> for Font {
     fn from(font: NoradFont) -> Self {
+        let mut glyphs = HashMap::<char, Glyph>::new();
+
+        for layer in font.layers.iter() {
+            for glyph in layer.iter() {
+                let contours = from_ufo_contours(&glyph.contours);
+                let name = glyph.name().to_string();
+                let g = Glyph::new(name, contours);
+                if let Some(codepoint) = glyph.codepoints.iter().next() {
+                    glyphs.insert(codepoint, g);
+                }
+            }
+        }
+
         Font {
             metadata: FontMetadata {
                 family: font.font_info.family_name.unwrap(),
@@ -69,7 +83,7 @@ impl From<NoradFont> for Font {
                 cap_height: font.font_info.cap_height.unwrap(),
                 x_height: font.font_info.x_height.unwrap(),
             },
-            glyphs: HashMap::new(),
+            glyphs,
         }
     }
 }

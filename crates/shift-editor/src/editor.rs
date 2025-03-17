@@ -1,5 +1,6 @@
 use shift_font::font::{Font, Metrics};
 use shift_font::font_service::FontService;
+use shift_font::glyph::Glyph;
 
 pub struct Editor {
     current_font: Font,
@@ -36,5 +37,9 @@ impl Editor {
             cap_height: self.current_font.metrics.cap_height,
             x_height: self.current_font.metrics.x_height,
         }
+    }
+
+    pub fn get_glyph(&self, char: char) -> Glyph {
+        self.current_font.glyphs.get(&char).unwrap().clone()
     }
 }

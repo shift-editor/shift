@@ -19,6 +19,7 @@ export abstract class Shape {
     return this.#position.y;
   }
 
+  // TODO: add tests
   static shoelace(points: Point[]): number {
     const n = points.length;
     let area = 0;

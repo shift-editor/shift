@@ -155,10 +155,7 @@ export class Select implements Tool {
   drawInteractive(ctx: IRenderer): void {
     switch (this.#state.type) {
       case 'selecting':
-        ctx.setStyle({
-          ...SELECTION_RECTANGLE_STYLES,
-          strokeStyle: 'transparent',
-        });
+        ctx.setStyle(SELECTION_RECTANGLE_STYLES);
         ctx.fillRect(
           this.#selectionRect.x,
           this.#selectionRect.y,
@@ -166,10 +163,7 @@ export class Select implements Tool {
           this.#selectionRect.height
         );
 
-        ctx.setStyle({
-          ...SELECTION_RECTANGLE_STYLES,
-          fillStyle: 'transparent',
-        });
+        ctx.setStyle(SELECTION_RECTANGLE_STYLES);
         ctx.strokeRect(
           this.#selectionRect.x,
           this.#selectionRect.y,

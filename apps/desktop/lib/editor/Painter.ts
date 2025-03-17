@@ -1,9 +1,8 @@
 import { Path2D } from '@/lib/graphics/Path';
+import { Line } from '@/lib/math/line';
 import { HANDLE_STYLES } from '@/lib/styles/style';
 import { IRenderer } from '@/types/graphics';
 import { HandleState } from '@/types/handle';
-
-import { Line } from '../math/line';
 
 export class Painter {
   public drawGuides(ctx: IRenderer, path: Path2D) {

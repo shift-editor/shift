@@ -1,12 +1,12 @@
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub enum PointType {
     OnCurve,
     OffCurve,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ContourPoint {
     point_type: PointType,
@@ -26,7 +26,7 @@ impl ContourPoint {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Contour {
     points: Vec<ContourPoint>,
     closed: bool,
@@ -50,6 +50,16 @@ impl Contour {
 
     pub fn close(&mut self) {
         self.closed = true;
+    }
+
+    pub fn to_svg(&self) -> String {
+        let mut svg = String::new();
+        svg.push_str("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1000 1000\">");
+        svg.push_str("<path d=\"");
+        svg.push_str("\" />");
+        svg.push_str("</svg>");
+
+        svg
     }
 }
 
