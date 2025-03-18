@@ -63,8 +63,8 @@ impl From<NoradFont> for Font {
             for glyph in layer.iter() {
                 let contours = from_ufo_contours(&glyph.contours);
                 let name = glyph.name().to_string();
-                let g = Glyph::new(name, contours);
                 if let Some(codepoint) = glyph.codepoints.iter().next() {
+                    let g = Glyph::new(name, codepoint, contours, glyph.width);
                     glyphs.insert(codepoint, g);
                 }
             }

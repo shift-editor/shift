@@ -7,12 +7,19 @@ use crate::contour::Contour;
 #[ts(export)]
 pub struct Glyph {
     name: String,
+    unicode: char,
     contours: Vec<Contour>,
+    x_advance: f64,
 }
 
 impl Glyph {
-    pub fn new(name: String, contours: Vec<Contour>) -> Self {
-        Self { name, contours }
+    pub fn new(name: String, unicode: char, contours: Vec<Contour>, x_advance: f64) -> Self {
+        Self {
+            name,
+            unicode,
+            contours,
+            x_advance,
+        }
     }
 
     pub fn get_name(&self) -> &str {

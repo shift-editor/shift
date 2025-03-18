@@ -39,7 +39,10 @@ impl Editor {
         }
     }
 
-    pub fn get_glyph(&self, char: char) -> Glyph {
-        self.current_font.glyphs.get(&char).unwrap().clone()
+    pub fn get_glyph(&mut self, char: char) -> &Glyph {
+        self.current_font
+            .glyphs
+            .entry(char)
+            .or_insert_with(|| Glyph::new(char.to_string(), char, vec![], 600.0))
     }
 }

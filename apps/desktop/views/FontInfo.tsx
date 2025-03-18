@@ -4,7 +4,6 @@ import { Metrics } from '@shift/shared';
 import { invoke } from '@tauri-apps/api/core';
 
 import { Toolbar } from '@/components/Toolbar';
-
 export const FontInfo = () => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
 

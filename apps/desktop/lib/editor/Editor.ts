@@ -12,7 +12,7 @@ import { Tool } from '@/types/tool';
 
 import { FrameHandler } from './FrameHandler';
 import { Painter } from './Painter';
-import { Scene } from './Scene';
+import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
 import { ContourPoint } from '../core/Contour';
 import { getBoundingRect } from '../math/rect';
@@ -87,6 +87,10 @@ export class Editor {
 
   public setViewportRect(rect: Rect2D) {
     this.#viewport.setRect(rect);
+  }
+
+  public setViewportUpm(upm: number) {
+    this.#viewport.upm = upm;
   }
 
   public getMousePosition(x?: number, y?: number): Point2D {
@@ -264,6 +268,10 @@ export class Editor {
     this.requestRedraw();
   }
 
+  public constructGuidesPath(guides: Guides) {
+    return this.#scene.constructGuidesPath(guides);
+  }
+
   #prepareCanvas(ctx: IRenderer) {
     this.#applyUserTransforms(ctx);
     this.#applyUpmTransforms(ctx);
@@ -301,7 +309,7 @@ export class Editor {
     ctx.setStyle(GUIDE_STYLES);
 
     ctx.lineWidth = Math.floor(GUIDE_STYLES.lineWidth / this.#viewport.zoom);
-    const guides = this.#scene.getStaticGuidesPath();
+    const guides = this.#scene.getGuidesPath();
     this.#painter.drawGuides(ctx, guides);
 
     // draw contours

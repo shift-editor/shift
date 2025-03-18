@@ -36,10 +36,10 @@ impl Default for Metrics {
     fn default() -> Self {
         Metrics {
             units_per_em: 1000.0,
-            ascender: 1000.0,
-            descender: 1000.0,
-            cap_height: 1000.0,
-            x_height: 1000.0,
+            ascender: 750.0,
+            descender: -200.0,
+            cap_height: 700.0,
+            x_height: 500.0,
         }
     }
 }

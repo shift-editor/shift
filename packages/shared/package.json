@@ -6,7 +6,7 @@
   "types": "./dist/index.d.ts",
   "description": "Shared types and utilities between the backend and frontend",
   "scripts": {
-    "clean": "rm -rf dist && rm -rf src/types/* && rm -f src/index.ts",
+    "clean": "rm -rf dist && rm -rf src/types/*",
     "build": "pnpm run exports:ts-rs && tsc",
     "dev": "tsc --watch",
     "exports:ts-rs": "node scripts/exports-ts-rs.js"

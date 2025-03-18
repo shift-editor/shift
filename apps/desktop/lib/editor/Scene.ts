@@ -6,15 +6,14 @@ import { ContourManager, ContourNode } from './ContourManager';
 import { Contour, ContourPoint } from '../core/Contour';
 import { Path2D } from '../graphics/Path';
 
-const X_ADVANCE = 600;
-
-const GUIDES = {
-  ascender: { y: 750 },
-  capHeight: { y: 700 },
-  xHeight: { y: 500 },
-  baseline: { y: 0 },
-  descender: { y: -200 },
-};
+export interface Guides {
+  xAdvance: number;
+  ascender: { y: number };
+  capHeight: { y: number };
+  xHeight: { y: number };
+  baseline: { y: number };
+  descender: { y: number };
+}
 
 export class Scene {
   #contourManager: ContourManager;
@@ -23,19 +22,37 @@ export class Scene {
   public constructor() {
     this.#contourManager = new ContourManager();
     this.#staticGuides = new Path2D();
-
-    Object.values(GUIDES).forEach(({ y }) => {
-      this.#staticGuides.moveTo(0, y);
-      this.#staticGuides.lineTo(X_ADVANCE, y);
-    });
-
-    this.#staticGuides.moveTo(0, GUIDES.descender.y);
-    this.#staticGuides.lineTo(0, GUIDES.ascender.y);
-    this.#staticGuides.moveTo(X_ADVANCE, GUIDES.descender.y);
-    this.#staticGuides.lineTo(X_ADVANCE, GUIDES.ascender.y);
   }
 
-  public getStaticGuidesPath(): Path2D {
+  public constructGuidesPath(guides: Guides): Path2D {
+    this.#staticGuides.clear();
+
+    // Draw horizontal guide lines
+    this.#staticGuides.moveTo(0, guides.ascender.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.ascender.y);
+
+    this.#staticGuides.moveTo(0, guides.capHeight.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.capHeight.y);
+
+    this.#staticGuides.moveTo(0, guides.xHeight.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.xHeight.y);
+
+    this.#staticGuides.moveTo(0, guides.baseline.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.baseline.y);
+
+    this.#staticGuides.moveTo(0, guides.descender.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.descender.y);
+
+    // Draw vertical guide lines
+    this.#staticGuides.moveTo(0, guides.descender.y);
+    this.#staticGuides.lineTo(0, guides.ascender.y);
+    this.#staticGuides.moveTo(guides.xAdvance, guides.descender.y);
+    this.#staticGuides.lineTo(guides.xAdvance, guides.ascender.y);
+
+    return this.#staticGuides;
+  }
+
+  public getGuidesPath(): Path2D {
     return this.#staticGuides;
   }
 

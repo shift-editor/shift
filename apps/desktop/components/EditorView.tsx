@@ -1,12 +1,13 @@
-import { FC, useEffect } from 'react';
+import { FC, useEffect, useState } from 'react';
 
+import { Glyph, Metrics } from '@shift/shared';
 import { invoke } from '@tauri-apps/api/core';
 
 import { CanvasContextProvider } from '@/context/CanvasContext';
 import AppState, { getEditor } from '@/store/store';
 
 import { InteractiveScene } from './InteractiveScene';
-import { Metrics } from './Metrics';
+import { Metrics as MetricsComponent } from './Metrics';
 import { StaticScene } from './StaticScene';
 
 interface EditorViewProps {
@@ -18,9 +19,23 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
 
   useEffect(() => {
-    invoke('get_glyph', { char: 'C' }).then((glyph) => {
-      console.log(glyph);
-    });
+    const fetchFontData = async () => {
+      const glyph = await invoke<Glyph>('get_glyph', { char: 'C' });
+      const metrics = await invoke<Metrics>('get_font_metrics');
+      const guides = {
+        ascender: { y: metrics.ascender },
+        capHeight: { y: metrics.capHeight },
+        xHeight: { y: metrics.xHeight },
+        descender: { y: metrics.descender },
+        baseline: { y: 0 },
+        xAdvance: glyph.x_advance,
+      };
+
+      editor.constructGuidesPath(guides);
+      editor.setViewportUpm(metrics.unitsPerEm);
+    };
+
+    fetchFontData();
 
     editor.activeTool().setReady();
 
@@ -55,7 +70,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>
-      <Metrics />
+      <MetricsComponent />
     </div>
   );
 };

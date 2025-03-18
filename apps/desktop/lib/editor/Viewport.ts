@@ -63,6 +63,10 @@ export class Viewport {
     return this.#upm;
   }
 
+  set upm(value: number) {
+    this.#upm = value;
+  }
+
   get padding(): number {
     return this.#padding;
   }
@@ -212,10 +216,10 @@ export class Viewport {
   }
 
   zoomIn(): void {
-    this.#zoom = clamp(this.#zoom + 0.5, 0.1, 6);
+    this.#zoom = clamp(this.#zoom + 0.25, 0.1, 6);
   }
 
   zoomOut(): void {
-    this.#zoom = clamp(this.#zoom - 0.5, 0.1, 6);
+    this.#zoom = clamp(this.#zoom - 0.25, 0.1, 6);
   }
 }
