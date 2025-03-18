@@ -2,7 +2,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 #[derive(Serialize, Clone, TS)]
-#[ts(export)]
+#[ts(export, rename_all = "camelCase")]
 
 pub enum PointType {
     OnCurve,
@@ -10,7 +10,7 @@ pub enum PointType {
 }
 
 #[derive(Serialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename = "IContourPoint", rename_all = "camelCase")]
 #[ts(export)]
 pub struct ContourPoint {
     point_type: PointType,

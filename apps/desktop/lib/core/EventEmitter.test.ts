@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { EventEmitter } from '@/lib/core/EventEmitter';
 
 import { EntityId } from './EntityId';
@@ -10,7 +12,7 @@ describe('EventEmitter', () => {
   });
 
   it('should emit events', () => {
-    const handler = jest.fn();
+    const handler = vi.fn();
 
     emitter.on('points:added', handler);
 
@@ -20,8 +22,8 @@ describe('EventEmitter', () => {
   });
 
   it('should call multiple handlers', () => {
-    const handler1 = jest.fn();
-    const handler2 = jest.fn();
+    const handler1 = vi.fn();
+    const handler2 = vi.fn();
 
     emitter.on('points:added', handler1);
     emitter.on('points:added', handler2);
@@ -35,7 +37,7 @@ describe('EventEmitter', () => {
   });
 
   it('should remove event handlers', () => {
-    const handler = jest.fn();
+    const handler = vi.fn();
 
     emitter.on('points:added', handler);
     emitter.off('points:added', handler);

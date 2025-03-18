@@ -1,20 +1,20 @@
+import { PointType, IContourPoint } from '@shift/shared';
+
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point } from '@/lib/math/point';
+import { Shape } from '@/lib/math/shape';
 import { Point2D } from '@/types/math';
 import { CubicSegment, LineSegment, Segment } from '@/types/segments';
 
-import { Shape } from '../math/shape';
-
-export type PointType = 'onCurve' | 'offCurve';
-export class ContourPoint extends Point {
+export class ContourPoint extends Point implements IContourPoint {
   #id: EntityId;
-  #type: PointType;
+  #pointType: PointType;
   #smooth: boolean = false;
 
   constructor(x: number, y: number, pointType: PointType, parentId: Ident) {
     super(x, y);
 
-    this.#type = pointType;
+    this.#pointType = pointType;
     this.#id = new EntityId(parentId);
   }
 
@@ -31,8 +31,8 @@ export class ContourPoint extends Point {
     return this.#id;
   }
 
-  get type(): PointType {
-    return this.#type;
+  get pointType(): PointType {
+    return this.#pointType;
   }
 
   get smooth(): boolean {
@@ -99,7 +99,7 @@ class SegmentIterator implements Iterator<Segment> {
     const p1 = this.#points[this.#index];
     const p2 = this.#points[this.#index + 1];
 
-    if (p1.type === 'onCurve' && p2.type === 'onCurve') {
+    if (p1.pointType === 'onCurve' && p2.pointType === 'onCurve') {
       const segment: LineSegment = {
         type: 'line',
         points: {
@@ -116,7 +116,7 @@ class SegmentIterator implements Iterator<Segment> {
       };
     }
 
-    if (p1.type === 'onCurve' && p2.type === 'offCurve') {
+    if (p1.pointType === 'onCurve' && p2.pointType === 'offCurve') {
       const p3 = this.#points[this.#index + 2];
       const p4 = this.#points[this.#index + 3];
 

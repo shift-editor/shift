@@ -1,7 +1,9 @@
+import { spawn } from 'child_process';
 import path from 'path';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fg from 'fast-glob';
 import { defineConfig } from 'vite';
 import svgr from 'vite-plugin-svgr';
 
@@ -26,12 +28,41 @@ const logResolve = () => {
   };
 };
 
+// ts-rs live reload
+const tsTsRsSLiveReload = () => {
+  return {
+    name: 'shift:ts-rs-live-reload',
+    async configureServer(server) {
+      const { watcher } = server;
+
+      const root = path.resolve(__dirname, '..', '..');
+      const crates = ['shift-font'];
+
+      const files = await fg(
+        crates.map((crate) => path.join(root, 'crates', crate, 'src', '**/*.rs'))
+      );
+
+      files.forEach((file) => {
+        watcher.add(file);
+      });
+
+      watcher.on('change', async (filePath) => {
+        spawn('pnpm', ['types:rebuild'], {
+          stdio: 'inherit',
+          cwd: root,
+        });
+      });
+    },
+  };
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [
     logResolve(),
     react(),
     tailwindcss(),
+    tsTsRsSLiveReload(),
     svgr({
       include: '**/*.svg',
     }),

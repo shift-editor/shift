@@ -1,3 +1,5 @@
+import { describe, it, expect } from 'vitest';
+
 import { Rect } from '@/lib/math/rect';
 
 describe('Rect', () => {

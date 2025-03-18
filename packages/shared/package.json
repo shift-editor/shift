@@ -6,8 +6,10 @@
   "types": "./dist/index.d.ts",
   "description": "Shared types and utilities between the backend and frontend",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "clean": "rm -rf dist && rm -rf src/types/* && rm -f src/index.ts",
+    "build": "pnpm run exports:ts-rs && tsc",
+    "dev": "tsc --watch",
+    "exports:ts-rs": "node scripts/exports-ts-rs.js"
   },
   "keywords": [],
   "author": "Kostya Farber <kostya.farber@gmail.com>"

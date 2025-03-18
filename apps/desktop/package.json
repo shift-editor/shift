@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist && rm -rf .turbo && rm -rf node_modules",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint --ext .ts,.tsx src/",
@@ -30,12 +32,14 @@
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^3.0.9",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^3.6.1",
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "fast-glob": "^3.3.3",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
     "postcss": "^8.5.1",
@@ -44,7 +48,8 @@
     "tailwindcss": "^4.0.3",
     "turbo": "^2.4.4",
     "typescript": "^5.2.2",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "vitest": "^3.0.9"
   },
   "prettier": {
     "plugins": [

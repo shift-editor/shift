@@ -2,23 +2,25 @@
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
   "tasks": {
-    "//#generate-types": {
-      "cache": true,
-      "inputs": [
-        "crates/shift-font/src/**/*.rs",
-        "crates/shift-unicode/src/**/*.rs"
-      ],
-      "outputs": ["packages/shared/src/types/**"]
+    "//#clean:app": {},
+    "clean": {
+      "dependsOn": ["//#clean:app"]
     },
     "build": {
-      "dependsOn": ["^build", "^generate-types"],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**", "build/**"]
     },
     "lint": {},
+    "//#types:rebuild": {
+      "inputs": ["packages/shared/dist/**"]
+    },
     "dev": {
-      "dependsOn": ["//#generate-types"],
+      "dependsOn": ["//#types:rebuild"],
       "cache": false,
       "persistent": true
+    },
+    "test": {
+      "cache": true
     }
   }
 }

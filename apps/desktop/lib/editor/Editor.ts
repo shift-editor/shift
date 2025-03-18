@@ -356,13 +356,14 @@ export class Editor {
             continue;
           }
 
-          switch (point.type) {
+          switch (point.pointType) {
             case 'onCurve':
               this.paintHandle(ctx, x, y, 'corner', handleState);
               break;
 
             case 'offCurve': {
-              const anchor = points[idx + 1].type == 'offCurve' ? points[idx - 1] : points[idx + 1];
+              const anchor =
+                points[idx + 1].pointType == 'offCurve' ? points[idx - 1] : points[idx + 1];
 
               const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
                 anchor.x,

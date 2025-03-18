@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+
 import { Contour } from '@/lib/core/Contour';
 
 describe('Contour', () => {

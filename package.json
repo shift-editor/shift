@@ -4,14 +4,16 @@
   "type": "module",
   "repository": "https://github.com/shift-editor/shift",
   "scripts": {
-    "generate-types": "cd crates/shift-font && cargo test export_bindings",
     "dev:tauri": "turbo run dev",
+    "types:rebuild": "pnpm --filter @shift/shared clean && cargo test -p shift-font export_bindings && pnpm --filter @shift/shared build",
     "dev:app": "pnpm tauri dev",
-    "clean": "./scripts/clean.sh",
     "build:tauri": "turbo run build --no-daemon",
     "build:app": "tauri build",
+    "cargo:clean": "cargo clean",
+    "clean:app": "pnpm cargo:clean && rm -rf .turbo && rm -rf node_modules",
+    "clean": "turbo run clean",
+    "test": "turbo run test",
     "tauri": "tauri",
-    "test": "bun test",
     "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "format:check": "prettier --check \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "lint": "eslint \"apps/**/*.{ts,tsx}\" --fix",
@@ -20,11 +22,12 @@
   },
   "packageManager": "pnpm@10.2.0",
   "devDependencies": {
-    "turbo": "^2.2.3",
     "@tauri-apps/cli": "^2.3.1",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "eslint": "^8.57.1",
     "prettier": "^3.5.3",
-    "prettier-plugin-tailwindcss": "^0.6.11"
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "turbo": "^2.2.3",
+    "concurrently": "^9.1.2"
   }
 }

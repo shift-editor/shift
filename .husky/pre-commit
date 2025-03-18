@@ -1,3 +1,3 @@
-bun format
-bun lint
-bun test
+pnpm format
+pnpm lint
+pnpm test

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use ts_rs::TS;
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export)]
+#[ts(export, rename_all = "camelCase")]
 pub struct FontMetadata {
     pub family: String,
     pub style_name: String,
@@ -44,6 +44,8 @@ impl Default for Metrics {
     }
 }
 
+#[derive(Serialize, Clone, TS)]
+#[ts(export)]
 pub struct Font {
     pub metadata: FontMetadata,
     pub metrics: Metrics,

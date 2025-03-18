@@ -1,5 +1,6 @@
-import { ContourManager } from './ContourManager';
+import { describe, it, expect, beforeEach } from 'vitest';
 
+import { ContourManager } from './ContourManager';
 describe('ContourManager', () => {
   let cm: ContourManager;
   beforeEach(() => {
