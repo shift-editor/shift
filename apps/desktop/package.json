@@ -1,5 +1,5 @@
 {
-  "name": "@shift/ui",
+  "name": "@shift/desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -13,6 +13,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
+    "@shift/shared": "workspace:*",
     "@tauri-apps/api": "^2",
     "canvaskit-wasm": "^0.39.1",
     "chroma-js": "^3.1.2",

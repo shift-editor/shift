@@ -23,9 +23,15 @@ importers:
       prettier-plugin-tailwindcss:
         specifier: ^0.6.11
         version: 0.6.11(prettier@3.5.3)
+      turbo:
+        specifier: ^2.2.3
+        version: 2.4.4
 
   apps/desktop:
     dependencies:
+      '@shift/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tauri-apps/api':
         specifier: ^2
         version: 2.3.0
@@ -114,6 +120,8 @@ importers:
       vite:
         specifier: ^5.3.1
         version: 5.4.14(@types/node@22.13.10)(lightningcss@1.29.2)
+
+  packages/shared: {}
 
 packages:
 

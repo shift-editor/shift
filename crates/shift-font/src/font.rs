@@ -1,9 +1,10 @@
+use crate::glyph::Glyph;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
-use crate::glyph::Glyph;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export)]
 pub struct FontMetadata {
     pub family: String,
     pub style_name: String,
@@ -20,7 +21,8 @@ impl Default for FontMetadata {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Metrics {
     pub units_per_em: f64,

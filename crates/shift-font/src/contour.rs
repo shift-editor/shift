@@ -1,13 +1,17 @@
 use serde::Serialize;
+use ts_rs::TS;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, TS)]
+#[ts(export)]
+
 pub enum PointType {
     OnCurve,
     OffCurve,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ContourPoint {
     point_type: PointType,
     x: f64,
@@ -26,7 +30,8 @@ impl ContourPoint {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, TS)]
+#[ts(export)]
 pub struct Contour {
     points: Vec<ContourPoint>,
     closed: bool,

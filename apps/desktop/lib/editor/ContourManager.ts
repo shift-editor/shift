@@ -76,8 +76,8 @@ export class ContourManager {
     p.movePointTo(point.x, point.y);
   }
 
-  addContour(): EntityId {
-    const c = new Contour();
+  addContour(contour?: Contour): EntityId {
+    const c = contour ?? new Contour();
     const node = { contour: c, renderPath: new Path2D(), invalidated: false };
     this.#contours.set(c.entityId.id, node);
 

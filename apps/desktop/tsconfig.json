@@ -40,7 +40,9 @@
       "@/assets/*": ["./assets/*"],
       "@/hooks": ["./hooks"],
       "@/hooks/*": ["./hooks/*"]
-    }
+    },
+    "outDir": "./dist",
+    "declaration": true
   },
   "references": [{ "path": "./tsconfig.node.json" }],
   "include": ["**/*.ts", "**/*.tsx"],

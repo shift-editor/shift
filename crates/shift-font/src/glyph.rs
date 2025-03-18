@@ -1,8 +1,10 @@
 use serde::Serialize;
+use ts_rs::TS;
 
 use crate::contour::Contour;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, TS)]
+#[ts(export)]
 pub struct Glyph {
     name: String,
     contours: Vec<Contour>,

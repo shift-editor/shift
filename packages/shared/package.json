@@ -1,0 +1,14 @@
+{
+  "name": "@shift/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "description": "Shared types and utilities between the backend and frontend",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [],
+  "author": "Kostya Farber <kostya.farber@gmail.com>"
+}

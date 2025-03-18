@@ -3,7 +3,7 @@ import { Point2D } from '@/types/math';
 import { CubicSegment } from '@/types/segments';
 
 import { ContourManager, ContourNode } from './ContourManager';
-import { ContourPoint } from '../core/Contour';
+import { Contour, ContourPoint } from '../core/Contour';
 import { Path2D } from '../graphics/Path';
 
 const X_ADVANCE = 600;
@@ -45,6 +45,10 @@ export class Scene {
 
   public closeContour(): EntityId {
     return this.#contourManager.closeContour();
+  }
+
+  public addContour(contour?: Contour): EntityId {
+    return this.#contourManager.addContour(contour);
   }
 
   public movePointTo(point: Point2D, id: EntityId) {
