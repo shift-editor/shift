@@ -47,6 +47,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     return () => {
       editor.activeTool().setIdle();
+      editor.clearContours();
     };
   }, [glyphId]);
 

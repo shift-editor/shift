@@ -166,6 +166,7 @@ export class Editor {
         this.#painter.drawControlHandle(ctx, x, y, state);
         break;
       case 'smooth':
+        this.#painter.drawSmoothHandle(ctx, x, y, state);
         break;
       case 'direction':
         this.#painter.drawDirectionHandle(ctx, x, y, state, isCounterClockWise);
@@ -174,6 +175,8 @@ export class Editor {
   }
 
   public loadContours(contours: IContour[]) {
+    this.clearContours();
+
     const cs = contours.map((contour) => {
       const c = new Contour();
       contour.points.map((p: IContourPoint) => {
@@ -187,6 +190,10 @@ export class Editor {
     });
 
     this.#scene.loadContours(cs);
+  }
+
+  public clearContours() {
+    this.#scene.clearContours();
   }
 
   public invalidateContour(id: Ident) {
@@ -248,6 +255,10 @@ export class Editor {
     return this.#scene.getAllPoints();
   }
 
+  public getAllContours(): ReadonlyArray<Contour> {
+    return this.#scene.getAllContours();
+  }
+
   public upgradeLineSegment(id: EntityId): EntityId {
     return this.#scene.upgradeLineSegment(id);
   }
@@ -305,7 +316,6 @@ export class Editor {
 
     const tool = this.activeTool();
     if (tool.drawInteractive) {
-      ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
       tool.drawInteractive(ctx);
     }
 
@@ -396,7 +406,11 @@ export class Editor {
                 anchor.y
               );
 
-              this.paintHandle(ctx, x, y, 'control', handleState);
+              if (anchor.smooth) {
+                this.paintHandle(ctx, x, y, 'smooth', handleState);
+              } else {
+                this.paintHandle(ctx, x, y, 'control', handleState);
+              }
 
               ctx.setStyle(DEFAULT_STYLES);
               ctx.drawLine(anchorX, anchorY, x, y);

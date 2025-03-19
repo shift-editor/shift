@@ -134,4 +134,12 @@ export class Painter {
 
     ctx.stroke();
   }
+
+  public drawSmoothHandle(ctx: IRenderer, x: number, y: number, handleState: HandleState): void {
+    const style = HANDLE_STYLES.smooth[handleState];
+    ctx.setStyle(style);
+
+    ctx.strokeCircle(x, y, style.size);
+    ctx.fillCircle(x, y, style.size);
+  }
 }

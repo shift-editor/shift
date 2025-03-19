@@ -24,20 +24,20 @@ fn from_ufo_contours(contours: &Vec<norad::Contour>) -> Vec<Contour> {
         let mut closed = true;
         contour.points.iter().for_each(|p| match p.typ {
             norad::PointType::Move => {
-                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, false));
+                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, p.smooth));
                 closed = false;
             }
 
             norad::PointType::Line => {
-                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, false));
+                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, p.smooth));
             }
 
             norad::PointType::Curve => {
-                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, false));
+                c.add_point(ContourPoint::new(p.x, p.y, PointType::OnCurve, p.smooth));
             }
 
             norad::PointType::OffCurve => {
-                c.add_point(ContourPoint::new(p.x, p.y, PointType::OffCurve, false));
+                c.add_point(ContourPoint::new(p.x, p.y, PointType::OffCurve, p.smooth));
             }
 
             _ => {}

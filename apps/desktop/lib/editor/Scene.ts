@@ -70,6 +70,10 @@ export class Scene {
     return this.#contourManager.addContour(contour);
   }
 
+  public clearContours() {
+    this.#contourManager.clearContours();
+  }
+
   public movePointTo(point: Point2D, id: EntityId) {
     this.#contourManager.movePointTo(point, id);
   }

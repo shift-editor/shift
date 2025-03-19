@@ -33,6 +33,10 @@ export class ContourManager {
     }
   }
 
+  public clearContours() {
+    this.#contours.clear();
+  }
+
   get currentContour(): ContourNode {
     const c = this.#contours.get(this.#activeContourId.id);
     if (!c) {
