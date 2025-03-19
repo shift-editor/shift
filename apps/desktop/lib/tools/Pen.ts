@@ -48,7 +48,7 @@ export class Pen implements Tool {
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-    const addedPointId = this.#editor.addPoint(x, y);
+    const addedPointId = this.#editor.addPoint(x, y, 'onCurve');
 
     this.#toolState = {
       type: 'dragging',

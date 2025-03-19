@@ -1,3 +1,5 @@
+import { IContour, IContourPoint, PointType } from '@shift/shared';
+
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { EventEmitter } from '@/lib/core/EventEmitter';
 import { BOUNDING_RECTANGLE_STYLES, DEFAULT_STYLES, GUIDE_STYLES } from '@/lib/styles/style';
@@ -14,7 +16,7 @@ import { FrameHandler } from './FrameHandler';
 import { Painter } from './Painter';
 import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
-import { ContourPoint } from '../core/Contour';
+import { Contour, ContourPoint } from '../core/Contour';
 import { getBoundingRect } from '../math/rect';
 
 interface EditorState {
@@ -171,6 +173,22 @@ export class Editor {
     }
   }
 
+  public loadContours(contours: IContour[]) {
+    const cs = contours.map((contour) => {
+      const c = new Contour();
+      contour.points.map((p: IContourPoint) => {
+        return c.addPoint(p.x, p.y, p.pointType, p.smooth);
+      });
+      if (contour.closed) {
+        c.close();
+      }
+
+      return c;
+    });
+
+    this.#scene.loadContours(cs);
+  }
+
   public invalidateContour(id: Ident) {
     this.#scene.invalidateContour(id);
   }
@@ -205,8 +223,8 @@ export class Editor {
   // @param y - The screen y position of the point in the viewport
   // @returns The id of the point
   // **
-  public addPoint(x: number, y: number): EntityId {
-    return this.#scene.addPoint(x, y);
+  public addPoint(x: number, y: number, pointType: PointType): EntityId {
+    return this.#scene.addPoint(x, y, pointType);
   }
 
   public closeContour(): EntityId {
@@ -214,10 +232,10 @@ export class Editor {
   }
 
   public addRect(rect: Rect2D): EntityId {
-    const id = this.#scene.addPoint(rect.x, rect.y);
-    this.#scene.addPoint(rect.x + rect.width, rect.y);
-    this.#scene.addPoint(rect.x + rect.width, rect.y + rect.height);
-    this.#scene.addPoint(rect.x, rect.y + rect.height);
+    const id = this.#scene.addPoint(rect.x, rect.y, 'onCurve');
+    this.#scene.addPoint(rect.x + rect.width, rect.y, 'onCurve');
+    this.#scene.addPoint(rect.x + rect.width, rect.y + rect.height, 'onCurve');
+    this.#scene.addPoint(rect.x, rect.y + rect.height, 'onCurve');
 
     return id;
   }
@@ -317,7 +335,7 @@ export class Editor {
     ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
     for (const node of nodes) {
       ctx.stroke(node.renderPath);
-      if (this.#state.fillContour && node.contour.closed()) {
+      if (this.#state.fillContour && node.contour.closed) {
         ctx.fillStyle = 'black';
         ctx.fill(node.renderPath);
       }
@@ -347,7 +365,7 @@ export class Editor {
           }
 
           if (node.contour.firstPoint() === point) {
-            if (node.contour.closed()) {
+            if (node.contour.closed) {
               this.paintHandle(ctx, x, y, 'direction', handleState, node.contour.isClockwise());
             } else {
               this.paintHandle(ctx, x, y, 'first', handleState);
@@ -356,7 +374,7 @@ export class Editor {
             continue;
           }
 
-          if (!node.contour.closed() && node.contour.lastPoint() === point) {
+          if (!node.contour.closed && node.contour.lastPoint() === point) {
             const p2 = points[idx - 1];
             const { x: px, y: py } = this.#viewport.projectUpmToScreen(p2.x, p2.y);
 

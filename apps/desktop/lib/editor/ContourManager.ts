@@ -1,3 +1,5 @@
+import { PointType } from '@shift/shared';
+
 import { Contour } from '@/lib/core/Contour';
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Path2D } from '@/lib/graphics/Path';
@@ -22,6 +24,15 @@ export class ContourManager {
     this.#activeContourId = c.entityId;
   }
 
+  public loadContours(contours: Contour[]) {
+    for (const contour of contours) {
+      this.#contours.set(contour.entityId.id, {
+        contour,
+        renderPath: new Path2D(),
+      });
+    }
+  }
+
   get currentContour(): ContourNode {
     const c = this.#contours.get(this.#activeContourId.id);
     if (!c) {
@@ -31,12 +42,12 @@ export class ContourManager {
     return c;
   }
 
-  addPoint(x: number, y: number): EntityId {
+  addPoint(x: number, y: number, pointType: PointType): EntityId {
     if (this.pointClosesPath(x, y)) {
       return this.closeContour();
     }
 
-    return this.currentContour.contour.addPoint(x, y);
+    return this.currentContour.contour.addPoint(x, y, pointType);
   }
 
   pointClosesPath(x: number, y: number): boolean {
@@ -118,6 +129,7 @@ export class ContourManager {
     }
   }
 
+  // TODO: this can be smarter
   buildRenderPaths(): void {
     for (const node of this.#contours.values()) {
       if (node.contour.points.length < 2) {
@@ -127,6 +139,7 @@ export class ContourManager {
       node.renderPath.clear();
 
       const segments = node.contour.segments();
+
       node.renderPath.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
 
       for (const segment of segments) {

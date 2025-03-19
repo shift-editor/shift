@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect } from 'react';
 
 import { Glyph, Metrics } from '@shift/shared';
 import { invoke } from '@tauri-apps/api/core';
@@ -11,7 +11,7 @@ import { Metrics as MetricsComponent } from './Metrics';
 import { StaticScene } from './StaticScene';
 
 interface EditorViewProps {
-  glyphId: string | undefined;
+  glyphId: string;
 }
 
 export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
@@ -20,7 +20,10 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
   useEffect(() => {
     const fetchFontData = async () => {
-      const glyph = await invoke<Glyph>('get_glyph', { char: 'C' });
+      const glyph = await invoke<Glyph>('get_glyph', {
+        char: String.fromCharCode(parseInt(glyphId, 16)),
+      });
+
       const metrics = await invoke<Metrics>('get_font_metrics');
       const guides = {
         ascender: { y: metrics.ascender },
@@ -33,6 +36,9 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
       editor.constructGuidesPath(guides);
       editor.setViewportUpm(metrics.unitsPerEm);
+
+      editor.loadContours(glyph.contours);
+      editor.requestRedraw();
     };
 
     fetchFontData();

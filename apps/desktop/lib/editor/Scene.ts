@@ -1,3 +1,5 @@
+import { PointType } from '@shift/shared';
+
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point2D } from '@/types/math';
 import { CubicSegment } from '@/types/segments';
@@ -56,8 +58,8 @@ export class Scene {
     return this.#staticGuides;
   }
 
-  public addPoint(x: number, y: number): EntityId {
-    return this.#contourManager.addPoint(x, y);
+  public addPoint(x: number, y: number, pointType: PointType): EntityId {
+    return this.#contourManager.addPoint(x, y, pointType);
   }
 
   public closeContour(): EntityId {
@@ -82,6 +84,10 @@ export class Scene {
 
   public invalidateContour(id: Ident): void {
     this.#contourManager.invalidateContour(id);
+  }
+
+  public loadContours(contours: Contour[]): void {
+    this.#contourManager.loadContours(contours);
   }
 
   // TODO: perhaps make this into a single functions where

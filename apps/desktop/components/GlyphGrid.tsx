@@ -14,7 +14,7 @@ export const GlyphGrid = () => {
             <div key={glyph.char_name}>
               <button
                 className="border-secondary-200 flex aspect-square w-full items-center justify-center rounded-md bg-[#ededed] text-center text-[4rem] text-black/30 transition-colors duration-200 hover:bg-[#868686]"
-                onClick={() => navigate(`/editor/C`)}
+                onClick={() => navigate(`/editor/${glyph.unicode}`)}
               >
                 {String.fromCharCode(parseInt(glyph.unicode, 16))}
               </button>

@@ -1,25 +1,21 @@
-import { PointType, IContourPoint } from '@shift/shared';
+import { IContour, IContourPoint, PointType } from '@shift/shared';
 
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point } from '@/lib/math/point';
 import { Shape } from '@/lib/math/shape';
-import { Point2D } from '@/types/math';
 import { CubicSegment, LineSegment, Segment } from '@/types/segments';
 
 export class ContourPoint extends Point implements IContourPoint {
   #id: EntityId;
   #pointType: PointType;
-  #smooth: boolean = false;
+  #smooth: boolean;
 
-  constructor(x: number, y: number, pointType: PointType, parentId: Ident) {
+  constructor(x: number, y: number, pointType: PointType, parentId: Ident, smooth?: boolean) {
     super(x, y);
 
     this.#pointType = pointType;
     this.#id = new EntityId(parentId);
-  }
-
-  static fromPoint2D(point: Point2D, pointType: PointType, parentId: Ident) {
-    return new ContourPoint(point.x, point.y, pointType, parentId);
+    this.#smooth = smooth ?? false;
   }
 
   movePointTo(x: number, y: number) {
@@ -145,7 +141,7 @@ class SegmentIterator implements Iterator<Segment> {
   }
 }
 
-export class Contour {
+export class Contour implements IContour {
   #id: EntityId;
   #points: ContourPoint[] = [];
   #closed: boolean = false;
@@ -158,8 +154,8 @@ export class Contour {
     return this.#points;
   }
 
-  addPoint(x: number, y: number): EntityId {
-    const p = new ContourPoint(x, y, 'onCurve', this.#id.id);
+  addPoint(x: number, y: number, pointType: PointType, smooth?: boolean): EntityId {
+    const p = new ContourPoint(x, y, pointType, this.#id.id, smooth);
     this.#points.push(p);
     return p.entityId;
   }
@@ -206,7 +202,7 @@ export class Contour {
     return this.#id;
   }
 
-  closed(): boolean {
+  get closed(): boolean {
     return this.#closed;
   }
 

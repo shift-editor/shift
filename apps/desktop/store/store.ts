@@ -1,3 +1,4 @@
+import { Glyph } from '@shift/shared';
 import { create } from 'zustand';
 
 import { Editor } from '@/lib/editor/Editor';
@@ -6,8 +7,10 @@ import { ToolName } from '@/types/tool';
 
 interface AppState {
   editor: Editor;
+  currentGlyph: Glyph | null;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
+  setActiveGlyph: (glyph: Glyph) => void;
 }
 
 const AppState = create<AppState>()((set) => {
@@ -33,9 +36,13 @@ const AppState = create<AppState>()((set) => {
 
   return {
     editor,
+    currentGlyph: null,
     activeTool: 'select',
     setActiveTool: (tool: ToolName) => {
       set({ activeTool: tool });
+    },
+    setActiveGlyph: (glyph: Glyph) => {
+      set({ currentGlyph: glyph });
     },
   };
 });
