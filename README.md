@@ -29,6 +29,8 @@ Shift uses the Tauri framework:
 
 - **Rust** (1.70 or later): [Install Rust](https://www.rust-lang.org/tools/install)
 - **pnpm** (1.0 or later): [Install pnpm](https://pnpm.io/installation)
+- **typescript** (5.8 or later, also known as tsc): [Install typescript](https://www.typescriptlang.org/download)
+- **node.js** (23.10 or later): [Install node.js](https://nodejs.org/en/download)
 - **System Dependencies**:
   - **Windows**: Microsoft Visual C++ Build Tools, WebView2
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
