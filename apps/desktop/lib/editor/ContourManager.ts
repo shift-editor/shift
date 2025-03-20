@@ -33,7 +33,10 @@ export class ContourManager {
 
   getActiveContour(): Contour {
     if (!this.#activeContourId) {
-      throw new Error('No active contour set');
+      const c = new Contour();
+      this.#contours.set(c.entityId.id, c);
+      this.#activeContourId = c.entityId;
+      return c;
     }
 
     const c = this.#contours.get(this.#activeContourId.id);

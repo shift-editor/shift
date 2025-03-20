@@ -5,12 +5,11 @@ import { getEditor } from '@/store/store';
 export const Metrics = () => {
   const xRef = useRef<HTMLDivElement>(null);
   const yRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef<HTMLDivElement>(null);
   const editor = getEditor();
 
   useEffect(() => {
     const updateMouseMetrics = () => {
-      if (!xRef.current || !yRef.current || !zoomRef.current) return;
+      if (!xRef.current || !yRef.current) return;
 
       const { x, y } = editor.getUpmMousePosition();
 
@@ -27,13 +26,11 @@ export const Metrics = () => {
 
   return (
     <>
-      <div className="absolute bottom-2 left-5 grid max-w-fit grid-cols-2 border border-black p-2 text-sm">
+      <div className="absolute bottom-2 left-[50%] grid max-w-fit grid-cols-2 rounded-sm border border-gray-200 bg-gray-200 p-2 text-sm">
         <div>x</div>
         <div className="text-right" ref={xRef} />
         <div>y</div>
         <div className="text-right" ref={yRef} />
-        <div className="text-right">zoom</div>
-        <div className="text-right" ref={zoomRef} />
       </div>
     </>
   );

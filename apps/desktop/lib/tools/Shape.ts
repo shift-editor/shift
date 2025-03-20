@@ -49,7 +49,11 @@ export class Shape implements Tool {
 
     const id = this.#editor.addPoint(this.#rect.x, this.#rect.y, 'onCurve');
     this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve');
-    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y + this.#rect.height, 'onCurve');
+    this.#editor.addPoint(
+      this.#rect.x + this.#rect.width,
+      this.#rect.y + this.#rect.height,
+      'onCurve'
+    );
     this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve');
     this.#editor.closeContour();
 
