@@ -20,13 +20,13 @@ const AppState = create<AppState>()((set) => {
   editor.on('points:added', (pointIds) => {
     console.log('points:added', pointIds);
 
-    editor.redrawContours(pointIds);
+    editor.redrawGlyph(pointIds);
   });
 
   editor.on('points:moved', (pointIds) => {
     console.log('points:moved', pointIds);
 
-    editor.redrawContours(pointIds);
+    editor.redrawGlyph(pointIds);
   });
 
   editor.on('points:removed', (pointIds) => {

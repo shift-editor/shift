@@ -6,13 +6,13 @@
     "clean": {
       "dependsOn": ["//#clean:app"]
     },
-    "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**"]
-    },
     "lint": {},
     "//#types:rebuild": {
       "inputs": ["packages/shared/dist/**"]
+    },
+    "build": {
+      "dependsOn": ["//#types:rebuild", "^build"],
+      "outputs": ["**/apps/desktop/dist/**"]
     },
     "dev": {
       "dependsOn": ["//#types:rebuild"],

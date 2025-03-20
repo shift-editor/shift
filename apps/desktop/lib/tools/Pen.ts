@@ -109,7 +109,7 @@ export class Pen implements Tool {
           const oppositeY = 2 * anchorY - y;
 
           this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
-          this.#editor.redrawContours([c2.entityId]);
+          this.#editor.redrawGlyph([c2.entityId]);
         }
       }
     }

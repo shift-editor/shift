@@ -2,34 +2,28 @@ import { PointType } from '@shift/shared';
 
 import { Contour } from '@/lib/core/Contour';
 import { EntityId, Ident } from '@/lib/core/EntityId';
-import { Path2D } from '@/lib/graphics/Path';
 import { Point2D } from '@/types/math';
 import { CubicSegment } from '@/types/segments';
 
-export interface ContourNode {
-  contour: Contour;
-  renderPath: Path2D;
-}
-
 export class ContourManager {
-  #activeContourId: EntityId;
-  #contours: Map<Ident, ContourNode> = new Map();
+  #activeContourId: EntityId | null;
+  #contours: Map<Ident, Contour> = new Map();
 
   constructor() {
-    const c = new Contour();
-    this.#contours.set(c.entityId.id, {
-      contour: c,
-      renderPath: new Path2D(),
-    });
-    this.#activeContourId = c.entityId;
+    this.#activeContourId = null;
+  }
+
+  public getContour(id: Ident): Contour | undefined {
+    return this.#contours.get(id);
+  }
+
+  public setActiveContour(id: EntityId) {
+    this.#activeContourId = id;
   }
 
   public loadContours(contours: Contour[]) {
     for (const contour of contours) {
-      this.#contours.set(contour.entityId.id, {
-        contour,
-        renderPath: new Path2D(),
-      });
+      this.#contours.set(contour.entityId.id, contour);
     }
   }
 
@@ -37,7 +31,11 @@ export class ContourManager {
     this.#contours.clear();
   }
 
-  get currentContour(): ContourNode {
+  getActiveContour(): Contour {
+    if (!this.#activeContourId) {
+      throw new Error('No active contour set');
+    }
+
     const c = this.#contours.get(this.#activeContourId.id);
     if (!c) {
       throw new Error('Current contour not found');
@@ -51,12 +49,12 @@ export class ContourManager {
       return this.closeContour();
     }
 
-    return this.currentContour.contour.addPoint(x, y, pointType);
+    return this.getActiveContour().addPoint(x, y, pointType);
   }
 
   pointClosesPath(x: number, y: number): boolean {
-    if (this.currentContour.contour.points.length > 1) {
-      const firstPoint = this.currentContour.contour.firstPoint();
+    if (this.getActiveContour().points.length > 1) {
+      const firstPoint = this.getActiveContour().firstPoint();
       return firstPoint.distance(x, y) < 6;
     }
 
@@ -64,9 +62,9 @@ export class ContourManager {
   }
 
   closeContour(): EntityId {
-    const firstPoint = this.currentContour.contour.firstPoint();
+    const firstPoint = this.getActiveContour().firstPoint();
 
-    this.currentContour.contour.close();
+    this.getActiveContour().close();
     this.#activeContourId = this.addContour();
 
     return firstPoint.entityId;
@@ -79,7 +77,7 @@ export class ContourManager {
       return;
     }
 
-    const p = c.contour.points.find((p) => {
+    const p = c.points.find((p) => {
       return p.entityId.id == id.id;
     });
 
@@ -93,19 +91,9 @@ export class ContourManager {
 
   addContour(contour?: Contour): EntityId {
     const c = contour ?? new Contour();
-    const node = { contour: c, renderPath: new Path2D(), invalidated: false };
-    this.#contours.set(c.entityId.id, node);
+    this.#contours.set(c.entityId.id, c);
 
     return c.entityId;
-  }
-
-  invalidateContour(id: Ident): void {
-    const node = this.#contours.get(id);
-    if (!node) {
-      return;
-    }
-
-    node.renderPath.invalidated = true;
   }
 
   upgradeLineSegment(id: EntityId): EntityId {
@@ -115,7 +103,7 @@ export class ContourManager {
       return id;
     }
 
-    return c.contour.upgradeLineSegment(id);
+    return c.upgradeLineSegment(id);
   }
 
   // TODO: Add tests
@@ -126,52 +114,14 @@ export class ContourManager {
       return undefined;
     }
 
-    for (const segment of c.contour.segments()) {
+    for (const segment of c.segments()) {
       if (segment.type === 'cubic' && segment.points.anchor1.entityId === id) {
         return segment;
       }
     }
   }
 
-  // TODO: this can be smarter
-  buildRenderPaths(): void {
-    for (const node of this.#contours.values()) {
-      if (node.contour.points.length < 2) {
-        continue;
-      }
-
-      node.renderPath.clear();
-
-      const segments = node.contour.segments();
-
-      node.renderPath.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
-
-      for (const segment of segments) {
-        switch (segment.type) {
-          case 'line':
-            node.renderPath.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
-            break;
-          case 'cubic':
-            node.renderPath.cubicTo(
-              segment.points.control1.x,
-              segment.points.control1.y,
-              segment.points.control2.x,
-              segment.points.control2.y,
-              segment.points.anchor2.x,
-              segment.points.anchor2.y
-            );
-            break;
-        }
-      }
-    }
-  }
-
-  nodes(): ContourNode[] {
-    this.buildRenderPaths();
+  contours(): Contour[] {
     return Array.from(this.#contours.values());
-  }
-
-  get currentPath(): Contour {
-    return this.currentContour.contour;
   }
 }

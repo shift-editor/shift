@@ -1,6 +1,6 @@
 import { IContour, IContourPoint, PointType } from '@shift/shared';
 
-import { EntityId, Ident } from '@/lib/core/EntityId';
+import { EntityId } from '@/lib/core/EntityId';
 import { EventEmitter } from '@/lib/core/EventEmitter';
 import { BOUNDING_RECTANGLE_STYLES, DEFAULT_STYLES, GUIDE_STYLES } from '@/lib/styles/style';
 import { tools } from '@/lib/tools/tools';
@@ -17,6 +17,7 @@ import { Painter } from './Painter';
 import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
 import { Contour, ContourPoint } from '../core/Contour';
+import { Path2D } from '../graphics/Path';
 import { getBoundingRect } from '../math/rect';
 
 interface EditorState {
@@ -189,6 +190,14 @@ export class Editor {
       return c;
     });
 
+    // this is a hack to ensure that the glyph is not empty
+    if (cs.length === 0) {
+      const c = new Contour();
+      cs.push(c);
+
+      this.#scene.setActiveContour(c.entityId);
+    }
+
     this.#scene.loadContours(cs);
   }
 
@@ -196,8 +205,12 @@ export class Editor {
     this.#scene.clearContours();
   }
 
-  public invalidateContour(id: Ident) {
-    this.#scene.invalidateContour(id);
+  public invalidateGlyph() {
+    this.#scene.invalidateGlyph();
+  }
+
+  public getGlyphPath(): Path2D {
+    return this.#scene.getGlyphPath();
   }
 
   public setHoveredPoint(point: ContourPoint) {
@@ -290,10 +303,8 @@ export class Editor {
     );
   }
 
-  public redrawContours(ids: EntityId[]) {
-    for (const id of ids) {
-      this.invalidateContour(id.parentId);
-    }
+  public redrawGlyph() {
+    this.invalidateGlyph();
     this.requestRedraw();
   }
 
@@ -327,7 +338,10 @@ export class Editor {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    const nodes = this.#scene.nodes();
+    const contours = this.#scene.getAllContours();
+    const glyphPath = this.#scene.getGlyphPath();
+
+    console.log(glyphPath);
 
     ctx.clear();
     ctx.save();
@@ -343,12 +357,10 @@ export class Editor {
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
     ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
-    for (const node of nodes) {
-      ctx.stroke(node.renderPath);
-      if (this.#state.fillContour && node.contour.closed) {
-        ctx.fillStyle = 'black';
-        ctx.fill(node.renderPath);
-      }
+    ctx.stroke(glyphPath);
+    if (this.#state.fillContour) {
+      ctx.fillStyle = 'black';
+      ctx.fill(glyphPath);
     }
 
     if (this.#state.selectedPoints.size > 0 && !this.#state.fillContour) {
@@ -362,8 +374,8 @@ export class Editor {
 
     // handles
     if (!this.#state.fillContour) {
-      for (const node of nodes) {
-        const points = node.contour.points;
+      for (const contour of contours) {
+        const points = contour.points;
         for (const [idx, point] of points.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
@@ -374,9 +386,9 @@ export class Editor {
             continue;
           }
 
-          if (node.contour.firstPoint() === point) {
-            if (node.contour.closed) {
-              this.paintHandle(ctx, x, y, 'direction', handleState, node.contour.isClockwise());
+          if (contour.firstPoint() === point) {
+            if (contour.closed) {
+              this.paintHandle(ctx, x, y, 'direction', handleState, contour.isClockwise());
             } else {
               this.paintHandle(ctx, x, y, 'first', handleState);
             }
@@ -384,7 +396,7 @@ export class Editor {
             continue;
           }
 
-          if (!node.contour.closed && node.contour.lastPoint() === point) {
+          if (!contour.closed && contour.lastPoint() === point) {
             const p2 = points[idx - 1];
             const { x: px, y: py } = this.#viewport.projectUpmToScreen(p2.x, p2.y);
 
@@ -399,7 +411,9 @@ export class Editor {
 
             case 'offCurve': {
               const anchor =
-                points[idx + 1].pointType == 'offCurve' ? points[idx - 1] : points[idx + 1];
+                points[(idx + 1) % points.length].pointType == 'offCurve'
+                  ? points[(idx - 1) % points.length]
+                  : points[(idx + 1) % points.length];
 
               const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
                 anchor.x,

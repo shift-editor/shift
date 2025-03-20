@@ -93,7 +93,7 @@ class SegmentIterator implements Iterator<Segment> {
     }
 
     const p1 = this.#points[this.#index];
-    const p2 = this.#points[this.#index + 1];
+    const p2 = this.#points[(this.#index + 1) % this.#points.length];
 
     if (p1.pointType === 'onCurve' && p2.pointType === 'onCurve') {
       const segment: LineSegment = {
@@ -113,8 +113,8 @@ class SegmentIterator implements Iterator<Segment> {
     }
 
     if (p1.pointType === 'onCurve' && p2.pointType === 'offCurve') {
-      const p3 = this.#points[this.#index + 2];
-      const p4 = this.#points[this.#index + 3];
+      const p3 = this.#points[(this.#index + 2) % this.#points.length];
+      const p4 = this.#points[(this.#index + 3) % this.#points.length];
 
       const segment: CubicSegment = {
         type: 'cubic',

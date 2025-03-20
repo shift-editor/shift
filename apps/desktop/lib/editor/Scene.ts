@@ -4,7 +4,7 @@ import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point2D } from '@/types/math';
 import { CubicSegment } from '@/types/segments';
 
-import { ContourManager, ContourNode } from './ContourManager';
+import { ContourManager } from './ContourManager';
 import { Contour, ContourPoint } from '../core/Contour';
 import { Path2D } from '../graphics/Path';
 
@@ -20,10 +20,12 @@ export interface Guides {
 export class Scene {
   #contourManager: ContourManager;
   #staticGuides: Path2D;
+  #glyphPath: Path2D;
 
   public constructor() {
     this.#contourManager = new ContourManager();
     this.#staticGuides = new Path2D();
+    this.#glyphPath = new Path2D();
   }
 
   public constructGuidesPath(guides: Guides): Path2D {
@@ -58,6 +60,49 @@ export class Scene {
     return this.#staticGuides;
   }
 
+  public getGlyphPath(): Path2D {
+    this.rebuildGlyphPath();
+    return this.#glyphPath;
+  }
+
+  public rebuildGlyphPath(): void {
+    this.#glyphPath.clear();
+
+    for (const contour of this.#contourManager.contours()) {
+      if (contour.points.length < 2) {
+        continue;
+      }
+
+      const segments = contour.segments();
+
+      if (segments.length === 0) continue;
+
+      this.#glyphPath.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
+
+      for (const segment of segments) {
+        switch (segment.type) {
+          case 'line':
+            this.#glyphPath.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
+            break;
+          case 'cubic':
+            this.#glyphPath.cubicTo(
+              segment.points.control1.x,
+              segment.points.control1.y,
+              segment.points.control2.x,
+              segment.points.control2.y,
+              segment.points.anchor2.x,
+              segment.points.anchor2.y
+            );
+            break;
+        }
+      }
+
+      if (contour.closed) {
+        this.#glyphPath.closePath();
+      }
+    }
+  }
+
   public addPoint(x: number, y: number, pointType: PointType): EntityId {
     return this.#contourManager.addPoint(x, y, pointType);
   }
@@ -68,6 +113,14 @@ export class Scene {
 
   public addContour(contour?: Contour): EntityId {
     return this.#contourManager.addContour(contour);
+  }
+
+  public setActiveContour(id: EntityId) {
+    this.#contourManager.setActiveContour(id);
+  }
+
+  public invalidateGlyph(): void {
+    this.#glyphPath.invalidated = true;
   }
 
   public clearContours() {
@@ -86,10 +139,6 @@ export class Scene {
     return this.#contourManager.getCubicSegment(id);
   }
 
-  public invalidateContour(id: Ident): void {
-    this.#contourManager.invalidateContour(id);
-  }
-
   public loadContours(contours: Contour[]): void {
     this.#contourManager.loadContours(contours);
   }
@@ -98,23 +147,23 @@ export class Scene {
   // you can pass optional IDs and if not it returns all points
   public getAllPoints(): ReadonlyArray<ContourPoint> {
     return this.#contourManager
-      .nodes()
+      .contours()
       .map((c) => {
-        return c.contour.points;
+        return c.points;
       })
       .flat();
   }
 
   public getAllContours() {
     return this.#contourManager
-      .nodes()
+      .contours()
       .map((c) => {
-        return c.contour;
+        return c;
       })
       .flat();
   }
 
-  nodes(): ContourNode[] {
-    return this.#contourManager.nodes();
+  contours(): Contour[] {
+    return this.#contourManager.contours();
   }
 }

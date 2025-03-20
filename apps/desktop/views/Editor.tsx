@@ -35,7 +35,9 @@ export const Editor = () => {
         editor.requestRedraw();
       }
 
-      if (e.key == ' ') {
+      // we don't want to trigger a redraw when the space bar is
+      // held down
+      if (e.key == ' ' && !e.repeat) {
         switchTool('hand');
         editor.setFillContour(true);
         editor.requestRedraw();
@@ -85,7 +87,7 @@ export const Editor = () => {
   return (
     <div className="flex h-screen w-screen flex-col items-center justify-center">
       <Toolbar />
-      <EditorView glyphId={glyphId} />
+      <EditorView glyphId={glyphId ?? ''} />
     </div>
   );
 };
