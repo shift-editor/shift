@@ -47,10 +47,10 @@ export class Shape implements Tool {
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = { type: 'ready' };
 
-    const id = this.#editor.addPoint(this.#rect.x, this.#rect.y);
-    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y);
-    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y + this.#rect.height);
-    this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height);
+    const id = this.#editor.addPoint(this.#rect.x, this.#rect.y, 'onCurve');
+    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve');
+    this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y + this.#rect.height, 'onCurve');
+    this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve');
     this.#editor.closeContour();
 
     this.#editor.emit('points:added', [id]);

@@ -341,8 +341,6 @@ export class Editor {
     const contours = this.#scene.getAllContours();
     const glyphPath = this.#scene.getGlyphPath();
 
-    console.log(glyphPath);
-
     ctx.clear();
     ctx.save();
 
