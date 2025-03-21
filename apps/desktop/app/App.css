@@ -2,6 +2,13 @@ html {
   overflow: hidden;
 }
 
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/fonts/Inter-VariableFont.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 .cursor-pen {
   cursor:
     url('/cursors/pen@1.svg') 15 8,

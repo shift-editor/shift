@@ -20,11 +20,13 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
   useEffect(() => {
     const fetchFontData = async () => {
-      const glyph = await invoke<Glyph>('get_glyph', {
-        char: String.fromCharCode(parseInt(glyphId, 16)),
-      });
+      const [metrics, glyph] = await Promise.all([
+        invoke<Metrics>('get_font_metrics'),
+        invoke<Glyph>('get_glyph', {
+          char: String.fromCharCode(parseInt(glyphId, 16)),
+        }),
+      ]);
 
-      const metrics = await invoke<Metrics>('get_font_metrics');
       const guides = {
         ascender: { y: metrics.ascender },
         capHeight: { y: metrics.capHeight },
@@ -38,7 +40,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       editor.setViewportUpm(metrics.unitsPerEm);
 
       editor.loadContours(glyph.contours);
-      editor.requestRedraw();
+      editor.redrawGlyph();
     };
 
     fetchFontData();

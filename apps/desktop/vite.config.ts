@@ -69,6 +69,7 @@ export default defineConfig(async () => ({
   ],
   root: __dirname,
   publicDir: path.resolve(__dirname, 'public'),
+  assetsInclude: ['**/*.ttf'],
   resolve: {
     alias: {
       '@': __dirname,
