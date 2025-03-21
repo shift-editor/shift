@@ -11,11 +11,11 @@
       "inputs": ["packages/shared/dist/**"]
     },
     "build": {
-      "dependsOn": ["//#types:rebuild", "^build"],
+      "dependsOn": ["^//#types:rebuild", "^build"],
       "outputs": ["**/apps/desktop/dist/**"]
     },
     "dev": {
-      "dependsOn": ["//#types:rebuild"],
+      "dependsOn": ["^//#types:rebuild"],
       "cache": false,
       "persistent": true
     },

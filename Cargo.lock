@@ -3681,6 +3681,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-events"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "ts-rs",
+]
+
+[[package]]
 name = "shift-font"
 version = "0.1.0"
 dependencies = [
@@ -3699,12 +3707,14 @@ dependencies = [
  "serde",
  "serde_json",
  "shift-editor",
+ "shift-events",
  "shift-font",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-shell",
+ "ts-rs",
 ]
 
 [[package]]

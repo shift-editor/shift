@@ -36,7 +36,7 @@ const tsTsRsSLiveReload = () => {
       const { watcher } = server;
 
       const root = path.resolve(__dirname, '..', '..');
-      const crates = ['shift-font'];
+      const crates = ['shift-font', 'shift-events'];
 
       const files = await fg(
         crates.map((crate) => path.join(root, 'crates', crate, 'src', '**/*.rs'))
@@ -100,7 +100,7 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
-      ignored: ['**/crates/**'],
+      ignored: ['**/crates/shift-tauri/**'],
     },
   },
 }));

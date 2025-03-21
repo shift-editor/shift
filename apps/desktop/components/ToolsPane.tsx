@@ -1,4 +1,7 @@
-import { FC } from 'react';
+import { FC, useEffect } from 'react';
+
+import { FontLoadedEvent } from '@shift/shared';
+import { listen } from '@tauri-apps/api/event';
 
 import { tools } from '@/lib/tools/tools';
 import AppState, { getEditor } from '@/store/store';
@@ -29,20 +32,35 @@ export const ToolsPane: FC = () => {
   const setActiveTool = AppState((state) => state.setActiveTool);
   const editor = getEditor();
 
+  const fileName = AppState((state) => state.fileName);
+
+  useEffect(() => {
+    const unsubscribe = listen<FontLoadedEvent>('font-loaded', (event) => {
+      AppState.setState({ fileName: event.payload.fileName });
+    });
+
+    return () => {
+      unsubscribe.then((fn) => fn());
+    };
+  }, []);
+
   return (
-    <section className="flex items-center justify-center gap-2">
-      {Array.from(tools.entries()).map(([name, { icon }]) => (
-        <ToolbarIcon
-          key={name}
-          Icon={icon}
-          name={name}
-          activeTool={activeTool}
-          onClick={() => {
-            setActiveTool(name);
-            editor.activeTool().setReady();
-          }}
-        />
-      ))}
+    <section className="flex flex-col items-center justify-center gap-2">
+      <h1 className="text-xs text-gray-300">{fileName}</h1>
+      <div className="flex items-center gap-2">
+        {Array.from(tools.entries()).map(([name, { icon }]) => (
+          <ToolbarIcon
+            key={name}
+            Icon={icon}
+            name={name}
+            activeTool={activeTool}
+            onClick={() => {
+              setActiveTool(name);
+              editor.activeTool().setReady();
+            }}
+          />
+        ))}
+      </div>
     </section>
   );
 };

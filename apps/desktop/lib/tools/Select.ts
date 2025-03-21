@@ -138,7 +138,7 @@ export class Select implements Tool {
 
       this.moveSelectedPoints(dx, dy);
 
-      this.#editor.redrawGlyph(Array.from(this.#editor.selectedPoints).map((p) => p.entityId));
+      this.#editor.redrawGlyph();
     }
 
     const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);

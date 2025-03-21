@@ -5,7 +5,7 @@
   "repository": "https://github.com/shift-editor/shift",
   "scripts": {
     "dev:tauri": "turbo run dev",
-    "types:rebuild": "pnpm --filter @shift/shared clean && cargo test -p shift-font export_bindings && pnpm --filter @shift/shared build",
+    "types:rebuild": "scripts/rebuild_types.sh",
     "dev:app": "pnpm tauri dev",
     "build:tauri": "turbo run build",
     "build:app": "pnpm tauri build",
@@ -21,7 +21,7 @@
     "lint:check": "eslint \"apps/**/*.{ts,tsx}\"",
     "check-deps": "depcheck"
   },
-  "packageManager": "pnpm@10.2.0",
+  "packageManager": "pnpm@10.6.5",
   "devDependencies": {
     "@tauri-apps/cli": "^2.3.1",
     "@typescript-eslint/eslint-plugin": "^8.26.1",

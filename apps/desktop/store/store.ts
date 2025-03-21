@@ -7,6 +7,7 @@ import { ToolName } from '@/types/tool';
 
 interface AppState {
   editor: Editor;
+  fileName: string;
   currentGlyph: Glyph | null;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
@@ -20,13 +21,13 @@ const AppState = create<AppState>()((set) => {
   editor.on('points:added', (pointIds) => {
     console.log('points:added', pointIds);
 
-    editor.redrawGlyph(pointIds);
+    editor.redrawGlyph();
   });
 
   editor.on('points:moved', (pointIds) => {
     console.log('points:moved', pointIds);
 
-    editor.redrawGlyph(pointIds);
+    editor.redrawGlyph();
   });
 
   editor.on('points:removed', (pointIds) => {
@@ -37,12 +38,16 @@ const AppState = create<AppState>()((set) => {
   return {
     editor,
     currentGlyph: null,
+    fileName: '',
     activeTool: 'select',
     setActiveTool: (tool: ToolName) => {
       set({ activeTool: tool });
     },
     setActiveGlyph: (glyph: Glyph) => {
       set({ currentGlyph: glyph });
+    },
+    setFileName: (fileName: string) => {
+      set({ fileName });
     },
   };
 });

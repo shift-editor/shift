@@ -1,9 +1,10 @@
 use std::sync::Mutex;
 
 use shift_editor::editor::Editor;
+use shift_events::events::FontLoadedEvent;
 use tauri::{
     menu::{AboutMetadataBuilder, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder},
-    App, AppHandle, Manager,
+    App, AppHandle, Emitter, Manager,
 };
 
 use tauri_plugin_dialog::DialogExt;
@@ -64,6 +65,15 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
                 .lock()
                 .unwrap()
                 .read_font(&file_path.to_str().unwrap());
+
+            app_handle
+                .emit(
+                    "font-loaded",
+                    FontLoadedEvent {
+                        file_name: file_path.file_name().unwrap().to_str().unwrap().to_string(),
+                    },
+                )
+                .unwrap();
         });
     }
 

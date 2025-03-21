@@ -1,4 +1,5 @@
 export * from "./types/Font";
+export * from "./types/FontLoadedEvent";
 export * from "./types/FontMetadata";
 export * from "./types/Glyph";
 export * from "./types/IContour";

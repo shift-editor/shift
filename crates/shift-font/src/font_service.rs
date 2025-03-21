@@ -16,6 +16,7 @@ pub trait FontAdaptor: Send + Sync {
 }
 
 pub struct FontService {
+    file_name: String,
     adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>>,
 }
 
@@ -24,10 +25,13 @@ impl FontService {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
 
-        Self { adaptors }
+        Self {
+            file_name: String::new(),
+            adaptors,
+        }
     }
 
-    pub fn read_font(&self, path: &str) -> Result<Font, String> {
+    pub fn read_font(&mut self, path: &str) -> Result<Font, String> {
         let path = Path::new(path);
         let extension = path.extension().unwrap().to_str().unwrap();
 
@@ -38,6 +42,8 @@ impl FontService {
             }
         };
 
-        adaptor.read_font(path.to_str().unwrap())
+        let font = adaptor.read_font(path.to_str().unwrap())?;
+        self.file_name = path.file_name().unwrap().to_str().unwrap().to_string();
+        Ok(font)
     }
 }
