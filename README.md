@@ -4,6 +4,9 @@
     <h1 align="center"><b>Shift</b></h1
 >
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
+
+  ![image](https://github.com/user-attachments/assets/e7ea2a69-2257-4d4e-9a20-28a44e9e0f3e)
+
   </p>
 </div>
 
