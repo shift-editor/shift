@@ -23,7 +23,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       const [metrics, glyph] = await Promise.all([
         invoke<Metrics>('get_font_metrics'),
         invoke<Glyph>('get_glyph', {
-          char: String.fromCharCode(parseInt(glyphId, 16)),
+          unicode: parseInt(glyphId, 16),
         }),
       ]);
 

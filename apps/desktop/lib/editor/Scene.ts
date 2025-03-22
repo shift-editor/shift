@@ -84,6 +84,14 @@ export class Scene {
           case 'line':
             this.#glyphPath.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
             break;
+          case 'quad':
+            this.#glyphPath.quadTo(
+              segment.points.control.x,
+              segment.points.control.y,
+              segment.points.anchor2.x,
+              segment.points.anchor2.y
+            );
+            break;
           case 'cubic':
             this.#glyphPath.cubicTo(
               segment.points.control1.x,

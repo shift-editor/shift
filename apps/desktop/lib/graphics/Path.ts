@@ -1,4 +1,6 @@
-import { IPath, PathCommand } from '@/types/graphics';
+import { PathCommand } from '@shift/shared';
+
+import { IPath } from '@/types/graphics';
 
 export class Path2D implements IPath {
   #commands: PathCommand[] = [];

@@ -57,15 +57,16 @@ pub struct UfoFontAdaptor;
 
 impl From<NoradFont> for Font {
     fn from(font: NoradFont) -> Self {
-        let mut glyphs = HashMap::<char, Glyph>::new();
+        let mut glyphs = HashMap::new();
 
         for layer in font.layers.iter() {
             for glyph in layer.iter() {
                 let contours = from_ufo_contours(&glyph.contours);
                 let name = glyph.name().to_string();
                 if let Some(codepoint) = glyph.codepoints.iter().next() {
-                    let g = Glyph::new(name, codepoint, contours, glyph.width);
-                    glyphs.insert(codepoint, g);
+                    let unicode = codepoint.into();
+                    let g = Glyph::new(name, unicode, contours, glyph.width);
+                    glyphs.insert(unicode, g);
                 }
             }
         }

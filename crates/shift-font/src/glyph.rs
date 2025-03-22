@@ -7,13 +7,13 @@ use crate::contour::Contour;
 #[ts(export)]
 pub struct Glyph {
     name: String,
-    unicode: char,
+    unicode: u32,
     contours: Vec<Contour>,
     x_advance: f64,
 }
 
 impl Glyph {
-    pub fn new(name: String, unicode: char, contours: Vec<Contour>, x_advance: f64) -> Self {
+    pub fn new(name: String, unicode: u32, contours: Vec<Contour>, x_advance: f64) -> Self {
         Self {
             name,
             unicode,

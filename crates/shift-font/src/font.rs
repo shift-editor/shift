@@ -49,7 +49,7 @@ impl Default for Metrics {
 pub struct Font {
     pub metadata: FontMetadata,
     pub metrics: Metrics,
-    pub glyphs: HashMap<char, Glyph>,
+    pub glyphs: HashMap<u32, Glyph>,
 }
 
 impl Default for Font {

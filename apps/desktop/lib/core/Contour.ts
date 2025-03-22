@@ -3,7 +3,7 @@ import { IContour, IContourPoint, PointType } from '@shift/shared';
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point } from '@/lib/math/point';
 import { Shape } from '@/lib/math/shape';
-import { CubicSegment, LineSegment, Segment } from '@/types/segments';
+import { CubicSegment, LineSegment, QuadSegment, Segment } from '@/types/segments';
 
 export class ContourPoint extends Point implements IContourPoint {
   #id: EntityId;
@@ -114,6 +114,26 @@ class SegmentIterator implements Iterator<Segment> {
 
     if (p1.pointType === 'onCurve' && p2.pointType === 'offCurve') {
       const p3 = this.#points[(this.#index + 2) % this.#points.length];
+
+      if (p3.pointType === 'onCurve') {
+        // This is a quadratic Bezier curve
+        const segment: QuadSegment = {
+          type: 'quad',
+          points: {
+            anchor1: p1,
+            control: p2,
+            anchor2: p3,
+          },
+        };
+
+        this.#index += 2;
+
+        return {
+          done: false,
+          value: segment,
+        };
+      }
+
       const p4 = this.#points[(this.#index + 3) % this.#points.length];
 
       const segment: CubicSegment = {

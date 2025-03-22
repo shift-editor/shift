@@ -5,4 +5,5 @@ export * from "./types/Glyph";
 export * from "./types/IContour";
 export * from "./types/IContourPoint";
 export * from "./types/Metrics";
+export * from "./types/PathCommand";
 export * from "./types/PointType";

@@ -269,6 +269,9 @@ export class CanvasKitRenderer implements IRenderer {
         case 'lineTo':
           nativePath.lineTo(command.x, command.y);
           break;
+        case 'quadTo':
+          nativePath.quadTo(command.cp1x, command.cp1y, command.x, command.y);
+          break;
         case 'cubicTo':
           nativePath.cubicTo(
             command.cp1x,

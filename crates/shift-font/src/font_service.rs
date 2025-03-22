@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::font::Font;
+use crate::otf_ttf::BytesFontAdaptor;
 use crate::ufo::UfoFontAdaptor;
 
 #[derive(Hash, Eq, PartialEq)]
 pub enum FontFormat {
     Ufo,
+    Ttf,
+    Otf,
 }
 
 pub trait FontAdaptor: Send + Sync {
@@ -24,6 +27,8 @@ impl FontService {
     pub fn new() -> Self {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
+        adaptors.insert(FontFormat::Ttf, Box::new(BytesFontAdaptor));
+        adaptors.insert(FontFormat::Otf, Box::new(BytesFontAdaptor));
 
         Self {
             file_name: String::new(),
@@ -37,6 +42,8 @@ impl FontService {
 
         let adaptor = match extension {
             "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
+            "ttf" => self.adaptors.get(&FontFormat::Ttf).unwrap(),
+            "otf" => self.adaptors.get(&FontFormat::Otf).unwrap(),
             _ => {
                 return Err(format!("Unsupported font format: {}", extension));
             }

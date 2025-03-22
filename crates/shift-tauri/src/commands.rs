@@ -11,7 +11,7 @@ pub fn get_font_metrics(state: State<'_, Mutex<Editor>>) -> Metrics {
 }
 
 #[tauri::command]
-pub fn get_glyph(state: State<'_, Mutex<Editor>>, char: char) -> Glyph {
+pub fn get_glyph(state: State<'_, Mutex<Editor>>, unicode: u32) -> Glyph {
     let mut editor = state.lock().unwrap();
-    editor.get_glyph(char).clone()
+    editor.get_glyph(unicode).clone()
 }

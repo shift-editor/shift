@@ -3,4 +3,4 @@ import type { FontMetadata } from "./FontMetadata";
 import type { Glyph } from "./Glyph";
 import type { Metrics } from "./Metrics";
 
-export type Font = { metadata: FontMetadata, metrics: Metrics, glyphs: { [key in string]?: Glyph }, };
+export type Font = { metadata: FontMetadata, metrics: Metrics, glyphs: { [key in number]?: Glyph }, };

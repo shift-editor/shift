@@ -2,21 +2,6 @@ import { DrawStyle } from '@/lib/styles/style';
 
 export type Colour = [number, number, number, number];
 
-export type PathCommand =
-  | { type: 'moveTo'; x: number; y: number }
-  | { type: 'lineTo'; x: number; y: number }
-  | { type: 'quadTo'; cp1x: number; cp1y: number; x: number; y: number }
-  | {
-      type: 'cubicTo';
-      cp1x: number;
-      cp1y: number;
-      cp2x: number;
-      cp2y: number;
-      x: number;
-      y: number;
-    }
-  | { type: 'close' };
-
 export interface IPath {
   moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
