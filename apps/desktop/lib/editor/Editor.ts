@@ -9,7 +9,7 @@ import { Event, EventData, EventHandler } from '@/types/events';
 import { IGraphicContext, IRenderer } from '@/types/graphics';
 import { HandleState, HandleType } from '@/types/handle';
 import { Point2D, Rect2D } from '@/types/math';
-import { CubicSegment } from '@/types/segments';
+import { CubicSegment, Segment } from '@/types/segments';
 import { Tool } from '@/types/tool';
 
 import { FrameHandler } from './FrameHandler';
@@ -276,8 +276,8 @@ export class Editor {
     return this.#scene.upgradeLineSegment(id);
   }
 
-  public getCubicSegment(id: EntityId): CubicSegment | undefined {
-    return this.#scene.getCubicSegment(id);
+  public getSegment(id: EntityId): Segment | undefined {
+    return this.#scene.getSegment(id);
   }
 
   public setFillContour(fillContour: boolean) {
@@ -404,7 +404,11 @@ export class Editor {
 
           switch (point.pointType) {
             case 'onCurve':
-              this.paintHandle(ctx, x, y, 'corner', handleState);
+              if (point.smooth) {
+                this.paintHandle(ctx, x, y, 'smooth', handleState);
+              } else {
+                this.paintHandle(ctx, x, y, 'corner', handleState);
+              }
               break;
 
             case 'offCurve': {
@@ -418,11 +422,7 @@ export class Editor {
                 anchor.y
               );
 
-              if (anchor.smooth) {
-                this.paintHandle(ctx, x, y, 'smooth', handleState);
-              } else {
-                this.paintHandle(ctx, x, y, 'control', handleState);
-              }
+              this.paintHandle(ctx, x, y, 'control', handleState);
 
               ctx.setStyle(DEFAULT_STYLES);
               ctx.drawLine(anchorX, anchorY, x, y);

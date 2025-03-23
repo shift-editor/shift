@@ -99,9 +99,9 @@ export class Pen implements Tool {
           trailingPoint: { x, y },
         };
 
-        const segment = this.#editor.getCubicSegment(this.#toolState.segmentId);
+        const segment = this.#editor.getSegment(this.#toolState.segmentId);
 
-        if (segment) {
+        if (segment && segment.type === 'cubic') {
           const c2 = segment.points.control2;
           const anchorX = this.#toolState.cornerPoint.x;
           const anchorY = this.#toolState.cornerPoint.y;
@@ -109,7 +109,7 @@ export class Pen implements Tool {
           const oppositeY = 2 * anchorY - y;
 
           this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
-          this.#editor.redrawGlyph([c2.entityId]);
+          this.#editor.redrawGlyph();
         }
       }
     }

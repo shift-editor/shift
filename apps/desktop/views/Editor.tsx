@@ -85,7 +85,7 @@ export const Editor = () => {
   }, [glyphId]);
 
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center">
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-white">
       <Toolbar />
       <EditorView glyphId={glyphId ?? ''} />
     </div>

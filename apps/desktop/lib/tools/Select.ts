@@ -47,8 +47,8 @@ export class Select implements Tool {
   }
 
   moveSelectedPoints(dx: number, dy: number): void {
+    // probably gets a bit more complex if we have cubic segments in the selection etc.
     for (const point of this.#editor.selectedPoints) {
-      // if control point is part of a smooth triplet need to handle this
       this.#editor.movePointTo(point.entityId, point.x + dx, point.y + dy);
     }
   }

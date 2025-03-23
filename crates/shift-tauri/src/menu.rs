@@ -57,24 +57,27 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     if event.id() == "open" {
         let app_handle = app.clone();
 
-        app.dialog().file().pick_file(move |file_path| {
-            let editor = app_handle.state::<Mutex<Editor>>();
-            let file_path = file_path.unwrap().into_path().unwrap();
+        app.dialog()
+            .file()
+            .add_filter("Font", &["ttf", "otf", "ufo"])
+            .pick_file(move |file_path| {
+                let editor = app_handle.state::<Mutex<Editor>>();
+                let file_path = file_path.unwrap().into_path().unwrap();
 
-            editor
-                .lock()
-                .unwrap()
-                .read_font(&file_path.to_str().unwrap());
+                editor
+                    .lock()
+                    .unwrap()
+                    .read_font(&file_path.to_str().unwrap());
 
-            app_handle
-                .emit(
-                    "font-loaded",
-                    FontLoadedEvent {
-                        file_name: file_path.file_name().unwrap().to_str().unwrap().to_string(),
-                    },
-                )
-                .unwrap();
-        });
+                app_handle
+                    .emit(
+                        "font-loaded",
+                        FontLoadedEvent {
+                            file_name: file_path.file_name().unwrap().to_str().unwrap().to_string(),
+                        },
+                    )
+                    .unwrap();
+            });
     }
 
     return;

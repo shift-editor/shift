@@ -3,7 +3,7 @@ import { PointType } from '@shift/shared';
 import { Contour } from '@/lib/core/Contour';
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point2D } from '@/types/math';
-import { CubicSegment } from '@/types/segments';
+import { Segment } from '@/types/segments';
 
 export class ContourManager {
   #activeContourId: EntityId | null;
@@ -110,7 +110,7 @@ export class ContourManager {
   }
 
   // TODO: Add tests
-  getCubicSegment(id: EntityId): CubicSegment | undefined {
+  getSegment(id: EntityId): Segment | undefined {
     const c = this.#contours.get(id.parentId);
     if (!c) {
       console.error('No parentId for point');
@@ -118,10 +118,12 @@ export class ContourManager {
     }
 
     for (const segment of c.segments()) {
-      if (segment.type === 'cubic' && segment.points.anchor1.entityId === id) {
+      if (segment.points.anchor1.entityId === id) {
         return segment;
       }
     }
+
+    return undefined;
   }
 
   contours(): Contour[] {

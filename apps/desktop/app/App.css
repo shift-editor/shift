@@ -1,5 +1,5 @@
-html {
-  overflow: hidden;
+body {
+  background-color: var(--color-secondary);
 }
 
 @font-face {

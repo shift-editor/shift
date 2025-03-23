@@ -2,7 +2,7 @@ import { PointType } from '@shift/shared';
 
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point2D } from '@/types/math';
-import { CubicSegment } from '@/types/segments';
+import { Segment } from '@/types/segments';
 
 import { ContourManager } from './ContourManager';
 import { Contour, ContourPoint } from '../core/Contour';
@@ -143,8 +143,8 @@ export class Scene {
     return this.#contourManager.upgradeLineSegment(id);
   }
 
-  public getCubicSegment(id: EntityId): CubicSegment | undefined {
-    return this.#contourManager.getCubicSegment(id);
+  public getSegment(id: EntityId): Segment | undefined {
+    return this.#contourManager.getSegment(id);
   }
 
   public loadContours(contours: Contour[]): void {
