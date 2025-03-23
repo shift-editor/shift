@@ -354,9 +354,9 @@ export class Editor {
 
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
-    ctx.lineWidth = Math.floor(ctx.lineWidth / this.#viewport.zoom);
+    ctx.lineWidth = Math.floor(DEFAULT_STYLES.lineWidth / this.#viewport.zoom);
     ctx.stroke(glyphPath);
-    if (this.#state.fillContour) {
+    if (glyphPath.isClosed() && this.#state.fillContour) {
       ctx.fillStyle = 'black';
       ctx.fill(glyphPath);
     }

@@ -183,7 +183,7 @@ export const HANDLE_STYLES: Record<HandleType, HandleStyles> = {
       dashPattern: [],
     },
     selected: {
-      size: 8,
+      size: 10,
       lineWidth: 0.75,
       antiAlias: false,
       strokeStyle: '#b933ad',

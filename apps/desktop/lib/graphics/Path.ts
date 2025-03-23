@@ -32,6 +32,10 @@ export class Path2D implements IPath {
     return this.#commands;
   }
 
+  isClosed(): boolean {
+    return this.#commands.filter((c) => c.type === 'close').length > 0;
+  }
+
   isEmpty(): boolean {
     return this.#commands.length === 0;
   }
