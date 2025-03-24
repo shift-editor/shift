@@ -1,4 +1,13 @@
 /**
+ * Returns the remainder of a number divided by a divisor, ensuring the result is positive.
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Remainder
+ * To obtain a modulo in JavaScript, in place of n % d, use ((n % d) + d) % d.
+ */
+export const mod = (n: number, d: number) => {
+  return ((n % d) + d) % d;
+};
+
+/**
  * Returns the width and height of the canvas, taking into account the device pixel ratio.
  * @param w - The width of the canvas.
  * @param h - The height of the canvas.

@@ -47,8 +47,25 @@ export class Select implements Tool {
   }
 
   moveSelectedPoints(dx: number, dy: number): void {
-    // probably gets a bit more complex if we have cubic segments in the selection etc.
-    for (const point of this.#editor.selectedPoints) {
+    // TODO: handle smooth points
+    const selectedPoints = this.#editor.selectedPoints;
+    const firstPoint = selectedPoints[0];
+
+    // moving an onCurve point with offCurve neighbors should move
+    // those neighbors as well
+    if (selectedPoints.length === 1 && firstPoint.isOnCurve()) {
+      const neighbors = this.#editor
+        .getNeighborPoints(firstPoint)
+        .filter((p) => p.pointType === 'offCurve');
+
+      for (const p of selectedPoints.concat(neighbors)) {
+        this.#editor.movePointTo(p.entityId, p.x + dx, p.y + dy);
+      }
+
+      return;
+    }
+
+    for (const point of selectedPoints) {
       this.#editor.movePointTo(point.entityId, point.x + dx, point.y + dy);
     }
   }

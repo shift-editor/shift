@@ -1,3 +1,5 @@
+import { mod } from '../utils/utils';
+
 /**
  * A cycling collection that wraps an array
  */
@@ -10,13 +12,12 @@ export class CyclingCollection<T> {
   }
 
   /**
-   * Creates a new CyclingCollection, returns null for empty arrays
+   * Creates a new CyclingCollection
    */
   static create<T>(items: T[]): CyclingCollection<T> {
     return new CyclingCollection(items);
   }
 
-  /** Array-like methods */
   get length(): number {
     return this.#array.length;
   }
@@ -30,26 +31,26 @@ export class CyclingCollection<T> {
   }
 
   moveTo(index: number): T {
-    this.#currentIndex = index % this.length;
+    this.#currentIndex = mod(index, this.length);
     return this.#array[this.#currentIndex];
   }
 
   next(): T {
-    this.#currentIndex = (this.#currentIndex + 1) % this.length;
+    this.#currentIndex = mod(this.#currentIndex + 1, this.length);
     return this.#array[this.#currentIndex];
   }
 
   prev(): T {
-    this.#currentIndex = (this.#currentIndex - 1 + this.length) % this.length;
+    this.#currentIndex = mod(this.#currentIndex - 1, this.length);
     return this.#array[this.#currentIndex];
   }
 
   peekNext(): T {
-    return this.#array[(this.#currentIndex + 1) % this.length];
+    return this.#array[mod(this.#currentIndex + 1, this.length)];
   }
 
   peekPrev(): T {
-    return this.#array[(this.#currentIndex - 1 + this.length) % this.length];
+    return this.#array[mod(this.#currentIndex - 1, this.length)];
   }
 
   reset(): void {

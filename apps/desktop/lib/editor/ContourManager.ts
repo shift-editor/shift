@@ -1,6 +1,6 @@
 import { PointType } from '@shift/shared';
 
-import { Contour } from '@/lib/core/Contour';
+import { Contour, ContourPoint } from '@/lib/core/Contour';
 import { EntityId, Ident } from '@/lib/core/EntityId';
 import { Point2D } from '@/types/math';
 import { Segment } from '@/types/segments';
@@ -55,6 +55,30 @@ export class ContourManager {
     return this.getActiveContour().addPoint(x, y, pointType);
   }
 
+  getNeighborPoints(p: ContourPoint): ContourPoint[] {
+    const c = this.#contours.get(p.entityId.parentId);
+    if (!c) {
+      console.error('No parentId for point');
+      return [];
+    }
+
+    const pointCursor = c.pointCursor();
+    const index = c.points.findIndex((point) => point.entityId.id === p.entityId.id);
+
+    if (index === -1) {
+      console.error('No index for point');
+      return [];
+    }
+
+    pointCursor.moveTo(index);
+    const neighbors = [];
+
+    neighbors.push(pointCursor.peekPrev());
+    neighbors.push(pointCursor.peekNext());
+
+    return neighbors;
+  }
+
   pointClosesPath(x: number, y: number): boolean {
     if (this.getActiveContour().points.length > 1) {
       const firstPoint = this.getActiveContour().firstPoint();
@@ -80,9 +104,7 @@ export class ContourManager {
       return;
     }
 
-    const p = c.points.find((p) => {
-      return p.entityId.id == id.id;
-    });
+    const p = c.points.find((p) => p.entityId.id === id.id);
 
     if (!p) {
       console.error('point not found');

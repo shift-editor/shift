@@ -9,7 +9,7 @@ import { Event, EventData, EventHandler } from '@/types/events';
 import { IGraphicContext, IRenderer } from '@/types/graphics';
 import { HandleState, HandleType } from '@/types/handle';
 import { Point2D, Rect2D } from '@/types/math';
-import { CubicSegment, Segment } from '@/types/segments';
+import { Segment } from '@/types/segments';
 import { Tool } from '@/types/tool';
 
 import { FrameHandler } from './FrameHandler';
@@ -245,6 +245,10 @@ export class Editor {
   // **
   public addPoint(x: number, y: number, pointType: PointType): EntityId {
     return this.#scene.addPoint(x, y, pointType);
+  }
+
+  public getNeighborPoints(p: ContourPoint): ContourPoint[] {
+    return this.#scene.getNeighborPoints(p);
   }
 
   public closeContour(): EntityId {

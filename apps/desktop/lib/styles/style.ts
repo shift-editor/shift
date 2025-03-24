@@ -99,7 +99,7 @@ export const HANDLE_STYLES: Record<HandleType, HandleStyles> = {
       dashPattern: [],
     },
     hovered: {
-      size: 3 ,
+      size: 3,
       lineWidth: 2,
       strokeStyle: '#ff6319',
       fillStyle: '#ff6319',

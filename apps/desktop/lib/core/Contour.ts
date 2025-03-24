@@ -37,6 +37,14 @@ export class ContourPoint extends Point implements IContourPoint {
     return this.#smooth;
   }
 
+  isOnCurve(): boolean {
+    return this.#pointType === 'onCurve';
+  }
+
+  isOffCurve(): boolean {
+    return this.#pointType === 'offCurve';
+  }
+
   toggleSmooth() {
     this.#smooth = true;
   }
@@ -173,12 +181,10 @@ class SegmentIterator implements Iterator<Segment> {
 export class Contour implements IContour {
   #id: EntityId;
   #points: ContourPoint[] = [];
-  #pointCursor: CyclingCollection<ContourPoint>;
   #closed: boolean = false;
 
   constructor() {
     this.#id = new EntityId();
-    this.#pointCursor = CyclingCollection.create(this.#points);
   }
 
   //**
@@ -189,7 +195,7 @@ export class Contour implements IContour {
   }
 
   pointCursor(): CyclingCollection<ContourPoint> {
-    return this.#pointCursor;
+    return CyclingCollection.create(this.#points);
   }
 
   addPoint(x: number, y: number, pointType: PointType, smooth?: boolean): EntityId {
@@ -206,8 +212,9 @@ export class Contour implements IContour {
       return id;
     }
 
-    const p1 = this.#pointCursor.moveTo(index - 1);
-    const p3 = this.#pointCursor.next();
+    const pointCursor = this.pointCursor();
+    const p1 = pointCursor.moveTo(index - 1);
+    const p3 = pointCursor.next();
 
     const c1 = p1.lerp(p3, 1.0 / 3.0);
     const c2 = p1.lerp(p3, 2.0 / 3.0);

@@ -115,6 +115,10 @@ export class Scene {
     return this.#contourManager.addPoint(x, y, pointType);
   }
 
+  public getNeighborPoints(p: ContourPoint): ContourPoint[] {
+    return this.#contourManager.getNeighborPoints(p);
+  }
+
   public closeContour(): EntityId {
     return this.#contourManager.closeContour();
   }
