@@ -373,13 +373,13 @@ export class Editor {
     // handles
     if (!this.#state.fillContour) {
       for (const contour of contours) {
-        const points = contour.points;
-        for (const [idx, point] of points.entries()) {
+        const pointCursor = contour.pointCursor();
+        for (const [idx, point] of pointCursor.items.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
           const handleState = this.getHandleState(point);
 
-          if (points.length === 1) {
+          if (pointCursor.length === 1) {
             this.paintHandle(ctx, x, y, 'corner', handleState);
             continue;
           }
@@ -395,7 +395,7 @@ export class Editor {
           }
 
           if (!contour.closed && contour.lastPoint() === point) {
-            const p2 = points[idx - 1];
+            const p2 = pointCursor.moveTo(idx - 1);
             const { x: px, y: py } = this.#viewport.projectUpmToScreen(p2.x, p2.y);
 
             this.#painter.drawLastHandle(ctx, x, y, px, py, handleState);
@@ -412,10 +412,11 @@ export class Editor {
               break;
 
             case 'offCurve': {
+              pointCursor.moveTo(idx);
               const anchor =
-                points[(idx + 1) % points.length].pointType == 'offCurve'
-                  ? points[(idx - 1) % points.length]
-                  : points[(idx + 1) % points.length];
+                pointCursor.peekNext().pointType == 'offCurve'
+                  ? pointCursor.prev()
+                  : pointCursor.next();
 
               const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
                 anchor.x,

@@ -91,15 +91,15 @@ export const HANDLE_STYLES: Record<HandleType, HandleStyles> = {
   },
   control: {
     idle: {
-      size: 3,
+      size: 1.5,
       lineWidth: 2,
       antiAlias: false,
       strokeStyle: '#ff6319',
-      fillStyle: '#ff6319',
+      fillStyle: 'white',
       dashPattern: [],
     },
     hovered: {
-      size: 3.5,
+      size: 3 ,
       lineWidth: 2,
       strokeStyle: '#ff6319',
       fillStyle: '#ff6319',
@@ -107,7 +107,7 @@ export const HANDLE_STYLES: Record<HandleType, HandleStyles> = {
       dashPattern: [],
     },
     selected: {
-      size: 5,
+      size: 4,
       lineWidth: 1,
       strokeStyle: '#ff6319',
       fillStyle: '#ff6319',

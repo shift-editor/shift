@@ -90,10 +90,6 @@ impl From<NoradFont> for Font {
 }
 
 impl FontAdaptor for UfoFontAdaptor {
-    fn extension(&self) -> &str {
-        "ufo"
-    }
-
     fn read_font(&self, path: &str) -> Result<Font, String> {
         let font = load_ufo(path.to_string());
         Ok(font.into())

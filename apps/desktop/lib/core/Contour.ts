@@ -5,6 +5,8 @@ import { Point } from '@/lib/math/point';
 import { Shape } from '@/lib/math/shape';
 import { CubicSegment, LineSegment, QuadSegment, Segment } from '@/types/segments';
 
+import { CyclingCollection } from './common';
+
 export class ContourPoint extends Point implements IContourPoint {
   #id: EntityId;
   #pointType: PointType;
@@ -41,16 +43,23 @@ export class ContourPoint extends Point implements IContourPoint {
 }
 
 class SegmentIterator implements Iterator<Segment> {
-  #points: ContourPoint[];
+  #points: CyclingCollection<ContourPoint> | null;
   #index: number = 0;
   #closed: boolean = false;
 
   public constructor(points: ContourPoint[], closed: boolean) {
     this.#closed = closed;
-    this.#points = points;
+    this.#points = CyclingCollection.create(points);
   }
 
   public next(): IteratorResult<Segment> {
+    if (this.#points === null) {
+      return {
+        done: true,
+        value: undefined,
+      };
+    }
+
     if (this.#index === -1) {
       return {
         done: true,
@@ -67,8 +76,8 @@ class SegmentIterator implements Iterator<Segment> {
 
     if (this.#index >= this.#points.length - 1) {
       if (this.#closed) {
-        const p1 = this.#points[this.#index];
-        const p2 = this.#points[(this.#index + 1) % this.#points.length];
+        const p1 = this.#points.moveTo(this.#index);
+        const p2 = this.#points.next();
 
         const segment: LineSegment = {
           type: 'line',
@@ -92,8 +101,8 @@ class SegmentIterator implements Iterator<Segment> {
       };
     }
 
-    const p1 = this.#points[this.#index];
-    const p2 = this.#points[(this.#index + 1) % this.#points.length];
+    const p1 = this.#points.current();
+    const p2 = this.#points.next();
 
     if (p1.pointType === 'onCurve' && p2.pointType === 'onCurve') {
       const segment: LineSegment = {
@@ -113,7 +122,7 @@ class SegmentIterator implements Iterator<Segment> {
     }
 
     if (p1.pointType === 'onCurve' && p2.pointType === 'offCurve') {
-      const p3 = this.#points[(this.#index + 2) % this.#points.length];
+      const p3 = this.#points.next();
 
       if (p3.pointType === 'onCurve') {
         // This is a quadratic Bezier curve
@@ -134,7 +143,7 @@ class SegmentIterator implements Iterator<Segment> {
         };
       }
 
-      const p4 = this.#points[(this.#index + 3) % this.#points.length];
+      const p4 = this.#points.next();
 
       const segment: CubicSegment = {
         type: 'cubic',
@@ -164,14 +173,23 @@ class SegmentIterator implements Iterator<Segment> {
 export class Contour implements IContour {
   #id: EntityId;
   #points: ContourPoint[] = [];
+  #pointCursor: CyclingCollection<ContourPoint>;
   #closed: boolean = false;
 
   constructor() {
     this.#id = new EntityId();
+    this.#pointCursor = CyclingCollection.create(this.#points);
   }
 
+  //**
+  // * Returns a copy of the points array
+  // */
   get points(): ContourPoint[] {
-    return this.#points;
+    return [...this.#points];
+  }
+
+  pointCursor(): CyclingCollection<ContourPoint> {
+    return this.#pointCursor;
   }
 
   addPoint(x: number, y: number, pointType: PointType, smooth?: boolean): EntityId {
@@ -188,8 +206,8 @@ export class Contour implements IContour {
       return id;
     }
 
-    const p1 = this.#points[index - 1];
-    const p3 = this.#points[index];
+    const p1 = this.#pointCursor.moveTo(index - 1);
+    const p3 = this.#pointCursor.next();
 
     const c1 = p1.lerp(p3, 1.0 / 3.0);
     const c2 = p1.lerp(p3, 2.0 / 3.0);

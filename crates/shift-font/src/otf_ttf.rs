@@ -7,7 +7,10 @@ use crate::{
     glyph::Glyph,
 };
 use skrifa::{
-    outline::{DrawSettings, OutlinePen}, prelude::{LocationRef, Size}, raw::TableProvider, FontRef, MetadataProvider
+    FontRef, MetadataProvider,
+    outline::{DrawSettings, OutlinePen},
+    prelude::{LocationRef, Size},
+    raw::TableProvider,
 };
 
 pub fn load_font(font_bytes: &[u8]) -> Result<FontRef, String> {
@@ -153,17 +156,7 @@ impl<'a> From<FontRef<'a>> for Font {
 }
 
 pub struct BytesFontAdaptor;
-
-enum Extension {
-    Ttf(String),
-    Otf(String),
-}
-
 impl FontAdaptor for BytesFontAdaptor {
-    fn extension(&self) -> &str {
-        ""
-    }
-
     fn read_font(&self, path: &str) -> Result<Font, String> {
         let bytes = std::fs::read(path).unwrap();
         let font = FontRef::new(&bytes).unwrap();

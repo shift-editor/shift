@@ -13,7 +13,6 @@ pub enum FontFormat {
 }
 
 pub trait FontAdaptor: Send + Sync {
-    fn extension(&self) -> &str;
     fn read_font(&self, path: &str) -> Result<Font, String>;
     fn write_font(&self, font: &Font, path: &str) -> Result<(), String>;
 }
@@ -36,9 +35,17 @@ impl FontService {
         }
     }
 
+    pub fn available_formats(&self) -> Vec<&FontFormat> {
+        self.adaptors.keys().collect()
+    }
+
     pub fn read_font(&mut self, path: &str) -> Result<Font, String> {
         let path = Path::new(path);
-        let extension = path.extension().unwrap().to_str().unwrap();
+        let extension = path
+            .extension()
+            .ok_or_else(|| "File has no extension".to_string())?
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in extension".to_string())?;
 
         let adaptor = match extension {
             "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
