@@ -247,6 +247,11 @@ export class Editor {
     return this.#scene.addPoint(x, y, pointType);
   }
 
+  // **
+  // Get the neighbor points of a point
+  // @param p - The point to get the neighbors of
+  // @returns The neighbor points of the point
+  // **
   public getNeighborPoints(p: ContourPoint): ContourPoint[] {
     return this.#scene.getNeighborPoints(p);
   }

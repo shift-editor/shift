@@ -22,6 +22,11 @@ export const InteractiveScene = () => {
       onMouseMove={(e) => {
         activeTool.onMouseMove(e);
       }}
+      onDoubleClick={(e) => {
+        if (!activeTool.onDoubleClick) return;
+
+        activeTool.onDoubleClick(e);
+      }}
     />
   );
 };

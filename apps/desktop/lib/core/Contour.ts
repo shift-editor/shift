@@ -46,7 +46,7 @@ export class ContourPoint extends Point implements IContourPoint {
   }
 
   toggleSmooth() {
-    this.#smooth = true;
+    this.#smooth = !this.#smooth;
   }
 }
 
