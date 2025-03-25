@@ -1,4 +1,5 @@
 pub mod contour;
+pub mod entity;
 pub mod font;
 pub mod font_service;
 pub mod glyph;

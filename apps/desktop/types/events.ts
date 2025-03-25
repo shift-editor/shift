@@ -1,11 +1,8 @@
-import { EntityId } from '@/lib/core/EntityId';
+export type EventName = 'points:added' | 'points:moved' | 'points:removed' | 'segment:upgraded';
+export type EventHandler<T> = (data: T) => void;
 
-export type EventData = {
-  'points:added': EntityId[];
-  'points:moved': EntityId[];
-  'points:removed': EntityId[];
-  'segment:upgraded': EntityId[];
-};
-
-export type Event = keyof EventData;
-export type EventHandler<T extends Event = Event> = (data: EventData[T]) => void;
+export interface IEventEmitter {
+  on<T>(event: EventName, handler: EventHandler<T>): void;
+  emit<T>(event: EventName, data: T): void;
+  off<T>(event: EventName, handler: EventHandler<T>): void;
+}

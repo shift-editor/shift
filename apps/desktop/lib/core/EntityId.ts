@@ -11,21 +11,13 @@ class Id {
 }
 
 export class EntityId {
-  #parentId: Ident = NO_PARENT_ID;
-  #id: Ident;
+  readonly parentId: Ident = NO_PARENT_ID;
+  readonly id: Ident;
 
   constructor(parentId?: Ident) {
     if (parentId) {
-      this.#parentId = parentId;
+      this.parentId = parentId;
     }
-    this.#id = Id.next();
-  }
-
-  get id(): Ident {
-    return this.#id;
-  }
-
-  get parentId(): Ident {
-    return this.#parentId;
+    this.id = Id.next();
   }
 }

@@ -1,11 +1,16 @@
-import { IContour, IContourPoint, PointType } from '@shift/shared';
+import {
+  IContour,
+  IContourPoint,
+  PointsAddedEvent,
+  PointsMovedEvent,
+  PointType,
+} from '@shift/shared';
 
 import { EntityId } from '@/lib/core/EntityId';
-import { EventEmitter } from '@/lib/core/EventEmitter';
 import { BOUNDING_RECTANGLE_STYLES, DEFAULT_STYLES, GUIDE_STYLES } from '@/lib/styles/style';
 import { tools } from '@/lib/tools/tools';
 import AppState from '@/store/store';
-import { Event, EventData, EventHandler } from '@/types/events';
+import { EventHandler, EventName, IEventEmitter } from '@/types/events';
 import { IGraphicContext, IRenderer } from '@/types/graphics';
 import { HandleState, HandleType } from '@/types/handle';
 import { Point2D, Rect2D } from '@/types/math';
@@ -17,6 +22,7 @@ import { Painter } from './Painter';
 import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
 import { Contour, ContourPoint } from '../core/Contour';
+import { UndoManager } from '../core/UndoManager';
 import { Path2D } from '../graphics/Path';
 import { getBoundingRect } from '../math/rect';
 
@@ -39,24 +45,66 @@ export class Editor {
   #scene: Scene;
   #painter: Painter;
   #frameHandler: FrameHandler;
-  #eventEmitter: EventEmitter;
+  #eventEmitter: IEventEmitter;
+
+  #undoManager: UndoManager;
 
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
 
-  constructor() {
+  constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
     this.#painter = new Painter();
 
     this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
 
-    this.#eventEmitter = new EventEmitter();
+    this.#undoManager = new UndoManager();
+
+    this.#eventEmitter = eventEmitter;
 
     this.#staticContext = null;
     this.#interactiveContext = null;
 
     this.#state = InitialEditorState;
+
+    this.on<PointsAddedEvent>('points:added', (points) => {
+      console.log('points:added', points);
+
+      this.#undoManager.push({
+        undo: () => {
+          for (const id of points.pointIds) {
+            this.removePoint(id);
+          }
+          this.redrawGlyph();
+        },
+      });
+
+      this.redrawGlyph();
+    });
+
+    this.on<PointsMovedEvent>('points:moved', (pointIds) => {
+      console.log('points:moved', pointIds);
+
+      this.#undoManager.push({
+        undo: () => {
+          for (const { pointId, dx, dy } of pointIds.points) {
+            this.movePointTo(pointId, dx, dy);
+          }
+
+          this.redrawGlyph();
+        },
+      });
+
+      console.log('undoManagerPeek', this.#undoManager.peek());
+
+      this.redrawGlyph();
+    });
+
+    this.on('points:removed', (pointIds) => {
+      console.log('points:removed', pointIds);
+      this.requestRedraw();
+    });
   }
 
   public setStaticContext(context: IGraphicContext) {
@@ -76,16 +124,20 @@ export class Editor {
     return tool.tool;
   }
 
-  public on<E extends Event>(event: E, handler: EventHandler) {
+  public on<T>(event: EventName, handler: EventHandler<T>) {
     this.#eventEmitter.on(event, handler);
   }
 
-  public off<E extends Event>(event: E, handler: EventHandler<E>) {
+  public off<T>(event: EventName, handler: EventHandler<T>) {
     this.#eventEmitter.off(event, handler);
   }
 
-  public emit<E extends Event>(event: E, data: EventData[E]) {
+  public emit<T>(event: EventName, data: T) {
     this.#eventEmitter.emit(event, data);
+  }
+
+  public undo() {
+    this.#undoManager.undo();
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -245,6 +297,10 @@ export class Editor {
   // **
   public addPoint(x: number, y: number, pointType: PointType): EntityId {
     return this.#scene.addPoint(x, y, pointType);
+  }
+
+  public removePoint(id: EntityId): ContourPoint | undefined {
+    return this.#scene.removePoint(id);
   }
 
   // **

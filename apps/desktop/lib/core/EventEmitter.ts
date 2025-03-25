@@ -1,19 +1,21 @@
-import { Event, EventData, EventHandler } from '@/types/events';
+import { emit, listen, UnlistenFn } from '@tauri-apps/api/event';
 
-export class EventEmitter {
-  #eventHandlers: Map<Event, EventHandler<Event>[]>;
+import { EventHandler, EventName, IEventEmitter } from '@/types/events';
+
+export class EventEmitter implements IEventEmitter {
+  #eventHandlers: Map<EventName, EventHandler<any>[]>;
 
   constructor() {
     this.#eventHandlers = new Map();
   }
 
-  on<E extends Event>(event: E, handler: EventHandler) {
+  on<T>(event: EventName, handler: EventHandler<T>) {
     const handlers = this.#eventHandlers.get(event) || [];
     handlers.push(handler);
     this.#eventHandlers.set(event, handlers);
   }
 
-  emit<E extends Event>(event: E, data: EventData[E]) {
+  emit<T>(event: EventName, data: T) {
     const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {
@@ -23,7 +25,7 @@ export class EventEmitter {
     handlers.forEach((handler) => handler(data));
   }
 
-  off<E extends Event>(event: E, handler: EventHandler<E>) {
+  off<T>(event: EventName, handler: EventHandler<T>) {
     const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {
@@ -34,5 +36,37 @@ export class EventEmitter {
       event,
       handlers.filter((h) => h !== handler)
     );
+  }
+}
+
+export class TauriEventEmitter implements IEventEmitter {
+  #unlistenFns: Map<EventName, UnlistenFn[]>;
+
+  constructor() {
+    this.#unlistenFns = new Map();
+  }
+
+  on<T>(event: EventName, handler: EventHandler<T>) {
+    listen<T>(event, (event) => {
+      console.log('eventPAYLOAD', event.payload);
+      handler(event.payload);
+    }).then((unlistenFn) => {
+      this.#unlistenFns.set(event, [...(this.#unlistenFns.get(event) || []), unlistenFn]);
+    });
+  }
+
+  emit<T>(event: EventName, data: T) {
+    emit(event, data);
+  }
+
+  off(event: EventName) {
+    const unlistenFns = this.#unlistenFns.get(event);
+
+    if (!unlistenFns) {
+      return;
+    }
+
+    unlistenFns.forEach((unlistenFn) => unlistenFn());
+    this.#unlistenFns.delete(event);
   }
 }

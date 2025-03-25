@@ -58,10 +58,11 @@ export class Pen implements Tool {
       },
     };
 
-    this.#editor.emit('points:added', [addedPointId]);
+    this.#editor.emit('points:added', { pointIds: [addedPointId] });
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
+    // TODO: if we create a cubic, keep all the points here
     this.#toolState = { type: 'ready' };
     this.#editor.requestRedraw();
   }
