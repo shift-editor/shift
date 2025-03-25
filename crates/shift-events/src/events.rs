@@ -12,6 +12,14 @@ pub struct FontLoadedEvent {
 #[derive(Serialize, Clone, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
+pub struct FontCompiledEvent {
+    pub file_name: String,
+    pub font_path: String,
+}
+
+#[derive(Serialize, Clone, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct PointsAddedEvent {
     pub point_ids: Vec<EntityId>,
 }

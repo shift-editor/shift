@@ -35,7 +35,7 @@ export const ToolsPane: FC = () => {
   const fileName = AppState((state) => state.fileName);
 
   useEffect(() => {
-    const unsubscribe = listen<FontLoadedEvent>('font-loaded', (event) => {
+    const unsubscribe = listen<FontLoadedEvent>('font:loaded', (event) => {
       AppState.setState({ fileName: event.payload.fileName });
     });
 

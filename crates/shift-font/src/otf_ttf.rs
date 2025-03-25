@@ -1,4 +1,8 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use crate::{
     contour::{Contour, ContourPoint, PointType},
@@ -6,6 +10,7 @@ use crate::{
     font_service::FontAdaptor,
     glyph::Glyph,
 };
+use fontc::JobTimer;
 use skrifa::{
     FontRef, MetadataProvider,
     outline::{DrawSettings, OutlinePen},
@@ -166,6 +171,21 @@ impl FontAdaptor for BytesFontAdaptor {
     fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
         Ok(())
     }
+}
+
+pub fn compile_font(path: &str, build_dir: &Path, output_name: &str) -> Result<(), String> {
+    let mut args = fontc::Args::new(build_dir, PathBuf::from(path));
+
+    args.output_file = Some(PathBuf::from(output_name));
+    let timer = JobTimer::new(Instant::now());
+    let exec_result = fontc::run(args, timer);
+    if exec_result.is_err() {
+        return Err(format!(
+            "Failed to compile font: {}",
+            exec_result.err().unwrap()
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

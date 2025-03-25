@@ -9,3 +9,4 @@ skrifa = "0.28.1"
 norad = "0.15.0"
 serde = { version = "1", features = ["derive"] }
 ts-rs = "10.1"
+fontc = { git = "https://github.com/googlefonts/fontc" }

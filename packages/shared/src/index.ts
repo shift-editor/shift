@@ -1,5 +1,6 @@
 export * from "./types/EntityId";
 export * from "./types/Font";
+export * from "./types/FontCompiledEvent";
 export * from "./types/FontLoadedEvent";
 export * from "./types/FontMetadata";
 export * from "./types/Glyph";

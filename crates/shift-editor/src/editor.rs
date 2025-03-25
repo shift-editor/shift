@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+
 use shift_font::font::{Font, Metrics};
 use shift_font::font_service::FontService;
 use shift_font::glyph::Glyph;
 
 pub struct Editor {
+    font_path: PathBuf,
     current_font: Font,
     font_service: FontService,
 }
@@ -11,6 +14,7 @@ impl Editor {
     pub fn new() -> Self {
         let font_service = FontService::new();
         Self {
+            font_path: PathBuf::new(),
             current_font: Font::default(),
             font_service,
         }
@@ -20,6 +24,10 @@ impl Editor {
         &self.current_font
     }
 
+    pub fn font_path(&self) -> &PathBuf {
+        &self.font_path
+    }
+
     pub fn read_font(&mut self, path: &str) {
         let font = self
             .font_service
@@ -27,6 +35,7 @@ impl Editor {
             .expect("Failed to read font");
 
         self.current_font = font;
+        self.font_path = PathBuf::from(path);
     }
 
     pub fn get_font_metrics(&self) -> Metrics {
