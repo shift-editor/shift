@@ -115,6 +115,10 @@ export class Scene {
     return this.#contourManager.addPoint(x, y, pointType);
   }
 
+  public removePoint(id: EntityId): ContourPoint | undefined {
+    return this.#contourManager.removePoint(id);
+  }
+
   public getNeighborPoints(p: ContourPoint): ContourPoint[] {
     return this.#contourManager.getNeighborPoints(p);
   }

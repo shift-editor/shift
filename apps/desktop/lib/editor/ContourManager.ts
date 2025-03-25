@@ -55,6 +55,16 @@ export class ContourManager {
     return this.getActiveContour().addPoint(x, y, pointType);
   }
 
+  removePoint(id: EntityId): ContourPoint | undefined {
+    const c = this.#contours.get(id.parentId);
+    if (!c) {
+      console.error('No parentId for point');
+      return;
+    }
+
+    c.removePoint(id);
+  }
+
   getNeighborPoints(p: ContourPoint): ContourPoint[] {
     const c = this.#contours.get(p.entityId.parentId);
     if (!c) {

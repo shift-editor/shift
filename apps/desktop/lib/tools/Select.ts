@@ -1,3 +1,5 @@
+import { PointsMovedEvent } from '@shift/shared';
+
 import { ContourPoint } from '@/lib/core/Contour';
 import { Editor } from '@/lib/editor/Editor';
 import { UPMRect } from '@/lib/math/rect';
@@ -57,14 +59,15 @@ export class Select implements Tool {
       const neighbors = this.#editor.getNeighborPoints(selectedPoint);
 
       switch (selectedPoint.pointType) {
-        case 'onCurve':
+        case 'onCurve': {
           const points = neighbors.filter((p) => p.pointType === 'offCurve');
           for (const p of points) {
             this.#editor.movePointTo(p.entityId, p.x + dx, p.y + dy);
           }
           break;
+        }
 
-        case 'offCurve':
+        case 'offCurve': {
           // if the anchor is smooth, we need to move the control points
           const anchor = neighbors.find((p) => p.pointType === 'onCurve')!;
           const oppositeControlPoint = this.#editor
@@ -95,6 +98,7 @@ export class Select implements Tool {
             this.#editor.movePointTo(oppositeControlPoint.entityId, newOppositeX, newOppositeY);
           }
           break;
+        }
       }
 
       this.#editor.movePointTo(selectedPoint.entityId, selectedPoint.x + dx, selectedPoint.y + dy);
@@ -230,28 +234,38 @@ export class Select implements Tool {
 
   keyDownHandler(e: KeyboardEvent) {
     if (this.#state.type === 'modifying') {
-      const selectedPointIds = Array.from(this.#editor.selectedPoints).map((p) => p.entityId);
-
       this.#state.shiftModifierOn = e.shiftKey;
       const modifier = e.metaKey ? 'large' : e.shiftKey ? 'medium' : 'small';
-      const nudge = NUDGES_VALUES[modifier];
+      const nudgeValue = NUDGES_VALUES[modifier];
+
+      const collectPoints = (p: ContourPoint, dx: number, dy: number) => ({
+        pointId: p.entityId,
+        dx,
+        dy,
+      });
+
+      const nudge = (dx: number, dy: number) => {
+        this.moveSelectedPoints(dx, dy);
+        this.#editor.emit<PointsMovedEvent>('points:moved', {
+          points: this.#editor.selectedPoints.map((p) => collectPoints(p, p.x - dx, p.y - dy)),
+        });
+      };
 
       switch (e.key) {
         case 'ArrowLeft':
-          this.moveSelectedPoints(-nudge, 0);
-          this.#editor.emit('points:moved', selectedPointIds);
+          nudge(-nudgeValue, 0);
           break;
+
         case 'ArrowRight':
-          this.moveSelectedPoints(nudge, 0);
-          this.#editor.emit('points:moved', selectedPointIds);
+          nudge(nudgeValue, 0);
           break;
+
         case 'ArrowUp':
-          this.moveSelectedPoints(0, nudge);
-          this.#editor.emit('points:moved', selectedPointIds);
+          nudge(0, nudgeValue);
           break;
+
         case 'ArrowDown':
-          this.moveSelectedPoints(0, -nudge);
-          this.#editor.emit('points:moved', selectedPointIds);
+          nudge(0, -nudgeValue);
           break;
       }
     }

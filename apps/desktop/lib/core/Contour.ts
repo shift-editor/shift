@@ -204,6 +204,19 @@ export class Contour implements IContour {
     return p.entityId;
   }
 
+  removePoint(id: EntityId): ContourPoint | undefined {
+    const index = this.#points.findIndex((p) => p.entityId.id === id.id);
+    if (index === -1) {
+      console.error('No index found for point');
+      return;
+    }
+
+    const point = this.#points[index];
+    this.#points.splice(index, 1);
+
+    return point;
+  }
+
   upgradeLineSegment(id: EntityId): EntityId {
     const index = this.#points.findIndex((p) => p.entityId.id === id.id);
 

@@ -1,6 +1,7 @@
 import { Glyph } from '@shift/shared';
 import { create } from 'zustand';
 
+import { TauriEventEmitter } from '@/lib/core/EventEmitter';
 import { Editor } from '@/lib/editor/Editor';
 import { createToolRegistry } from '@/lib/tools/tools';
 import { ToolName } from '@/types/tool';
@@ -15,25 +16,9 @@ interface AppState {
 }
 
 const AppState = create<AppState>()((set) => {
-  const editor = new Editor();
+  const tauriEventEmitter = new TauriEventEmitter();
+  const editor = new Editor(tauriEventEmitter);
   createToolRegistry(editor);
-
-  editor.on('points:added', (pointIds) => {
-    console.log('points:added', pointIds);
-
-    editor.redrawGlyph();
-  });
-
-  editor.on('points:moved', (pointIds) => {
-    console.log('points:moved', pointIds);
-
-    editor.redrawGlyph();
-  });
-
-  editor.on('points:removed', (pointIds) => {
-    console.log('points:removed', pointIds);
-    editor.requestRedraw();
-  });
 
   return {
     editor,

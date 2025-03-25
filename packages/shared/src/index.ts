@@ -1,3 +1,4 @@
+export * from "./types/EntityId";
 export * from "./types/Font";
 export * from "./types/FontLoadedEvent";
 export * from "./types/FontMetadata";
@@ -5,5 +6,8 @@ export * from "./types/Glyph";
 export * from "./types/IContour";
 export * from "./types/IContourPoint";
 export * from "./types/Metrics";
+export * from "./types/MovedPoint";
 export * from "./types/PathCommand";
 export * from "./types/PointType";
+export * from "./types/PointsAddedEvent";
+export * from "./types/PointsMovedEvent";

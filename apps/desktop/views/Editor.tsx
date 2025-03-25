@@ -58,6 +58,10 @@ export const Editor = () => {
         editor.requestRedraw();
       }
 
+      if (e.key == 'z' && e.metaKey) {
+        editor.undo();
+      }
+
       if (activeTool.keyDownHandler) {
         activeTool.keyDownHandler(e);
       }
