@@ -13,6 +13,7 @@ export interface Tool {
 
   keyDownHandler?(e: KeyboardEvent): void;
   keyUpHandler?(e: KeyboardEvent): void;
+  onDoubleClick?(e: React.MouseEvent<HTMLCanvasElement>): void;
 
   drawInteractive?(ctx: IRenderer): void;
 }
