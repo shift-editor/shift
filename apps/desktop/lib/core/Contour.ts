@@ -199,6 +199,13 @@ export class Contour implements IContour {
     return [...this.#points];
   }
 
+  clone(): Contour {
+    const contour = new Contour();
+    contour.#points = [...this.#points];
+    contour.#closed = this.#closed;
+    return contour;
+  }
+
   pointCursor(): CyclingCollection<ContourPoint> {
     return CyclingCollection.create(this.#points);
   }

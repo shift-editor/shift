@@ -88,15 +88,12 @@ export class Editor {
 
       this.#undoManager.push({
         undo: () => {
-          for (const { pointId, dx, dy } of pointIds.points) {
-            this.movePointBy(pointId, -dx, -dy);
+          for (const { pointId, fromX, fromY } of pointIds.points) {
+            console.log(pointId, fromX, fromY);
+            this.movePointTo(pointId, fromX, fromY);
           }
-
-          this.redrawGlyph();
         },
       });
-
-      this.redrawGlyph();
     });
 
     this.on('points:removed', (pointIds) => {
@@ -136,6 +133,7 @@ export class Editor {
 
   public undo() {
     this.#undoManager.undo();
+    this.redrawGlyph();
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -295,6 +293,10 @@ export class Editor {
   // **
   public addPoint(x: number, y: number, pointType: PointType): EntityId {
     return this.#scene.addPoint(x, y, pointType);
+  }
+
+  public getPoint(id: EntityId): ContourPoint | undefined {
+    return this.#scene.getPoint(id);
   }
 
   public removePoint(id: EntityId): ContourPoint | undefined {

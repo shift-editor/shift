@@ -2,7 +2,6 @@ import { PointType } from '@shift/shared';
 
 import { Contour, ContourPoint } from '@/lib/core/Contour';
 import { EntityId, Ident } from '@/lib/core/EntityId';
-import { Point2D } from '@/types/math';
 import { Segment } from '@/types/segments';
 
 export class ContourManager {
@@ -53,6 +52,22 @@ export class ContourManager {
     }
 
     return this.getActiveContour().addPoint(x, y, pointType);
+  }
+
+  getPoint(id: EntityId): ContourPoint | undefined {
+    const c = this.#contours.get(id.parentId);
+    if (!c) {
+      console.error('No parentId for point');
+      return undefined;
+    }
+
+    const point = c.points.find((p) => p.entityId.id === id.id);
+    if (!point) {
+      console.error('No point found');
+      return undefined;
+    }
+
+    return point;
   }
 
   removePoint(id: EntityId): ContourPoint | undefined {
@@ -140,11 +155,25 @@ export class ContourManager {
 
     p.movePointBy(dx, dy);
   }
+
   addContour(contour?: Contour): EntityId {
     const c = contour ?? new Contour();
     this.#contours.set(c.entityId.id, c);
 
     return c.entityId;
+  }
+
+  duplicateContour(id: EntityId): EntityId {
+    const c = this.#contours.get(id.id);
+    if (!c) {
+      console.error('No parentId for point');
+      return id;
+    }
+
+    const newContour = c.clone();
+    this.#contours.set(newContour.entityId.id, newContour);
+
+    return newContour.entityId;
   }
 
   upgradeLineSegment(id: EntityId): EntityId {

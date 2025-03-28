@@ -32,10 +32,7 @@ pub fn create_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    let compile = MenuItemBuilder::new("Compile")
-        .id("compile")
-        .accelerator("CmdOrCtrl+C")
-        .build(app)?;
+    let compile = MenuItemBuilder::new("Compile").id("compile").build(app)?;
 
     let file = SubmenuBuilder::new(app, "File")
         .item(&new)

@@ -29,8 +29,10 @@ pub struct PointsAddedEvent {
 #[serde(rename_all = "camelCase")]
 pub struct MovedPoint {
     pub point_id: EntityId,
-    pub dx: f32,
-    pub dy: f32,
+    pub from_x: f32,
+    pub from_y: f32,
+    pub to_x: f32,
+    pub to_y: f32,
 }
 
 #[derive(Serialize, Clone, TS)]

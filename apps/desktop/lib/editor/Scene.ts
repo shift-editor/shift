@@ -115,6 +115,10 @@ export class Scene {
     return this.#contourManager.addPoint(x, y, pointType);
   }
 
+  public getPoint(id: EntityId): ContourPoint | undefined {
+    return this.#contourManager.getPoint(id);
+  }
+
   public removePoint(id: EntityId): ContourPoint | undefined {
     return this.#contourManager.removePoint(id);
   }

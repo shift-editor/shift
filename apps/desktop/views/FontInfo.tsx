@@ -4,6 +4,7 @@ import { Metrics } from '@shift/shared';
 import { invoke } from '@tauri-apps/api/core';
 
 import { Toolbar } from '@/components/Toolbar';
+
 export const FontInfo = () => {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
 
@@ -19,7 +20,7 @@ export const FontInfo = () => {
   return (
     <>
       <Toolbar />
-      <main className="flex h-screen w-screen flex-col items-center justify-center">
+      <main className="text-light flex h-screen w-screen flex-col items-center justify-center text-white">
         <h1>Font Info</h1>
         <div>
           <p>Units per em: {metrics?.unitsPerEm}</p>

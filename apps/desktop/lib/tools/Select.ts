@@ -112,8 +112,6 @@ export class Select implements Tool {
     }
   }
 
-  commitSelectedPoints(): void {}
-
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -149,7 +147,7 @@ export class Select implements Tool {
           }
         }
 
-        this.#state.selectedPoint = firstHitPoint;
+        this.#state = { type: 'modifying', startPos: { x, y }, selectedPoint: firstHitPoint };
         break;
     }
 
@@ -213,8 +211,10 @@ export class Select implements Tool {
         this.#editor.emit<PointsMovedEvent>('points:moved', {
           points: this.#editor.selectedPoints.map((p) => ({
             pointId: p.entityId,
-            dx,
-            dy,
+            fromX: p.x - dx,
+            fromY: p.y - dy,
+            toX: p.x,
+            toY: p.y,
           })),
         });
       };
@@ -260,8 +260,10 @@ export class Select implements Tool {
         this.#editor.emit<PointsMovedEvent>('points:moved', {
           points: this.#editor.selectedPoints.map((p) => ({
             pointId: p.entityId,
-            dx,
-            dy,
+            fromX: p.x - dx,
+            fromY: p.y - dy,
+            toX: p.x,
+            toY: p.y,
           })),
         });
       };

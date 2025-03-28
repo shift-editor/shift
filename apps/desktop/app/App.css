@@ -1,5 +1,6 @@
 body {
   background-color: var(--color-secondary);
+  overflow: hidden;
 }
 
 @font-face {
