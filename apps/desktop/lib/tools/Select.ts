@@ -15,6 +15,7 @@ export type SelectState =
   | { type: 'selecting'; startPos: Point2D }
   | {
       type: 'modifying';
+      startPos: Point2D;
       selectedPoint?: ContourPoint;
       shiftModifierOn?: boolean;
     };
@@ -62,7 +63,7 @@ export class Select implements Tool {
         case 'onCurve': {
           const points = neighbors.filter((p) => p.pointType === 'offCurve');
           for (const p of points) {
-            this.#editor.movePointTo(p.entityId, p.x + dx, p.y + dy);
+            this.#editor.movePointBy(p.entityId, dx, dy);
           }
           break;
         }
@@ -101,13 +102,13 @@ export class Select implements Tool {
         }
       }
 
-      this.#editor.movePointTo(selectedPoint.entityId, selectedPoint.x + dx, selectedPoint.y + dy);
+      this.#editor.movePointBy(selectedPoint.entityId, dx, dy);
 
       return;
     }
 
     for (const point of selectedPoints) {
-      this.#editor.movePointTo(point.entityId, point.x + dx, point.y + dy);
+      this.#editor.movePointBy(point.entityId, dx, dy);
     }
   }
 
@@ -125,7 +126,7 @@ export class Select implements Tool {
     switch (this.#state.type) {
       case 'ready':
         if (hitPoints.length === 1) {
-          this.#state = { type: 'modifying', selectedPoint: firstHitPoint };
+          this.#state = { type: 'modifying', startPos: { x, y }, selectedPoint: firstHitPoint };
           this.commitHitPoints(hitPoints);
           break;
         }
@@ -155,27 +156,6 @@ export class Select implements Tool {
     this.#editor.requestRedraw();
   }
 
-  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state.type === 'selecting') {
-      const hitPoints = this.gatherHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
-
-      if (hitPoints.length === 0) {
-        this.#state = { type: 'ready' };
-      } else {
-        this.commitHitPoints(hitPoints);
-        this.#state = { type: 'modifying' };
-      }
-
-      this.#selectionRect.clear();
-    }
-
-    if (this.#state.type === 'modifying') {
-      this.#state.selectedPoint = undefined;
-    }
-
-    this.#editor.requestRedraw();
-  }
-
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -195,8 +175,6 @@ export class Select implements Tool {
       const dy = y - this.#state.selectedPoint.y;
 
       this.moveSelectedPoints(dx, dy);
-
-      this.#editor.redrawGlyph();
     }
 
     const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
@@ -205,6 +183,45 @@ export class Select implements Tool {
       this.#editor.setHoveredPoint(hitPoints[0]);
     } else {
       this.#editor.clearHoveredPoint();
+    }
+
+    this.#editor.redrawGlyph();
+  }
+
+  onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
+    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    if (this.#state.type === 'selecting') {
+      const hitPoints = this.gatherHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
+
+      if (hitPoints.length === 0) {
+        this.#state = { type: 'ready' };
+      } else {
+        this.commitHitPoints(hitPoints);
+        this.#state = { type: 'modifying', startPos: { x, y } };
+      }
+
+      this.#selectionRect.clear();
+    }
+
+    if (this.#state.type === 'modifying' && this.#state.selectedPoint) {
+      const dx = x - this.#state.startPos.x;
+      const dy = y - this.#state.startPos.y;
+
+      const commitMove = (dx: number, dy: number) => {
+        this.#editor.emit<PointsMovedEvent>('points:moved', {
+          points: this.#editor.selectedPoints.map((p) => ({
+            pointId: p.entityId,
+            dx,
+            dy,
+          })),
+        });
+      };
+
+      commitMove(dx, dy);
+
+      this.#state.selectedPoint = undefined;
     }
 
     this.#editor.requestRedraw();
@@ -238,16 +255,14 @@ export class Select implements Tool {
       const modifier = e.metaKey ? 'large' : e.shiftKey ? 'medium' : 'small';
       const nudgeValue = NUDGES_VALUES[modifier];
 
-      const collectPoints = (p: ContourPoint, dx: number, dy: number) => ({
-        pointId: p.entityId,
-        dx,
-        dy,
-      });
-
       const nudge = (dx: number, dy: number) => {
         this.moveSelectedPoints(dx, dy);
         this.#editor.emit<PointsMovedEvent>('points:moved', {
-          points: this.#editor.selectedPoints.map((p) => collectPoints(p, p.x - dx, p.y - dy)),
+          points: this.#editor.selectedPoints.map((p) => ({
+            pointId: p.entityId,
+            dx,
+            dy,
+          })),
         });
       };
 

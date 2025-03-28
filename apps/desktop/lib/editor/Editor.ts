@@ -89,14 +89,12 @@ export class Editor {
       this.#undoManager.push({
         undo: () => {
           for (const { pointId, dx, dy } of pointIds.points) {
-            this.movePointTo(pointId, dx, dy);
+            this.movePointBy(pointId, -dx, -dy);
           }
 
           this.redrawGlyph();
         },
       });
-
-      console.log('undoManagerPeek', this.#undoManager.peek());
 
       this.redrawGlyph();
     });
@@ -326,7 +324,11 @@ export class Editor {
   }
 
   public movePointTo(id: EntityId, x: number, y: number) {
-    this.#scene.movePointTo({ x, y }, id);
+    this.#scene.movePointTo(id, x, y);
+  }
+
+  public movePointBy(id: EntityId, dx: number, dy: number) {
+    this.#scene.movePointBy(id, dx, dy);
   }
 
   public getAllPoints(): ReadonlyArray<ContourPoint> {

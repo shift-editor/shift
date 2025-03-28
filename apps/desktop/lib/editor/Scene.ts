@@ -143,8 +143,12 @@ export class Scene {
     this.#contourManager.clearContours();
   }
 
-  public movePointTo(point: Point2D, id: EntityId) {
-    this.#contourManager.movePointTo(point, id);
+  public movePointTo(id: EntityId, x: number, y: number) {
+    this.#contourManager.movePointTo(id, x, y);
+  }
+
+  public movePointBy(id: EntityId, dx: number, dy: number) {
+    this.#contourManager.movePointBy(id, dx, dy);
   }
 
   public upgradeLineSegment(id: EntityId): EntityId {

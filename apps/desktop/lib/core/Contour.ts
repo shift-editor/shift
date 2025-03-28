@@ -25,6 +25,11 @@ export class ContourPoint extends Point implements IContourPoint {
     this.set_y(y);
   }
 
+  movePointBy(dx: number, dy: number) {
+    this.set_x(this.x + dx);
+    this.set_y(this.y + dy);
+  }
+
   get entityId(): EntityId {
     return this.#id;
   }

@@ -48,7 +48,6 @@ export class TauriEventEmitter implements IEventEmitter {
 
   on<T>(event: EventName, handler: EventHandler<T>) {
     listen<T>(event, (event) => {
-      console.log('eventPAYLOAD', event.payload);
       handler(event.payload);
     }).then((unlistenFn) => {
       this.#unlistenFns.set(event, [...(this.#unlistenFns.get(event) || []), unlistenFn]);

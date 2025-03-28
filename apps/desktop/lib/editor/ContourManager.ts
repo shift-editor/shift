@@ -107,7 +107,7 @@ export class ContourManager {
     return firstPoint.entityId;
   }
 
-  movePointTo(point: Point2D, id: EntityId) {
+  movePointTo(id: EntityId, x: number, y: number) {
     const c = this.#contours.get(id.parentId);
     if (!c) {
       console.error('No parentId for point');
@@ -121,9 +121,25 @@ export class ContourManager {
       return;
     }
 
-    p.movePointTo(point.x, point.y);
+    p.movePointTo(x, y);
   }
 
+  movePointBy(id: EntityId, dx: number, dy: number) {
+    const c = this.#contours.get(id.parentId);
+    if (!c) {
+      console.error('No parentId for point');
+      return;
+    }
+
+    const p = c.points.find((p) => p.entityId.id === id.id);
+
+    if (!p) {
+      console.error('point not found');
+      return;
+    }
+
+    p.movePointBy(dx, dy);
+  }
   addContour(contour?: Contour): EntityId {
     const c = contour ?? new Contour();
     this.#contours.set(c.entityId.id, c);
