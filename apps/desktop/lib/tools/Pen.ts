@@ -59,6 +59,7 @@ export class Pen implements Tool {
     };
 
     this.#editor.emit('points:added', { pointIds: [addedPointId] });
+    this.#editor.requestRedraw();
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {

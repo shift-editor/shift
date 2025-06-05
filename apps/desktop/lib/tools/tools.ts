@@ -19,7 +19,11 @@ export interface ToolRegistryItem {
 export const tools = new Map<ToolName, ToolRegistryItem>();
 
 export const createToolRegistry = (editor: Editor) => {
-  tools.set('select', { tool: new Select(editor), icon: SelectIcon, tooltip: 'Select Tool (V)' });
+  tools.set('select', {
+    tool: new Select(editor.editSession()),
+    icon: SelectIcon,
+    tooltip: 'Select Tool (V)',
+  });
   tools.set('pen', { tool: new Pen(editor), icon: PenIcon, tooltip: 'Pen Tool (P)' });
   tools.set('hand', { tool: new Hand(editor), icon: HandIcon, tooltip: 'Hand Tool (H)' });
   tools.set('shape', { tool: new Shape(editor), icon: ShapeIcon, tooltip: 'Shape Tool (S)' });

@@ -1,9 +1,7 @@
-import { PointsMovedEvent } from '@shift/shared';
-
 import { ContourPoint } from '@/lib/core/Contour';
-import { Editor } from '@/lib/editor/Editor';
 import { UPMRect } from '@/lib/math/rect';
 import { SELECTION_RECTANGLE_STYLES } from '@/lib/styles/style';
+import { EditSession } from '@/types/edit';
 import { IRenderer } from '@/types/graphics';
 import { Point2D } from '@/types/math';
 import { NUDGES_VALUES } from '@/types/nudge';
@@ -23,12 +21,12 @@ export type SelectState =
 export class Select implements Tool {
   public readonly name: ToolName = 'select';
 
-  #editor: Editor;
+  #session: EditSession;
   #state: SelectState;
   #selectionRect: UPMRect;
 
-  public constructor(editor: Editor) {
-    this.#editor = editor;
+  public constructor(session: EditSession) {
+    this.#session = session;
     this.#state = { type: 'idle' };
     this.#selectionRect = new UPMRect(0, 0, 0, 0);
   }
@@ -42,82 +40,67 @@ export class Select implements Tool {
   }
 
   gatherHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {
-    return this.#editor.getAllPoints().filter(hitTest);
+    return this.#session.getAllPoints().filter(hitTest);
   }
 
-  commitHitPoints(hitPoints: ContourPoint[]): void {
-    hitPoints.map((p) => this.#editor.addToSelectedPoints(p));
+  isPointSelected(point: ContourPoint): boolean {
+    return this.#session.getSelectedPoints().includes(point);
   }
 
   moveSelectedPoints(dx: number, dy: number): void {
     // TODO: handle smooth points
-    const selectedPoints = this.#editor.selectedPoints;
-    const selectedPoint = selectedPoints[0];
-
-    // moving an onCurve point with offCurve neighbors should move
-    // those neighbors as well
-    if (selectedPoints.length === 1) {
-      const neighbors = this.#editor.getNeighborPoints(selectedPoint);
-
-      switch (selectedPoint.pointType) {
-        case 'onCurve': {
-          const points = neighbors.filter((p) => p.pointType === 'offCurve');
-          for (const p of points) {
-            this.#editor.movePointBy(p.entityId, dx, dy);
-          }
-          break;
-        }
-
-        case 'offCurve': {
-          // if the anchor is smooth, we need to move the control points
-          const anchor = neighbors.find((p) => p.pointType === 'onCurve')!;
-          const oppositeControlPoint = this.#editor
-            .getNeighborPoints(anchor)
-            .find((p) => p.pointType == 'offCurve' && p !== selectedPoint);
-
-          if (anchor.smooth && oppositeControlPoint) {
-            const newSelectedX = selectedPoint.x + dx;
-            const newSelectedY = selectedPoint.y + dy;
-
-            const selectedVector = {
-              x: newSelectedX - anchor.x,
-              y: newSelectedY - anchor.y,
-            };
-
-            const originalMagnitude = Math.hypot(
-              oppositeControlPoint.x - anchor.x,
-              oppositeControlPoint.y - anchor.y
-            );
-
-            const magnitude = Math.hypot(selectedVector.x, selectedVector.y);
-            const unitX = -selectedVector.x / magnitude;
-            const unitY = -selectedVector.y / magnitude;
-
-            const newOppositeX = anchor.x + unitX * originalMagnitude;
-            const newOppositeY = anchor.y + unitY * originalMagnitude;
-
-            this.#editor.movePointTo(oppositeControlPoint.entityId, newOppositeX, newOppositeY);
-          }
-          break;
-        }
-      }
-
-      this.#editor.movePointBy(selectedPoint.entityId, dx, dy);
-
-      return;
-    }
-
-    for (const point of selectedPoints) {
-      this.#editor.movePointBy(point.entityId, dx, dy);
-    }
+    // const selectedPoints = this.#editor.selectedPoints;
+    // const selectedPoint = selectedPoints[0];
+    // // moving an onCurve point with offCurve neighbors should move
+    // // those neighbors as well
+    // if (selectedPoints.length === 1) {
+    //   const neighbors = this.#editor.getNeighborPoints(selectedPoint);
+    //   switch (selectedPoint.pointType) {
+    //     case 'onCurve': {
+    //       const points = neighbors.filter((p) => p.pointType === 'offCurve');
+    //       for (const p of points) {
+    //         this.#editor.movePointBy(p.entityId, dx, dy);
+    //       }
+    //       break;
+    //     }
+    //     case 'offCurve': {
+    //       // if the anchor is smooth, we need to move the control points
+    //       const anchor = neighbors.find((p) => p.pointType === 'onCurve')!;
+    //       const oppositeControlPoint = this.#editor
+    //         .getNeighborPoints(anchor)
+    //         .find((p) => p.pointType == 'offCurve' && p !== selectedPoint);
+    //       if (anchor.smooth && oppositeControlPoint) {
+    //         const newSelectedX = selectedPoint.x + dx;
+    //         const newSelectedY = selectedPoint.y + dy;
+    //         const selectedVector = {
+    //           x: newSelectedX - anchor.x,
+    //           y: newSelectedY - anchor.y,
+    //         };
+    //         const originalMagnitude = Math.hypot(
+    //           oppositeControlPoint.x - anchor.x,
+    //           oppositeControlPoint.y - anchor.y
+    //         );
+    //         const magnitude = Math.hypot(selectedVector.x, selectedVector.y);
+    //         const unitX = -selectedVector.x / magnitude;
+    //         const unitY = -selectedVector.y / magnitude;
+    //         const newOppositeX = anchor.x + unitX * originalMagnitude;
+    //         const newOppositeY = anchor.y + unitY * originalMagnitude;
+    //         this.#editor.movePointTo(oppositeControlPoint.entityId, newOppositeX, newOppositeY);
+    //       }
+    //       break;
+    //     }
+    //   }
+    //   this.#editor.movePointBy(selectedPoint.entityId, dx, dy);
+    //   return;
+    // }
+    // for (const point of selectedPoints) {
+    //   this.#editor.movePointBy(point.entityId, dx, dy);
+    // }
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
 
-    // TODO:  this could return multiple values if the points are very close
-    //        we need to think about how to handle this
     const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
     const firstHitPoint = hitPoints[0];
 
@@ -125,7 +108,7 @@ export class Select implements Tool {
       case 'ready':
         if (hitPoints.length === 1) {
           this.#state = { type: 'modifying', startPos: { x, y }, selectedPoint: firstHitPoint };
-          this.commitHitPoints(hitPoints);
+          this.#session.setSelectedPoints(hitPoints);
           break;
         }
 
@@ -134,16 +117,16 @@ export class Select implements Tool {
       case 'modifying':
         if (hitPoints.length === 0) {
           this.#state = { type: 'ready' };
-          this.#editor.clearSelectedPoints();
+          this.#session.clearSelectedPoints();
           break;
         }
 
-        if (!this.#editor.isPointSelected(firstHitPoint)) {
+        if (!this.isPointSelected(firstHitPoint)) {
           if (this.#state.shiftModifierOn) {
-            this.commitHitPoints(hitPoints);
+            this.#session.setSelectedPoints(hitPoints);
           } else {
-            this.#editor.clearSelectedPoints();
-            this.commitHitPoints(hitPoints);
+            this.#session.clearSelectedPoints();
+            this.#session.setSelectedPoints(hitPoints);
           }
         }
 
@@ -151,12 +134,11 @@ export class Select implements Tool {
         break;
     }
 
-    this.#editor.requestRedraw();
+    this.#session.redraw();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
 
     if (this.#state.type === 'selecting') {
       const width = x - this.#state.startPos.x;
@@ -172,23 +154,23 @@ export class Select implements Tool {
       const dx = x - this.#state.selectedPoint.x;
       const dy = y - this.#state.selectedPoint.y;
 
-      this.moveSelectedPoints(dx, dy);
+      this.#session.preview(dx, dy);
+      // this.#session.commit();
     }
 
     const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
 
     if (hitPoints.length > 0) {
-      this.#editor.setHoveredPoint(hitPoints[0]);
+      this.#session.setHoveredPoint(hitPoints[0]);
     } else {
-      this.#editor.clearHoveredPoint();
+      this.#session.clearHoveredPoint();
     }
 
-    this.#editor.redrawGlyph();
+    this.#session.redraw();
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
 
     if (this.#state.type === 'selecting') {
       const hitPoints = this.gatherHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
@@ -196,7 +178,7 @@ export class Select implements Tool {
       if (hitPoints.length === 0) {
         this.#state = { type: 'ready' };
       } else {
-        this.commitHitPoints(hitPoints);
+        this.#session.setSelectedPoints(hitPoints);
         this.#state = { type: 'modifying', startPos: { x, y } };
       }
 
@@ -207,24 +189,12 @@ export class Select implements Tool {
       const dx = x - this.#state.startPos.x;
       const dy = y - this.#state.startPos.y;
 
-      const commitMove = (dx: number, dy: number) => {
-        this.#editor.emit<PointsMovedEvent>('points:moved', {
-          points: this.#editor.selectedPoints.map((p) => ({
-            pointId: p.entityId,
-            fromX: p.x - dx,
-            fromY: p.y - dy,
-            toX: p.x,
-            toY: p.y,
-          })),
-        });
-      };
-
-      commitMove(dx, dy);
-
+      // this.#session.preview(dx, dy);
+      this.#session.commit(dx, dy);
       this.#state.selectedPoint = undefined;
     }
 
-    this.#editor.requestRedraw();
+    this.#session.redraw();
   }
 
   drawInteractive(ctx: IRenderer): void {
@@ -256,16 +226,9 @@ export class Select implements Tool {
       const nudgeValue = NUDGES_VALUES[modifier];
 
       const nudge = (dx: number, dy: number) => {
-        this.moveSelectedPoints(dx, dy);
-        this.#editor.emit<PointsMovedEvent>('points:moved', {
-          points: this.#editor.selectedPoints.map((p) => ({
-            pointId: p.entityId,
-            fromX: p.x - dx,
-            fromY: p.y - dy,
-            toX: p.x,
-            toY: p.y,
-          })),
-        });
+        this.#session.preview(dx, dy);
+        this.#session.commit(dx, dy);
+        this.#session.redraw();
       };
 
       switch (e.key) {
@@ -294,22 +257,21 @@ export class Select implements Tool {
     }
   }
 
-  onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-
-    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
-
-    if (hitPoints.length === 1) {
-      const point = hitPoints[0];
-      const segment = this.#editor.getSegment(point.entityId);
-      if (!segment) return;
-
-      // need to handle the case where this corner is wedged between two segments
-      // one of which is a cubic and line or two cubics
-      if (point.pointType === 'onCurve') {
-        point.toggleSmooth();
-      }
-    }
-  }
+  // onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>): void {
+  //   const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
+  //
+  //   const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
+  //
+  //   if (hitPoints.length === 1) {
+  //     const point = hitPoints[0];
+  //     const segment = this.#editor.getSegment(point.entityId);
+  //     if (!segment) return;
+  //
+  //     // need to handle the case where this corner is wedged between two segments
+  //     // one of which is a cubic and line or two cubics
+  //     if (point.pointType === 'onCurve') {
+  //       point.toggleSmooth();
+  //     }
+  //   }
+  // }
 }

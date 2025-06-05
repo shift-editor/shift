@@ -10,6 +10,7 @@ import { EntityId } from '@/lib/core/EntityId';
 import { BOUNDING_RECTANGLE_STYLES, DEFAULT_STYLES, GUIDE_STYLES } from '@/lib/styles/style';
 import { tools } from '@/lib/tools/tools';
 import AppState from '@/store/store';
+import { EditSession } from '@/types/edit';
 import { EventHandler, EventName, IEventEmitter } from '@/types/events';
 import { IGraphicContext, IRenderer } from '@/types/graphics';
 import { HandleState, HandleType } from '@/types/handle';
@@ -22,6 +23,7 @@ import { Painter } from './Painter';
 import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
 import { Contour, ContourPoint } from '../core/Contour';
+import { EditEngine, EditEngineContext } from '../core/EditEngine';
 import { UndoManager } from '../core/UndoManager';
 import { Path2D } from '../graphics/Path';
 import { getBoundingRect } from '../math/rect';
@@ -79,7 +81,6 @@ export class Editor {
           this.redrawGlyph();
         },
       });
-
       this.redrawGlyph();
     });
 
@@ -89,9 +90,10 @@ export class Editor {
       this.#undoManager.push({
         undo: () => {
           for (const { pointId, fromX, fromY } of pointIds.points) {
-            console.log(pointId, fromX, fromY);
             this.movePointTo(pointId, fromX, fromY);
           }
+
+          this.redrawGlyph();
         },
       });
     });
@@ -108,6 +110,59 @@ export class Editor {
 
   public setInteractiveContext(context: IGraphicContext) {
     this.#interactiveContext = context;
+  }
+
+  public editSession(): EditSession {
+    const editEngineContext: EditEngineContext = {
+      getSelectedPoints: () => [...this.#state.selectedPoints.values()],
+      movePointBy: (point, dx, dy) => {
+        this.#scene.movePointBy(point.entityId, dx, dy);
+      },
+    };
+
+    const editEngine = new EditEngine(editEngineContext);
+
+    return {
+      getMousePosition: (x, y) => {
+        const position = this.getMousePosition(x, y);
+        return this.projectScreenToUpm(position.x, position.y);
+      },
+      getAllPoints: () => [...this.#scene.getAllPoints()],
+      getSelectedPoints: () => [...this.#state.selectedPoints.values()],
+      getHoveredPoint: () => this.#state.hoveredPoint,
+
+      setSelectedPoints: (points) => {
+        this.#state.selectedPoints = new Set(points);
+      },
+      clearSelectedPoints: () => {
+        this.#state.selectedPoints.clear();
+      },
+      setHoveredPoint: (point) => {
+        this.#state.hoveredPoint = point;
+      },
+      clearHoveredPoint: () => {
+        this.#state.hoveredPoint = null;
+      },
+      preview: (dx, dy) => {
+        editEngine.previewEdits(dx, dy);
+      },
+      commit: (dx, dy) => {
+        const edits = editEngine.commitEdits(dx, dy);
+
+        this.emit<PointsMovedEvent>('points:moved', {
+          points: edits.map((e) => ({
+            pointId: e.point.entityId,
+            fromX: e.fromX,
+            fromY: e.fromY,
+            toX: e.toX,
+            toY: e.toY,
+          })),
+        });
+      },
+      redraw: () => {
+        this.redrawGlyph();
+      },
+    };
   }
 
   public activeTool(): Tool {

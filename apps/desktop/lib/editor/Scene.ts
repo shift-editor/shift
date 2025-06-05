@@ -1,7 +1,6 @@
 import { PointType } from '@shift/shared';
 
-import { EntityId, Ident } from '@/lib/core/EntityId';
-import { Point2D } from '@/types/math';
+import { EntityId } from '@/lib/core/EntityId';
 import { Segment } from '@/types/segments';
 
 import { ContourManager } from './ContourManager';
@@ -169,7 +168,7 @@ export class Scene {
 
   // TODO: perhaps make this into a single functions where
   // you can pass optional IDs and if not it returns all points
-  public getAllPoints(): ReadonlyArray<ContourPoint> {
+  public getAllPoints(): ContourPoint[] {
     return this.#contourManager
       .contours()
       .map((c) => {
