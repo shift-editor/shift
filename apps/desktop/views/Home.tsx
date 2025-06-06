@@ -1,16 +1,7 @@
-import { useEffect } from 'react';
-
 import { GlyphGrid } from '@/components/GlyphGrid';
 import { Toolbar } from '@/components/Toolbar';
-import AppState from '@/store/store';
 
 export const Home = () => {
-  const setActiveTool = AppState((state) => state.setActiveTool);
-
-  useEffect(() => {
-    setActiveTool('disabled');
-  }, []);
-
   return (
     <main className="grid h-full w-full grid-rows-[auto_1fr]">
       <Toolbar />

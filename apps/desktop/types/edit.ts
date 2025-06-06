@@ -1,14 +1,26 @@
 import { ContourPoint } from '@/lib/core/Contour';
+import { EditEngineContext } from '@/lib/core/EditEngine';
 
 import { Point2D } from './math';
 
 export type Edit = {
   point: ContourPoint;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
+  from: Point2D;
+  to: Point2D;
 };
+
+export interface AppliedEdit {
+  point: ContourPoint;
+  edits: Edit[];
+  affectedPoints: ContourPoint[];
+}
+
+export interface EditRule {
+  description: string;
+  match(point: ContourPoint): boolean;
+  apply(ctx: EditEngineContext, point: ContourPoint, dx: number, dy: number): AppliedEdit;
+}
+
 export interface EditSession {
   getMousePosition(x: number, y: number): Point2D;
 

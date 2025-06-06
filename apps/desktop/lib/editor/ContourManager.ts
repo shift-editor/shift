@@ -81,6 +81,12 @@ export class ContourManager {
   }
 
   getNeighborPoints(p: ContourPoint): ContourPoint[] {
+    // Use the direct point relationships if available, otherwise fall back to cursor navigation
+    if (p.prevPoint !== null || p.nextPoint !== null) {
+      return p.getNeighbors();
+    }
+
+    // Fallback to the original cursor-based approach
     const c = this.#contours.get(p.entityId.parentId);
     if (!c) {
       console.error('No parentId for point');

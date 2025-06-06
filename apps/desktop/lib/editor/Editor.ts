@@ -115,8 +115,8 @@ export class Editor {
   public editSession(): EditSession {
     const editEngineContext: EditEngineContext = {
       getSelectedPoints: () => [...this.#state.selectedPoints.values()],
-      movePointBy: (point, dx, dy) => {
-        this.#scene.movePointBy(point.entityId, dx, dy);
+      movePointTo: (point, x, y) => {
+        this.#scene.movePointTo(point.entityId, x, y);
       },
     };
 
@@ -144,20 +144,19 @@ export class Editor {
         this.#state.hoveredPoint = null;
       },
       preview: (dx, dy) => {
-        editEngine.previewEdits(dx, dy);
+        editEngine.applyEdits(dx, dy);
       },
       commit: (dx, dy) => {
-        const edits = editEngine.commitEdits(dx, dy);
-
-        this.emit<PointsMovedEvent>('points:moved', {
-          points: edits.map((e) => ({
-            pointId: e.point.entityId,
-            fromX: e.fromX,
-            fromY: e.fromY,
-            toX: e.toX,
-            toY: e.toY,
-          })),
-        });
+        // editEngine.applyEdits(dx, dy);
+        //   this.emit<PointsMovedEvent>('points:moved', {
+        //     points: edits.map((e) => ({
+        //       pointId: e.point.entityId,
+        //       fromX: e.fromX,
+        //       fromY: e.fromY,
+        //       toX: e.toX,
+        //       toY: e.toY,
+        //     })),
+        //   });
       },
       redraw: () => {
         this.redrawGlyph();

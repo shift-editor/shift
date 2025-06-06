@@ -190,7 +190,7 @@ export class Select implements Tool {
       const dy = y - this.#state.startPos.y;
 
       // this.#session.preview(dx, dy);
-      this.#session.commit(dx, dy);
+      // this.#session.commit(dx, dy);
       this.#state.selectedPoint = undefined;
     }
 

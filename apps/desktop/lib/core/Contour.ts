@@ -12,6 +12,9 @@ export class ContourPoint extends Point implements IContourPoint {
   #pointType: PointType;
   #smooth: boolean;
 
+  prevPoint: ContourPoint | null = null;
+  nextPoint: ContourPoint | null = null;
+
   constructor(x: number, y: number, pointType: PointType, parentId: Ident, smooth?: boolean) {
     super(x, y);
 
@@ -52,6 +55,44 @@ export class ContourPoint extends Point implements IContourPoint {
 
   toggleSmooth() {
     this.#smooth = !this.#smooth;
+  }
+
+  /**
+   * Get the previous point in the contour
+   */
+  getPrevPoint(): ContourPoint | null {
+    return this.prevPoint;
+  }
+
+  /**
+   * Get the next point in the contour
+   */
+  getNextPoint(): ContourPoint | null {
+    return this.nextPoint;
+  }
+
+  /**
+   * Check if this point has a previous point
+   */
+  hasPrevPoint(): boolean {
+    return this.prevPoint !== null;
+  }
+
+  /**
+   * Check if this point has a next point
+   */
+  hasNextPoint(): boolean {
+    return this.nextPoint !== null;
+  }
+
+  /**
+   * Get both neighbor points as an array
+   */
+  getNeighbors(): ContourPoint[] {
+    const neighbors: ContourPoint[] = [];
+    if (this.prevPoint) neighbors.push(this.prevPoint);
+    if (this.nextPoint) neighbors.push(this.nextPoint);
+    return neighbors;
   }
 }
 
@@ -203,6 +244,7 @@ export class Contour implements IContour {
     const contour = new Contour();
     contour.#points = [...this.#points];
     contour.#closed = this.#closed;
+    contour.#updatePointRelationships();
     return contour;
   }
 
@@ -212,7 +254,22 @@ export class Contour implements IContour {
 
   addPoint(x: number, y: number, pointType: PointType, smooth?: boolean): EntityId {
     const p = new ContourPoint(x, y, pointType, this.#id.id, smooth);
-    this.#points.push(p);
+    this.#addPointInternal(p);
+    return p.entityId;
+  }
+
+  /**
+   * Insert a point at a specific index in the contour
+   */
+  insertPointAt(
+    index: number,
+    x: number,
+    y: number,
+    pointType: PointType,
+    smooth?: boolean
+  ): EntityId {
+    const p = new ContourPoint(x, y, pointType, this.#id.id, smooth);
+    this.#insertPointInternal(index, p);
     return p.entityId;
   }
 
@@ -223,10 +280,7 @@ export class Contour implements IContour {
       return;
     }
 
-    const point = this.#points[index];
-    this.#points.splice(index, 1);
-
-    return point;
+    return this.#removePointInternal(index);
   }
 
   upgradeLineSegment(id: EntityId): EntityId {
@@ -247,9 +301,84 @@ export class Contour implements IContour {
     const control1 = new ContourPoint(c1.x, c1.y, 'offCurve', this.#id.id);
     const control2 = new ContourPoint(c2.x, c2.y, 'offCurve', this.#id.id);
 
-    this.#points.splice(index, 0, control1, control2);
+    this.#insertMultiplePointsInternal(index, [control1, control2]);
 
     return p1.entityId;
+  }
+
+  /**
+   * Internal method to add a point and automatically update relationships
+   */
+  #addPointInternal(point: ContourPoint): void {
+    this.#points.push(point);
+    this.#updatePointRelationships();
+  }
+
+  /**
+   * Internal method to insert a point at a specific index and automatically update relationships
+   */
+  #insertPointInternal(index: number, point: ContourPoint): void {
+    this.#points.splice(index, 0, point);
+    this.#updatePointRelationships();
+  }
+
+  /**
+   * Internal method to insert multiple points at a specific index and automatically update relationships
+   */
+  #insertMultiplePointsInternal(index: number, points: ContourPoint[]): void {
+    this.#points.splice(index, 0, ...points);
+    this.#updatePointRelationships();
+  }
+
+  /**
+   * Internal method to remove a point at a specific index and automatically update relationships
+   */
+  #removePointInternal(index: number): ContourPoint {
+    const point = this.#points[index];
+    this.#points.splice(index, 1);
+    this.#updatePointRelationships();
+    return point;
+  }
+
+  /**
+   * Updates the prevPoint and nextPoint relationships for all points in the contour
+   */
+  #updatePointRelationships(): void {
+    if (this.#points.length === 0) {
+      return;
+    }
+
+    if (this.#points.length === 1) {
+      // Single point has no neighbors
+      this.#points[0].prevPoint = null;
+      this.#points[0].nextPoint = null;
+      return;
+    }
+
+    for (let i = 0; i < this.#points.length; i++) {
+      const currentPoint = this.#points[i];
+
+      if (this.#closed) {
+        // For closed contours, wrap around
+        const prevIndex = (i - 1 + this.#points.length) % this.#points.length;
+        const nextIndex = (i + 1) % this.#points.length;
+
+        currentPoint.prevPoint = this.#points[prevIndex];
+        currentPoint.nextPoint = this.#points[nextIndex];
+      } else {
+        // For open contours, first and last points have null neighbors
+        if (i === 0) {
+          currentPoint.prevPoint = null;
+          currentPoint.nextPoint = this.#points.length > 1 ? this.#points[1] : null;
+        } else if (i === this.#points.length - 1) {
+          currentPoint.prevPoint = this.#points[i - 1];
+          currentPoint.nextPoint = null;
+        } else {
+          currentPoint.prevPoint = this.#points[i - 1];
+          currentPoint.nextPoint = this.#points[i + 1];
+        }
+      }
+    }
   }
 
   [Symbol.iterator](): Iterator<Segment> {
@@ -278,6 +407,7 @@ export class Contour implements IContour {
 
   close() {
     this.#closed = true;
+    this.#updatePointRelationships();
   }
 
   isEmpty(): boolean {
