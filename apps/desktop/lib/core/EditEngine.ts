@@ -1,114 +1,49 @@
-import { AppliedEdit, Edit, EditRule } from '@/types/edit';
+import { AppliedEdit, Edit } from '@/types/edit';
 
 import { ContourPoint } from './Contour';
+import { BuildPattern } from './PatternParser';
+import { BuildRuleTable, RuleTable } from './RuleTable';
 
-const MoveAction: EditRule = {
-  description: 'Move a point by a given delta',
-  match(): boolean {
-    return true;
-  },
-  apply(ctx: EditEngineContext, point: ContourPoint, dx: number, dy: number): AppliedEdit {
-    ctx.movePointTo(point, point.x + dx, point.y + dy);
-
-    return {
-      point,
-      edits: [
-        {
-          point,
-          from: { x: point.x, y: point.y },
-          to: { x: point.x + dx, y: point.y + dy },
-        },
-      ],
-      affectedPoints: [],
-    };
-  },
-};
-
-const MoveNeighbourHandles: EditRule = {
-  description: 'Moves unselected neighboring handles of a smooth|corner point',
-  match(point: ContourPoint): boolean {
-    if (point.pointType !== 'onCurve') {
-      return false;
-    }
-
-    if (point.prevPoint === null && point.nextPoint === null) {
-      return false;
-    }
-
-    if (point.prevPoint && point.prevPoint.pointType === 'offCurve') {
-      return true;
-    }
-
-    if (point.nextPoint && point.nextPoint.pointType === 'offCurve') {
-      return true;
-    }
-
-    return false;
-  },
-  apply(ctx: EditEngineContext, point: ContourPoint, dx: number, dy: number): AppliedEdit {
-    const edits: Edit[] = [];
-    const affectedPoints: ContourPoint[] = [];
-
-    if (point.prevPoint) {
-      affectedPoints.push(point.prevPoint);
-      ctx.movePointTo(point.prevPoint, point.prevPoint.x + dx, point.prevPoint.y + dy);
-      edits.push({
-        point: point.prevPoint,
-        from: { x: point.prevPoint.x, y: point.prevPoint.y },
-        to: { x: point.prevPoint.x + dx, y: point.prevPoint.y + dy },
-      });
-    }
-
-    if (point.nextPoint) {
-      affectedPoints.push(point.nextPoint);
-      ctx.movePointTo(point.nextPoint, point.nextPoint.x + dx, point.nextPoint.y + dy);
-      edits.push({
-        point: point.nextPoint,
-        from: { x: point.nextPoint.x, y: point.nextPoint.y },
-        to: { x: point.nextPoint.x + dx, y: point.nextPoint.y + dy },
-      });
-    }
-    return {
-      point,
-      edits: edits,
-      affectedPoints: [],
-    };
-  },
-};
-
-export interface EditEngineContext {
-  getSelectedPoints(): ContourPoint[];
-  movePointTo(point: ContourPoint, x: number, y: number): void;
+export interface EditContext {
+  getSelectedPoints(): Set<ContourPoint>;
+  movePointBy(point: ContourPoint, dx: number, dy: number): void;
 }
 
-const rules: EditRule[] = [MoveNeighbourHandles];
-
 export class EditEngine {
-  #context: EditEngineContext;
-  #rules: EditRule[];
+  #context: EditContext;
+  #ruleTable: RuleTable;
 
-  public constructor(context: EditEngineContext) {
+  public constructor(context: EditContext) {
     this.#context = context;
-    this.#rules = rules;
+    this.#ruleTable = BuildRuleTable();
   }
 
   public applyEdits(dx: number, dy: number): AppliedEdit[] {
     const selectedPoints = this.#context.getSelectedPoints();
     const edits: AppliedEdit[] = [];
 
-    // selected points
+    // move selected points
     for (const point of selectedPoints) {
-      const edit = MoveAction.apply(this.#context, point, dx, dy);
-      edits.push(edit);
+      const edit: Edit = {
+        point: point,
+        from: { x: point.x, y: point.y },
+        to: { x: point.x + dx, y: point.y + dy },
+      };
+      this.#context.movePointBy(point, dx, dy);
+      edits.push({
+        point: point,
+        edits: [edit],
+        affectedPoints: [],
+      });
     }
 
-    // affected points
+    // apply rules for affected points
     for (const point of selectedPoints) {
-      for (const rule of this.#rules) {
-        if (rule.match(point)) {
-          const edit = rule.apply(this.#context, point, dx, dy);
-          edits.push(edit);
-        }
+      const pattern = BuildPattern(point, selectedPoints);
+      const rule = this.#ruleTable.get(pattern);
+      if (rule) {
+        const edit = rule.action(this.#context, point, dx, dy);
+        edits.push(edit);
       }
     }
 

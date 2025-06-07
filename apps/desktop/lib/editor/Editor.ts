@@ -23,7 +23,7 @@ import { Painter } from './Painter';
 import { Guides, Scene } from './Scene';
 import { Viewport } from './Viewport';
 import { Contour, ContourPoint } from '../core/Contour';
-import { EditEngine, EditEngineContext } from '../core/EditEngine';
+import { EditEngine, EditContext } from '../core/EditEngine';
 import { UndoManager } from '../core/UndoManager';
 import { Path2D } from '../graphics/Path';
 import { getBoundingRect } from '../math/rect';
@@ -113,10 +113,10 @@ export class Editor {
   }
 
   public editSession(): EditSession {
-    const editEngineContext: EditEngineContext = {
-      getSelectedPoints: () => [...this.#state.selectedPoints.values()],
-      movePointTo: (point, x, y) => {
-        this.#scene.movePointTo(point.entityId, x, y);
+    const editEngineContext: EditContext = {
+      getSelectedPoints: () => this.#state.selectedPoints,
+      movePointBy: (point, dx, dy) => {
+        this.#scene.movePointBy(point.entityId, dx, dy);
       },
     };
 

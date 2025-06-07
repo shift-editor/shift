@@ -1,5 +1,5 @@
 import { ContourPoint } from '@/lib/core/Contour';
-import { EditEngineContext } from '@/lib/core/EditEngine';
+import { EditContext } from '@/lib/core/EditEngine';
 
 import { Point2D } from './math';
 
@@ -17,8 +17,7 @@ export interface AppliedEdit {
 
 export interface EditRule {
   description: string;
-  match(point: ContourPoint): boolean;
-  apply(ctx: EditEngineContext, point: ContourPoint, dx: number, dy: number): AppliedEdit;
+  apply(ctx: EditContext, point: ContourPoint, dx: number, dy: number): AppliedEdit;
 }
 
 export interface EditSession {
