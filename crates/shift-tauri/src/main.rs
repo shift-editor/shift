@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use shift_editor::editor::Editor;
 use shift_tauri::commands;
 use shift_tauri::menu;
+use shift_tauri::shortcuts;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::ShortcutState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn main() {
@@ -16,6 +18,18 @@ fn main() {
             app.on_menu_event(move |_app, event| {
                 menu::handle_menu_event(_app, &event);
             });
+
+            // Register global shortcut for force quit
+            let app_handle = app.handle().clone();
+            app.handle().plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(move |_app, shortcut, event| {
+                        if event.state() == ShortcutState::Pressed {
+                            shortcuts::handle_shortcut(&app_handle, shortcut);
+                        }
+                    })
+                    .build(),
+            )?;
 
             Ok(())
         })

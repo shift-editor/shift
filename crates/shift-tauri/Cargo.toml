@@ -33,6 +33,7 @@ ts-rs = "10.1"
 
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2.2.0"
+tauri-plugin-global-shortcut = "2"
 
 shift-font.workspace = true
 shift-editor.workspace = true

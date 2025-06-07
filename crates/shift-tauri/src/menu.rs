@@ -1,10 +1,10 @@
 use std::sync::Mutex;
 
+use crate::core;
 use shift_editor::editor::Editor;
 use shift_events::events::{FontCompiledEvent, FontLoadedEvent};
 use tauri::{
     menu::{AboutMetadataBuilder, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder},
-    path::{self, PathResolver},
     App, AppHandle, Emitter, Manager,
 };
 
@@ -54,7 +54,7 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     }
 
     if event.id() == "quit" {
-        app.exit(0);
+        core::handle_quit(app);
         return;
     }
 

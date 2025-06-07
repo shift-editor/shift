@@ -71,8 +71,6 @@ export class Editor {
     this.#state = InitialEditorState;
 
     this.on<PointsAddedEvent>('points:added', (points) => {
-      console.log('points:added', points);
-
       this.#undoManager.push({
         undo: () => {
           for (const id of points.pointIds) {
@@ -85,8 +83,6 @@ export class Editor {
     });
 
     this.on<PointsMovedEvent>('points:moved', (pointIds) => {
-      console.log('points:moved', pointIds);
-
       this.#undoManager.push({
         undo: () => {
           for (const { pointId, fromX, fromY } of pointIds.points) {
@@ -99,7 +95,6 @@ export class Editor {
     });
 
     this.on('points:removed', (pointIds) => {
-      console.log('points:removed', pointIds);
       this.requestRedraw();
     });
   }

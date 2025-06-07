@@ -141,8 +141,6 @@ export const RULE_TEMPLATES: RuleTemplate = new Map([
           };
         }
 
-        console.log('BEFORE TANGENT CALL', point.prevPoint.prevPoint);
-
         const edit = MaintainTangency(
           ctx,
           point.prevPoint,
@@ -208,7 +206,6 @@ const buildRuleTable = (ruleTemplates: RuleTemplate): RuleTable => {
     }
   }
 
-  console.log(ruleTable);
   return ruleTable;
 };
 
