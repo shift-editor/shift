@@ -6,7 +6,7 @@ import { BuildRuleTable, RuleTable } from './RuleTable';
 
 export interface EditContext {
   getSelectedPoints(): Set<ContourPoint>;
-  movePointBy(point: ContourPoint, dx: number, dy: number): void;
+  movePointTo(point: ContourPoint, x: number, y: number): void;
 }
 
 export class EditEngine {
@@ -29,7 +29,8 @@ export class EditEngine {
         from: { x: point.x, y: point.y },
         to: { x: point.x + dx, y: point.y + dy },
       };
-      this.#context.movePointBy(point, dx, dy);
+
+      this.#context.movePointTo(point, point.x + dx, point.y + dy);
       edits.push({
         point: point,
         edits: [edit],
@@ -37,7 +38,6 @@ export class EditEngine {
       });
     }
 
-    // apply rules for affected points
     for (const point of selectedPoints) {
       const pattern = BuildPattern(point, selectedPoints);
       const rule = this.#ruleTable.get(pattern);

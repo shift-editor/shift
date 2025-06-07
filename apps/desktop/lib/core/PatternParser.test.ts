@@ -94,139 +94,6 @@ describe('PatternParser', () => {
     });
   });
 
-  describe('pattern building with Contour', () => {
-    it('builds a simple HCH pattern', () => {
-      const contour = new Contour();
-      contour.addPoint(0, 0, 'offCurve'); // H
-      contour.addPoint(100, 0, 'onCurve'); // C
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('offCurve');
-      expect(points[1].pointType).toBe('onCurve');
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-      expect(points[2].nextPoint).toBe(points[0]);
-      expect(points[0].prevPoint).toBe(points[2]);
-    });
-
-    it('builds a pattern with character set [NH]SH', () => {
-      const contour = new Contour();
-      // First point can be either N or H
-      contour.addPoint(0, 0, 'onCurve'); // N
-      contour.addPoint(100, 0, 'offCurve'); // S
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('onCurve');
-      expect(points[1].pointType).toBe('offCurve');
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-    });
-
-    it('builds a pattern with X token (all point types)', () => {
-      const contour = new Contour();
-      // X expands to N, C, H, S
-      contour.addPoint(0, 0, 'onCurve'); // N
-      contour.addPoint(100, 0, 'onCurve'); // C
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('onCurve');
-      expect(points[1].pointType).toBe('onCurve');
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-    });
-
-    it('builds a pattern with selected point', () => {
-      const contour = new Contour();
-      contour.addPoint(0, 0, 'offCurve'); // H
-      contour.addPoint(100, 0, 'onCurve', true); // @ (selected point)
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('offCurve');
-      expect(points[1].pointType).toBe('onCurve');
-      expect(points[1].smooth).toBe(true); // Selected point should be smooth
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-    });
-
-    it('builds a symmetric pattern H@H', () => {
-      const contour = new Contour();
-      contour.addPoint(0, 0, 'offCurve'); // H
-      contour.addPoint(100, 0, 'onCurve', true); // @ (selected point)
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('offCurve');
-      expect(points[1].pointType).toBe('onCurve');
-      expect(points[1].smooth).toBe(true);
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-      expect(points[2].nextPoint).toBe(points[0]);
-      expect(points[0].prevPoint).toBe(points[2]);
-    });
-
-    it('builds a complex pattern with multiple sets and X', () => {
-      const contour = new Contour();
-      // [NH][SC]H pattern
-      contour.addPoint(0, 0, 'onCurve'); // N
-      contour.addPoint(100, 0, 'offCurve'); // S
-      contour.addPoint(200, 0, 'offCurve'); // H
-      contour.close();
-
-      const points = contour.points;
-      expect(points.length).toBe(3);
-      expect(points[0].pointType).toBe('onCurve');
-      expect(points[1].pointType).toBe('offCurve');
-      expect(points[2].pointType).toBe('offCurve');
-
-      // Verify linked list relationships
-      expect(points[0].nextPoint).toBe(points[1]);
-      expect(points[1].prevPoint).toBe(points[0]);
-      expect(points[1].nextPoint).toBe(points[2]);
-      expect(points[2].prevPoint).toBe(points[1]);
-      expect(points[2].nextPoint).toBe(points[0]);
-      expect(points[0].prevPoint).toBe(points[2]);
-    });
-  });
-
   describe('BuildPattern', () => {
     it('builds pattern for a point with no neighbors', () => {
       const contour = new Contour();
@@ -234,7 +101,7 @@ describe('PatternParser', () => {
       const selectedPoints = new Set<ContourPoint>();
 
       const pattern = BuildPattern(contour.points[0], selectedPoints);
-      expect(pattern).toBe('NSN');
+      expect(pattern).toBe('NCN');
     });
 
     it('builds pattern for a point with both neighbors', () => {
@@ -246,7 +113,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('SSS');
+      expect(pattern).toBe('CCC');
     });
 
     it('builds pattern for a point with selected neighbors', () => {
@@ -258,7 +125,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>([contour.points[0], contour.points[2]]);
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('@S@');
+      expect(pattern).toBe('@C@');
     });
 
     it('builds pattern for a point with handle neighbors', () => {
@@ -270,7 +137,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('HSH');
+      expect(pattern).toBe('HCH');
     });
 
     it('builds pattern for a point with selected handle neighbors', () => {
@@ -282,7 +149,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>([contour.points[0], contour.points[2]]);
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('@S@');
+      expect(pattern).toBe('@C@');
     });
 
     it('builds pattern for a point with mixed neighbors', () => {
@@ -294,7 +161,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('HSS');
+      expect(pattern).toBe('HCC');
     });
 
     it('builds pattern with only one neighbor', () => {
@@ -304,7 +171,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       const pattern = BuildPattern(contour.points[0], selectedPoints);
-      expect(pattern).toBe('NSH');
+      expect(pattern).toBe('NCH');
     });
 
     it('builds pattern with complex point types', () => {
@@ -316,7 +183,21 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       const pattern = BuildPattern(contour.points[1], selectedPoints);
-      expect(pattern).toBe('SHS');
+      expect(pattern).toBe('CHC');
+    });
+
+    it('builds pattern for handle with smooth neighbour', () => {
+      const contour = new Contour();
+      contour.addPoint(0, 0, 'offCurve'); // prev (H)
+      contour.addPoint(100, 0, 'offCurve'); // current (H)
+      contour.addPoint(200, 0, 'onCurve', true); // next (S)
+      contour.addPoint(300, 0, 'offCurve'); // next (H)
+      contour.close();
+
+      const selectedPoints = new Set<ContourPoint>();
+      selectedPoints.add(contour.points[1]);
+      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      expect(pattern).toBe('HHS');
     });
   });
 

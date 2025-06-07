@@ -7,7 +7,7 @@ describe('EditEngine', () => {
   let editEngine: EditEngine;
   let mockContext: {
     getSelectedPoints: () => Set<ContourPoint>;
-    movePointBy: (point: ContourPoint, dx: number, dy: number) => void;
+    movePointTo: (point: ContourPoint, dx: number, dy: number) => void;
   };
   let contour: Contour;
 
@@ -15,9 +15,9 @@ describe('EditEngine', () => {
     contour = new Contour();
     mockContext = {
       getSelectedPoints: () => new Set<ContourPoint>(),
-      movePointBy: (point: ContourPoint, dx: number, dy: number) => {
-        point.set_x(point.x + dx);
-        point.set_y(point.y + dy);
+      movePointTo: (point: ContourPoint, x: number, y: number) => {
+        point.set_x(x);
+        point.set_y(y);
       },
     };
     editEngine = new EditEngine(mockContext);

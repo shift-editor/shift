@@ -1,6 +1,7 @@
 import { AppliedEdit, Edit } from '@/types/edit';
 
 import { ContourPoint } from './Contour';
+import { MaintainTangency } from './EditActions';
 import { EditContext } from './EditEngine';
 import { PatternParser } from './PatternParser';
 
@@ -35,7 +36,7 @@ export const RULE_TEMPLATES: RuleTemplate = new Map([
           from: { x: nextPoint.x, y: nextPoint.y },
           to: { x: nextPoint.x + dx, y: nextPoint.y + dy },
         };
-        ctx.movePointBy(nextPoint, dx, dy);
+        ctx.movePointTo(nextPoint, nextPoint.x + dx, nextPoint.y + dy);
 
         return {
           point: point,
@@ -66,7 +67,7 @@ export const RULE_TEMPLATES: RuleTemplate = new Map([
           from: { x: prevPoint.x, y: prevPoint.y },
           to: { x: prevPoint.x + dx, y: prevPoint.y + dy },
         };
-        ctx.movePointBy(prevPoint, dx, dy);
+        ctx.movePointTo(prevPoint, prevPoint.x + dx, prevPoint.y + dy);
 
         return {
           point: point,
@@ -105,14 +106,90 @@ export const RULE_TEMPLATES: RuleTemplate = new Map([
           to: { x: nextPoint.x + dx, y: nextPoint.y + dy },
         };
 
-        ctx.movePointBy(prevPoint, dx, dy);
-        ctx.movePointBy(nextPoint, dx, dy);
+        ctx.movePointTo(prevPoint, prevPoint.x + dx, prevPoint.y + dy);
+        ctx.movePointTo(nextPoint, nextPoint.x + dx, nextPoint.y + dy);
 
         return {
           point: point,
           edits: [edit1, edit2],
           affectedPoints: [prevPoint, nextPoint],
         };
+      },
+    },
+  ],
+  [
+    'SH[@X]',
+    {
+      pattern: 'SH[@X]',
+      description: 'move the handle of a smooth point',
+      action: (ctx, point, dx, dy) => {
+        if (!point.prevPoint) {
+          console.warn('expected an anchor point');
+          return {
+            point: point,
+            edits: [],
+            affectedPoints: [],
+          };
+        }
+
+        if (!point.prevPoint.prevPoint) {
+          console.warn('expected opposite point');
+          return {
+            point: point,
+            edits: [],
+            affectedPoints: [],
+          };
+        }
+
+        console.log('BEFORE TANGENT CALL', point.prevPoint.prevPoint);
+
+        const edit = MaintainTangency(
+          ctx,
+          point.prevPoint,
+          point,
+          point.prevPoint.prevPoint,
+          dx,
+          dy
+        );
+
+        return edit;
+      },
+    },
+  ],
+  [
+    '[@X]HS',
+    {
+      pattern: '[@X]HS',
+      description: 'move the handle of a smooth point',
+      action: (ctx, point, dx, dy) => {
+        if (!point.nextPoint) {
+          console.warn('expected an anchor point');
+          return {
+            point: point,
+            edits: [],
+            affectedPoints: [],
+          };
+        }
+
+        if (!point.nextPoint.nextPoint) {
+          console.warn('expected opposite point');
+          return {
+            point: point,
+            edits: [],
+            affectedPoints: [],
+          };
+        }
+
+        const edit = MaintainTangency(
+          ctx,
+          point.nextPoint,
+          point,
+          point.nextPoint.nextPoint,
+          dx,
+          dy
+        );
+
+        return edit;
       },
     },
   ],
@@ -131,6 +208,7 @@ const buildRuleTable = (ruleTemplates: RuleTemplate): RuleTable => {
     }
   }
 
+  console.log(ruleTable);
   return ruleTable;
 };
 

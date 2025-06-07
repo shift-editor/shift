@@ -19,27 +19,31 @@ const ALL_POINT_TOKENS = [TOKENS.NO_POINT, TOKENS.CORNER, TOKENS.SMOOTH, TOKENS.
 
 export const BuildPattern = (point: ContourPoint, selectedPoints: Set<ContourPoint>) => {
   let pattern = '';
-  if (point.prevPoint) {
-    if (selectedPoints.has(point.prevPoint)) {
-      pattern += TOKENS.SELECTED_POINT;
-    } else {
-      pattern += point.prevPoint.pointType === 'onCurve' ? TOKENS.SMOOTH : TOKENS.HANDLE;
-    }
-  } else {
-    pattern += TOKENS.NO_POINT;
-  }
 
-  pattern += point.pointType === 'onCurve' ? TOKENS.SMOOTH : TOKENS.HANDLE;
-
-  if (point.nextPoint) {
-    if (selectedPoints.has(point.nextPoint)) {
-      pattern += TOKENS.SELECTED_POINT;
-    } else {
-      pattern += point.nextPoint.pointType === 'onCurve' ? TOKENS.SMOOTH : TOKENS.HANDLE;
+  const pointPattern = (
+    point: ContourPoint | null,
+    centralPoint: boolean,
+    selectedPoints: Set<ContourPoint>
+  ) => {
+    if (!point) {
+      return TOKENS.NO_POINT;
     }
-  } else {
-    pattern += TOKENS.NO_POINT;
-  }
+
+    if (selectedPoints.has(point) && !centralPoint) {
+      return TOKENS.SELECTED_POINT;
+    }
+
+    switch (point.pointType) {
+      case 'onCurve':
+        return point.smooth ? TOKENS.SMOOTH : TOKENS.CORNER;
+      case 'offCurve':
+        return TOKENS.HANDLE;
+    }
+  };
+
+  pattern += pointPattern(point.prevPoint, false, selectedPoints);
+  pattern += pointPattern(point, true, selectedPoints);
+  pattern += pointPattern(point.nextPoint, false, selectedPoints);
 
   return pattern;
 };

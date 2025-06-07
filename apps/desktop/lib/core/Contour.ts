@@ -6,7 +6,6 @@ import { Shape } from '@/lib/math/shape';
 import { CubicSegment, LineSegment, QuadSegment, Segment } from '@/types/segments';
 
 import { CyclingCollection } from './common';
-import { Pattern } from './RuleTable';
 
 export class ContourPoint extends Point implements IContourPoint {
   #id: EntityId;

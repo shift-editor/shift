@@ -115,8 +115,8 @@ export class Editor {
   public editSession(): EditSession {
     const editEngineContext: EditContext = {
       getSelectedPoints: () => this.#state.selectedPoints,
-      movePointBy: (point, dx, dy) => {
-        this.#scene.movePointBy(point.entityId, dx, dy);
+      movePointTo: (point, x, y) => {
+        this.#scene.movePointTo(point.entityId, x, y);
       },
     };
 
