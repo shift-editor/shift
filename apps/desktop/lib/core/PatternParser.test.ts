@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Contour, ContourPoint } from './Contour';
-import { PatternParser, BuildPattern } from './PatternParser';
+import { PatternParser, BuildRules } from './PatternParser';
 
 describe('PatternParser', () => {
   let parser: PatternParser;
@@ -100,7 +100,7 @@ describe('PatternParser', () => {
       contour.addPoint(0, 0, 'onCurve');
       const selectedPoints = new Set<ContourPoint>();
 
-      const pattern = BuildPattern(contour.points[0], selectedPoints);
+      const pattern = BuildRules(contour.points[0], selectedPoints);
       expect(pattern).toBe('NCN');
     });
 
@@ -112,7 +112,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>();
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('CCC');
     });
 
@@ -124,7 +124,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>([contour.points[0], contour.points[2]]);
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('@C@');
     });
 
@@ -136,7 +136,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>();
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('HCH');
     });
 
@@ -148,7 +148,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>([contour.points[0], contour.points[2]]);
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('@C@');
     });
 
@@ -160,7 +160,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>();
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('HCC');
     });
 
@@ -170,7 +170,7 @@ describe('PatternParser', () => {
       contour.addPoint(200, 0, 'offCurve'); // next
 
       const selectedPoints = new Set<ContourPoint>();
-      const pattern = BuildPattern(contour.points[0], selectedPoints);
+      const pattern = BuildRules(contour.points[0], selectedPoints);
       expect(pattern).toBe('NCH');
     });
 
@@ -182,7 +182,7 @@ describe('PatternParser', () => {
       contour.close();
 
       const selectedPoints = new Set<ContourPoint>();
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('CHC');
     });
 
@@ -196,7 +196,7 @@ describe('PatternParser', () => {
 
       const selectedPoints = new Set<ContourPoint>();
       selectedPoints.add(contour.points[1]);
-      const pattern = BuildPattern(contour.points[1], selectedPoints);
+      const pattern = BuildRules(contour.points[1], selectedPoints);
       expect(pattern).toBe('HHS');
     });
   });

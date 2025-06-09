@@ -1,8 +1,7 @@
 import { AppliedEdit, Edit } from '@/types/edit';
 
 import { ContourPoint } from './Contour';
-import { BuildPattern } from './PatternParser';
-import { BuildRuleTable, RuleTable } from './RuleTable';
+import { PatternMatcher } from './PatternMatcher';
 
 export interface EditContext {
   getSelectedPoints(): Set<ContourPoint>;
@@ -11,11 +10,11 @@ export interface EditContext {
 
 export class EditEngine {
   #context: EditContext;
-  #ruleTable: RuleTable;
+  #patternMatcher: PatternMatcher;
 
   public constructor(context: EditContext) {
     this.#context = context;
-    this.#ruleTable = BuildRuleTable();
+    this.#patternMatcher = new PatternMatcher();
   }
 
   public applyEdits(dx: number, dy: number): AppliedEdit[] {
@@ -38,9 +37,9 @@ export class EditEngine {
       });
     }
 
+    // apply rules for affected points
     for (const point of selectedPoints) {
-      const pattern = BuildPattern(point, selectedPoints);
-      const rule = this.#ruleTable.get(pattern);
+      const rule = this.#patternMatcher.match(point, selectedPoints);
       if (rule) {
         const edit = rule.action(this.#context, point, dx, dy);
         edits.push(edit);

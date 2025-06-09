@@ -118,10 +118,11 @@ export const RULE_TEMPLATES: RuleTemplate = new Map([
     },
   ],
   [
-    'SH[@X]',
+    'HS[HC][@X][@X]',
     {
-      pattern: 'SH[@X]',
-      description: 'move the handle of a smooth point',
+      pattern: 'HSH[@X][@X]',
+      description:
+        'move the handle and maintain tangency through the anchor point with the opposite handle',
       action: (ctx, point, dx, dy) => {
         if (!point.prevPoint) {
           console.warn('expected an anchor point');

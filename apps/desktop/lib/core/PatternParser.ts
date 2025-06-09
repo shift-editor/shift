@@ -1,8 +1,9 @@
 import { ContourPoint } from './Contour';
+import { PatternMatcher } from './PatternMatcher';
 import { Pattern } from './RuleTable';
 
 // Token types
-const TOKENS = {
+export const TOKENS = {
   NO_POINT: 'N',
   CORNER: 'C',
   HANDLE: 'H',
@@ -17,35 +18,17 @@ type Token = (typeof TOKENS)[keyof typeof TOKENS];
 
 const ALL_POINT_TOKENS = [TOKENS.NO_POINT, TOKENS.CORNER, TOKENS.SMOOTH, TOKENS.HANDLE];
 
-export const BuildPattern = (point: ContourPoint, selectedPoints: Set<ContourPoint>) => {
-  let pattern = '';
-
-  const pointPattern = (
-    point: ContourPoint | null,
-    centralPoint: boolean,
-    selectedPoints: Set<ContourPoint>
-  ) => {
-    if (!point) {
-      return TOKENS.NO_POINT;
-    }
-
-    if (selectedPoints.has(point) && !centralPoint) {
-      return TOKENS.SELECTED_POINT;
-    }
-
-    switch (point.pointType) {
-      case 'onCurve':
-        return point.smooth ? TOKENS.SMOOTH : TOKENS.CORNER;
-      case 'offCurve':
-        return TOKENS.HANDLE;
-    }
-  };
-
-  pattern += pointPattern(point.prevPoint, false, selectedPoints);
-  pattern += pointPattern(point, true, selectedPoints);
-  pattern += pointPattern(point.nextPoint, false, selectedPoints);
-
-  return pattern;
+/**
+ * Builds patterns for a given point using PatternMatcher
+ * @deprecated Use PatternMatcher.buildPatterns() directly for better performance and configurability
+ * @param point The central point
+ * @param selectedPoints Set of selected points
+ * @returns The first pattern (3-point window) for backward compatibility
+ */
+export const BuildRules = (point: ContourPoint, selectedPoints: Set<ContourPoint>): Pattern => {
+  const matcher = new PatternMatcher();
+  const patterns = matcher.buildPatterns(point, selectedPoints);
+  return patterns[0]; // Return first pattern for backward compatibility
 };
 
 export class PatternParser {
