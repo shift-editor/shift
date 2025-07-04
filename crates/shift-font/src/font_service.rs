@@ -12,7 +12,7 @@ pub enum FontFormat {
     Otf,
 }
 
-pub trait FontAdaptor: Send + Sync {
+pub trait FontAdaptor {
     fn read_font(&self, path: &str) -> Result<Font, String>;
     fn write_font(&self, font: &Font, path: &str) -> Result<(), String>;
 }

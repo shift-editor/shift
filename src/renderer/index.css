@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+:root {
+  --font-ui: "Inter";
+  --text-ui: 0.85rem;
+  --color-secondary: #3a3a3a;
+}
