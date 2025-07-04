@@ -4,4 +4,5 @@ members = ["crates/*"]
 
 
 [workspace.dependencies]
+shift-core = { path = "crates/shift-core" }
 shift-font = { path = "crates/shift-font" }

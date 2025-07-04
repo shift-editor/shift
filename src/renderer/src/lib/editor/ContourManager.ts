@@ -1,6 +1,4 @@
-import { PointType } from "/shared";
-
-import { Contour, ContourPoint } from "@/lib/core/Contour";
+import { Contour, ContourPoint, PointType } from "@/lib/core/Contour";
 import { EntityId, Ident } from "@/lib/core/EntityId";
 import { Segment } from "@/types/segments";
 

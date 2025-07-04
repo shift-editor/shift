@@ -7,12 +7,10 @@ version = "0.0.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-fontc = "0.2.0"
-norad = "0.16.0"
-serde = "1.0.219"
-skrifa = "0.32.0"
-ts-rs = "11.0.1"
+shift-core = { workspace = true }
+# Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
+napi = { version = "2.12.2", default-features = false, features = ["napi4"] }
+napi-derive = "2.12.2"
 
-[profile.release]
-lto = true
-strip = "symbols"
+[build-dependencies]
+napi-build = "2.0.1"

@@ -1,63 +1,74 @@
-use std::collections::HashMap;
-use std::path::Path;
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
+use shift_core::{font::Font, font_loader::FontLoader};
 
-use crate::font::Font;
-use crate::otf_ttf::BytesFontAdaptor;
-use crate::ufo::UfoFontAdaptor;
-
-#[derive(Hash, Eq, PartialEq)]
-pub enum FontFormat {
-    Ufo,
-    Ttf,
-    Otf,
-}
-
-pub trait FontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String>;
-    fn write_font(&self, font: &Font, path: &str) -> Result<(), String>;
-}
-
+#[napi]
 pub struct FontService {
-    file_name: String,
-    adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>>,
+  font_loader: FontLoader,
+  font: Font,
 }
 
+#[napi]
 impl FontService {
-    pub fn new() -> Self {
-        let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
-        adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
-        adaptors.insert(FontFormat::Ttf, Box::new(BytesFontAdaptor));
-        adaptors.insert(FontFormat::Otf, Box::new(BytesFontAdaptor));
-
-        Self {
-            file_name: String::new(),
-            adaptors,
-        }
+  #[napi(constructor)]
+  pub fn new() -> Self {
+    Self {
+      font_loader: FontLoader::new(),
+      font: Font::default(),
     }
+  }
 
-    pub fn available_formats(&self) -> Vec<&FontFormat> {
-        self.adaptors.keys().collect()
-    }
+  #[napi]
+  pub fn load_font(&mut self, path: String) -> Result<()> {
+    self.font = self
+      .font_loader
+      .read_font(&path)
+      .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to load font: {}", e)))?;
+    Ok(())
+  }
 
-    pub fn read_font(&mut self, path: &str) -> Result<Font, String> {
-        let path = Path::new(path);
-        let extension = path
-            .extension()
-            .ok_or_else(|| "File has no extension".to_string())?
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in extension".to_string())?;
+  #[napi]
+  pub fn get_font_family(&self) -> String {
+    self.font.metadata.family.clone()
+  }
 
-        let adaptor = match extension {
-            "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
-            "ttf" => self.adaptors.get(&FontFormat::Ttf).unwrap(),
-            "otf" => self.adaptors.get(&FontFormat::Otf).unwrap(),
-            _ => {
-                return Err(format!("Unsupported font format: {}", extension));
-            }
-        };
+  #[napi]
+  pub fn get_font_style(&self) -> String {
+    self.font.metadata.style_name.clone()
+  }
 
-        let font = adaptor.read_font(path.to_str().unwrap())?;
-        self.file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-        Ok(font)
-    }
+  #[napi]
+  pub fn get_font_version(&self) -> i32 {
+    self.font.metadata.version
+  }
+
+  #[napi]
+  pub fn get_units_per_em(&self) -> f64 {
+    self.font.metrics.units_per_em
+  }
+
+  #[napi]
+  pub fn get_ascender(&self) -> f64 {
+    self.font.metrics.ascender
+  }
+
+  #[napi]
+  pub fn get_descender(&self) -> f64 {
+    self.font.metrics.descender
+  }
+
+  #[napi]
+  pub fn get_cap_height(&self) -> f64 {
+    self.font.metrics.cap_height
+  }
+
+  #[napi]
+  pub fn get_x_height(&self) -> f64 {
+    self.font.metrics.x_height
+  }
+
+  #[napi]
+  pub fn get_glyph_count(&self) -> u32 {
+    self.font.glyphs.len() as u32
+  }
 }

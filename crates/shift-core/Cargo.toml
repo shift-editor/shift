@@ -1,0 +1,15 @@
+[package]
+edition = "2021"
+name = "shift-core"
+version = "0.0.0"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+bitflags = "2.9.1"
+fontc = "0.2.0"
+norad = "0.16.0"
+serde = "1.0.219"
+skrifa = "0.32.0"
+ts-rs = "11.0.1"

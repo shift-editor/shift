@@ -1,6 +1,2 @@
-pub mod contour;
-pub mod font;
 pub mod font_service;
-pub mod glyph;
-pub mod otf_ttf;
-pub mod ufo;
+pub use font_service::FontService;
