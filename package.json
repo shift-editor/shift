@@ -5,17 +5,15 @@
   "description": "An application for creating and editing fonts",
   "main": ".vite/build/main.js",
   "scripts": {
-    "start": "pnpm run build:native && electron-forge start",
-    "dev": "pnpm run build:native:debug && electron-forge start",
+    "dev": "electron-forge start",
+    "dev:app": "scripts/watch.sh",
     "package": "pnpm run build:native && electron-forge package",
     "make": "pnpm run build:native && electron-forge make",
     "publish": "pnpm run build:native && electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "build:native": "pnpm --filter shift-font run build",
     "build:native:debug": "pnpm --filter shift-font run build:debug",
-    "install:native": "pnpm --filter shift-font install",
-    "test:native": "pnpm --filter shift-font run test",
-    "postinstall": "pnpm run build:native:debug"
+    "test:native": "pnpm --filter shift-font run test"
   },
   "keywords": [],
   "author": {
@@ -39,10 +37,12 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^9.2.0",
     "electron": "37.1.0",
     "electron-vite": "^3.1.0",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
+    "nodemon": "^3.1.10",
     "tailwindcss": "^4.1.11",
     "ts-node": "^10.9.2",
     "typescript": "~4.5.4",

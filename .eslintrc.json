@@ -25,14 +25,14 @@
       },
       "alias": {
         "map": [
-          ["@", "./apps/desktop"],
-          ["@/components", "./apps/desktop/components"],
-          ["@/lib", "./apps/desktop/lib"],
-          ["@/store", "./apps/desktop/store"],
-          ["@/types", "./apps/desktop/types"],
-          ["@/context", "./apps/desktop/context"],
-          ["@/assets", "./apps/desktop/assets"],
-          ["@/hooks", "./apps/desktop/hooks"]
+          ["@", "./src/renderer"],
+          ["@/components", "./src/renderer/components"],
+          ["@/lib", "./src/renderer/lib"],
+          ["@/store", "./src/renderer/store"],
+          ["@/types", "./src/renderer/types"],
+          ["@/context", "./src/renderer/context"],
+          ["@/assets", "./src/renderer/assets"],
+          ["@/hooks", "./src/renderer/hooks"]
         ],
         "extensions": [".ts", ".tsx", ".js", ".jsx", ".json"]
       }

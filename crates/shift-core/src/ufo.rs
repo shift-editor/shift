@@ -25,20 +25,20 @@ fn from_ufo_contours(contours: &Vec<norad::Contour>) -> Vec<Contour> {
     let mut closed = true;
     contour.points.iter().for_each(|p| match p.typ {
       norad::PointType::Move => {
-        c.add_point(p.x, p.y, PointType::ON_CURVE, p.smooth);
+        c.add_point(p.x, p.y, PointType::OnCurve, p.smooth);
         closed = false;
       }
 
       norad::PointType::Line => {
-        c.add_point(p.x, p.y, PointType::ON_CURVE, p.smooth);
+        c.add_point(p.x, p.y, PointType::OnCurve, p.smooth);
       }
 
       norad::PointType::Curve => {
-        c.add_point(p.x, p.y, PointType::ON_CURVE, p.smooth);
+        c.add_point(p.x, p.y, PointType::OnCurve, p.smooth);
       }
 
       norad::PointType::OffCurve => {
-        c.add_point(p.x, p.y, PointType::OFF_CURVE, p.smooth);
+        c.add_point(p.x, p.y, PointType::OffCurve, p.smooth);
       }
 
       _ => {}
@@ -66,7 +66,7 @@ impl From<NoradFont> for Font {
         let name = glyph.name().to_string();
         if let Some(codepoint) = glyph.codepoints.iter().next() {
           let unicode = codepoint.into();
-          let g = Glyph::new(name, unicode, contours, glyph.width);
+          let g = Glyph::from_contours(name, unicode, glyph.width, contours);
           glyphs.insert(unicode, g);
         }
       }

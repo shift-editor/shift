@@ -36,7 +36,7 @@ impl OutlinePen for ShiftPen {
       .contours
       .last_mut()
       .unwrap()
-      .add_point(x as f64, y as f64, PointType::OFF_CURVE, false);
+      .add_point(x as f64, y as f64, PointType::OffCurve, false);
   }
 
   fn line_to(&mut self, x: f32, y: f32) {
@@ -44,44 +44,41 @@ impl OutlinePen for ShiftPen {
       .contours
       .last_mut()
       .unwrap()
-      .add_point(x as f64, y as f64, PointType::ON_CURVE, false);
+      .add_point(x as f64, y as f64, PointType::OnCurve, false);
   }
 
   fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self.contours.last_mut().unwrap().add_point(
-      cx0 as f64,
-      cy0 as f64,
-      PointType::OFF_CURVE,
-      false,
-    );
+    self
+      .contours
+      .last_mut()
+      .unwrap()
+      .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
 
     self
       .contours
       .last_mut()
       .unwrap()
-      .add_point(x as f64, y as f64, PointType::ON_CURVE, false);
+      .add_point(x as f64, y as f64, PointType::OnCurve, false);
   }
 
   fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-    self.contours.last_mut().unwrap().add_point(
-      cx0 as f64,
-      cy0 as f64,
-      PointType::OFF_CURVE,
-      false,
-    );
-
-    self.contours.last_mut().unwrap().add_point(
-      cx1 as f64,
-      cy1 as f64,
-      PointType::OFF_CURVE,
-      false,
-    );
+    self
+      .contours
+      .last_mut()
+      .unwrap()
+      .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
 
     self
       .contours
       .last_mut()
       .unwrap()
-      .add_point(x as f64, y as f64, PointType::ON_CURVE, false);
+      .add_point(cx1 as f64, cy1 as f64, PointType::OffCurve, false);
+
+    self
+      .contours
+      .last_mut()
+      .unwrap()
+      .add_point(x as f64, y as f64, PointType::OnCurve, false);
   }
 
   fn close(&mut self) {
@@ -114,7 +111,8 @@ impl<'a> From<FontRef<'a>> for Font {
       let hmtx = font.hmtx().unwrap();
       let advance_width = hmtx.advance(glyph_id).unwrap();
 
-      let glyph = Glyph::new(String::new(), unicode, pen.contours(), advance_width.into());
+      let glyph =
+        Glyph::from_contours(String::new(), unicode, advance_width.into(), pen.contours());
       glyphs.insert(unicode, glyph);
     }
 

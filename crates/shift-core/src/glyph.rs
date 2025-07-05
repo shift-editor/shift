@@ -5,7 +5,7 @@ use crate::{contour::Contour, entity::ContourId};
 pub struct Glyph {
   name: String,
   unicode: u32,
-  contours: HashMap<ContourId, Contour>,
+  contours: Vec<Contour>,
   x_advance: f64,
 }
 
@@ -14,7 +14,16 @@ impl Glyph {
     Self {
       name,
       unicode,
-      contours: HashMap::new(),
+      contours: Vec::new(),
+      x_advance,
+    }
+  }
+
+  pub fn from_contours(name: String, unicode: u32, x_advance: f64, contours: Vec<Contour>) -> Self {
+    Self {
+      name,
+      unicode,
+      contours,
       x_advance,
     }
   }
@@ -33,5 +42,9 @@ impl Glyph {
 
   pub fn get_x_advance(&self) -> f64 {
     self.x_advance
+  }
+
+  pub fn get_contours(&self) -> &Vec<Contour> {
+    &self.contours
   }
 }
