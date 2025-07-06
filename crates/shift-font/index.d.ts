@@ -10,20 +10,6 @@ export interface JsMetrics {
   capHeight: number
   xHeight: number
 }
-export declare class Contour {
-  id: ContourId
-  points: Array<Point>
-  closed: boolean
-}
-export declare class ContourId { }
-export declare class PointId { }
-export declare class Glyph {
-  name: string
-  unicode: number
-  contours: Record<ContourId, Contour>
-  xAdvance: number
-}
-export declare class Point { }
 export declare class FontEngine {
   constructor()
   loadFont(path: string): void

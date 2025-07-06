@@ -54,5 +54,11 @@ app.on("activate", () => {
   }
 });
 
+app.whenReady().then(() => {
+  if (process.platform === "darwin") {
+    app.dock?.setIcon(path.join(__dirname, "../../icons/icon.png"));
+  }
+});
+
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.

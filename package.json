@@ -7,13 +7,18 @@
   "scripts": {
     "dev": "electron-forge start",
     "dev:app": "scripts/watch.sh",
+    "clean": "rm -rf .vite/build && rm -rf node_modules && cargo clean && rm -rf out",
     "package": "pnpm run build:native && electron-forge package",
     "make": "pnpm run build:native && electron-forge make",
     "publish": "pnpm run build:native && electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx .",
     "build:native": "pnpm --filter shift-font run build",
     "build:native:debug": "pnpm --filter shift-font run build:debug",
-    "test:native": "pnpm --filter shift-font run test"
+    "test:native": "pnpm --filter shift-font run test",
+    "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
+    "format:check": "prettier --check \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\"",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" --fix",
+    "lint:check": "eslint \"apps/**/*.{ts,tsx}\"",
+    "check-deps": "depcheck"
   },
   "keywords": [],
   "author": {
