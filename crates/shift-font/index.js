@@ -310,6 +310,11 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { FontService } = nativeBinding
+const { Contour, ContourId, PointId, Glyph, Point, FontEngine } = nativeBinding
 
-module.exports.FontService = FontService
+module.exports.Contour = Contour
+module.exports.ContourId = ContourId
+module.exports.PointId = PointId
+module.exports.Glyph = Glyph
+module.exports.Point = Point
+module.exports.FontEngine = FontEngine

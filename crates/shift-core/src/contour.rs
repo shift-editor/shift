@@ -3,6 +3,7 @@ use crate::{
   point::{Point, PointType},
 };
 
+#[derive(Clone)]
 pub struct Contour {
   id: ContourId,
   points: Vec<Point>,
@@ -18,8 +19,8 @@ impl Contour {
     }
   }
 
-  pub fn id(&self) -> &ContourId {
-    &self.id
+  pub fn get_id(&self) -> ContourId {
+    self.id
   }
 
   pub fn add_point(&mut self, x: f64, y: f64, point_type: PointType, smooth: bool) -> PointId {

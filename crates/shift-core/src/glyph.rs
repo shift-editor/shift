@@ -2,49 +2,56 @@ use std::collections::HashMap;
 
 use crate::{contour::Contour, entity::ContourId};
 
+#[derive(Clone)]
+pub struct GlyphMetadata {
+  pub name: String,
+  pub unicode: u32,
+  pub x_advance: f64,
+}
+
+#[derive(Clone)]
 pub struct Glyph {
-  name: String,
-  unicode: u32,
-  contours: Vec<Contour>,
-  x_advance: f64,
+  metadata: GlyphMetadata,
+  contours: HashMap<ContourId, Contour>,
 }
 
 impl Glyph {
   pub fn new(name: String, unicode: u32, x_advance: f64) -> Self {
     Self {
-      name,
-      unicode,
-      contours: Vec::new(),
-      x_advance,
+      metadata: GlyphMetadata {
+        name,
+        unicode,
+        x_advance,
+      },
+      contours: HashMap::new(),
     }
   }
 
   pub fn from_contours(name: String, unicode: u32, x_advance: f64, contours: Vec<Contour>) -> Self {
+    let mut contours_map = HashMap::new();
+    for contour in contours {
+      contours_map.insert(contour.get_id(), contour);
+    }
+
     Self {
-      name,
-      unicode,
-      contours,
-      x_advance,
+      metadata: GlyphMetadata {
+        name,
+        unicode,
+        x_advance,
+      },
+      contours: contours_map,
     }
   }
 
-  pub fn get_name(&self) -> &str {
-    &self.name
+  pub fn get_metadata(&self) -> &GlyphMetadata {
+    &self.metadata
   }
 
   pub fn get_contours_count(&self) -> usize {
     self.contours.len()
   }
 
-  pub fn get_unicode(&self) -> u32 {
-    self.unicode
-  }
-
-  pub fn get_x_advance(&self) -> f64 {
-    self.x_advance
-  }
-
-  pub fn get_contours(&self) -> &Vec<Contour> {
-    &self.contours
+  pub fn get_contours(&self) -> Vec<&Contour> {
+    self.contours.values().collect()
   }
 }

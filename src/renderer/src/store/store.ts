@@ -1,4 +1,3 @@
-import { Glyph } from "/shared";
 import { create } from "zustand";
 
 import { EventEmitter } from "@/lib/core/EventEmitter";

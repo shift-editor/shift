@@ -1,15 +1,17 @@
-use napi::bindgen_prelude::*;
+use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{font::Font, font_loader::FontLoader};
 
+use crate::types::JSMetrics;
+
 #[napi]
-pub struct FontService {
+pub struct FontEngine {
   font_loader: FontLoader,
   font: Font,
 }
 
 #[napi]
-impl FontService {
+impl FontEngine {
   #[napi(constructor)]
   pub fn new() -> Self {
     Self {
@@ -17,7 +19,10 @@ impl FontService {
       font: Font::default(),
     }
   }
+}
 
+#[napi]
+impl FontEngine {
   #[napi]
   pub fn load_font(&mut self, path: String) -> Result<()> {
     self.font = self
@@ -28,13 +33,13 @@ impl FontService {
   }
 
   #[napi]
-  pub fn get_font_family(&self) -> String {
-    self.font.metadata.family.clone()
+  pub fn get_font_family(&self) -> &str {
+    &self.font.metadata.family
   }
 
   #[napi]
-  pub fn get_font_style(&self) -> String {
-    self.font.metadata.style_name.clone()
+  pub fn get_font_style(&self) -> &str {
+    &self.font.metadata.style_name
   }
 
   #[napi]
@@ -43,28 +48,8 @@ impl FontService {
   }
 
   #[napi]
-  pub fn get_units_per_em(&self) -> f64 {
-    self.font.metrics.units_per_em
-  }
-
-  #[napi]
-  pub fn get_ascender(&self) -> f64 {
-    self.font.metrics.ascender
-  }
-
-  #[napi]
-  pub fn get_descender(&self) -> f64 {
-    self.font.metrics.descender
-  }
-
-  #[napi]
-  pub fn get_cap_height(&self) -> f64 {
-    self.font.metrics.cap_height
-  }
-
-  #[napi]
-  pub fn get_x_height(&self) -> f64 {
-    self.font.metrics.x_height
+  pub fn get_metrics(&self) -> JSMetrics {
+    self.font.metrics.into()
   }
 
   #[napi]
