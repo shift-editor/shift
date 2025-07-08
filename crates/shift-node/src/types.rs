@@ -1,5 +1,8 @@
 use napi_derive::napi;
-use shift_core::font::{FontMetadata, Metrics};
+use shift_core::{
+  font::{FontMetadata, Metrics},
+  point::PointType,
+};
 
 #[napi(object)]
 pub struct JSFontMetrics {
@@ -35,6 +38,30 @@ impl From<FontMetadata> for JSFontMetaData {
       family: metadata.family,
       style_name: metadata.style_name,
       version: metadata.version,
+    }
+  }
+}
+
+#[napi]
+pub enum PointTypeJS {
+  OnCurve,
+  OffCurve,
+}
+
+impl From<PointType> for PointTypeJS {
+  fn from(point_type: PointType) -> Self {
+    match point_type {
+      PointType::OnCurve => PointTypeJS::OnCurve,
+      PointType::OffCurve => PointTypeJS::OffCurve,
+    }
+  }
+}
+
+impl From<PointTypeJS> for PointType {
+  fn from(point_type: PointTypeJS) -> Self {
+    match point_type {
+      PointTypeJS::OnCurve => PointType::OnCurve,
+      PointTypeJS::OffCurve => PointType::OffCurve,
     }
   }
 }

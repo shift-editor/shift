@@ -8,6 +8,7 @@ use crate::types::{JSFontMetaData, JSFontMetrics};
 #[napi]
 pub struct FontEngine {
   font_loader: FontLoader,
+  current_edit_session: Option<EditSession>,
   font: Font,
 }
 
@@ -17,13 +18,11 @@ impl FontEngine {
   pub fn new() -> Self {
     Self {
       font_loader: FontLoader::new(),
+      current_edit_session: None,
       font: Font::default(),
     }
   }
-}
 
-#[napi]
-impl FontEngine {
   #[napi]
   pub fn load_font(&mut self, path: String) -> Result<()> {
     self.font = self
@@ -48,8 +47,30 @@ impl FontEngine {
     self.font.get_glyph_count() as u32
   }
 
-  pub fn start_editing_glyph(&mut self, unicode: u32) -> EditSession {
+  #[napi]
+  pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
     let glyph = self.font.get_glyph(unicode);
-    return EditSession::new(Rc::clone(&glyph));
+    let edit_session = EditSession::new(Rc::clone(&glyph));
+    self.current_edit_session = Some(edit_session);
+    Ok(())
+  }
+
+  fn get_edit_session(&mut self) -> Result<&mut EditSession> {
+    self
+      .current_edit_session
+      .as_mut()
+      .ok_or(Error::new(Status::GenericFailure, "No edit session"))
+  }
+
+  #[napi]
+  pub fn end_edit_session(&mut self) {
+    self.current_edit_session = None;
+  }
+
+  #[napi]
+  pub fn add_empty_contour(&mut self) -> Result<u32> {
+    let edit_session = self.get_edit_session()?;
+    let contour_id = edit_session.add_empty_contour();
+    Ok(contour_id.raw() as u32)
   }
 }

@@ -1,10 +1,10 @@
 {
-  "name": "shift-font",
+  "name": "shift-node",
   "version": "0.0.0",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
-    "name": "shift-font",
+    "name": "shift-node",
     "triples": {
       "additional": [
         "aarch64-apple-darwin",

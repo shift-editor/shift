@@ -2,7 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 const { contextBridge } = require("electron");
-const { FontEngine } = require("shift-font");
+const { FontEngine } = require("shift-node");
 
 const fontEngineInstance = new FontEngine();
 

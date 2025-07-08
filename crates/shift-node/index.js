@@ -32,24 +32,24 @@ switch (platform) {
   case 'android':
     switch (arch) {
       case 'arm64':
-        localFileExisted = existsSync(join(__dirname, 'shift-font.android-arm64.node'))
+        localFileExisted = existsSync(join(__dirname, 'shift-node.android-arm64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.android-arm64.node')
+            nativeBinding = require('./shift-node.android-arm64.node')
           } else {
-            nativeBinding = require('shift-font-android-arm64')
+            nativeBinding = require('shift-node-android-arm64')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'arm':
-        localFileExisted = existsSync(join(__dirname, 'shift-font.android-arm-eabi.node'))
+        localFileExisted = existsSync(join(__dirname, 'shift-node.android-arm-eabi.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.android-arm-eabi.node')
+            nativeBinding = require('./shift-node.android-arm-eabi.node')
           } else {
-            nativeBinding = require('shift-font-android-arm-eabi')
+            nativeBinding = require('shift-node-android-arm-eabi')
           }
         } catch (e) {
           loadError = e
@@ -63,13 +63,13 @@ switch (platform) {
     switch (arch) {
       case 'x64':
         localFileExisted = existsSync(
-          join(__dirname, 'shift-font.win32-x64-msvc.node')
+          join(__dirname, 'shift-node.win32-x64-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.win32-x64-msvc.node')
+            nativeBinding = require('./shift-node.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('shift-font-win32-x64-msvc')
+            nativeBinding = require('shift-node-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -77,13 +77,13 @@ switch (platform) {
         break
       case 'ia32':
         localFileExisted = existsSync(
-          join(__dirname, 'shift-font.win32-ia32-msvc.node')
+          join(__dirname, 'shift-node.win32-ia32-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.win32-ia32-msvc.node')
+            nativeBinding = require('./shift-node.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('shift-font-win32-ia32-msvc')
+            nativeBinding = require('shift-node-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
@@ -91,13 +91,13 @@ switch (platform) {
         break
       case 'arm64':
         localFileExisted = existsSync(
-          join(__dirname, 'shift-font.win32-arm64-msvc.node')
+          join(__dirname, 'shift-node.win32-arm64-msvc.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.win32-arm64-msvc.node')
+            nativeBinding = require('./shift-node.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('shift-font-win32-arm64-msvc')
+            nativeBinding = require('shift-node-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -108,23 +108,23 @@ switch (platform) {
     }
     break
   case 'darwin':
-    localFileExisted = existsSync(join(__dirname, 'shift-font.darwin-universal.node'))
+    localFileExisted = existsSync(join(__dirname, 'shift-node.darwin-universal.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./shift-font.darwin-universal.node')
+        nativeBinding = require('./shift-node.darwin-universal.node')
       } else {
-        nativeBinding = require('shift-font-darwin-universal')
+        nativeBinding = require('shift-node-darwin-universal')
       }
       break
     } catch {}
     switch (arch) {
       case 'x64':
-        localFileExisted = existsSync(join(__dirname, 'shift-font.darwin-x64.node'))
+        localFileExisted = existsSync(join(__dirname, 'shift-node.darwin-x64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.darwin-x64.node')
+            nativeBinding = require('./shift-node.darwin-x64.node')
           } else {
-            nativeBinding = require('shift-font-darwin-x64')
+            nativeBinding = require('shift-node-darwin-x64')
           }
         } catch (e) {
           loadError = e
@@ -132,13 +132,13 @@ switch (platform) {
         break
       case 'arm64':
         localFileExisted = existsSync(
-          join(__dirname, 'shift-font.darwin-arm64.node')
+          join(__dirname, 'shift-node.darwin-arm64.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.darwin-arm64.node')
+            nativeBinding = require('./shift-node.darwin-arm64.node')
           } else {
-            nativeBinding = require('shift-font-darwin-arm64')
+            nativeBinding = require('shift-node-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -152,12 +152,12 @@ switch (platform) {
     if (arch !== 'x64') {
       throw new Error(`Unsupported architecture on FreeBSD: ${arch}`)
     }
-    localFileExisted = existsSync(join(__dirname, 'shift-font.freebsd-x64.node'))
+    localFileExisted = existsSync(join(__dirname, 'shift-node.freebsd-x64.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./shift-font.freebsd-x64.node')
+        nativeBinding = require('./shift-node.freebsd-x64.node')
       } else {
-        nativeBinding = require('shift-font-freebsd-x64')
+        nativeBinding = require('shift-node-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -168,26 +168,26 @@ switch (platform) {
       case 'x64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-x64-musl.node')
+            join(__dirname, 'shift-node.linux-x64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-x64-musl.node')
+              nativeBinding = require('./shift-node.linux-x64-musl.node')
             } else {
-              nativeBinding = require('shift-font-linux-x64-musl')
+              nativeBinding = require('shift-node-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-x64-gnu.node')
+            join(__dirname, 'shift-node.linux-x64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-x64-gnu.node')
+              nativeBinding = require('./shift-node.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('shift-font-linux-x64-gnu')
+              nativeBinding = require('shift-node-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -197,26 +197,26 @@ switch (platform) {
       case 'arm64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-arm64-musl.node')
+            join(__dirname, 'shift-node.linux-arm64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-arm64-musl.node')
+              nativeBinding = require('./shift-node.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('shift-font-linux-arm64-musl')
+              nativeBinding = require('shift-node-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-arm64-gnu.node')
+            join(__dirname, 'shift-node.linux-arm64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-arm64-gnu.node')
+              nativeBinding = require('./shift-node.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('shift-font-linux-arm64-gnu')
+              nativeBinding = require('shift-node-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -226,26 +226,26 @@ switch (platform) {
       case 'arm':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-arm-musleabihf.node')
+            join(__dirname, 'shift-node.linux-arm-musleabihf.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-arm-musleabihf.node')
+              nativeBinding = require('./shift-node.linux-arm-musleabihf.node')
             } else {
-              nativeBinding = require('shift-font-linux-arm-musleabihf')
+              nativeBinding = require('shift-node-linux-arm-musleabihf')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-arm-gnueabihf.node')
+            join(__dirname, 'shift-node.linux-arm-gnueabihf.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-arm-gnueabihf.node')
+              nativeBinding = require('./shift-node.linux-arm-gnueabihf.node')
             } else {
-              nativeBinding = require('shift-font-linux-arm-gnueabihf')
+              nativeBinding = require('shift-node-linux-arm-gnueabihf')
             }
           } catch (e) {
             loadError = e
@@ -255,26 +255,26 @@ switch (platform) {
       case 'riscv64':
         if (isMusl()) {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-riscv64-musl.node')
+            join(__dirname, 'shift-node.linux-riscv64-musl.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-riscv64-musl.node')
+              nativeBinding = require('./shift-node.linux-riscv64-musl.node')
             } else {
-              nativeBinding = require('shift-font-linux-riscv64-musl')
+              nativeBinding = require('shift-node-linux-riscv64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
           localFileExisted = existsSync(
-            join(__dirname, 'shift-font.linux-riscv64-gnu.node')
+            join(__dirname, 'shift-node.linux-riscv64-gnu.node')
           )
           try {
             if (localFileExisted) {
-              nativeBinding = require('./shift-font.linux-riscv64-gnu.node')
+              nativeBinding = require('./shift-node.linux-riscv64-gnu.node')
             } else {
-              nativeBinding = require('shift-font-linux-riscv64-gnu')
+              nativeBinding = require('shift-node-linux-riscv64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -283,13 +283,13 @@ switch (platform) {
         break
       case 's390x':
         localFileExisted = existsSync(
-          join(__dirname, 'shift-font.linux-s390x-gnu.node')
+          join(__dirname, 'shift-node.linux-s390x-gnu.node')
         )
         try {
           if (localFileExisted) {
-            nativeBinding = require('./shift-font.linux-s390x-gnu.node')
+            nativeBinding = require('./shift-node.linux-s390x-gnu.node')
           } else {
-            nativeBinding = require('shift-font-linux-s390x-gnu')
+            nativeBinding = require('shift-node-linux-s390x-gnu')
           }
         } catch (e) {
           loadError = e
@@ -310,6 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { FontEngine } = nativeBinding
+const { FontEngine, PointTypeJS } = nativeBinding
 
 module.exports.FontEngine = FontEngine
+module.exports.PointTypeJS = PointTypeJS
