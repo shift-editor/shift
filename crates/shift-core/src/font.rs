@@ -1,4 +1,7 @@
-use crate::glyph::Glyph;
+use crate::{
+  constants::DEFAULT_X_ADVANCE,
+  glyph::{Glyph, SharedGlyph},
+};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -41,9 +44,9 @@ impl Default for Metrics {
 
 #[derive(Clone)]
 pub struct Font {
-  pub metadata: FontMetadata,
-  pub metrics: Metrics,
-  pub glyphs: HashMap<u32, Glyph>,
+  metadata: FontMetadata,
+  metrics: Metrics,
+  glyphs: HashMap<u32, SharedGlyph>,
 }
 
 impl Default for Font {
@@ -57,7 +60,7 @@ impl Default for Font {
 }
 
 impl Font {
-  pub fn new(metadata: FontMetadata, metrics: Metrics, glyphs: HashMap<u32, Glyph>) -> Self {
+  pub fn new(metadata: FontMetadata, metrics: Metrics, glyphs: HashMap<u32, SharedGlyph>) -> Self {
     Self {
       metadata,
       metrics,
@@ -69,7 +72,31 @@ impl Font {
     &self.metrics
   }
 
-  pub fn get_glyphs(&self) -> &HashMap<u32, Glyph> {
+  pub fn get_metadata(&self) -> &FontMetadata {
+    &self.metadata
+  }
+
+  pub fn set_new_metrics(&mut self, metrics: Metrics) {
+    self.metrics = metrics;
+  }
+
+  pub fn set_new_metadata(&mut self, metadata: FontMetadata) {
+    self.metadata = metadata;
+  }
+
+  pub fn get_glyph_count(&self) -> usize {
+    self.glyphs.len()
+  }
+
+  pub fn get_glyphs(&self) -> &HashMap<u32, SharedGlyph> {
     &self.glyphs
+  }
+
+  pub fn get_glyph(&mut self, unicode: u32) -> SharedGlyph {
+    self
+      .glyphs
+      .entry(unicode)
+      .or_insert_with(|| Glyph::new("".to_string(), unicode, DEFAULT_X_ADVANCE))
+      .clone()
   }
 }

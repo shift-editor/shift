@@ -8,7 +8,7 @@ pub enum PointType {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
-  id: PointId,
+  _id: PointId,
   x: f64,
   y: f64,
   point_type: PointType,
@@ -16,9 +16,9 @@ pub struct Point {
 }
 
 impl Point {
-  pub fn new(x: f64, y: f64, point_type: PointType, smooth: bool) -> Self {
+  pub fn new(id: PointId, x: f64, y: f64, point_type: PointType, smooth: bool) -> Self {
     Self {
-      id: PointId::new(),
+      _id: id,
       x,
       y,
       point_type,
@@ -26,23 +26,27 @@ impl Point {
     }
   }
 
-  pub fn get_x(&self) -> f64 {
+  pub fn x(&self) -> f64 {
     self.x
   }
 
-  pub fn get_y(&self) -> f64 {
+  pub fn y(&self) -> f64 {
     self.y
   }
 
-  pub fn get_point_type(&self) -> &PointType {
+  pub fn point_type(&self) -> &PointType {
     &self.point_type
+  }
+
+  pub fn id(&self) -> PointId {
+    self._id
   }
 
   pub fn is_smooth(&self) -> bool {
     self.smooth
   }
 
-  pub fn id(&self) -> PointId {
-    self.id
+  pub fn distance(&self, x: f64, y: f64) -> f64 {
+    return ((self.x - x).powf(2.0) + (self.y - y).powf(2.0)).sqrt();
   }
 }

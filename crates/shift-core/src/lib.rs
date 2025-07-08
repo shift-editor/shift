@@ -1,5 +1,7 @@
 pub mod binary;
+pub mod constants;
 pub mod contour;
+pub mod edit_session;
 pub mod entity;
 pub mod font;
 pub mod font_loader;

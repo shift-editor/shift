@@ -1364,8 +1364,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "shift-font"
-version = "0.0.0"
+name = "shift-math"
+version = "0.1.0"
+
+[[package]]
+name = "shift-node"
+version = "0.0.1"
 dependencies = [
  "napi",
  "napi-build",

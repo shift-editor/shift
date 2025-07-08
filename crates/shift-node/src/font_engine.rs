@@ -1,8 +1,9 @@
 use napi::{Error, Result, Status};
 use napi_derive::napi;
-use shift_core::{font::Font, font_loader::FontLoader};
+use shift_core::{edit_session::EditSession, font::Font, font_loader::FontLoader};
+use std::rc::Rc;
 
-use crate::types::JSMetrics;
+use crate::types::{JSFontMetaData, JSFontMetrics};
 
 #[napi]
 pub struct FontEngine {
@@ -33,27 +34,22 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn get_font_family(&self) -> &str {
-    &self.font.metadata.family
+  pub fn get_metadata(&self) -> JSFontMetaData {
+    self.font.get_metadata().clone().into()
   }
 
   #[napi]
-  pub fn get_font_style(&self) -> &str {
-    &self.font.metadata.style_name
-  }
-
-  #[napi]
-  pub fn get_font_version(&self) -> i32 {
-    self.font.metadata.version
-  }
-
-  #[napi]
-  pub fn get_metrics(&self) -> JSMetrics {
-    self.font.metrics.into()
+  pub fn get_metrics(&self) -> JSFontMetrics {
+    self.font.get_metrics().clone().into()
   }
 
   #[napi]
   pub fn get_glyph_count(&self) -> u32 {
-    self.font.glyphs.len() as u32
+    self.font.get_glyph_count() as u32
+  }
+
+  pub fn start_editing_glyph(&mut self, unicode: u32) -> EditSession {
+    let glyph = self.font.get_glyph(unicode);
+    return EditSession::new(Rc::clone(&glyph));
   }
 }

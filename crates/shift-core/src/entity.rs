@@ -38,8 +38,11 @@ macro_rules! entity_id {
         Self(EntityId::new())
       }
 
-      pub fn new_with_parent(parent: &Self) -> Self {
-        Self(EntityId::new_with_parent(&parent.0))
+      pub fn new_with_parent<T>(parent: &T) -> Self
+      where
+        T: AsRef<EntityId>,
+      {
+        Self(EntityId::new_with_parent(parent.as_ref()))
       }
 
       pub fn raw(&self) -> u64 {
@@ -50,6 +53,12 @@ macro_rules! entity_id {
     impl From<$name> for u64 {
       fn from(id: $name) -> u64 {
         id.raw()
+      }
+    }
+
+    impl AsRef<EntityId> for $name {
+      fn as_ref(&self) -> &EntityId {
+        &self.0
       }
     }
   };

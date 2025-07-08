@@ -72,21 +72,21 @@ impl From<NoradFont> for Font {
       }
     }
 
-    Font {
-      metadata: FontMetadata {
-        family: font.font_info.family_name.unwrap_or_default(),
-        style_name: font.font_info.style_name.unwrap_or_default(),
-        version: font.font_info.version_major.unwrap_or_default(),
-      },
-      metrics: Metrics {
-        units_per_em: *font.font_info.units_per_em.unwrap_or(2048.into()),
-        ascender: font.font_info.ascender.unwrap_or_default(),
-        descender: font.font_info.descender.unwrap_or_default(),
-        cap_height: font.font_info.cap_height.unwrap_or_default(),
-        x_height: font.font_info.x_height.unwrap_or_default(),
-      },
-      glyphs,
-    }
+    let metadata = FontMetadata {
+      family: font.font_info.family_name.unwrap_or_default(),
+      style_name: font.font_info.style_name.unwrap_or_default(),
+      version: font.font_info.version_major.unwrap_or_default(),
+    };
+
+    let metrics = Metrics {
+      units_per_em: *font.font_info.units_per_em.unwrap_or(2048.into()),
+      ascender: font.font_info.ascender.unwrap_or_default(),
+      descender: font.font_info.descender.unwrap_or_default(),
+      cap_height: font.font_info.cap_height.unwrap_or_default(),
+      x_height: font.font_info.x_height.unwrap_or_default(),
+    };
+
+    return Font::new(metadata, metrics, glyphs);
   }
 }
 

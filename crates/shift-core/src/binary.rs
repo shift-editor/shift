@@ -116,21 +116,21 @@ impl<'a> From<FontRef<'a>> for Font {
       glyphs.insert(unicode, glyph);
     }
 
-    Font {
-      metadata: FontMetadata {
-        family: String::new(),
-        style_name: String::new(),
-        version: 1,
-      },
-      metrics: Metrics {
-        units_per_em: metrics.units_per_em as f64,
-        ascender: metrics.ascent as f64,
-        descender: metrics.descent as f64,
-        cap_height: metrics.cap_height.unwrap_or(0.0) as f64,
-        x_height: metrics.x_height.unwrap_or(0.0) as f64,
-      },
-      glyphs,
-    }
+    let metrics = Metrics {
+      units_per_em: metrics.units_per_em as f64,
+      ascender: metrics.ascent as f64,
+      descender: metrics.descent as f64,
+      cap_height: metrics.cap_height.unwrap_or(0.0) as f64,
+      x_height: metrics.x_height.unwrap_or(0.0) as f64,
+    };
+
+    let metadata = FontMetadata {
+      family: String::new(),
+      style_name: String::new(),
+      version: 1,
+    };
+
+    Font::new(metadata, metrics, glyphs)
   }
 }
 

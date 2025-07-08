@@ -1,11 +1,12 @@
 use crate::{
+  constants::PIXEL,
   entity::{ContourId, PointId},
   point::{Point, PointType},
 };
 
 #[derive(Clone)]
 pub struct Contour {
-  id: ContourId,
+  cid: ContourId,
   points: Vec<Point>,
   closed: bool,
 }
@@ -13,20 +14,37 @@ pub struct Contour {
 impl Contour {
   pub fn new() -> Self {
     Self {
-      id: ContourId::new(),
+      cid: ContourId::new(),
       points: Vec::new(),
       closed: false,
     }
   }
 
-  pub fn get_id(&self) -> ContourId {
-    self.id
+  pub fn id(&self) -> ContourId {
+    self.cid
+  }
+
+  pub fn get_first_point(&self) -> Option<Point> {
+    if self.points.len() > 0 {
+      Some(self.points[0])
+    } else {
+      None
+    }
   }
 
   pub fn add_point(&mut self, x: f64, y: f64, point_type: PointType, smooth: bool) -> PointId {
-    let point = Point::new(x, y, point_type, smooth);
+    let point_id = PointId::new_with_parent(&self.cid);
+    let point = Point::new(point_id, x, y, point_type, smooth);
     self.points.push(point);
-    point.id()
+    point_id
+  }
+
+  pub fn get_point(&self, id: PointId) -> Result<&Point, String> {
+    self
+      .points
+      .iter()
+      .find(|p| p.id() == id)
+      .ok_or(format!("Point with id {:?} not found", id))
   }
 
   pub fn remove_point(&mut self, id: PointId) -> Result<usize, String> {
@@ -52,6 +70,10 @@ impl Contour {
     self.closed = true;
   }
 
+  pub fn open(&mut self) {
+    self.closed = false;
+  }
+
   pub fn length(&self) -> usize {
     self.points.len()
   }
@@ -74,9 +96,9 @@ mod tests {
     let id = contour.add_point(20.0, 30.0, PointType::OnCurve, false);
 
     assert_eq!(contour.points.len(), 1);
-    assert_eq!(contour.points[0].get_x(), 20.0);
-    assert_eq!(contour.points[0].get_y(), 30.0);
-    assert_eq!(contour.points[0].get_point_type(), &PointType::OnCurve);
+    assert_eq!(contour.points[0].x(), 20.0);
+    assert_eq!(contour.points[0].y(), 30.0);
+    assert_eq!(contour.points[0].point_type(), &PointType::OnCurve);
     assert_eq!(contour.points[0].id(), id);
   }
 
