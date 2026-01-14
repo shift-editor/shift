@@ -34,7 +34,8 @@ export function snapshotToContours(snapshot: GlyphSnapshot): Contour[] {
 
     for (const pointSnap of contourSnap.points) {
       const pointType: PointType = pointSnap.pointType === 'onCurve' ? 'onCurve' : 'offCurve';
-      contour.addPoint(pointSnap.x, pointSnap.y, pointType, pointSnap.smooth);
+      // Pass the Rust ID so we can match points by ID later
+      contour.addPoint(pointSnap.x, pointSnap.y, pointType, pointSnap.smooth, pointSnap.id);
     }
 
     if (contourSnap.closed) {

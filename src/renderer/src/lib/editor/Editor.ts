@@ -1,4 +1,3 @@
-import { EntityId } from "@/lib/core/EntityId";
 import {
   BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
@@ -12,27 +11,30 @@ import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleState, HandleType } from "@/types/handle";
 import { Point2D, Rect2D } from "@/types/math";
 import { Segment } from "@/types/segments";
-import { Tool } from "@/types/tool";
+import { Tool, ToolContext } from "@/types/tool";
+import type { PointId } from "@/types/ids";
+import { asPointId } from "@/types/ids";
+import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
 
 import { FrameHandler } from "./FrameHandler";
 import { Painter } from "./Painter";
 import { Guides, Scene } from "./Scene";
 import { Viewport } from "./Viewport";
 import { Contour, ContourPoint, PointType } from "../core/Contour";
+import { EntityId } from "../core/EntityId";
 import { EditEngine, EditContext } from "../core/EditEngine";
 import { UndoManager } from "../core/UndoManager";
 import { Path2D } from "../graphics/Path";
 import { getBoundingRect } from "../math/rect";
-import {
-  createRustBridge,
-  snapshotToContours,
-  type IRustBridge,
-} from "../core/RustBridge";
-import type { GlyphSnapshot, CommandResult } from "@/types/snapshots";
+import { snapshotToContours } from "../core/RustBridge";
+import { FontEngine } from "@/engine";
+import { findPointInSnapshot } from "./render";
 
 interface EditorState {
-  selectedPoints: Set<ContourPoint>;
-  hoveredPoint: ContourPoint | null;
+  /** Selected points by their Rust IDs. */
+  selectedPoints: Set<PointId>;
+  /** Hovered point by its Rust ID. */
+  hoveredPoint: PointId | null;
   fillContour: boolean;
 }
 
@@ -56,9 +58,8 @@ export class Editor {
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
 
-  // Rust integration - Rust is the single source of truth
-  #rustBridge: IRustBridge;
-  #currentSnapshot: GlyphSnapshot | null = null;
+  // Rust integration - FontEngine is the single source of truth
+  #fontEngine: FontEngine;
 
   constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
@@ -74,16 +75,24 @@ export class Editor {
     this.#staticContext = null;
     this.#interactiveContext = null;
 
-    this.#state = InitialEditorState;
+    this.#state = { ...InitialEditorState, selectedPoints: new Set() };
 
-    // Initialize Rust bridge
-    this.#rustBridge = createRustBridge();
+    // Initialize FontEngine (Rust interface)
+    this.#fontEngine = new FontEngine();
+
+    // Subscribe to snapshot changes for automatic sync
+    this.#fontEngine.onChange((snapshot) => {
+      if (snapshot) {
+        this.#syncFromSnapshot(snapshot);
+      }
+      this.requestRedraw();
+    });
 
     this.on("points:added", (points: any) => {
       this.#undoManager.push({
         undo: () => {
           for (const id of points.pointIds) {
-            this.removePoint(id);
+            this.#fontEngine.editing.removePoints([id]);
           }
           this.redrawGlyph();
         },
@@ -95,7 +104,7 @@ export class Editor {
       this.#undoManager.push({
         undo: () => {
           for (const { pointId, fromX, fromY } of pointIds.points) {
-            this.movePointTo(pointId, fromX, fromY);
+            this.#fontEngine.editing.movePointTo(pointId, fromX, fromY);
           }
 
           this.redrawGlyph();
@@ -103,7 +112,7 @@ export class Editor {
       });
     });
 
-    this.on("points:removed", (pointIds) => {
+    this.on("points:removed", (_pointIds) => {
       this.requestRedraw();
     });
   }
@@ -117,42 +126,38 @@ export class Editor {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RUST BRIDGE INTEGRATION
+  // FONT ENGINE INTEGRATION
   // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Get the FontEngine instance.
+   */
+  public get fontEngine(): FontEngine {
+    return this.#fontEngine;
+  }
 
   /**
    * Start editing a glyph. Creates an edit session in Rust and adds an empty contour.
    */
   public startEditSession(unicode: number): void {
-    const result = this.#rustBridge.sendCommand({
-      type: "startEditSession",
-      glyphUnicode: unicode,
-    });
-
-    if (result.success) {
-      // Add an empty contour to start with
-      const addContourResult = this.#rustBridge.sendCommand({ type: "addContour" });
-      if (addContourResult.success && addContourResult.snapshot) {
-        this.#syncFromSnapshot(addContourResult.snapshot);
-      }
-    }
+    this.#fontEngine.session.startEditSession(unicode);
+    // Add an empty contour to start with
+    this.#fontEngine.editing.addContour();
   }
 
   /**
    * End the current edit session.
    */
   public endEditSession(): void {
-    this.#rustBridge.sendCommand({ type: "endEditSession" });
-    this.#currentSnapshot = null;
+    this.#fontEngine.session.endEditSession();
   }
 
   /**
    * Sync Scene state from a Rust snapshot.
+   * TODO: Eventually Scene should render directly from snapshot without Contour objects.
    */
   #syncFromSnapshot(snapshot: GlyphSnapshot): void {
-    this.#currentSnapshot = snapshot;
-
-    // Convert snapshot to TypeScript Contour objects for rendering
+    // Convert snapshot to TypeScript Contour objects for rendering (temporary)
     const contours = snapshotToContours(snapshot);
     this.#scene.loadContours(contours);
 
@@ -167,15 +172,34 @@ export class Editor {
   }
 
   /**
-   * Get the current snapshot.
+   * Get the current snapshot from FontEngine.
    */
   public getSnapshot(): GlyphSnapshot | null {
-    return this.#currentSnapshot;
+    return this.#fontEngine.snapshot;
   }
 
+  /**
+   * Create an edit session for tools.
+   * Note: This is a compatibility layer that bridges the old ContourPoint-based
+   * tool API with the new PointId-based state. Tools will be migrated to use
+   * ToolContext directly in Phase 8.
+   */
   public editSession(): EditSession {
+    // Convert PointId selection to ContourPoint selection for legacy tools
+    const getSelectedContourPoints = (): ContourPoint[] => {
+      const allPoints = this.#scene.getAllPoints();
+      return allPoints.filter((p) => this.#state.selectedPoints.has(asPointId(p.id)));
+    };
+
+    // Find the ContourPoint for the hovered PointId
+    const getHoveredContourPoint = (): ContourPoint | null => {
+      if (!this.#state.hoveredPoint) return null;
+      const allPoints = this.#scene.getAllPoints();
+      return allPoints.find((p) => p.id === this.#state.hoveredPoint) ?? null;
+    };
+
     const editEngineContext: EditContext = {
-      getSelectedPoints: () => this.#state.selectedPoints,
+      getSelectedPoints: () => new Set(getSelectedContourPoints()),
       movePointTo: (point, x, y) => {
         this.#scene.movePointTo(point.entityId, x, y);
       },
@@ -189,17 +213,18 @@ export class Editor {
         return this.projectScreenToUpm(position.x, position.y);
       },
       getAllPoints: () => [...this.#scene.getAllPoints()],
-      getSelectedPoints: () => [...this.#state.selectedPoints.values()],
-      getHoveredPoint: () => this.#state.hoveredPoint,
+      getSelectedPoints: getSelectedContourPoints,
+      getHoveredPoint: getHoveredContourPoint,
 
       setSelectedPoints: (points) => {
-        this.#state.selectedPoints = new Set(points);
+        // Convert ContourPoint[] to Set<PointId>
+        this.#state.selectedPoints = new Set(points.map((p) => asPointId(p.id)));
       },
       clearSelectedPoints: () => {
         this.#state.selectedPoints.clear();
       },
       setHoveredPoint: (point) => {
-        this.#state.hoveredPoint = point;
+        this.#state.hoveredPoint = point ? asPointId(point.id) : null;
       },
       clearHoveredPoint: () => {
         this.#state.hoveredPoint = null;
@@ -207,21 +232,44 @@ export class Editor {
       preview: (dx, dy) => {
         editEngine.applyEdits(dx, dy);
       },
-      commit: (dx, dy) => {
-        // editEngine.applyEdits(dx, dy);
-        //   this.emit<PointsMovedEvent>('points:moved', {
-        //     points: edits.map((e) => ({
-        //       pointId: e.point.entityId,
-        //       fromX: e.fromX,
-        //       fromY: e.fromY,
-        //       toX: e.toX,
-        //       toY: e.toY,
-        //     })),
-        //   });
+      commit: (_dx, _dy) => {
+        // TODO: Implement commit via FontEngine
       },
       redraw: () => {
         this.redrawGlyph();
       },
+    };
+  }
+
+  /**
+   * Create a ToolContext for modern tools.
+   * This is the preferred API for new tools.
+   */
+  public createToolContext(): ToolContext {
+    return {
+      snapshot: this.#fontEngine.snapshot,
+      selectedPoints: this.#state.selectedPoints,
+      hoveredPoint: this.#state.hoveredPoint,
+      viewport: this.#viewport,
+      mousePosition: this.#viewport.getUpmMousePosition(),
+      fontEngine: this.#fontEngine,
+      setSelectedPoints: (ids) => {
+        this.#state.selectedPoints = ids;
+        this.requestRedraw();
+      },
+      addToSelection: (id) => {
+        this.#state.selectedPoints.add(id);
+        this.requestRedraw();
+      },
+      clearSelection: () => {
+        this.#state.selectedPoints.clear();
+        this.requestRedraw();
+      },
+      setHoveredPoint: (id) => {
+        this.#state.hoveredPoint = id;
+        this.requestRedraw();
+      },
+      requestRedraw: () => this.requestRedraw(),
     };
   }
 
@@ -299,12 +347,15 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
-  public getHandleState(p: ContourPoint): HandleState {
-    if (this.#state.selectedPoints.has(p)) {
+  /**
+   * Get the handle state for a point by ID.
+   */
+  public getHandleState(pointId: PointId): HandleState {
+    if (this.#state.selectedPoints.has(pointId)) {
       return "selected";
     }
 
-    if (this.#state.hoveredPoint === p) {
+    if (this.#state.hoveredPoint === pointId) {
       return "hovered";
     }
 
@@ -344,7 +395,7 @@ export class Editor {
     const cs = contours.map((contour) => {
       const c = new Contour();
       contour.points.map((p: ContourPoint) => {
-        return c.addPoint(p.x, p.y, p.pointType, p.smooth);
+      return c.addPoint(p.x, p.y, p.pointType, p.smooth);
       });
       if (contour.closed) {
         c.close();
@@ -376,24 +427,50 @@ export class Editor {
     return this.#scene.getGlyphPath();
   }
 
-  public setHoveredPoint(point: ContourPoint) {
-    this.#state.hoveredPoint = point;
+  /**
+   * Set the hovered point by ID.
+   */
+  public setHoveredPoint(pointId: PointId | null) {
+    this.#state.hoveredPoint = pointId;
   }
 
   public clearHoveredPoint() {
     this.#state.hoveredPoint = null;
   }
 
-  public get selectedPoints(): ContourPoint[] {
-    return [...this.#state.selectedPoints.values()];
+  /**
+   * Get the currently hovered point ID.
+   */
+  public get hoveredPoint(): PointId | null {
+    return this.#state.hoveredPoint;
   }
 
-  public isPointSelected(p: ContourPoint) {
-    return this.#state.selectedPoints.has(p);
+  /**
+   * Get the selected point IDs.
+   */
+  public get selectedPoints(): ReadonlySet<PointId> {
+    return this.#state.selectedPoints;
   }
 
-  public addToSelectedPoints(p: ContourPoint) {
-    return this.#state.selectedPoints.add(p);
+  /**
+   * Check if a point is selected by ID.
+   */
+  public isPointSelected(pointId: PointId): boolean {
+    return this.#state.selectedPoints.has(pointId);
+  }
+
+  /**
+   * Add a point to the selection by ID.
+   */
+  public addToSelection(pointId: PointId): void {
+    this.#state.selectedPoints.add(pointId);
+  }
+
+  /**
+   * Set the selected points.
+   */
+  public setSelectedPoints(pointIds: Set<PointId>): void {
+    this.#state.selectedPoints = pointIds;
   }
 
   public clearSelectedPoints() {
@@ -401,71 +478,50 @@ export class Editor {
   }
 
   /**
-   * Add a point to the active contour via Rust.
-   * @param x - The x position in UPM coordinates
-   * @param y - The y position in UPM coordinates
-   * @param pointType - The type of point (onCurve or offCurve)
-   * @returns The EntityId of the added point
+   * Get point data for all selected points.
+   * Used for calculating bounding rectangles.
    */
-  public addPoint(x: number, y: number, pointType: PointType): EntityId {
-    const result = this.#rustBridge.sendCommand({
-      type: "addPoint",
-      x,
-      y,
-      pointType,
-      smooth: false,
-    });
+  #getSelectedPointData(): Array<{ x: number; y: number }> {
+    const snapshot = this.#fontEngine.snapshot;
+    if (!snapshot) return [];
 
-    if (result.success && result.snapshot) {
-      this.#syncFromSnapshot(result.snapshot);
-
-      // Return the ID of the last added point from snapshot
-      const lastContour = result.snapshot.contours[result.snapshot.contours.length - 1];
-      if (lastContour && lastContour.points.length > 0) {
-        const lastPoint = lastContour.points[lastContour.points.length - 1];
-        return EntityId.fromString(lastPoint.id);
+    const result: Array<{ x: number; y: number }> = [];
+    for (const pointId of this.#state.selectedPoints) {
+      const found = findPointInSnapshot(snapshot, pointId);
+      if (found) {
+        result.push({ x: found.point.x, y: found.point.y });
       }
     }
-
-    // Return a placeholder ID if command failed
-    console.error("[Editor] addPoint failed:", result.error);
-    return new EntityId();
-  }
-
-  public getPoint(id: EntityId): ContourPoint | undefined {
-    return this.#scene.getPoint(id);
-  }
-
-  public removePoint(id: EntityId): ContourPoint | undefined {
-    return this.#scene.removePoint(id);
-  }
-
-  // **
-  // Get the neighbor points of a point
-  // @param p - The point to get the neighbors of
-  // @returns The neighbor points of the point
-  // **
-  public getNeighborPoints(p: ContourPoint): ContourPoint[] {
-    return this.#scene.getNeighborPoints(p);
+    return result;
   }
 
   /**
-   * Close the active contour via Rust.
+   * Add a point to the active contour via FontEngine.
+   * @param x - The x position in UPM coordinates
+   * @param y - The y position in UPM coordinates
+   * @param pointType - The type of point (onCurve or offCurve)
+   * @returns The PointId of the added point
    */
-  public closeContour(): EntityId {
-    if (this.#currentSnapshot?.activeContourId) {
-      const result = this.#rustBridge.sendCommand({
-        type: "closeContour",
-        contourId: this.#currentSnapshot.activeContourId,
-      });
+  public addPoint(x: number, y: number, pointType: PointType): PointId {
+    return this.#fontEngine.editing.addPoint(x, y, pointType, false);
+  }
 
-      if (result.success && result.snapshot) {
-        this.#syncFromSnapshot(result.snapshot);
-      }
-    }
+  /**
+   * Find a point in the current snapshot by ID.
+   */
+  public findPoint(pointId: PointId): PointSnapshot | null {
+    const snapshot = this.#fontEngine.snapshot;
+    if (!snapshot) return null;
 
-    // Also close in scene for rendering consistency
-    return this.#scene.closeContour();
+    const result = findPointInSnapshot(snapshot, pointId);
+    return result?.point ?? null;
+  }
+
+  /**
+   * Close the active contour via FontEngine.
+   */
+  public closeContour(): void {
+    this.#fontEngine.editing.closeContour();
   }
 
   public addRect(rect: Rect2D): EntityId {
@@ -590,9 +646,13 @@ export class Editor {
     }
 
     if (this.#state.selectedPoints.size > 0 && !this.#state.fillContour) {
-      const bbRect = getBoundingRect([...this.selectedPoints.values()]);
-      ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
-      ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
+      // Get the actual point data for selected points to calculate bounding rect
+      const selectedPointData = this.#getSelectedPointData();
+      if (selectedPointData.length > 0) {
+        const bbRect = getBoundingRect(selectedPointData);
+        ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
+        ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
+      }
     }
 
     ctx.restore();
@@ -605,7 +665,7 @@ export class Editor {
         for (const [idx, point] of pointCursor.items.entries()) {
           const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
 
-          const handleState = this.getHandleState(point);
+          const handleState = this.getHandleState(asPointId(point.id));
 
           if (pointCursor.length === 1) {
             this.paintHandle(ctx, x, y, "corner", handleState);

@@ -15,9 +15,10 @@ export type PointType = "onCurve" | "offCurve";
 // contour buffer
 
 export class ContourPoint extends Point {
-  #id: EntityId;
+  #entityId: EntityId;
   #pointType: PointType;
   #smooth: boolean;
+  #rustId: string;
 
   prevPoint: ContourPoint | null = null;
   nextPoint: ContourPoint | null = null;
@@ -27,13 +28,15 @@ export class ContourPoint extends Point {
     y: number,
     pointType: PointType,
     parentId: Ident,
-    smooth?: boolean
+    smooth?: boolean,
+    rustId?: string
   ) {
     super(x, y);
 
     this.#pointType = pointType;
-    this.#id = new EntityId(parentId);
+    this.#entityId = new EntityId(parentId);
     this.#smooth = smooth ?? false;
+    this.#rustId = rustId ?? this.#entityId.toString();
   }
 
   movePointTo(x: number, y: number) {
@@ -47,7 +50,12 @@ export class ContourPoint extends Point {
   }
 
   get entityId(): EntityId {
-    return this.#id;
+    return this.#entityId;
+  }
+
+  /** Get the Rust ID string (used for PointId matching). */
+  get id(): string {
+    return this.#rustId;
   }
 
   get pointType(): PointType {
@@ -271,9 +279,10 @@ export class Contour {
     x: number,
     y: number,
     pointType: PointType,
-    smooth?: boolean
+    smooth?: boolean,
+    rustId?: string
   ): EntityId {
-    const p = new ContourPoint(x, y, pointType, this.#id.id, smooth);
+    const p = new ContourPoint(x, y, pointType, this.#id.id, smooth, rustId);
     this.#addPointInternal(p);
     return p.entityId;
   }

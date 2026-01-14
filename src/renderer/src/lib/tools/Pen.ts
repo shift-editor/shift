@@ -2,6 +2,7 @@ import { Editor } from '@/lib/editor/Editor';
 import { IRenderer } from '@/types/graphics';
 import { Point2D } from '@/types/math';
 import { Tool, ToolName } from '@/types/tool';
+import type { PointId } from '@/types/ids';
 
 import { EntityId } from '../core/EntityId';
 import { Point } from '../math/point';
@@ -9,7 +10,8 @@ import { DEFAULT_STYLES } from '../styles/style';
 
 interface AddedPoint {
   point: Point2D;
-  entityId: EntityId;
+  /** PointId from FontEngine (Rust ID) */
+  pointId: PointId;
 }
 
 export type PenState =
@@ -19,6 +21,7 @@ export type PenState =
   | {
       type: 'draggingHandle';
       cornerPoint: Point2D;
+      /** EntityId from Scene's upgradeLineSegment (legacy) */
       segmentId: EntityId;
       trailingPoint: Point2D;
     };
@@ -54,7 +57,7 @@ export class Pen implements Tool {
       type: 'dragging',
       point: {
         point: { x, y },
-        entityId: addedPointId,
+        pointId: addedPointId,
       },
     };
 
@@ -75,22 +78,29 @@ export class Pen implements Tool {
     switch (this.#toolState.type) {
       case 'dragging':
         {
+          const currentState = this.#toolState;
           const distance = Point.distance(
-            this.#toolState.point.point.x,
-            this.#toolState.point.point.y,
+            currentState.point.point.x,
+            currentState.point.point.y,
             x,
             y
           );
 
-          if (this.#toolState.point.entityId && distance > 3) {
-            const id = this.#editor.upgradeLineSegment(this.#toolState.point.entityId);
+          if (currentState.point.pointId && distance > 3) {
+            // TODO: upgradeLineSegment should work with PointId
+            // For now, we find the Scene point by matching the Rust ID
+            const allPoints = this.#editor.getAllPoints();
+            const scenePoint = allPoints.find(p => p.id === currentState.point.pointId);
+            if (scenePoint) {
+              const id = this.#editor.upgradeLineSegment(scenePoint.entityId);
 
-            this.#toolState = {
-              type: 'draggingHandle',
-              trailingPoint: { x, y },
-              cornerPoint: this.#toolState.point.point,
-              segmentId: id,
-            };
+              this.#toolState = {
+                type: 'draggingHandle',
+                trailingPoint: { x, y },
+                cornerPoint: currentState.point.point,
+                segmentId: id,
+              };
+            }
           }
         }
         break;
@@ -110,6 +120,7 @@ export class Pen implements Tool {
           const oppositeX = 2 * anchorX - x;
           const oppositeY = 2 * anchorY - y;
 
+          // c2 is a ContourPoint which has entityId (from Scene)
           this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
           this.#editor.redrawGlyph();
         }
