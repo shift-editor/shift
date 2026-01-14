@@ -287,6 +287,60 @@ impl FontEngine {
       Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
     }
   }
+
+  /// Move multiple points by a delta (dx, dy).
+  /// Takes an array of point ID strings.
+  /// Returns a CommandResult JSON string with affected point IDs.
+  #[napi]
+  pub fn move_points(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    // Parse point IDs from strings
+    let parsed_ids: Vec<shift_core::entity::PointId> = point_ids
+      .iter()
+      .filter_map(|id_str| {
+        id_str
+          .parse::<u128>()
+          .ok()
+          .map(shift_core::entity::PointId::from_raw)
+      })
+      .collect();
+
+    if parsed_ids.is_empty() && !point_ids.is_empty() {
+      return Ok(serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap());
+    }
+
+    let moved = session.move_points(&parsed_ids, dx, dy);
+    let result = CommandResult::success(session, moved);
+    Ok(serde_json::to_string(&result).unwrap())
+  }
+
+  /// Remove multiple points by their IDs.
+  /// Takes an array of point ID strings.
+  /// Returns a CommandResult JSON string.
+  #[napi]
+  pub fn remove_points(&mut self, point_ids: Vec<String>) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    // Parse point IDs from strings
+    let parsed_ids: Vec<shift_core::entity::PointId> = point_ids
+      .iter()
+      .filter_map(|id_str| {
+        id_str
+          .parse::<u128>()
+          .ok()
+          .map(shift_core::entity::PointId::from_raw)
+      })
+      .collect();
+
+    if parsed_ids.is_empty() && !point_ids.is_empty() {
+      return Ok(serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap());
+    }
+
+    let removed = session.remove_points(&parsed_ids);
+    let result = CommandResult::success(session, removed);
+    Ok(serde_json::to_string(&result).unwrap())
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

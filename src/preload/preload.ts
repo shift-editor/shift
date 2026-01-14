@@ -136,6 +136,26 @@ const fontEngineAPI = {
   ): string => {
     return fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth);
   },
+
+  /**
+   * Move multiple points by a delta.
+   * Returns CommandResult JSON with affected point IDs.
+   */
+  movePoints: (
+    pointIds: string[],
+    dx: number,
+    dy: number
+  ): string => {
+    return fontEngineInstance.movePoints(pointIds, dx, dy);
+  },
+
+  /**
+   * Remove multiple points by their IDs.
+   * Returns CommandResult JSON.
+   */
+  removePoints: (pointIds: string[]): string => {
+    return fontEngineInstance.removePoints(pointIds);
+  },
 };
 
 // Expose to renderer via contextBridge

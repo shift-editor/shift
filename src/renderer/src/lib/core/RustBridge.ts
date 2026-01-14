@@ -182,7 +182,23 @@ export class RustBridge implements IRustBridge {
           return parseCommandResult(resultJson);
         }
 
-        // TODO: Implement remaining commands (movePoints, removePoints, etc.)
+        case 'movePoints': {
+          // Move multiple points by delta
+          const resultJson = this.native.movePoints(
+            command.pointIds,
+            command.dx,
+            command.dy
+          );
+          return parseCommandResult(resultJson);
+        }
+
+        case 'removePoints': {
+          // Remove multiple points
+          const resultJson = this.native.removePoints(command.pointIds);
+          return parseCommandResult(resultJson);
+        }
+
+        // TODO: Implement remaining commands (setPointPosition, etc.)
         default:
           return {
             success: false,

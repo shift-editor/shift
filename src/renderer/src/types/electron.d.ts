@@ -153,6 +153,22 @@ export interface NativeFontEngine {
     pointType: 'onCurve' | 'offCurve',
     smooth: boolean
   ): string;
+
+  /**
+   * Move multiple points by a delta.
+   * Returns a CommandResult JSON string with affected point IDs.
+   */
+  movePoints(
+    pointIds: string[],
+    dx: number,
+    dy: number
+  ): string;
+
+  /**
+   * Remove multiple points by their IDs.
+   * Returns a CommandResult JSON string.
+   */
+  removePoints(pointIds: string[]): string;
 }
 
 // ═══════════════════════════════════════════════════════════
