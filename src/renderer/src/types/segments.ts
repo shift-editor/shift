@@ -1,10 +1,8 @@
-import type { EntityId } from "@/lib/core/EntityId";
-
 export type SegmentType = "line" | "quad" | "cubic";
 
 /**
  * Minimal point interface for segments.
- * Compatible with both ContourPoint and PointSnapshot.
+ * Compatible with PointSnapshot from Rust.
  */
 export interface SegmentPoint {
   id: string;
@@ -12,8 +10,6 @@ export interface SegmentPoint {
   y: number;
   pointType: "onCurve" | "offCurve";
   smooth: boolean;
-  /** EntityId is present on ContourPoint (legacy) */
-  entityId?: EntityId;
 }
 
 /**

@@ -8,6 +8,12 @@
 import type { PointSnapshot, ContourSnapshot } from "@/types/generated";
 import type { Segment, SegmentPoint } from "@/types/segments";
 
+// Debug logging
+const DEBUG = true;
+function debug(...args: any[]) {
+  if (DEBUG) console.log("[Segments]", ...args);
+}
+
 /**
  * Parse a contour's points into renderable segments.
  *
@@ -24,8 +30,16 @@ export function parseSegments(
   points: PointSnapshot[],
   closed: boolean
 ): Segment[] {
+  debug("parseSegments called with", points.length, "points, closed:", closed);
+
   if (points.length < 2) {
+    debug("  Less than 2 points, returning empty");
     return [];
+  }
+
+  // Log all points
+  for (let i = 0; i < points.length; i++) {
+    debug(`  Point[${i}]:`, points[i].id, "x:", points[i].x, "y:", points[i].y, "type:", points[i].pointType);
   }
 
   const segments: Segment[] = [];
@@ -35,8 +49,11 @@ export function parseSegments(
     const p1 = points[index];
     const p2 = points[index + 1];
 
+    debug(`  Processing index ${index}: p1.type=${p1.pointType}, p2.type=${p2.pointType}`);
+
     // Line segment: onCurve → onCurve
     if (p1.pointType === "onCurve" && p2.pointType === "onCurve") {
+      debug(`    Creating LINE segment from (${p1.x}, ${p1.y}) to (${p2.x}, ${p2.y})`);
       segments.push({
         type: "line",
         points: { anchor1: p1, anchor2: p2 },
@@ -50,12 +67,14 @@ export function parseSegments(
       const p3 = points[index + 2];
 
       if (!p3) {
+        debug("    Incomplete bezier at end, breaking");
         // Incomplete segment at end, skip
         break;
       }
 
       // Quadratic: onCurve → offCurve → onCurve
       if (p3.pointType === "onCurve") {
+        debug(`    Creating QUAD segment`);
         segments.push({
           type: "quad",
           points: { anchor1: p1, control: p2, anchor2: p3 },
@@ -68,10 +87,12 @@ export function parseSegments(
       if (p3.pointType === "offCurve") {
         const p4 = points[index + 3];
         if (!p4) {
+          debug("    Incomplete cubic at end, breaking");
           // Incomplete segment at end, skip
           break;
         }
 
+        debug(`    Creating CUBIC segment`);
         segments.push({
           type: "cubic",
           points: { anchor1: p1, control1: p2, control2: p3, anchor2: p4 },
@@ -82,6 +103,7 @@ export function parseSegments(
     }
 
     // Unknown pattern, skip point
+    debug(`    Unknown pattern at index ${index}, skipping`);
     index += 1;
   }
 
@@ -91,6 +113,7 @@ export function parseSegments(
     const firstOnCurve = findFirstOnCurve(points);
 
     if (lastOnCurve && firstOnCurve && lastOnCurve !== firstOnCurve) {
+      debug("  Adding closing LINE segment");
       // Simple line close for now
       // TODO: Handle bezier closing segments
       segments.push({
@@ -100,6 +123,7 @@ export function parseSegments(
     }
   }
 
+  debug("  Returning", segments.length, "segments");
   return segments;
 }
 

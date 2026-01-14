@@ -10,7 +10,6 @@ import type { PointId } from "@/types/ids";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
 import { Path2D } from "@/lib/graphics/Path";
-import { Contour, type PointType } from "@/lib/core/Contour";
 
 /**
  * Options for rendering a glyph.
@@ -231,32 +230,3 @@ export function isContourClockwise(contour: ContourSnapshot): boolean {
   return sum > 0;
 }
 
-// ═══════════════════════════════════════════════════════════
-// SNAPSHOT TO CONTOUR CONVERSION (TEMPORARY)
-// ═══════════════════════════════════════════════════════════
-
-/**
- * Convert a GlyphSnapshot from Rust to TypeScript Contour objects for rendering.
- * This allows the Editor's Scene to render glyph data from Rust.
- *
- * Note: This is temporary until Scene is migrated to render directly from snapshots.
- * Creates new TypeScript Contour objects for rendering. The TypeScript
- * objects have their own EntityIds - we pass the Rust ID for point matching.
- */
-export function snapshotToContours(snapshot: GlyphSnapshot): Contour[] {
-  return snapshot.contours.map((contourSnap) => {
-    const contour = new Contour();
-
-    for (const pointSnap of contourSnap.points) {
-      const pointType: PointType = pointSnap.pointType === 'onCurve' ? 'onCurve' : 'offCurve';
-      // Pass the Rust ID so we can match points by ID later
-      contour.addPoint(pointSnap.x, pointSnap.y, pointType, pointSnap.smooth, pointSnap.id);
-    }
-
-    if (contourSnap.closed) {
-      contour.close();
-    }
-
-    return contour;
-  });
-}

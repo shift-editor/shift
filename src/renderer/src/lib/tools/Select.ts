@@ -66,8 +66,8 @@ export type SelectState =
       startPos: Point2D;
       /** The point being dragged (if any) */
       dragPointId?: PointId;
-      /** Original position of drag point for delta calculation */
-      dragPointOriginalPos?: Point2D;
+      /** Last drag position for incremental delta calculation */
+      lastDragPos?: Point2D;
       shiftModifierOn?: boolean;
     };
 
@@ -112,7 +112,7 @@ export class Select implements Tool {
             type: 'modifying',
             startPos: { x, y },
             dragPointId: pointId,
-            dragPointOriginalPos: { x: hitPoint.x, y: hitPoint.y },
+            lastDragPos: { x, y },
           };
           this.#editor.setSelectedPoints(new Set([pointId]));
           break;
@@ -145,7 +145,7 @@ export class Select implements Tool {
           type: 'modifying',
           startPos: { x, y },
           dragPointId: pointId,
-          dragPointOriginalPos: { x: hitPoint.x, y: hitPoint.y },
+          lastDragPos: { x, y },
           shiftModifierOn: this.#state.shiftModifierOn,
         };
         break;
@@ -167,15 +167,19 @@ export class Select implements Tool {
       this.#selectionRect.resize(width, height);
     }
 
-    // Move selected points
-    if (this.#state.type === 'modifying' && this.#state.dragPointOriginalPos) {
-      const dx = x - this.#state.dragPointOriginalPos.x;
-      const dy = y - this.#state.dragPointOriginalPos.y;
+    // Move selected points (incremental delta from last position)
+    if (this.#state.type === 'modifying' && this.#state.lastDragPos) {
+      const dx = x - this.#state.lastDragPos.x;
+      const dy = y - this.#state.lastDragPos.y;
 
-      // Move all selected points by delta
-      const selectedIds = Array.from(ctx.selectedPoints);
-      if (selectedIds.length > 0) {
-        this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+      // Only move if there's actual movement
+      if (dx !== 0 || dy !== 0) {
+        const selectedIds = Array.from(ctx.selectedPoints);
+        if (selectedIds.length > 0) {
+          this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+        }
+        // Update last position for next frame
+        this.#state = { ...this.#state, lastDragPos: { x, y } };
       }
     }
 
@@ -214,7 +218,7 @@ export class Select implements Tool {
       this.#state = {
         ...this.#state,
         dragPointId: undefined,
-        dragPointOriginalPos: undefined,
+        lastDragPos: undefined,
       };
     }
 

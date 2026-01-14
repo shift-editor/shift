@@ -3,10 +3,28 @@ import { IRenderer } from '@/types/graphics';
 import { Point2D } from '@/types/math';
 import { Tool, ToolName } from '@/types/tool';
 import type { PointId } from '@/types/ids';
+import type { PointSnapshot, ContourSnapshot } from '@/types/generated';
 
-import { EntityId } from '../core/EntityId';
 import { Point } from '../math/point';
 import { DEFAULT_STYLES } from '../styles/style';
+
+const HIT_RADIUS = 8;
+
+/**
+ * Get the first point of a contour.
+ */
+function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
+  return contour.points.length > 0 ? contour.points[0] : null;
+}
+
+/**
+ * Check if position is near a point.
+ */
+function isNearPoint(x: number, y: number, point: PointSnapshot, radius: number): boolean {
+  const dx = x - point.x;
+  const dy = y - point.y;
+  return Math.sqrt(dx * dx + dy * dy) < radius;
+}
 
 interface AddedPoint {
   point: Point2D;
@@ -14,17 +32,28 @@ interface AddedPoint {
   pointId: PointId;
 }
 
+/**
+ * State for bezier creation when dragging after placing a point.
+ * Creates control points on either side of the anchor.
+ */
+interface BezierDragState {
+  type: 'draggingHandle';
+  /** The anchor point we're adding handles to */
+  anchorPoint: Point2D;
+  anchorPointId: PointId;
+  /** Leading control point (in direction of drag) */
+  leadingControlId: PointId | null;
+  /** Trailing control point (opposite direction) */
+  trailingControlId: PointId | null;
+  /** Current trailing position for rendering */
+  trailingPoint: Point2D;
+}
+
 export type PenState =
   | { type: 'ready' }
   | { type: 'idle' }
   | { type: 'dragging'; point: AddedPoint }
-  | {
-      type: 'draggingHandle';
-      cornerPoint: Point2D;
-      /** EntityId from Scene's upgradeLineSegment (legacy) */
-      segmentId: EntityId;
-      trailingPoint: Point2D;
-    };
+  | BezierDragState;
 
 export class Pen implements Tool {
   public readonly name: ToolName = 'pen';
@@ -51,6 +80,25 @@ export class Pen implements Tool {
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    // Check if clicking near the first point of an open contour to close it
+    const snapshot = this.#editor.getSnapshot();
+    if (snapshot) {
+      const activeContourId = this.#editor.fontEngine.editing.getActiveContourId();
+      const activeContour = snapshot.contours.find(c => c.id === activeContourId);
+
+      if (activeContour && !activeContour.closed && activeContour.points.length >= 2) {
+        const firstPoint = getFirstPoint(activeContour);
+        if (firstPoint && isNearPoint(x, y, firstPoint, HIT_RADIUS)) {
+          // Close the contour and start a new one
+          this.#editor.closeContour();
+          this.#editor.fontEngine.editing.addContour();
+          this.#editor.requestRedraw();
+          return;
+        }
+      }
+    }
+
     const addedPointId = this.#editor.addPoint(x, y, 'onCurve');
 
     this.#toolState = {
@@ -86,44 +134,57 @@ export class Pen implements Tool {
             y
           );
 
+          // If we've dragged far enough, create control points for a bezier curve
           if (currentState.point.pointId && distance > 3) {
-            // TODO: upgradeLineSegment should work with PointId
-            // For now, we find the Scene point by matching the Rust ID
-            const allPoints = this.#editor.getAllPoints();
-            const scenePoint = allPoints.find(p => p.id === currentState.point.pointId);
-            if (scenePoint) {
-              const id = this.#editor.upgradeLineSegment(scenePoint.entityId);
+            const anchorX = currentState.point.point.x;
+            const anchorY = currentState.point.point.y;
 
-              this.#toolState = {
-                type: 'draggingHandle',
-                trailingPoint: { x, y },
-                cornerPoint: currentState.point.point,
-                segmentId: id,
-              };
-            }
+            // Calculate opposite position (mirror of drag position across anchor)
+            const oppositeX = 2 * anchorX - x;
+            const oppositeY = 2 * anchorY - y;
+
+            // Add leading control point (in drag direction) - this will be used by the NEXT segment
+            const leadingControlId = this.#editor.fontEngine.editing.addPoint(
+              x, y, 'offCurve', false
+            );
+
+            // TODO: For proper bezier, we'd also add a trailing control point
+            // that belongs to the PREVIOUS segment. This requires more complex
+            // handling since the trailing control should be inserted BEFORE the anchor.
+            // For now, we just track the position for visual feedback.
+
+            this.#toolState = {
+              type: 'draggingHandle',
+              anchorPoint: currentState.point.point,
+              anchorPointId: currentState.point.pointId,
+              leadingControlId: leadingControlId,
+              trailingControlId: null, // Would need insert-before functionality
+              trailingPoint: { x: oppositeX, y: oppositeY },
+            };
           }
         }
         break;
 
       case 'draggingHandle': {
+        const anchorX = this.#toolState.anchorPoint.x;
+        const anchorY = this.#toolState.anchorPoint.y;
+        const oppositeX = 2 * anchorX - x;
+        const oppositeY = 2 * anchorY - y;
+
+        // Move the leading control point to follow the mouse
+        if (this.#toolState.leadingControlId) {
+          this.#editor.fontEngine.editing.movePointTo(
+            this.#toolState.leadingControlId, x, y
+          );
+        }
+
+        // Update trailing point position for visual feedback
         this.#toolState = {
           ...this.#toolState,
-          trailingPoint: { x, y },
+          trailingPoint: { x: oppositeX, y: oppositeY },
         };
 
-        const segment = this.#editor.getSegment(this.#toolState.segmentId);
-
-        if (segment && segment.type === 'cubic') {
-          const c2 = segment.points.control2;
-          const anchorX = this.#toolState.cornerPoint.x;
-          const anchorY = this.#toolState.cornerPoint.y;
-          const oppositeX = 2 * anchorX - x;
-          const oppositeY = 2 * anchorY - y;
-
-          // c2 is a ContourPoint which has entityId (from Scene)
-          this.#editor.movePointTo(c2.entityId, oppositeX, oppositeY);
-          this.#editor.redrawGlyph();
-        }
+        this.#editor.redrawGlyph();
       }
     }
 
@@ -141,10 +202,13 @@ export class Pen implements Tool {
       ...DEFAULT_STYLES,
     });
 
+    // Draw line from trailing point through anchor to show the handle direction
     ctx.beginPath();
     ctx.moveTo(this.#toolState.trailingPoint.x, this.#toolState.trailingPoint.y);
-    ctx.lineTo(this.#toolState.cornerPoint.x, this.#toolState.cornerPoint.y);
+    ctx.lineTo(this.#toolState.anchorPoint.x, this.#toolState.anchorPoint.y);
     ctx.stroke();
+
+    // Draw the trailing handle indicator (opposite of mouse position)
     this.drawTrailingHandle(ctx, this.#toolState.trailingPoint.x, this.#toolState.trailingPoint.y);
   }
 }
