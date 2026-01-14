@@ -7,4 +7,5 @@ pub mod font;
 pub mod font_loader;
 pub mod glyph;
 pub mod point;
+pub mod snapshot;
 pub mod ufo;

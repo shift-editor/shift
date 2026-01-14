@@ -4,14 +4,15 @@ import { EventEmitter } from "@/lib/core/EventEmitter";
 import { Editor } from "@/lib/editor/Editor";
 import { createToolRegistry } from "@/lib/tools/tools";
 import { ToolName } from "@/types/tool";
+import type { GlyphSnapshot } from "@/types/generated";
 
 interface AppState {
   editor: Editor;
   fileName: string;
-  currentGlyph: Glyph | null;
+  currentGlyph: GlyphSnapshot | null;
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
-  setActiveGlyph: (glyph: Glyph) => void;
+  setActiveGlyph: (glyph: GlyphSnapshot) => void;
 }
 
 const AppState = create<AppState>()((set) => {
@@ -27,7 +28,7 @@ const AppState = create<AppState>()((set) => {
     setActiveTool: (tool: ToolName) => {
       set({ activeTool: tool });
     },
-    setActiveGlyph: (glyph: Glyph) => {
+    setActiveGlyph: (glyph: GlyphSnapshot) => {
       set({ currentGlyph: glyph });
     },
     setFileName: (fileName: string) => {

@@ -1,4 +1,4 @@
-import { createContext, useEffect, useRef, useState } from 'react';
+import { createContext, useEffect, useRef } from 'react';
 
 import { CanvasKit } from 'canvaskit-wasm';
 

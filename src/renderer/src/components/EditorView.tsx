@@ -16,30 +16,34 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
 
   useEffect(() => {
-    const fetchFontData = async () => {
+    // Parse glyphId to get unicode (e.g., "65" for 'A')
+    const unicode = parseInt(glyphId, 10) || 65; // Default to 'A' if invalid
+
+    const initEditor = () => {
       const guides = {
-        ascender: { y: 100 },
-        capHeight: { y: 100 },
-        xHeight: { y: 100 },
-        descender: { y: 100 },
+        ascender: { y: 800 },
+        capHeight: { y: 700 },
+        xHeight: { y: 500 },
+        descender: { y: -200 },
         baseline: { y: 0 },
-        xAdvance: 100,
+        xAdvance: 600,
       };
 
       editor.constructGuidesPath(guides);
       editor.setViewportUpm(1000);
 
-      editor.loadContours([]);
+      // Start Rust edit session for this glyph
+      editor.startEditSession(unicode);
       editor.redrawGlyph();
     };
 
-    fetchFontData();
+    initEditor();
 
     editor.activeTool().setReady();
 
     return () => {
       editor.activeTool().setIdle();
-      editor.clearContours();
+      editor.endEditSession();
     };
   }, [glyphId]);
 

@@ -1,11 +1,61 @@
-import { ContourPoint } from '@/lib/core/Contour';
+import { Editor } from '@/lib/editor/Editor';
 import { UPMRect } from '@/lib/math/rect';
 import { SELECTION_RECTANGLE_STYLES } from '@/lib/styles/style';
-import { EditSession } from '@/types/edit';
 import { IRenderer } from '@/types/graphics';
 import { Point2D } from '@/types/math';
 import { NUDGES_VALUES } from '@/types/nudge';
 import { Tool, ToolName } from '@/types/tool';
+import type { PointId } from '@/types/ids';
+import { asPointId } from '@/types/ids';
+import type { PointSnapshot } from '@/types/generated';
+
+/**
+ * Calculate distance between a point and coordinates.
+ */
+function pointDistance(point: PointSnapshot, x: number, y: number): number {
+  const dx = point.x - x;
+  const dy = point.y - y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Find point at position with given hit radius.
+ */
+function findPointAtPosition(
+  points: PointSnapshot[],
+  x: number,
+  y: number,
+  hitRadius: number
+): PointSnapshot | null {
+  for (const point of points) {
+    if (pointDistance(point, x, y) < hitRadius) {
+      return point;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find all points within a rectangle.
+ */
+function findPointsInRect(
+  points: PointSnapshot[],
+  rect: UPMRect
+): PointSnapshot[] {
+  return points.filter((p) => rect.hit(p.x, p.y));
+}
+
+/**
+ * Get all points from a snapshot.
+ */
+function getAllPoints(snapshot: { contours: Array<{ points: PointSnapshot[] }> } | null): PointSnapshot[] {
+  if (!snapshot) return [];
+  const result: PointSnapshot[] = [];
+  for (const contour of snapshot.contours) {
+    result.push(...contour.points);
+  }
+  return result;
+}
 
 export type SelectState =
   | { type: 'idle' }
@@ -14,19 +64,22 @@ export type SelectState =
   | {
       type: 'modifying';
       startPos: Point2D;
-      selectedPoint?: ContourPoint;
+      /** The point being dragged (if any) */
+      dragPointId?: PointId;
+      /** Last drag position for incremental delta calculation */
+      lastDragPos?: Point2D;
       shiftModifierOn?: boolean;
     };
 
 export class Select implements Tool {
   public readonly name: ToolName = 'select';
 
-  #session: EditSession;
+  #editor: Editor;
   #state: SelectState;
   #selectionRect: UPMRect;
 
-  public constructor(session: EditSession) {
-    this.#session = session;
+  public constructor(editor: Editor) {
+    this.#editor = editor;
     this.#state = { type: 'idle' };
     this.#selectionRect = new UPMRect(0, 0, 0, 0);
   }
@@ -39,56 +92,72 @@ export class Select implements Tool {
     this.#state = { type: 'ready' };
   }
 
-  gatherHitPoints(hitTest: (p: ContourPoint) => boolean): ContourPoint[] {
-    return this.#session.getAllPoints().filter(hitTest);
-  }
-
-  isPointSelected(point: ContourPoint): boolean {
-    return this.#session.getSelectedPoints().includes(point);
+  #getMouseUpm(e: React.MouseEvent<HTMLCanvasElement>): Point2D {
+    const screenPos = this.#editor.getMousePosition(e.clientX, e.clientY);
+    return this.#editor.projectScreenToUpm(screenPos.x, screenPos.y);
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#getMouseUpm(e);
+    const ctx = this.#editor.createToolContext();
+    const allPoints = getAllPoints(ctx.snapshot);
 
-    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
-    const firstHitPoint = hitPoints[0];
+    const hitPoint = findPointAtPosition(allPoints, x, y, 4);
 
     switch (this.#state.type) {
       case 'ready':
-        if (hitPoints.length === 1) {
-          this.#state = { type: 'modifying', startPos: { x, y }, selectedPoint: firstHitPoint };
-          this.#session.setSelectedPoints(hitPoints);
+        if (hitPoint) {
+          const pointId = asPointId(hitPoint.id);
+          this.#state = {
+            type: 'modifying',
+            startPos: { x, y },
+            dragPointId: pointId,
+            lastDragPos: { x, y },
+          };
+          this.#editor.setSelectedPoints(new Set([pointId]));
           break;
         }
 
         this.#state = { type: 'selecting', startPos: { x, y } };
         break;
+
       case 'modifying':
-        if (hitPoints.length === 0) {
+        if (!hitPoint) {
           this.#state = { type: 'ready' };
-          this.#session.clearSelectedPoints();
+          this.#editor.clearSelectedPoints();
           break;
         }
 
-        if (!this.isPointSelected(firstHitPoint)) {
+        const pointId = asPointId(hitPoint.id);
+        if (!ctx.selectedPoints.has(pointId)) {
           if (this.#state.shiftModifierOn) {
-            const selectedPoints = this.#session.getSelectedPoints();
-            this.#session.setSelectedPoints([...selectedPoints, ...hitPoints]);
+            // Add to selection
+            const newSelection = new Set(ctx.selectedPoints);
+            newSelection.add(pointId);
+            this.#editor.setSelectedPoints(newSelection);
           } else {
-            this.#session.clearSelectedPoints();
-            this.#session.setSelectedPoints(hitPoints);
+            // Replace selection
+            this.#editor.setSelectedPoints(new Set([pointId]));
           }
         }
 
-        this.#state = { type: 'modifying', startPos: { x, y }, selectedPoint: firstHitPoint };
+        this.#state = {
+          type: 'modifying',
+          startPos: { x, y },
+          dragPointId: pointId,
+          lastDragPos: { x, y },
+          shiftModifierOn: this.#state.shiftModifierOn,
+        };
         break;
     }
 
-    this.#session.redraw();
+    this.#editor.requestRedraw();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#getMouseUpm(e);
+    const ctx = this.#editor.createToolContext();
+    const allPoints = getAllPoints(ctx.snapshot);
 
     if (this.#state.type === 'selecting') {
       const width = x - this.#state.startPos.x;
@@ -98,53 +167,62 @@ export class Select implements Tool {
       this.#selectionRect.resize(width, height);
     }
 
-    // move the point, if it's an active handle move all points by delta
-    // otherwise we need to move proportional to an anchor point
-    if (this.#state.type === 'modifying' && this.#state.selectedPoint) {
-      const dx = x - this.#state.selectedPoint.x;
-      const dy = y - this.#state.selectedPoint.y;
+    // Move selected points (incremental delta from last position)
+    if (this.#state.type === 'modifying' && this.#state.lastDragPos) {
+      const dx = x - this.#state.lastDragPos.x;
+      const dy = y - this.#state.lastDragPos.y;
 
-      this.#session.preview(dx, dy);
-      // this.#session.commit();
+      // Only move if there's actual movement
+      if (dx !== 0 || dy !== 0) {
+        const selectedIds = Array.from(ctx.selectedPoints);
+        if (selectedIds.length > 0) {
+          this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+        }
+        // Update last position for next frame
+        this.#state = { ...this.#state, lastDragPos: { x, y } };
+      }
     }
 
-    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
-
-    if (hitPoints.length > 0) {
-      this.#session.setHoveredPoint(hitPoints[0]);
+    // Update hover state
+    const hitPoint = findPointAtPosition(allPoints, x, y, 4);
+    if (hitPoint) {
+      this.#editor.setHoveredPoint(asPointId(hitPoint.id));
     } else {
-      this.#session.clearHoveredPoint();
+      this.#editor.clearHoveredPoint();
     }
 
-    this.#session.redraw();
+    this.#editor.requestRedraw();
   }
 
   onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#getMouseUpm(e);
+    const ctx = this.#editor.createToolContext();
+    const allPoints = getAllPoints(ctx.snapshot);
 
     if (this.#state.type === 'selecting') {
-      const hitPoints = this.gatherHitPoints((p) => this.#selectionRect.hit(p.x, p.y));
+      const hitPoints = findPointsInRect(allPoints, this.#selectionRect);
 
       if (hitPoints.length === 0) {
         this.#state = { type: 'ready' };
       } else {
-        this.#session.setSelectedPoints(hitPoints);
+        const selectedIds = new Set(hitPoints.map((p) => asPointId(p.id)));
+        this.#editor.setSelectedPoints(selectedIds);
         this.#state = { type: 'modifying', startPos: { x, y } };
       }
 
       this.#selectionRect.clear();
     }
 
-    if (this.#state.type === 'modifying' && this.#state.selectedPoint) {
-      const dx = x - this.#state.startPos.x;
-      const dy = y - this.#state.startPos.y;
-
-      // this.#session.preview(dx, dy);
-      // this.#session.commit(dx, dy);
-      this.#state.selectedPoint = undefined;
+    if (this.#state.type === 'modifying') {
+      // Clear drag state but stay in modifying mode
+      this.#state = {
+        ...this.#state,
+        dragPointId: undefined,
+        lastDragPos: undefined,
+      };
     }
 
-    this.#session.redraw();
+    this.#editor.requestRedraw();
   }
 
   drawInteractive(ctx: IRenderer): void {
@@ -175,10 +253,14 @@ export class Select implements Tool {
       const modifier = e.metaKey ? 'large' : e.shiftKey ? 'medium' : 'small';
       const nudgeValue = NUDGES_VALUES[modifier];
 
+      const ctx = this.#editor.createToolContext();
+      const selectedIds = Array.from(ctx.selectedPoints);
+
       const nudge = (dx: number, dy: number) => {
-        this.#session.preview(dx, dy);
-        this.#session.commit(dx, dy);
-        this.#session.redraw();
+        if (selectedIds.length > 0) {
+          this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+          this.#editor.requestRedraw();
+        }
       };
 
       switch (e.key) {
@@ -208,16 +290,16 @@ export class Select implements Tool {
   }
 
   onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const { x, y } = this.#session.getMousePosition(e.clientX, e.clientY);
+    const { x, y } = this.#getMouseUpm(e);
+    const ctx = this.#editor.createToolContext();
+    const allPoints = getAllPoints(ctx.snapshot);
 
-    const hitPoints = this.gatherHitPoints((p) => p.distance(x, y) < 4);
+    const hitPoint = findPointAtPosition(allPoints, x, y, 4);
 
-    if (hitPoints.length === 1) {
-      const point = hitPoints[0];
-
-      if (point.pointType === 'onCurve') {
-        point.toggleSmooth();
-      }
+    if (hitPoint && hitPoint.pointType === 'onCurve') {
+      // TODO: Toggle smooth via FontEngine
+      // For now, this is a no-op since we need a Rust command for this
+      console.log('Toggle smooth not yet implemented via FontEngine');
     }
   }
 }

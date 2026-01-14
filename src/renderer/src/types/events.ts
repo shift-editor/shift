@@ -1,4 +1,4 @@
-export type EventName = 'points:added' | 'points:moved' | 'points:removed' | 'segment:upgraded';
+export type EventName = 'points:added' | 'points:moved' | 'points:removed' | 'segment:upgraded' | 'font:loaded';
 export type EventHandler<T> = (data: T) => void;
 
 export interface IEventEmitter {

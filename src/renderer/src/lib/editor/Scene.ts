@@ -1,8 +1,19 @@
-import { EntityId } from "@/lib/core/EntityId";
-import type { Segment } from "@/types/segments";
-import { ContourManager } from "./ContourManager";
-import { Contour, ContourPoint, type PointType } from "../core/Contour";
+/**
+ * Scene - Pure rendering from GlyphSnapshot.
+ *
+ * This class renders glyph data directly from Rust snapshots.
+ * No intermediate TypeScript state - just snapshot in, path out.
+ */
+
 import { Path2D } from "@/lib/graphics/Path";
+import { parseSegments } from "@/engine/segments";
+import type { GlyphSnapshot, ContourSnapshot } from "@/types/generated";
+
+// Debug logging
+const DEBUG = true;
+function debug(...args: any[]) {
+  if (DEBUG) console.log("[Scene]", ...args);
+}
 
 export interface Guides {
   xAdvance: number;
@@ -14,14 +25,37 @@ export interface Guides {
 }
 
 export class Scene {
-  #contourManager: ContourManager;
   #staticGuides: Path2D;
   #glyphPath: Path2D;
+  #snapshot: GlyphSnapshot | null = null;
 
   public constructor() {
-    this.#contourManager = new ContourManager();
     this.#staticGuides = new Path2D();
     this.#glyphPath = new Path2D();
+  }
+
+  /**
+   * Set the current snapshot to render.
+   */
+  public setSnapshot(snapshot: GlyphSnapshot | null): void {
+    debug("setSnapshot called:", snapshot ? `${snapshot.contours.length} contours` : "null");
+    if (snapshot) {
+      for (const contour of snapshot.contours) {
+        debug("  Contour:", contour.id, "points:", contour.points.length, "closed:", contour.closed);
+        for (const p of contour.points) {
+          debug("    Point:", p.id, "x:", p.x, "y:", p.y, "type:", p.pointType);
+        }
+      }
+    }
+    this.#snapshot = snapshot;
+    this.#glyphPath.invalidated = true;
+  }
+
+  /**
+   * Get the current snapshot.
+   */
+  public getSnapshot(): GlyphSnapshot | null {
+    return this.#snapshot;
   }
 
   public constructGuidesPath(guides: Guides): Path2D {
@@ -61,135 +95,103 @@ export class Scene {
     return this.#glyphPath;
   }
 
+  /**
+   * Rebuild the glyph path from the current snapshot.
+   *
+   * Note: We do NOT set invalidated = false here.
+   * The renderer (CanvasKitRenderer) uses the invalidated flag to know
+   * when it needs to reconstruct its cached native path. The renderer
+   * sets invalidated = false after it has processed the new commands.
+   */
   public rebuildGlyphPath(): void {
+    debug("rebuildGlyphPath called, invalidated:", this.#glyphPath.invalidated);
+
+    if (!this.#glyphPath.invalidated) {
+      debug("  Path not invalidated, skipping rebuild");
+      return;
+    }
+
     this.#glyphPath.clear();
 
-    for (const contour of this.#contourManager.contours()) {
-      if (contour.points.length < 2) {
-        continue;
-      }
+    if (!this.#snapshot) {
+      debug("  No snapshot, returning empty path");
+      // Still need to keep invalidated = true so renderer clears its cache
+      return;
+    }
 
-      const segments = contour.segments();
+    debug("  Building path from", this.#snapshot.contours.length, "contours");
+    for (const contour of this.#snapshot.contours) {
+      this.#buildContourPath(contour);
+    }
 
-      if (segments.length === 0) continue;
+    // Note: We intentionally leave invalidated = true here.
+    // The renderer will set it to false after reconstructing its native path.
+    debug("  Path built with", this.#glyphPath.commands.length, "commands, leaving invalidated=true for renderer");
+  }
 
-      this.#glyphPath.moveTo(
-        segments[0].points.anchor1.x,
-        segments[0].points.anchor1.y
-      );
+  #buildContourPath(contour: ContourSnapshot): void {
+    debug("  #buildContourPath:", contour.id, "points:", contour.points.length);
 
-      for (const segment of segments) {
-        switch (segment.type) {
-          case "line":
-            this.#glyphPath.lineTo(
-              segment.points.anchor2.x,
-              segment.points.anchor2.y
-            );
-            break;
-          case "quad":
-            this.#glyphPath.quadTo(
-              segment.points.control.x,
-              segment.points.control.y,
-              segment.points.anchor2.x,
-              segment.points.anchor2.y
-            );
-            break;
-          case "cubic":
-            this.#glyphPath.cubicTo(
-              segment.points.control1.x,
-              segment.points.control1.y,
-              segment.points.control2.x,
-              segment.points.control2.y,
-              segment.points.anchor2.x,
-              segment.points.anchor2.y
-            );
-            break;
-        }
-      }
+    if (contour.points.length < 2) {
+      debug("    Less than 2 points, skipping");
+      return;
+    }
 
-      if (contour.closed) {
-        this.#glyphPath.closePath();
+    const segments = parseSegments(contour.points, contour.closed);
+    debug("    parseSegments returned", segments.length, "segments");
+
+    if (segments.length === 0) {
+      debug("    No segments, returning");
+      return;
+    }
+
+    // Move to the first point
+    debug("    moveTo:", segments[0].points.anchor1.x, segments[0].points.anchor1.y);
+    this.#glyphPath.moveTo(
+      segments[0].points.anchor1.x,
+      segments[0].points.anchor1.y
+    );
+
+    // Draw each segment
+    for (const segment of segments) {
+      switch (segment.type) {
+        case "line":
+          debug("    lineTo:", segment.points.anchor2.x, segment.points.anchor2.y);
+          this.#glyphPath.lineTo(
+            segment.points.anchor2.x,
+            segment.points.anchor2.y
+          );
+          break;
+        case "quad":
+          debug("    quadTo:", segment.points.control.x, segment.points.control.y, "->", segment.points.anchor2.x, segment.points.anchor2.y);
+          this.#glyphPath.quadTo(
+            segment.points.control.x,
+            segment.points.control.y,
+            segment.points.anchor2.x,
+            segment.points.anchor2.y
+          );
+          break;
+        case "cubic":
+          debug("    cubicTo:", segment.points.control1.x, segment.points.control1.y, "->", segment.points.control2.x, segment.points.control2.y, "->", segment.points.anchor2.x, segment.points.anchor2.y);
+          this.#glyphPath.cubicTo(
+            segment.points.control1.x,
+            segment.points.control1.y,
+            segment.points.control2.x,
+            segment.points.control2.y,
+            segment.points.anchor2.x,
+            segment.points.anchor2.y
+          );
+          break;
       }
     }
-  }
 
-  public addPoint(x: number, y: number, pointType: PointType): EntityId {
-    return this.#contourManager.addPoint(x, y, pointType);
-  }
-
-  public getPoint(id: EntityId): ContourPoint | undefined {
-    return this.#contourManager.getPoint(id);
-  }
-
-  public removePoint(id: EntityId): ContourPoint | undefined {
-    return this.#contourManager.removePoint(id);
-  }
-
-  public getNeighborPoints(p: ContourPoint): ContourPoint[] {
-    return this.#contourManager.getNeighborPoints(p);
-  }
-
-  public closeContour(): EntityId {
-    return this.#contourManager.closeContour();
-  }
-
-  public addContour(contour?: Contour): EntityId {
-    return this.#contourManager.addContour(contour);
-  }
-
-  public setActiveContour(id: EntityId) {
-    this.#contourManager.setActiveContour(id);
+    if (contour.closed) {
+      debug("    closePath");
+      this.#glyphPath.closePath();
+    }
   }
 
   public invalidateGlyph(): void {
     this.#glyphPath.invalidated = true;
-  }
-
-  public clearContours() {
-    this.#contourManager.clearContours();
-  }
-
-  public movePointTo(id: EntityId, x: number, y: number) {
-    this.#contourManager.movePointTo(id, x, y);
-  }
-
-  public movePointBy(id: EntityId, dx: number, dy: number) {
-    this.#contourManager.movePointBy(id, dx, dy);
-  }
-
-  public upgradeLineSegment(id: EntityId): EntityId {
-    return this.#contourManager.upgradeLineSegment(id);
-  }
-
-  public getSegment(id: EntityId): Segment | undefined {
-    return this.#contourManager.getSegment(id);
-  }
-
-  public loadContours(contours: Contour[]): void {
-    this.#contourManager.loadContours(contours);
-  }
-
-  // TODO: perhaps make this into a single functions where
-  // you can pass optional IDs and if not it returns all points
-  public getAllPoints(): ContourPoint[] {
-    return this.#contourManager
-      .contours()
-      .map((c) => {
-        return c.points;
-      })
-      .flat();
-  }
-
-  public getAllContours() {
-    return this.#contourManager
-      .contours()
-      .map((c) => {
-        return c;
-      })
-      .flat();
-  }
-
-  contours(): Contour[] {
-    return this.#contourManager.contours();
   }
 }

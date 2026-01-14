@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { EventEmitter } from '@/lib/core/EventEmitter';
 
-import { EntityId } from './EntityId';
-
 describe('EventEmitter', () => {
   let emitter: EventEmitter;
 
@@ -16,7 +14,7 @@ describe('EventEmitter', () => {
 
     emitter.on('points:added', handler);
 
-    emitter.emit('points:added', [new EntityId(1)]);
+    emitter.emit('points:added', ['point-1']);
 
     expect(handler).toHaveBeenCalled();
   });
@@ -28,7 +26,7 @@ describe('EventEmitter', () => {
     emitter.on('points:added', handler1);
     emitter.on('points:added', handler2);
 
-    const pointId = new EntityId(1);
+    const pointId = 'point-1';
 
     emitter.emit('points:added', [pointId]);
 
@@ -42,7 +40,7 @@ describe('EventEmitter', () => {
     emitter.on('points:added', handler);
     emitter.off('points:added', handler);
 
-    emitter.emit('points:added', [new EntityId(1)]);
+    emitter.emit('points:added', ['point-1']);
 
     expect(handler).not.toHaveBeenCalled();
   });

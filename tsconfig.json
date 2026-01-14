@@ -3,11 +3,15 @@
   "include": [
     "src/renderer/env.d.ts",
     "src/renderer/**/*",
-    "src/preload/*.d.ts",
-    "vite.*.config.ts" ],
+    "src/preload/*.d.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ],
   "compilerOptions": {
     "useDefineForClassFields": true,
     "strict": false,
+    "skipLibCheck": true,
     "allowJs": true,
     "checkJs": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

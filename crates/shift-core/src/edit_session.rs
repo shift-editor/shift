@@ -90,7 +90,8 @@ impl EditSession {
     Ok(point_id)
   }
 
-  /// Add a point to the active contour
+  /// Add a point to the active contour.
+  /// If no active contour exists, creates one automatically.
   pub fn add_point(
     &mut self,
     x: f64,
@@ -98,9 +99,10 @@ impl EditSession {
     point_type: PointType,
     is_smooth: bool,
   ) -> Result<PointId, String> {
-    let contour_id = self
-      .active_contour_id
-      .ok_or_else(|| "No active contour".to_string())?;
+    let contour_id = match self.active_contour_id {
+      Some(id) => id,
+      None => self.add_empty_contour(),
+    };
     self.add_point_to_contour(contour_id, x, y, point_type, is_smooth)
   }
 
@@ -162,6 +164,66 @@ impl EditSession {
     contour.open();
     Ok(())
   }
+
+  /// Find which contour a point belongs to.
+  /// Returns the contour ID if the point is found.
+  pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {
+    for contour in self.glyph.contours_iter() {
+      if contour.get_point(point_id).is_some() {
+        return Some(contour.id());
+      }
+    }
+    None
+  }
+
+  /// Move multiple points by a delta (dx, dy).
+  /// Finds each point across all contours and translates it.
+  /// Returns the list of point IDs that were successfully moved.
+  pub fn move_points(&mut self, point_ids: &[PointId], dx: f64, dy: f64) -> Vec<PointId> {
+    let mut moved_points = Vec::new();
+
+    // First, collect which contour each point belongs to
+    let point_contours: Vec<(PointId, ContourId)> = point_ids
+      .iter()
+      .filter_map(|&pid| self.find_point_contour(pid).map(|cid| (pid, cid)))
+      .collect();
+
+    // Then apply the translations
+    for (point_id, contour_id) in point_contours {
+      if let Ok(contour) = self.glyph.contour_mut(contour_id) {
+        if let Some(point) = contour.get_point_mut(point_id) {
+          point.translate(dx, dy);
+          moved_points.push(point_id);
+        }
+      }
+    }
+
+    moved_points
+  }
+
+  /// Remove multiple points by their IDs.
+  /// Finds each point across all contours and removes it.
+  /// Returns the list of point IDs that were successfully removed.
+  pub fn remove_points(&mut self, point_ids: &[PointId]) -> Vec<PointId> {
+    let mut removed_points = Vec::new();
+
+    // First, collect which contour each point belongs to
+    let point_contours: Vec<(PointId, ContourId)> = point_ids
+      .iter()
+      .filter_map(|&pid| self.find_point_contour(pid).map(|cid| (pid, cid)))
+      .collect();
+
+    // Then remove each point
+    for (point_id, contour_id) in point_contours {
+      if let Ok(contour) = self.glyph.contour_mut(contour_id) {
+        if contour.remove_point(point_id).is_some() {
+          removed_points.push(point_id);
+        }
+      }
+    }
+
+    removed_points
+  }
 }
 
 #[cfg(test)]
@@ -218,13 +280,24 @@ mod tests {
   }
 
   #[test]
-  fn add_point_without_active_contour_fails() {
+  fn add_point_without_active_contour_creates_one() {
     let mut session = create_session();
+    assert!(session.active_contour_id().is_none());
 
     let result = session.add_point(100.0, 200.0, PointType::OnCurve, false);
 
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "No active contour");
+    assert!(result.is_ok());
+    // A contour should have been auto-created
+    assert!(session.active_contour_id().is_some());
+    assert_eq!(session.glyph().contours_count(), 1);
+
+    // Verify the point was added
+    let contour_id = session.active_contour_id().unwrap();
+    let point_id = result.unwrap();
+    let contour = session.glyph().contour(contour_id).unwrap();
+    let point = contour.get_point(point_id).unwrap();
+    assert_eq!(point.x(), 100.0);
+    assert_eq!(point.y(), 200.0);
   }
 
   #[test]
@@ -279,5 +352,65 @@ mod tests {
     assert_eq!(glyph.contours_count(), 1);
     assert_eq!(glyph.name(), "test");
     assert_eq!(glyph.unicode(), 65);
+  }
+
+  #[test]
+  fn move_points_multiple() {
+    let mut session = create_session();
+    let contour_id = session.add_empty_contour();
+    let p1 = session.add_point(0.0, 0.0, PointType::OnCurve, false).unwrap();
+    let p2 = session.add_point(100.0, 100.0, PointType::OnCurve, false).unwrap();
+
+    let moved = session.move_points(&[p1, p2], 10.0, 20.0);
+
+    assert_eq!(moved.len(), 2);
+    assert!(moved.contains(&p1));
+    assert!(moved.contains(&p2));
+
+    let contour = session.glyph().contour(contour_id).unwrap();
+    assert_eq!(contour.get_point(p1).unwrap().x(), 10.0);
+    assert_eq!(contour.get_point(p1).unwrap().y(), 20.0);
+    assert_eq!(contour.get_point(p2).unwrap().x(), 110.0);
+    assert_eq!(contour.get_point(p2).unwrap().y(), 120.0);
+  }
+
+  #[test]
+  fn move_points_across_contours() {
+    let mut session = create_session();
+    let c1_id = session.add_empty_contour();
+    let p1 = session.add_point(0.0, 0.0, PointType::OnCurve, false).unwrap();
+
+    let c2_id = session.add_empty_contour();
+    let p2 = session.add_point(50.0, 50.0, PointType::OnCurve, false).unwrap();
+
+    let moved = session.move_points(&[p1, p2], 5.0, 5.0);
+
+    assert_eq!(moved.len(), 2);
+
+    let c1 = session.glyph().contour(c1_id).unwrap();
+    let c2 = session.glyph().contour(c2_id).unwrap();
+
+    assert_eq!(c1.get_point(p1).unwrap().x(), 5.0);
+    assert_eq!(c2.get_point(p2).unwrap().x(), 55.0);
+  }
+
+  #[test]
+  fn remove_points_multiple() {
+    let mut session = create_session();
+    session.add_empty_contour();
+    let p1 = session.add_point(0.0, 0.0, PointType::OnCurve, false).unwrap();
+    let p2 = session.add_point(100.0, 100.0, PointType::OnCurve, false).unwrap();
+    let p3 = session.add_point(200.0, 200.0, PointType::OnCurve, false).unwrap();
+
+    let removed = session.remove_points(&[p1, p3]);
+
+    assert_eq!(removed.len(), 2);
+    assert!(removed.contains(&p1));
+    assert!(removed.contains(&p3));
+
+    // p2 should still exist
+    assert!(session.find_point_contour(p2).is_some());
+    assert!(session.find_point_contour(p1).is_none());
+    assert!(session.find_point_contour(p3).is_none());
   }
 }

@@ -20,7 +20,7 @@ export const tools = new Map<ToolName, ToolRegistryItem>();
 
 export const createToolRegistry = (editor: Editor) => {
   tools.set('select', {
-    tool: new Select(editor.editSession()),
+    tool: new Select(editor),
     icon: SelectIcon,
     tooltip: 'Select Tool (V)',
   });

@@ -343,6 +343,7 @@ export class CanvasKitRenderer implements IRenderer {
       const newPath = new this.ctx.canvasKit.Path();
       const nativePath = this.constructPath(path, newPath);
       this.#cachedPaths.set(path, nativePath);
+      path.invalidated = false;
       this.canvas.drawPath(nativePath, p);
       return;
     }
@@ -376,6 +377,7 @@ export class CanvasKitRenderer implements IRenderer {
       const newPath = new this.ctx.canvasKit.Path();
       const nativePath = this.constructPath(path, newPath);
       this.#cachedPaths.set(path, nativePath);
+      path.invalidated = false;
       this.canvas.drawPath(nativePath, p);
       return;
     }
