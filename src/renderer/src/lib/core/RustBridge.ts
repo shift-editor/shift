@@ -14,6 +14,50 @@ import type {
   FontMetrics,
   GlyphSnapshot,
 } from '@/types/snapshots';
+import { Contour, type PointType } from './Contour';
+
+// ═══════════════════════════════════════════════════════════
+// SNAPSHOT TO CONTOUR CONVERSION
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Convert a GlyphSnapshot from Rust to TypeScript Contour objects for rendering.
+ * This allows the Editor's Scene to render glyph data from Rust.
+ *
+ * Note: Creates new TypeScript Contour objects for rendering. The TypeScript
+ * objects have their own EntityIds - we don't need to sync IDs for pure rendering.
+ */
+export function snapshotToContours(snapshot: GlyphSnapshot): Contour[] {
+  return snapshot.contours.map((contourSnap) => {
+    const contour = new Contour();
+
+    for (const pointSnap of contourSnap.points) {
+      const pointType: PointType = pointSnap.pointType === 'onCurve' ? 'onCurve' : 'offCurve';
+      contour.addPoint(pointSnap.x, pointSnap.y, pointType, pointSnap.smooth);
+    }
+
+    if (contourSnap.closed) {
+      contour.close();
+    }
+
+    return contour;
+  });
+}
+
+/**
+ * Parse a CommandResult JSON string from Rust
+ */
+export function parseCommandResult(json: string): CommandResult {
+  const raw = JSON.parse(json);
+  return {
+    success: raw.success,
+    snapshot: raw.snapshot ?? null,
+    error: raw.error,
+    affectedPointIds: raw.affectedPointIds,
+    canUndo: raw.canUndo,
+    canRedo: raw.canRedo,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════
 // INTERFACE
@@ -27,10 +71,16 @@ export interface IRustBridge {
   sendCommand(command: Command): CommandResult;
 
   /**
-   * Get current glyph snapshot without mutation
-   * Returns null if no edit session is active
+   * Get current glyph snapshot without mutation (JSON parse method).
+   * Returns null if no edit session is active.
    */
   getSnapshot(): GlyphSnapshot | null;
+
+  /**
+   * Get current glyph snapshot using native NAPI objects (more efficient).
+   * Returns null if no edit session is active.
+   */
+  getSnapshotData(): GlyphSnapshot | null;
 
   /**
    * Load a font file
@@ -81,7 +131,6 @@ export interface IRustBridge {
  * Real RustBridge that communicates with the Rust FontEngine via preload
  */
 export class RustBridge implements IRustBridge {
-  #cachedSnapshot: GlyphSnapshot | null = null;
   #canUndo = false;
   #canRedo = false;
 
@@ -101,8 +150,6 @@ export class RustBridge implements IRustBridge {
 
   sendCommand(command: Command): CommandResult {
     try {
-      // TODO: Implement command dispatch to Rust
-      // For now, delegate to specific methods based on command type
       switch (command.type) {
         case 'startEditSession':
           this.startEditSession(command.glyphUnicode);
@@ -112,12 +159,30 @@ export class RustBridge implements IRustBridge {
           this.endEditSession();
           return this.#successResult();
 
-        case 'addContour':
-          this.native.addEmptyContour();
-          this.#invalidateCache();
-          return this.#successResult();
+        case 'addContour': {
+          // Use the new Rust API that returns CommandResult JSON
+          const resultJson = this.native.addContour();
+          return parseCommandResult(resultJson);
+        }
 
-        // TODO: Implement remaining commands as Rust API expands
+        case 'addPoint': {
+          // Add point to active contour via Rust
+          const resultJson = this.native.addPoint(
+            command.x,
+            command.y,
+            command.pointType,
+            command.smooth ?? false
+          );
+          return parseCommandResult(resultJson);
+        }
+
+        case 'closeContour': {
+          // Close the active contour
+          const resultJson = this.native.closeContour();
+          return parseCommandResult(resultJson);
+        }
+
+        // TODO: Implement remaining commands (movePoints, removePoints, etc.)
         default:
           return {
             success: false,
@@ -139,8 +204,51 @@ export class RustBridge implements IRustBridge {
   }
 
   getSnapshot(): GlyphSnapshot | null {
-    // TODO: Implement when Rust getGlyphSnapshot is available
-    return this.#cachedSnapshot;
+    // Fetch snapshot from Rust
+    const json = this.native.getSnapshot();
+    if (json === null) {
+      return null;
+    }
+    try {
+      return JSON.parse(json) as GlyphSnapshot;
+    } catch {
+      console.error('Failed to parse snapshot JSON:', json);
+      return null;
+    }
+  }
+
+  /**
+   * Get snapshot using native NAPI object (more efficient than JSON parse).
+   * Returns null if no edit session is active.
+   */
+  getSnapshotData(): GlyphSnapshot | null {
+    if (!this.native.hasEditSession()) {
+      return null;
+    }
+    try {
+      const data = this.native.getSnapshotData();
+      // The native data matches our GlyphSnapshot interface
+      return {
+        unicode: data.unicode,
+        name: data.name,
+        xAdvance: data.xAdvance,
+        contours: data.contours.map((c) => ({
+          id: c.id,
+          points: c.points.map((p) => ({
+            id: p.id,
+            x: p.x,
+            y: p.y,
+            pointType: p.pointType as 'onCurve' | 'offCurve',
+            smooth: p.smooth,
+          })),
+          closed: c.closed,
+        })),
+        activeContourId: data.activeContourId,
+      };
+    } catch (e) {
+      console.error('Failed to get snapshot data:', e);
+      return null;
+    }
   }
 
   loadFont(path: string): void {
@@ -173,19 +281,10 @@ export class RustBridge implements IRustBridge {
 
   startEditSession(unicode: number): void {
     this.native.startEditSession(unicode);
-    // Initialize empty snapshot for new session
-    this.#cachedSnapshot = {
-      unicode,
-      name: '',
-      xAdvance: 500,
-      contours: [],
-      activeContourId: null,
-    };
   }
 
   endEditSession(): void {
     this.native.endEditSession();
-    this.#cachedSnapshot = null;
     this.#canUndo = false;
     this.#canRedo = false;
   }
@@ -198,15 +297,10 @@ export class RustBridge implements IRustBridge {
     return this.#canRedo;
   }
 
-  #invalidateCache(): void {
-    // TODO: Fetch fresh snapshot from Rust
-    // this.#cachedSnapshot = this.native.getGlyphSnapshot();
-  }
-
   #successResult(): CommandResult {
     return {
       success: true,
-      snapshot: this.#cachedSnapshot,
+      snapshot: this.getSnapshot(),
       canUndo: this.#canUndo,
       canRedo: this.#canRedo,
     };
@@ -281,6 +375,11 @@ export class MockRustBridge implements IRustBridge {
   }
 
   getSnapshot(): GlyphSnapshot | null {
+    return this.#snapshot;
+  }
+
+  getSnapshotData(): GlyphSnapshot | null {
+    // Mock implementation just returns the same snapshot
     return this.#snapshot;
   }
 
