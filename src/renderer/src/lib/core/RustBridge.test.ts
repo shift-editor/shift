@@ -288,18 +288,25 @@ describe('MockRustBridge', () => {
       expect(result.error).toContain('No active edit session');
     });
 
-    it('should error when adding point without contour', () => {
+    it('should auto-create contour when adding point without one', () => {
       bridge.startEditSession(65);
+      expect(bridge.getSnapshot()?.contours).toHaveLength(0);
 
       const result = bridge.sendCommand({
         type: 'addPoint',
-        x: 0,
-        y: 0,
+        x: 100,
+        y: 200,
         pointType: 'onCurve',
       });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('No active contour');
+      expect(result.success).toBe(true);
+      // A contour should have been auto-created
+      expect(result.snapshot?.contours).toHaveLength(1);
+      expect(result.snapshot?.activeContourId).not.toBeNull();
+      // Point should be in the new contour
+      expect(result.snapshot?.contours[0].points).toHaveLength(1);
+      expect(result.snapshot?.contours[0].points[0].x).toBe(100);
+      expect(result.snapshot?.contours[0].points[0].y).toBe(200);
     });
 
     it('should error when closing non-existent contour', () => {

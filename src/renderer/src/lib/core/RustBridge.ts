@@ -488,9 +488,18 @@ export class MockRustBridge implements IRustBridge {
       return this.#error('No active edit session');
     }
 
-    const contourId = cmd.contourId ?? this.#snapshot.activeContourId;
+    let contourId = cmd.contourId ?? this.#snapshot.activeContourId;
+
+    // Auto-create a contour if none exists (matches Rust behavior)
     if (!contourId) {
-      return this.#error('No active contour');
+      const newContourId = this.#generateId();
+      this.#snapshot.contours.push({
+        id: newContourId,
+        points: [],
+        closed: false,
+      });
+      this.#snapshot.activeContourId = newContourId;
+      contourId = newContourId;
     }
 
     const contour = this.#snapshot.contours.find((c) => c.id === contourId);

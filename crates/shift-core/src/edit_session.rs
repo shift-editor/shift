@@ -90,7 +90,8 @@ impl EditSession {
     Ok(point_id)
   }
 
-  /// Add a point to the active contour
+  /// Add a point to the active contour.
+  /// If no active contour exists, creates one automatically.
   pub fn add_point(
     &mut self,
     x: f64,
@@ -98,9 +99,10 @@ impl EditSession {
     point_type: PointType,
     is_smooth: bool,
   ) -> Result<PointId, String> {
-    let contour_id = self
-      .active_contour_id
-      .ok_or_else(|| "No active contour".to_string())?;
+    let contour_id = match self.active_contour_id {
+      Some(id) => id,
+      None => self.add_empty_contour(),
+    };
     self.add_point_to_contour(contour_id, x, y, point_type, is_smooth)
   }
 
@@ -278,13 +280,24 @@ mod tests {
   }
 
   #[test]
-  fn add_point_without_active_contour_fails() {
+  fn add_point_without_active_contour_creates_one() {
     let mut session = create_session();
+    assert!(session.active_contour_id().is_none());
 
     let result = session.add_point(100.0, 200.0, PointType::OnCurve, false);
 
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "No active contour");
+    assert!(result.is_ok());
+    // A contour should have been auto-created
+    assert!(session.active_contour_id().is_some());
+    assert_eq!(session.glyph().contours_count(), 1);
+
+    // Verify the point was added
+    let contour_id = session.active_contour_id().unwrap();
+    let point_id = result.unwrap();
+    let contour = session.glyph().contour(contour_id).unwrap();
+    let point = contour.get_point(point_id).unwrap();
+    assert_eq!(point.x(), 100.0);
+    assert_eq!(point.y(), 200.0);
   }
 
   #[test]

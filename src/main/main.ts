@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, globalShortcut } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -10,9 +10,11 @@ if (started) {
   app.quit();
 }
 
+let mainWindow: BrowserWindow | null = null;
+
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
@@ -30,6 +32,15 @@ const createWindow = () => {
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+
+  // Register keyboard shortcuts for reload
+  mainWindow.webContents.once("did-finish-load", () => {
+    // Cmd+Shift+R or Ctrl+Shift+R for full reload (reloads preload script and native modules)
+    globalShortcut.register(process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R", () => {
+      // Reload the window - this will reload the preload script and pick up new native modules
+      mainWindow?.reload();
+    });
+  });
 };
 
 // This method will be called when Electron has finished
@@ -58,6 +69,11 @@ app.whenReady().then(() => {
   if (process.platform === "darwin") {
     app.dock?.setIcon(path.join(__dirname, "../../icons/icon.png"));
   }
+});
+
+// Clean up shortcuts on quit
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 // In this file you can include the rest of your app's specific main process
