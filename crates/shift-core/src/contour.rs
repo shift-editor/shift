@@ -1,5 +1,4 @@
 use crate::{
-  constants::PIXEL,
   entity::{ContourId, PointId},
   point::{Point, PointType},
 };
@@ -39,23 +38,21 @@ impl Contour {
     point_id
   }
 
-  pub fn get_point(&self, id: PointId) -> Result<&Point, String> {
-    self
-      .points
-      .iter()
-      .find(|p| p.id() == id)
-      .ok_or(format!("Point with id {:?} not found", id))
+  pub fn get_point(&self, id: PointId) -> Option<&Point> {
+    self.points.iter().find(|p| p.id() == id)
   }
 
-  pub fn remove_point(&mut self, id: PointId) -> Result<usize, String> {
-    let index = self
-      .points
-      .iter()
-      .position(|i| i.id() == id)
-      .ok_or("Point not found")?;
-    self.points.remove(index);
+  pub fn get_point_mut(&mut self, id: PointId) -> Option<&mut Point> {
+    self.points.iter_mut().find(|p| p.id() == id)
+  }
 
-    Ok(index)
+  pub fn remove_point(&mut self, id: PointId) -> Option<Point> {
+    let index = self.points.iter().position(|i| i.id() == id)?;
+    Some(self.points.remove(index))
+  }
+
+  pub fn points(&self) -> &[Point] {
+    &self.points
   }
 
   pub fn is_empty(&self) -> bool {
@@ -103,10 +100,43 @@ mod tests {
   }
 
   #[test]
+  fn get_point() {
+    let mut contour = Contour::new();
+    let id = contour.add_point(20.0, 30.0, PointType::OnCurve, false);
+
+    let point = contour.get_point(id).unwrap();
+    assert_eq!(point.x(), 20.0);
+    assert_eq!(point.y(), 30.0);
+  }
+
+  #[test]
+  fn get_point_mut() {
+    let mut contour = Contour::new();
+    let id = contour.add_point(20.0, 30.0, PointType::OnCurve, false);
+
+    let point = contour.get_point_mut(id).unwrap();
+    point.set_position(50.0, 60.0);
+
+    assert_eq!(contour.get_point(id).unwrap().x(), 50.0);
+    assert_eq!(contour.get_point(id).unwrap().y(), 60.0);
+  }
+
+  #[test]
   fn remove_point() {
     let mut contour = Contour::new();
     let id = contour.add_point(20.0, 30.0, PointType::OnCurve, false);
-    let _ = contour.remove_point(id);
+
+    let removed = contour.remove_point(id);
+    assert!(removed.is_some());
     assert_eq!(contour.points.len(), 0);
+  }
+
+  #[test]
+  fn remove_nonexistent_point() {
+    let mut contour = Contour::new();
+    let id = PointId::new();
+
+    let removed = contour.remove_point(id);
+    assert!(removed.is_none());
   }
 }
