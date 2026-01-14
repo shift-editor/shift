@@ -5,7 +5,6 @@ import {
 } from "@/lib/styles/style";
 import { tools } from "@/lib/tools/tools";
 import AppState from "@/store/store";
-import { EditSession } from "@/types/edit";
 import { EventHandler, EventName, IEventEmitter } from "@/types/events";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleState, HandleType } from "@/types/handle";
@@ -22,13 +21,11 @@ import { Guides, Scene } from "./Scene";
 import { Viewport } from "./Viewport";
 import { Contour, ContourPoint, PointType } from "../core/Contour";
 import { EntityId } from "../core/EntityId";
-import { EditEngine, EditContext } from "../core/EditEngine";
 import { UndoManager } from "../core/UndoManager";
 import { Path2D } from "../graphics/Path";
 import { getBoundingRect } from "../math/rect";
-import { snapshotToContours } from "../core/RustBridge";
 import { FontEngine } from "@/engine";
-import { findPointInSnapshot } from "./render";
+import { findPointInSnapshot, snapshotToContours } from "./render";
 
 interface EditorState {
   /** Selected points by their Rust IDs. */
@@ -176,69 +173,6 @@ export class Editor {
    */
   public getSnapshot(): GlyphSnapshot | null {
     return this.#fontEngine.snapshot;
-  }
-
-  /**
-   * Create an edit session for tools.
-   * Note: This is a compatibility layer that bridges the old ContourPoint-based
-   * tool API with the new PointId-based state. Tools will be migrated to use
-   * ToolContext directly in Phase 8.
-   */
-  public editSession(): EditSession {
-    // Convert PointId selection to ContourPoint selection for legacy tools
-    const getSelectedContourPoints = (): ContourPoint[] => {
-      const allPoints = this.#scene.getAllPoints();
-      return allPoints.filter((p) => this.#state.selectedPoints.has(asPointId(p.id)));
-    };
-
-    // Find the ContourPoint for the hovered PointId
-    const getHoveredContourPoint = (): ContourPoint | null => {
-      if (!this.#state.hoveredPoint) return null;
-      const allPoints = this.#scene.getAllPoints();
-      return allPoints.find((p) => p.id === this.#state.hoveredPoint) ?? null;
-    };
-
-    const editEngineContext: EditContext = {
-      getSelectedPoints: () => new Set(getSelectedContourPoints()),
-      movePointTo: (point, x, y) => {
-        this.#scene.movePointTo(point.entityId, x, y);
-      },
-    };
-
-    const editEngine = new EditEngine(editEngineContext);
-
-    return {
-      getMousePosition: (x, y) => {
-        const position = this.getMousePosition(x, y);
-        return this.projectScreenToUpm(position.x, position.y);
-      },
-      getAllPoints: () => [...this.#scene.getAllPoints()],
-      getSelectedPoints: getSelectedContourPoints,
-      getHoveredPoint: getHoveredContourPoint,
-
-      setSelectedPoints: (points) => {
-        // Convert ContourPoint[] to Set<PointId>
-        this.#state.selectedPoints = new Set(points.map((p) => asPointId(p.id)));
-      },
-      clearSelectedPoints: () => {
-        this.#state.selectedPoints.clear();
-      },
-      setHoveredPoint: (point) => {
-        this.#state.hoveredPoint = point ? asPointId(point.id) : null;
-      },
-      clearHoveredPoint: () => {
-        this.#state.hoveredPoint = null;
-      },
-      preview: (dx, dy) => {
-        editEngine.applyEdits(dx, dy);
-      },
-      commit: (_dx, _dy) => {
-        // TODO: Implement commit via FontEngine
-      },
-      redraw: () => {
-        this.redrawGlyph();
-      },
-    };
   }
 
   /**

@@ -12,11 +12,10 @@ export type {
   PointSnapshot,
   ContourSnapshot,
   GlyphSnapshot,
-  CommandResult,
 } from './generated';
 
 // Import for use in helper functions
-import type { PointSnapshot, ContourSnapshot, GlyphSnapshot, CommandResult } from './generated';
+import type { PointSnapshot, ContourSnapshot, GlyphSnapshot } from './generated';
 
 // ═══════════════════════════════════════════════════════════
 // FONT METADATA & METRICS (not yet generated from Rust)
@@ -34,34 +33,6 @@ export interface FontMetrics {
   descender: number;
   capHeight: number;
   xHeight: number;
-}
-
-// ═══════════════════════════════════════════════════════════
-// HELPER TYPES
-// ═══════════════════════════════════════════════════════════
-
-/** Result of a successful command */
-export interface SuccessResult extends CommandResult {
-  success: true;
-  snapshot: GlyphSnapshot;
-  error?: never;
-}
-
-/** Result of a failed command */
-export interface ErrorResult extends CommandResult {
-  success: false;
-  snapshot: null;
-  error: string;
-}
-
-/** Type guard for successful results */
-export function isSuccessResult(result: CommandResult): result is SuccessResult {
-  return result.success && result.snapshot !== null;
-}
-
-/** Type guard for error results */
-export function isErrorResult(result: CommandResult): result is ErrorResult {
-  return !result.success;
 }
 
 // ═══════════════════════════════════════════════════════════

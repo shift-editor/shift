@@ -5,6 +5,9 @@
     "src/renderer/**/*",
     "src/preload/*.d.ts"
   ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ],
   "compilerOptions": {
     "useDefineForClassFields": true,
     "strict": false,

@@ -72,10 +72,10 @@ export class ContourManager {
     const c = this.#contours.get(id.parentId);
     if (!c) {
       console.error("No parentId for point");
-      return;
+      return undefined;
     }
 
-    c.removePoint(id);
+    return c.removePoint(id);
   }
 
   getNeighborPoints(p: ContourPoint): ContourPoint[] {

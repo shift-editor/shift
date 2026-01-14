@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm install:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nMigrate Select tool to ToolContext, delete legacy code\n\nPhase 8:\n- Rewrite Select tool to use Editor + ToolContext + FontEngine\n- Remove editSession\\(\\) compatibility layer from Editor\n- Delete EditSession interface and EditEngine class\n\nPhase 10a:\n- Delete RustBridge.ts \\(replaced by FontEngine managers\\)\n- Delete commands.ts \\(command pattern no longer used\\)\n- Delete old FontEngine.ts in lib/core/\n- Delete PatternMatcher, PatternParser, RuleTable, EditActions\n- Move snapshotToContours to render.ts\n\nFixes:\n- Add font:loaded to EventName type\n- Fix Glyph -> GlyphSnapshot in store.ts\n- Fix missing return values in Contour/ContourManager\n- Exclude test files from typecheck\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

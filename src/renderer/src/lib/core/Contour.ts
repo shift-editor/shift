@@ -306,7 +306,7 @@ export class Contour {
     const index = this.#points.findIndex((p) => p.entityId.id === id.id);
     if (index === -1) {
       console.error("No index found for point");
-      return;
+      return undefined;
     }
 
     return this.#removePointInternal(index);

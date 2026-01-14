@@ -119,7 +119,7 @@ export class MockNativeFontEngine implements NativeFontEngine {
   }
 
   addContour(): string {
-    const contourId = this.addEmptyContour();
+    this.addEmptyContour();
     return this.#makeResult(true, []);
   }
 
