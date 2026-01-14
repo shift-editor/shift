@@ -1,6 +1,12 @@
 use napi::{Error, Result, Status};
 use napi_derive::napi;
-use shift_core::{edit_session::EditSession, font::Font, font_loader::FontLoader};
+use shift_core::{
+  edit_session::EditSession,
+  font::Font,
+  font_loader::FontLoader,
+  point::PointType,
+  snapshot::{CommandResult, GlyphSnapshot},
+};
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
 
@@ -135,6 +141,216 @@ impl FontEngine {
       Status::GenericFailure,
       "set_active_contour not yet implemented - contour IDs need proper serialization",
     ))
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SNAPSHOT METHODS
+  // ═══════════════════════════════════════════════════════════
+
+  /// Get the current glyph snapshot as JSON.
+  /// Returns null if no edit session is active.
+  #[napi]
+  pub fn get_snapshot(&self) -> Option<String> {
+    self.current_edit_session.as_ref().map(|session| {
+      let snapshot = GlyphSnapshot::from_edit_session(session);
+      serde_json::to_string(&snapshot).unwrap_or_else(|_| "null".to_string())
+    })
+  }
+
+  /// Get the current glyph snapshot as a parsed object (avoids JSON overhead).
+  /// This is more efficient for frequent reads.
+  #[napi]
+  pub fn get_snapshot_data(&self) -> Result<JSGlyphSnapshot> {
+    let session = self
+      .current_edit_session
+      .as_ref()
+      .ok_or_else(|| Error::new(Status::GenericFailure, "No edit session active"))?;
+
+    Ok(JSGlyphSnapshot::from_edit_session(session))
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // POINT OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /// Add a point to the active contour.
+  /// Returns a CommandResult JSON string.
+  #[napi]
+  pub fn add_point(
+    &mut self,
+    x: f64,
+    y: f64,
+    point_type: String,
+    smooth: bool,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let pt = match point_type.as_str() {
+      "onCurve" => PointType::OnCurve,
+      "offCurve" => PointType::OffCurve,
+      _ => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid point type: {}",
+            point_type
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.add_point(x, y, pt, smooth) {
+      Ok(point_id) => {
+        let result = CommandResult::success(session, vec![point_id]);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+
+  /// Add a point to a specific contour.
+  /// Returns a CommandResult JSON string.
+  #[napi]
+  pub fn add_point_to_contour(
+    &mut self,
+    contour_id: String,
+    x: f64,
+    y: f64,
+    point_type: String,
+    smooth: bool,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let pt = match point_type.as_str() {
+      "onCurve" => PointType::OnCurve,
+      "offCurve" => PointType::OffCurve,
+      _ => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid point type: {}",
+            point_type
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    // Parse contour ID (stored as u128 string)
+    let cid = match contour_id.parse::<u128>() {
+      Ok(raw) => shift_core::entity::ContourId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid contour ID: {}",
+            contour_id
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.add_point_to_contour(cid, x, y, pt, smooth) {
+      Ok(point_id) => {
+        let result = CommandResult::success(session, vec![point_id]);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+
+  /// Add an empty contour and return a CommandResult JSON string.
+  #[napi]
+  pub fn add_contour(&mut self) -> Result<String> {
+    let session = self.get_edit_session()?;
+    let _contour_id = session.add_empty_contour();
+    let result = CommandResult::success_simple(session);
+    Ok(serde_json::to_string(&result).unwrap())
+  }
+
+  /// Close the active contour.
+  #[napi]
+  pub fn close_contour(&mut self) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let contour_id = match session.active_contour_id() {
+      Some(id) => id,
+      None => {
+        return Ok(serde_json::to_string(&CommandResult::error("No active contour")).unwrap())
+      }
+    };
+
+    match session.close_contour(contour_id) {
+      Ok(_) => {
+        let result = CommandResult::success_simple(session);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// JS-NATIVE SNAPSHOT TYPES (no JSON serialization)
+// ═══════════════════════════════════════════════════════════
+
+/// Point snapshot as native NAPI object (more efficient than JSON)
+#[napi(object)]
+pub struct JSPointSnapshot {
+  pub id: String,
+  pub x: f64,
+  pub y: f64,
+  pub point_type: String,
+  pub smooth: bool,
+}
+
+/// Contour snapshot as native NAPI object
+#[napi(object)]
+pub struct JSContourSnapshot {
+  pub id: String,
+  pub points: Vec<JSPointSnapshot>,
+  pub closed: bool,
+}
+
+/// Glyph snapshot as native NAPI object
+#[napi(object)]
+pub struct JSGlyphSnapshot {
+  pub unicode: u32,
+  pub name: String,
+  pub x_advance: f64,
+  pub contours: Vec<JSContourSnapshot>,
+  pub active_contour_id: Option<String>,
+}
+
+impl JSGlyphSnapshot {
+  pub fn from_edit_session(session: &EditSession) -> Self {
+    let glyph = session.glyph();
+    Self {
+      unicode: glyph.unicode(),
+      name: glyph.name().to_string(),
+      x_advance: glyph.x_advance(),
+      contours: glyph
+        .contours_iter()
+        .map(|c| JSContourSnapshot {
+          id: c.id().raw().to_string(),
+          points: c
+            .points()
+            .iter()
+            .map(|p| JSPointSnapshot {
+              id: p.id().raw().to_string(),
+              x: p.x(),
+              y: p.y(),
+              point_type: match p.point_type() {
+                PointType::OnCurve => "onCurve".to_string(),
+                PointType::OffCurve => "offCurve".to_string(),
+              },
+              smooth: p.is_smooth(),
+            })
+            .collect(),
+          closed: c.is_closed(),
+        })
+        .collect(),
+      active_contour_id: session.active_contour_id().map(|id| id.raw().to_string()),
+    }
   }
 }
 

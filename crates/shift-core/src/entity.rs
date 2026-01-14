@@ -48,6 +48,16 @@ macro_rules! entity_id {
       pub fn raw(&self) -> u64 {
         self.0.id.0
       }
+
+      /// Reconstruct an ID from its raw value.
+      /// Note: This creates an ID without a parent reference.
+      /// Use with caution - mainly for deserializing IDs from JS.
+      pub fn from_raw(raw: u128) -> Self {
+        Self(EntityId {
+          id: Id(raw as u64),
+          parent: NO_PARENT,
+        })
+      }
     }
 
     impl From<$name> for u64 {

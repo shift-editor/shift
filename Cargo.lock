@@ -1359,6 +1359,7 @@ dependencies = [
  "fontc",
  "norad 0.16.0",
  "serde",
+ "serde_json",
  "skrifa",
  "ts-rs",
 ]
@@ -1370,6 +1371,8 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "serde",
+ "serde_json",
  "shift-core",
 ]
 
