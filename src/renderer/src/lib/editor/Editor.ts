@@ -56,9 +56,8 @@ export class Editor {
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
 
-  // Rust integration
+  // Rust integration - Rust is the single source of truth
   #rustBridge: IRustBridge;
-  #useRustBridge: boolean = false; // Toggle for Rust vs TS-only mode
   #currentSnapshot: GlyphSnapshot | null = null;
 
   constructor(eventEmitter: IEventEmitter) {
@@ -122,37 +121,9 @@ export class Editor {
   // ═══════════════════════════════════════════════════════════
 
   /**
-   * Enable Rust bridge mode. When enabled, all mutations go through Rust.
+   * Start editing a glyph. Creates an edit session in Rust and adds an empty contour.
    */
-  public enableRustBridge(): void {
-    this.#useRustBridge = true;
-    console.log("[Editor] Rust bridge enabled");
-  }
-
-  /**
-   * Disable Rust bridge mode. Falls back to TypeScript-only operations.
-   */
-  public disableRustBridge(): void {
-    this.#useRustBridge = false;
-    console.log("[Editor] Rust bridge disabled");
-  }
-
-  /**
-   * Check if Rust bridge mode is enabled.
-   */
-  public isRustBridgeEnabled(): boolean {
-    return this.#useRustBridge;
-  }
-
-  /**
-   * Start editing a glyph via Rust.
-   */
-  public startRustEditSession(unicode: number): void {
-    if (!this.#useRustBridge) {
-      console.warn("[Editor] Rust bridge not enabled, call enableRustBridge() first");
-      return;
-    }
-
+  public startEditSession(unicode: number): void {
     const result = this.#rustBridge.sendCommand({
       type: "startEditSession",
       glyphUnicode: unicode,
@@ -168,11 +139,9 @@ export class Editor {
   }
 
   /**
-   * End the current Rust edit session.
+   * End the current edit session.
    */
-  public endRustEditSession(): void {
-    if (!this.#useRustBridge) return;
-
+  public endEditSession(): void {
     this.#rustBridge.sendCommand({ type: "endEditSession" });
     this.#currentSnapshot = null;
   }
@@ -198,9 +167,9 @@ export class Editor {
   }
 
   /**
-   * Get the current Rust snapshot.
+   * Get the current snapshot.
    */
-  public getRustSnapshot(): GlyphSnapshot | null {
+  public getSnapshot(): GlyphSnapshot | null {
     return this.#currentSnapshot;
   }
 
@@ -431,40 +400,36 @@ export class Editor {
     this.#state.selectedPoints.clear();
   }
 
-  // **
-  // Add a point to the scene
-  // @param x - The screen x position of the point in the viewport
-  // @param y - The screen y position of the point in the viewport
-  // @returns The id of the point
-  // **
+  /**
+   * Add a point to the active contour via Rust.
+   * @param x - The x position in UPM coordinates
+   * @param y - The y position in UPM coordinates
+   * @param pointType - The type of point (onCurve or offCurve)
+   * @returns The EntityId of the added point
+   */
   public addPoint(x: number, y: number, pointType: PointType): EntityId {
-    if (this.#useRustBridge) {
-      // Send command to Rust
-      const result = this.#rustBridge.sendCommand({
-        type: "addPoint",
-        x,
-        y,
-        pointType,
-        smooth: false,
-      });
+    const result = this.#rustBridge.sendCommand({
+      type: "addPoint",
+      x,
+      y,
+      pointType,
+      smooth: false,
+    });
 
-      if (result.success && result.snapshot) {
-        this.#syncFromSnapshot(result.snapshot);
+    if (result.success && result.snapshot) {
+      this.#syncFromSnapshot(result.snapshot);
 
-        // Return the ID of the last added point from snapshot
-        const lastContour = result.snapshot.contours[result.snapshot.contours.length - 1];
-        if (lastContour && lastContour.points.length > 0) {
-          const lastPoint = lastContour.points[lastContour.points.length - 1];
-          // Return as EntityId (we use the snapshot point ID)
-          return EntityId.fromString(lastPoint.id);
-        }
+      // Return the ID of the last added point from snapshot
+      const lastContour = result.snapshot.contours[result.snapshot.contours.length - 1];
+      if (lastContour && lastContour.points.length > 0) {
+        const lastPoint = lastContour.points[lastContour.points.length - 1];
+        return EntityId.fromString(lastPoint.id);
       }
-
-      // Fallback to scene if Rust fails
-      console.warn("[Editor] Rust addPoint failed, falling back to scene");
     }
 
-    return this.#scene.addPoint(x, y, pointType);
+    // Return a placeholder ID if command failed
+    console.error("[Editor] addPoint failed:", result.error);
+    return new EntityId();
   }
 
   public getPoint(id: EntityId): ContourPoint | undefined {
@@ -484,8 +449,11 @@ export class Editor {
     return this.#scene.getNeighborPoints(p);
   }
 
+  /**
+   * Close the active contour via Rust.
+   */
   public closeContour(): EntityId {
-    if (this.#useRustBridge && this.#currentSnapshot?.activeContourId) {
+    if (this.#currentSnapshot?.activeContourId) {
       const result = this.#rustBridge.sendCommand({
         type: "closeContour",
         contourId: this.#currentSnapshot.activeContourId,
@@ -496,6 +464,7 @@ export class Editor {
       }
     }
 
+    // Also close in scene for rendering consistency
     return this.#scene.closeContour();
   }
 
