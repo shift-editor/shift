@@ -1,8 +1,10 @@
 //! Snapshot types for serializing glyph state to TypeScript
 //!
-//! These types match the TypeScript interfaces in snapshots.ts
+//! These types are auto-exported to TypeScript via ts-rs.
+//! Run `cargo test` to regenerate the TypeScript bindings in `bindings/`.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
   contour::Contour,
@@ -16,8 +18,9 @@ use crate::{
 // POINT SNAPSHOT
 // ═══════════════════════════════════════════════════════════
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/renderer/src/types/generated/")]
 pub struct PointSnapshot {
   pub id: String,
   pub x: f64,
@@ -26,8 +29,9 @@ pub struct PointSnapshot {
   pub smooth: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/renderer/src/types/generated/")]
 pub enum PointTypeString {
   OnCurve,
   OffCurve,
@@ -58,8 +62,9 @@ impl From<&Point> for PointSnapshot {
 // CONTOUR SNAPSHOT
 // ═══════════════════════════════════════════════════════════
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/renderer/src/types/generated/")]
 pub struct ContourSnapshot {
   pub id: String,
   pub points: Vec<PointSnapshot>,
@@ -80,13 +85,16 @@ impl From<&Contour> for ContourSnapshot {
 // GLYPH SNAPSHOT
 // ═══════════════════════════════════════════════════════════
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/renderer/src/types/generated/")]
 pub struct GlyphSnapshot {
   pub unicode: u32,
   pub name: String,
+  #[ts(rename = "xAdvance")]
   pub x_advance: f64,
   pub contours: Vec<ContourSnapshot>,
+  #[ts(rename = "activeContourId")]
   pub active_contour_id: Option<String>,
 }
 
@@ -125,16 +133,20 @@ impl GlyphSnapshot {
 // COMMAND RESULT
 // ═══════════════════════════════════════════════════════════
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/renderer/src/types/generated/")]
 pub struct CommandResult {
   pub success: bool,
   pub snapshot: Option<GlyphSnapshot>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[ts(rename = "affectedPointIds")]
   pub affected_point_ids: Option<Vec<String>>,
+  #[ts(rename = "canUndo")]
   pub can_undo: bool,
+  #[ts(rename = "canRedo")]
   pub can_redo: bool,
 }
 

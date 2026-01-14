@@ -7,12 +7,13 @@
  * 3. Provides query methods for current state
  */
 
-import type { Command, PointTypeString } from '@/types/commands';
+import type { Command } from '@/types/commands';
 import type {
   CommandResult,
   FontMetadata,
   FontMetrics,
   GlyphSnapshot,
+  PointTypeString,
 } from '@/types/snapshots';
 import { Contour, type PointType } from './Contour';
 

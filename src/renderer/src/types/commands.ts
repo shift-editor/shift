@@ -3,6 +3,11 @@
  * These represent user intentions that mutate the glyph state
  */
 
+import type { PointTypeString } from './generated';
+
+// Re-export for convenience
+export type { PointTypeString } from './generated';
+
 // ═══════════════════════════════════════════════════════════
 // POINT OPERATIONS
 // ═══════════════════════════════════════════════════════════
@@ -100,12 +105,6 @@ export interface StartEditSessionCommand {
 export interface EndEditSessionCommand {
   type: 'endEditSession';
 }
-
-// ═══════════════════════════════════════════════════════════
-// SHARED TYPES
-// ═══════════════════════════════════════════════════════════
-
-export type PointTypeString = 'onCurve' | 'offCurve';
 
 // ═══════════════════════════════════════════════════════════
 // UNION TYPE
