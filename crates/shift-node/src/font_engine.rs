@@ -1,14 +1,20 @@
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{edit_session::EditSession, font::Font, font_loader::FontLoader};
-use std::rc::Rc;
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
 
+/// FontEngine is the main entry point for the Rust font editing system.
+///
+/// It owns the font data and manages edit sessions. When a session is active,
+/// the glyph being edited is owned by the session. When the session ends,
+/// the glyph is returned to the font.
 #[napi]
 pub struct FontEngine {
   font_loader: FontLoader,
   current_edit_session: Option<EditSession>,
+  /// Unicode of the glyph being edited (for returning it to the font)
+  editing_unicode: Option<u32>,
   font: Font,
 }
 
@@ -19,6 +25,7 @@ impl FontEngine {
     Self {
       font_loader: FontLoader::new(),
       current_edit_session: None,
+      editing_unicode: None,
       font: Font::default(),
     }
   }
@@ -39,7 +46,7 @@ impl FontEngine {
 
   #[napi]
   pub fn get_metrics(&self) -> JSFontMetrics {
-    self.font.get_metrics().clone().into()
+    (*self.font.get_metrics()).into()
   }
 
   #[napi]
@@ -47,11 +54,23 @@ impl FontEngine {
     self.font.get_glyph_count() as u32
   }
 
+  /// Start an edit session for a glyph.
+  /// Takes ownership of the glyph from the font.
   #[napi]
   pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
-    let glyph = self.font.get_glyph(unicode);
-    let edit_session = EditSession::new(Rc::clone(&glyph));
+    if self.current_edit_session.is_some() {
+      return Err(Error::new(
+        Status::GenericFailure,
+        "Edit session already active. End the current session first.",
+      ));
+    }
+
+    // Take ownership of the glyph from the font
+    let glyph = self.font.take_glyph(unicode);
+    let edit_session = EditSession::new(glyph);
+
     self.current_edit_session = Some(edit_session);
+    self.editing_unicode = Some(unicode);
     Ok(())
   }
 
@@ -59,18 +78,112 @@ impl FontEngine {
     self
       .current_edit_session
       .as_mut()
-      .ok_or(Error::new(Status::GenericFailure, "No edit session"))
+      .ok_or(Error::new(Status::GenericFailure, "No edit session active"))
   }
 
+  /// End the current edit session.
+  /// Returns the glyph to the font.
   #[napi]
-  pub fn end_edit_session(&mut self) {
-    self.current_edit_session = None;
+  pub fn end_edit_session(&mut self) -> Result<()> {
+    let session = self.current_edit_session.take().ok_or(Error::new(
+      Status::GenericFailure,
+      "No edit session to end",
+    ))?;
+
+    // Return the glyph to the font
+    let glyph = session.into_glyph();
+    self.font.put_glyph(glyph);
+    self.editing_unicode = None;
+
+    Ok(())
   }
 
+  /// Check if an edit session is active
   #[napi]
-  pub fn add_empty_contour(&mut self) -> Result<u32> {
+  pub fn has_edit_session(&self) -> bool {
+    self.current_edit_session.is_some()
+  }
+
+  /// Get the unicode of the glyph being edited
+  #[napi]
+  pub fn get_editing_unicode(&self) -> Option<u32> {
+    self.editing_unicode
+  }
+
+  /// Add an empty contour to the current glyph and set it as active.
+  /// Returns the contour ID as a string.
+  #[napi]
+  pub fn add_empty_contour(&mut self) -> Result<String> {
     let edit_session = self.get_edit_session()?;
     let contour_id = edit_session.add_empty_contour();
-    Ok(contour_id.raw() as u32)
+    Ok(contour_id.raw().to_string())
+  }
+
+  /// Get the active contour ID
+  #[napi]
+  pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
+    let edit_session = self.get_edit_session()?;
+    Ok(edit_session.active_contour_id().map(|id| id.raw().to_string()))
+  }
+
+  /// Set the active contour by ID
+  #[napi]
+  pub fn set_active_contour(&mut self, _contour_id: String) -> Result<()> {
+    // For now, we need to parse the string back to ContourId
+    // This is a simplification - in a full implementation we'd have proper ID handling
+    Err(Error::new(
+      Status::GenericFailure,
+      "set_active_contour not yet implemented - contour IDs need proper serialization",
+    ))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_new_font_engine() {
+    let engine = FontEngine::new();
+    assert!(!engine.has_edit_session());
+    assert_eq!(engine.get_glyph_count(), 0);
+  }
+
+  #[test]
+  fn test_start_and_end_session() {
+    let mut engine = FontEngine::new();
+
+    // Start session for 'A' (65)
+    engine.start_edit_session(65).unwrap();
+    assert!(engine.has_edit_session());
+    assert_eq!(engine.get_editing_unicode(), Some(65));
+
+    // End session
+    engine.end_edit_session().unwrap();
+    assert!(!engine.has_edit_session());
+    assert_eq!(engine.get_editing_unicode(), None);
+  }
+
+  #[test]
+  fn test_cannot_start_second_session() {
+    let mut engine = FontEngine::new();
+
+    engine.start_edit_session(65).unwrap();
+    let result = engine.start_edit_session(66);
+
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_add_contour() {
+    let mut engine = FontEngine::new();
+    engine.start_edit_session(65).unwrap();
+
+    let contour_id = engine.add_empty_contour().unwrap();
+    assert!(!contour_id.is_empty());
+
+    // Active contour should be set
+    let active = engine.get_active_contour_id().unwrap();
+    assert_eq!(active, Some(contour_id));
   }
 }
