@@ -11,7 +11,10 @@
       "Bash(pnpm build:*)",
       "Bash(git checkout:*)",
       "Bash(pnpm add:*)",
-      "Bash(pnpm test:*)"
+      "Bash(pnpm test:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run test:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

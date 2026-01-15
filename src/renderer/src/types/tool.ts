@@ -3,6 +3,7 @@ import type { GlyphSnapshot } from "./generated";
 import type { PointId } from "./ids";
 import type { FontEngine } from "@/engine";
 import type { Viewport } from "@/lib/editor/Viewport";
+import type { CommandHistory } from "@/lib/commands";
 
 export type ToolName = "select" | "pen" | "hand" | "shape" | "disabled";
 
@@ -37,6 +38,9 @@ export interface ToolContext {
 
   /** Font engine for mutations. */
   readonly fontEngine: FontEngine;
+
+  /** Command history for undo/redo. */
+  readonly commands: CommandHistory;
 
   /** Set the selected points. */
   setSelectedPoints(ids: Set<PointId>): void;

@@ -23,6 +23,7 @@ import { Path2D } from "../graphics/Path";
 import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
 import { findPointInSnapshot } from "./render";
+import { CommandHistory } from "../commands";
 
 // Debug logging flag - set to true to enable debug output
 const DEBUG = true;
@@ -73,6 +74,7 @@ export class Editor {
   #eventEmitter: IEventEmitter;
 
   #undoManager: UndoManager;
+  #commandHistory: CommandHistory;
 
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
@@ -89,15 +91,21 @@ export class Editor {
 
     this.#undoManager = new UndoManager();
 
+    // Initialize FontEngine first (needed for CommandHistory)
+    this.#fontEngine = new FontEngine();
+
+    // Initialize CommandHistory with FontEngine
+    this.#commandHistory = new CommandHistory(
+      this.#fontEngine,
+      () => this.#fontEngine.snapshot
+    );
+
     this.#eventEmitter = eventEmitter;
 
     this.#staticContext = null;
     this.#interactiveContext = null;
 
     this.#state = { ...InitialEditorState, selectedPoints: new Set() };
-
-    // Initialize FontEngine (Rust interface)
-    this.#fontEngine = new FontEngine();
 
     // Subscribe to snapshot changes - Scene renders directly from snapshot
     this.#fontEngine.onChange((snapshot) => {
@@ -190,6 +198,7 @@ export class Editor {
       viewport: this.#viewport,
       mousePosition: this.#viewport.getUpmMousePosition(),
       fontEngine: this.#fontEngine,
+      commands: this.#commandHistory,
       setSelectedPoints: (ids) => {
         this.#state.selectedPoints = ids;
         this.requestRedraw();
@@ -208,6 +217,13 @@ export class Editor {
       },
       requestRedraw: () => this.requestRedraw(),
     };
+  }
+
+  /**
+   * Get the command history for undo/redo operations.
+   */
+  public get commandHistory(): CommandHistory {
+    return this.#commandHistory;
   }
 
   public activeTool(): Tool {

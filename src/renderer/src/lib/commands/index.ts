@@ -7,3 +7,10 @@ export {
   MovePointToCommand,
   RemovePointsCommand,
 } from "./PointCommands";
+export {
+  AddBezierAnchorCommand,
+  TogglePointSmoothCommand,
+  CloseContourCommand,
+  AddContourCommand,
+  NudgePointsCommand,
+} from "./BezierCommands";
