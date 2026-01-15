@@ -1,8 +1,6 @@
 import { createContext, useEffect, useRef } from 'react';
 
-import { CanvasKit } from 'canvaskit-wasm';
-
-import { CanvasKitContext, initCanvasKit } from '@/lib/graphics/backends/CanvasKitRenderer';
+import { Canvas2DContext } from '@/lib/graphics/backends/Canvas2DRenderer';
 import AppState from '@/store/store';
 import { CanvasRef } from '@/types/graphics';
 
@@ -21,26 +19,23 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const initCanvas = (canvasKit: CanvasKit, canvas: HTMLCanvasElement) => {
-      const ctx = new CanvasKitContext(canvasKit);
-
+    const initCanvas = (canvas: HTMLCanvasElement) => {
+      const ctx = new Canvas2DContext();
       ctx.resizeCanvas(canvas);
-
       return ctx;
     };
 
     const editor = AppState.getState().editor;
 
-    const setUpContexts = async ({
+    const setUpContexts = ({
       interactiveCanvas,
       staticCanvas,
     }: {
       interactiveCanvas: HTMLCanvasElement;
       staticCanvas: HTMLCanvasElement;
     }) => {
-      const canvasKit = await initCanvasKit();
-      const interactiveContext = initCanvas(canvasKit, interactiveCanvas);
-      const staticContext = initCanvas(canvasKit, staticCanvas);
+      const interactiveContext = initCanvas(interactiveCanvas);
+      const staticContext = initCanvas(staticCanvas);
 
       editor.setInteractiveContext(interactiveContext);
       editor.setStaticContext(staticContext);

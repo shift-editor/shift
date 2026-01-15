@@ -1,17 +1,18 @@
 /**
- * Scene - Pure rendering from GlyphSnapshot.
+ * Scene - Pure rendering from GlyphSnapshot with reactive invalidation.
  *
- * This class renders glyph data directly from Rust snapshots.
- * No intermediate TypeScript state - just snapshot in, path out.
+ * Uses signals to automatically track when paths need rebuilding.
+ * The snapshot signal triggers path rebuilding when it changes.
  */
 
 import { Path2D } from "@/lib/graphics/Path";
+import { signal, computed, effect, type Effect, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
 import { parseSegments } from "@/engine/segments";
 import type { GlyphSnapshot, ContourSnapshot } from "@/types/generated";
 
 // Debug logging
-const DEBUG = true;
-function debug(...args: any[]) {
+const DEBUG = false;
+function debug(...args: unknown[]) {
   if (DEBUG) console.log("[Scene]", ...args);
 }
 
@@ -27,27 +28,36 @@ export interface Guides {
 export class Scene {
   #staticGuides: Path2D;
   #glyphPath: Path2D;
-  #snapshot: GlyphSnapshot | null = null;
+
+  // Reactive state
+  readonly snapshot: WritableSignal<GlyphSnapshot | null>;
+  readonly needsRebuild: ComputedSignal<boolean>;
+
+  // Track the last snapshot we built from (for change detection)
+  #lastBuiltSnapshot: GlyphSnapshot | null = null;
 
   public constructor() {
     this.#staticGuides = new Path2D();
     this.#glyphPath = new Path2D();
+
+    // Reactive snapshot - setting this triggers path invalidation
+    this.snapshot = signal<GlyphSnapshot | null>(null);
+
+    // Computed that tracks whether we need to rebuild
+    // This is true when snapshot changes from what we last built
+    this.needsRebuild = computed(() => {
+      const current = this.snapshot.value;
+      return current !== this.#lastBuiltSnapshot;
+    });
   }
 
   /**
    * Set the current snapshot to render.
+   * This automatically invalidates the glyph path.
    */
   public setSnapshot(snapshot: GlyphSnapshot | null): void {
     debug("setSnapshot called:", snapshot ? `${snapshot.contours.length} contours` : "null");
-    if (snapshot) {
-      for (const contour of snapshot.contours) {
-        debug("  Contour:", contour.id, "points:", contour.points.length, "closed:", contour.closed);
-        for (const p of contour.points) {
-          debug("    Point:", p.id, "x:", p.x, "y:", p.y, "type:", p.pointType);
-        }
-      }
-    }
-    this.#snapshot = snapshot;
+    this.snapshot.set(snapshot);
     this.#glyphPath.invalidated = true;
   }
 
@@ -55,7 +65,7 @@ export class Scene {
    * Get the current snapshot.
    */
   public getSnapshot(): GlyphSnapshot | null {
-    return this.#snapshot;
+    return this.snapshot.value;
   }
 
   public constructGuidesPath(guides: Guides): Path2D {
@@ -99,9 +109,9 @@ export class Scene {
    * Rebuild the glyph path from the current snapshot.
    *
    * Note: We do NOT set invalidated = false here.
-   * The renderer (CanvasKitRenderer) uses the invalidated flag to know
-   * when it needs to reconstruct its cached native path. The renderer
-   * sets invalidated = false after it has processed the new commands.
+   * The renderer uses the invalidated flag to know when it needs to
+   * reconstruct its cached native path. The renderer sets invalidated
+   * = false after it has processed the new commands.
    */
   public rebuildGlyphPath(): void {
     debug("rebuildGlyphPath called, invalidated:", this.#glyphPath.invalidated);
@@ -113,20 +123,21 @@ export class Scene {
 
     this.#glyphPath.clear();
 
-    if (!this.#snapshot) {
+    const snapshot = this.snapshot.value;
+    if (!snapshot) {
       debug("  No snapshot, returning empty path");
-      // Still need to keep invalidated = true so renderer clears its cache
       return;
     }
 
-    debug("  Building path from", this.#snapshot.contours.length, "contours");
-    for (const contour of this.#snapshot.contours) {
+    debug("  Building path from", snapshot.contours.length, "contours");
+    for (const contour of snapshot.contours) {
       this.#buildContourPath(contour);
     }
 
-    // Note: We intentionally leave invalidated = true here.
-    // The renderer will set it to false after reconstructing its native path.
-    debug("  Path built with", this.#glyphPath.commands.length, "commands, leaving invalidated=true for renderer");
+    // Update tracking
+    this.#lastBuiltSnapshot = snapshot;
+
+    debug("  Path built with", this.#glyphPath.commands.length, "commands");
   }
 
   #buildContourPath(contour: ContourSnapshot): void {
@@ -193,5 +204,21 @@ export class Scene {
 
   public invalidateGlyph(): void {
     this.#glyphPath.invalidated = true;
+  }
+
+  /**
+   * Create an effect that runs when the snapshot changes.
+   * Useful for the Editor to trigger redraws.
+   *
+   * @example
+   * const cleanup = scene.onSnapshotChange(() => {
+   *   editor.requestRedraw();
+   * });
+   */
+  public onSnapshotChange(callback: () => void): Effect {
+    return effect(() => {
+      this.snapshot.value; // Subscribe to changes
+      callback();
+    });
   }
 }
