@@ -15,8 +15,9 @@ import { asPointId } from "@/types/ids";
 import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
 
 import { FrameHandler } from "./FrameHandler";
-import { Painter } from "./Painter";
+import { drawGuides, drawHandle, drawHandleLast } from "./handles";
 import { Guides, Scene } from "./Scene";
+import { createSelectionManager, type SelectionManager, type SelectionMode } from "./SelectionManager";
 import { Viewport } from "./Viewport";
 import { UndoManager } from "../core/UndoManager";
 import { Path2D } from "../graphics/Path";
@@ -35,23 +36,14 @@ function debug(...args: any[]) {
   }
 }
 
-export type SelectionMode = 'preview' | 'committed';
+export type { SelectionMode };
 
 interface EditorState {
-  /** Selected points by their Rust IDs. */
-  selectedPoints: Set<PointId>;
-  /** Hovered point by its Rust ID. */
-  hoveredPoint: PointId | null;
   fillContour: boolean;
-  /** Selection mode: 'preview' during rectangle drag, 'committed' after mouseUp */
-  selectionMode: SelectionMode;
 }
 
 export const InitialEditorState: EditorState = {
-  selectedPoints: new Set(),
-  hoveredPoint: null,
   fillContour: false,
-  selectionMode: 'committed',
 };
 
 /**
@@ -72,10 +64,10 @@ function isContourClockwise(points: PointSnapshot[]): boolean {
 
 export class Editor {
   #state: EditorState;
+  #selection: SelectionManager;
 
   #viewport: Viewport;
   #scene: Scene;
-  #painter: Painter;
   #frameHandler: FrameHandler;
   #eventEmitter: IEventEmitter;
 
@@ -91,7 +83,6 @@ export class Editor {
 
   constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
-    this.#painter = new Painter();
 
     this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
@@ -112,7 +103,8 @@ export class Editor {
     this.#staticContext = null;
     this.#interactiveContext = null;
 
-    this.#state = { ...InitialEditorState, selectedPoints: new Set() };
+    this.#state = { ...InitialEditorState };
+    this.#selection = createSelectionManager(() => this.requestRedraw());
 
     // Watch snapshot signal - Scene renders directly from snapshot
     this.#snapshotEffect = effect(() => {
@@ -201,27 +193,23 @@ export class Editor {
   public createToolContext(): ToolContext {
     return {
       snapshot: this.#fontEngine.snapshot.value,
-      selectedPoints: this.#state.selectedPoints,
-      hoveredPoint: this.#state.hoveredPoint,
+      selectedPoints: this.#selection.selectedPoints as Set<PointId>,
+      hoveredPoint: this.#selection.hoveredPoint,
       viewport: this.#viewport,
       mousePosition: this.#viewport.getUpmMousePosition(),
       fontEngine: this.#fontEngine,
       commands: this.#commandHistory,
       setSelectedPoints: (ids) => {
-        this.#state.selectedPoints = ids;
-        this.requestRedraw();
+        this.#selection.selectMultiple(ids);
       },
       addToSelection: (id) => {
-        this.#state.selectedPoints.add(id);
-        this.requestRedraw();
+        this.#selection.addToSelection(id);
       },
       clearSelection: () => {
-        this.#state.selectedPoints.clear();
-        this.requestRedraw();
+        this.#selection.clearSelection();
       },
       setHoveredPoint: (id) => {
-        this.#state.hoveredPoint = id;
-        this.requestRedraw();
+        this.#selection.setHovered(id);
       },
       requestRedraw: () => this.requestRedraw(),
     };
@@ -312,42 +300,22 @@ export class Editor {
    * Get the handle state for a point by ID.
    */
   public getHandleState(pointId: PointId): HandleState {
-    if (this.#state.selectedPoints.has(pointId)) {
-      return "selected";
-    }
+    return this.#selection.getHandleState(pointId);
+  }
 
-    if (this.#state.hoveredPoint === pointId) {
-      return "hovered";
-    }
-
-    return "idle";
+  public get selection(): SelectionManager {
+    return this.#selection;
   }
 
   public paintHandle(
     ctx: IRenderer,
     x: number,
     y: number,
-    handleType: HandleType,
+    handleType: Exclude<HandleType, 'last'>,
     state: HandleState,
     isCounterClockWise?: boolean
   ) {
-    switch (handleType) {
-      case "first":
-        this.#painter.drawFirstHandle(ctx, x, y, state);
-        break;
-      case "corner":
-        this.#painter.drawCornerHandle(ctx, x, y, state);
-        break;
-      case "control":
-        this.#painter.drawControlHandle(ctx, x, y, state);
-        break;
-      case "smooth":
-        this.#painter.drawSmoothHandle(ctx, x, y, state);
-        break;
-      case "direction":
-        this.#painter.drawDirectionHandle(ctx, x, y, state, isCounterClockWise);
-        break;
-    }
+    drawHandle(ctx, handleType, x, y, state, { isCounterClockWise });
   }
 
   public invalidateGlyph() {
@@ -362,58 +330,58 @@ export class Editor {
    * Set the hovered point by ID.
    */
   public setHoveredPoint(pointId: PointId | null) {
-    this.#state.hoveredPoint = pointId;
+    this.#selection.setHovered(pointId);
   }
 
   public clearHoveredPoint() {
-    this.#state.hoveredPoint = null;
+    this.#selection.clearHovered();
   }
 
   /**
    * Get the currently hovered point ID.
    */
   public get hoveredPoint(): PointId | null {
-    return this.#state.hoveredPoint;
+    return this.#selection.hoveredPoint;
   }
 
   /**
    * Get the selected point IDs.
    */
   public get selectedPoints(): ReadonlySet<PointId> {
-    return this.#state.selectedPoints;
+    return this.#selection.selectedPoints;
   }
 
   /**
    * Check if a point is selected by ID.
    */
   public isPointSelected(pointId: PointId): boolean {
-    return this.#state.selectedPoints.has(pointId);
+    return this.#selection.isSelected(pointId);
   }
 
   /**
    * Add a point to the selection by ID.
    */
   public addToSelection(pointId: PointId): void {
-    this.#state.selectedPoints.add(pointId);
+    this.#selection.addToSelection(pointId);
   }
 
   /**
    * Set the selected points.
    */
   public setSelectedPoints(pointIds: Set<PointId>): void {
-    this.#state.selectedPoints = pointIds;
+    this.#selection.selectMultiple(pointIds);
   }
 
   public clearSelectedPoints() {
-    this.#state.selectedPoints.clear();
+    this.#selection.clearSelection();
   }
 
   public setSelectionMode(mode: SelectionMode): void {
-    this.#state.selectionMode = mode;
+    this.#selection.setMode(mode);
   }
 
   public getSelectionMode(): SelectionMode {
-    return this.#state.selectionMode;
+    return this.#selection.mode;
   }
 
   /**
@@ -425,7 +393,7 @@ export class Editor {
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
-    for (const pointId of this.#state.selectedPoints) {
+    for (const pointId of this.#selection.selectedPoints) {
       const found = findPointInSnapshot(snapshot, pointId);
       if (found) {
         result.push({ x: found.point.x, y: found.point.y });
@@ -545,7 +513,7 @@ export class Editor {
 
     ctx.lineWidth = Math.floor(GUIDE_STYLES.lineWidth / this.#viewport.zoom);
     const guides = this.#scene.getGuidesPath();
-    this.#painter.drawGuides(ctx, guides);
+    drawGuides(ctx, guides);
 
     // draw contours
     ctx.setStyle(DEFAULT_STYLES);
@@ -558,9 +526,9 @@ export class Editor {
     }
 
     const shouldDrawBoundingRect =
-      this.#state.selectedPoints.size > 0 &&
+      this.#selection.selectedPoints.size > 0 &&
       !this.#state.fillContour &&
-      this.#state.selectionMode === 'committed';
+      this.#selection.mode === 'committed';
 
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#getSelectedPointData();
@@ -628,7 +596,7 @@ export class Editor {
             prevPoint.x,
             prevPoint.y
           );
-          this.#painter.drawLastHandle(ctx, x, y, px, py, handleState);
+          drawHandleLast(ctx, { x0: x, y0: y, x1: px, y1: py }, handleState);
           continue;
         }
 
