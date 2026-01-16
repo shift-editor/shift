@@ -258,6 +258,56 @@ impl FontEngine {
     }
   }
 
+  /// Insert a point before an existing point.
+  /// Returns a CommandResult JSON string with the new point ID.
+  #[napi]
+  pub fn insert_point_before(
+    &mut self,
+    before_point_id: String,
+    x: f64,
+    y: f64,
+    point_type: String,
+    smooth: bool,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let pt = match point_type.as_str() {
+      "onCurve" => PointType::OnCurve,
+      "offCurve" => PointType::OffCurve,
+      _ => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid point type: {}",
+            point_type
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    // Parse point ID (stored as u128 string)
+    let before_id = match before_point_id.parse::<u128>() {
+      Ok(raw) => shift_core::entity::PointId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid point ID: {}",
+            before_point_id
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.insert_point_before(before_id, x, y, pt, smooth) {
+      Ok(point_id) => {
+        let result = CommandResult::success(session, vec![point_id]);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+
   /// Add an empty contour and return a CommandResult JSON string.
   #[napi]
   pub fn add_contour(&mut self) -> Result<String> {

@@ -6,10 +6,18 @@ static NO_PARENT: Id = Id(0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id(u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, Hash)]
 pub struct EntityId {
   id: Id,
   parent: Id,
+}
+
+// Only compare the id field, not the parent
+// This allows IDs reconstructed from JS (with parent=0) to match
+impl PartialEq for EntityId {
+  fn eq(&self, other: &Self) -> bool {
+    self.id == other.id
+  }
 }
 
 impl EntityId {
@@ -76,3 +84,68 @@ macro_rules! entity_id {
 
 entity_id!(ContourId);
 entity_id!(PointId);
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn entity_id_equality_ignores_parent() {
+    // Create two EntityIds with the same id but different parents
+    let id1 = EntityId {
+      id: Id(42),
+      parent: Id(10),
+    };
+    let id2 = EntityId {
+      id: Id(42),
+      parent: Id(20),
+    };
+    let id3 = EntityId {
+      id: Id(42),
+      parent: NO_PARENT,
+    };
+
+    // All should be equal because they have the same id
+    assert_eq!(id1, id2);
+    assert_eq!(id1, id3);
+    assert_eq!(id2, id3);
+  }
+
+  #[test]
+  fn entity_id_inequality_when_different_id() {
+    let id1 = EntityId {
+      id: Id(42),
+      parent: Id(10),
+    };
+    let id2 = EntityId {
+      id: Id(43),
+      parent: Id(10),
+    };
+
+    assert_ne!(id1, id2);
+  }
+
+  #[test]
+  fn point_id_from_raw_matches_original() {
+    // Simulate what happens when JS sends back an ID:
+    // 1. Create a PointId with a parent (like when added to a contour)
+    let contour_id = ContourId::new();
+    let original = PointId::new_with_parent(&contour_id);
+    let raw_value = original.raw();
+
+    // 2. Reconstruct from raw (like when receiving from JS)
+    let reconstructed = PointId::from_raw(raw_value as u128);
+
+    // 3. They should be equal even though reconstructed has no parent
+    assert_eq!(original, reconstructed);
+  }
+
+  #[test]
+  fn contour_id_from_raw_matches_original() {
+    let original = ContourId::new();
+    let raw_value = original.raw();
+    let reconstructed = ContourId::from_raw(raw_value as u128);
+
+    assert_eq!(original, reconstructed);
+  }
+}

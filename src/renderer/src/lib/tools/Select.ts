@@ -167,19 +167,24 @@ export class Select implements Tool {
       this.#selectionRect.resize(width, height);
     }
 
-    // Move selected points (incremental delta from last position)
-    if (this.#state.type === 'modifying' && this.#state.lastDragPos) {
-      const dx = x - this.#state.lastDragPos.x;
-      const dy = y - this.#state.lastDragPos.y;
+    // Move selected points - calculate delta from the dragged point's actual position
+    // This avoids precision loss from floored mouse coordinates accumulating over time
+    if (this.#state.type === 'modifying' && this.#state.dragPointId) {
+      // Capture dragPointId for use in the find callback (TypeScript narrowing workaround)
+      const dragPointId = this.#state.dragPointId;
+      // Find the dragged point to get its current position
+      const dragPoint = allPoints.find(p => p.id === dragPointId);
+      if (dragPoint) {
+        const dx = x - dragPoint.x;
+        const dy = y - dragPoint.y;
 
-      // Only move if there's actual movement
-      if (dx !== 0 || dy !== 0) {
-        const selectedIds = Array.from(ctx.selectedPoints);
-        if (selectedIds.length > 0) {
-          this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+        // Only move if there's actual movement
+        if (dx !== 0 || dy !== 0) {
+          const selectedIds = Array.from(ctx.selectedPoints);
+          if (selectedIds.length > 0) {
+            this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+          }
         }
-        // Update last position for next frame
-        this.#state = { ...this.#state, lastDragPos: { x, y } };
       }
     }
 

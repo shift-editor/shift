@@ -137,6 +137,15 @@ export interface NativeFontEngine {
 
   /** Remove multiple points by their IDs. Returns CommandResult JSON. */
   removePoints(pointIds: string[]): string;
+
+  /** Insert a point before an existing point. Returns CommandResult JSON. */
+  insertPointBefore(
+    beforePointId: string,
+    x: number,
+    y: number,
+    pointType: PointTypeString,
+    smooth: boolean
+  ): string;
 }
 
 /**

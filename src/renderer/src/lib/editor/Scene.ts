@@ -11,7 +11,7 @@ import { parseSegments } from "@/engine/segments";
 import type { GlyphSnapshot, ContourSnapshot } from "@/types/generated";
 
 // Debug logging
-const DEBUG = false;
+const DEBUG = true;
 function debug(...args: unknown[]) {
   if (DEBUG) console.log("[Scene]", ...args);
 }

@@ -97,6 +97,11 @@ export declare class FontEngine {
    * Returns a CommandResult JSON string.
    */
   addPointToContour(contourId: string, x: number, y: number, pointType: string, smooth: boolean): string
+  /**
+   * Insert a point before an existing point.
+   * Returns a CommandResult JSON string with the new point ID.
+   */
+  insertPointBefore(beforePointId: string, x: number, y: number, pointType: string, smooth: boolean): string
   /** Add an empty contour and return a CommandResult JSON string. */
   addContour(): string
   /** Close the active contour. */

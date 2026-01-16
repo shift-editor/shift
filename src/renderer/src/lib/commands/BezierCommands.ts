@@ -153,6 +153,8 @@ export class TogglePointSmoothCommand extends BaseCommand<void> {
   undo(_ctx: CommandContext): void {
     // Restore original smooth state
     // TODO: Implement when FontEngine API is available
+    // Will use this.#_wasSmooth to restore the original state
+    void this.#_wasSmooth;
   }
 }
 
@@ -208,7 +210,9 @@ export class AddContourCommand extends BaseCommand<ContourId> {
 
   undo(_ctx: CommandContext): void {
     // TODO: Add removeContour to FontEngine API
+    // Will use this.#_previousActiveId to restore the active contour
     // For now this is a placeholder
+    void this.#_previousActiveId;
     console.warn("AddContourCommand.undo: Remove contour not yet implemented");
   }
 }

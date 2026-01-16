@@ -19,7 +19,6 @@
 
 import { vi } from "vitest";
 import type { GlyphSnapshot, PointSnapshot, ContourSnapshot, PointTypeString } from "@/types/generated";
-import type { PointId } from "@/types/ids";
 import { asPointId, asContourId } from "@/types/ids";
 import { FontEngine, MockNativeFontEngine } from "./index";
 
@@ -260,6 +259,7 @@ export function createMockEditing() {
   return {
     addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
     removePoints: vi.fn(),

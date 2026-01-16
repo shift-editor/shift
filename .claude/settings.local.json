@@ -14,7 +14,14 @@
       "Bash(pnpm test:*)",
       "Bash(git commit:*)",
       "Bash(npm run test:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm test:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(cargo test:*)",
+      "Bash(grep:*)",
+      "Bash(pnpm --filter renderer typecheck:*)",
+      "Bash(cargo check:*)",
+      "Bash(pnpm build:native:debug:*)"
     ]
   }
 }

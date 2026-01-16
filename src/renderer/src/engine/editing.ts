@@ -187,6 +187,41 @@ export class EditingManager {
     }
   }
 
+  /**
+   * Insert a point before an existing point.
+   * Used for inserting control points in the correct position for bezier curves.
+   * @returns The ID of the newly inserted point.
+   */
+  insertPointBefore(
+    beforePointId: PointId,
+    x: number,
+    y: number,
+    pointType: PointTypeString,
+    smooth: boolean = false
+  ): PointId {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.insertPointBefore(
+      beforePointId,
+      x,
+      y,
+      pointType,
+      smooth
+    );
+    const result = parseCommandResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError("insertPointBefore", result.error ?? undefined);
+    }
+
+    if (result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+
+    const pointId = result.affectedPointIds?.[0];
+    return asPointId(pointId ?? "");
+  }
+
   // ═══════════════════════════════════════════════════════════
   // CONTOUR OPERATIONS
   // ═══════════════════════════════════════════════════════════

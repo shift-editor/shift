@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Pen, type PenState } from "./Pen";
+import { Pen, type PenState } from "./pen";
 import { Editor } from "@/lib/editor/Editor";
 import { createMockFontEngine, getAllPoints, getPointCount, getContourCount } from "@/engine/testing";
 import { EventEmitter } from "@/lib/core/EventEmitter";
