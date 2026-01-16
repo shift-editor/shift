@@ -7,7 +7,7 @@ import { ToolName, Tool } from '@/types/tool';
 
 import { Hand } from './Hand';
 import { Pen } from './pen';
-import { Select } from './Select';
+import { Select } from './select';
 import { Shape } from './Shape';
 
 export interface ToolRegistryItem {

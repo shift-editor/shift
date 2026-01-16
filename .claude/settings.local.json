@@ -23,7 +23,8 @@
       "Bash(pnpm build:native:debug:*)",
       "WebSearch",
       "Bash(pnpm lint:check:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm format:*)"
     ]
   }
 }

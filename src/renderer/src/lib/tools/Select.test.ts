@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Select } from "./Select";
+import { Select } from "./select";
 import { Editor } from "@/lib/editor/Editor";
 import { createMockFontEngine, getAllPoints } from "@/__test-utils__";
 import { EventEmitter } from "@/lib/core/EventEmitter";
@@ -52,6 +52,8 @@ function createMockEditor() {
       hoveredPoint = null;
     }),
     requestRedraw: vi.fn(),
+    setSelectionMode: vi.fn(),
+    getSelectionMode: vi.fn(() => 'committed'),
     createToolContext: vi.fn(() => ({
       snapshot: fontEngine.snapshot.value,
       selectedPoints,
@@ -284,6 +286,49 @@ describe("Select tool", () => {
       // Points at 100,100 and 150,150 should be in rectangle 50,50 to 200,200
       expect(selectedIds.size).toBeGreaterThanOrEqual(1);
     });
+
+    it("should request redraw when selection rectangle is released", () => {
+      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
+      select.onMouseMove(createMouseEvent("mousemove", 200, 200));
+      mockEditor.requestRedraw.mockClear();
+
+      select.onMouseUp(createMouseEvent("mouseup", 200, 200));
+
+      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+    });
+
+    it("should transition from selecting to ready when no points in rectangle", () => {
+      select.onMouseDown(createMouseEvent("mousedown", 400, 400));
+      select.onMouseMove(createMouseEvent("mousemove", 450, 450));
+      mockEditor.requestRedraw.mockClear();
+
+      select.onMouseUp(createMouseEvent("mouseup", 450, 450));
+
+      expect(select.getState().type).toBe("ready");
+      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+    });
+
+    it("should select points within rectangle while dragging", () => {
+      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
+      mockEditor.setSelectedPoints.mockClear();
+
+      select.onMouseMove(createMouseEvent("mousemove", 120, 120));
+
+      expect(mockEditor.setSelectedPoints).toHaveBeenCalled();
+      const selectedIds = mockEditor.setSelectedPoints.mock.calls[0][0];
+      expect(selectedIds.size).toBe(1);
+    });
+
+    it("should update selection as rectangle changes", () => {
+      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
+
+      select.onMouseMove(createMouseEvent("mousemove", 120, 120));
+      const firstCall = mockEditor.setSelectedPoints.mock.calls.length;
+
+      select.onMouseMove(createMouseEvent("mousemove", 200, 200));
+
+      expect(mockEditor.setSelectedPoints.mock.calls.length).toBeGreaterThan(firstCall);
+    });
   });
 
   describe("nudging points", () => {
@@ -403,7 +448,9 @@ describe("Select tool", () => {
       expect(mockEditor.requestRedraw).toHaveBeenCalled();
     });
 
-    it("should request redraw on mouse move", () => {
+    it("should request redraw on mouse move during selecting", () => {
+      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
+      mockEditor.requestRedraw.mockClear();
       select.onMouseMove(createMouseEvent("mousemove", 100, 100));
       expect(mockEditor.requestRedraw).toHaveBeenCalled();
     });

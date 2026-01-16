@@ -35,18 +35,23 @@ function debug(...args: any[]) {
   }
 }
 
+export type SelectionMode = 'preview' | 'committed';
+
 interface EditorState {
   /** Selected points by their Rust IDs. */
   selectedPoints: Set<PointId>;
   /** Hovered point by its Rust ID. */
   hoveredPoint: PointId | null;
   fillContour: boolean;
+  /** Selection mode: 'preview' during rectangle drag, 'committed' after mouseUp */
+  selectionMode: SelectionMode;
 }
 
 export const InitialEditorState: EditorState = {
   selectedPoints: new Set(),
   hoveredPoint: null,
   fillContour: false,
+  selectionMode: 'committed',
 };
 
 /**
@@ -403,6 +408,14 @@ export class Editor {
     this.#state.selectedPoints.clear();
   }
 
+  public setSelectionMode(mode: SelectionMode): void {
+    this.#state.selectionMode = mode;
+  }
+
+  public getSelectionMode(): SelectionMode {
+    return this.#state.selectionMode;
+  }
+
   /**
    * Get point data for all selected points.
    * Used for calculating bounding rectangles.
@@ -544,8 +557,12 @@ export class Editor {
       ctx.fill(glyphPath);
     }
 
-    if (this.#state.selectedPoints.size > 0 && !this.#state.fillContour) {
-      // Get the actual point data for selected points to calculate bounding rect
+    const shouldDrawBoundingRect =
+      this.#state.selectedPoints.size > 0 &&
+      !this.#state.fillContour &&
+      this.#state.selectionMode === 'committed';
+
+    if (shouldDrawBoundingRect) {
       const selectedPointData = this.#getSelectedPointData();
       if (selectedPointData.length > 0) {
         const bbRect = getBoundingRect(selectedPointData);

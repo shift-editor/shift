@@ -71,7 +71,7 @@ export class Pen implements Tool {
     this.#renderEffect = effect(() => {
       const state = this.#state.value;
 
-      if (state.type === 'dragging') {
+      if (state.type === 'dragging' || state.type === 'ready') {
         editor.requestRedraw();
       }
     });
@@ -139,7 +139,6 @@ export class Pen implements Tool {
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
-    // Any drag state returns to ready
     const state = this.#state.value;
     if (state.type === 'anchored' || state.type === 'dragging') {
       this.#state.set({ type: 'ready' });
