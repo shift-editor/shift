@@ -64,7 +64,7 @@ function extractNAPITypes() {
 }
 
 function generateRendererTypes(napiTypes) {
-  const { interfaces, enums, classMethods } = napiTypes;
+  const { interfaces, enums } = napiTypes;
 
   let output = `import { fontEngine } from "../../../preload/preload";
 

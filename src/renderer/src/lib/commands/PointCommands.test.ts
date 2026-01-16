@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
 import type { CommandContext } from "./Command";
-import type { PointId } from "@/types/ids";
 import { asPointId } from "@/types/ids";
 
 // Mock FontEngine editing methods

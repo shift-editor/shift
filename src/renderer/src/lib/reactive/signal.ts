@@ -202,8 +202,9 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
       }
       this.dependencies.clear();
 
-      // Track new dependencies
+      // Track new dependencies (intentional this-alias for reactive tracking)
       const prevComputation = currentComputation;
+      // oxlint-disable-next-line typescript-eslint/no-this-alias
       currentComputation = this;
 
       try {
@@ -269,8 +270,9 @@ class EffectImpl implements Effect, Computation {
       }
       this.dependencies.clear();
 
-      // Track new dependencies
+      // Track new dependencies (intentional this-alias for reactive tracking)
       const prevComputation = currentComputation;
+      // oxlint-disable-next-line typescript-eslint/no-this-alias
       currentComputation = this;
 
       try {

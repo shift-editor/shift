@@ -10,11 +10,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Select, type SelectState } from "./Select";
+import { Select } from "./Select";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getAllPoints, getPointCount, findPointById } from "@/engine/testing";
+import { createMockFontEngine, getAllPoints } from "@/engine/testing";
 import { EventEmitter } from "@/lib/core/EventEmitter";
-import { asPointId } from "@/types/ids";
 import type { PointId } from "@/types/ids";
 
 /**
@@ -27,7 +26,8 @@ function createMockEditor() {
   fontEngine.session.startEditSession(65);
   fontEngine.editing.addContour();
 
-  const eventEmitter = new EventEmitter();
+  // EventEmitter instance kept for potential future use
+  new EventEmitter();
 
   // Track state
   let selectedPoints = new Set<PointId>();
@@ -107,13 +107,11 @@ describe("Select tool", () => {
   let select: Select;
   let mockEditor: ReturnType<typeof createMockEditor>["mockEditor"];
   let fontEngine: ReturnType<typeof createMockEditor>["fontEngine"];
-  let getSelectedPoints: ReturnType<typeof createMockEditor>["getSelectedPoints"];
 
   beforeEach(() => {
     const setup = createMockEditor();
     mockEditor = setup.mockEditor;
     fontEngine = setup.fontEngine;
-    getSelectedPoints = setup.getSelectedPoints;
     select = new Select(mockEditor as unknown as Editor);
     select.setReady();
   });
@@ -253,8 +251,8 @@ describe("Select tool", () => {
       select.onMouseMove(createMouseEvent("mousemove", 120, 120));
 
       // Both should have moved by same delta
-      const points = getAllPoints(fontEngine.snapshot);
       // Note: the mock context returns both as selected, so both should move
+      getAllPoints(fontEngine.snapshot);
     });
   });
 

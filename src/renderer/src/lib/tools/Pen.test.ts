@@ -9,9 +9,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Pen, type PenState } from "./pen";
+import { Pen } from "./pen";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getAllPoints, getPointCount, getContourCount } from "@/engine/testing";
+import { createMockFontEngine, getPointCount, getContourCount } from "@/engine/testing";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 
 /**
@@ -25,7 +25,8 @@ function createMockEditor() {
   fontEngine.session.startEditSession(65);
   fontEngine.editing.addContour();
 
-  const eventEmitter = new EventEmitter();
+  // EventEmitter instance kept for potential future use
+  new EventEmitter();
 
   // Track state
   let selectedPoints = new Set<string>();

@@ -10,9 +10,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "./CommandHistory";
 import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
-import { NudgePointsCommand, AddContourCommand, CloseContourCommand } from "./BezierCommands";
+import { NudgePointsCommand } from "./BezierCommands";
 import { createMockFontEngine, getAllPoints, getPointCount } from "@/engine/testing";
-import { asPointId } from "@/types/ids";
 
 describe("CommandHistory", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
@@ -57,7 +56,7 @@ describe("CommandHistory", () => {
 
   describe("undo", () => {
     it("should undo the last command", () => {
-      const pointId = history.execute(new AddPointCommand(100, 200, "onCurve"));
+      history.execute(new AddPointCommand(100, 200, "onCurve"));
       expect(getPointCount(fontEngine.snapshot)).toBe(1);
 
       const didUndo = history.undo();
@@ -250,7 +249,7 @@ describe("Command integration with history", () => {
 
     it("should handle add undo/redo", () => {
       // Add point through history
-      const pointId = history.execute(new AddPointCommand(100, 200, "onCurve"));
+      history.execute(new AddPointCommand(100, 200, "onCurve"));
       expect(getPointCount(fontEngine.snapshot)).toBe(1);
 
       // Undo add
