@@ -136,9 +136,3 @@ if (require.main === module) {
 }
 
 module.exports = { extractNAPITypes, generateRendererTypes };
-
-
-
-
-
-

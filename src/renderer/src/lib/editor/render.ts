@@ -229,4 +229,3 @@ export function isContourClockwise(contour: ContourSnapshot): boolean {
 
   return sum > 0;
 }
-

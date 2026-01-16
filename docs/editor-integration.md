@@ -161,5 +161,3 @@ Multiple glyphs: prefer one session per open glyph. When switching, end the old 
 
 ---
 Short summary: The editor sends batched commands to a Rust-owned session and renders from an engine-supplied draw buffer, using a small outline/topology snapshot for interactions. Start with snapshot refreshes for simplicity; add deltas and optimizations once the walking skeleton is stable.
-
-

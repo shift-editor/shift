@@ -17,11 +17,15 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    title: "Shift",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
     },
   });
+
+  // Maximize the window
+  mainWindow.maximize();
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -39,6 +43,11 @@ const createWindow = () => {
     globalShortcut.register(process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R", () => {
       // Reload the window - this will reload the preload script and pick up new native modules
       mainWindow?.reload();
+    });
+
+    // Cmd+Q or Ctrl+Q to force quit
+    globalShortcut.register(process.platform === "darwin" ? "Command+Q" : "Control+Q", () => {
+      app.quit();
     });
   });
 };

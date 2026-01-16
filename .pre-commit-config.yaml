@@ -1,0 +1,58 @@
+repos:
+  # Standard file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  # Rust hooks
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --workspace
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # TypeScript/JavaScript hooks
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint
+        entry: pnpm lint:check
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+
+      - id: tsgo-typecheck
+        name: tsgo typecheck
+        entry: pnpm typecheck
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false
+
+      - id: vitest
+        name: vitest
+        entry: pnpm test
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false

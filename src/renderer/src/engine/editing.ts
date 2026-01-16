@@ -279,6 +279,28 @@ export class EditingManager {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // POINT PROPERTIES
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Toggle the smooth property of a point.
+   */
+  toggleSmooth(pointId: PointId): void {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.toggleSmooth(pointId);
+    const result = parseCommandResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError("toggleSmooth", result.error ?? undefined);
+    }
+
+    if (result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // PRIVATE
   // ═══════════════════════════════════════════════════════════
 

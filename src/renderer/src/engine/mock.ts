@@ -260,6 +260,21 @@ export class MockNativeFontEngine implements NativeFontEngine {
     return this.#makeResult(false, [], `Point ${beforePointId} not found`);
   }
 
+  toggleSmooth(pointId: string): string {
+    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+
+    // Find the point and toggle its smooth property
+    for (const contour of this.#snapshot.contours) {
+      const point = contour.points.find((p) => p.id === pointId);
+      if (point) {
+        point.smooth = !point.smooth;
+        return this.#makeResult(true, [pointId]);
+      }
+    }
+
+    return this.#makeResult(false, [], `Point ${pointId} not found`);
+  }
+
   // ═══════════════════════════════════════════════════════════
   // PRIVATE
   // ═══════════════════════════════════════════════════════════

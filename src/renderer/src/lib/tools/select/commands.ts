@@ -157,9 +157,10 @@ export class SelectCommands {
   }
 
   toggleSmooth(pos: Point2D): boolean {
-    const { point } = this.hitTest(pos);
-    if (point && point.pointType === 'onCurve') {
-      console.log('Toggle smooth not yet implemented via FontEngine');
+    const { point, pointId } = this.hitTest(pos);
+    if (point && point.pointType === 'onCurve' && pointId) {
+      this.#editor.fontEngine.editing.toggleSmooth(pointId);
+      this.#editor.requestRedraw();
       return true;
     }
     return false;

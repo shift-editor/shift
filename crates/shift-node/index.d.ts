@@ -118,4 +118,9 @@ export declare class FontEngine {
    * Returns a CommandResult JSON string.
    */
   removePoints(pointIds: Array<string>): string
+  /**
+   * Toggle the smooth property of a point.
+   * Returns a CommandResult JSON string.
+   */
+  toggleSmooth(pointId: string): string
 }

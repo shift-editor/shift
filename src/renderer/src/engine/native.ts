@@ -146,6 +146,9 @@ export interface NativeFontEngine {
     pointType: PointTypeString,
     smooth: boolean
   ): string;
+
+  /** Toggle the smooth property of a point. Returns CommandResult JSON. */
+  toggleSmooth(pointId: string): string;
 }
 
 /**

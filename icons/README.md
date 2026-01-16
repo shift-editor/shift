@@ -14,7 +14,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') {
     app.dock.setIcon(path.join(__dirname, '../icons/icon.png'));
   }
-  
+
   createWindow();
 });
 

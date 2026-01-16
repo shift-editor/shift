@@ -101,7 +101,7 @@ if [[ "$OSTYPE" == "darwin"* ]] && command -v iconutil &> /dev/null; then
     # Create iconset directory
     ICONSET_DIR="$OUTPUT_DIR/icon.iconset"
     mkdir -p "$ICONSET_DIR"
-    
+
     # Generate required iconset files
     convert "$INPUT_FILE" -resize "16x16" -background transparent "$ICONSET_DIR/icon_16x16.png"
     convert "$INPUT_FILE" -resize "32x32" -background transparent "$ICONSET_DIR/icon_16x16@2x.png"
@@ -113,13 +113,13 @@ if [[ "$OSTYPE" == "darwin"* ]] && command -v iconutil &> /dev/null; then
     convert "$INPUT_FILE" -resize "512x512" -background transparent "$ICONSET_DIR/icon_256x256@2x.png"
     convert "$INPUT_FILE" -resize "512x512" -background transparent "$ICONSET_DIR/icon_512x512.png"
     convert "$INPUT_FILE" -resize "1024x1024" -background transparent "$ICONSET_DIR/icon_512x512@2x.png"
-    
+
     # Convert iconset to icns
     iconutil -c icns "$ICONSET_DIR"
-    
+
     # Clean up iconset directory
     rm -rf "$ICONSET_DIR"
-    
+
     echo -e "${GREEN}  ✅ Generated: icon.icns${NC}"
 else
     echo -e "${YELLOW}  ⚠️  iconutil not available. Using PNG fallback for macOS.${NC}"
@@ -147,7 +147,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') {
     app.dock.setIcon(path.join(__dirname, '../icons/icon.png'));
   }
-  
+
   createWindow();
 });
 

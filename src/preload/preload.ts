@@ -170,6 +170,14 @@ const fontEngineAPI = {
   ): string => {
     return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
   },
+
+  /**
+   * Toggle the smooth property of a point.
+   * Returns CommandResult JSON.
+   */
+  toggleSmooth: (pointId: string): string => {
+    return fontEngineInstance.toggleSmooth(pointId);
+  },
 };
 
 // Expose to renderer via contextBridge

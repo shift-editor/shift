@@ -24,6 +24,12 @@ pub struct FontEngine {
   font: Font,
 }
 
+impl Default for FontEngine {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 #[napi]
 impl FontEngine {
   #[napi(constructor)]
@@ -41,7 +47,7 @@ impl FontEngine {
     self.font = self
       .font_loader
       .read_font(&path)
-      .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to load font: {}", e)))?;
+      .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to load font: {e}")))?;
     Ok(())
   }
 
@@ -91,10 +97,10 @@ impl FontEngine {
   /// Returns the glyph to the font.
   #[napi]
   pub fn end_edit_session(&mut self) -> Result<()> {
-    let session = self.current_edit_session.take().ok_or(Error::new(
-      Status::GenericFailure,
-      "No edit session to end",
-    ))?;
+    let session = self
+      .current_edit_session
+      .take()
+      .ok_or(Error::new(Status::GenericFailure, "No edit session to end"))?;
 
     // Return the glyph to the font
     let glyph = session.into_glyph();
@@ -129,7 +135,11 @@ impl FontEngine {
   #[napi]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
-    Ok(edit_session.active_contour_id().map(|id| id.raw().to_string()))
+    Ok(
+      edit_session
+        .active_contour_id()
+        .map(|id| id.raw().to_string()),
+    )
   }
 
   /// Set the active contour by ID
@@ -176,13 +186,7 @@ impl FontEngine {
   /// Add a point to the active contour.
   /// Returns a CommandResult JSON string.
   #[napi]
-  pub fn add_point(
-    &mut self,
-    x: f64,
-    y: f64,
-    point_type: String,
-    smooth: bool,
-  ) -> Result<String> {
+  pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
     let session = self.get_edit_session()?;
 
     let pt = match point_type.as_str() {
@@ -191,8 +195,7 @@ impl FontEngine {
       _ => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {}",
-            point_type
+            "Invalid point type: {point_type}"
           )))
           .unwrap(),
         )
@@ -227,8 +230,7 @@ impl FontEngine {
       _ => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {}",
-            point_type
+            "Invalid point type: {point_type}"
           )))
           .unwrap(),
         )
@@ -241,8 +243,7 @@ impl FontEngine {
       Err(_) => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {}",
-            contour_id
+            "Invalid contour ID: {contour_id}"
           )))
           .unwrap(),
         )
@@ -277,8 +278,7 @@ impl FontEngine {
       _ => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {}",
-            point_type
+            "Invalid point type: {point_type}"
           )))
           .unwrap(),
         )
@@ -291,8 +291,7 @@ impl FontEngine {
       Err(_) => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point ID: {}",
-            before_point_id
+            "Invalid point ID: {before_point_id}"
           )))
           .unwrap(),
         )
@@ -357,7 +356,9 @@ impl FontEngine {
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap());
+      return Ok(
+        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
+      );
     }
 
     let moved = session.move_points(&parsed_ids, dx, dy);
@@ -384,12 +385,42 @@ impl FontEngine {
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap());
+      return Ok(
+        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
+      );
     }
 
     let removed = session.remove_points(&parsed_ids);
     let result = CommandResult::success(session, removed);
     Ok(serde_json::to_string(&result).unwrap())
+  }
+
+  /// Toggle the smooth property of a point.
+  /// Returns a CommandResult JSON string.
+  #[napi]
+  pub fn toggle_smooth(&mut self, point_id: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    // Parse point ID from string
+    let parsed_id = match point_id.parse::<u128>() {
+      Ok(raw) => shift_core::entity::PointId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid point ID: {point_id}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.toggle_smooth(parsed_id) {
+      Ok(_) => {
+        let result = CommandResult::success(session, vec![parsed_id]);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
   }
 }
 
