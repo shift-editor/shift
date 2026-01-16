@@ -1,11 +1,26 @@
-import { FC, useEffect } from "react";
+import { FC, useEffect, useMemo } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import AppState, { getEditor } from "@/store/store";
+import { ToolName } from "@/types/tool";
 
 import { InteractiveScene } from "./InteractiveScene";
 import { Metrics as MetricsComponent } from "./Metrics";
 import { StaticScene } from "./StaticScene";
+
+function getCursorStyle(tool: ToolName): string {
+  switch (tool) {
+    case "pen":
+      // Use image-set for retina support: 1x (32px) and 2x (64px) versions
+      return `-webkit-image-set(url("/cursors/pen@1.svg") 1x, url("/cursors/pen@2.svg") 2x) 16 8, crosshair`;
+    case "hand":
+      return "grab";
+    case "select":
+      return "default";
+    default:
+      return "default";
+  }
+}
 
 interface EditorViewProps {
   glyphId: string;
@@ -57,9 +72,12 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     editor.requestRedraw();
   };
 
+  const cursorStyle = useMemo(() => getCursorStyle(activeTool), [activeTool]);
+
   return (
     <div
-      className={`relative z-20 h-full w-full overflow-hidden cursor-${activeTool}`}
+      className="relative z-20 h-full w-full overflow-hidden"
+      style={{ cursor: cursorStyle }}
       onWheel={onWheel}
       onMouseMove={(e) => {
         const position = editor.getMousePosition(e.clientX, e.clientY);

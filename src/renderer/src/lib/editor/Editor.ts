@@ -23,6 +23,8 @@ import { Path2D } from "../graphics/Path";
 import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
 import { findPointInSnapshot } from "./render";
+import { CommandHistory } from "../commands";
+import { effect, type Effect } from "../reactive/signal";
 
 // Debug logging flag - set to true to enable debug output
 const DEBUG = true;
@@ -33,18 +35,23 @@ function debug(...args: any[]) {
   }
 }
 
+export type SelectionMode = 'preview' | 'committed';
+
 interface EditorState {
   /** Selected points by their Rust IDs. */
   selectedPoints: Set<PointId>;
   /** Hovered point by its Rust ID. */
   hoveredPoint: PointId | null;
   fillContour: boolean;
+  /** Selection mode: 'preview' during rectangle drag, 'committed' after mouseUp */
+  selectionMode: SelectionMode;
 }
 
 export const InitialEditorState: EditorState = {
   selectedPoints: new Set(),
   hoveredPoint: null,
   fillContour: false,
+  selectionMode: 'committed',
 };
 
 /**
@@ -73,12 +80,14 @@ export class Editor {
   #eventEmitter: IEventEmitter;
 
   #undoManager: UndoManager;
+  #commandHistory: CommandHistory;
 
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
 
   // Rust integration - FontEngine is the single source of truth
   #fontEngine: FontEngine;
+  #snapshotEffect: Effect;
 
   constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
@@ -89,6 +98,15 @@ export class Editor {
 
     this.#undoManager = new UndoManager();
 
+    // Initialize FontEngine first (needed for CommandHistory)
+    this.#fontEngine = new FontEngine();
+
+    // Initialize CommandHistory with FontEngine
+    this.#commandHistory = new CommandHistory(
+      this.#fontEngine,
+      () => this.#fontEngine.snapshot.value
+    );
+
     this.#eventEmitter = eventEmitter;
 
     this.#staticContext = null;
@@ -96,11 +114,9 @@ export class Editor {
 
     this.#state = { ...InitialEditorState, selectedPoints: new Set() };
 
-    // Initialize FontEngine (Rust interface)
-    this.#fontEngine = new FontEngine();
-
-    // Subscribe to snapshot changes - Scene renders directly from snapshot
-    this.#fontEngine.onChange((snapshot) => {
+    // Watch snapshot signal - Scene renders directly from snapshot
+    this.#snapshotEffect = effect(() => {
+      const snapshot = this.#fontEngine.snapshot.value;
       debug("Snapshot changed:", snapshot?.contours.length, "contours");
       this.#scene.setSnapshot(snapshot);
       this.requestRedraw();
@@ -175,7 +191,7 @@ export class Editor {
    * Get the current snapshot from FontEngine.
    */
   public getSnapshot(): GlyphSnapshot | null {
-    return this.#fontEngine.snapshot;
+    return this.#fontEngine.snapshot.value;
   }
 
   /**
@@ -184,12 +200,13 @@ export class Editor {
    */
   public createToolContext(): ToolContext {
     return {
-      snapshot: this.#fontEngine.snapshot,
+      snapshot: this.#fontEngine.snapshot.value,
       selectedPoints: this.#state.selectedPoints,
       hoveredPoint: this.#state.hoveredPoint,
       viewport: this.#viewport,
       mousePosition: this.#viewport.getUpmMousePosition(),
       fontEngine: this.#fontEngine,
+      commands: this.#commandHistory,
       setSelectedPoints: (ids) => {
         this.#state.selectedPoints = ids;
         this.requestRedraw();
@@ -208,6 +225,13 @@ export class Editor {
       },
       requestRedraw: () => this.requestRedraw(),
     };
+  }
+
+  /**
+   * Get the command history for undo/redo operations.
+   */
+  public get commandHistory(): CommandHistory {
+    return this.#commandHistory;
   }
 
   public activeTool(): Tool {
@@ -384,12 +408,20 @@ export class Editor {
     this.#state.selectedPoints.clear();
   }
 
+  public setSelectionMode(mode: SelectionMode): void {
+    this.#state.selectionMode = mode;
+  }
+
+  public getSelectionMode(): SelectionMode {
+    return this.#state.selectionMode;
+  }
+
   /**
    * Get point data for all selected points.
    * Used for calculating bounding rectangles.
    */
   #getSelectedPointData(): Array<{ x: number; y: number }> {
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
@@ -418,7 +450,7 @@ export class Editor {
    * Find a point in the current snapshot by ID.
    */
   public findPoint(pointId: PointId): PointSnapshot | null {
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return null;
 
     const result = findPointInSnapshot(snapshot, pointId);
@@ -498,7 +530,7 @@ export class Editor {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     const glyphPath = this.#scene.getGlyphPath();
 
     debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
@@ -525,8 +557,12 @@ export class Editor {
       ctx.fill(glyphPath);
     }
 
-    if (this.#state.selectedPoints.size > 0 && !this.#state.fillContour) {
-      // Get the actual point data for selected points to calculate bounding rect
+    const shouldDrawBoundingRect =
+      this.#state.selectedPoints.size > 0 &&
+      !this.#state.fillContour &&
+      this.#state.selectionMode === 'committed';
+
+    if (shouldDrawBoundingRect) {
       const selectedPointData = this.#getSelectedPointData();
       if (selectedPointData.length > 0) {
         const bbRect = getBoundingRect(selectedPointData);
@@ -646,6 +682,9 @@ export class Editor {
   }
 
   public destroy() {
+    // Dispose signal effects
+    this.#snapshotEffect.dispose();
+
     if (this.#staticContext) {
       this.#staticContext.destroy();
     }

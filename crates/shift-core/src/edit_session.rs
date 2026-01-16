@@ -106,6 +106,27 @@ impl EditSession {
     self.add_point_to_contour(contour_id, x, y, point_type, is_smooth)
   }
 
+  /// Insert a point before an existing point in the active contour.
+  /// Returns the new point's ID, or an error if the reference point is not found.
+  pub fn insert_point_before(
+    &mut self,
+    before_id: PointId,
+    x: f64,
+    y: f64,
+    point_type: PointType,
+    is_smooth: bool,
+  ) -> Result<PointId, String> {
+    // Find which contour contains the reference point
+    let contour_id = self
+      .find_point_contour(before_id)
+      .ok_or_else(|| format!("Point {:?} not found in any contour", before_id))?;
+
+    let contour = self.glyph.contour_mut(contour_id)?;
+    contour
+      .insert_point_before(before_id, x, y, point_type, is_smooth)
+      .ok_or_else(|| format!("Failed to insert point before {:?}", before_id))
+  }
+
   /// Move a point to a new position
   pub fn move_point(
     &mut self,
@@ -412,5 +433,46 @@ mod tests {
     assert!(session.find_point_contour(p2).is_some());
     assert!(session.find_point_contour(p1).is_none());
     assert!(session.find_point_contour(p3).is_none());
+  }
+
+  #[test]
+  fn insert_point_before_creates_bezier_pattern() {
+    let mut session = create_session();
+    let contour_id = session.add_empty_contour();
+
+    // Add two onCurve points (anchor1 and anchor2)
+    let anchor1 = session.add_point(0.0, 0.0, PointType::OnCurve, false).unwrap();
+    let anchor2 = session.add_point(100.0, 100.0, PointType::OnCurve, false).unwrap();
+
+    // Insert a control point BEFORE anchor2
+    let control = session
+      .insert_point_before(anchor2, 50.0, 75.0, PointType::OffCurve, false)
+      .unwrap();
+
+    // Verify order: [anchor1, control, anchor2]
+    let contour = session.glyph().contour(contour_id).unwrap();
+    let points: Vec<_> = contour.points().iter().collect();
+
+    assert_eq!(points.len(), 3);
+    assert_eq!(points[0].id(), anchor1);
+    assert_eq!(points[1].id(), control);
+    assert_eq!(points[2].id(), anchor2);
+
+    // Verify types form a quadratic bezier pattern
+    assert_eq!(points[0].point_type(), &PointType::OnCurve);
+    assert_eq!(points[1].point_type(), &PointType::OffCurve);
+    assert_eq!(points[2].point_type(), &PointType::OnCurve);
+  }
+
+  #[test]
+  fn insert_point_before_nonexistent_fails() {
+    let mut session = create_session();
+    session.add_empty_contour();
+    session.add_point(0.0, 0.0, PointType::OnCurve, false).unwrap();
+
+    let fake_id = PointId::new();
+    let result = session.insert_point_before(fake_id, 50.0, 50.0, PointType::OffCurve, false);
+
+    assert!(result.is_err());
   }
 }

@@ -230,6 +230,36 @@ export class MockNativeFontEngine implements NativeFontEngine {
     return this.#makeResult(true, pointIds);
   }
 
+  insertPointBefore(
+    beforePointId: string,
+    x: number,
+    y: number,
+    pointType: PointTypeString,
+    smooth: boolean
+  ): string {
+    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+
+    // Find the contour and index of the reference point
+    for (const contour of this.#snapshot.contours) {
+      const index = contour.points.findIndex((p) => p.id === beforePointId);
+      if (index !== -1) {
+        const newPointId = this.#generateId();
+        const newPoint = {
+          id: newPointId,
+          x,
+          y,
+          pointType,
+          smooth,
+        };
+        // Insert at the found index (before the reference point)
+        contour.points.splice(index, 0, newPoint);
+        return this.#makeResult(true, [newPointId]);
+      }
+    }
+
+    return this.#makeResult(false, [], `Point ${beforePointId} not found`);
+  }
+
   // ═══════════════════════════════════════════════════════════
   // PRIVATE
   // ═══════════════════════════════════════════════════════════

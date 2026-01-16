@@ -15,22 +15,21 @@
     "allowJs": true,
     "checkJs": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/renderer/src/*"
+        "./src/renderer/src/*"
       ],
       "@assets/*": [
-        "src/renderer/src/assets/*"
+        "./src/renderer/src/assets/*"
       ],
       "@components/*": [
-        "src/renderer/src/components/*"
+        "./src/renderer/src/components/*"
       ],
       "@types/*": [
-        "src/renderer/src/types/*"
+        "./src/renderer/src/types/*"
       ],
       "@data/*": [
-        "src/renderer/src/charsets/*"
+        "./src/renderer/src/charsets/*"
       ]
     }
   },

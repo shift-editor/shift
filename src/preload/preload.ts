@@ -156,6 +156,20 @@ const fontEngineAPI = {
   removePoints: (pointIds: string[]): string => {
     return fontEngineInstance.removePoints(pointIds);
   },
+
+  /**
+   * Insert a point before an existing point.
+   * Returns CommandResult JSON.
+   */
+  insertPointBefore: (
+    beforePointId: string,
+    x: number,
+    y: number,
+    pointType: 'onCurve' | 'offCurve',
+    smooth: boolean
+  ): string => {
+    return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
+  },
 };
 
 // Expose to renderer via contextBridge

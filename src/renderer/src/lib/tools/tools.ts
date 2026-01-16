@@ -6,8 +6,8 @@ import { Editor } from '@/lib/editor/Editor';
 import { ToolName, Tool } from '@/types/tool';
 
 import { Hand } from './Hand';
-import { Pen } from './Pen';
-import { Select } from './Select';
+import { Pen } from './pen';
+import { Select } from './select';
 import { Shape } from './Shape';
 
 export interface ToolRegistryItem {

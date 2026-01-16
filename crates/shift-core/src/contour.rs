@@ -38,6 +38,23 @@ impl Contour {
     point_id
   }
 
+  /// Insert a point before an existing point.
+  /// Returns None if the reference point is not found.
+  pub fn insert_point_before(
+    &mut self,
+    before_id: PointId,
+    x: f64,
+    y: f64,
+    point_type: PointType,
+    smooth: bool,
+  ) -> Option<PointId> {
+    let index = self.points.iter().position(|p| p.id() == before_id)?;
+    let point_id = PointId::new_with_parent(&self.cid);
+    let point = Point::new(point_id, x, y, point_type, smooth);
+    self.points.insert(index, point);
+    Some(point_id)
+  }
+
   pub fn get_point(&self, id: PointId) -> Option<&Point> {
     self.points.iter().find(|p| p.id() == id)
   }
@@ -138,5 +155,37 @@ mod tests {
 
     let removed = contour.remove_point(id);
     assert!(removed.is_none());
+  }
+
+  #[test]
+  fn insert_point_before() {
+    let mut contour = Contour::new();
+    let id1 = contour.add_point(10.0, 10.0, PointType::OnCurve, false);
+    let id2 = contour.add_point(30.0, 30.0, PointType::OnCurve, false);
+
+    // Insert a point before id2
+    let inserted_id = contour.insert_point_before(id2, 20.0, 20.0, PointType::OffCurve, false);
+    assert!(inserted_id.is_some());
+
+    // Verify order: [id1, inserted, id2]
+    assert_eq!(contour.points.len(), 3);
+    assert_eq!(contour.points[0].id(), id1);
+    assert_eq!(contour.points[1].id(), inserted_id.unwrap());
+    assert_eq!(contour.points[2].id(), id2);
+
+    // Verify the inserted point's properties
+    assert_eq!(contour.points[1].x(), 20.0);
+    assert_eq!(contour.points[1].y(), 20.0);
+    assert_eq!(contour.points[1].point_type(), &PointType::OffCurve);
+  }
+
+  #[test]
+  fn insert_point_before_nonexistent() {
+    let mut contour = Contour::new();
+    contour.add_point(10.0, 10.0, PointType::OnCurve, false);
+    let fake_id = PointId::new();
+
+    let result = contour.insert_point_before(fake_id, 20.0, 20.0, PointType::OffCurve, false);
+    assert!(result.is_none());
   }
 }
