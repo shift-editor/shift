@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm install:*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)",
+      "Bash(pnpm build:*)",
+      "Bash(git checkout:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm test:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run test:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm test:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(cargo test:*)",
+      "Bash(grep:*)",
+      "Bash(pnpm --filter renderer typecheck:*)",
+      "Bash(cargo check:*)",
+      "Bash(pnpm build:native:debug:*)",
+      "WebSearch",
+      "Bash(pnpm lint:check:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm format:*)"
+    ]
+  }
+}

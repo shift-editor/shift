@@ -1,0 +1,31 @@
+body {
+  background-color: var(--color-secondary);
+  overflow: hidden;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/assets/fonts/Inter-VariableFont.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* Custom pen cursor with retina support */
+.cursor-pen {
+  cursor: url("/cursors/pen@1.svg") 15 8, auto;
+}
+
+@media (min-resolution: 2dppx) {
+  .cursor-pen {
+    cursor: url("/cursors/pen@2.svg") 15 8, auto;
+  }
+}
+
+/* Grab/hand cursor */
+.cursor-hand {
+  cursor: grab;
+}
+
+.cursor-hand:active {
+  cursor: grabbing;
+}

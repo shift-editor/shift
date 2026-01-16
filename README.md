@@ -1,84 +1,96 @@
-<div align="center">
-  <p align="center">
-    <img width=150 src="https://github.com/user-attachments/assets/521e2732-341d-441d-bb6d-bf7bcdccf764" />
-    <h1 align="center"><b>Shift</b></h1
->
-    <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
-   
-  ![image](https://github.com/user-attachments/assets/ff850488-3413-4b46-a4c8-c2344db0dc0e)
-  
-  </p>
-</div>
+# Shift
 
-## Why Shift?
+A font editor built with Electron, React, and Rust.
 
-Shift aims to redefine font editing by combining the power of Rust for performance-critical tasks with the flexibility of web-based UI technologies. Whether you're a type designer or a developer, Shift offers a fresh approach to creating and editing fonts with a focus on speed, precision, and extensibility.
+## Prerequisites
 
-> [!IMPORTANT]
-> Shift is in a pre-alpha state and is currently only suitable for developers interested in contributing to the project
-
-## Architecture
-
-Shift uses the Tauri framework:
-
-- **UI**: Uses React and Vite for components around the canvas
-- **Rendering**: Webview based UI utilising the HTML canvas and rendered with CanvasKit (Skia) for high-quality graphics
-- **State management**: Zustland for global React state mangement
-- **Backend**: Rust for high-intensive operations and font related processing
+- [Node.js](https://nodejs.org/) (v18+)
+- [pnpm](https://pnpm.io/) (v9+)
+- [Rust](https://rustup.rs/) (stable)
 
 ## Getting Started
 
-### Prerequisites
-
-- **Rust** (1.70 or later): [Install Rust](https://www.rust-lang.org/tools/install)
-- **pnpm** (1.0 or later): [Install pnpm](https://pnpm.io/installation)
-- **typescript** (5.8 or later, also known as tsc): [Install typescript](https://www.typescriptlang.org/download)
-- **node.js** (23.10 or later): [Install node.js](https://nodejs.org/en/download)
-- **System Dependencies**:
-  - **Windows**: Microsoft Visual C++ Build Tools, WebView2
-  - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux**: WebKit2GTK (`libwebkit2gtk-4.0-dev`) and build essentials
-
-### Quick Start
-
-1. **Clone the repository**:
-
 ```bash
-git clone https://github.com/shift-editor/shift.git
-cd shift
-```
-
-2. **Install dependencies**:
-
-```bash
+# Install dependencies
 pnpm install
+
+# Build the native Rust module
+pnpm build:native
+
+# Start development server
+pnpm dev
 ```
 
-3. **Run the development server**:
+## Commands
 
-```bash
-pnpm dev:app
+### Development
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start the Electron app in development mode |
+| `pnpm dev:app` | Start with watch mode for auto-reload |
+
+### Build
+
+| Command | Description |
+|---------|-------------|
+| `pnpm build:native` | Build the Rust native module (release) |
+| `pnpm build:native:debug` | Build the Rust native module (debug) |
+| `pnpm package` | Package the app for distribution |
+| `pnpm make` | Create distributable installers |
+
+### Code Quality
+
+| Command | Description |
+|---------|-------------|
+| `pnpm typecheck` | Run TypeScript type checking |
+| `pnpm lint` | Run ESLint and auto-fix issues |
+| `pnpm lint:check` | Run ESLint without auto-fixing |
+| `pnpm format` | Format code with Prettier |
+| `pnpm format:check` | Check code formatting |
+
+### Testing
+
+| Command | Description |
+|---------|-------------|
+| `pnpm test:native` | Run Rust unit tests |
+
+### Maintenance
+
+| Command | Description |
+|---------|-------------|
+| `pnpm clean` | Remove all build artifacts and node_modules |
+| `pnpm check-deps` | Check for unused dependencies |
+
+## Project Structure
+
+```
+shift/
+├── crates/                 # Rust crates
+│   ├── shift-core/         # Core font editing logic
+│   └── shift-node/         # Node.js NAPI bindings
+├── src/
+│   ├── main/               # Electron main process
+│   ├── preload/            # Electron preload scripts
+│   └── renderer/           # React frontend
+│       └── src/
+│           ├── engine/     # Font engine (Rust interface)
+│           ├── editor/     # Canvas editor
+│           ├── tools/      # Drawing tools
+│           ├── graphics/   # Rendering backends
+│           ├── types/      # TypeScript types
+│           └── components/ # React components
+└── scripts/                # Build scripts
 ```
 
-### Build for Production
+## Architecture
 
-```bash
-pnpm build:app
-
-```
-
-### Common Issues
-
-- If you encounter build errors, ensure you have all system dependencies installed
-- For Linux users, make sure WebKit2GTK development libraries are installed
-- For detailed troubleshooting, check the [Tauri docs](https://v1.tauri.app/v1/guides/getting-started/prerequisites/)
-
-## Development Roadmap
-
-We aim to implement the typical features present in font editors such as FontForge, Glyphs, RobotFont etc.
+- **Rust (shift-core)**: Font data structures and editing algorithms
+- **NAPI (shift-node)**: Exposes Rust to Node.js via native bindings
+- **Electron**: Desktop app shell with main/renderer process model
+- **React**: UI components and state management
+- **CanvasKit**: WebAssembly-based canvas rendering (migrating to 2D canvas)
 
 ## License
 
-[GNU General Public License (GPL) v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html)
-
-Copyright © 2025 Kostya Farber. All rights reserved.
+MIT

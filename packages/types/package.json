@@ -1,0 +1,15 @@
+{
+  "name": "@shift/types",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts"
+    },
+    "./napi": {
+      "types": "./napi.d.ts"
+    }
+  }
+}

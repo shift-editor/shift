@@ -4,7 +4,5 @@ members = ["crates/*"]
 
 
 [workspace.dependencies]
-shift-events = { path = "crates/shift-events" }
-shift-font = { path = "crates/shift-font" }
-shift-editor = { path = "crates/shift-editor" }
-shift-unicode = { path = "crates/shift-unicode" }
+shift-core = { path = "crates/shift-core" }
+shift-node = { path = "crates/shift-node" }
