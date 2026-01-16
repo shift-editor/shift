@@ -68,12 +68,9 @@ export class Pen implements Tool {
     this.#state = signal<PenState>({ type: 'idle' });
     this.#commands = new PenCommands(editor);
 
-    // Auto-redraw when tool state changes (for ghost lines/preview only)
-    // NOTE: FontEngine mutations already trigger redraw via onChange - this is ONLY for UI state
     this.#renderEffect = effect(() => {
       const state = this.#state.value;
 
-      // Tool preview (ghost lines, handle indicators) only visible in dragging state
       if (state.type === 'dragging') {
         editor.requestRedraw();
       }
@@ -119,7 +116,6 @@ export class Pen implements Tool {
     // Check for contour close action
     if (this.shouldCloseContour(x, y)) {
       this.#commands.closeContour();
-      // No requestRedraw needed - closeContour modifies FontEngine, onChange handles redraw
       return;
     }
 
@@ -140,7 +136,6 @@ export class Pen implements Tool {
     });
 
     this.#editor.emit('points:added', { pointIds: [result.pointId] });
-    // No requestRedraw needed - placeAnchor calls addPoint, onChange handles redraw
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -148,7 +143,6 @@ export class Pen implements Tool {
     const state = this.#state.value;
     if (state.type === 'anchored' || state.type === 'dragging') {
       this.#state.set({ type: 'ready' });
-      // No requestRedraw needed - state change triggers effect for UI state
     }
   }
 
@@ -195,9 +189,6 @@ export class Pen implements Tool {
         handles: result.handles,
         mousePos,
       });
-
-      // No redrawGlyph needed - createHandles calls insertPointBefore, onChange handles redraw
-      // The effect also triggers requestRedraw since state changed to 'dragging'
     }
   }
 
@@ -220,9 +211,6 @@ export class Pen implements Tool {
       mousePos,
     });
 
-    // No redrawGlyph/requestRedraw needed:
-    // - updateHandles calls movePointTo, which emits snapshot, onChange handles data redraw
-    // - state.set triggers the effect which handles UI preview redraw
   }
 
   // ==========================================================================
@@ -235,10 +223,17 @@ export class Pen implements Tool {
    */
   private buildContourContext(): ContourContext {
     const snapshot = this.#editor.getSnapshot();
-    const activeContourId = this.#editor.fontEngine.editing.getActiveContourId();
-    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+    if (!snapshot) {
+      return {
+        previousPointType: 'none',
+        previousOnCurvePosition: null,
+        isFirstPoint: true,
+      };
+    }
 
-    if (!activeContour || activeContour.points.length === 0) {
+    const activeContourId = this.#editor.fontEngine.editing.getActiveContourId();
+    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    if (activeContour.points.length === 0) {
       return {
         previousPointType: 'none',
         previousOnCurvePosition: null,

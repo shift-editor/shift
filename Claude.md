@@ -1,6 +1,11 @@
 # Shift Editor - Development Guide
 
+## General Guidelines
+
+Avoid adding comments unless absolutely neccessary.
+
 ## Package Manager
+
 This project uses **pnpm** (v9.0.0) as its package manager.
 
 ## Available Commands
