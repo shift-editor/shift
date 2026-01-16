@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
 import { asPointId } from "@/types/ids";
-import { createMockCommandContext } from "@/__test-utils__";
+import { createMockCommandContext } from "@/testing";
 
 describe("AddPointCommand", () => {
   it("should add a point at specified coordinates", () => {

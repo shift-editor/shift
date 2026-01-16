@@ -2,13 +2,13 @@
  * Test utilities for the Shift font editor.
  *
  * This module provides all testing utilities in one place.
- * Import from `@/__test-utils__` instead of scattered locations.
+ * Import from `@/testing` instead of scattered locations.
  *
  * ## Quick Reference
  *
  * ### For Testing Commands
  * ```typescript
- * import { createMockCommandContext } from '@/__test-utils__';
+ * import { createMockCommandContext } from '@/testing';
  *
  * const ctx = createMockCommandContext();
  * cmd.execute(ctx);
@@ -17,7 +17,7 @@
  *
  * ### For Testing Tools
  * ```typescript
- * import { createMockToolContext, createMouseEvent, getPointCount } from '@/__test-utils__';
+ * import { createMockToolContext, createMouseEvent, getPointCount } from '@/testing';
  *
  * const { ctx, fontEngine } = createMockToolContext();
  * tool.onMouseDown(createMouseEvent('mousedown', { clientX: 100, clientY: 100 }));
@@ -26,7 +26,7 @@
  *
  * ### For Creating Test Data
  * ```typescript
- * import { createTestSnapshot, createMockFontEngine, populateEngine } from '@/__test-utils__';
+ * import { createTestSnapshot, createMockFontEngine, populateEngine } from '@/testing';
  *
  * const snapshot = createTestSnapshot({
  *   contours: [{ points: [{ x: 0, y: 0 }, { x: 100, y: 100 }], closed: true }]

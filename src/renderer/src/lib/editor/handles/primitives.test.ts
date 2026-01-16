@@ -7,7 +7,7 @@ import {
   drawStrokedRect,
   drawArrowHead,
   drawDirectionArrow,
-} from '../primitives';
+} from './primitives';
 import type { IRenderer } from '@/types/graphics';
 
 function createMockRenderer(): IRenderer {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { drawHandle, drawHandleLast, drawGuides } from '../index';
+import { drawHandle, drawHandleLast, drawGuides } from './index';
 import type { IRenderer } from '@/types/graphics';
 import type { HandleState, HandleType } from '@/types/handle';
 import { Path2D } from '@/lib/graphics/Path';

@@ -83,7 +83,7 @@ export function createMockFontEngine(): FontEngine {
  *
  * @example
  * ```typescript
- * import { createMockEditing, createMockCommandContext } from '@/__test-utils__';
+ * import { createMockEditing, createMockCommandContext } from '@/testing';
  *
  * it('should add point', () => {
  *   const ctx = createMockCommandContext();

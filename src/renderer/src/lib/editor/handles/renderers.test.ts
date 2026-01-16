@@ -7,7 +7,7 @@ import {
   drawSmoothHandle,
   drawDirectionHandle,
   drawLastHandle,
-} from '../renderers';
+} from './renderers';
 import type { IRenderer } from '@/types/graphics';
 import type { HandleState } from '@/types/handle';
 

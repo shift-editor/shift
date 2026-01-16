@@ -6,7 +6,7 @@ import {
   NudgePointsCommand,
 } from "./BezierCommands";
 import { asPointId } from "@/types/ids";
-import { createMockCommandContext } from "@/__test-utils__";
+import { createMockCommandContext } from "@/testing";
 
 describe("AddBezierAnchorCommand", () => {
   it("should add three points: anchor, leading, and trailing", () => {

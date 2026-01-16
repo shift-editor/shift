@@ -33,7 +33,7 @@ import {
  *
  * @example
  * ```typescript
- * import { createMockCommandContext } from '@/__test-utils__';
+ * import { createMockCommandContext } from '@/testing';
  *
  * it('should add point', () => {
  *   const ctx = createMockCommandContext();
@@ -77,7 +77,7 @@ export interface MockToolContextOptions {
  *
  * @example
  * ```typescript
- * import { createMockToolContext, createMouseEvent } from '@/__test-utils__';
+ * import { createMockToolContext, createMouseEvent } from '@/testing';
  *
  * it('should select point on click', () => {
  *   const { ctx, getSelectedPoints } = createMockToolContext({

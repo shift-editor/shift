@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { createStateMachine } from '../StateMachine';
+import { createStateMachine } from './StateMachine';
 
 type TestState =
   | { type: 'idle' }

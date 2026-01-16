@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Select } from "./select";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getAllPoints } from "@/__test-utils__";
+import { createMockFontEngine, getAllPoints } from "@/testing";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 import type { PointId } from "@/types/ids";
 

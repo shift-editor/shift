@@ -12,7 +12,8 @@
  */
 
 import { Editor } from '@/lib/editor/Editor';
-import { signal, effect, type WritableSignal, type Effect } from '@/lib/reactive/signal';
+import { effect, type Effect } from '@/lib/reactive/signal';
+import { createStateMachine, type StateMachine } from '@/lib/tools/core';
 import { IRenderer } from '@/types/graphics';
 import { Tool, ToolName } from '@/types/tool';
 import type { ContourSnapshot, PointSnapshot } from '@/types/generated';
@@ -59,19 +60,17 @@ export class Pen implements Tool {
   public readonly name: ToolName = 'pen';
 
   #editor: Editor;
-  #state: WritableSignal<PenState>;
+  #sm: StateMachine<PenState>;
   #commands: PenCommands;
   #renderEffect: Effect;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#state = signal<PenState>({ type: 'idle' });
+    this.#sm = createStateMachine<PenState>({ type: 'idle' });
     this.#commands = new PenCommands(editor);
 
     this.#renderEffect = effect(() => {
-      const state = this.#state.value;
-
-      if (state.type === 'dragging' || state.type === 'ready') {
+      if (this.#sm.isIn('dragging', 'ready')) {
         editor.requestRedraw();
       }
     });
@@ -82,11 +81,11 @@ export class Pen implements Tool {
   // ==========================================================================
 
   setIdle(): void {
-    this.#state.set({ type: 'idle' });
+    this.#sm.transition({ type: 'idle' });
   }
 
   setReady(): void {
-    this.#state.set({ type: 'ready' });
+    this.#sm.transition({ type: 'ready' });
   }
 
   dispose(): void {
@@ -99,7 +98,7 @@ export class Pen implements Tool {
 
   /** Get current state (for testing) */
   getState(): PenState {
-    return this.#state.value;
+    return this.#sm.current;
   }
 
   // ==========================================================================
@@ -108,7 +107,7 @@ export class Pen implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (e.button !== 0) return;
-    if (this.#state.value.type !== 'ready') return;
+    if (!this.#sm.isIn('ready')) return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -126,7 +125,7 @@ export class Pen implements Tool {
     const result = this.#commands.placeAnchor({ x, y });
 
     // Transition to anchored state
-    this.#state.set({
+    this.#sm.transition({
       type: 'anchored',
       anchor: {
         position: { x, y },
@@ -139,77 +138,46 @@ export class Pen implements Tool {
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
-    const state = this.#state.value;
-    if (state.type === 'anchored' || state.type === 'dragging') {
-      this.#state.set({ type: 'ready' });
+    if (this.#sm.isIn('anchored', 'dragging')) {
+      this.#sm.transition({ type: 'ready' });
     }
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    const state = this.#state.value;
-    switch (state.type) {
-      case 'anchored':
-        this.handleAnchoredMouseMove({ x, y });
-        break;
+    this.#sm.when('anchored', (state) => {
+      const { anchor } = state;
+      const dist = distance(anchor.position, mousePos);
 
-      case 'dragging':
-        this.handleDraggingMouseMove({ x, y });
-        break;
-    }
-  }
+      // Check if we've exceeded the drag threshold
+      if (dist > DRAG_THRESHOLD) {
+        // Create handles
+        const result = this.#commands.createHandles(anchor, mousePos);
 
-  // ==========================================================================
-  // State-Specific Handlers
-  // ==========================================================================
-
-  /**
-   * Handle mouse move in anchored state.
-   * Transitions to dragging if drag threshold is exceeded.
-   */
-  private handleAnchoredMouseMove(mousePos: { x: number; y: number }): void {
-    const state = this.#state.value;
-    if (state.type !== 'anchored') return;
-
-    const { anchor } = state;
-    const dist = distance(anchor.position, mousePos);
-
-    // Check if we've exceeded the drag threshold
-    if (dist > DRAG_THRESHOLD) {
-      // Create handles
-      const result = this.#commands.createHandles(anchor, mousePos);
-
-      // Transition to dragging state
-      this.#state.set({
-        type: 'dragging',
-        anchor,
-        handles: result.handles,
-        mousePos,
-      });
-    }
-  }
-
-  /**
-   * Handle mouse move in dragging state.
-   * Updates handle positions.
-   */
-  private handleDraggingMouseMove(mousePos: { x: number; y: number }): void {
-    const state = this.#state.value;
-    if (state.type !== 'dragging') return;
-
-    const { anchor, handles } = state;
-
-    // Update handle positions
-    this.#commands.updateHandles(anchor, handles, mousePos);
-
-    // Update mouse position in state for rendering (triggers effect for UI preview)
-    this.#state.set({
-      ...state,
-      mousePos,
+        // Transition to dragging state
+        this.#sm.transition({
+          type: 'dragging',
+          anchor,
+          handles: result.handles,
+          mousePos,
+        });
+      }
     });
 
+    this.#sm.when('dragging', (state) => {
+      const { anchor, handles } = state;
+
+      // Update handle positions
+      this.#commands.updateHandles(anchor, handles, mousePos);
+
+      // Update mouse position in state for rendering (triggers effect for UI preview)
+      this.#sm.transition({
+        ...state,
+        mousePos,
+      });
+    });
   }
 
   // ==========================================================================
@@ -283,38 +251,37 @@ export class Pen implements Tool {
    * Draw interactive elements (ghost lines during drag).
    */
   drawInteractive(ctx: IRenderer): void {
-    const state = this.#state.value;
-    if (state.type !== 'dragging') return;
+    this.#sm.when('dragging', (state) => {
+      const { anchor, mousePos } = state;
 
-    const { anchor, mousePos } = state;
+      ctx.setStyle({
+        ...DEFAULT_STYLES,
+      });
 
-    ctx.setStyle({
-      ...DEFAULT_STYLES,
+      const anchorX = anchor.position.x;
+      const anchorY = anchor.position.y;
+      const mouseX = mousePos.x;
+      const mouseY = mousePos.y;
+
+      // Calculate mirrored position
+      const mirrorPos = mirror(mousePos, anchor.position);
+
+      // Line 1: Mouse position to anchor
+      ctx.beginPath();
+      ctx.moveTo(mouseX, mouseY);
+      ctx.lineTo(anchorX, anchorY);
+      ctx.stroke();
+
+      // Line 2: Anchor to mirrored position
+      ctx.beginPath();
+      ctx.moveTo(anchorX, anchorY);
+      ctx.lineTo(mirrorPos.x, mirrorPos.y);
+      ctx.stroke();
+
+      // Draw handle indicators
+      this.drawHandle(ctx, mouseX, mouseY);
+      this.drawHandle(ctx, mirrorPos.x, mirrorPos.y);
     });
-
-    const anchorX = anchor.position.x;
-    const anchorY = anchor.position.y;
-    const mouseX = mousePos.x;
-    const mouseY = mousePos.y;
-
-    // Calculate mirrored position
-    const mirrorPos = mirror(mousePos, anchor.position);
-
-    // Line 1: Mouse position to anchor
-    ctx.beginPath();
-    ctx.moveTo(mouseX, mouseY);
-    ctx.lineTo(anchorX, anchorY);
-    ctx.stroke();
-
-    // Line 2: Anchor to mirrored position
-    ctx.beginPath();
-    ctx.moveTo(anchorX, anchorY);
-    ctx.lineTo(mirrorPos.x, mirrorPos.y);
-    ctx.stroke();
-
-    // Draw handle indicators
-    this.drawHandle(ctx, mouseX, mouseY);
-    this.drawHandle(ctx, mirrorPos.x, mirrorPos.y);
   }
 
   /**

@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Pen } from "./pen";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getPointCount, getContourCount } from "@/__test-utils__";
+import { createMockFontEngine, getPointCount, getContourCount } from "@/testing";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { createSelectionManager, type SelectionManager } from '../SelectionManager';
+import { createSelectionManager, type SelectionManager } from './SelectionManager';
 import type { PointId } from '@/types/ids';
 
 const asPointId = (id: number): PointId => id as unknown as PointId;
