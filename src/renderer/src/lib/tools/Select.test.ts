@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Select } from "./Select";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getAllPoints } from "@/engine/testing";
+import { createMockFontEngine, getAllPoints } from "@/__test-utils__";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 import type { PointId } from "@/types/ids";
 
@@ -32,18 +32,13 @@ function createMockEditor() {
   // Track state
   let selectedPoints = new Set<PointId>();
   let hoveredPoint: PointId | null = null;
-  let snapshot = fontEngine.snapshot;
 
-  // Subscribe to snapshot changes
-  fontEngine.onChange((s) => {
-    snapshot = s;
-  });
-
+  // Snapshot is now a signal - read via .value
   const mockEditor = {
     fontEngine,
     getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
-    getSnapshot: vi.fn(() => snapshot),
+    getSnapshot: vi.fn(() => fontEngine.snapshot.value),
     setSelectedPoints: vi.fn((ids: Set<PointId>) => {
       selectedPoints = ids;
     }),
@@ -58,7 +53,7 @@ function createMockEditor() {
     }),
     requestRedraw: vi.fn(),
     createToolContext: vi.fn(() => ({
-      snapshot,
+      snapshot: fontEngine.snapshot.value,
       selectedPoints,
       hoveredPoint,
       fontEngine,
@@ -210,7 +205,7 @@ describe("Select tool", () => {
       select.onMouseMove(createMouseEvent("mousemove", 150, 150));
 
       // Point should have moved
-      const points = getAllPoints(fontEngine.snapshot);
+      const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(150);
       expect(points[0].y).toBe(150);
     });
@@ -220,13 +215,13 @@ describe("Select tool", () => {
 
       // First move
       select.onMouseMove(createMouseEvent("mousemove", 110, 110));
-      let points = getAllPoints(fontEngine.snapshot);
+      let points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(110);
       expect(points[0].y).toBe(110);
 
       // Second move (relative to last position)
       select.onMouseMove(createMouseEvent("mousemove", 130, 130));
-      points = getAllPoints(fontEngine.snapshot);
+      points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(130);
       expect(points[0].y).toBe(130);
     });
@@ -238,7 +233,7 @@ describe("Select tool", () => {
       // Manually set both as selected
       const bothSelected = new Set([pointId, p2]);
       mockEditor.createToolContext.mockReturnValue({
-        snapshot: fontEngine.snapshot,
+        snapshot: fontEngine.snapshot.value,
         selectedPoints: bothSelected,
         hoveredPoint: null,
         fontEngine,
@@ -252,7 +247,7 @@ describe("Select tool", () => {
 
       // Both should have moved by same delta
       // Note: the mock context returns both as selected, so both should move
-      getAllPoints(fontEngine.snapshot);
+      getAllPoints(fontEngine.snapshot.value);
     });
   });
 
@@ -308,7 +303,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot);
+      const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBeGreaterThan(100);
     });
 
@@ -319,7 +314,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot);
+      const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBeLessThan(100);
     });
 
@@ -330,7 +325,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot);
+      const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].y).toBeGreaterThan(100);
     });
 
@@ -341,20 +336,20 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot);
+      const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].y).toBeLessThan(100);
     });
 
     it("should nudge by larger amount with shift key", () => {
       // Get initial position
-      const before = getAllPoints(fontEngine.snapshot)[0].x;
+      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
       // Nudge without shift
       const normalEvent = createKeyboardEvent("keydown", "ArrowRight");
       if (select.keyDownHandler) {
         select.keyDownHandler(normalEvent);
       }
-      const afterSmall = getAllPoints(fontEngine.snapshot)[0].x;
+      const afterSmall = getAllPoints(fontEngine.snapshot.value)[0].x;
       const smallNudge = afterSmall - before;
 
       // Reset
@@ -365,20 +360,20 @@ describe("Select tool", () => {
       if (select.keyDownHandler) {
         select.keyDownHandler(shiftEvent);
       }
-      const afterLarge = getAllPoints(fontEngine.snapshot)[0].x;
+      const afterLarge = getAllPoints(fontEngine.snapshot.value)[0].x;
       const largeNudge = afterLarge - before;
 
       expect(largeNudge).toBeGreaterThan(smallNudge);
     });
 
     it("should nudge by largest amount with meta key", () => {
-      const before = getAllPoints(fontEngine.snapshot)[0].x;
+      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
       const metaEvent = createKeyboardEvent("keydown", "ArrowRight", { metaKey: true });
       if (select.keyDownHandler) {
         select.keyDownHandler(metaEvent);
       }
-      const after = getAllPoints(fontEngine.snapshot)[0].x;
+      const after = getAllPoints(fontEngine.snapshot.value)[0].x;
 
       // Meta should give largest nudge
       expect(after - before).toBeGreaterThan(1);
@@ -389,14 +384,14 @@ describe("Select tool", () => {
       const newSelect = new Select(mockEditor as unknown as Editor);
       newSelect.setReady();
 
-      const before = getAllPoints(fontEngine.snapshot)[0].x;
+      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
       const event = createKeyboardEvent("keydown", "ArrowRight");
       if (newSelect.keyDownHandler) {
         newSelect.keyDownHandler(event);
       }
 
-      const after = getAllPoints(fontEngine.snapshot)[0].x;
+      const after = getAllPoints(fontEngine.snapshot.value)[0].x;
       // Point should not have moved since no selection
       expect(after).toBe(before);
     });

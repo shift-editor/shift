@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Pen } from "./pen";
 import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getPointCount, getContourCount } from "@/engine/testing";
+import { createMockFontEngine, getPointCount, getContourCount } from "@/__test-utils__";
 import { EventEmitter } from "@/lib/core/EventEmitter";
 
 /**
@@ -31,18 +31,13 @@ function createMockEditor() {
   // Track state
   let selectedPoints = new Set<string>();
   let hoveredPoint: string | null = null;
-  let snapshot = fontEngine.snapshot;
 
-  // Subscribe to snapshot changes
-  fontEngine.onChange((s) => {
-    snapshot = s;
-  });
-
+  // Snapshot is now a signal - read via .value
   const mockEditor = {
     fontEngine,
     getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
-    getSnapshot: vi.fn(() => snapshot),
+    getSnapshot: vi.fn(() => fontEngine.snapshot.value),
     addPoint: vi.fn((x: number, y: number, type: "onCurve" | "offCurve") => {
       return fontEngine.editing.addPoint(x, y, type, false);
     }),
@@ -66,7 +61,7 @@ function createMockEditor() {
     emit: vi.fn(),
     paintHandle: vi.fn(),
     createToolContext: vi.fn(() => ({
-      snapshot,
+      snapshot: fontEngine.snapshot.value,
       selectedPoints,
       hoveredPoint,
       fontEngine,
@@ -131,7 +126,7 @@ describe("Pen tool", () => {
       pen.onMouseDown(event);
 
       expect(mockEditor.addPoint).toHaveBeenCalledWith(100, 200, "onCurve");
-      expect(getPointCount(fontEngine.snapshot)).toBe(1);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
     });
 
     it("should not add point on non-left click", () => {
@@ -156,12 +151,8 @@ describe("Pen tool", () => {
       expect(mockEditor.emit).toHaveBeenCalledWith("points:added", expect.any(Object));
     });
 
-    it("should request redraw after adding point", () => {
-      const event = createMouseEvent("mousedown", 100, 200);
-      pen.onMouseDown(event);
-
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
-    });
+    // Note: requestRedraw is now handled reactively via signal effects
+    // watching fontEngine.snapshot, not called directly by the tool
   });
 
   describe("point coordinates", () => {
@@ -181,7 +172,7 @@ describe("Pen tool", () => {
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
       pen.onMouseDown(createMouseEvent("mousedown", 300, 100));
 
-      expect(getPointCount(fontEngine.snapshot)).toBe(3);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(3);
     });
   });
 
@@ -189,24 +180,24 @@ describe("Pen tool", () => {
     it("should create control point when dragging far enough", () => {
       // Start point creation
       pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      expect(getPointCount(fontEngine.snapshot)).toBe(1);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
 
       // Drag far enough to trigger handle creation (>3 pixels)
       pen.onMouseMove(createMouseEvent("mousemove", 120, 100));
 
       // Should have added a control point
       // Note: Current implementation adds leading control on drag
-      expect(getPointCount(fontEngine.snapshot)).toBeGreaterThanOrEqual(1);
+      expect(getPointCount(fontEngine.snapshot.value)).toBeGreaterThanOrEqual(1);
     });
 
     it("should not create control point for small drag", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      const initialCount = getPointCount(fontEngine.snapshot);
+      const initialCount = getPointCount(fontEngine.snapshot.value);
 
       // Small drag (< 3 pixels) - should not create control points
       pen.onMouseMove(createMouseEvent("mousemove", 101, 100));
 
-      expect(getPointCount(fontEngine.snapshot)).toBe(initialCount);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(initialCount);
     });
   });
 
@@ -217,7 +208,7 @@ describe("Pen tool", () => {
       pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
-      expect(getPointCount(fontEngine.snapshot)).toBe(2);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
 
       // Click near first point (within HIT_RADIUS = 8)
       mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
@@ -260,7 +251,7 @@ describe("Pen tool", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
       pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
 
-      expect(getContourCount(fontEngine.snapshot)).toBeGreaterThanOrEqual(1);
+      expect(getContourCount(fontEngine.snapshot.value)).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -274,11 +265,7 @@ describe("Pen tool", () => {
       expect(mockEditor.addPoint).toHaveBeenCalledTimes(2);
     });
 
-    it("should request redraw on mouse up", () => {
-      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
-
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
-    });
+    // Note: requestRedraw is now handled reactively via signal effects
+    // when state transitions occur, not called directly by the tool
   });
 });

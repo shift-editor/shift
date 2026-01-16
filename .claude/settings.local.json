@@ -22,7 +22,8 @@
       "Bash(cargo check:*)",
       "Bash(pnpm build:native:debug:*)",
       "WebSearch",
-      "Bash(pnpm lint:check:*)"
+      "Bash(pnpm lint:check:*)",
+      "Bash(pnpm lint:*)"
     ]
   }
 }

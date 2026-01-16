@@ -1,26 +1,18 @@
 /**
- * Testing utilities for FontEngine.
+ * FontEngine testing utilities.
  *
- * Provides mock implementations and test helpers for testing
- * code that depends on FontEngine without requiring the Rust backend.
- *
- * @example
- * ```typescript
- * import { createTestFontEngine, TestFontEngine } from '@/engine/testing';
- *
- * const engine = createTestFontEngine();
- * engine.session.startEditSession(65);
- * engine.editing.addPoint(100, 200, 'onCurve');
- *
- * // Access internal state for assertions
- * expect(engine.snapshot?.contours[0].points.length).toBe(1);
- * ```
+ * Provides mock implementations for testing code that depends on FontEngine
+ * without requiring the Rust backend.
  */
 
 import { vi } from "vitest";
 import type { GlyphSnapshot, PointSnapshot, ContourSnapshot, PointTypeString } from "@/types/generated";
 import { asPointId, asContourId } from "@/types/ids";
-import { FontEngine, MockNativeFontEngine } from "./index";
+import { FontEngine, MockNativeFontEngine } from "@/engine";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEST FONTENGINE
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Test FontEngine with additional test utilities.
@@ -60,7 +52,7 @@ export class TestFontEngine extends FontEngine {
 }
 
 /**
- * Create a test FontEngine instance.
+ * Create a test FontEngine instance with call logging.
  */
 export function createTestFontEngine(): TestFontEngine {
   return new TestFontEngine();
@@ -73,6 +65,54 @@ export function createTestFontEngine(): TestFontEngine {
 export function createMockFontEngine(): FontEngine {
   return new FontEngine(new MockNativeFontEngine());
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOCK EDITING OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Create mock editing operations for testing commands.
+ *
+ * Returns vi.fn() mocks for each editing method with sensible defaults:
+ * - `addPoint`, `addPointToContour`, `insertPointBefore` return auto-incrementing point IDs
+ * - `addContour` returns auto-incrementing contour IDs
+ * - `getActiveContourId` returns "contour-0"
+ * - Other methods are simple mocks
+ *
+ * Use this when testing Command classes that need to verify editing method calls.
+ *
+ * @example
+ * ```typescript
+ * import { createMockEditing, createMockCommandContext } from '@/__test-utils__';
+ *
+ * it('should add point', () => {
+ *   const ctx = createMockCommandContext();
+ *   const cmd = new AddPointCommand(100, 200, 'onCurve');
+ *   cmd.execute(ctx);
+ *   expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith(100, 200, 'onCurve', false);
+ * });
+ * ```
+ */
+export function createMockEditing() {
+  let pointIdCounter = 0;
+  let contourIdCounter = 0;
+
+  return {
+    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    movePoints: vi.fn().mockReturnValue([]),
+    movePointTo: vi.fn(),
+    removePoints: vi.fn(),
+    addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
+    closeContour: vi.fn(),
+    getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SNAPSHOT CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Configuration for creating a test snapshot.
@@ -181,6 +221,10 @@ export function populateEngine(engine: FontEngine, snapshot: GlyphSnapshot): voi
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SNAPSHOT QUERY HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
  * Find a point in a snapshot by approximate coordinates.
  */
@@ -246,25 +290,4 @@ export function getPointCount(snapshot: GlyphSnapshot | null): number {
 export function getContourCount(snapshot: GlyphSnapshot | null): number {
   if (!snapshot) return 0;
   return snapshot.contours.length;
-}
-
-/**
- * Mock editing operations for testing.
- * Returns vi.fn() mocks for each editing method.
- */
-export function createMockEditing() {
-  let pointIdCounter = 0;
-  let contourIdCounter = 0;
-
-  return {
-    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    movePoints: vi.fn().mockReturnValue([]),
-    movePointTo: vi.fn(),
-    removePoints: vi.fn(),
-    addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
-    closeContour: vi.fn(),
-    getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
-  };
 }

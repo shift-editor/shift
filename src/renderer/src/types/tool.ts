@@ -76,4 +76,7 @@ export interface Tool {
   onDoubleClick?(e: React.MouseEvent<HTMLCanvasElement>): void;
 
   drawInteractive?(ctx: IRenderer): void;
+
+  /** Optional cleanup when tool is disposed (e.g., for signal effects). */
+  dispose?(): void;
 }

@@ -12,8 +12,9 @@
  * ```typescript
  * const engine = new FontEngine();
  *
- * // Subscribe to snapshot changes
- * engine.onChange(snapshot => {
+ * // Use effect to react to snapshot changes
+ * effect(() => {
+ *   const snapshot = engine.snapshot.value;
  *   // Update rendering
  * });
  *
@@ -23,12 +24,13 @@
  * // Add points
  * const pointId = engine.editing.addPoint(100, 200, 'onCurve');
  *
- * // Current snapshot is always available
- * const snapshot = engine.snapshot;
+ * // Current snapshot is always available via signal
+ * const snapshot = engine.snapshot.value;
  * ```
  */
 
 import type { GlyphSnapshot } from "@/types/generated";
+import { signal, type WritableSignal } from "@/lib/reactive/signal";
 import { getNative, hasNative, type NativeFontEngine } from "./native";
 import { EditingManager } from "./editing";
 import { SessionManager } from "./session";
@@ -36,10 +38,16 @@ import { InfoManager } from "./info";
 import { HistoryManager } from "./history";
 import { IOManager } from "./io";
 
-type SnapshotListener = (snapshot: GlyphSnapshot | null) => void;
-
 /**
  * FontEngine is the primary interface to the Rust font editing system.
+ *
+ * The `snapshot` property is a reactive signal. Use `effect()` to react to changes:
+ * ```typescript
+ * effect(() => {
+ *   const snapshot = fontEngine.snapshot.value;
+ *   // This runs whenever snapshot changes
+ * });
+ * ```
  */
 export class FontEngine {
   readonly editing: EditingManager;
@@ -48,19 +56,24 @@ export class FontEngine {
   readonly history: HistoryManager;
   readonly io: IOManager;
 
+  /**
+   * Reactive signal containing the current glyph snapshot.
+   * Use `.value` to read, or access within an `effect()` to auto-track.
+   */
+  readonly snapshot: WritableSignal<GlyphSnapshot | null>;
+
   #native: NativeFontEngine;
-  #snapshot: GlyphSnapshot | null = null;
-  #listeners: Set<SnapshotListener> = new Set();
 
   constructor(native?: NativeFontEngine) {
     this.#native = native ?? getNative();
+    this.snapshot = signal<GlyphSnapshot | null>(null);
 
     // Shared context for managers
     const ctx = {
       native: this.#native,
       hasSession: () => this.session.isActive(),
       emitSnapshot: (snapshot: GlyphSnapshot | null) => {
-        this.#setSnapshot(snapshot);
+        this.snapshot.set(snapshot);
       },
     };
 
@@ -73,39 +86,12 @@ export class FontEngine {
   }
 
   /**
-   * Get the current glyph snapshot.
-   * Returns null if no edit session is active.
-   */
-  get snapshot(): GlyphSnapshot | null {
-    return this.#snapshot;
-  }
-
-  /**
-   * Subscribe to snapshot changes.
-   * Called whenever the glyph data changes.
-   * @returns Unsubscribe function.
-   */
-  onChange(listener: SnapshotListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
-  /**
    * Force a refresh of the snapshot from Rust.
    * Useful if the snapshot might be stale.
    */
   refreshSnapshot(): void {
     const snapshot = this.session.getSnapshot();
-    this.#setSnapshot(snapshot);
-  }
-
-  #setSnapshot(snapshot: GlyphSnapshot | null): void {
-    this.#snapshot = snapshot;
-    for (const listener of this.#listeners) {
-      listener(snapshot);
-    }
+    this.snapshot.set(snapshot);
   }
 }
 

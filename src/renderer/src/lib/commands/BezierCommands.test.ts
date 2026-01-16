@@ -1,37 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   AddBezierAnchorCommand,
   CloseContourCommand,
   AddContourCommand,
   NudgePointsCommand,
 } from "./BezierCommands";
-import type { CommandContext } from "./Command";
-import { asPointId, asContourId } from "@/types/ids";
-
-// Mock FontEngine editing methods
-const createMockContext = (snapshot = null): CommandContext => {
-  let pointCounter = 0;
-
-  const mockEditing = {
-    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointCounter}`)),
-    movePoints: vi.fn().mockReturnValue([]),
-    removePoints: vi.fn(),
-    closeContour: vi.fn(),
-    addContour: vi.fn().mockReturnValue(asContourId("contour-1")),
-    getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
-  };
-
-  return {
-    fontEngine: {
-      editing: mockEditing,
-    } as any,
-    snapshot,
-  };
-};
+import { asPointId } from "@/types/ids";
+import { createMockCommandContext } from "@/__test-utils__";
 
 describe("AddBezierAnchorCommand", () => {
   it("should add three points: anchor, leading, and trailing", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
 
     cmd.execute(ctx);
@@ -41,7 +20,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should add anchor as smooth onCurve point", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
 
     cmd.execute(ctx);
@@ -57,7 +36,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should add leading control in drag direction", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
 
     cmd.execute(ctx);
@@ -73,7 +52,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should add trailing control mirrored across anchor", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     // Anchor at (100, 100), leading at (150, 120)
     // Trailing should be at (50, 80) - mirrored
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
@@ -91,7 +70,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should return the anchor point ID", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
 
     const result = cmd.execute(ctx);
@@ -101,7 +80,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should store all point IDs for undo", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
 
     cmd.execute(ctx);
@@ -112,7 +91,7 @@ describe("AddBezierAnchorCommand", () => {
   });
 
   it("should remove all three points on undo", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
 
     cmd.execute(ctx);
@@ -133,7 +112,7 @@ describe("AddBezierAnchorCommand", () => {
 
 describe("CloseContourCommand", () => {
   it("should close the active contour", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new CloseContourCommand();
 
     cmd.execute(ctx);
@@ -152,7 +131,7 @@ describe("CloseContourCommand", () => {
       ],
       activeContourId: "contour-0",
     };
-    const ctx = createMockContext(snapshot);
+    const ctx = createMockCommandContext(snapshot);
     const cmd = new CloseContourCommand();
 
     cmd.execute(ctx);
@@ -168,7 +147,7 @@ describe("CloseContourCommand", () => {
 
 describe("AddContourCommand", () => {
   it("should add a new contour", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddContourCommand();
 
     const result = cmd.execute(ctx);
@@ -185,7 +164,7 @@ describe("AddContourCommand", () => {
 
 describe("NudgePointsCommand", () => {
   it("should move points by the nudge delta", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1"), asPointId("p2")];
     const cmd = new NudgePointsCommand(pointIds, 1, 0); // Nudge right
 
@@ -199,7 +178,7 @@ describe("NudgePointsCommand", () => {
   });
 
   it("should move points back on undo", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1")];
     const cmd = new NudgePointsCommand(pointIds, 5, -10); // Nudge right and up
 
@@ -214,7 +193,7 @@ describe("NudgePointsCommand", () => {
   });
 
   it("should not call movePoints with empty array", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new NudgePointsCommand([], 5, 5);
 
     cmd.execute(ctx);

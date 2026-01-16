@@ -12,6 +12,7 @@
  */
 
 import { Editor } from '@/lib/editor/Editor';
+import { signal, effect, type WritableSignal, type Effect } from '@/lib/reactive/signal';
 import { IRenderer } from '@/types/graphics';
 import { Tool, ToolName } from '@/types/tool';
 import type { ContourSnapshot, PointSnapshot } from '@/types/generated';
@@ -58,13 +59,25 @@ export class Pen implements Tool {
   public readonly name: ToolName = 'pen';
 
   #editor: Editor;
-  #state: PenState;
+  #state: WritableSignal<PenState>;
   #commands: PenCommands;
+  #renderEffect: Effect;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#state = { type: 'idle' };
+    this.#state = signal<PenState>({ type: 'idle' });
     this.#commands = new PenCommands(editor);
+
+    // Auto-redraw when tool state changes (for ghost lines/preview only)
+    // NOTE: FontEngine mutations already trigger redraw via onChange - this is ONLY for UI state
+    this.#renderEffect = effect(() => {
+      const state = this.#state.value;
+
+      // Tool preview (ghost lines, handle indicators) only visible in dragging state
+      if (state.type === 'dragging') {
+        editor.requestRedraw();
+      }
+    });
   }
 
   // ==========================================================================
@@ -72,11 +85,15 @@ export class Pen implements Tool {
   // ==========================================================================
 
   setIdle(): void {
-    this.#state = { type: 'idle' };
+    this.#state.set({ type: 'idle' });
   }
 
   setReady(): void {
-    this.#state = { type: 'ready' };
+    this.#state.set({ type: 'ready' });
+  }
+
+  dispose(): void {
+    this.#renderEffect.dispose();
   }
 
   // ==========================================================================
@@ -85,7 +102,7 @@ export class Pen implements Tool {
 
   /** Get current state (for testing) */
   getState(): PenState {
-    return this.#state;
+    return this.#state.value;
   }
 
   // ==========================================================================
@@ -94,7 +111,7 @@ export class Pen implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (e.button !== 0) return;
-    if (this.#state.type !== 'ready') return;
+    if (this.#state.value.type !== 'ready') return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -102,7 +119,7 @@ export class Pen implements Tool {
     // Check for contour close action
     if (this.shouldCloseContour(x, y)) {
       this.#commands.closeContour();
-      this.#editor.requestRedraw();
+      // No requestRedraw needed - closeContour modifies FontEngine, onChange handles redraw
       return;
     }
 
@@ -113,27 +130,25 @@ export class Pen implements Tool {
     const result = this.#commands.placeAnchor({ x, y });
 
     // Transition to anchored state
-    this.#state = {
+    this.#state.set({
       type: 'anchored',
       anchor: {
         position: { x, y },
         pointId: result.pointId,
         context,
       },
-    };
+    });
 
     this.#editor.emit('points:added', { pointIds: [result.pointId] });
-    this.#editor.requestRedraw();
+    // No requestRedraw needed - placeAnchor calls addPoint, onChange handles redraw
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
     // Any drag state returns to ready
-    if (
-      this.#state.type === 'anchored' ||
-      this.#state.type === 'dragging'
-    ) {
-      this.#state = { type: 'ready' };
-      this.#editor.requestRedraw();
+    const state = this.#state.value;
+    if (state.type === 'anchored' || state.type === 'dragging') {
+      this.#state.set({ type: 'ready' });
+      // No requestRedraw needed - state change triggers effect for UI state
     }
   }
 
@@ -141,7 +156,8 @@ export class Pen implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    switch (this.#state.type) {
+    const state = this.#state.value;
+    switch (state.type) {
       case 'anchored':
         this.handleAnchoredMouseMove({ x, y });
         break;
@@ -161,9 +177,10 @@ export class Pen implements Tool {
    * Transitions to dragging if drag threshold is exceeded.
    */
   private handleAnchoredMouseMove(mousePos: { x: number; y: number }): void {
-    if (this.#state.type !== 'anchored') return;
+    const state = this.#state.value;
+    if (state.type !== 'anchored') return;
 
-    const { anchor } = this.#state;
+    const { anchor } = state;
     const dist = distance(anchor.position, mousePos);
 
     // Check if we've exceeded the drag threshold
@@ -172,14 +189,15 @@ export class Pen implements Tool {
       const result = this.#commands.createHandles(anchor, mousePos);
 
       // Transition to dragging state
-      this.#state = {
+      this.#state.set({
         type: 'dragging',
         anchor,
         handles: result.handles,
         mousePos,
-      };
+      });
 
-      this.#editor.redrawGlyph();
+      // No redrawGlyph needed - createHandles calls insertPointBefore, onChange handles redraw
+      // The effect also triggers requestRedraw since state changed to 'dragging'
     }
   }
 
@@ -188,21 +206,23 @@ export class Pen implements Tool {
    * Updates handle positions.
    */
   private handleDraggingMouseMove(mousePos: { x: number; y: number }): void {
-    if (this.#state.type !== 'dragging') return;
+    const state = this.#state.value;
+    if (state.type !== 'dragging') return;
 
-    const { anchor, handles } = this.#state;
+    const { anchor, handles } = state;
 
     // Update handle positions
     this.#commands.updateHandles(anchor, handles, mousePos);
 
-    // Update mouse position in state for rendering
-    this.#state = {
-      ...this.#state,
+    // Update mouse position in state for rendering (triggers effect for UI preview)
+    this.#state.set({
+      ...state,
       mousePos,
-    };
+    });
 
-    this.#editor.redrawGlyph();
-    this.#editor.requestRedraw();
+    // No redrawGlyph/requestRedraw needed:
+    // - updateHandles calls movePointTo, which emits snapshot, onChange handles data redraw
+    // - state.set triggers the effect which handles UI preview redraw
   }
 
   // ==========================================================================
@@ -269,9 +289,10 @@ export class Pen implements Tool {
    * Draw interactive elements (ghost lines during drag).
    */
   drawInteractive(ctx: IRenderer): void {
-    if (this.#state.type !== 'dragging') return;
+    const state = this.#state.value;
+    if (state.type !== 'dragging') return;
 
-    const { anchor, mousePos } = this.#state;
+    const { anchor, mousePos } = state;
 
     ctx.setStyle({
       ...DEFAULT_STYLES,

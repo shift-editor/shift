@@ -1,28 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
-import type { CommandContext } from "./Command";
 import { asPointId } from "@/types/ids";
-
-// Mock FontEngine editing methods
-const createMockContext = (snapshot = null): CommandContext => {
-  const mockEditing = {
-    addPoint: vi.fn().mockReturnValue(asPointId("point-1")),
-    movePoints: vi.fn().mockReturnValue([]),
-    movePointTo: vi.fn(),
-    removePoints: vi.fn(),
-  };
-
-  return {
-    fontEngine: {
-      editing: mockEditing,
-    } as any,
-    snapshot,
-  };
-};
+import { createMockCommandContext } from "@/__test-utils__";
 
 describe("AddPointCommand", () => {
   it("should add a point at specified coordinates", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddPointCommand(100, 200, "onCurve");
 
     const pointId = cmd.execute(ctx);
@@ -37,7 +20,7 @@ describe("AddPointCommand", () => {
   });
 
   it("should add a smooth point", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddPointCommand(50, 75, "onCurve", true);
 
     cmd.execute(ctx);
@@ -51,7 +34,7 @@ describe("AddPointCommand", () => {
   });
 
   it("should add an offCurve point", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddPointCommand(30, 40, "offCurve");
 
     cmd.execute(ctx);
@@ -65,7 +48,7 @@ describe("AddPointCommand", () => {
   });
 
   it("should remove the point on undo", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new AddPointCommand(100, 200, "onCurve");
 
     const pointId = cmd.execute(ctx);
@@ -82,7 +65,7 @@ describe("AddPointCommand", () => {
 
 describe("MovePointsCommand", () => {
   it("should move points by the specified delta", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1"), asPointId("p2")];
     const cmd = new MovePointsCommand(pointIds, 10, 20);
 
@@ -96,7 +79,7 @@ describe("MovePointsCommand", () => {
   });
 
   it("should move points back by negative delta on undo", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1")];
     const cmd = new MovePointsCommand(pointIds, 15, -5);
 
@@ -111,7 +94,7 @@ describe("MovePointsCommand", () => {
   });
 
   it("should not call movePoints with empty array", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new MovePointsCommand([], 10, 20);
 
     cmd.execute(ctx);
@@ -120,7 +103,7 @@ describe("MovePointsCommand", () => {
   });
 
   it("should redo by executing again", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1")];
     const cmd = new MovePointsCommand(pointIds, 5, 5);
 
@@ -146,7 +129,7 @@ describe("MovePointsCommand", () => {
 
 describe("RemovePointsCommand", () => {
   it("should remove specified points", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const pointIds = [asPointId("p1"), asPointId("p2")];
     const cmd = new RemovePointsCommand(pointIds);
 
@@ -156,7 +139,7 @@ describe("RemovePointsCommand", () => {
   });
 
   it("should not call removePoints with empty array", () => {
-    const ctx = createMockContext();
+    const ctx = createMockCommandContext();
     const cmd = new RemovePointsCommand([]);
 
     cmd.execute(ctx);
@@ -178,7 +161,7 @@ describe("RemovePointsCommand", () => {
       ],
       activeContourId: "contour-1",
     };
-    const ctx = createMockContext(snapshot);
+    const ctx = createMockCommandContext(snapshot);
     const cmd = new RemovePointsCommand([asPointId("p1")]);
 
     cmd.execute(ctx);

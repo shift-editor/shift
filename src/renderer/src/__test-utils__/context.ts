@@ -1,28 +1,60 @@
 /**
- * Test helpers for tool testing.
+ * Context mocks for testing.
  *
- * Provides mock implementations and utilities for testing tools
- * without requiring the full Editor/React context.
+ * Provides mock implementations of CommandContext and ToolContext
+ * for testing commands and tools in isolation.
  */
 
 import { vi } from "vitest";
 import type { ToolContext } from "@/types/tool";
 import type { PointId } from "@/types/ids";
 import type { Rect2D } from "@/types/math";
-import {
-  createMockFontEngine,
-  createTestSnapshot,
-  populateEngine,
-  getAllPoints,
-  findPointAt,
-  type TestSnapshotConfig,
-} from "@/engine/testing";
+import type { GlyphSnapshot } from "@/types/generated";
+import type { CommandContext } from "@/lib/commands/Command";
 import { CommandHistory } from "@/lib/commands";
 import { Viewport } from "@/lib/editor/Viewport";
+import {
+  createMockFontEngine,
+  createMockEditing,
+  createTestSnapshot,
+  populateEngine,
+  type TestSnapshotConfig,
+} from "./engine";
 
-// Re-export for convenience
-export { createTestSnapshot, getAllPoints, findPointAt };
-export type { TestSnapshotConfig };
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMAND CONTEXT
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Create a mock CommandContext for testing commands.
+ *
+ * Uses createMockEditing() to provide vi.fn() mocks for all editing methods,
+ * making it easy to verify command behavior.
+ *
+ * @example
+ * ```typescript
+ * import { createMockCommandContext } from '@/__test-utils__';
+ *
+ * it('should add point', () => {
+ *   const ctx = createMockCommandContext();
+ *   const cmd = new AddPointCommand(100, 200, 'onCurve');
+ *   cmd.execute(ctx);
+ *   expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith(100, 200, 'onCurve', false);
+ * });
+ * ```
+ */
+export function createMockCommandContext(snapshot: GlyphSnapshot | null = null): CommandContext {
+  return {
+    fontEngine: {
+      editing: createMockEditing(),
+    } as any,
+    snapshot,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL CONTEXT
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Options for creating a mock tool context.
@@ -39,8 +71,23 @@ export interface MockToolContextOptions {
 }
 
 /**
- * Create a mock ToolContext for testing.
+ * Create a mock ToolContext for testing tools.
+ *
  * Returns both the context and tracking functions for assertions.
+ *
+ * @example
+ * ```typescript
+ * import { createMockToolContext, createMouseEvent } from '@/__test-utils__';
+ *
+ * it('should select point on click', () => {
+ *   const { ctx, getSelectedPoints } = createMockToolContext({
+ *     snapshot: { contours: [{ points: [{ x: 100, y: 100 }] }] }
+ *   });
+ *
+ *   tool.onMouseDown(createMouseEvent('mousedown', { clientX: 100, clientY: 100 }));
+ *   expect(getSelectedPoints().size).toBe(1);
+ * });
+ * ```
  */
 export function createMockToolContext(options: MockToolContextOptions = {}) {
   const fontEngine = createMockFontEngine();
@@ -63,7 +110,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   // Create CommandHistory with fontEngine and snapshot getter
   const commandHistory = new CommandHistory(
     fontEngine,
-    () => fontEngine.snapshot
+    () => fontEngine.snapshot.value
   );
 
   // Populate with snapshot if provided, otherwise just start empty session
@@ -83,7 +130,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
 
   const ctx: ToolContext = {
     get snapshot() {
-      return fontEngine.snapshot;
+      return fontEngine.snapshot.value;
     },
     get selectedPoints() {
       return selectedPoints;
@@ -129,90 +176,4 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
       selectedPoints = ids;
     },
   };
-}
-
-/**
- * Create a mock React mouse event.
- */
-export function createMouseEvent(
-  type: "mousedown" | "mouseup" | "mousemove" | "dblclick",
-  options: {
-    clientX: number;
-    clientY: number;
-    button?: number;
-    shiftKey?: boolean;
-    ctrlKey?: boolean;
-    metaKey?: boolean;
-  }
-): React.MouseEvent<HTMLCanvasElement> {
-  return {
-    type,
-    clientX: options.clientX,
-    clientY: options.clientY,
-    button: options.button ?? 0,
-    shiftKey: options.shiftKey ?? false,
-    ctrlKey: options.ctrlKey ?? false,
-    metaKey: options.metaKey ?? false,
-    preventDefault: vi.fn(),
-    stopPropagation: vi.fn(),
-  } as unknown as React.MouseEvent<HTMLCanvasElement>;
-}
-
-/**
- * Create a mock keyboard event.
- */
-export function createKeyboardEvent(
-  type: "keydown" | "keyup",
-  options: {
-    key: string;
-    shiftKey?: boolean;
-    ctrlKey?: boolean;
-    metaKey?: boolean;
-  }
-): KeyboardEvent {
-  return {
-    type,
-    key: options.key,
-    shiftKey: options.shiftKey ?? false,
-    ctrlKey: options.ctrlKey ?? false,
-    metaKey: options.metaKey ?? false,
-    preventDefault: vi.fn(),
-    stopPropagation: vi.fn(),
-  } as unknown as KeyboardEvent;
-}
-
-/**
- * Simulate a click at screen coordinates.
- * Returns the mouse events for further manipulation.
- */
-export function simulateClick(x: number, y: number, options?: { shiftKey?: boolean }) {
-  const down = createMouseEvent("mousedown", { clientX: x, clientY: y, ...options });
-  const up = createMouseEvent("mouseup", { clientX: x, clientY: y, ...options });
-  return { down, up };
-}
-
-/**
- * Simulate a drag from one point to another.
- * Returns all the mouse events for the drag operation.
- */
-export function simulateDrag(
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-  steps: number = 5
-) {
-  const down = createMouseEvent("mousedown", { clientX: fromX, clientY: fromY });
-
-  const moves: React.MouseEvent<HTMLCanvasElement>[] = [];
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const x = fromX + (toX - fromX) * t;
-    const y = fromY + (toY - fromY) * t;
-    moves.push(createMouseEvent("mousemove", { clientX: x, clientY: y }));
-  }
-
-  const up = createMouseEvent("mouseup", { clientX: toX, clientY: toY });
-
-  return { down, moves, up };
 }

@@ -24,6 +24,7 @@ import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
 import { findPointInSnapshot } from "./render";
 import { CommandHistory } from "../commands";
+import { effect, type Effect } from "../reactive/signal";
 
 // Debug logging flag - set to true to enable debug output
 const DEBUG = true;
@@ -81,6 +82,7 @@ export class Editor {
 
   // Rust integration - FontEngine is the single source of truth
   #fontEngine: FontEngine;
+  #snapshotEffect: Effect;
 
   constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
@@ -97,7 +99,7 @@ export class Editor {
     // Initialize CommandHistory with FontEngine
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
-      () => this.#fontEngine.snapshot
+      () => this.#fontEngine.snapshot.value
     );
 
     this.#eventEmitter = eventEmitter;
@@ -107,8 +109,9 @@ export class Editor {
 
     this.#state = { ...InitialEditorState, selectedPoints: new Set() };
 
-    // Subscribe to snapshot changes - Scene renders directly from snapshot
-    this.#fontEngine.onChange((snapshot) => {
+    // Watch snapshot signal - Scene renders directly from snapshot
+    this.#snapshotEffect = effect(() => {
+      const snapshot = this.#fontEngine.snapshot.value;
       debug("Snapshot changed:", snapshot?.contours.length, "contours");
       this.#scene.setSnapshot(snapshot);
       this.requestRedraw();
@@ -183,7 +186,7 @@ export class Editor {
    * Get the current snapshot from FontEngine.
    */
   public getSnapshot(): GlyphSnapshot | null {
-    return this.#fontEngine.snapshot;
+    return this.#fontEngine.snapshot.value;
   }
 
   /**
@@ -192,7 +195,7 @@ export class Editor {
    */
   public createToolContext(): ToolContext {
     return {
-      snapshot: this.#fontEngine.snapshot,
+      snapshot: this.#fontEngine.snapshot.value,
       selectedPoints: this.#state.selectedPoints,
       hoveredPoint: this.#state.hoveredPoint,
       viewport: this.#viewport,
@@ -405,7 +408,7 @@ export class Editor {
    * Used for calculating bounding rectangles.
    */
   #getSelectedPointData(): Array<{ x: number; y: number }> {
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
@@ -434,7 +437,7 @@ export class Editor {
    * Find a point in the current snapshot by ID.
    */
   public findPoint(pointId: PointId): PointSnapshot | null {
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return null;
 
     const result = findPointInSnapshot(snapshot, pointId);
@@ -514,7 +517,7 @@ export class Editor {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    const snapshot = this.#fontEngine.snapshot;
+    const snapshot = this.#fontEngine.snapshot.value;
     const glyphPath = this.#scene.getGlyphPath();
 
     debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
@@ -662,6 +665,9 @@ export class Editor {
   }
 
   public destroy() {
+    // Dispose signal effects
+    this.#snapshotEffect.dispose();
+
     if (this.#staticContext) {
       this.#staticContext.destroy();
     }
