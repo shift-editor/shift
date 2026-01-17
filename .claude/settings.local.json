@@ -28,7 +28,8 @@
       "Bash(cargo build:*)",
       "Bash(xargs:*)",
       "Bash(git log:*)",
-      "Bash(pnpm build:native:*)"
+      "Bash(pnpm build:native:*)",
+      "Bash(tree:*)"
     ]
   }
 }
