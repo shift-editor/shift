@@ -8,6 +8,7 @@ export {
   RemovePointsCommand,
 } from "./PointCommands";
 export {
+  InsertPointCommand,
   AddBezierAnchorCommand,
   TogglePointSmoothCommand,
   CloseContourCommand,

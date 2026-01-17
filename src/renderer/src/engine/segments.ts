@@ -8,9 +8,8 @@
 import type { PointSnapshot, ContourSnapshot } from "@/types/generated";
 import type { Segment, SegmentPoint } from "@/types/segments";
 
-// Debug logging
-const DEBUG = true;
-function debug(...args: any[]) {
+const DEBUG = false;
+function debug(...args: unknown[]) {
   if (DEBUG) console.log("[Segments]", ...args);
 }
 

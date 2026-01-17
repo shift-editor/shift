@@ -13,6 +13,7 @@ interface AppState {
   activeTool: ToolName;
   setActiveTool: (tool: ToolName) => void;
   setActiveGlyph: (glyph: GlyphSnapshot) => void;
+  setFileName: (fileName: string) => void;
 }
 
 const AppState = create<AppState>()((set) => {

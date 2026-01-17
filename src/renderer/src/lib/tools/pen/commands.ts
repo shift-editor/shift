@@ -3,12 +3,16 @@
  *
  * Commands handle the HOW - the actual bezier geometry and point operations.
  * Each command is a pure operation that can be tested in isolation.
+ *
+ * Uses CommandHistory for all mutations to support undo/redo.
  */
 
 import type { Editor } from '@/lib/editor/Editor';
 import type { Point2D } from '@/types/math';
 import type { PointId } from '@/types/ids';
 import type { AnchorData, HandleData } from './states';
+import { AddPointCommand } from '@/lib/commands/PointCommands';
+import { InsertPointCommand, CloseContourCommand, AddContourCommand } from '@/lib/commands/BezierCommands';
 
 // ============================================================================
 // Geometry Helpers
@@ -69,6 +73,8 @@ export interface CreateHandlesResult {
  * - createHandles: Create control points when dragging starts
  * - updateHandles: Update control point positions during drag
  * - closeContour: Close the current contour
+ *
+ * All operations use CommandHistory for undo/redo support.
  */
 export class PenCommands {
   #editor: Editor;
@@ -85,7 +91,8 @@ export class PenCommands {
    * Place an anchor (on-curve) point at the given position.
    */
   placeAnchor(pos: Point2D): PlaceAnchorResult {
-    const pointId = this.#editor.addPoint(pos.x, pos.y, 'onCurve');
+    const cmd = new AddPointCommand(pos.x, pos.y, 'onCurve', false);
+    const pointId = this.#editor.commandHistory.execute(cmd);
     return { pointId };
   }
 
@@ -117,10 +124,12 @@ export class PenCommands {
     mousePos: Point2D,
   ): CreateHandlesResult {
     const { context, pointId, position } = anchor;
+    const history = this.#editor.commandHistory;
 
     // Case 1: First point - just create outgoing handle
     if (context.isFirstPoint) {
-      const cpOutId = this.#editor.addPoint(mousePos.x, mousePos.y, 'offCurve');
+      const cmd = new AddPointCommand(mousePos.x, mousePos.y, 'offCurve', false);
+      const cpOutId = history.execute(cmd);
       return {
         handles: { cpOut: cpOutId },
       };
@@ -131,24 +140,14 @@ export class PenCommands {
       // cp1 = 1/3 from previous on-curve toward current anchor (fixed position)
       if (context.previousOnCurvePosition) {
         const cp1Pos = calculateFraction(context.previousOnCurvePosition, position, 1 / 3);
-        this.#editor.fontEngine.editing.insertPointBefore(
-          pointId,
-          cp1Pos.x,
-          cp1Pos.y,
-          'offCurve',
-          false,
-        );
+        const cmd = new InsertPointCommand(pointId, cp1Pos.x, cp1Pos.y, 'offCurve', false);
+        history.execute(cmd);
       }
 
       // cpIn = mirrored from mouse position
       const cpInPos = mirror(mousePos, position);
-      const cpInId = this.#editor.fontEngine.editing.insertPointBefore(
-        pointId,
-        cpInPos.x,
-        cpInPos.y,
-        'offCurve',
-        false,
-      );
+      const cmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
+      const cpInId = history.execute(cmd);
 
       return {
         handles: { cpIn: cpInId },
@@ -159,16 +158,12 @@ export class PenCommands {
     if (context.previousPointType === 'offCurve') {
       // cpIn = mirrored from mouse (inserted before anchor)
       const cpInPos = mirror(mousePos, position);
-      const cpInId = this.#editor.fontEngine.editing.insertPointBefore(
-        pointId,
-        cpInPos.x,
-        cpInPos.y,
-        'offCurve',
-        false,
-      );
+      const insertCmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
+      const cpInId = history.execute(insertCmd);
 
       // cpOut = follows mouse (added after anchor)
-      const cpOutId = this.#editor.addPoint(mousePos.x, mousePos.y, 'offCurve');
+      const addCmd = new AddPointCommand(mousePos.x, mousePos.y, 'offCurve', false);
+      const cpOutId = history.execute(addCmd);
 
       return {
         handles: { cpIn: cpInId, cpOut: cpOutId },
@@ -188,6 +183,10 @@ export class PenCommands {
    *
    * - cpOut (if exists): follows mouse directly
    * - cpIn (if exists): mirrors mouse across anchor
+   *
+   * Note: These moves are NOT added to command history since they happen
+   * continuously during drag. The final position is already captured by
+   * the commands that created the handles.
    */
   updateHandles(
     anchor: AnchorData,
@@ -196,12 +195,12 @@ export class PenCommands {
   ): void {
     const { position } = anchor;
 
-    // cpOut follows mouse directly
+    // cpOut follows mouse directly - direct call (not undoable individually)
     if (handles.cpOut) {
       this.#editor.fontEngine.editing.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
     }
 
-    // cpIn is mirrored across anchor
+    // cpIn is mirrored across anchor - direct call (not undoable individually)
     if (handles.cpIn) {
       const mirroredPos = mirror(mousePos, position);
       this.#editor.fontEngine.editing.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
@@ -216,7 +215,12 @@ export class PenCommands {
    * Close the current contour and start a new one.
    */
   closeContour(): void {
-    this.#editor.closeContour();
-    this.#editor.fontEngine.editing.addContour();
+    const history = this.#editor.commandHistory;
+
+    // Close the current contour
+    history.execute(new CloseContourCommand());
+
+    // Add a new contour
+    history.execute(new AddContourCommand());
   }
 }

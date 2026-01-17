@@ -31,24 +31,16 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
 
   useEffect(() => {
-    // Parse glyphId to get unicode (e.g., "65" for 'A')
-    const unicode = parseInt(glyphId, 10) || 65; // Default to 'A' if invalid
+    // Parse glyphId as hex (e.g., "0041" for 'A')
+    const unicode = parseInt(glyphId, 16) || 0x41; // Default to 'A' if invalid
 
     const initEditor = () => {
-      const guides = {
-        ascender: { y: 800 },
-        capHeight: { y: 700 },
-        xHeight: { y: 500 },
-        descender: { y: -200 },
-        baseline: { y: 0 },
-        xAdvance: 600,
-      };
-
-      editor.constructGuidesPath(guides);
-      editor.setViewportUpm(1000);
-
       // Start Rust edit session for this glyph
       editor.startEditSession(unicode);
+
+      // Update viewport with actual font metrics (UPM, descender, guides)
+      editor.updateMetricsFromFont();
+
       editor.redrawGlyph();
     };
 

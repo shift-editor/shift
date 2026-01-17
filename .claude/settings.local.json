@@ -29,7 +29,8 @@
       "Bash(xargs:*)",
       "Bash(git log:*)",
       "Bash(pnpm build:native:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(pnpm format:check:*)"
     ]
   }
 }

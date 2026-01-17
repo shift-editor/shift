@@ -2,7 +2,10 @@
 
 ## General Guidelines
 
-Avoid adding comments unless absolutely neccessary.
+* Avoid adding comments unless absolutely neccessary.
+* ALWAYS add tests to verify behaviour after completing a feature
+* ALWAYS keep documentation up to date
+* Consult the documentation and code together
 
 ## Package Manager
 

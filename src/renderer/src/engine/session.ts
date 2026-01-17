@@ -7,7 +7,6 @@
 
 import type { GlyphSnapshot } from "@/types/generated";
 import type { NativeFontEngine, NativeGlyphSnapshot } from "./native";
-import { FontEngineError } from "./errors";
 
 export interface SessionManagerContext {
   native: NativeFontEngine;
@@ -49,14 +48,16 @@ export class SessionManager {
 
   /**
    * Start editing a glyph by unicode codepoint.
-   * Only one session can be active at a time.
-   * @throws FontEngineError if a session is already active.
+   * If a session is already active for a different glyph, it will be ended first.
+   * If already editing the same glyph, this is a no-op.
    */
   startEditSession(unicode: number): void {
     if (this.isActive()) {
-      throw new FontEngineError(
-        "Edit session already active. Call endEditSession() first."
-      );
+      const currentUnicode = this.getEditingUnicode();
+      if (currentUnicode === unicode) {
+        return;
+      }
+      this.endEditSession();
     }
 
     this.#ctx.native.startEditSession(unicode);

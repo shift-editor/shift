@@ -9,38 +9,23 @@ import type { GlyphSnapshot, PointSnapshot, ContourSnapshot } from "@/types/gene
 import type { PointId } from "@/types/ids";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
-import { Path2D } from "@/lib/graphics/Path";
 
-/**
- * Options for rendering a glyph.
- */
-export interface RenderGlyphOptions {
-  /** Whether to fill the glyph (vs just stroke). */
-  fill?: boolean;
-  /** Stroke style settings. */
-  strokeStyle?: {
-    color?: string;
-    lineWidth?: number;
-  };
-  /** Fill style settings. */
-  fillStyle?: {
-    color?: string;
-  };
+export interface Guides {
+  xAdvance: number;
+  ascender: { y: number };
+  capHeight: { y: number };
+  xHeight: { y: number };
+  baseline: { y: number };
+  descender: { y: number };
 }
 
-/**
- * State for handle rendering (selection, hover).
- */
 export interface HandleRenderState {
   selectedPoints: ReadonlySet<PointId>;
   hoveredPoint: PointId | null;
 }
 
-/**
- * Build a Path2D from a glyph snapshot.
- */
-export function buildGlyphPath(snapshot: GlyphSnapshot): Path2D {
-  const path = new Path2D();
+export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
+  let hasClosed = false;
 
   for (const contour of snapshot.contours) {
     if (contour.points.length < 2) {
@@ -50,18 +35,16 @@ export function buildGlyphPath(snapshot: GlyphSnapshot): Path2D {
     const segments = parseSegments(contour.points, contour.closed);
     if (segments.length === 0) continue;
 
-    // Move to the first point
-    const firstSegment = segments[0];
-    path.moveTo(firstSegment.points.anchor1.x, firstSegment.points.anchor1.y);
+    ctx.beginPath();
+    ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
 
-    // Draw each segment
     for (const segment of segments) {
       switch (segment.type) {
         case "line":
-          path.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
+          ctx.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
           break;
         case "quad":
-          path.quadTo(
+          ctx.quadTo(
             segment.points.control.x,
             segment.points.control.y,
             segment.points.anchor2.x,
@@ -69,7 +52,7 @@ export function buildGlyphPath(snapshot: GlyphSnapshot): Path2D {
           );
           break;
         case "cubic":
-          path.cubicTo(
+          ctx.cubicTo(
             segment.points.control1.x,
             segment.points.control1.y,
             segment.points.control2.x,
@@ -82,38 +65,36 @@ export function buildGlyphPath(snapshot: GlyphSnapshot): Path2D {
     }
 
     if (contour.closed) {
-      path.closePath();
+      ctx.closePath();
+      hasClosed = true;
     }
+
+    ctx.stroke();
   }
 
-  return path;
+  return hasClosed;
 }
 
-/**
- * Render a glyph outline to a canvas context.
- */
-export function renderGlyphOutline(
-  ctx: IRenderer,
-  snapshot: GlyphSnapshot,
-  options: RenderGlyphOptions = {}
-): void {
-  const path = buildGlyphPath(snapshot);
+export function renderGuides(ctx: IRenderer, guides: Guides): void {
+  ctx.beginPath();
 
-  if (options.strokeStyle?.color) {
-    ctx.strokeStyle = options.strokeStyle.color;
-  }
-  if (options.strokeStyle?.lineWidth) {
-    ctx.lineWidth = options.strokeStyle.lineWidth;
+  for (const y of [
+    guides.ascender.y,
+    guides.capHeight.y,
+    guides.xHeight.y,
+    guides.baseline.y,
+    guides.descender.y
+  ]) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(guides.xAdvance, y);
   }
 
-  ctx.stroke(path);
+  ctx.moveTo(0, guides.descender.y);
+  ctx.lineTo(0, guides.ascender.y);
+  ctx.moveTo(guides.xAdvance, guides.descender.y);
+  ctx.lineTo(guides.xAdvance, guides.ascender.y);
 
-  if (options.fill && path.isClosed()) {
-    if (options.fillStyle?.color) {
-      ctx.fillStyle = options.fillStyle.color;
-    }
-    ctx.fill(path);
-  }
+  ctx.stroke();
 }
 
 /**

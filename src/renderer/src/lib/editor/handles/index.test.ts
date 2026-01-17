@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { drawHandle, drawHandleLast, drawGuides } from './index';
+import { drawHandle, drawHandleLast } from './index';
 import type { IRenderer } from '@/types/graphics';
 import type { HandleState, HandleType } from '@/types/handle';
-import { Path2D } from '@/lib/graphics/Path';
 
 function createMockRenderer(): IRenderer {
   return {
@@ -27,6 +26,7 @@ function createMockRenderer(): IRenderer {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    quadTo: vi.fn(),
     cubicTo: vi.fn(),
     arcTo: vi.fn(),
     closePath: vi.fn(),
@@ -79,18 +79,6 @@ describe('handles API', () => {
 
       expect(ctx.setStyle).toHaveBeenCalled();
       expect(ctx.stroke).toHaveBeenCalled();
-    });
-  });
-
-  describe('drawGuides', () => {
-    it('should stroke the provided path', () => {
-      const path = new Path2D();
-      path.moveTo(0, 0);
-      path.lineTo(100, 100);
-
-      drawGuides(ctx, path);
-
-      expect(ctx.stroke).toHaveBeenCalledWith(path);
     });
   });
 });

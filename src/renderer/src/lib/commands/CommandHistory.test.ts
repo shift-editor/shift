@@ -158,6 +158,142 @@ describe("CommandHistory", () => {
   });
 });
 
+describe("batching", () => {
+  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let history: CommandHistory;
+
+  beforeEach(() => {
+    fontEngine = createMockFontEngine();
+    history = new CommandHistory(fontEngine, () => fontEngine.snapshot.value);
+    fontEngine.session.startEditSession(65);
+    fontEngine.editing.addContour();
+  });
+
+  describe("beginBatch/endBatch", () => {
+    it("should group multiple commands into single undo step", () => {
+      history.beginBatch("Add Points");
+      history.execute(new AddPointCommand(100, 100, "onCurve"));
+      history.execute(new AddPointCommand(200, 200, "onCurve"));
+      history.execute(new AddPointCommand(300, 300, "onCurve"));
+      history.endBatch();
+
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(3);
+      expect(history.undoCount.value).toBe(1);
+
+      history.undo();
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(0);
+    });
+
+    it("should set isBatching to true during batch", () => {
+      expect(history.isBatching).toBe(false);
+      history.beginBatch("Test");
+      expect(history.isBatching).toBe(true);
+      history.endBatch();
+      expect(history.isBatching).toBe(false);
+    });
+
+    it("should throw if beginBatch called while already batching", () => {
+      history.beginBatch("First");
+      expect(() => history.beginBatch("Second")).toThrow("Cannot nest batches");
+    });
+
+    it("should throw if endBatch called without beginBatch", () => {
+      expect(() => history.endBatch()).toThrow("Not in a batch");
+    });
+
+    it("should not add empty batch to undo stack", () => {
+      history.beginBatch("Empty");
+      history.endBatch();
+      expect(history.undoCount.value).toBe(0);
+    });
+
+    it("should handle single command batch same as non-batched", () => {
+      history.beginBatch("Single");
+      history.execute(new AddPointCommand(100, 100, "onCurve"));
+      history.endBatch();
+
+      expect(history.undoCount.value).toBe(1);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
+
+      history.undo();
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(0);
+    });
+
+    it("should use batch name as undo label", () => {
+      history.beginBatch("Draw Curve");
+      history.execute(new AddPointCommand(100, 100, "onCurve"));
+      history.execute(new AddPointCommand(200, 200, "onCurve"));
+      history.endBatch();
+
+      expect(history.getUndoLabel()).toBe("Draw Curve");
+    });
+  });
+
+  describe("cancelBatch", () => {
+    it("should discard batch without adding to undo stack", () => {
+      history.beginBatch("Cancelled");
+      history.execute(new AddPointCommand(100, 100, "onCurve"));
+      history.execute(new AddPointCommand(200, 200, "onCurve"));
+      history.cancelBatch();
+
+      // Points were still added (commands executed)
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
+      // But no undo entry
+      expect(history.undoCount.value).toBe(0);
+    });
+
+    it("should reset isBatching state", () => {
+      history.beginBatch("Test");
+      expect(history.isBatching).toBe(true);
+      history.cancelBatch();
+      expect(history.isBatching).toBe(false);
+    });
+  });
+
+  describe("record", () => {
+    it("should add command to undo stack without executing", () => {
+      // Add point directly (not through history)
+      const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
+
+      // Move point directly
+      fontEngine.editing.movePoints([pointId], 50, 50);
+      const points = getAllPoints(fontEngine.snapshot.value);
+      expect(points[0].x).toBe(150);
+
+      // Record the move command (already executed)
+      history.record(new MovePointsCommand([pointId], 50, 50));
+
+      expect(history.undoCount.value).toBe(1);
+
+      // Undo should reverse the already-executed move
+      history.undo();
+      const undonePoints = getAllPoints(fontEngine.snapshot.value);
+      expect(undonePoints[0].x).toBe(100);
+    });
+
+    it("should work within a batch", () => {
+      const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+
+      history.beginBatch("Drag");
+      fontEngine.editing.movePoints([pointId], 10, 0);
+      fontEngine.editing.movePoints([pointId], 10, 0);
+      fontEngine.editing.movePoints([pointId], 10, 0);
+      // Record single command for total movement
+      history.record(new MovePointsCommand([pointId], 30, 0));
+      history.endBatch();
+
+      expect(history.undoCount.value).toBe(1);
+      const points = getAllPoints(fontEngine.snapshot.value);
+      expect(points[0].x).toBe(130);
+
+      history.undo();
+      const undonePoints = getAllPoints(fontEngine.snapshot.value);
+      expect(undonePoints[0].x).toBe(100);
+    });
+  });
+});
+
 describe("Command integration with history", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
   let history: CommandHistory;

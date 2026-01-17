@@ -2,77 +2,18 @@
  * Canvas 2D Renderer
  *
  * Native Canvas 2D API implementation of IRenderer.
- * Benefits over CanvasKit:
- * - No WASM loading
- * - Simpler debugging (native DevTools support)
- * - Smaller bundle size
- * - No WebGL context management
+ * Uses immediate mode rendering - no path caching.
  */
 
 import { DEFAULT_STYLES, DrawStyle } from "@/lib/styles/style";
 import { getEditor } from "@/store/store";
 import { IGraphicContext, IRenderer, IPath } from "@/types/graphics";
-import { Path2D as ShiftPath2D } from "../Path";
-
-// Native Canvas 2D Path wrapper implementing IPath
-export class Canvas2DPath implements IPath {
-  #path: Path2D;
-
-  constructor() {
-    this.#path = new Path2D();
-  }
-
-  moveTo(x: number, y: number): void {
-    this.#path.moveTo(x, y);
-  }
-
-  lineTo(x: number, y: number): void {
-    this.#path.lineTo(x, y);
-  }
-
-  cubicTo(
-    cp1x: number,
-    cp1y: number,
-    cp2x: number,
-    cp2y: number,
-    x: number,
-    y: number
-  ): void {
-    this.#path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
-  }
-
-  quadTo(cpx: number, cpy: number, x: number, y: number): void {
-    this.#path.quadraticCurveTo(cpx, cpy, x, y);
-  }
-
-  arcTo(
-    x: number,
-    y: number,
-    radius: number,
-    startAngle: number,
-    endAngle: number,
-    isCounterClockwise?: boolean
-  ): void {
-    this.#path.arc(x, y, radius, startAngle, endAngle, isCounterClockwise);
-  }
-
-  closePath(): void {
-    this.#path.closePath();
-  }
-
-  _getNativePath(): Path2D {
-    return this.#path;
-  }
-}
 
 export class Canvas2DRenderer implements IRenderer {
   #ctx: Canvas2DContext;
   #renderCtx: CanvasRenderingContext2D;
   #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
   #path: Path2D;
-
-  // Cache for converting ShiftPath2D to native Path2D
-  #cachedPaths: Map<ShiftPath2D, Path2D> = new Map();
 
   public constructor(ctx: Canvas2DContext) {
     this.#ctx = ctx;
@@ -164,18 +105,9 @@ export class Canvas2DRenderer implements IRenderer {
     this.#renderCtx.restore();
   }
 
-  flush(): void {
-    // Canvas 2D doesn't need explicit flushing - operations are immediate
-    // This is a no-op for API compatibility
-  }
-
   clear(): void {
     const canvas = this.#renderCtx.canvas;
     this.#renderCtx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-
-  dispose(): void {
-    this.#cachedPaths.clear();
   }
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void {
@@ -211,7 +143,7 @@ export class Canvas2DRenderer implements IRenderer {
   }
 
   createPath(): IPath {
-    return new Canvas2DPath();
+    throw new Error("createPath is not supported - use immediate mode rendering");
   }
 
   beginPath(): void {
@@ -256,106 +188,13 @@ export class Canvas2DRenderer implements IRenderer {
     this.#path.closePath();
   }
 
-  // Convert ShiftPath2D commands to native Path2D
-  #constructPath(path: ShiftPath2D): Path2D {
-    const nativePath = new Path2D();
-
-    for (const command of path.commands) {
-      switch (command.type) {
-        case "moveTo":
-          nativePath.moveTo(command.x, command.y);
-          break;
-        case "lineTo":
-          nativePath.lineTo(command.x, command.y);
-          break;
-        case "quadTo":
-          nativePath.quadraticCurveTo(
-            command.cp1x,
-            command.cp1y,
-            command.x,
-            command.y
-          );
-          break;
-        case "cubicTo":
-          nativePath.bezierCurveTo(
-            command.cp1x,
-            command.cp1y,
-            command.cp2x,
-            command.cp2y,
-            command.x,
-            command.y
-          );
-          break;
-        case "close":
-          nativePath.closePath();
-          break;
-      }
-    }
-
-    return nativePath;
-  }
-
-  stroke(path?: ShiftPath2D | IPath): void {
+  stroke(): void {
     this.#applyStrokeStyle();
-
-    if (path) {
-      if (path instanceof ShiftPath2D) {
-        // Handle ShiftPath2D with caching
-        let cachedPath = this.#cachedPaths.get(path);
-
-        if (cachedPath && !path.invalidated) {
-          this.#renderCtx.stroke(cachedPath);
-          return;
-        }
-
-        // Rebuild path
-        cachedPath = this.#constructPath(path);
-        this.#cachedPaths.set(path, cachedPath);
-        path.invalidated = false;
-        this.#renderCtx.stroke(cachedPath);
-        return;
-      }
-
-      // Handle IPath (Canvas2DPath)
-      if (path instanceof Canvas2DPath) {
-        this.#renderCtx.stroke(path._getNativePath());
-        return;
-      }
-    }
-
-    // Stroke current path
     this.#renderCtx.stroke(this.#path);
   }
 
-  fill(path?: ShiftPath2D | IPath): void {
+  fill(): void {
     this.#applyFillStyle();
-
-    if (path) {
-      if (path instanceof ShiftPath2D) {
-        // Handle ShiftPath2D with caching
-        let cachedPath = this.#cachedPaths.get(path);
-
-        if (cachedPath && !path.invalidated) {
-          this.#renderCtx.fill(cachedPath);
-          return;
-        }
-
-        // Rebuild path
-        cachedPath = this.#constructPath(path);
-        this.#cachedPaths.set(path, cachedPath);
-        path.invalidated = false;
-        this.#renderCtx.fill(cachedPath);
-        return;
-      }
-
-      // Handle IPath (Canvas2DPath)
-      if (path instanceof Canvas2DPath) {
-        this.#renderCtx.fill(path._getNativePath());
-        return;
-      }
-    }
-
-    // Fill current path
     this.#renderCtx.fill(this.#path);
   }
 
@@ -437,14 +276,7 @@ export class Canvas2DContext implements IGraphicContext {
     this.#renderCtx!.scale(dpr, dpr);
   }
 
-  public dispose(): void {
-    if (this.#renderer) {
-      this.#renderer.dispose();
-    }
-  }
-
   public destroy(): void {
-    this.dispose();
     this.#renderCtx = null;
     this.#renderer = null;
   }

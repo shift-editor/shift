@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 const { FontEngine } = require('shift-node');
 
 // Create a single FontEngine instance
@@ -196,5 +196,28 @@ const fontEngineAPI = {
 // Expose to renderer via contextBridge
 contextBridge.exposeInMainWorld('shiftFont', fontEngineAPI);
 
+const electronAPI = {
+  onMenuOpenFont: (callback: (path: string) => void) => {
+    const handler = (_event: any, path: string) => callback(path);
+    ipcRenderer.on('menu:open-font', handler);
+    return () => ipcRenderer.removeListener('menu:open-font', handler);
+  },
+  onMenuUndo: (callback: () => void) => {
+    ipcRenderer.on('menu:undo', callback);
+    return () => ipcRenderer.removeListener('menu:undo', callback);
+  },
+  onMenuRedo: (callback: () => void) => {
+    ipcRenderer.on('menu:redo', callback);
+    return () => ipcRenderer.removeListener('menu:redo', callback);
+  },
+  onMenuDelete: (callback: () => void) => {
+    ipcRenderer.on('menu:delete', callback);
+    return () => ipcRenderer.removeListener('menu:delete', callback);
+  },
+};
+
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+
 // Export type for TypeScript
 export type FontEngineAPI = typeof fontEngineAPI;
+export type ElectronAPI = typeof electronAPI;

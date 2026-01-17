@@ -1,9 +1,9 @@
 # Core - LLM Context
 
 ## Quick Facts
-- **Purpose**: Core utilities (EventEmitter, UndoManager, EditEngine)
+- **Purpose**: Core utilities (EventEmitter, EditEngine)
 - **Language**: TypeScript
-- **Key Files**: `EventEmitter.ts`, `UndoManager.ts`, `EditEngine.ts`, `common.ts`
+- **Key Files**: `EventEmitter.ts`, `EditEngine.ts`, `common.ts`
 - **Dependencies**: types, engine/native
 - **Dependents**: lib/editor, lib/tools, engine
 
@@ -12,7 +12,6 @@
 src/renderer/src/lib/core/
 ├── EventEmitter.ts       # Pub/sub implementation
 ├── EventEmitter.test.ts  # Tests
-├── UndoManager.ts        # Command stack
 ├── EditEngine.ts         # Unified edit operations
 └── common.ts             # CyclingCollection utility
 ```
@@ -41,34 +40,6 @@ class EventEmitter implements IEventEmitter {
     const handlers = this.#listeners.get(event) ?? [];
     const index = handlers.indexOf(handler);
     if (index !== -1) handlers.splice(index, 1);
-  }
-}
-```
-
-### UndoManager (UndoManager.ts)
-```typescript
-interface Command {
-  undo(): void;
-}
-
-class UndoManager {
-  #stack: Command[] = [];
-
-  push(command: Command): void {
-    this.#stack.push(command);
-  }
-
-  peek(): Command | undefined {
-    return this.#stack[this.#stack.length - 1];
-  }
-
-  undo(): void {
-    const command = this.#stack.pop();
-    command?.undo();
-  }
-
-  clear(): void {
-    this.#stack = [];
   }
 }
 ```
@@ -153,9 +124,6 @@ const engine = new EditEngine(ctx);
 | EventEmitter | on(event, handler) | Subscribe |
 | EventEmitter | emit(event, data) | Publish |
 | EventEmitter | off(event, handler) | Unsubscribe |
-| UndoManager | push(cmd) | Add to stack |
-| UndoManager | undo() | Pop and execute |
-| UndoManager | clear() | Empty stack |
 | EditEngine | applyEdits(selected, dx, dy) | Unified edit |
 | CyclingCollection | next() / prev() | Cycle items |
 
@@ -172,19 +140,6 @@ emitter.on('font:loaded', (font) => {
 
 // Publish
 emitter.emit('font:loaded', loadedFont);
-```
-
-### Undo stack
-```typescript
-const undo = new UndoManager();
-
-// Before mutation
-const prev = getState();
-mutate();
-undo.push({ undo: () => setState(prev) });
-
-// Undo
-undo.undo();
 ```
 
 ### Unified edits
@@ -221,7 +176,6 @@ type EventName =
 ## Constraints and Invariants
 
 1. **Handler Reference**: Must keep reference for off() to work
-2. **No Redo**: UndoManager only supports undo, not redo
-3. **Session Required**: EditEngine assumes active session
-4. **JSON Parse**: EditEngine parses native JSON results
-5. **Cycle Modulo**: CyclingCollection uses safe modulo for negative indices
+2. **Session Required**: EditEngine assumes active session
+3. **JSON Parse**: EditEngine parses native JSON results
+4. **Cycle Modulo**: CyclingCollection uses safe modulo for negative indices

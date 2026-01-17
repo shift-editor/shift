@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut } from "electron";
+import { app, BrowserWindow, globalShortcut, Menu, dialog } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -11,6 +11,65 @@ if (started) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+function createMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{ role: 'appMenu' as const }] : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Font...',
+          accelerator: 'CmdOrCtrl+O',
+          click: async () => {
+            const result = await dialog.showOpenDialog({
+              properties: ['openFile', 'openDirectory'],
+              filters: [
+                { name: 'Font Files', extensions: ['ufo', 'ttf', 'otf'] },
+              ]
+            });
+            if (!result.canceled && result.filePaths[0]) {
+              mainWindow?.webContents.send('menu:open-font', result.filePaths[0]);
+            }
+          }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => mainWindow?.webContents.send('menu:undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => mainWindow?.webContents.send('menu:redo') },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { label: 'Delete', accelerator: 'Backspace', click: () => mainWindow?.webContents.send('menu:delete') },
+        { type: 'separator' },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => mainWindow?.webContents.send('menu:select-all') },
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'resetZoom' },
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 const createWindow = () => {
   // Create the browser window.
@@ -55,7 +114,10 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on("ready", createWindow);
+app.on("ready", () => {
+  createMenu();
+  createWindow();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

@@ -1,10 +1,10 @@
 # Core
 
-Core utilities including EventEmitter pub/sub, UndoManager, and EditEngine.
+Core utilities including EventEmitter pub/sub and EditEngine.
 
 ## Overview
 
-The core library provides foundational utilities used throughout the Shift editor. It includes an EventEmitter for pub/sub communication, an UndoManager for command stack management, and the EditEngine for unified edit operations.
+The core library provides foundational utilities used throughout the Shift editor. It includes an EventEmitter for pub/sub communication and the EditEngine for unified edit operations.
 
 ## Architecture
 
@@ -15,12 +15,6 @@ EventEmitter
 ├── emit(event, data)
 └── off(event, handler)
 
-UndoManager
-├── #stack: Command[]
-├── push(command)
-├── undo()
-└── clear()
-
 EditEngine
 ├── #ctx: EditEngineContext
 └── applyEdits(selectedPoints, dx, dy) → PointId[]
@@ -29,8 +23,7 @@ EditEngine
 ### Key Design Decisions
 
 1. **Generic EventEmitter**: Type-safe events with generic handlers
-2. **Simple UndoManager**: Lightweight command stack without redo
-3. **EditEngine Abstraction**: Unified interface for rule-based edits
+2. **EditEngine Abstraction**: Unified interface for rule-based edits
 
 ## Key Concepts
 
@@ -46,20 +39,6 @@ emitter.on('points:added', (ids: PointId[]) => {
 });
 
 emitter.emit('points:added', [pointId1, pointId2]);
-```
-
-### UndoManager
-
-Simple command stack for undo operations:
-
-```typescript
-const manager = new UndoManager();
-
-manager.push({
-  undo: () => restorePreviousState()
-});
-
-manager.undo();  // Executes the undo function
 ```
 
 ### EditEngine
@@ -82,12 +61,6 @@ const affected = engine.applyEdits(
 - `on<T>(event, handler): void` - Subscribe
 - `emit<T>(event, data): void` - Publish
 - `off<T>(event, handler): void` - Unsubscribe
-
-### UndoManager
-- `push(command): void` - Add to stack
-- `peek(): Command | undefined` - View top
-- `undo(): void` - Pop and execute undo
-- `clear(): void` - Empty stack
 
 ### EditEngine
 - `applyEdits(selectedPoints, dx, dy): PointId[]` - Apply edits with rules
@@ -116,22 +89,6 @@ emitter.emit('points:added', [newPointId]);
 
 // Unsubscribe
 emitter.off('points:added', handler);
-```
-
-### UndoManager
-```typescript
-const undo = new UndoManager();
-
-// Save state before operation
-const previousState = getCurrentState();
-performOperation();
-
-undo.push({
-  undo: () => restoreState(previousState)
-});
-
-// Later: undo the operation
-undo.undo();
 ```
 
 ### EditEngine

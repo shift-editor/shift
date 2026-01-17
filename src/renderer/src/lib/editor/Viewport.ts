@@ -4,6 +4,7 @@ import { Point2D, Rect2D } from '@/types/math';
 export class Viewport {
   #padding: number;
   #upm: number;
+  #descender: number;
   #canvasRect: Rect2D;
 
   #zoom: number;
@@ -20,6 +21,7 @@ export class Viewport {
 
   constructor() {
     this.#upm = 1000;
+    this.#descender = -200;
     this.#padding = 300;
 
     this.#dpr = window.devicePixelRatio || 1;
@@ -67,8 +69,22 @@ export class Viewport {
     this.#upm = value;
   }
 
+  get descender(): number {
+    return this.#descender;
+  }
+
+  set descender(value: number) {
+    this.#descender = value;
+  }
+
   get padding(): number {
     return this.#padding;
+  }
+
+  get upmScale(): number {
+    const availableHeight = this.logicalHeight - 2 * this.#padding;
+    if (availableHeight <= 0 || this.#upm <= 0) return 1;
+    return availableHeight / this.#upm;
   }
 
   // **
@@ -160,24 +176,28 @@ export class Viewport {
     const zoomedX = (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
     const zoomedY = (y - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
 
-    const upmX = Math.floor(zoomedX - this.#padding);
-    const upmY = Math.floor(-zoomedY + (this.logicalHeight - this.#padding));
+    const scale = this.upmScale;
+    const baselineY = this.logicalHeight - this.#padding - this.#descender * scale;
+    const upmX = Math.floor((zoomedX - this.#padding) / scale);
+    const upmY = Math.floor((-zoomedY + baselineY) / scale);
 
     return { x: upmX, y: upmY };
   }
 
   public projectUpmToScreen(x: number, y: number) {
-    x = x + this.#padding;
+    const scale = this.upmScale;
+    const baselineY = this.logicalHeight - this.#padding - this.#descender * scale;
 
-    y = -(y - (this.logicalHeight - this.#padding));
+    const screenX = x * scale + this.#padding;
+    const screenY = -(y * scale - baselineY);
 
     const panX = this.#panX + this.getCentrePoint().x * (1 - this.#zoom);
     const panY = this.#panY + this.getCentrePoint().y * (1 - this.#zoom);
 
-    x = x * this.#zoom + panX;
-    y = y * this.#zoom + panY;
-
-    return { x, y };
+    return {
+      x: screenX * this.#zoom + panX,
+      y: screenY * this.#zoom + panY,
+    };
   }
 
   // **

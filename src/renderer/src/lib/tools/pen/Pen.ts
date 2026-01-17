@@ -114,9 +114,14 @@ export class Pen implements Tool {
 
     // Check for contour close action
     if (this.shouldCloseContour(x, y)) {
+      this.#editor.commandHistory.beginBatch('Close Contour');
       this.#commands.closeContour();
+      this.#editor.commandHistory.endBatch();
       return;
     }
+
+    // Start a batch for this pen stroke
+    this.#editor.commandHistory.beginBatch('Add Point');
 
     // Build contour context
     const context = this.buildContourContext();
@@ -139,6 +144,10 @@ export class Pen implements Tool {
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#sm.isIn('anchored', 'dragging')) {
+      // End the batch for this pen stroke
+      if (this.#editor.commandHistory.isBatching) {
+        this.#editor.commandHistory.endBatch();
+      }
       this.#sm.transition({ type: 'ready' });
     }
   }

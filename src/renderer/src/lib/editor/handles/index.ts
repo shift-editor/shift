@@ -1,4 +1,3 @@
-import type { Path2D } from '@/lib/graphics/Path';
 import type { IRenderer } from '@/types/graphics';
 import type { HandleState, HandleType } from '@/types/handle';
 
@@ -42,8 +41,4 @@ export function drawHandleLast(
   state: HandleState
 ): void {
   drawLastHandle(ctx, pos, state);
-}
-
-export function drawGuides(ctx: IRenderer, path: Path2D): void {
-  ctx.stroke(path);
 }

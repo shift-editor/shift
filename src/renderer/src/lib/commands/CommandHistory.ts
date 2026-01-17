@@ -6,10 +6,14 @@
  * - redoStack: commands that have been undone and can be redone
  *
  * When a new command is executed, the redo stack is cleared.
+ *
+ * Supports batching via beginBatch()/endBatch() - commands executed
+ * during a batch are grouped into a single undo step.
  */
 
 import { signal, computed, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
+import { CompositeCommand } from "./Command";
 import type { FontEngine } from "@/engine/FontEngine";
 import type { GlyphSnapshot } from "@/types/generated";
 
@@ -18,12 +22,18 @@ export interface CommandHistoryOptions {
   maxHistory?: number;
 }
 
+interface BatchState {
+  name: string;
+  commands: Command<unknown>[];
+}
+
 export class CommandHistory {
   #undoStack: Command<unknown>[] = [];
   #redoStack: Command<unknown>[] = [];
   #maxHistory: number;
   #fontEngine: FontEngine;
   #getSnapshot: () => GlyphSnapshot | null;
+  #batch: BatchState | null = null;
 
   // Reactive signals for UI binding
   readonly undoCount: WritableSignal<number>;
@@ -46,6 +56,10 @@ export class CommandHistory {
     this.canRedo = computed(() => this.redoCount.value > 0);
   }
 
+  get isBatching(): boolean {
+    return this.#batch !== null;
+  }
+
   #createContext(): CommandContext {
     return {
       fontEngine: this.#fontEngine,
@@ -59,7 +73,60 @@ export class CommandHistory {
   }
 
   /**
+   * Start a batch of commands that will be grouped into a single undo step.
+   * Call endBatch() when done.
+   */
+  beginBatch(name: string): void {
+    if (this.#batch) {
+      throw new Error("Cannot nest batches - already in a batch");
+    }
+    this.#batch = { name, commands: [] };
+  }
+
+  /**
+   * End the current batch and add all batched commands as a single undo step.
+   */
+  endBatch(): void {
+    if (!this.#batch) {
+      throw new Error("Not in a batch");
+    }
+
+    const { name, commands } = this.#batch;
+    this.#batch = null;
+
+    if (commands.length === 0) {
+      return;
+    }
+
+    if (commands.length === 1) {
+      this.#addToUndoStack(commands[0]);
+    } else {
+      this.#addToUndoStack(new CompositeCommand(name, commands));
+    }
+  }
+
+  /**
+   * Cancel the current batch without adding to undo stack.
+   * Commands already executed are NOT rolled back.
+   */
+  cancelBatch(): void {
+    this.#batch = null;
+  }
+
+  #addToUndoStack(command: Command<unknown>): void {
+    this.#undoStack.push(command);
+
+    if (this.#undoStack.length > this.#maxHistory) {
+      this.#undoStack.shift();
+    }
+
+    this.#redoStack = [];
+    this.#updateCounts();
+  }
+
+  /**
    * Execute a command and add it to the undo stack.
+   * If in a batch, the command is collected for later grouping.
    * Clears the redo stack.
    *
    * @returns The result of the command's execute method
@@ -68,19 +135,29 @@ export class CommandHistory {
     const ctx = this.#createContext();
     const result = command.execute(ctx);
 
-    // Add to undo stack
-    this.#undoStack.push(command);
-
-    // Trim if exceeding max history
-    if (this.#undoStack.length > this.#maxHistory) {
-      this.#undoStack.shift();
+    if (this.#batch) {
+      this.#batch.commands.push(command);
+    } else {
+      this.#addToUndoStack(command);
     }
 
-    // Clear redo stack on new action
-    this.#redoStack = [];
-
-    this.#updateCounts();
     return result;
+  }
+
+  /**
+   * Record a command that was already executed externally.
+   * The command's execute() is NOT called, but it's added to the undo stack
+   * so it can be undone later.
+   *
+   * Use this for operations that happen incrementally (like dragging)
+   * where the action has already been performed and you just need undo support.
+   */
+  record(command: Command<unknown>): void {
+    if (this.#batch) {
+      this.#batch.commands.push(command);
+    } else {
+      this.#addToUndoStack(command);
+    }
   }
 
   /**

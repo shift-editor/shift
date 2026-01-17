@@ -6,7 +6,59 @@
  */
 
 import type { PointId, ContourId } from "@/types/ids";
+import type { PointTypeString } from "@/types/generated";
 import { BaseCommand, type CommandContext } from "./Command";
+
+/**
+ * Insert a point before an existing point in a contour.
+ */
+export class InsertPointCommand extends BaseCommand<PointId> {
+  readonly name = "Insert Point";
+
+  #beforePointId: PointId;
+  #x: number;
+  #y: number;
+  #pointType: PointTypeString;
+  #smooth: boolean;
+
+  #resultId: PointId | null = null;
+
+  constructor(
+    beforePointId: PointId,
+    x: number,
+    y: number,
+    pointType: PointTypeString,
+    smooth: boolean = false
+  ) {
+    super();
+    this.#beforePointId = beforePointId;
+    this.#x = x;
+    this.#y = y;
+    this.#pointType = pointType;
+    this.#smooth = smooth;
+  }
+
+  execute(ctx: CommandContext): PointId {
+    this.#resultId = ctx.fontEngine.editing.insertPointBefore(
+      this.#beforePointId,
+      this.#x,
+      this.#y,
+      this.#pointType,
+      this.#smooth
+    );
+    return this.#resultId;
+  }
+
+  undo(ctx: CommandContext): void {
+    if (this.#resultId) {
+      ctx.fontEngine.editing.removePoints([this.#resultId]);
+    }
+  }
+
+  redo(ctx: CommandContext): PointId {
+    return this.execute(ctx);
+  }
+}
 
 /**
  * Add a bezier anchor point with symmetric control handles.

@@ -36,11 +36,13 @@ fn from_ufo_contours(contours: &Vec<norad::Contour>) -> Vec<Contour> {
                 c.add_point(p.x, p.y, PointType::OnCurve, p.smooth);
             }
 
+            norad::PointType::QCurve => {
+                c.add_point(p.x, p.y, PointType::OnCurve, p.smooth);
+            }
+
             norad::PointType::OffCurve => {
                 c.add_point(p.x, p.y, PointType::OffCurve, p.smooth);
             }
-
-            _ => {}
         });
 
         if closed {

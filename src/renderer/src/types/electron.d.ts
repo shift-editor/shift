@@ -172,6 +172,17 @@ export interface NativeFontEngine {
 }
 
 // ═══════════════════════════════════════════════════════════
+// ELECTRON IPC API
+// ═══════════════════════════════════════════════════════════
+
+export interface ElectronAPI {
+  onMenuOpenFont: (callback: (path: string) => void) => () => void;
+  onMenuUndo: (callback: () => void) => () => void;
+  onMenuRedo: (callback: () => void) => () => void;
+  onMenuDelete: (callback: () => void) => () => void;
+}
+
+// ═══════════════════════════════════════════════════════════
 // GLOBAL TYPE DECLARATIONS
 // ═══════════════════════════════════════════════════════════
 
@@ -182,6 +193,12 @@ declare global {
      * Available after the preload script runs.
      */
     shiftFont: NativeFontEngine;
+
+    /**
+     * Electron IPC API exposed via contextBridge.
+     * Available after the preload script runs.
+     */
+    electronAPI?: ElectronAPI;
   }
 }
 

@@ -35,7 +35,7 @@ impl OutlinePen for ShiftPen {
         self.contours
             .last_mut()
             .unwrap()
-            .add_point(x as f64, y as f64, PointType::OffCurve, false);
+            .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {

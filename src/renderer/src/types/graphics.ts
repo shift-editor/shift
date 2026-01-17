@@ -26,9 +26,7 @@ export interface IPath {
 export interface IRenderer {
   save(): void;
   restore(): void;
-  flush(): void;
   clear(): void;
-  dispose(): void;
 
   lineWidth: number;
   strokeStyle: string;
@@ -48,6 +46,7 @@ export interface IRenderer {
   moveTo(x: number, y: number): void;
 
   lineTo(x: number, y: number): void;
+  quadTo(cpx: number, cpy: number, x: number, y: number): void;
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
   cubicTo(
     cpx1: number,
@@ -68,8 +67,8 @@ export interface IRenderer {
 
   closePath(): void;
 
-  stroke(path?: IPath): void;
-  fill(path?: IPath): void;
+  stroke(): void;
+  fill(): void;
 
   scale(x: number, y: number): void;
   translate(x: number, y: number): void;

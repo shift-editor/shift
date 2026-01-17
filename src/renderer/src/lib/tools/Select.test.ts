@@ -33,9 +33,22 @@ function createMockEditor() {
   let selectedPoints = new Set<PointId>();
   let hoveredPoint: PointId | null = null;
 
+  // Mock command history
+  const mockCommandHistory = {
+    execute: vi.fn((cmd: any) => cmd.execute({ fontEngine, snapshot: fontEngine.snapshot.value })),
+    record: vi.fn(),
+    beginBatch: vi.fn(),
+    endBatch: vi.fn(),
+    cancelBatch: vi.fn(),
+    isBatching: false,
+    undo: vi.fn(),
+    redo: vi.fn(),
+  };
+
   // Snapshot is now a signal - read via .value
   const mockEditor = {
     fontEngine,
+    commandHistory: mockCommandHistory,
     getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
     getSnapshot: vi.fn(() => fontEngine.snapshot.value),

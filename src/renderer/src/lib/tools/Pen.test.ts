@@ -31,10 +31,24 @@ function createMockEditor() {
   // Track state
   let selectedPoints = new Set<string>();
   let hoveredPoint: string | null = null;
+  let isBatching = false;
+
+  // Mock command history
+  const mockCommandHistory = {
+    execute: vi.fn((cmd: any) => cmd.execute({ fontEngine, snapshot: fontEngine.snapshot.value })),
+    record: vi.fn(),
+    beginBatch: vi.fn(() => { isBatching = true; }),
+    endBatch: vi.fn(() => { isBatching = false; }),
+    cancelBatch: vi.fn(() => { isBatching = false; }),
+    get isBatching() { return isBatching; },
+    undo: vi.fn(),
+    redo: vi.fn(),
+  };
 
   // Snapshot is now a signal - read via .value
   const mockEditor = {
     fontEngine,
+    commandHistory: mockCommandHistory,
     getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
     getSnapshot: vi.fn(() => fontEngine.snapshot.value),
@@ -121,11 +135,12 @@ describe("Pen tool", () => {
   });
 
   describe("point creation", () => {
-    it("should add point on mouse down", () => {
+    it("should add point on mouse down via commandHistory", () => {
       const event = createMouseEvent("mousedown", 100, 200);
       pen.onMouseDown(event);
 
-      expect(mockEditor.addPoint).toHaveBeenCalledWith(100, 200, "onCurve");
+      expect(mockEditor.commandHistory.beginBatch).toHaveBeenCalledWith("Add Point");
+      expect(mockEditor.commandHistory.execute).toHaveBeenCalled();
       expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
     });
 
@@ -133,7 +148,7 @@ describe("Pen tool", () => {
       const event = createMouseEvent("mousedown", 100, 200, 2); // Right click
       pen.onMouseDown(event);
 
-      expect(mockEditor.addPoint).not.toHaveBeenCalled();
+      expect(mockEditor.commandHistory.execute).not.toHaveBeenCalled();
     });
 
     it("should not add point when not in ready state", () => {
@@ -141,7 +156,7 @@ describe("Pen tool", () => {
       const event = createMouseEvent("mousedown", 100, 200);
       pen.onMouseDown(event);
 
-      expect(mockEditor.addPoint).not.toHaveBeenCalled();
+      expect(mockEditor.commandHistory.execute).not.toHaveBeenCalled();
     });
 
     it("should emit points:added event", () => {
@@ -156,13 +171,17 @@ describe("Pen tool", () => {
   });
 
   describe("point coordinates", () => {
-    it("should use projected UPM coordinates", () => {
+    it("should use projected UPM coordinates and create point at that location", () => {
       mockEditor.projectScreenToUpm.mockReturnValue({ x: 150, y: 250 });
 
       const event = createMouseEvent("mousedown", 100, 200);
       pen.onMouseDown(event);
 
-      expect(mockEditor.addPoint).toHaveBeenCalledWith(150, 250, "onCurve");
+      // Verify command was executed and point was created at projected coordinates
+      expect(mockEditor.commandHistory.execute).toHaveBeenCalled();
+      const snapshot = fontEngine.snapshot.value;
+      expect(snapshot?.contours[0]?.points[0]?.x).toBe(150);
+      expect(snapshot?.contours[0]?.points[0]?.y).toBe(250);
     });
 
     it("should add multiple points at different positions", () => {
@@ -210,11 +229,17 @@ describe("Pen tool", () => {
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
       expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
 
+      // Reset mocks to track close contour
+      mockEditor.commandHistory.execute.mockClear();
+      mockEditor.commandHistory.beginBatch.mockClear();
+
       // Click near first point (within HIT_RADIUS = 8)
       mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
       pen.onMouseDown(createMouseEvent("mousedown", 102, 102));
 
-      expect(mockEditor.closeContour).toHaveBeenCalled();
+      // Should have batched close contour commands
+      expect(mockEditor.commandHistory.beginBatch).toHaveBeenCalledWith("Close Contour");
+      expect(mockEditor.commandHistory.endBatch).toHaveBeenCalled();
     });
 
     it("should create new contour after closing", () => {
@@ -256,13 +281,18 @@ describe("Pen tool", () => {
   });
 
   describe("mouse up handling", () => {
-    it("should return to ready state on mouse up", () => {
+    it("should return to ready state on mouse up and end batch", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
       pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
 
+      // Batch should be ended
+      expect(mockEditor.commandHistory.endBatch).toHaveBeenCalled();
+
       // Can start a new point
+      mockEditor.commandHistory.execute.mockClear();
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
-      expect(mockEditor.addPoint).toHaveBeenCalledTimes(2);
+      expect(mockEditor.commandHistory.execute).toHaveBeenCalled();
+      expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
     });
 
     // Note: requestRedraw is now handled reactively via signal effects

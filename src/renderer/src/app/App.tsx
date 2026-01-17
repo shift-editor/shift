@@ -1,9 +1,25 @@
 import './App.css';
+import { useEffect } from 'react';
 import { HashRouter, Route, Routes } from 'react-router-dom';
+
+import AppState from '@/store/store';
 
 import { routes } from './routes';
 
 export const App = () => {
+  useEffect(() => {
+    const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
+      const editor = AppState.getState().editor;
+      editor.fontEngine.io.loadFont(filePath);
+      editor.updateMetricsFromFont();
+      AppState.getState().setFileName(filePath.split('/').pop() ?? '');
+    });
+
+    return () => {
+      unsubscribeOpen?.();
+    };
+  }, []);
+
   return (
     <HashRouter>
       <Routes>

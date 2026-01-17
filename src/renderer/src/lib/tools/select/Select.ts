@@ -1,10 +1,13 @@
 import { Editor } from '@/lib/editor/Editor';
+import { MovePointsCommand } from '@/lib/commands/PointCommands';
+import { NudgePointsCommand } from '@/lib/commands/BezierCommands';
 import { UPMRect } from '@/lib/math/rect';
 import { effect, type Effect } from '@/lib/reactive/signal';
 import { SELECTION_RECTANGLE_STYLES } from '@/lib/styles/style';
 import { createStateMachine, type StateMachine } from '@/lib/tools/core';
 import { IRenderer } from '@/types/graphics';
 import { Tool, ToolName } from '@/types/tool';
+import type { PointId } from '@/types/ids';
 
 import { SelectCommands } from './commands';
 import type { SelectState } from './states';
@@ -18,6 +21,7 @@ export class Select implements Tool {
   #selectionRect: UPMRect;
   #renderEffect: Effect;
   #shiftModifierOn: boolean = false;
+  #draggedPointIds: PointId[] = [];
 
   constructor(editor: Editor) {
     this.#editor = editor;
@@ -60,6 +64,9 @@ export class Select implements Tool {
     this.#sm.when('ready', () => {
       if (pointId) {
         this.#commands.selectPoint(pointId, false);
+        // Track selected points for undo
+        const ctx = this.#editor.createToolContext();
+        this.#draggedPointIds = [...ctx.selectedPoints];
         this.#sm.transition({
           type: 'dragging',
           drag: {
@@ -91,6 +98,9 @@ export class Select implements Tool {
           if (!isSelected) {
             this.#commands.selectPoint(pointId, false);
           }
+          // Track selected points for undo
+          const ctx = this.#editor.createToolContext();
+          this.#draggedPointIds = [...ctx.selectedPoints];
           this.#sm.transition({
             type: 'dragging',
             drag: {
@@ -168,7 +178,16 @@ export class Select implements Tool {
       }
     });
 
-    this.#sm.when('dragging', () => {
+    this.#sm.when('dragging', (state) => {
+      const { totalDelta } = state.drag;
+
+      // Record the move for undo if there was actual movement
+      if ((totalDelta.x !== 0 || totalDelta.y !== 0) && this.#draggedPointIds.length > 0) {
+        const cmd = new MovePointsCommand(this.#draggedPointIds, totalDelta.x, totalDelta.y);
+        this.#editor.commandHistory.record(cmd);
+      }
+
+      this.#draggedPointIds = [];
       this.#sm.transition({ type: 'selected', hoveredPointId: null });
     });
   }
@@ -200,28 +219,34 @@ export class Select implements Tool {
 
     const modifier = e.metaKey ? 'large' : e.shiftKey ? 'medium' : 'small';
     const nudgeValue = this.#commands.getNudgeValue(modifier);
+    const ctx = this.#editor.createToolContext();
+    const pointIds = [...ctx.selectedPoints];
+
+    if (pointIds.length === 0) return;
+
+    let dx = 0;
+    let dy = 0;
 
     switch (e.key) {
       case 'ArrowLeft':
-        this.#commands.nudgeSelectedPoints(-nudgeValue, 0);
-        this.#editor.requestRedraw();
+        dx = -nudgeValue;
         break;
-
       case 'ArrowRight':
-        this.#commands.nudgeSelectedPoints(nudgeValue, 0);
-        this.#editor.requestRedraw();
+        dx = nudgeValue;
         break;
-
       case 'ArrowUp':
-        this.#commands.nudgeSelectedPoints(0, nudgeValue);
-        this.#editor.requestRedraw();
+        dy = nudgeValue;
         break;
-
       case 'ArrowDown':
-        this.#commands.nudgeSelectedPoints(0, -nudgeValue);
-        this.#editor.requestRedraw();
+        dy = -nudgeValue;
         break;
+      default:
+        return;
     }
+
+    const cmd = new NudgePointsCommand(pointIds, dx, dy);
+    this.#editor.commandHistory.execute(cmd);
+    this.#editor.requestRedraw();
   }
 
   keyUpHandler(_e: KeyboardEvent): void {

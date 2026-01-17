@@ -15,22 +15,18 @@ import { asPointId } from "@/types/ids";
 import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
 
 import { FrameHandler } from "./FrameHandler";
-import { drawGuides, drawHandle, drawHandleLast } from "./handles";
-import { Guides, Scene } from "./Scene";
+import { drawHandle, drawHandleLast } from "./handles";
 import { createSelectionManager, type SelectionManager, type SelectionMode } from "./SelectionManager";
 import { Viewport } from "./Viewport";
-import { UndoManager } from "../core/UndoManager";
-import { Path2D } from "../graphics/Path";
 import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
-import { findPointInSnapshot } from "./render";
+import { findPointInSnapshot, renderGlyph, renderGuides, type Guides } from "./render";
 import { CommandHistory } from "../commands";
 import { effect, type Effect } from "../reactive/signal";
 
-// Debug logging flag - set to true to enable debug output
-const DEBUG = true;
+const DEBUG = false;
 
-function debug(...args: any[]) {
+function debug(...args: unknown[]) {
   if (DEBUG) {
     console.log("[Editor]", ...args);
   }
@@ -67,11 +63,9 @@ export class Editor {
   #selection: SelectionManager;
 
   #viewport: Viewport;
-  #scene: Scene;
   #frameHandler: FrameHandler;
   #eventEmitter: IEventEmitter;
 
-  #undoManager: UndoManager;
   #commandHistory: CommandHistory;
 
   #staticContext: IGraphicContext | null;
@@ -83,11 +77,7 @@ export class Editor {
 
   constructor(eventEmitter: IEventEmitter) {
     this.#viewport = new Viewport();
-
-    this.#scene = new Scene();
     this.#frameHandler = new FrameHandler();
-
-    this.#undoManager = new UndoManager();
 
     // Initialize FontEngine first (needed for CommandHistory)
     this.#fontEngine = new FontEngine();
@@ -106,36 +96,11 @@ export class Editor {
     this.#state = { ...InitialEditorState };
     this.#selection = createSelectionManager(() => this.requestRedraw());
 
-    // Watch snapshot signal - Scene renders directly from snapshot
+    // Watch snapshot signal - redraw when snapshot changes
     this.#snapshotEffect = effect(() => {
       const snapshot = this.#fontEngine.snapshot.value;
       debug("Snapshot changed:", snapshot?.contours.length, "contours");
-      this.#scene.setSnapshot(snapshot);
       this.requestRedraw();
-    });
-
-    this.on("points:added", (points: any) => {
-      this.#undoManager.push({
-        undo: () => {
-          for (const id of points.pointIds) {
-            this.#fontEngine.editing.removePoints([id]);
-          }
-          this.redrawGlyph();
-        },
-      });
-      this.redrawGlyph();
-    });
-
-    this.on("points:moved", (pointIds: any) => {
-      this.#undoManager.push({
-        undo: () => {
-          for (const { pointId, fromX, fromY } of pointIds.points) {
-            this.#fontEngine.editing.movePointTo(pointId, fromX, fromY);
-          }
-
-          this.redrawGlyph();
-        },
-      });
     });
 
     this.on("points:removed", (_pointIds) => {
@@ -244,7 +209,12 @@ export class Editor {
   }
 
   public undo() {
-    this.#undoManager.undo();
+    this.#commandHistory.undo();
+    this.redrawGlyph();
+  }
+
+  public redo() {
+    this.#commandHistory.redo();
     this.redrawGlyph();
   }
 
@@ -254,6 +224,13 @@ export class Editor {
 
   public setViewportUpm(upm: number) {
     this.#viewport.upm = upm;
+  }
+
+  public updateMetricsFromFont(): void {
+    const metrics = this.#fontEngine.info.getMetrics();
+    this.#viewport.upm = metrics.unitsPerEm;
+    this.#viewport.descender = metrics.descender;
+    this.requestRedraw();
   }
 
   public getMousePosition(x?: number, y?: number): Point2D {
@@ -316,14 +293,6 @@ export class Editor {
     isCounterClockWise?: boolean
   ) {
     drawHandle(ctx, handleType, x, y, state, { isCounterClockWise });
-  }
-
-  public invalidateGlyph() {
-    this.#scene.invalidateGlyph();
-  }
-
-  public getGlyphPath(): Path2D {
-    return this.#scene.getGlyphPath();
   }
 
   /**
@@ -453,23 +422,20 @@ export class Editor {
   }
 
   #applyUpmTransforms(ctx: IRenderer) {
+    const scale = this.#viewport.upmScale;
+    const baselineY = this.#viewport.logicalHeight - this.#viewport.padding - this.#viewport.descender * scale;
     ctx.transform(
-      1,
+      scale,
       0,
       0,
-      -1,
+      -scale,
       this.#viewport.padding,
-      this.#viewport.logicalHeight - this.#viewport.padding
+      baselineY
     );
   }
 
   public redrawGlyph() {
-    this.invalidateGlyph();
     this.requestRedraw();
-  }
-
-  public constructGuidesPath(guides: Guides) {
-    return this.#scene.constructGuidesPath(guides);
   }
 
   #prepareCanvas(ctx: IRenderer) {
@@ -491,7 +457,6 @@ export class Editor {
     }
 
     ctx.restore();
-    ctx.flush();
   }
 
   #drawStatic() {
@@ -499,30 +464,46 @@ export class Editor {
     const ctx = this.#staticContext.getContext();
 
     const snapshot = this.#fontEngine.snapshot.value;
-    const glyphPath = this.#scene.getGlyphPath();
 
     debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
-    debug("drawStatic: glyphPath isEmpty:", glyphPath.isEmpty(), "isClosed:", glyphPath.isClosed(), "commands:", glyphPath.commands.length);
 
     ctx.clear();
     ctx.save();
 
     this.#prepareCanvas(ctx);
 
-    ctx.setStyle(GUIDE_STYLES);
+    // Line width needs to account for UPM scale since we're in UPM coordinate space
+    const upmScale = this.#viewport.upmScale;
 
-    ctx.lineWidth = Math.floor(GUIDE_STYLES.lineWidth / this.#viewport.zoom);
-    const guides = this.#scene.getGuidesPath();
-    drawGuides(ctx, guides);
+    // Render guides directly from metrics + snapshot.xAdvance
+    if (snapshot) {
+      const guides = this.#getGuides(snapshot);
+      ctx.setStyle(GUIDE_STYLES);
+      ctx.lineWidth = GUIDE_STYLES.lineWidth / (this.#viewport.zoom * upmScale);
 
-    // draw contours
-    ctx.setStyle(DEFAULT_STYLES);
-    ctx.lineWidth = Math.floor(DEFAULT_STYLES.lineWidth / this.#viewport.zoom);
-    debug("drawStatic: about to stroke glyphPath");
-    ctx.stroke(glyphPath);
-    if (glyphPath.isClosed() && this.#state.fillContour) {
-      ctx.fillStyle = "black";
-      ctx.fill(glyphPath);
+      if (!this.#state.fillContour) {
+        renderGuides(ctx, guides);
+      }
+
+      // Render glyph directly from snapshot
+      ctx.setStyle(DEFAULT_STYLES);
+      ctx.lineWidth = DEFAULT_STYLES.lineWidth / (this.#viewport.zoom * upmScale);
+      const hasClosed = renderGlyph(ctx, snapshot);
+
+      if (hasClosed && this.#state.fillContour) {
+        ctx.fillStyle = "black";
+        // Re-render with fill
+        for (const contour of snapshot.contours) {
+          if (contour.closed) {
+            ctx.beginPath();
+            for (const point of contour.points) {
+              ctx.lineTo(point.x, point.y);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
     }
 
     const shouldDrawBoundingRect =
@@ -548,7 +529,18 @@ export class Editor {
     }
 
     ctx.restore();
-    ctx.flush();
+  }
+
+  #getGuides(snapshot: GlyphSnapshot): Guides {
+    const metrics = this.#fontEngine.info.getMetrics();
+    return {
+      ascender: { y: metrics.ascender },
+      capHeight: { y: metrics.capHeight },
+      xHeight: { y: metrics.xHeight },
+      baseline: { y: 0 },
+      descender: { y: metrics.descender },
+      xAdvance: snapshot.xAdvance,
+    };
   }
 
   /**
