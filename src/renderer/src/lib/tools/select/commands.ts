@@ -126,10 +126,7 @@ export class SelectCommands {
     const dy = currentPos.y - dragPoint.y;
 
     if (dx !== 0 || dy !== 0) {
-      const selectedIds = Array.from(ctx.selectedPoints);
-      if (selectedIds.length > 0) {
-        this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
-      }
+      this.#editor.fontEngine.editEngine.applyEdits(ctx.selectedPoints, dx, dy);
     }
 
     return { x: dx, y: dy };
@@ -137,9 +134,8 @@ export class SelectCommands {
 
   nudgeSelectedPoints(dx: number, dy: number): void {
     const ctx = this.#editor.createToolContext();
-    const selectedIds = Array.from(ctx.selectedPoints);
-    if (selectedIds.length > 0) {
-      this.#editor.fontEngine.editing.movePoints(selectedIds, dx, dy);
+    if (ctx.selectedPoints.size > 0) {
+      this.#editor.fontEngine.editEngine.applyEdits(ctx.selectedPoints, dx, dy);
     }
   }
 

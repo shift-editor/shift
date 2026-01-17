@@ -7,3 +7,5 @@ export type { PointSnapshot } from './PointSnapshot';
 export type { ContourSnapshot } from './ContourSnapshot';
 export type { GlyphSnapshot } from './GlyphSnapshot';
 export type { CommandResult } from './CommandResult';
+export type { RuleId } from './RuleId';
+export type { MatchedRule } from './MatchedRule';

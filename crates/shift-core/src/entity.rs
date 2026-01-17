@@ -93,6 +93,21 @@ macro_rules! entity_id {
                 &self.0
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.raw())
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::num::ParseIntError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                let raw: u64 = s.parse()?;
+                Ok(Self::from_raw(raw as u128))
+            }
+        }
     };
 }
 
@@ -161,5 +176,25 @@ mod tests {
         let reconstructed = ContourId::from_raw(raw_value as u128);
 
         assert_eq!(original, reconstructed);
+    }
+
+    #[test]
+    fn point_id_display_shows_raw_value() {
+        let id = PointId::from_raw(12345);
+        assert_eq!(id.to_string(), "12345");
+    }
+
+    #[test]
+    fn point_id_from_str_roundtrip() {
+        let original = PointId::new();
+        let string_rep = original.to_string();
+        let parsed: PointId = string_rep.parse().unwrap();
+        assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn point_id_from_str_invalid() {
+        let result: Result<PointId, _> = "not_a_number".parse();
+        assert!(result.is_err());
     }
 }

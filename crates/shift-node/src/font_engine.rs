@@ -1,9 +1,14 @@
+use std::collections::HashSet;
+
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{
+  edit_ops::apply_edits,
   edit_session::EditSession,
+  entity::PointId,
   font::Font,
   font_loader::FontLoader,
+  pattern::MatchedRule,
   point::PointType,
   snapshot::{CommandResult, GlyphSnapshot},
 };
@@ -128,18 +133,14 @@ impl FontEngine {
   pub fn add_empty_contour(&mut self) -> Result<String> {
     let edit_session = self.get_edit_session()?;
     let contour_id = edit_session.add_empty_contour();
-    Ok(contour_id.raw().to_string())
+    Ok(contour_id.to_string())
   }
 
   /// Get the active contour ID
   #[napi]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
-    Ok(
-      edit_session
-        .active_contour_id()
-        .map(|id| id.raw().to_string()),
-    )
+    Ok(edit_session.active_contour_id().map(|id| id.to_string()))
   }
 
   /// Set the active contour by ID
@@ -422,6 +423,68 @@ impl FontEngine {
       Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // UNIFIED EDIT OPERATION
+  // ═══════════════════════════════════════════════════════════
+
+  /// Apply edits to selected points with automatic rule matching and application.
+  /// This is a unified operation that combines:
+  /// 1. Moving the selected points
+  /// 2. Matching rules based on point context
+  /// 3. Applying matched rules (handle movement, tangency maintenance)
+  ///
+  /// Returns a JSON object with:
+  /// - success: boolean
+  /// - snapshot: the updated glyph snapshot
+  /// - affectedPointIds: all points that were modified
+  /// - matchedRules: rules that were matched and applied
+  #[napi]
+  pub fn apply_edits_unified(
+    &mut self,
+    point_ids: Vec<String>,
+    dx: f64,
+    dy: f64,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let selected_ids: HashSet<PointId> = point_ids
+      .iter()
+      .filter_map(|id_str| id_str.parse().ok())
+      .collect();
+
+    if selected_ids.is_empty() && !point_ids.is_empty() {
+      return Ok(
+        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
+      );
+    }
+
+    let result = apply_edits(session, &selected_ids, dx, dy);
+
+    let response = EditResultJson {
+      success: true,
+      snapshot: Some(result.snapshot),
+      affected_point_ids: result
+        .affected_point_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect(),
+      matched_rules: result.matched_rules,
+      error: None,
+    };
+
+    Ok(serde_json::to_string(&response).unwrap())
+  }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditResultJson {
+  success: bool,
+  snapshot: Option<GlyphSnapshot>,
+  affected_point_ids: Vec<String>,
+  matched_rules: Vec<MatchedRule>,
+  error: Option<String>,
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -466,12 +529,12 @@ impl JSGlyphSnapshot {
       contours: glyph
         .contours_iter()
         .map(|c| JSContourSnapshot {
-          id: c.id().raw().to_string(),
+          id: c.id().to_string(),
           points: c
             .points()
             .iter()
             .map(|p| JSPointSnapshot {
-              id: p.id().raw().to_string(),
+              id: p.id().to_string(),
               x: p.x(),
               y: p.y(),
               point_type: match p.point_type() {
@@ -484,7 +547,7 @@ impl JSGlyphSnapshot {
           closed: c.is_closed(),
         })
         .collect(),
-      active_contour_id: session.active_contour_id().map(|id| id.raw().to_string()),
+      active_contour_id: session.active_contour_id().map(|id| id.to_string()),
     }
   }
 }

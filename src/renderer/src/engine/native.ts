@@ -149,6 +149,17 @@ export interface NativeFontEngine {
 
   /** Toggle the smooth property of a point. Returns CommandResult JSON. */
   toggleSmooth(pointId: string): string;
+
+  // ═══════════════════════════════════════════════════════════
+  // UNIFIED EDIT OPERATION
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Apply edits to selected points with automatic rule matching and application.
+   * Combines: move points → match rules → apply rules (handle movement, tangency).
+   * Returns JSON with { success, snapshot, affectedPointIds, matchedRules, error }.
+   */
+  applyEditsUnified(pointIds: string[], dx: number, dy: number): string;
 }
 
 /**

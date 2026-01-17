@@ -178,6 +178,19 @@ const fontEngineAPI = {
   toggleSmooth: (pointId: string): string => {
     return fontEngineInstance.toggleSmooth(pointId);
   },
+
+  // ═══════════════════════════════════════════════════════════
+  // UNIFIED EDIT OPERATION
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Apply edits to selected points with automatic rule matching and application.
+   * Combines: move points → match rules → apply rules (handle movement, tangency).
+   * Returns JSON with { success, snapshot, affectedPointIds, matchedRules, error }.
+   */
+  applyEditsUnified: (pointIds: string[], dx: number, dy: number): string => {
+    return fontEngineInstance.applyEditsUnified(pointIds, dx, dy);
+  },
 };
 
 // Expose to renderer via contextBridge

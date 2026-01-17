@@ -37,6 +37,7 @@ import { SessionManager } from "./session";
 import { InfoManager } from "./info";
 import { HistoryManager } from "./history";
 import { IOManager } from "./io";
+import { EditEngine } from "@/lib/core/EditEngine";
 
 /**
  * FontEngine is the primary interface to the Rust font editing system.
@@ -51,6 +52,7 @@ import { IOManager } from "./io";
  */
 export class FontEngine {
   readonly editing: EditingManager;
+  readonly editEngine: EditEngine;
   readonly session: SessionManager;
   readonly info: InfoManager;
   readonly history: HistoryManager;
@@ -79,6 +81,7 @@ export class FontEngine {
 
     // Initialize managers
     this.editing = new EditingManager(ctx);
+    this.editEngine = new EditEngine(ctx);
     this.session = new SessionManager(ctx);
     this.info = new InfoManager(ctx);
     this.history = new HistoryManager(ctx);

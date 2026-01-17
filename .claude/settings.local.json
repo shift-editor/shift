@@ -24,7 +24,11 @@
       "WebSearch",
       "Bash(pnpm lint:check:*)",
       "Bash(pnpm lint:*)",
-      "Bash(pnpm format:*)"
+      "Bash(pnpm format:*)",
+      "Bash(cargo build:*)",
+      "Bash(xargs:*)",
+      "Bash(git log:*)",
+      "Bash(pnpm build:native:*)"
     ]
   }
 }

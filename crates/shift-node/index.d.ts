@@ -123,4 +123,18 @@ export declare class FontEngine {
    * Returns a CommandResult JSON string.
    */
   toggleSmooth(pointId: string): string
+  /**
+   * Apply edits to selected points with automatic rule matching and application.
+   * This is a unified operation that combines:
+   * 1. Moving the selected points
+   * 2. Matching rules based on point context
+   * 3. Applying matched rules (handle movement, tangency maintenance)
+   *
+   * Returns a JSON object with:
+   * - success: boolean
+   * - snapshot: the updated glyph snapshot
+   * - affectedPointIds: all points that were modified
+   * - matchedRules: rules that were matched and applied
+   */
+  applyEditsUnified(pointIds: Array<string>, dx: number, dy: number): string
 }

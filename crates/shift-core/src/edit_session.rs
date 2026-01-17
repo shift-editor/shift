@@ -10,9 +10,7 @@ use crate::{
 /// The EditSession owns the glyph data during editing, allowing mutations.
 /// When the session ends, the modified glyph can be written back to the font.
 pub struct EditSession {
-    /// The glyph being edited (owned, not shared)
     glyph: Glyph,
-    /// The currently active contour for adding points
     active_contour_id: Option<ContourId>,
 }
 

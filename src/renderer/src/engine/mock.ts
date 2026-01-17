@@ -263,7 +263,6 @@ export class MockNativeFontEngine implements NativeFontEngine {
   toggleSmooth(pointId: string): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
-    // Find the point and toggle its smooth property
     for (const contour of this.#snapshot.contours) {
       const point = contour.points.find((p) => p.id === pointId);
       if (point) {
@@ -273,6 +272,41 @@ export class MockNativeFontEngine implements NativeFontEngine {
     }
 
     return this.#makeResult(false, [], `Point ${pointId} not found`);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // UNIFIED EDIT OPERATION
+  // ═══════════════════════════════════════════════════════════
+
+  applyEditsUnified(pointIds: string[], dx: number, dy: number): string {
+    if (!this.#snapshot) {
+      return JSON.stringify({
+        success: false,
+        snapshot: null,
+        affectedPointIds: [],
+        matchedRules: [],
+        error: "No active edit session",
+      });
+    }
+
+    const moved: string[] = [];
+    for (const contour of this.#snapshot.contours) {
+      for (const point of contour.points) {
+        if (pointIds.includes(point.id)) {
+          point.x += dx;
+          point.y += dy;
+          moved.push(point.id);
+        }
+      }
+    }
+
+    return JSON.stringify({
+      success: true,
+      snapshot: this.#snapshot,
+      affectedPointIds: moved,
+      matchedRules: [],
+      error: null,
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
