@@ -74,24 +74,27 @@
 - [x] Scene with reactive path building from snapshots
 - [x] Viewport with coordinate transforms (screen ↔ UPM)
 - [x] Pan and zoom (wheel + tool)
+- [x] Zoom to cursor position (Cmd+/Cmd-)
 - [x] SelectionManager for point selection state
 - [x] FrameHandler for batched redraws
 - [x] Command pattern infrastructure
+- [x] Reactive signals for state management
 
 **Drawing Tools**
 - [x] Pen tool with state machine
   - [x] Click to place anchor points
   - [x] Drag to create bezier handles
   - [x] Click on first point to close contour
-- [x] Select tool
+  - [x] Custom pen cursor
+- [x] Select tool with state machine
   - [x] Click to select single point
   - [x] Shift+click to toggle in selection
   - [x] Box selection (drag on empty space)
-  - [x] Drag to move selected points
+  - [x] Drag to move selected points (with undo support)
   - [x] Arrow keys to nudge (small/medium/large increments)
   - [x] Double-click to toggle smooth
 - [x] Hand tool for panning
-- [x] Tool switching via toolbar or keyboard shortcuts
+- [x] Tool switching via toolbar or keyboard shortcuts (v, p, h, s, space)
 
 **Rendering**
 - [x] Path2D abstraction for platform independence
@@ -111,29 +114,31 @@
 - [x] Custom cursor for pen tool
 - [x] Titlebar, NavigationPane, SidePane structure
 
+**Undo/Redo**
+- [x] CommandHistory with reactive signals (canUndo, canRedo)
+- [x] Batching support (beginBatch/endBatch for grouped operations)
+- [x] Wire `Cmd+Z` → `CommandHistory.undo()`
+- [x] Wire `Cmd+Shift+Z` → `CommandHistory.redo()`
+- [x] Menu items for Undo/Redo (Edit menu integration)
+- [x] All point operations create proper Commands (Add, Move, Remove)
+
+**Delete Operations**
+- [x] `Delete` / `Backspace` key → `removePoints()` on selection
+- [x] Menu item for Delete (Edit menu integration)
+
 ---
 
 ## 🚧 In Progress / Partial Implementation
 
-- [ ] Undo/redo (CommandHistory exists, needs wiring to shortcuts)
 - [ ] Font file opening in app (loader exists, UI integration needed)
 - [ ] Shape tool (placeholder only)
+- [ ] Visual feedback in UI for undo/redo ("Undo Move Point")
 
 ---
 
 ## 📋 Planned Features
 
 ### Phase 0: Complete Basic Vector Editing ⭐ Priority
-
-**Undo/Redo Wiring**
-- [ ] Wire `Cmd+Z` → `CommandHistory.undo()`
-- [ ] Wire `Cmd+Shift+Z` → `CommandHistory.redo()`
-- [ ] Ensure all operations create proper Commands
-- [ ] Visual feedback in UI ("Undo Move Point")
-
-**Delete Operations**
-- [ ] `Delete` / `Backspace` key → `removePoints()` on selection
-- [ ] Handle deleting entire contour when last point removed
 
 **Clipboard Operations**
 - [ ] `Cmd+C` - copy selected points (serialize to clipboard)
@@ -443,8 +448,8 @@ interface ShiftScriptContext {
 ### v0.1 - Alpha (MVP)
 - Basic bezier drawing ✓
 - Point selection and manipulation ✓
-- Undo/redo (wired)
-- Delete points
+- Undo/redo ✓
+- Delete points ✓
 - Open/save UFO files
 - Export to TTF
 
@@ -507,6 +512,9 @@ interface ShiftScriptContext {
 - [ ] Mock FontEngine for frontend dev
 
 **Code Quality**
+- [x] Oxlint for linting
+- [x] tsgo for type checking
+- [x] Pre-commit hooks (format, lint, typecheck, test)
 - [ ] Remove debug logging from production
 - [ ] Consolidate duplicate types
 - [ ] Document public APIs
