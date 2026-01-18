@@ -4,26 +4,7 @@ import type { PointId } from '@/types/ids';
 import type { AnchorData, HandleData } from './states';
 import { AddPointCommand } from '@/lib/commands/PointCommands';
 import { InsertPointCommand, CloseContourCommand, AddContourCommand } from '@/lib/commands/BezierCommands';
-
-export function mirror(point: Point2D, anchor: Point2D): Point2D {
-  return {
-    x: 2 * anchor.x - point.x,
-    y: 2 * anchor.y - point.y,
-  };
-}
-
-export function calculateFraction(from: Point2D, to: Point2D, fraction: number): Point2D {
-  return {
-    x: from.x + (to.x - from.x) * fraction,
-    y: from.y + (to.y - from.y) * fraction,
-  };
-}
-
-export function distance(p1: Point2D, p2: Point2D): number {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
+import { Vec2 } from '@/lib/geo';
 
 export interface PlaceAnchorResult {
   pointId: PointId;
@@ -65,12 +46,12 @@ export class PenCommands {
 
     if (context.previousPointType === 'onCurve') {
       if (context.previousOnCurvePosition) {
-        const cp1Pos = calculateFraction(context.previousOnCurvePosition, position, 1 / 3);
+        const cp1Pos = Vec2.lerp(context.previousOnCurvePosition, position, 1 / 3);
         const cmd = new InsertPointCommand(pointId, cp1Pos.x, cp1Pos.y, 'offCurve', false);
         history.execute(cmd);
       }
 
-      const cpInPos = mirror(mousePos, position);
+      const cpInPos = Vec2.mirror(mousePos, position);
       const cmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
       const cpInId = history.execute(cmd);
 
@@ -80,7 +61,7 @@ export class PenCommands {
     }
 
     if (context.previousPointType === 'offCurve') {
-      const cpInPos = mirror(mousePos, position);
+      const cpInPos = Vec2.mirror(mousePos, position);
       const insertCmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
       const cpInId = history.execute(insertCmd);
 
@@ -108,7 +89,7 @@ export class PenCommands {
     }
 
     if (handles.cpIn) {
-      const mirroredPos = mirror(mousePos, position);
+      const mirroredPos = Vec2.mirror(mousePos, position);
       ctx.edit.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
   }

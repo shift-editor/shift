@@ -1,4 +1,5 @@
 import { Editor } from '@/lib/editor/Editor';
+import { Vec2 } from '@/lib/geo';
 import { effect, type Effect } from '@/lib/reactive/signal';
 import { createStateMachine, type StateMachine } from '@/lib/tools/core';
 import { IRenderer } from '@/types/graphics';
@@ -6,7 +7,7 @@ import { Tool, ToolName } from '@/types/tool';
 import type { ContourSnapshot, PointSnapshot } from '@/types/generated';
 
 import { DEFAULT_STYLES } from '../../styles/style';
-import { PenCommands, distance, mirror } from './commands';
+import { PenCommands } from './commands';
 import {
   type ContourContext,
   type PenState,
@@ -18,15 +19,8 @@ function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
   return contour.points.length > 0 ? contour.points[0] : null;
 }
 
-function isNearPoint(
-  x: number,
-  y: number,
-  point: PointSnapshot,
-  radius: number,
-): boolean {
-  const dx = x - point.x;
-  const dy = y - point.y;
-  return Math.sqrt(dx * dx + dy * dy) < radius;
+function isNearPoint(pos: { x: number; y: number }, point: PointSnapshot, radius: number): boolean {
+  return Vec2.dist(pos, point) < radius;
 }
 
 export class Pen implements Tool {
@@ -114,7 +108,7 @@ export class Pen implements Tool {
 
     this.#sm.when('anchored', (state) => {
       const { anchor } = state;
-      const dist = distance(anchor.position, mousePos);
+      const dist = Vec2.dist(anchor.position, mousePos);
 
       if (dist > DRAG_THRESHOLD) {
         const result = this.#commands.createHandles(anchor, mousePos);
@@ -190,7 +184,7 @@ export class Pen implements Tool {
     }
 
     const firstPoint = getFirstPoint(activeContour);
-    return firstPoint !== null && isNearPoint(x, y, firstPoint, CLOSE_HIT_RADIUS);
+    return firstPoint !== null && isNearPoint({ x, y }, firstPoint, CLOSE_HIT_RADIUS);
   }
 
   drawInteractive(ctx: IRenderer): void {
@@ -206,7 +200,7 @@ export class Pen implements Tool {
       const mouseX = mousePos.x;
       const mouseY = mousePos.y;
 
-      const mirrorPos = mirror(mousePos, anchor.position);
+      const mirrorPos = Vec2.mirror(mousePos, anchor.position);
 
       ctx.beginPath();
       ctx.moveTo(mouseX, mouseY);

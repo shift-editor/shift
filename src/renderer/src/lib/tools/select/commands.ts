@@ -5,21 +5,15 @@ import type { PointId } from '@/types/ids';
 import { asPointId } from '@/types/ids';
 import type { PointSnapshot } from '@/types/generated';
 import { NUDGES_VALUES, type NudgeMagnitude } from '@/types/nudge';
-
-function pointDistance(point: PointSnapshot, x: number, y: number): number {
-  const dx = point.x - x;
-  const dy = point.y - y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
+import { Vec2 } from '@/lib/geo';
 
 function findPointAtPosition(
   points: PointSnapshot[],
-  x: number,
-  y: number,
+  pos: Point2D,
   hitRadius: number,
 ): PointSnapshot | null {
   for (const point of points) {
-    if (pointDistance(point, x, y) < hitRadius) {
+    if (Vec2.dist(point, pos) < hitRadius) {
       return point;
     }
   }
@@ -60,7 +54,7 @@ export class SelectCommands {
     const ctx = this.#editor.createToolContext();
     const allPoints = getAllPoints(ctx.snapshot);
     const hitRadius = ctx.screen.hitRadius;
-    const hitPoint = findPointAtPosition(allPoints, pos.x, pos.y, hitRadius);
+    const hitPoint = findPointAtPosition(allPoints, pos, hitRadius);
 
     if (hitPoint) {
       return { point: hitPoint, pointId: asPointId(hitPoint.id) };
@@ -114,22 +108,22 @@ export class SelectCommands {
     const dragPoint = allPoints.find((p) => p.id === anchorId);
 
     if (!dragPoint) {
-      return { x: 0, y: 0 };
+      return Vec2.zero();
     }
 
-    const dx = currentPos.x - dragPoint.x;
-    const dy = currentPos.y - dragPoint.y;
+    const delta = Vec2.sub(currentPos, dragPoint);
 
-    if (dx !== 0 || dy !== 0) {
+    if (!Vec2.isZero(delta)) {
       for (const pointId of ctx.selectedPoints) {
         const point = allPoints.find((p) => p.id === pointId);
         if (point) {
-          ctx.edit.movePointTo(pointId, point.x + dx, point.y + dy);
+          const newPos = Vec2.add(point, delta);
+          ctx.edit.movePointTo(pointId, newPos.x, newPos.y);
         }
       }
     }
 
-    return { x: dx, y: dy };
+    return delta;
   }
 
   nudgeSelectedPoints(dx: number, dy: number): void {
