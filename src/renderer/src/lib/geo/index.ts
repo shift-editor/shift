@@ -1,35 +1,28 @@
 /**
  * Shift Geometry Library
  *
- * A lightweight, functional library for 2D vector math, geometric primitives,
- * hit testing, and snapping.
+ * A lightweight, functional library for 2D vector math and geometric primitives.
  *
  * Modules:
  * - Vec2: Core 2D vector operations
- * - Segment: Line and bezier curve primitives
- * - HitTest: Unified hit testing system
- * - Snap: Snapping infrastructure for precision editing
+ * - Curve: Pure geometry curve primitives (line, quadratic, cubic bezier)
+ *
+ * Note: For font editing segments with point IDs, see types/segments.ts.
+ * The Curve module provides pure geometry without identity tracking.
  *
  * @example
  * ```ts
- * import { Vec2, Segment, HitTest, Snap } from '@/lib/geo';
+ * import { Vec2, Curve } from '@/lib/geo';
  *
  * // Vector operations
  * const sum = Vec2.add(a, b);
  * const dist = Vec2.dist(a, b);
  *
- * // Segments
- * const line = Segment.line(p0, p1);
- * const curve = Segment.cubic(p0, c0, c1, p1);
- * const midpoint = Segment.pointAt(curve, 0.5);
- *
- * // Hit testing
- * const isNear = HitTest.point(mousePos, target, radius);
- * const result = HitTest.segment(mousePos, curve, radius);
- *
- * // Snapping
- * const snapped = Snap.toGrid(mousePos, gridSize);
- * const result = Snap.find(mousePos, targets, { threshold: 10 });
+ * // Curves (pure geometry)
+ * const line = Curve.line(p0, p1);
+ * const cubic = Curve.cubic(p0, c0, c1, p1);
+ * const midpoint = Curve.pointAt(cubic, 0.5);
+ * const closest = Curve.closestPoint(cubic, mousePos);
  * ```
  */
 
@@ -37,36 +30,12 @@
 export { Vec2 } from './Vec2';
 export type { Point2D } from './Vec2';
 
-// Segment primitives
-export { Segment } from './Segment';
+// Curve primitives (pure geometry)
+export { Curve } from './Curve';
 export type {
-  LineSegment,
-  CubicSegment,
-  QuadraticSegment,
-  Segment as SegmentType,
+  LineCurve,
+  QuadraticCurve,
+  CubicCurve,
+  CurveType,
   ClosestPointResult,
-} from './Segment';
-
-// Hit testing
-export { HitTest } from './HitTest';
-export type {
-  HitResult,
-  HitTarget,
-  PointTarget,
-  SegmentTarget,
-  RectTarget,
-  CollectionHitOptions,
-} from './HitTest';
-
-// Snapping
-export { Snap } from './Snap';
-export type {
-  SnapResult,
-  SnapTarget,
-  PointSnapTarget,
-  LineSnapTarget,
-  GridSnapTarget,
-  AngleSnapTarget,
-  ExtensionSnapTarget,
-  SnapOptions,
-} from './Snap';
+} from './Curve';
