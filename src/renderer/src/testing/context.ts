@@ -1,48 +1,20 @@
-/**
- * Context mocks for testing.
- *
- * Provides mock implementations of CommandContext and ToolContext
- * for testing commands and tools in isolation.
- */
-
-import { vi } from "vitest";
-import type { ToolContext } from "@/types/tool";
-import type { PointId } from "@/types/ids";
-import type { Rect2D } from "@/types/math";
-import type { GlyphSnapshot } from "@/types/generated";
-import type { CommandContext } from "@/lib/commands/Command";
-import { CommandHistory } from "@/lib/commands";
-import { Viewport } from "@/lib/editor/Viewport";
+import { vi } from 'vitest';
+import type { ToolContext, ScreenContext, SelectContext, EditContext } from '@/types/tool';
+import type { PointId } from '@/types/ids';
+import type { Rect2D } from '@/types/math';
+import type { GlyphSnapshot } from '@/types/generated';
+import type { CommandContext } from '@/lib/commands/Command';
+import { CommandHistory } from '@/lib/commands';
+import { Viewport } from '@/lib/editor/Viewport';
+import { asContourId } from '@/types/ids';
 import {
   createMockFontEngine,
   createMockEditing,
   createTestSnapshot,
   populateEngine,
   type TestSnapshotConfig,
-} from "./engine";
+} from './engine';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// COMMAND CONTEXT
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Create a mock CommandContext for testing commands.
- *
- * Uses createMockEditing() to provide vi.fn() mocks for all editing methods,
- * making it easy to verify command behavior.
- *
- * @example
- * ```typescript
- * import { createMockCommandContext } from '@/testing';
- *
- * it('should add point', () => {
- *   const ctx = createMockCommandContext();
- *   const cmd = new AddPointCommand(100, 200, 'onCurve');
- *   cmd.execute(ctx);
- *   expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith(100, 200, 'onCurve', false);
- * });
- * ```
- */
 export function createMockCommandContext(snapshot: GlyphSnapshot | null = null): CommandContext {
   return {
     fontEngine: {
@@ -52,48 +24,17 @@ export function createMockCommandContext(snapshot: GlyphSnapshot | null = null):
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TOOL CONTEXT
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Options for creating a mock tool context.
- */
 export interface MockToolContextOptions {
-  /** Initial snapshot configuration. */
   snapshot?: TestSnapshotConfig;
-  /** Initial selected point IDs. */
   selectedPoints?: Set<PointId>;
-  /** Initial hovered point. */
   hoveredPoint?: PointId | null;
-  /** Viewport dimensions (defaults to 1000x1000). */
   viewportSize?: { width: number; height: number };
 }
 
-/**
- * Create a mock ToolContext for testing tools.
- *
- * Returns both the context and tracking functions for assertions.
- *
- * @example
- * ```typescript
- * import { createMockToolContext, createMouseEvent } from '@/testing';
- *
- * it('should select point on click', () => {
- *   const { ctx, getSelectedPoints } = createMockToolContext({
- *     snapshot: { contours: [{ points: [{ x: 100, y: 100 }] }] }
- *   });
- *
- *   tool.onMouseDown(createMouseEvent('mousedown', { clientX: 100, clientY: 100 }));
- *   expect(getSelectedPoints().size).toBe(1);
- * });
- * ```
- */
 export function createMockToolContext(options: MockToolContextOptions = {}) {
   const fontEngine = createMockFontEngine();
   const viewport = new Viewport();
 
-  // Configure viewport with full Rect2D
   const size = options.viewportSize ?? { width: 1000, height: 1000 };
   const rect: Rect2D = {
     x: 0,
@@ -107,26 +48,91 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   };
   viewport.setRect(rect);
 
-  // Create CommandHistory with fontEngine and snapshot getter
   const commandHistory = new CommandHistory(
     fontEngine,
     () => fontEngine.snapshot.value
   );
 
-  // Populate with snapshot if provided, otherwise just start empty session
   if (options.snapshot) {
     const snapshot = createTestSnapshot(options.snapshot);
     populateEngine(fontEngine, snapshot);
   } else {
-    // Start an empty edit session
     fontEngine.session.startEditSession(65);
     fontEngine.editing.addContour();
   }
 
-  // Track state changes
   let selectedPoints = options.selectedPoints ?? new Set<PointId>();
   let hoveredPoint = options.hoveredPoint ?? null;
+  let selectionMode: 'preview' | 'committed' = 'committed';
   let redrawCount = 0;
+
+  const screen: ScreenContext = {
+    toUpmDistance: (px: number) => viewport.screenToUpmDistance(px),
+    get hitRadius() {
+      return viewport.screenToUpmDistance(8);
+    },
+    lineWidth: (px = 1) => viewport.screenToUpmDistance(px),
+  };
+
+  const select: SelectContext = {
+    set: vi.fn((ids: Set<PointId>) => {
+      selectedPoints = new Set(ids);
+    }),
+    add: vi.fn((id: PointId) => {
+      selectedPoints = new Set(selectedPoints);
+      selectedPoints.add(id);
+    }),
+    remove: vi.fn((id: PointId) => {
+      selectedPoints = new Set(selectedPoints);
+      selectedPoints.delete(id);
+    }),
+    toggle: vi.fn((id: PointId) => {
+      selectedPoints = new Set(selectedPoints);
+      if (selectedPoints.has(id)) {
+        selectedPoints.delete(id);
+      } else {
+        selectedPoints.add(id);
+      }
+    }),
+    clear: vi.fn(() => {
+      selectedPoints = new Set();
+    }),
+    has: vi.fn(() => selectedPoints.size > 0),
+    setHovered: vi.fn((id: PointId | null) => {
+      hoveredPoint = id;
+    }),
+    setMode: vi.fn((mode: 'preview' | 'committed') => {
+      selectionMode = mode;
+    }),
+  };
+
+  const edit: EditContext = {
+    addPoint: vi.fn((x: number, y: number, type: 'onCurve' | 'offCurve') => {
+      return fontEngine.editing.addPoint(x, y, type, false);
+    }),
+    movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) => {
+      fontEngine.editing.movePoints([...ids], dx, dy);
+    }),
+    movePointTo: vi.fn((id: PointId, x: number, y: number) => {
+      fontEngine.editing.movePointTo(id, x, y);
+    }),
+    removePoints: vi.fn((ids: Iterable<PointId>) => {
+      fontEngine.editing.removePoints([...ids]);
+    }),
+    addContour: vi.fn(() => {
+      return fontEngine.editing.addContour();
+    }),
+    closeContour: vi.fn(() => {
+      fontEngine.editing.closeContour();
+    }),
+    toggleSmooth: vi.fn((id: PointId) => {
+      fontEngine.editing.toggleSmooth(id);
+    }),
+    getActiveContourId: vi.fn(() => {
+      const id = fontEngine.editing.getActiveContourId();
+      return id ? asContourId(id) : null;
+    }),
+  };
 
   const ctx: ToolContext = {
     get snapshot() {
@@ -138,26 +144,18 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     get hoveredPoint() {
       return hoveredPoint;
     },
-    viewport,
     mousePosition: { x: 0, y: 0 },
-    fontEngine,
+    get selectionMode() {
+      return selectionMode;
+    },
+    screen,
+    select,
+    edit,
     commands: commandHistory,
-    setSelectedPoints: vi.fn((ids: Set<PointId>) => {
-      selectedPoints = ids;
-    }),
-    addToSelection: vi.fn((id: PointId) => {
-      selectedPoints = new Set(selectedPoints);
-      selectedPoints.add(id);
-    }),
-    clearSelection: vi.fn(() => {
-      selectedPoints = new Set();
-    }),
-    setHoveredPoint: vi.fn((id: PointId | null) => {
-      hoveredPoint = id;
-    }),
     requestRedraw: vi.fn(() => {
       redrawCount++;
     }),
+    emit: vi.fn(),
   };
 
   return {
@@ -165,13 +163,9 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     fontEngine,
     commandHistory,
     viewport,
-    /** Get current selected points (for assertions). */
     getSelectedPoints: () => selectedPoints,
-    /** Get current hovered point (for assertions). */
     getHoveredPoint: () => hoveredPoint,
-    /** Get redraw count (for assertions). */
     getRedrawCount: () => redrawCount,
-    /** Update selected points directly (for test setup). */
     setSelectedPoints: (ids: Set<PointId>) => {
       selectedPoints = ids;
     },

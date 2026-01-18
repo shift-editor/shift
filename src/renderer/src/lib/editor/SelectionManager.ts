@@ -11,8 +11,10 @@ export interface SelectionManager {
   select(pointId: PointId): void;
   selectMultiple(pointIds: Set<PointId>): void;
   addToSelection(pointId: PointId): void;
+  removeFromSelection(pointId: PointId): void;
   toggleSelection(pointId: PointId): void;
   clearSelection(): void;
+  hasSelection(): boolean;
   setHovered(pointId: PointId | null): void;
   clearHovered(): void;
   setMode(mode: SelectionMode): void;
@@ -64,6 +66,11 @@ export function createSelectionManager(onChange?: () => void): SelectionManager 
       notify();
     },
 
+    removeFromSelection(pointId: PointId): void {
+      state.selectedPoints.delete(pointId);
+      notify();
+    },
+
     toggleSelection(pointId: PointId): void {
       if (state.selectedPoints.has(pointId)) {
         state.selectedPoints.delete(pointId);
@@ -76,6 +83,10 @@ export function createSelectionManager(onChange?: () => void): SelectionManager 
     clearSelection(): void {
       state.selectedPoints.clear();
       notify();
+    },
+
+    hasSelection(): boolean {
+      return state.selectedPoints.size > 0;
     },
 
     setHovered(pointId: PointId | null): void {

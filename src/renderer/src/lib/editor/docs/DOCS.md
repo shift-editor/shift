@@ -24,9 +24,11 @@ Editor
 ### Key Design Decisions
 
 1. **Dual Canvas**: Static layer for glyph, interactive layer for tools
-2. **UPM Coordinates**: Font design space with Y-axis inversion
-3. **Reactive Rendering**: Effects watch snapshot signal for redraws
-4. **Functional Rendering**: Pure functions render from immutable snapshots
+2. **Matrix Transforms**: 2D affine matrices for all coordinate transformations
+3. **Reactive Matrices**: Computed signals auto-invalidate when dependencies change
+4. **UPM Coordinates**: Font design space with Y-axis inversion
+5. **Reactive Rendering**: Effects watch snapshot signal for redraws
+6. **Functional Rendering**: Pure functions render from immutable snapshots
 
 ## Key Concepts
 
@@ -63,6 +65,88 @@ projectScreenToUpm(screenX, screenY): Point2D
 projectUpmToScreen(upmX, upmY): Point2D
 ```
 
+### Matrix Transform System
+
+The Shift editor uses **2D affine transformation matrices** (3x2 representation) for all coordinate transformations. This provides a solid foundation for current features and future transforms (rotation, reflection, skew).
+
+#### Overview
+
+```typescript
+// 2D Affine Matrix (3x2 representation)
+// Represents: | a  c  e |
+//             | b  d  f |
+//             | 0  0  1 | (implicit)
+
+const m = Mat.Identity()              // Create identity matrix
+  .translate(100, 50)                 // Translate
+  .scale(2, 3)                        // Scale
+  .rotate(Math.PI / 4);               // Rotate (future)
+
+// Transform a point
+const point = Mat.applyToPoint(m, { x: 10, y: 20 });
+
+// Compose matrices
+const composed = Mat.Compose(m1, m2);
+
+// Invert matrix
+const inverse = Mat.Inverse(m);
+```
+
+#### Transformation Pipeline
+
+**UPM → Screen Transform:**
+1. Scale to canvas space and flip Y-axis
+2. Position baseline at padding
+3. Apply zoom around canvas center
+4. Apply pan offset
+
+```typescript
+// Example: baseline at 600px, scale 0.4 UPM/px, zoom 1.5, pan (50, 0)
+upmTransform = Identity
+  .translate(300, 600)  // Position baseline
+  .scale(0.4, -0.4);    // Scale and flip Y
+
+screenTransform = Identity
+  .translate(50, 0)     // Pan
+  .scale(1.5, 1.5);     // Zoom
+
+result = Compose(screenTransform, upmTransform);
+```
+
+**Screen → UPM Transform:**
+- Inverse of UPM → Screen
+- Applied to mouse events to convert screen coordinates to UPM space
+
+#### Zoom-to-Cursor
+
+The `zoomToPoint(screenX, screenY, zoomDelta)` algorithm maintains the UPM coordinate under the cursor:
+
+```typescript
+1. Record UPM at cursor BEFORE zoom
+2. Apply zoom factor to viewport
+3. Calculate UPM at cursor AFTER zoom (matrices recompute automatically)
+4. Adjust pan to compensate for UPM drift
+```
+
+This ensures smooth zooming that "follows" the cursor, creating an intuitive zoom experience.
+
+#### Future Transform Support
+
+The matrix system already supports additional transforms needed for future features:
+
+```typescript
+// Rotation (already implemented in Mat.rotate)
+const rotated = Mat.Rotate(Math.PI / 4);
+
+// Reflection (via negative scale)
+const flipX = Mat.Scale(-1, 1);
+const flipY = Mat.Scale(1, -1);
+
+// Skew (modify matrix components)
+const skewed = Mat.Identity();
+skewed.c = Math.tan(angleX);  // X-axis skew
+```
+
 ### Selection Management
 
 Three handle states based on selection:
@@ -82,7 +166,12 @@ type SelectionMode = 'preview' | 'committed';
 
 ### Viewport
 - `pan(dx, dy)` - Pan canvas
-- `zoomIn() / zoomOut()` - Zoom controls
+- `zoomIn() / zoomOut()` - Zoom to canvas center (1.25x / 0.8x)
+- `zoomToPoint(screenX, screenY, zoomDelta)` - Zoom toward cursor position
+- `projectScreenToUpm(x, y): Point2D` - Screen to UPM transform
+- `projectUpmToScreen(x, y): Point2D` - UPM to screen transform
+- `getUpmToScreenMatrix(): Mat` - Get transformation matrix
+- `getScreenToUpmMatrix(): Mat` - Get inverse transformation matrix
 - `setViewportRect(rect)` - Set canvas bounds
 - `setViewportUpm(upm)` - Set units per em
 

@@ -10,7 +10,7 @@ export const App = () => {
   useEffect(() => {
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
       const editor = AppState.getState().editor;
-      editor.fontEngine.io.loadFont(filePath);
+      editor.loadFont(filePath);
       editor.updateMetricsFromFont();
       AppState.getState().setFileName(filePath.split('/').pop() ?? '');
     });

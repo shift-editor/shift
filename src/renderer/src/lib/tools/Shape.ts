@@ -47,21 +47,22 @@ export class Shape implements Tool {
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
     this.#state = { type: 'ready' };
 
+    const ctx = this.#editor.createToolContext();
     const pointIds = [];
 
-    pointIds.push(this.#editor.addPoint(this.#rect.x, this.#rect.y, 'onCurve'));
-    pointIds.push(this.#editor.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve'));
+    pointIds.push(ctx.edit.addPoint(this.#rect.x, this.#rect.y, 'onCurve'));
+    pointIds.push(ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve'));
     pointIds.push(
-      this.#editor.addPoint(
+      ctx.edit.addPoint(
         this.#rect.x + this.#rect.width,
         this.#rect.y + this.#rect.height,
         'onCurve'
       )
     );
-    pointIds.push(this.#editor.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve'));
-    this.#editor.closeContour();
+    pointIds.push(ctx.edit.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve'));
+    ctx.edit.closeContour();
 
-    this.#editor.emit('points:added', { pointIds });
+    ctx.emit('points:added', { pointIds });
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -84,7 +85,8 @@ export class Shape implements Tool {
       bottom: this.#state.startPos.y + height,
     };
 
-    this.#editor.requestRedraw();
+    const ctx = this.#editor.createToolContext();
+    ctx.requestRedraw();
   }
 
   drawInteractive(ctx: IRenderer): void {

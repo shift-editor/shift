@@ -1,17 +1,20 @@
 import { clamp } from '@/lib/utils/utils';
 import { Point2D, Rect2D } from '@/types/math';
+import { Mat } from '@/lib/primitives/Mat';
+import { signal, computed, type WritableSignal, type Signal } from '@/lib/reactive/signal';
 
 export class Viewport {
-  #padding: number;
-  #upm: number;
-  #descender: number;
+  // Reactive viewport state (signals auto-invalidate derived matrices)
+  readonly #zoom: WritableSignal<number>;
+  readonly #panX: WritableSignal<number>;
+  readonly #panY: WritableSignal<number>;
+  readonly #upm: WritableSignal<number>;
+  readonly #descender: WritableSignal<number>;
+  readonly #padding: WritableSignal<number>;
+
+  // Non-reactive state
   #canvasRect: Rect2D;
-
-  #zoom: number;
   #dpr: number;
-
-  #panX: number;
-  #panY: number;
 
   #mouseX: number;
   #mouseY: number;
@@ -19,13 +22,20 @@ export class Viewport {
   #upmX: number;
   #upmY: number;
 
-  constructor() {
-    this.#upm = 1000;
-    this.#descender = -200;
-    this.#padding = 300;
+  // Computed matrices (automatically recompute when dependencies change)
+  readonly #upmToScreenMatrix: Signal<Mat>;
+  readonly #screenToUpmMatrix: Signal<Mat>;
 
-    this.#dpr = window.devicePixelRatio || 1;
-    this.#zoom = 1;
+  constructor() {
+    // Initialize signals
+    this.#zoom = signal(1);
+    this.#panX = signal(0);
+    this.#panY = signal(0);
+    this.#upm = signal(1000);
+    this.#descender = signal(-200);
+    this.#padding = signal(300);
+
+    this.#dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
     this.#mouseX = 0;
     this.#mouseY = 0;
@@ -44,8 +54,34 @@ export class Viewport {
       bottom: 0,
     };
 
-    this.#panX = 0;
-    this.#panY = 0;
+    // Computed matrix: UPM → Screen
+    // Automatically recomputes when zoom, pan, upm, descender, or padding change
+    this.#upmToScreenMatrix = computed(() => {
+      const scale = this.upmScale;
+      const baselineY = this.logicalHeight - this.#padding.value - this.#descender.value * scale;
+      const center = this.getCentrePoint();
+      const zoom = this.#zoom.value;
+
+      // 1. UPM → View: scale, flip Y, position baseline
+      const upmTransform = Mat.Identity()
+        .translate(this.#padding.value, baselineY)
+        .scale(scale, -scale);
+
+      // 2. View → Screen: zoom and pan around center
+      const panX = this.#panX.value + center.x * (1 - zoom);
+      const panY = this.#panY.value + center.y * (1 - zoom);
+      const viewTransform = Mat.Identity()
+        .translate(panX, panY)
+        .scale(zoom, zoom);
+
+      return Mat.Compose(viewTransform, upmTransform);
+    });
+
+    // Computed matrix: Screen → UPM (inverse)
+    // Automatically recomputes when upmToScreenMatrix changes
+    this.#screenToUpmMatrix = computed(() => {
+      return Mat.Inverse(this.#upmToScreenMatrix.value);
+    });
   }
 
   // **
@@ -62,29 +98,29 @@ export class Viewport {
   // @returns The upm of the viewport
   // **
   get upm(): number {
-    return this.#upm;
+    return this.#upm.value;
   }
 
   set upm(value: number) {
-    this.#upm = value;
+    this.#upm.value = value;
   }
 
   get descender(): number {
-    return this.#descender;
+    return this.#descender.value;
   }
 
   set descender(value: number) {
-    this.#descender = value;
+    this.#descender.value = value;
   }
 
   get padding(): number {
-    return this.#padding;
+    return this.#padding.value;
   }
 
   get upmScale(): number {
-    const availableHeight = this.logicalHeight - 2 * this.#padding;
-    if (availableHeight <= 0 || this.#upm <= 0) return 1;
-    return availableHeight / this.#upm;
+    const availableHeight = this.logicalHeight - 2 * this.#padding.value;
+    if (availableHeight <= 0 || this.#upm.value <= 0) return 1;
+    return availableHeight / this.#upm.value;
   }
 
   // **
@@ -126,7 +162,7 @@ export class Viewport {
   // @returns The scale of the viewport
   // **
   get scale(): number {
-    return this.#zoom;
+    return this.#zoom.value;
   }
 
   // **
@@ -138,7 +174,7 @@ export class Viewport {
   }
 
   public get zoom(): number {
-    return this.#zoom;
+    return this.#zoom.value;
   }
 
   // **
@@ -172,32 +208,15 @@ export class Viewport {
   }
 
   public projectScreenToUpm(x: number, y: number) {
-    const center = this.getCentrePoint();
-    const zoomedX = (x - (this.#panX + center.x * (1 - this.#zoom))) / this.#zoom;
-    const zoomedY = (y - (this.#panY + center.y * (1 - this.#zoom))) / this.#zoom;
-
-    const scale = this.upmScale;
-    const baselineY = this.logicalHeight - this.#padding - this.#descender * scale;
-    const upmX = Math.floor((zoomedX - this.#padding) / scale);
-    const upmY = Math.floor((-zoomedY + baselineY) / scale);
-
-    return { x: upmX, y: upmY };
+    const result = Mat.applyToPoint(this.#screenToUpmMatrix.value, { x, y });
+    return {
+      x: Math.floor(result.x),
+      y: Math.floor(result.y),
+    };
   }
 
   public projectUpmToScreen(x: number, y: number) {
-    const scale = this.upmScale;
-    const baselineY = this.logicalHeight - this.#padding - this.#descender * scale;
-
-    const screenX = x * scale + this.#padding;
-    const screenY = -(y * scale - baselineY);
-
-    const panX = this.#panX + this.getCentrePoint().x * (1 - this.#zoom);
-    const panY = this.#panY + this.getCentrePoint().y * (1 - this.#zoom);
-
-    return {
-      x: screenX * this.#zoom + panX,
-      y: screenY * this.#zoom + panY,
-    };
+    return Mat.applyToPoint(this.#upmToScreenMatrix.value, { x, y });
   }
 
   // **
@@ -218,11 +237,11 @@ export class Viewport {
   }
 
   get panX(): number {
-    return this.#panX;
+    return this.#panX.value;
   }
 
   get panY(): number {
-    return this.#panY;
+    return this.#panY.value;
   }
 
   // **
@@ -231,15 +250,71 @@ export class Viewport {
   // @param y - The y position of the mouse
   // **
   pan(x: number, y: number): void {
-    this.#panX = x;
-    this.#panY = y;
+    this.#panX.value = x;
+    this.#panY.value = y;
+  }
+
+  /**
+   * Zoom toward a specific screen point
+   *
+   * Algorithm:
+   * 1. Record UPM coordinate at cursor BEFORE zoom
+   * 2. Apply zoom factor
+   * 3. Get UPM coordinate at cursor AFTER zoom (same screen position, different UPM due to new matrices)
+   * 4. Adjust pan by the delta to keep cursor over same UPM coordinate
+   */
+  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+    const before = this.projectScreenToUpm(screenX, screenY);
+
+    const newZoom = clamp(this.#zoom.value * zoomDelta, 0.1, 6);
+    this.#zoom.value = newZoom;
+
+    const after = this.projectScreenToUpm(screenX, screenY);
+
+    const scale = this.upmScale;
+    const deltaX = (before.x - after.x) * scale * newZoom;
+    const deltaY = (before.y - after.y) * scale * newZoom;
+
+    this.#panX.value -= deltaX;
+    this.#panY.value += deltaY;
   }
 
   zoomIn(): void {
-    this.#zoom = clamp(this.#zoom + 0.25, 0.1, 6);
+    const center = this.getCentrePoint();
+    this.zoomToPoint(center.x, center.y, 1.25);
   }
 
   zoomOut(): void {
-    this.#zoom = clamp(this.#zoom - 0.25, 0.1, 6);
+    const center = this.getCentrePoint();
+    this.zoomToPoint(center.x, center.y, 0.8);
+  }
+
+  /**
+   * Get the UPM to Screen transformation matrix
+   */
+  public getUpmToScreenMatrix(): Mat {
+    return this.#upmToScreenMatrix.value.clone();
+  }
+
+  /**
+   * Get the Screen to UPM transformation matrix
+   */
+  public getScreenToUpmMatrix(): Mat {
+    return this.#screenToUpmMatrix.value.clone();
+  }
+
+  /**
+   * Convert a screen-space distance to UPM-space distance.
+   * Accounts for both UPM scale and zoom level.
+   */
+  public screenToUpmDistance(screenDistance: number): number {
+    return screenDistance / (this.upmScale * this.#zoom.value);
+  }
+
+  /**
+   * Get the effective scale factor (upmScale * zoom).
+   */
+  public get effectiveScale(): number {
+    return this.upmScale * this.#zoom.value;
   }
 }

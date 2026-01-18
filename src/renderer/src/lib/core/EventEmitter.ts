@@ -1,19 +1,19 @@
-import type { EventHandler, EventName, IEventEmitter } from "@/types/events";
+import type { EditorEventName, EditorEventMap, EventHandler, IEventEmitter } from '@/types/events';
 
 export class EventEmitter implements IEventEmitter {
-  #eventHandlers: Map<EventName, EventHandler<any>[]>;
+  #eventHandlers: Map<EditorEventName, EventHandler<any>[]>;
 
   constructor() {
     this.#eventHandlers = new Map();
   }
 
-  on<T>(event: EventName, handler: EventHandler<T>) {
+  on<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
     const handlers = this.#eventHandlers.get(event) || [];
-    handlers.push(handler);
+    handlers.push(handler as EventHandler<any>);
     this.#eventHandlers.set(event, handlers);
   }
 
-  emit<T>(event: EventName, data: T) {
+  emit<K extends EditorEventName>(event: K, data: EditorEventMap[K]) {
     const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {
@@ -23,7 +23,7 @@ export class EventEmitter implements IEventEmitter {
     handlers.forEach((handler) => handler(data));
   }
 
-  off<T>(event: EventName, handler: EventHandler<T>) {
+  off<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
     const handlers = this.#eventHandlers.get(event);
 
     if (!handlers) {

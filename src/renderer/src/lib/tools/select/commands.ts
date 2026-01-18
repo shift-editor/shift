@@ -5,7 +5,6 @@ import type { PointId } from '@/types/ids';
 import { asPointId } from '@/types/ids';
 import type { PointSnapshot } from '@/types/generated';
 import { NUDGES_VALUES, type NudgeMagnitude } from '@/types/nudge';
-import { HIT_RADIUS } from './states';
 
 function pointDistance(point: PointSnapshot, x: number, y: number): number {
   const dx = point.x - x;
@@ -60,7 +59,8 @@ export class SelectCommands {
   hitTest(pos: Point2D): HitTestResult {
     const ctx = this.#editor.createToolContext();
     const allPoints = getAllPoints(ctx.snapshot);
-    const hitPoint = findPointAtPosition(allPoints, pos.x, pos.y, HIT_RADIUS);
+    const hitRadius = ctx.screen.hitRadius;
+    const hitPoint = findPointAtPosition(allPoints, pos.x, pos.y, hitRadius);
 
     if (hitPoint) {
       return { point: hitPoint, pointId: asPointId(hitPoint.id) };
@@ -69,13 +69,13 @@ export class SelectCommands {
   }
 
   selectPoint(pointId: PointId, additive: boolean): void {
+    const ctx = this.#editor.createToolContext();
     if (additive) {
-      const ctx = this.#editor.createToolContext();
       const newSelection = new Set(ctx.selectedPoints);
       newSelection.add(pointId);
-      this.#editor.setSelectedPoints(newSelection);
+      ctx.select.set(newSelection);
     } else {
-      this.#editor.setSelectedPoints(new Set([pointId]));
+      ctx.select.set(new Set([pointId]));
     }
   }
 
@@ -84,23 +84,18 @@ export class SelectCommands {
     const allPoints = getAllPoints(ctx.snapshot);
     const hitPoints = findPointsInRect(allPoints, rect);
     const pointIds = new Set(hitPoints.map((p) => asPointId(p.id)));
-    this.#editor.setSelectedPoints(pointIds);
+    ctx.select.set(pointIds);
     return { points: hitPoints, pointIds };
   }
 
   clearSelection(): void {
-    this.#editor.clearSelectedPoints();
+    const ctx = this.#editor.createToolContext();
+    ctx.select.clear();
   }
 
   togglePointInSelection(pointId: PointId): void {
     const ctx = this.#editor.createToolContext();
-    const newSelection = new Set(ctx.selectedPoints);
-    if (newSelection.has(pointId)) {
-      newSelection.delete(pointId);
-    } else {
-      newSelection.add(pointId);
-    }
-    this.#editor.setSelectedPoints(newSelection);
+    ctx.select.toggle(pointId);
   }
 
   isPointSelected(pointId: PointId): boolean {
@@ -110,7 +105,7 @@ export class SelectCommands {
 
   hasSelection(): boolean {
     const ctx = this.#editor.createToolContext();
-    return ctx.selectedPoints.size > 0;
+    return ctx.select.has();
   }
 
   moveSelectedPoints(anchorId: PointId, currentPos: Point2D): Point2D {
@@ -126,7 +121,12 @@ export class SelectCommands {
     const dy = currentPos.y - dragPoint.y;
 
     if (dx !== 0 || dy !== 0) {
-      this.#editor.fontEngine.editEngine.applyEdits(ctx.selectedPoints, dx, dy);
+      for (const pointId of ctx.selectedPoints) {
+        const point = allPoints.find((p) => p.id === pointId);
+        if (point) {
+          ctx.edit.movePointTo(pointId, point.x + dx, point.y + dy);
+        }
+      }
     }
 
     return { x: dx, y: dy };
@@ -135,7 +135,7 @@ export class SelectCommands {
   nudgeSelectedPoints(dx: number, dy: number): void {
     const ctx = this.#editor.createToolContext();
     if (ctx.selectedPoints.size > 0) {
-      this.#editor.fontEngine.editEngine.applyEdits(ctx.selectedPoints, dx, dy);
+      ctx.edit.movePoints(ctx.selectedPoints, dx, dy);
     }
   }
 
@@ -144,19 +144,17 @@ export class SelectCommands {
   }
 
   updateHover(pos: Point2D): void {
+    const ctx = this.#editor.createToolContext();
     const { pointId } = this.hitTest(pos);
-    if (pointId) {
-      this.#editor.setHoveredPoint(pointId);
-    } else {
-      this.#editor.clearHoveredPoint();
-    }
+    ctx.select.setHovered(pointId);
   }
 
   toggleSmooth(pos: Point2D): boolean {
+    const ctx = this.#editor.createToolContext();
     const { point, pointId } = this.hitTest(pos);
     if (point && point.pointType === 'onCurve' && pointId) {
-      this.#editor.fontEngine.editing.toggleSmooth(pointId);
-      this.#editor.requestRedraw();
+      ctx.edit.toggleSmooth(pointId);
+      ctx.requestRedraw();
       return true;
     }
     return false;

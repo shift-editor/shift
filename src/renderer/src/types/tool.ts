@@ -1,66 +1,57 @@
-import type { IRenderer } from "./graphics";
-import type { GlyphSnapshot } from "./generated";
-import type { PointId } from "./ids";
-import type { FontEngine } from "@/engine";
-import type { Viewport } from "@/lib/editor/Viewport";
-import type { CommandHistory } from "@/lib/commands";
+import type { IRenderer } from './graphics';
+import type { GlyphSnapshot } from './generated';
+import type { PointId, ContourId } from './ids';
+import type { Point2D } from './math';
+import type { CommandHistory } from '@/lib/commands';
+import type { SelectionMode } from '@/lib/editor/SelectionManager';
+import type { EditorEventName, EditorEventMap } from './events';
 
-export type ToolName = "select" | "pen" | "hand" | "shape" | "disabled";
+export type ToolName = 'select' | 'pen' | 'hand' | 'shape' | 'disabled';
 
-/**
- * Context passed to tools for accessing editor state and performing actions.
- *
- * Tools receive this context instead of reaching into Editor directly.
- */
-export interface ToolContext {
-  // ═══════════════════════════════════════════════════════════
-  // READ-ONLY STATE
-  // ═══════════════════════════════════════════════════════════
-
-  /** Current glyph snapshot (null if no edit session). */
-  readonly snapshot: GlyphSnapshot | null;
-
-  /** Currently selected point IDs. */
-  readonly selectedPoints: ReadonlySet<PointId>;
-
-  /** Currently hovered point ID (null if none). */
-  readonly hoveredPoint: PointId | null;
-
-  /** Viewport for coordinate transforms. */
-  readonly viewport: Viewport;
-
-  /** Mouse position in UPM coordinates. */
-  readonly mousePosition: { x: number; y: number };
-
-  // ═══════════════════════════════════════════════════════════
-  // ACTIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /** Font engine for mutations. */
-  readonly fontEngine: FontEngine;
-
-  /** Command history for undo/redo. */
-  readonly commands: CommandHistory;
-
-  /** Set the selected points. */
-  setSelectedPoints(ids: Set<PointId>): void;
-
-  /** Add a point to selection. */
-  addToSelection(id: PointId): void;
-
-  /** Clear selection. */
-  clearSelection(): void;
-
-  /** Set the hovered point. */
-  setHoveredPoint(id: PointId | null): void;
-
-  /** Request a redraw of the canvas. */
-  requestRedraw(): void;
+export interface ScreenContext {
+  toUpmDistance(pixels: number): number;
+  readonly hitRadius: number;
+  lineWidth(pixels?: number): number;
 }
 
-/**
- * Tool interface - implements mouse/keyboard handlers and optional rendering.
- */
+export interface SelectContext {
+  set(ids: Set<PointId>): void;
+  add(id: PointId): void;
+  remove(id: PointId): void;
+  toggle(id: PointId): void;
+  clear(): void;
+  has(): boolean;
+  setHovered(id: PointId | null): void;
+  setMode(mode: SelectionMode): void;
+}
+
+export interface EditContext {
+  addPoint(x: number, y: number, type: 'onCurve' | 'offCurve'): PointId;
+  movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
+  movePointTo(id: PointId, x: number, y: number): void;
+  removePoints(ids: Iterable<PointId>): void;
+  addContour(): ContourId;
+  closeContour(): void;
+  toggleSmooth(id: PointId): void;
+  getActiveContourId(): ContourId | null;
+}
+
+export interface ToolContext {
+  readonly snapshot: GlyphSnapshot | null;
+  readonly selectedPoints: ReadonlySet<PointId>;
+  readonly hoveredPoint: PointId | null;
+  readonly mousePosition: Point2D;
+  readonly selectionMode: SelectionMode;
+
+  readonly screen: ScreenContext;
+  readonly select: SelectContext;
+  readonly edit: EditContext;
+
+  readonly commands: CommandHistory;
+  requestRedraw(): void;
+  emit<K extends EditorEventName>(event: K, data: EditorEventMap[K]): void;
+}
+
 export interface Tool {
   name: ToolName;
 
@@ -77,6 +68,5 @@ export interface Tool {
 
   drawInteractive?(ctx: IRenderer): void;
 
-  /** Optional cleanup when tool is disposed (e.g., for signal effects). */
   dispose?(): void;
 }

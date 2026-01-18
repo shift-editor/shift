@@ -18,6 +18,3 @@ export interface DragData {
   startPos: Point2D;
   totalDelta: Point2D;
 }
-
-export const HIT_RADIUS = 4;
-export const DRAG_THRESHOLD = 2;

@@ -60,13 +60,13 @@ export class Select implements Tool {
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     const pos = this.#getMouseUpm(e);
     const { pointId } = this.#commands.hitTest(pos);
+    const ctx = this.#editor.createToolContext();
 
     this.#sm.when('ready', () => {
       if (pointId) {
         this.#commands.selectPoint(pointId, false);
-        // Track selected points for undo
-        const ctx = this.#editor.createToolContext();
-        this.#draggedPointIds = [...ctx.selectedPoints];
+        const freshCtx = this.#editor.createToolContext();
+        this.#draggedPointIds = [...freshCtx.selectedPoints];
         this.#sm.transition({
           type: 'dragging',
           drag: {
@@ -76,7 +76,7 @@ export class Select implements Tool {
           },
         });
       } else {
-        this.#editor.setSelectionMode('preview');
+        ctx.select.setMode('preview');
         this.#sm.transition({
           type: 'selecting',
           selection: { startPos: pos, currentPos: pos },
@@ -98,9 +98,8 @@ export class Select implements Tool {
           if (!isSelected) {
             this.#commands.selectPoint(pointId, false);
           }
-          // Track selected points for undo
-          const ctx = this.#editor.createToolContext();
-          this.#draggedPointIds = [...ctx.selectedPoints];
+          const freshCtx = this.#editor.createToolContext();
+          this.#draggedPointIds = [...freshCtx.selectedPoints];
           this.#sm.transition({
             type: 'dragging',
             drag: {
@@ -112,7 +111,7 @@ export class Select implements Tool {
         }
       } else {
         this.#commands.clearSelection();
-        this.#editor.setSelectionMode('preview');
+        ctx.select.setMode('preview');
         this.#sm.transition({
           type: 'selecting',
           selection: { startPos: pos, currentPos: pos },
@@ -120,7 +119,7 @@ export class Select implements Tool {
       }
     });
 
-    this.#editor.requestRedraw();
+    ctx.requestRedraw();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
@@ -166,10 +165,12 @@ export class Select implements Tool {
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
+    const ctx = this.#editor.createToolContext();
+
     this.#sm.when('selecting', () => {
       const { pointIds } = this.#commands.selectPointsInRect(this.#selectionRect);
       this.#selectionRect.clear();
-      this.#editor.setSelectionMode('committed');
+      ctx.select.setMode('committed');
 
       if (pointIds.size > 0) {
         this.#sm.transition({ type: 'selected', hoveredPointId: null });
@@ -181,10 +182,9 @@ export class Select implements Tool {
     this.#sm.when('dragging', (state) => {
       const { totalDelta } = state.drag;
 
-      // Record the move for undo if there was actual movement
       if ((totalDelta.x !== 0 || totalDelta.y !== 0) && this.#draggedPointIds.length > 0) {
         const cmd = new MovePointsCommand(this.#draggedPointIds, totalDelta.x, totalDelta.y);
-        this.#editor.commandHistory.record(cmd);
+        ctx.commands.record(cmd);
       }
 
       this.#draggedPointIds = [];
@@ -193,16 +193,16 @@ export class Select implements Tool {
   }
 
   drawInteractive(ctx: IRenderer): void {
+    const toolCtx = this.#editor.createToolContext();
     this.#sm.when('selecting', () => {
       ctx.setStyle(SELECTION_RECTANGLE_STYLES);
+      ctx.lineWidth = toolCtx.screen.lineWidth(SELECTION_RECTANGLE_STYLES.lineWidth);
       ctx.fillRect(
         this.#selectionRect.x,
         this.#selectionRect.y,
         this.#selectionRect.width,
         this.#selectionRect.height,
       );
-
-      ctx.setStyle(SELECTION_RECTANGLE_STYLES);
       ctx.strokeRect(
         this.#selectionRect.x,
         this.#selectionRect.y,
@@ -245,8 +245,8 @@ export class Select implements Tool {
     }
 
     const cmd = new NudgePointsCommand(pointIds, dx, dy);
-    this.#editor.commandHistory.execute(cmd);
-    this.#editor.requestRedraw();
+    ctx.commands.execute(cmd);
+    ctx.requestRedraw();
   }
 
   keyUpHandler(_e: KeyboardEvent): void {

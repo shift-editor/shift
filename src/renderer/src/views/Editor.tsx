@@ -16,13 +16,15 @@ export const Editor = () => {
     const activeTool = editor.activeTool();
 
     const keyDownHandler = (e: KeyboardEvent) => {
-      if (e.key === '=' && e.metaKey) {
+      // Zoom in: Cmd+= OR Cmd+Shift++ (both work)
+      if ((e.key === '=' || e.key === '+') && e.metaKey) {
         e.preventDefault();
         editor.zoomIn();
         editor.requestRedraw();
         return;
       }
 
+      // Zoom out: Cmd+-
       if (e.key === '-' && e.metaKey) {
         e.preventDefault();
         editor.zoomOut();
@@ -80,12 +82,7 @@ export const Editor = () => {
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        const selectedPoints = editor.selectedPoints;
-        if (selectedPoints.size > 0) {
-          editor.fontEngine.editing.removePoints([...selectedPoints]);
-          editor.clearSelectedPoints();
-          editor.requestRedraw();
-        }
+        editor.deleteSelectedPoints();
         return;
       }
 
@@ -121,12 +118,7 @@ export const Editor = () => {
     const unsubscribeUndo = window.electronAPI?.onMenuUndo(() => editor.undo());
     const unsubscribeRedo = window.electronAPI?.onMenuRedo(() => editor.redo());
     const unsubscribeDelete = window.electronAPI?.onMenuDelete(() => {
-      const selectedPoints = editor.selectedPoints;
-      if (selectedPoints.size > 0) {
-        editor.fontEngine.editing.removePoints([...selectedPoints]);
-        editor.clearSelectedPoints();
-        editor.requestRedraw();
-      }
+      editor.deleteSelectedPoints();
     });
 
     return () => {

@@ -1,12 +1,3 @@
-/**
- * Pen Tool Commands
- *
- * Commands handle the HOW - the actual bezier geometry and point operations.
- * Each command is a pure operation that can be tested in isolation.
- *
- * Uses CommandHistory for all mutations to support undo/redo.
- */
-
 import type { Editor } from '@/lib/editor/Editor';
 import type { Point2D } from '@/types/math';
 import type { PointId } from '@/types/ids';
@@ -14,14 +5,6 @@ import type { AnchorData, HandleData } from './states';
 import { AddPointCommand } from '@/lib/commands/PointCommands';
 import { InsertPointCommand, CloseContourCommand, AddContourCommand } from '@/lib/commands/BezierCommands';
 
-// ============================================================================
-// Geometry Helpers
-// ============================================================================
-
-/**
- * Mirror a point across an anchor.
- * Used to create symmetric handles during drag.
- */
 export function mirror(point: Point2D, anchor: Point2D): Point2D {
   return {
     x: 2 * anchor.x - point.x,
@@ -29,10 +12,6 @@ export function mirror(point: Point2D, anchor: Point2D): Point2D {
   };
 }
 
-/**
- * Calculate a point at a fraction of the distance between two points.
- * Used to place cp1 at 1/3 of the segment.
- */
 export function calculateFraction(from: Point2D, to: Point2D, fraction: number): Point2D {
   return {
     x: from.x + (to.x - from.x) * fraction,
@@ -40,18 +19,11 @@ export function calculateFraction(from: Point2D, to: Point2D, fraction: number):
   };
 }
 
-/**
- * Calculate distance between two points.
- */
 export function distance(p1: Point2D, p2: Point2D): number {
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
   return Math.sqrt(dx * dx + dy * dy);
 }
-
-// ============================================================================
-// Command Results
-// ============================================================================
 
 export interface PlaceAnchorResult {
   pointId: PointId;
@@ -61,21 +33,6 @@ export interface CreateHandlesResult {
   handles: HandleData;
 }
 
-// ============================================================================
-// Pen Commands Class
-// ============================================================================
-
-/**
- * Collection of commands for the Pen tool.
- *
- * Each command encapsulates a semantic operation:
- * - placeAnchor: Add an on-curve point
- * - createHandles: Create control points when dragging starts
- * - updateHandles: Update control point positions during drag
- * - closeContour: Close the current contour
- *
- * All operations use CommandHistory for undo/redo support.
- */
 export class PenCommands {
   #editor: Editor;
 
@@ -83,50 +40,21 @@ export class PenCommands {
     this.#editor = editor;
   }
 
-  // ==========================================================================
-  // Place Anchor Command
-  // ==========================================================================
-
-  /**
-   * Place an anchor (on-curve) point at the given position.
-   */
   placeAnchor(pos: Point2D): PlaceAnchorResult {
+    const ctx = this.#editor.createToolContext();
     const cmd = new AddPointCommand(pos.x, pos.y, 'onCurve', false);
-    const pointId = this.#editor.commandHistory.execute(cmd);
+    const pointId = ctx.commands.execute(cmd);
     return { pointId };
   }
 
-  // ==========================================================================
-  // Create Handles Command
-  // ==========================================================================
-
-  /**
-   * Create control points when user starts dragging after placing an anchor.
-   *
-   * The behavior depends on the contour context:
-   *
-   * 1. First point (isFirstPoint = true):
-   *    - Just create cpOut (follows mouse)
-   *    - Sequence: [anchor, cpOut]
-   *
-   * 2. Previous was on-curve (no trailing cpOut):
-   *    - Create full cubic with cp1 and cpIn
-   *    - Sequence: [prevAnchor, cp1, cpIn, anchor]
-   *    - cp1 = 1/3 from prev toward anchor (fixed)
-   *    - cpIn = mirrored from mouse
-   *
-   * 3. Previous was off-curve (trailing cpOut exists):
-   *    - Create cpIn (mirrored) + cpOut (follows mouse)
-   *    - Sequence: [..., prevCpOut, cpIn, anchor, cpOut]
-   */
   createHandles(
     anchor: AnchorData,
     mousePos: Point2D,
   ): CreateHandlesResult {
     const { context, pointId, position } = anchor;
-    const history = this.#editor.commandHistory;
+    const ctx = this.#editor.createToolContext();
+    const history = ctx.commands;
 
-    // Case 1: First point - just create outgoing handle
     if (context.isFirstPoint) {
       const cmd = new AddPointCommand(mousePos.x, mousePos.y, 'offCurve', false);
       const cpOutId = history.execute(cmd);
@@ -135,16 +63,13 @@ export class PenCommands {
       };
     }
 
-    // Case 2: Previous was on-curve - create cubic [prevAnchor, cp1, cpIn, anchor]
     if (context.previousPointType === 'onCurve') {
-      // cp1 = 1/3 from previous on-curve toward current anchor (fixed position)
       if (context.previousOnCurvePosition) {
         const cp1Pos = calculateFraction(context.previousOnCurvePosition, position, 1 / 3);
         const cmd = new InsertPointCommand(pointId, cp1Pos.x, cp1Pos.y, 'offCurve', false);
         history.execute(cmd);
       }
 
-      // cpIn = mirrored from mouse position
       const cpInPos = mirror(mousePos, position);
       const cmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
       const cpInId = history.execute(cmd);
@@ -154,14 +79,11 @@ export class PenCommands {
       };
     }
 
-    // Case 3: Previous was off-curve - create [..., prevCpOut, cpIn, anchor, cpOut]
     if (context.previousPointType === 'offCurve') {
-      // cpIn = mirrored from mouse (inserted before anchor)
       const cpInPos = mirror(mousePos, position);
       const insertCmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, 'offCurve', false);
       const cpInId = history.execute(insertCmd);
 
-      // cpOut = follows mouse (added after anchor)
       const addCmd = new AddPointCommand(mousePos.x, mousePos.y, 'offCurve', false);
       const cpOutId = history.execute(addCmd);
 
@@ -170,57 +92,32 @@ export class PenCommands {
       };
     }
 
-    // Fallback (shouldn't reach here with valid context)
     return { handles: {} };
   }
 
-  // ==========================================================================
-  // Update Handles Command
-  // ==========================================================================
-
-  /**
-   * Update control point positions during drag.
-   *
-   * - cpOut (if exists): follows mouse directly
-   * - cpIn (if exists): mirrors mouse across anchor
-   *
-   * Note: These moves are NOT added to command history since they happen
-   * continuously during drag. The final position is already captured by
-   * the commands that created the handles.
-   */
   updateHandles(
     anchor: AnchorData,
     handles: HandleData,
     mousePos: Point2D,
   ): void {
     const { position } = anchor;
+    const ctx = this.#editor.createToolContext();
 
-    // cpOut follows mouse directly - direct call (not undoable individually)
     if (handles.cpOut) {
-      this.#editor.fontEngine.editing.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
+      ctx.edit.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
     }
 
-    // cpIn is mirrored across anchor - direct call (not undoable individually)
     if (handles.cpIn) {
       const mirroredPos = mirror(mousePos, position);
-      this.#editor.fontEngine.editing.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
+      ctx.edit.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
   }
 
-  // ==========================================================================
-  // Close Contour Command
-  // ==========================================================================
-
-  /**
-   * Close the current contour and start a new one.
-   */
   closeContour(): void {
-    const history = this.#editor.commandHistory;
+    const ctx = this.#editor.createToolContext();
+    const history = ctx.commands;
 
-    // Close the current contour
     history.execute(new CloseContourCommand());
-
-    // Add a new contour
     history.execute(new AddContourCommand());
   }
 }

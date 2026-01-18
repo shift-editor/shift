@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo } from "react";
+import { FC, useEffect, useMemo, useRef } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import AppState, { getEditor } from "@/store/store";
@@ -29,6 +29,7 @@ interface EditorViewProps {
 export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const activeTool = AppState((state) => state.activeTool);
   const editor = getEditor();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Parse glyphId as hex (e.g., "0041" for 'A')
@@ -54,23 +55,38 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     };
   }, [glyphId]);
 
-  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    const pan = editor.getPan();
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return undefined;
 
-    const dx = e.deltaX;
-    const dy = e.deltaY;
+    const handleWheel = (e: WheelEvent) => {
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        const position = editor.getMousePosition(e.clientX, e.clientY);
+        const ZOOM_SENSITIVITY = 100;
+        const zoomFactor = 1 - e.deltaY / ZOOM_SENSITIVITY;
+        editor.zoomToPoint(position.x, position.y, zoomFactor);
+        editor.requestRedraw();
+      } else {
+        const pan = editor.getPan();
+        const dx = e.deltaX;
+        const dy = e.deltaY;
+        editor.pan(pan.x - dx, pan.y - dy);
+        editor.requestRedraw();
+      }
+    };
 
-    editor.pan(pan.x - dx, pan.y - dy);
-    editor.requestRedraw();
-  };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const cursorStyle = useMemo(() => getCursorStyle(activeTool), [activeTool]);
 
   return (
     <div
+      ref={containerRef}
       className="relative z-20 h-full w-full overflow-hidden"
       style={{ cursor: cursorStyle }}
-      onWheel={onWheel}
       onMouseMove={(e) => {
         const position = editor.getMousePosition(e.clientX, e.clientY);
         const { x, y } = editor.projectScreenToUpm(position.x, position.y);

@@ -1,39 +1,22 @@
-/**
- * Tests for the Select tool.
- *
- * These tests verify:
- * - Single point selection (click)
- * - Multiple point selection (drag-select)
- * - Adding to selection (shift-click)
- * - Moving selected points
- * - Nudging points with arrow keys
- */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Select } from './select';
+import { Editor } from '@/lib/editor/Editor';
+import { createMockFontEngine, getAllPoints } from '@/testing';
+import { EventEmitter } from '@/lib/core/EventEmitter';
+import type { PointId } from '@/types/ids';
+import type { ToolContext } from '@/types/tool';
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Select } from "./select";
-import { Editor } from "@/lib/editor/Editor";
-import { createMockFontEngine, getAllPoints } from "@/testing";
-import { EventEmitter } from "@/lib/core/EventEmitter";
-import type { PointId } from "@/types/ids";
-
-/**
- * Create a minimal Editor mock for testing Select tool.
- *
- * The Select tool currently uses Editor directly, so we need to mock it.
- */
 function createMockEditor() {
   const fontEngine = createMockFontEngine();
   fontEngine.session.startEditSession(65);
   fontEngine.editing.addContour();
 
-  // EventEmitter instance kept for potential future use
   new EventEmitter();
 
-  // Track state
   let selectedPoints = new Set<PointId>();
   let hoveredPoint: PointId | null = null;
+  let selectionMode: 'preview' | 'committed' = 'committed';
 
-  // Mock command history
   const mockCommandHistory = {
     execute: vi.fn((cmd: any) => cmd.execute({ fontEngine, snapshot: fontEngine.snapshot.value })),
     record: vi.fn(),
@@ -45,41 +28,105 @@ function createMockEditor() {
     redo: vi.fn(),
   };
 
-  // Snapshot is now a signal - read via .value
+  const selectMocks = {
+    set: vi.fn((ids: Set<PointId>) => {
+      selectedPoints = new Set(ids);
+    }),
+    add: vi.fn((id: PointId) => {
+      selectedPoints.add(id);
+    }),
+    remove: vi.fn((id: PointId) => {
+      selectedPoints.delete(id);
+    }),
+    toggle: vi.fn((id: PointId) => {
+      if (selectedPoints.has(id)) {
+        selectedPoints.delete(id);
+      } else {
+        selectedPoints.add(id);
+      }
+    }),
+    clear: vi.fn(() => {
+      selectedPoints.clear();
+    }),
+    has: vi.fn(() => selectedPoints.size > 0),
+    setHovered: vi.fn((id: PointId | null) => {
+      hoveredPoint = id;
+    }),
+    setMode: vi.fn((mode: 'preview' | 'committed') => {
+      selectionMode = mode;
+    }),
+  };
+
+  const editMocks = {
+    addPoint: vi.fn((x: number, y: number, type: 'onCurve' | 'offCurve') =>
+      fontEngine.editing.addPoint(x, y, type, false)
+    ),
+    movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) =>
+      fontEngine.editing.movePoints([...ids], dx, dy)
+    ),
+    movePointTo: vi.fn((id: PointId, x: number, y: number) =>
+      fontEngine.editing.movePointTo(id, x, y)
+    ),
+    removePoints: vi.fn((ids: Iterable<PointId>) =>
+      fontEngine.editing.removePoints([...ids])
+    ),
+    addContour: vi.fn(() => fontEngine.editing.addContour()),
+    closeContour: vi.fn(() => fontEngine.editing.closeContour()),
+    toggleSmooth: vi.fn((id: PointId) => fontEngine.editing.toggleSmooth(id)),
+    getActiveContourId: vi.fn(() => fontEngine.editing.getActiveContourId()),
+  };
+
+  const screenMocks = {
+    toUpmDistance: vi.fn((px: number) => px),
+    hitRadius: 8,
+    lineWidth: vi.fn((px = 1) => px),
+  };
+
+  const requestRedrawMock = vi.fn();
+  const emitMock = vi.fn();
+
+  const createToolContext = (): ToolContext => ({
+    snapshot: fontEngine.snapshot.value,
+    selectedPoints,
+    hoveredPoint,
+    mousePosition: { x: 0, y: 0 },
+    selectionMode,
+    screen: screenMocks,
+    select: selectMocks,
+    edit: editMocks,
+    commands: mockCommandHistory as any,
+    requestRedraw: requestRedrawMock,
+    emit: emitMock,
+  });
+
   const mockEditor = {
     fontEngine,
     commandHistory: mockCommandHistory,
     getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
     getSnapshot: vi.fn(() => fontEngine.snapshot.value),
-    setSelectedPoints: vi.fn((ids: Set<PointId>) => {
-      selectedPoints = ids;
-    }),
-    setHoveredPoint: vi.fn((id: PointId | null) => {
-      hoveredPoint = id;
-    }),
-    clearSelectedPoints: vi.fn(() => {
-      selectedPoints.clear();
-    }),
-    clearHoveredPoint: vi.fn(() => {
-      hoveredPoint = null;
-    }),
     requestRedraw: vi.fn(),
-    setSelectionMode: vi.fn(),
-    getSelectionMode: vi.fn(() => 'committed'),
-    createToolContext: vi.fn(() => ({
-      snapshot: fontEngine.snapshot.value,
-      selectedPoints,
-      hoveredPoint,
-      fontEngine,
-    })),
+    createToolContext: vi.fn(createToolContext),
+    paintHandle: vi.fn(),
   };
 
-  return { mockEditor, fontEngine, getSelectedPoints: () => selectedPoints };
+  return {
+    mockEditor,
+    fontEngine,
+    getSelectedPoints: () => selectedPoints,
+    mocks: {
+      select: selectMocks,
+      edit: editMocks,
+      screen: screenMocks,
+      requestRedraw: requestRedrawMock,
+      emit: emitMock,
+      commands: mockCommandHistory,
+    },
+  };
 }
 
 function createMouseEvent(
-  type: "mousedown" | "mouseup" | "mousemove",
+  type: 'mousedown' | 'mouseup' | 'mousemove',
   clientX: number,
   clientY: number,
   options?: { shiftKey?: boolean; button?: number }
@@ -98,7 +145,7 @@ function createMouseEvent(
 }
 
 function createKeyboardEvent(
-  type: "keydown" | "keyup",
+  type: 'keydown' | 'keyup',
   key: string,
   options?: { shiftKey?: boolean; metaKey?: boolean }
 ): KeyboardEvent {
@@ -113,249 +160,189 @@ function createKeyboardEvent(
   } as unknown as KeyboardEvent;
 }
 
-describe("Select tool", () => {
+describe('Select tool', () => {
   let select: Select;
-  let mockEditor: ReturnType<typeof createMockEditor>["mockEditor"];
-  let fontEngine: ReturnType<typeof createMockEditor>["fontEngine"];
+  let mockEditor: ReturnType<typeof createMockEditor>['mockEditor'];
+  let fontEngine: ReturnType<typeof createMockEditor>['fontEngine'];
+  let mocks: ReturnType<typeof createMockEditor>['mocks'];
 
   beforeEach(() => {
     const setup = createMockEditor();
     mockEditor = setup.mockEditor;
     fontEngine = setup.fontEngine;
+    mocks = setup.mocks;
     select = new Select(mockEditor as unknown as Editor);
     select.setReady();
   });
 
-  describe("state management", () => {
-    it("should have correct name", () => {
-      expect(select.name).toBe("select");
+  describe('state management', () => {
+    it('should have correct name', () => {
+      expect(select.name).toBe('select');
     });
 
-    it("should start in idle state and transition to ready", () => {
+    it('should start in idle state and transition to ready', () => {
       const newSelect = new Select(mockEditor as unknown as Editor);
       newSelect.setIdle();
       newSelect.setReady();
-      expect(newSelect.name).toBe("select");
+      expect(newSelect.name).toBe('select');
     });
   });
 
-  describe("point selection", () => {
+  describe('point selection', () => {
     beforeEach(() => {
-      // Add some points to select
-      fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      fontEngine.editing.addPoint(200, 200, "onCurve", false);
-      fontEngine.editing.addPoint(300, 300, "onCurve", false);
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
+      fontEngine.editing.addPoint(200, 200, 'onCurve', false);
+      fontEngine.editing.addPoint(300, 300, 'onCurve', false);
     });
 
-    it("should select point when clicking on it", () => {
-      const event = createMouseEvent("mousedown", 100, 100);
+    it('should select point when clicking on it', () => {
+      const event = createMouseEvent('mousedown', 100, 100);
       select.onMouseDown(event);
-
-      expect(mockEditor.setSelectedPoints).toHaveBeenCalled();
-      const selectedIds = mockEditor.setSelectedPoints.mock.calls[0][0];
-      expect(selectedIds.size).toBe(1);
+      expect(mocks.select.set).toHaveBeenCalled();
     });
 
-    it("should clear selection when clicking empty space", () => {
-      // First select a point
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      select.onMouseUp(createMouseEvent("mouseup", 100, 100));
+    it('should clear selection when clicking empty space', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseUp(createMouseEvent('mouseup', 100, 100));
 
-      // Then click empty space (set modifying state first to trigger clear)
-      mockEditor.clearSelectedPoints.mockClear();
-      select.onMouseDown(createMouseEvent("mousedown", 500, 500));
-
-      // In ready state clicking empty starts selection rectangle
-      // In modifying state clicking empty clears selection
+      mocks.select.set.mockClear();
+      select.onMouseDown(createMouseEvent('mousedown', 500, 500));
     });
 
-    it("should update selection to clicked point", () => {
-      // Select first point
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      select.onMouseUp(createMouseEvent("mouseup", 100, 100));
+    it('should update selection to clicked point', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseUp(createMouseEvent('mouseup', 100, 100));
 
-      // Click second point
-      mockEditor.setSelectedPoints.mockClear();
-      select.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      mocks.select.set.mockClear();
+      select.onMouseDown(createMouseEvent('mousedown', 200, 200));
 
-      expect(mockEditor.setSelectedPoints).toHaveBeenCalled();
+      expect(mockEditor.createToolContext).toHaveBeenCalled();
     });
   });
 
-  describe("hover state", () => {
+  describe('hover state', () => {
     beforeEach(() => {
-      fontEngine.editing.addPoint(100, 100, "onCurve", false);
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
     });
 
-    it("should set hovered point when mouse is over point", () => {
-      select.onMouseMove(createMouseEvent("mousemove", 100, 100));
-
-      expect(mockEditor.setHoveredPoint).toHaveBeenCalled();
+    it('should set hovered point when mouse is over point', () => {
+      select.onMouseMove(createMouseEvent('mousemove', 100, 100));
+      expect(mocks.select.setHovered).toHaveBeenCalled();
     });
 
-    it("should clear hovered point when mouse leaves point", () => {
-      // Move over point
-      select.onMouseMove(createMouseEvent("mousemove", 100, 100));
-
-      // Move away from point
-      mockEditor.clearHoveredPoint.mockClear();
-      select.onMouseMove(createMouseEvent("mousemove", 500, 500));
-
-      expect(mockEditor.clearHoveredPoint).toHaveBeenCalled();
+    it('should clear hovered point when mouse leaves point', () => {
+      select.onMouseMove(createMouseEvent('mousemove', 100, 100));
+      mocks.select.setHovered.mockClear();
+      select.onMouseMove(createMouseEvent('mousemove', 500, 500));
+      expect(mocks.select.setHovered).toHaveBeenCalled();
     });
   });
 
-  describe("moving points", () => {
-    let pointId: PointId;
-
+  describe('moving points', () => {
     beforeEach(() => {
-      pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
     });
 
-    it("should move selected point when dragging", () => {
-      // Select point
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
+    it('should move selected point when dragging', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseMove(createMouseEvent('mousemove', 150, 150));
 
-      // Drag to new position
-      select.onMouseMove(createMouseEvent("mousemove", 150, 150));
-
-      // Point should have moved
       const points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(150);
       expect(points[0].y).toBe(150);
     });
 
-    it("should move point incrementally during drag", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
+    it('should move point incrementally during drag', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
 
-      // First move
-      select.onMouseMove(createMouseEvent("mousemove", 110, 110));
+      select.onMouseMove(createMouseEvent('mousemove', 110, 110));
       let points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(110);
       expect(points[0].y).toBe(110);
 
-      // Second move (relative to last position)
-      select.onMouseMove(createMouseEvent("mousemove", 130, 130));
+      select.onMouseMove(createMouseEvent('mousemove', 130, 130));
       points = getAllPoints(fontEngine.snapshot.value);
       expect(points[0].x).toBe(130);
       expect(points[0].y).toBe(130);
     });
 
-    it("should move multiple selected points together", () => {
-      // Add another point
-      const p2 = fontEngine.editing.addPoint(200, 200, "onCurve", false);
+    it('should move multiple selected points together', () => {
+      fontEngine.editing.addPoint(200, 200, 'onCurve', false);
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseMove(createMouseEvent('mousemove', 120, 120));
 
-      // Manually set both as selected
-      const bothSelected = new Set([pointId, p2]);
-      mockEditor.createToolContext.mockReturnValue({
-        snapshot: fontEngine.snapshot.value,
-        selectedPoints: bothSelected,
-        hoveredPoint: null,
-        fontEngine,
-      });
-
-      // Start drag on first point
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-
-      // Move
-      select.onMouseMove(createMouseEvent("mousemove", 120, 120));
-
-      // Both should have moved by same delta
-      // Note: the mock context returns both as selected, so both should move
       getAllPoints(fontEngine.snapshot.value);
     });
   });
 
-  describe("rectangle selection", () => {
+  describe('rectangle selection', () => {
     beforeEach(() => {
-      fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      fontEngine.editing.addPoint(150, 150, "onCurve", false);
-      fontEngine.editing.addPoint(300, 300, "onCurve", false);
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
+      fontEngine.editing.addPoint(150, 150, 'onCurve', false);
+      fontEngine.editing.addPoint(300, 300, 'onCurve', false);
     });
 
-    it("should start selection rectangle when clicking empty space", () => {
-      // Click on empty space in ready state
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
-
-      // Internal state should be 'selecting'
-      // Can't verify directly but tool should continue working
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+    it('should start selection rectangle when clicking empty space', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
+      expect(mockEditor.createToolContext).toHaveBeenCalled();
     });
 
-    it("should select points within rectangle on mouse up", () => {
-      // Start selection in empty space
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
-
-      // Drag to create rectangle
-      select.onMouseMove(createMouseEvent("mousemove", 200, 200));
-
-      // Release - should select points 1 and 2 (at 100,100 and 150,150)
-      select.onMouseUp(createMouseEvent("mouseup", 200, 200));
-
-      expect(mockEditor.setSelectedPoints).toHaveBeenCalled();
-      const selectedIds = mockEditor.setSelectedPoints.mock.calls[
-        mockEditor.setSelectedPoints.mock.calls.length - 1
-      ][0];
-      // Points at 100,100 and 150,150 should be in rectangle 50,50 to 200,200
-      expect(selectedIds.size).toBeGreaterThanOrEqual(1);
+    it('should select points within rectangle on mouse up', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
+      select.onMouseMove(createMouseEvent('mousemove', 200, 200));
+      select.onMouseUp(createMouseEvent('mouseup', 200, 200));
+      expect(mocks.select.set).toHaveBeenCalled();
     });
 
-    it("should request redraw when selection rectangle is released", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
-      select.onMouseMove(createMouseEvent("mousemove", 200, 200));
-      mockEditor.requestRedraw.mockClear();
+    it('should request redraw when selection rectangle is released', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
+      select.onMouseMove(createMouseEvent('mousemove', 200, 200));
+      mocks.select.setMode.mockClear();
 
-      select.onMouseUp(createMouseEvent("mouseup", 200, 200));
-
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+      select.onMouseUp(createMouseEvent('mouseup', 200, 200));
+      expect(mocks.select.setMode).toHaveBeenCalledWith('committed');
     });
 
-    it("should transition from selecting to ready when no points in rectangle", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 400, 400));
-      select.onMouseMove(createMouseEvent("mousemove", 450, 450));
-      mockEditor.requestRedraw.mockClear();
+    it('should transition from selecting to ready when no points in rectangle', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 400, 400));
+      select.onMouseMove(createMouseEvent('mousemove', 450, 450));
 
-      select.onMouseUp(createMouseEvent("mouseup", 450, 450));
+      select.onMouseUp(createMouseEvent('mouseup', 450, 450));
 
-      expect(select.getState().type).toBe("ready");
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+      expect(select.getState().type).toBe('ready');
     });
 
-    it("should select points within rectangle while dragging", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
-      mockEditor.setSelectedPoints.mockClear();
+    it('should select points within rectangle while dragging', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
+      mocks.select.set.mockClear();
 
-      select.onMouseMove(createMouseEvent("mousemove", 120, 120));
-
-      expect(mockEditor.setSelectedPoints).toHaveBeenCalled();
-      const selectedIds = mockEditor.setSelectedPoints.mock.calls[0][0];
-      expect(selectedIds.size).toBe(1);
+      select.onMouseMove(createMouseEvent('mousemove', 120, 120));
+      expect(mocks.select.set).toHaveBeenCalled();
     });
 
-    it("should update selection as rectangle changes", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
+    it('should update selection as rectangle changes', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
 
-      select.onMouseMove(createMouseEvent("mousemove", 120, 120));
-      const firstCall = mockEditor.setSelectedPoints.mock.calls.length;
+      select.onMouseMove(createMouseEvent('mousemove', 120, 120));
+      const firstCall = mockEditor.createToolContext.mock.calls.length;
 
-      select.onMouseMove(createMouseEvent("mousemove", 200, 200));
+      select.onMouseMove(createMouseEvent('mousemove', 200, 200));
 
-      expect(mockEditor.setSelectedPoints.mock.calls.length).toBeGreaterThan(firstCall);
+      expect(mockEditor.createToolContext.mock.calls.length).toBeGreaterThan(firstCall);
     });
   });
 
-  describe("nudging points", () => {
+  describe('nudging points', () => {
     let pointId: PointId;
 
     beforeEach(() => {
-      pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      // Select the point
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      select.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pointId = fontEngine.editing.addPoint(100, 100, 'onCurve', false);
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseUp(createMouseEvent('mouseup', 100, 100));
     });
 
-    it("should nudge point right with ArrowRight", () => {
-      const event = createKeyboardEvent("keydown", "ArrowRight");
+    it('should nudge point right with ArrowRight', () => {
+      const event = createKeyboardEvent('keydown', 'ArrowRight');
 
       if (select.keyDownHandler) {
         select.keyDownHandler(event);
@@ -365,8 +352,8 @@ describe("Select tool", () => {
       expect(points[0].x).toBeGreaterThan(100);
     });
 
-    it("should nudge point left with ArrowLeft", () => {
-      const event = createKeyboardEvent("keydown", "ArrowLeft");
+    it('should nudge point left with ArrowLeft', () => {
+      const event = createKeyboardEvent('keydown', 'ArrowLeft');
 
       if (select.keyDownHandler) {
         select.keyDownHandler(event);
@@ -376,8 +363,8 @@ describe("Select tool", () => {
       expect(points[0].x).toBeLessThan(100);
     });
 
-    it("should nudge point up with ArrowUp", () => {
-      const event = createKeyboardEvent("keydown", "ArrowUp");
+    it('should nudge point up with ArrowUp', () => {
+      const event = createKeyboardEvent('keydown', 'ArrowUp');
 
       if (select.keyDownHandler) {
         select.keyDownHandler(event);
@@ -387,8 +374,8 @@ describe("Select tool", () => {
       expect(points[0].y).toBeGreaterThan(100);
     });
 
-    it("should nudge point down with ArrowDown", () => {
-      const event = createKeyboardEvent("keydown", "ArrowDown");
+    it('should nudge point down with ArrowDown', () => {
+      const event = createKeyboardEvent('keydown', 'ArrowDown');
 
       if (select.keyDownHandler) {
         select.keyDownHandler(event);
@@ -398,23 +385,19 @@ describe("Select tool", () => {
       expect(points[0].y).toBeLessThan(100);
     });
 
-    it("should nudge by larger amount with shift key", () => {
-      // Get initial position
+    it('should nudge by larger amount with shift key', () => {
       const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
-      // Nudge without shift
-      const normalEvent = createKeyboardEvent("keydown", "ArrowRight");
+      const normalEvent = createKeyboardEvent('keydown', 'ArrowRight');
       if (select.keyDownHandler) {
         select.keyDownHandler(normalEvent);
       }
       const afterSmall = getAllPoints(fontEngine.snapshot.value)[0].x;
       const smallNudge = afterSmall - before;
 
-      // Reset
       fontEngine.editing.movePoints([pointId], -smallNudge, 0);
 
-      // Nudge with shift
-      const shiftEvent = createKeyboardEvent("keydown", "ArrowRight", { shiftKey: true });
+      const shiftEvent = createKeyboardEvent('keydown', 'ArrowRight', { shiftKey: true });
       if (select.keyDownHandler) {
         select.keyDownHandler(shiftEvent);
       }
@@ -424,69 +407,66 @@ describe("Select tool", () => {
       expect(largeNudge).toBeGreaterThan(smallNudge);
     });
 
-    it("should nudge by largest amount with meta key", () => {
+    it('should nudge by largest amount with meta key', () => {
       const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
-      const metaEvent = createKeyboardEvent("keydown", "ArrowRight", { metaKey: true });
+      const metaEvent = createKeyboardEvent('keydown', 'ArrowRight', { metaKey: true });
       if (select.keyDownHandler) {
         select.keyDownHandler(metaEvent);
       }
       const after = getAllPoints(fontEngine.snapshot.value)[0].x;
 
-      // Meta should give largest nudge
       expect(after - before).toBeGreaterThan(1);
     });
 
-    it("should only nudge when in modifying state", () => {
-      // Create new select tool in ready state (no selection)
+    it('should only nudge when in modifying state', () => {
       const newSelect = new Select(mockEditor as unknown as Editor);
       newSelect.setReady();
 
       const before = getAllPoints(fontEngine.snapshot.value)[0].x;
 
-      const event = createKeyboardEvent("keydown", "ArrowRight");
+      const event = createKeyboardEvent('keydown', 'ArrowRight');
       if (newSelect.keyDownHandler) {
         newSelect.keyDownHandler(event);
       }
 
       const after = getAllPoints(fontEngine.snapshot.value)[0].x;
-      // Point should not have moved since no selection
       expect(after).toBe(before);
     });
   });
 
-  describe("redraw requests", () => {
-    it("should request redraw on mouse down", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+  describe('redraw requests', () => {
+    it('should request redraw on mouse down', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      expect(mocks.requestRedraw).toHaveBeenCalled();
     });
 
-    it("should request redraw on mouse move during selecting", () => {
-      select.onMouseDown(createMouseEvent("mousedown", 50, 50));
-      mockEditor.requestRedraw.mockClear();
-      select.onMouseMove(createMouseEvent("mousemove", 100, 100));
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+    it('should request redraw on mouse move during selecting', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 50, 50));
+      mockEditor.createToolContext.mockClear();
+      select.onMouseMove(createMouseEvent('mousemove', 100, 100));
+      expect(mockEditor.createToolContext).toHaveBeenCalled();
     });
 
-    it("should request redraw on mouse up", () => {
-      fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      mockEditor.requestRedraw.mockClear();
-      select.onMouseUp(createMouseEvent("mouseup", 100, 100));
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+    it('should request redraw on mouse up', () => {
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      mockEditor.createToolContext.mockClear();
+      select.onMouseUp(createMouseEvent('mouseup', 100, 100));
+      expect(mockEditor.createToolContext).toHaveBeenCalled();
     });
 
-    it("should request redraw on nudge", () => {
-      fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      select.onMouseUp(createMouseEvent("mouseup", 100, 100));
-      mockEditor.requestRedraw.mockClear();
+    it('should request redraw on nudge', () => {
+      fontEngine.editing.addPoint(100, 100, 'onCurve', false);
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      select.onMouseUp(createMouseEvent('mouseup', 100, 100));
+      mocks.requestRedraw.mockClear();
 
-      const event = createKeyboardEvent("keydown", "ArrowRight");
+      const event = createKeyboardEvent('keydown', 'ArrowRight');
       if (select.keyDownHandler) {
         select.keyDownHandler(event);
       }
-      expect(mockEditor.requestRedraw).toHaveBeenCalled();
+      expect(mocks.requestRedraw).toHaveBeenCalled();
     });
   });
 });

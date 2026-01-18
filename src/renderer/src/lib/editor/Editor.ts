@@ -2,33 +2,35 @@ import {
   BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
-} from "@/lib/styles/style";
-import { tools } from "@/lib/tools/tools";
-import AppState from "@/store/store";
-import { EventHandler, EventName, IEventEmitter } from "@/types/events";
-import { IGraphicContext, IRenderer } from "@/types/graphics";
-import { HandleState, HandleType } from "@/types/handle";
-import { Point2D, Rect2D } from "@/types/math";
-import { Tool, ToolContext } from "@/types/tool";
-import type { PointId } from "@/types/ids";
-import { asPointId } from "@/types/ids";
-import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
+} from '@/lib/styles/style';
+import { tools } from '@/lib/tools/tools';
+import AppState from '@/store/store';
+import type { EditorEventName, EditorEventMap, EventHandler, IEventEmitter } from '@/types/events';
+import { IGraphicContext, IRenderer } from '@/types/graphics';
+import { HandleState, HandleType } from '@/types/handle';
+import { Point2D, Rect2D } from '@/types/math';
+import { Tool, ToolContext } from '@/types/tool';
+import type { PointId } from '@/types/ids';
+import { asPointId, asContourId } from '@/types/ids';
+import type { GlyphSnapshot, PointSnapshot } from '@/types/generated';
 
-import { FrameHandler } from "./FrameHandler";
-import { drawHandle, drawHandleLast } from "./handles";
-import { createSelectionManager, type SelectionManager, type SelectionMode } from "./SelectionManager";
-import { Viewport } from "./Viewport";
-import { getBoundingRect } from "../math/rect";
-import { FontEngine } from "@/engine";
-import { findPointInSnapshot, renderGlyph, renderGuides, type Guides } from "./render";
-import { CommandHistory } from "../commands";
-import { effect, type Effect } from "../reactive/signal";
+import { FrameHandler } from './FrameHandler';
+import { drawHandle, drawHandleLast } from './handles';
+import { createSelectionManager, type SelectionManager, type SelectionMode } from './SelectionManager';
+import { Viewport } from './Viewport';
+import { getBoundingRect } from '../math/rect';
+import { FontEngine } from '@/engine';
+import { findPointInSnapshot, renderGlyph, renderGuides, type Guides } from './render';
+import { CommandHistory, AddPointCommand, MovePointsCommand, RemovePointsCommand, CloseContourCommand, AddContourCommand } from '../commands';
+import { effect, type Effect } from '../reactive/signal';
 
 const DEBUG = false;
+const SCREEN_HIT_RADIUS = 8;
+const SCREEN_LINE_WIDTH = 1;
 
 function debug(...args: unknown[]) {
   if (DEBUG) {
-    console.log("[Editor]", ...args);
+    console.log('[Editor]', ...args);
   }
 }
 
@@ -42,9 +44,6 @@ export const InitialEditorState: EditorState = {
   fillContour: false,
 };
 
-/**
- * Check if a contour is clockwise using the shoelace formula.
- */
 function isContourClockwise(points: PointSnapshot[]): boolean {
   if (points.length < 3) return true;
 
@@ -71,7 +70,6 @@ export class Editor {
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
 
-  // Rust integration - FontEngine is the single source of truth
   #fontEngine: FontEngine;
   #snapshotEffect: Effect;
 
@@ -79,10 +77,8 @@ export class Editor {
     this.#viewport = new Viewport();
     this.#frameHandler = new FrameHandler();
 
-    // Initialize FontEngine first (needed for CommandHistory)
     this.#fontEngine = new FontEngine();
 
-    // Initialize CommandHistory with FontEngine
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.snapshot.value
@@ -96,14 +92,13 @@ export class Editor {
     this.#state = { ...InitialEditorState };
     this.#selection = createSelectionManager(() => this.requestRedraw());
 
-    // Watch snapshot signal - redraw when snapshot changes
     this.#snapshotEffect = effect(() => {
       const snapshot = this.#fontEngine.snapshot.value;
-      debug("Snapshot changed:", snapshot?.contours.length, "contours");
+      debug('Snapshot changed:', snapshot?.contours.length, 'contours');
       this.requestRedraw();
     });
 
-    this.on("points:removed", (_pointIds) => {
+    this.on('points:removed', (_pointIds) => {
       this.requestRedraw();
     });
   }
@@ -116,73 +111,95 @@ export class Editor {
     this.#interactiveContext = context;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // FONT ENGINE INTEGRATION
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Get the FontEngine instance.
-   */
-  public get fontEngine(): FontEngine {
-    return this.#fontEngine;
-  }
-
-  /**
-   * Start editing a glyph. Creates an edit session in Rust and adds an empty contour.
-   */
   public startEditSession(unicode: number): void {
-    debug("Starting edit session for unicode:", unicode);
+    debug('Starting edit session for unicode:', unicode);
     this.#fontEngine.session.startEditSession(unicode);
-    // Add an empty contour to start with
     this.#fontEngine.editing.addContour();
   }
 
-  /**
-   * End the current edit session.
-   */
   public endEditSession(): void {
     this.#fontEngine.session.endEditSession();
   }
 
-  /**
-   * Get the current snapshot from FontEngine.
-   */
   public getSnapshot(): GlyphSnapshot | null {
     return this.#fontEngine.snapshot.value;
   }
 
-  /**
-   * Create a ToolContext for modern tools.
-   * This is the preferred API for new tools.
-   */
   public createToolContext(): ToolContext {
+    const viewport = this.#viewport;
+    const selection = this.#selection;
+    const fontEngine = this.#fontEngine;
+    const commands = this.#commandHistory;
+    const emitter = this.#eventEmitter;
+    const requestRedraw = () => this.requestRedraw();
+
     return {
-      snapshot: this.#fontEngine.snapshot.value,
-      selectedPoints: this.#selection.selectedPoints as Set<PointId>,
-      hoveredPoint: this.#selection.hoveredPoint,
-      viewport: this.#viewport,
-      mousePosition: this.#viewport.getUpmMousePosition(),
-      fontEngine: this.#fontEngine,
-      commands: this.#commandHistory,
-      setSelectedPoints: (ids) => {
-        this.#selection.selectMultiple(ids);
+      snapshot: fontEngine.snapshot.value,
+      selectedPoints: selection.selectedPoints,
+      hoveredPoint: selection.hoveredPoint,
+      mousePosition: viewport.getUpmMousePosition(),
+      selectionMode: selection.mode,
+
+      screen: {
+        toUpmDistance: (px) => viewport.screenToUpmDistance(px),
+        get hitRadius() {
+          return viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
+        },
+        lineWidth: (px = 1) => viewport.screenToUpmDistance(px),
       },
-      addToSelection: (id) => {
-        this.#selection.addToSelection(id);
+
+      select: {
+        set: (ids) => selection.selectMultiple(ids),
+        add: (id) => selection.addToSelection(id),
+        remove: (id) => selection.removeFromSelection(id),
+        toggle: (id) => selection.toggleSelection(id),
+        clear: () => selection.clearSelection(),
+        has: () => selection.hasSelection(),
+        setHovered: (id) => selection.setHovered(id),
+        setMode: (mode) => selection.setMode(mode),
       },
-      clearSelection: () => {
-        this.#selection.clearSelection();
+
+      edit: {
+        addPoint: (x, y, type) => {
+          const cmd = new AddPointCommand(x, y, type, false);
+          return commands.execute(cmd);
+        },
+        movePoints: (ids, dx, dy) => {
+          const cmd = new MovePointsCommand([...ids], dx, dy);
+          commands.execute(cmd);
+        },
+        movePointTo: (id, x, y) => {
+          fontEngine.editing.movePointTo(id, x, y);
+        },
+        removePoints: (ids) => {
+          const cmd = new RemovePointsCommand([...ids]);
+          commands.execute(cmd);
+        },
+        addContour: () => {
+          const cmd = new AddContourCommand();
+          return commands.execute(cmd);
+        },
+        closeContour: () => {
+          const cmd = new CloseContourCommand();
+          commands.execute(cmd);
+        },
+        toggleSmooth: (id) => {
+          fontEngine.editing.toggleSmooth(id);
+        },
+        getActiveContourId: () => {
+          const id = fontEngine.editing.getActiveContourId();
+          return id ? asContourId(id) : null;
+        },
       },
-      setHoveredPoint: (id) => {
-        this.#selection.setHovered(id);
+
+      commands,
+      requestRedraw,
+      emit: <K extends EditorEventName>(event: K, data: EditorEventMap[K]) => {
+        emitter.emit(event, data);
       },
-      requestRedraw: () => this.requestRedraw(),
     };
   }
 
-  /**
-   * Get the command history for undo/redo operations.
-   */
   public get commandHistory(): CommandHistory {
     return this.#commandHistory;
   }
@@ -196,15 +213,15 @@ export class Editor {
     return tool.tool;
   }
 
-  public on<T>(event: EventName, handler: EventHandler<T>) {
+  public on<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
     this.#eventEmitter.on(event, handler);
   }
 
-  public off<T>(event: EventName, handler: EventHandler<T>) {
+  public off<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
     this.#eventEmitter.off(event, handler);
   }
 
-  public emit<T>(event: EventName, data: T) {
+  public emit<K extends EditorEventName>(event: K, data: EditorEventMap[K]) {
     this.#eventEmitter.emit(event, data);
   }
 
@@ -269,19 +286,16 @@ export class Editor {
     this.#viewport.zoomOut();
   }
 
+  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+    this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
+  }
+
   public zoom(): number {
     return this.#viewport.zoom;
   }
 
-  /**
-   * Get the handle state for a point by ID.
-   */
   public getHandleState(pointId: PointId): HandleState {
     return this.#selection.getHandleState(pointId);
-  }
-
-  public get selection(): SelectionManager {
-    return this.#selection;
   }
 
   public paintHandle(
@@ -295,68 +309,38 @@ export class Editor {
     drawHandle(ctx, handleType, x, y, state, { isCounterClockWise });
   }
 
-  /**
-   * Set the hovered point by ID.
-   */
-  public setHoveredPoint(pointId: PointId | null) {
-    this.#selection.setHovered(pointId);
+  public getFontMetrics() {
+    return this.#fontEngine.info.getMetrics();
   }
 
-  public clearHoveredPoint() {
-    this.#selection.clearHovered();
+  public getFontMetadata() {
+    return this.#fontEngine.info.getMetadata();
   }
 
-  /**
-   * Get the currently hovered point ID.
-   */
-  public get hoveredPoint(): PointId | null {
-    return this.#selection.hoveredPoint;
+  public loadFont(filePath: string): void {
+    this.#fontEngine.io.loadFont(filePath);
   }
 
-  /**
-   * Get the selected point IDs.
-   */
   public get selectedPoints(): ReadonlySet<PointId> {
     return this.#selection.selectedPoints;
   }
 
-  /**
-   * Check if a point is selected by ID.
-   */
-  public isPointSelected(pointId: PointId): boolean {
-    return this.#selection.isSelected(pointId);
+  public deleteSelectedPoints(): void {
+    if (this.#selection.selectedPoints.size > 0) {
+      this.#fontEngine.editing.removePoints([...this.#selection.selectedPoints]);
+      this.#selection.clearSelection();
+      this.requestRedraw();
+    }
   }
 
-  /**
-   * Add a point to the selection by ID.
-   */
-  public addToSelection(pointId: PointId): void {
-    this.#selection.addToSelection(pointId);
+  public findPoint(pointId: PointId): PointSnapshot | null {
+    const snapshot = this.#fontEngine.snapshot.value;
+    if (!snapshot) return null;
+
+    const result = findPointInSnapshot(snapshot, pointId);
+    return result?.point ?? null;
   }
 
-  /**
-   * Set the selected points.
-   */
-  public setSelectedPoints(pointIds: Set<PointId>): void {
-    this.#selection.selectMultiple(pointIds);
-  }
-
-  public clearSelectedPoints() {
-    this.#selection.clearSelection();
-  }
-
-  public setSelectionMode(mode: SelectionMode): void {
-    this.#selection.setMode(mode);
-  }
-
-  public getSelectionMode(): SelectionMode {
-    return this.#selection.mode;
-  }
-
-  /**
-   * Get point data for all selected points.
-   * Used for calculating bounding rectangles.
-   */
   #getSelectedPointData(): Array<{ x: number; y: number }> {
     const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return [];
@@ -371,35 +355,8 @@ export class Editor {
     return result;
   }
 
-  /**
-   * Add a point to the active contour via FontEngine.
-   * @param x - The x position in UPM coordinates
-   * @param y - The y position in UPM coordinates
-   * @param pointType - The type of point (onCurve or offCurve)
-   * @returns The PointId of the added point
-   */
-  public addPoint(x: number, y: number, pointType: "onCurve" | "offCurve"): PointId {
-    debug("Adding point:", x, y, pointType);
-    return this.#fontEngine.editing.addPoint(x, y, pointType, false);
-  }
-
-  /**
-   * Find a point in the current snapshot by ID.
-   */
-  public findPoint(pointId: PointId): PointSnapshot | null {
-    const snapshot = this.#fontEngine.snapshot.value;
-    if (!snapshot) return null;
-
-    const result = findPointInSnapshot(snapshot, pointId);
-    return result?.point ?? null;
-  }
-
-  /**
-   * Close the active contour via FontEngine.
-   */
-  public closeContour(): void {
-    debug("Closing contour");
-    this.#fontEngine.editing.closeContour();
+  #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
+    return this.#viewport.screenToUpmDistance(screenPixels);
   }
 
   public setFillContour(fillContour: boolean) {
@@ -465,34 +422,28 @@ export class Editor {
 
     const snapshot = this.#fontEngine.snapshot.value;
 
-    debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
+    debug('drawStatic: snapshot contours:', snapshot?.contours.length ?? 0);
 
     ctx.clear();
     ctx.save();
 
     this.#prepareCanvas(ctx);
 
-    // Line width needs to account for UPM scale since we're in UPM coordinate space
-    const upmScale = this.#viewport.upmScale;
-
-    // Render guides directly from metrics + snapshot.xAdvance
     if (snapshot) {
       const guides = this.#getGuides(snapshot);
       ctx.setStyle(GUIDE_STYLES);
-      ctx.lineWidth = GUIDE_STYLES.lineWidth / (this.#viewport.zoom * upmScale);
+      ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
 
       if (!this.#state.fillContour) {
         renderGuides(ctx, guides);
       }
 
-      // Render glyph directly from snapshot
       ctx.setStyle(DEFAULT_STYLES);
-      ctx.lineWidth = DEFAULT_STYLES.lineWidth / (this.#viewport.zoom * upmScale);
+      ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
       const hasClosed = renderGlyph(ctx, snapshot);
 
       if (hasClosed && this.#state.fillContour) {
-        ctx.fillStyle = "black";
-        // Re-render with fill
+        ctx.fillStyle = 'black';
         for (const contour of snapshot.contours) {
           if (contour.closed) {
             ctx.beginPath();
@@ -516,6 +467,7 @@ export class Editor {
       if (selectedPointData.length > 0) {
         const bbRect = getBoundingRect(selectedPointData);
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
+        ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
         ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
       }
     }
@@ -523,7 +475,6 @@ export class Editor {
     ctx.restore();
     ctx.save();
 
-    // Draw handles directly from snapshot
     if (!this.#state.fillContour && snapshot) {
       this.#drawHandlesFromSnapshot(ctx, snapshot);
     }
@@ -543,10 +494,6 @@ export class Editor {
     };
   }
 
-  /**
-   * Draw point handles directly from snapshot data.
-   * This is the single source of truth - no intermediate state.
-   */
   #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
     for (const contour of snapshot.contours) {
       const points = contour.points;
@@ -559,29 +506,24 @@ export class Editor {
         const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
         const handleState = this.getHandleState(asPointId(point.id));
 
-        // Single point - just draw corner
         if (numPoints === 1) {
-          this.paintHandle(ctx, x, y, "corner", handleState);
+          this.paintHandle(ctx, x, y, 'corner', handleState);
           continue;
         }
 
         const isFirst = idx === 0;
         const isLast = idx === numPoints - 1;
 
-        // First point
         if (isFirst) {
           if (contour.closed) {
-            // Direction indicator for closed contours
             const clockwise = isContourClockwise(points);
-            this.paintHandle(ctx, x, y, "direction", handleState, !clockwise);
+            this.paintHandle(ctx, x, y, 'direction', handleState, !clockwise);
           } else {
-            // First handle for open contours
-            this.paintHandle(ctx, x, y, "first", handleState);
+            this.paintHandle(ctx, x, y, 'first', handleState);
           }
           continue;
         }
 
-        // Last point of open contour
         if (isLast && !contour.closed) {
           const prevPoint = points[idx - 1];
           const { x: px, y: py } = this.#viewport.projectUpmToScreen(
@@ -592,30 +534,25 @@ export class Editor {
           continue;
         }
 
-        // Regular points
-        if (point.pointType === "onCurve") {
+        if (point.pointType === 'onCurve') {
           if (point.smooth) {
-            this.paintHandle(ctx, x, y, "smooth", handleState);
+            this.paintHandle(ctx, x, y, 'smooth', handleState);
           } else {
-            this.paintHandle(ctx, x, y, "corner", handleState);
+            this.paintHandle(ctx, x, y, 'corner', handleState);
           }
         } else {
-          // Off-curve (control point)
-          // Find the anchor point to draw the handle line
           const nextPoint = points[(idx + 1) % numPoints];
           const prevPoint = points[idx - 1];
 
-          // If next point is also off-curve, connect to previous anchor
-          // Otherwise connect to next anchor
           const anchor =
-            nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
+            nextPoint.pointType === 'offCurve' ? prevPoint : nextPoint;
 
           const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
             anchor.x,
             anchor.y
           );
 
-          this.paintHandle(ctx, x, y, "control", handleState);
+          this.paintHandle(ctx, x, y, 'control', handleState);
 
           ctx.setStyle(DEFAULT_STYLES);
           ctx.drawLine(anchorX, anchorY, x, y);
@@ -642,7 +579,6 @@ export class Editor {
   }
 
   public destroy() {
-    // Dispose signal effects
     this.#snapshotEffect.dispose();
 
     if (this.#staticContext) {

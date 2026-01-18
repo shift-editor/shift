@@ -6,6 +6,7 @@
 * ALWAYS add tests to verify behaviour after completing a feature
 * ALWAYS keep documentation up to date
 * Consult the documentation and code together
+* When finishing a feature check if it ticks off an item in the roadmap
 
 ## Package Manager
 
