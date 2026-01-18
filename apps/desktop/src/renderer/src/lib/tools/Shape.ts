@@ -48,21 +48,16 @@ export class Shape implements Tool {
     this.#state = { type: 'ready' };
 
     const ctx = this.#editor.createToolContext();
-    const pointIds = [];
 
-    pointIds.push(ctx.edit.addPoint(this.#rect.x, this.#rect.y, 'onCurve'));
-    pointIds.push(ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve'));
-    pointIds.push(
-      ctx.edit.addPoint(
-        this.#rect.x + this.#rect.width,
-        this.#rect.y + this.#rect.height,
-        'onCurve'
-      )
+    ctx.edit.addPoint(this.#rect.x, this.#rect.y, 'onCurve');
+    ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve');
+    ctx.edit.addPoint(
+      this.#rect.x + this.#rect.width,
+      this.#rect.y + this.#rect.height,
+      'onCurve'
     );
-    pointIds.push(ctx.edit.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve'));
+    ctx.edit.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve');
     ctx.edit.closeContour();
-
-    ctx.emit('points:added', { pointIds });
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {

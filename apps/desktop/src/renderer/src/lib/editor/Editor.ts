@@ -2,10 +2,10 @@ import {
   BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
+  SEGMENT_HOVER_STYLE,
 } from '@/lib/styles/style';
 import { tools } from '@/lib/tools/tools';
 import AppState from '@/store/store';
-import type { EditorEventName, EditorEventMap, EventHandler, IEventEmitter } from '@/types/events';
 import { IGraphicContext, IRenderer } from '@/types/graphics';
 import { HandleState, HandleType } from '@/types/handle';
 import { Point2D, Rect2D } from '@/types/math';
@@ -16,6 +16,7 @@ import type { GlyphSnapshot, PointSnapshot } from '@/types/generated';
 
 import { FrameHandler } from './FrameHandler';
 import { drawHandle, drawHandleLast } from './handles';
+import { createIndicatorManager, type IndicatorManager } from './IndicatorManager';
 import { createSelectionManager, type SelectionManager, type SelectionMode } from './SelectionManager';
 import { Viewport } from './Viewport';
 import { getBoundingRect } from '../math/rect';
@@ -23,6 +24,8 @@ import { FontEngine } from '@/engine';
 import { findPointInSnapshot, renderGlyph, renderGuides, type Guides } from './render';
 import { CommandHistory, AddPointCommand, MovePointsCommand, RemovePointsCommand, CloseContourCommand, AddContourCommand } from '../commands';
 import { effect, type Effect } from '../reactive/signal';
+import { parseSegments } from '@/engine/segments';
+import { Segment } from '../geo';
 
 const DEBUG = false;
 const SCREEN_HIT_RADIUS = 8;
@@ -60,10 +63,10 @@ function isContourClockwise(points: PointSnapshot[]): boolean {
 export class Editor {
   #state: EditorState;
   #selection: SelectionManager;
+  #indicators: IndicatorManager;
 
   #viewport: Viewport;
   #frameHandler: FrameHandler;
-  #eventEmitter: IEventEmitter;
 
   #commandHistory: CommandHistory;
 
@@ -71,9 +74,9 @@ export class Editor {
   #interactiveContext: IGraphicContext | null;
 
   #fontEngine: FontEngine;
-  #snapshotEffect: Effect;
+  #redrawEffect: Effect;
 
-  constructor(eventEmitter: IEventEmitter) {
+  constructor() {
     this.#viewport = new Viewport();
     this.#frameHandler = new FrameHandler();
 
@@ -84,21 +87,19 @@ export class Editor {
       () => this.#fontEngine.snapshot.value
     );
 
-    this.#eventEmitter = eventEmitter;
-
     this.#staticContext = null;
     this.#interactiveContext = null;
 
     this.#state = { ...InitialEditorState };
-    this.#selection = createSelectionManager(() => this.requestRedraw());
+    this.#selection = createSelectionManager();
+    this.#indicators = createIndicatorManager();
 
-    this.#snapshotEffect = effect(() => {
-      const snapshot = this.#fontEngine.snapshot.value;
-      debug('Snapshot changed:', snapshot?.contours.length, 'contours');
-      this.requestRedraw();
-    });
-
-    this.on('points:removed', (_pointIds) => {
+    this.#redrawEffect = effect(() => {
+      this.#fontEngine.snapshot.value;
+      this.#selection.selectedPoints;
+      this.#selection.mode;
+      this.#indicators.hoveredPoint;
+      this.#indicators.hoveredSegment;
       this.requestRedraw();
     });
   }
@@ -128,15 +129,16 @@ export class Editor {
   public createToolContext(): ToolContext {
     const viewport = this.#viewport;
     const selection = this.#selection;
+    const indicators = this.#indicators;
     const fontEngine = this.#fontEngine;
     const commands = this.#commandHistory;
-    const emitter = this.#eventEmitter;
     const requestRedraw = () => this.requestRedraw();
 
     return {
       snapshot: fontEngine.snapshot.value,
       selectedPoints: selection.selectedPoints,
-      hoveredPoint: selection.hoveredPoint,
+      hoveredPoint: indicators.hoveredPoint,
+      hoveredSegment: indicators.hoveredSegment,
       mousePosition: viewport.getUpmMousePosition(),
       selectionMode: selection.mode,
 
@@ -155,8 +157,13 @@ export class Editor {
         toggle: (id) => selection.toggleSelection(id),
         clear: () => selection.clearSelection(),
         has: () => selection.hasSelection(),
-        setHovered: (id) => selection.setHovered(id),
         setMode: (mode) => selection.setMode(mode),
+      },
+
+      indicators: {
+        setHoveredPoint: (id) => indicators.setHoveredPoint(id),
+        setHoveredSegment: (indicator) => indicators.setHoveredSegment(indicator),
+        clearAll: () => indicators.clearAll(),
       },
 
       edit: {
@@ -197,9 +204,6 @@ export class Editor {
 
       commands,
       requestRedraw,
-      emit: <K extends EditorEventName>(event: K, data: EditorEventMap[K]) => {
-        emitter.emit(event, data);
-      },
     };
   }
 
@@ -214,18 +218,6 @@ export class Editor {
       throw new Error(`Tool ${activeTool} not found`);
     }
     return tool.tool;
-  }
-
-  public on<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
-    this.#eventEmitter.on(event, handler);
-  }
-
-  public off<K extends EditorEventName>(event: K, handler: EventHandler<K>) {
-    this.#eventEmitter.off(event, handler);
-  }
-
-  public emit<K extends EditorEventName>(event: K, data: EditorEventMap[K]) {
-    this.#eventEmitter.emit(event, data);
   }
 
   public undo() {
@@ -298,7 +290,13 @@ export class Editor {
   }
 
   public getHandleState(pointId: PointId): HandleState {
-    return this.#selection.getHandleState(pointId);
+    if (this.#selection.isSelected(pointId)) {
+      return 'selected';
+    }
+    if (this.#indicators.hoveredPoint === pointId) {
+      return 'hovered';
+    }
+    return 'idle';
   }
 
   public paintHandle(
@@ -460,6 +458,10 @@ export class Editor {
       }
     }
 
+    if (!this.#state.fillContour && snapshot) {
+      this.#drawSegmentIndicator(ctx, snapshot);
+    }
+
     const shouldDrawBoundingRect =
       this.#selection.selectedPoints.size > 0 &&
       !this.#state.fillContour &&
@@ -495,6 +497,49 @@ export class Editor {
       descender: { y: metrics.descender },
       xAdvance: snapshot.xAdvance,
     };
+  }
+
+  #drawSegmentIndicator(ctx: IRenderer, snapshot: GlyphSnapshot): void {
+    const hoveredSegment = this.#indicators.hoveredSegment;
+    if (!hoveredSegment) return;
+
+    for (const contour of snapshot.contours) {
+      const segments = parseSegments(contour.points, contour.closed);
+
+      for (const segment of segments) {
+        const segmentId = Segment.id(segment);
+        if (segmentId !== hoveredSegment.segmentId) continue;
+
+        ctx.setStyle(SEGMENT_HOVER_STYLE);
+        ctx.lineWidth = this.#lineWidthUpm(SEGMENT_HOVER_STYLE.lineWidth);
+
+        const curve = Segment.toCurve(segment);
+        ctx.beginPath();
+        ctx.moveTo(curve.p0.x, curve.p0.y);
+
+        switch (curve.type) {
+          case 'line':
+            ctx.lineTo(curve.p1.x, curve.p1.y);
+            break;
+          case 'quadratic':
+            ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
+            break;
+          case 'cubic':
+            ctx.cubicTo(
+              curve.c0.x,
+              curve.c0.y,
+              curve.c1.x,
+              curve.c1.y,
+              curve.p1.x,
+              curve.p1.y
+            );
+            break;
+        }
+
+        ctx.stroke();
+        return;
+      }
+    }
   }
 
   #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
@@ -582,7 +627,7 @@ export class Editor {
   }
 
   public destroy() {
-    this.#snapshotEffect.dispose();
+    this.#redrawEffect.dispose();
 
     if (this.#staticContext) {
       this.#staticContext.destroy();

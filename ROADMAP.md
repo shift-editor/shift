@@ -157,14 +157,14 @@
 ### Phase 1: Interactive Feedback & Indicators
 
 **Segment Hit Testing**
-- [ ] Hit testing for bezier segments (not just points)
-- [ ] Calculate nearest point on curve (parametric)
-- [ ] Configurable hover threshold
+- [x] Hit testing for bezier segments (not just points)
+- [x] Calculate nearest point on curve (parametric)
+- [x] Configurable hover threshold
 
 **Segment Hover Rendering**
-- [ ] Track `hoveredSegmentId` in Select tool state
-- [ ] Highlight hovered segment (different stroke color/width)
-- [ ] Show control handles when hovering near curve
+- [x] Track `hoveredSegmentId` in Select tool state
+- [x] Highlight hovered segment (different stroke color/width)
+- [x] Show control handles when hovering near curve
 - [ ] Cursor change on segment hover (crosshair)
 
 **Point Insertion**

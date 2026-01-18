@@ -1,48 +1,20 @@
 # Core - LLM Context
 
 ## Quick Facts
-- **Purpose**: Core utilities (EventEmitter, EditEngine)
+- **Purpose**: Core utilities (EditEngine)
 - **Language**: TypeScript
-- **Key Files**: `EventEmitter.ts`, `EditEngine.ts`, `common.ts`
+- **Key Files**: `EditEngine.ts`, `common.ts`
 - **Dependencies**: types, engine/native
 - **Dependents**: lib/editor, lib/tools, engine
 
 ## File Structure
 ```
 src/renderer/src/lib/core/
-├── EventEmitter.ts       # Pub/sub implementation
-├── EventEmitter.test.ts  # Tests
 ├── EditEngine.ts         # Unified edit operations
 └── common.ts             # CyclingCollection utility
 ```
 
 ## Core Abstractions
-
-### EventEmitter (EventEmitter.ts)
-```typescript
-class EventEmitter implements IEventEmitter {
-  #listeners = new Map<EventName, EventHandler<any>[]>();
-
-  on<T>(event: EventName, handler: EventHandler<T>): void {
-    const handlers = this.#listeners.get(event) ?? [];
-    handlers.push(handler);
-    this.#listeners.set(event, handlers);
-  }
-
-  emit<T>(event: EventName, data: T): void {
-    const handlers = this.#listeners.get(event) ?? [];
-    for (const handler of handlers) {
-      handler(data);
-    }
-  }
-
-  off<T>(event: EventName, handler: EventHandler<T>): void {
-    const handlers = this.#listeners.get(event) ?? [];
-    const index = handlers.indexOf(handler);
-    if (index !== -1) handlers.splice(index, 1);
-  }
-}
-```
 
 ### EditEngine (EditEngine.ts)
 ```typescript
@@ -87,25 +59,6 @@ class CyclingCollection<T> {
 
 ## Key Patterns
 
-### Type-Safe Events
-```typescript
-// Event types defined in types/events.ts
-type EventName = 'points:added' | 'points:moved' | 'points:removed' | ...;
-
-// Type-safe subscription
-emitter.on<PointId[]>('points:added', (ids) => {
-  // ids is PointId[]
-});
-```
-
-### Handler Reference for Unsubscribe
-```typescript
-// Must keep reference to unsubscribe
-const handler = (ids: PointId[]) => { /* ... */ };
-emitter.on('points:added', handler);
-emitter.off('points:added', handler);  // Same reference required
-```
-
 ### EditEngine Context Injection
 ```typescript
 const ctx = {
@@ -121,26 +74,10 @@ const engine = new EditEngine(ctx);
 
 | Class | Method | Purpose |
 |-------|--------|---------|
-| EventEmitter | on(event, handler) | Subscribe |
-| EventEmitter | emit(event, data) | Publish |
-| EventEmitter | off(event, handler) | Unsubscribe |
 | EditEngine | applyEdits(selected, dx, dy) | Unified edit |
 | CyclingCollection | next() / prev() | Cycle items |
 
 ## Common Operations
-
-### Pub/sub pattern
-```typescript
-const emitter = new EventEmitter();
-
-// Subscribe
-emitter.on('font:loaded', (font) => {
-  console.log('Font loaded:', font.name);
-});
-
-// Publish
-emitter.emit('font:loaded', loadedFont);
-```
 
 ### Unified edits
 ```typescript
@@ -162,20 +99,8 @@ tools.next();     // 'hand'
 tools.next();     // 'pen' (cycles)
 ```
 
-## Event Types (types/events.ts)
-
-```typescript
-type EventName =
-  | 'points:added'     // PointId[]
-  | 'points:moved'     // { ids: PointId[], dx, dy }
-  | 'points:removed'   // PointId[]
-  | 'segment:upgraded' // SegmentUpgradeData
-  | 'font:loaded';     // Font
-```
-
 ## Constraints and Invariants
 
-1. **Handler Reference**: Must keep reference for off() to work
-2. **Session Required**: EditEngine assumes active session
-3. **JSON Parse**: EditEngine parses native JSON results
-4. **Cycle Modulo**: CyclingCollection uses safe modulo for negative indices
+1. **Session Required**: EditEngine assumes active session
+2. **JSON Parse**: EditEngine parses native JSON results
+3. **Cycle Modulo**: CyclingCollection uses safe modulo for negative indices

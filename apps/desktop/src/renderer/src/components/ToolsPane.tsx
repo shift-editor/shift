@@ -1,4 +1,4 @@
-import { FC, useEffect } from "react";
+import { FC } from "react";
 
 import {
   Tooltip,
@@ -54,18 +54,6 @@ export const ToolsPane: FC = () => {
   const editor = getEditor();
 
   const fileName = AppState((state) => state.fileName);
-
-  useEffect(() => {
-    editor.on("font:loaded", (event: any) => {
-      AppState.setState({ fileName: event.payload.fileName });
-    });
-
-    return () => {
-      editor.off("font:loaded", (event: any) => {
-        AppState.setState({ fileName: event.payload.fileName });
-      });
-    };
-  }, []);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">

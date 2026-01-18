@@ -1,9 +1,10 @@
 import { vi } from 'vitest';
-import type { ToolContext, ScreenContext, SelectContext, EditContext } from '@/types/tool';
+import type { ToolContext, ScreenContext, SelectContext, EditContext, IndicatorContext } from '@/types/tool';
 import type { PointId } from '@/types/ids';
 import type { Rect2D } from '@/types/math';
 import type { GlyphSnapshot } from '@/types/generated';
 import type { CommandContext } from '@/lib/commands/Command';
+import type { SegmentIndicator } from '@/types/indicator';
 import { CommandHistory } from '@/lib/commands';
 import { Viewport } from '@/lib/editor/Viewport';
 import { asContourId } from '@/types/ids';
@@ -62,7 +63,8 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   }
 
   let selectedPoints = options.selectedPoints ?? new Set<PointId>();
-  let hoveredPoint = options.hoveredPoint ?? null;
+  let hoveredPoint: PointId | null = options.hoveredPoint ?? null;
+  let hoveredSegment: SegmentIndicator | null = null;
   let selectionMode: 'preview' | 'committed' = 'committed';
   let redrawCount = 0;
 
@@ -98,11 +100,23 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
       selectedPoints = new Set();
     }),
     has: vi.fn(() => selectedPoints.size > 0),
-    setHovered: vi.fn((id: PointId | null) => {
-      hoveredPoint = id;
-    }),
     setMode: vi.fn((mode: 'preview' | 'committed') => {
       selectionMode = mode;
+    }),
+  };
+
+  const indicators: IndicatorContext = {
+    setHoveredPoint: vi.fn((id: PointId | null) => {
+      hoveredPoint = id;
+      if (id) hoveredSegment = null;
+    }),
+    setHoveredSegment: vi.fn((indicator: SegmentIndicator | null) => {
+      hoveredSegment = indicator;
+      if (indicator) hoveredPoint = null;
+    }),
+    clearAll: vi.fn(() => {
+      hoveredPoint = null;
+      hoveredSegment = null;
     }),
   };
 
@@ -147,18 +161,21 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     get hoveredPoint() {
       return hoveredPoint;
     },
+    get hoveredSegment() {
+      return hoveredSegment;
+    },
     mousePosition: { x: 0, y: 0 },
     get selectionMode() {
       return selectionMode;
     },
     screen,
     select,
+    indicators,
     edit,
     commands: commandHistory,
     requestRedraw: vi.fn(() => {
       redrawCount++;
     }),
-    emit: vi.fn(),
   };
 
   return {

@@ -25,6 +25,54 @@ signal.value
 3. **Batched Effects**: Effects queued during batch, executed at batch end
 4. **Cleanup Support**: Effects can return cleanup functions
 
+## When to Use Signals
+
+**Use signals for:**
+- Continuous state that changes over time (selection, hover, zoom)
+- State accessed by multiple consumers
+- Derived/computed values
+- UI state that triggers redraws
+
+**Use signals + effect() for:**
+- Triggering side effects when state changes
+- Auto-subscribing to dependencies
+- Cleanup on state change (return cleanup function)
+
+**Don't use signals for:**
+- One-shot operations (use functions)
+- Event payloads with specific data (if you need to know *what* changed, pass it directly)
+- State that never changes after initialization
+- React component state that doesn't need editor access (use Zustand)
+
+**Signals vs Zustand:**
+- **Signals**: Editor internals (canvas, rendering, tools, commands)
+- **Zustand**: React UI state (filename, active tool, panels, preferences)
+
+**Pattern: Manager + Signals**
+```typescript
+function createSelectionManager() {
+  const selectedPoints = signal<ReadonlySet<PointId>>(new Set());
+
+  return {
+    // Getter tracks dependency when accessed inside effect()
+    get selectedPoints() { return selectedPoints.value; },
+
+    // Mutator uses peek() to read without tracking, .value to write
+    addToSelection(id) {
+      const next = new Set(selectedPoints.peek());
+      next.add(id);
+      selectedPoints.value = next;
+    },
+  };
+}
+
+// Consumer auto-subscribes via effect()
+effect(() => {
+  manager.selectedPoints; // Tracks dependency
+  redraw();
+});
+```
+
 ## Key Concepts
 
 ### Signals

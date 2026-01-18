@@ -3,9 +3,11 @@ import { UPMRect } from '@/lib/math/rect';
 import type { Point2D } from '@/types/math';
 import type { PointId } from '@/types/ids';
 import { asPointId } from '@/types/ids';
-import type { PointSnapshot } from '@/types/generated';
+import type { PointSnapshot, GlyphSnapshot } from '@/types/generated';
 import { NUDGES_VALUES, type NudgeMagnitude } from '@/types/nudge';
-import { Vec2 } from '@/lib/geo';
+import { Vec2, Segment } from '@/lib/geo';
+import { parseSegments } from '@/engine/segments';
+import type { SegmentHitResult } from '@/lib/geo';
 
 function findPointAtPosition(
   points: PointSnapshot[],
@@ -31,6 +33,20 @@ function getAllPoints(snapshot: { contours: Array<{ points: PointSnapshot[] }> }
     result.push(...contour.points);
   }
   return result;
+}
+
+function hitTestSegments(snapshot: GlyphSnapshot | null, pos: Point2D, hitRadius: number): SegmentHitResult | null {
+  if (!snapshot) return null;
+
+  for (const contour of snapshot.contours) {
+    const segments = parseSegments(contour.points, contour.closed);
+    const hit = Segment.hitTestMultiple(segments, pos, hitRadius);
+    if (hit) {
+      return hit;
+    }
+  }
+
+  return null;
 }
 
 export interface HitTestResult {
@@ -133,8 +149,25 @@ export class SelectCommands {
 
   updateHover(pos: Point2D): void {
     const ctx = this.#editor.createToolContext();
+    const hitRadius = ctx.screen.hitRadius;
+
     const { pointId } = this.hitTest(pos);
-    ctx.select.setHovered(pointId);
+    if (pointId) {
+      ctx.indicators.setHoveredPoint(pointId);
+      return;
+    }
+
+    const segmentHit = hitTestSegments(ctx.snapshot, pos, hitRadius);
+    if (segmentHit) {
+      ctx.indicators.setHoveredSegment({
+        segmentId: segmentHit.segmentId,
+        closestPoint: segmentHit.point,
+        t: segmentHit.t,
+      });
+      return;
+    }
+
+    ctx.indicators.clearAll();
   }
 
   toggleSmooth(pos: Point2D): boolean {

@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Pen } from './pen';
-import { Editor } from '@/lib/editor/Editor';
 import { createMockFontEngine, getPointCount, getContourCount } from '@/testing';
-import { EventEmitter } from '@/lib/core/EventEmitter';
 import type { PointId } from '@/types/ids';
 import type { ToolContext } from '@/types/tool';
 
@@ -10,8 +8,6 @@ function createMockEditor() {
   const fontEngine = createMockFontEngine();
   fontEngine.session.startEditSession(65);
   fontEngine.editing.addContour();
-
-  new EventEmitter();
 
   let selectedPoints = new Set<PointId>();
   let hoveredPoint: PointId | null = null;
@@ -75,7 +71,6 @@ function createMockEditor() {
   };
 
   const requestRedrawMock = vi.fn();
-  const emitMock = vi.fn();
 
   const createToolContext = (): ToolContext => ({
     snapshot: fontEngine.snapshot.value,
@@ -88,7 +83,6 @@ function createMockEditor() {
     edit: editMocks,
     commands: mockCommandHistory as any,
     requestRedraw: requestRedrawMock,
-    emit: emitMock,
   });
 
   const mockEditor = {
@@ -110,7 +104,6 @@ function createMockEditor() {
       edit: editMocks,
       screen: screenMocks,
       requestRedraw: requestRedrawMock,
-      emit: emitMock,
       commands: mockCommandHistory,
     },
   };
@@ -188,13 +181,6 @@ describe('Pen tool', () => {
       pen.onMouseDown(event);
 
       expect(mocks.commands.execute).not.toHaveBeenCalled();
-    });
-
-    it('should emit points:added event', () => {
-      const event = createMouseEvent('mousedown', 100, 200);
-      pen.onMouseDown(event);
-
-      expect(mocks.emit).toHaveBeenCalledWith('points:added', expect.any(Object));
     });
   });
 

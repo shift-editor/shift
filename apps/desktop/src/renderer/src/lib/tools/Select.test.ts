@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Select } from './select';
-import { Editor } from '@/lib/editor/Editor';
 import { createMockFontEngine, getAllPoints } from '@/testing';
-import { EventEmitter } from '@/lib/core/EventEmitter';
 import type { PointId } from '@/types/ids';
 import type { ToolContext } from '@/types/tool';
 
@@ -10,8 +8,6 @@ function createMockEditor() {
   const fontEngine = createMockFontEngine();
   fontEngine.session.startEditSession(65);
   fontEngine.editing.addContour();
-
-  new EventEmitter();
 
   let selectedPoints = new Set<PointId>();
   let hoveredPoint: PointId | null = null;
@@ -49,11 +45,18 @@ function createMockEditor() {
       selectedPoints.clear();
     }),
     has: vi.fn(() => selectedPoints.size > 0),
-    setHovered: vi.fn((id: PointId | null) => {
-      hoveredPoint = id;
-    }),
     setMode: vi.fn((mode: 'preview' | 'committed') => {
       selectionMode = mode;
+    }),
+  };
+
+  const indicatorMocks = {
+    setHoveredPoint: vi.fn((id: PointId | null) => {
+      hoveredPoint = id;
+    }),
+    setHoveredSegment: vi.fn(),
+    clearAll: vi.fn(() => {
+      hoveredPoint = null;
     }),
   };
 
@@ -86,20 +89,20 @@ function createMockEditor() {
   };
 
   const requestRedrawMock = vi.fn();
-  const emitMock = vi.fn();
 
   const createToolContext = (): ToolContext => ({
     snapshot: fontEngine.snapshot.value,
     selectedPoints,
     hoveredPoint,
+    hoveredSegment: null,
     mousePosition: { x: 0, y: 0 },
     selectionMode,
     screen: screenMocks,
     select: selectMocks,
+    indicators: indicatorMocks,
     edit: editMocks,
     commands: mockCommandHistory as any,
     requestRedraw: requestRedrawMock,
-    emit: emitMock,
   });
 
   const mockEditor = {
@@ -119,10 +122,10 @@ function createMockEditor() {
     getSelectedPoints: () => selectedPoints,
     mocks: {
       select: selectMocks,
+      indicators: indicatorMocks,
       edit: editMocks,
       screen: screenMocks,
       requestRedraw: requestRedrawMock,
-      emit: emitMock,
       commands: mockCommandHistory,
     },
   };
@@ -230,14 +233,15 @@ describe('Select tool', () => {
 
     it('should set hovered point when mouse is over point', () => {
       select.onMouseMove(createMouseEvent('mousemove', 100, 100));
-      expect(mocks.select.setHovered).toHaveBeenCalled();
+      expect(mocks.indicators.setHoveredPoint).toHaveBeenCalled();
     });
 
     it('should clear hovered point when mouse leaves point', () => {
       select.onMouseMove(createMouseEvent('mousemove', 100, 100));
-      mocks.select.setHovered.mockClear();
+      mocks.indicators.setHoveredPoint.mockClear();
+      mocks.indicators.clearAll.mockClear();
       select.onMouseMove(createMouseEvent('mousemove', 500, 500));
-      expect(mocks.select.setHovered).toHaveBeenCalled();
+      expect(mocks.indicators.clearAll).toHaveBeenCalled();
     });
   });
 

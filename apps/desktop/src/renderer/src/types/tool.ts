@@ -4,7 +4,7 @@ import type { PointId, ContourId } from './ids';
 import type { Point2D } from './math';
 import type { CommandHistory } from '@/lib/commands';
 import type { SelectionMode } from '@/lib/editor/SelectionManager';
-import type { EditorEventName, EditorEventMap } from './events';
+import type { SegmentIndicator } from './indicator';
 
 export type ToolName = 'select' | 'pen' | 'hand' | 'shape' | 'disabled';
 
@@ -21,8 +21,13 @@ export interface SelectContext {
   toggle(id: PointId): void;
   clear(): void;
   has(): boolean;
-  setHovered(id: PointId | null): void;
   setMode(mode: SelectionMode): void;
+}
+
+export interface IndicatorContext {
+  setHoveredPoint(id: PointId | null): void;
+  setHoveredSegment(indicator: SegmentIndicator | null): void;
+  clearAll(): void;
 }
 
 export interface EditContext {
@@ -41,16 +46,17 @@ export interface ToolContext {
   readonly snapshot: GlyphSnapshot | null;
   readonly selectedPoints: ReadonlySet<PointId>;
   readonly hoveredPoint: PointId | null;
+  readonly hoveredSegment: SegmentIndicator | null;
   readonly mousePosition: Point2D;
   readonly selectionMode: SelectionMode;
 
   readonly screen: ScreenContext;
   readonly select: SelectContext;
+  readonly indicators: IndicatorContext;
   readonly edit: EditContext;
 
   readonly commands: CommandHistory;
   requestRedraw(): void;
-  emit<K extends EditorEventName>(event: K, data: EditorEventMap[K]): void;
 }
 
 export interface Tool {

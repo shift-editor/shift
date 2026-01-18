@@ -39,3 +39,7 @@ export type {
   CurveType,
   ClosestPointResult,
 } from './Curve';
+
+// Segment operations (font editing segments with IDs)
+export { Segment } from './Segment';
+export type { SegmentHitResult } from './Segment';

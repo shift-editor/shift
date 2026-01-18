@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-import { EventEmitter } from "@/lib/core/EventEmitter";
 import { Editor } from "@/lib/editor/Editor";
 import { createToolRegistry } from "@/lib/tools/tools";
 import { ToolName } from "@/types/tool";
@@ -17,8 +16,7 @@ interface AppState {
 }
 
 const AppState = create<AppState>()((set) => {
-  const eventEmitter = new EventEmitter();
-  const editor = new Editor(eventEmitter);
+  const editor = new Editor();
   createToolRegistry(editor);
 
   return {

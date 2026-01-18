@@ -208,3 +208,11 @@ export const BOUNDING_RECTANGLE_STYLES: DrawStyle = {
   antiAlias: false,
   dashPattern: [5, 5],
 };
+
+export const SEGMENT_HOVER_STYLE: DrawStyle = {
+  lineWidth: 2,
+  strokeStyle: '#4A90D9',
+  fillStyle: 'transparent',
+  antiAlias: true,
+  dashPattern: [],
+};

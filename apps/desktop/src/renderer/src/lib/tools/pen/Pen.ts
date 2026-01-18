@@ -88,8 +88,6 @@ export class Pen implements Tool {
         context,
       },
     });
-
-    ctx.emit('points:added', { pointIds: [result.pointId] });
   }
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {

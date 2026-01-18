@@ -198,3 +198,25 @@ computed(() => {
 5. **Batch Nesting**: Nested batches only flush at outermost batch end
 6. **Dependency Cleanup**: Old dependencies unsubscribed on recomputation
 7. **Re-entrance Safety**: Notifications during notify are deferred
+
+## Design Guidance
+
+### Signals vs Callbacks
+- **Before**: `createManager(onChange?: () => void)` - manual notify
+- **After**: `createManager()` with internal signals - automatic tracking
+
+### Accessing Signal State
+- `signal.value` - read AND track as dependency (use in effect/computed)
+- `signal.peek()` - read WITHOUT tracking (use when building new values)
+
+### Immutable Updates for Collections
+```typescript
+// Signals use Object.is() - mutating same object won't trigger
+const set = signal(new Set());
+set.value.add(1);  // ❌ Won't notify - same Set reference
+
+// Create new collection to trigger update
+const next = new Set(set.peek());
+next.add(1);
+set.value = next;  // ✅ New reference triggers notify
+```

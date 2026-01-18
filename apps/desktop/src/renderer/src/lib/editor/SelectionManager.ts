@@ -1,11 +1,10 @@
-import type { HandleState } from '@/types/handle';
 import type { PointId } from '@/types/ids';
+import { signal, type WritableSignal } from '../reactive/signal';
 
 export type SelectionMode = 'preview' | 'committed';
 
 export interface SelectionManager {
   readonly selectedPoints: ReadonlySet<PointId>;
-  readonly hoveredPoint: PointId | null;
   readonly mode: SelectionMode;
 
   select(pointId: PointId): void;
@@ -15,107 +14,67 @@ export interface SelectionManager {
   toggleSelection(pointId: PointId): void;
   clearSelection(): void;
   hasSelection(): boolean;
-  setHovered(pointId: PointId | null): void;
-  clearHovered(): void;
   setMode(mode: SelectionMode): void;
   isSelected(pointId: PointId): boolean;
-  getHandleState(pointId: PointId): HandleState;
 }
 
-interface SelectionState {
-  selectedPoints: Set<PointId>;
-  hoveredPoint: PointId | null;
-  mode: SelectionMode;
-}
-
-export function createSelectionManager(onChange?: () => void): SelectionManager {
-  const state: SelectionState = {
-    selectedPoints: new Set(),
-    hoveredPoint: null,
-    mode: 'committed',
-  };
-
-  const notify = () => onChange?.();
+export function createSelectionManager(): SelectionManager {
+  const selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal(new Set());
+  const mode: WritableSignal<SelectionMode> = signal('committed');
 
   return {
     get selectedPoints(): ReadonlySet<PointId> {
-      return state.selectedPoints;
-    },
-
-    get hoveredPoint(): PointId | null {
-      return state.hoveredPoint;
+      return selectedPoints.value;
     },
 
     get mode(): SelectionMode {
-      return state.mode;
+      return mode.value;
     },
 
     select(pointId: PointId): void {
-      state.selectedPoints.clear();
-      state.selectedPoints.add(pointId);
-      notify();
+      selectedPoints.value = new Set([pointId]);
     },
 
     selectMultiple(pointIds: Set<PointId>): void {
-      state.selectedPoints = new Set(pointIds);
-      notify();
+      selectedPoints.value = new Set(pointIds);
     },
 
     addToSelection(pointId: PointId): void {
-      state.selectedPoints.add(pointId);
-      notify();
+      const next = new Set(selectedPoints.peek());
+      next.add(pointId);
+      selectedPoints.value = next;
     },
 
     removeFromSelection(pointId: PointId): void {
-      state.selectedPoints.delete(pointId);
-      notify();
+      const next = new Set(selectedPoints.peek());
+      next.delete(pointId);
+      selectedPoints.value = next;
     },
 
     toggleSelection(pointId: PointId): void {
-      if (state.selectedPoints.has(pointId)) {
-        state.selectedPoints.delete(pointId);
+      const next = new Set(selectedPoints.peek());
+      if (next.has(pointId)) {
+        next.delete(pointId);
       } else {
-        state.selectedPoints.add(pointId);
+        next.add(pointId);
       }
-      notify();
+      selectedPoints.value = next;
     },
 
     clearSelection(): void {
-      state.selectedPoints.clear();
-      notify();
+      selectedPoints.value = new Set();
     },
 
     hasSelection(): boolean {
-      return state.selectedPoints.size > 0;
+      return selectedPoints.peek().size > 0;
     },
 
-    setHovered(pointId: PointId | null): void {
-      state.hoveredPoint = pointId;
-      notify();
-    },
-
-    clearHovered(): void {
-      state.hoveredPoint = null;
-      notify();
-    },
-
-    setMode(mode: SelectionMode): void {
-      state.mode = mode;
-      notify();
+    setMode(m: SelectionMode): void {
+      mode.value = m;
     },
 
     isSelected(pointId: PointId): boolean {
-      return state.selectedPoints.has(pointId);
-    },
-
-    getHandleState(pointId: PointId): HandleState {
-      if (state.selectedPoints.has(pointId)) {
-        return 'selected';
-      }
-      if (state.hoveredPoint === pointId) {
-        return 'hovered';
-      }
-      return 'idle';
+      return selectedPoints.peek().has(pointId);
     },
   };
 }
