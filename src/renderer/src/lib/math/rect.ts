@@ -1,6 +1,5 @@
-import { Point2D, Rect2D } from '@/types/math';
+import type { Point2D, Rect2D } from '@/types/math';
 
-import { Point } from './point';
 import { Shape } from './shape';
 
 export class Rect extends Shape {
@@ -14,7 +13,6 @@ export class Rect extends Shape {
   }
 
   public static fromBounds(left: number, top: number, right: number, bottom: number): Rect {
-    // TODO: check that it's a valid rectangle
     return new Rect(left, top, right - left, bottom - top);
   }
 
@@ -22,30 +20,25 @@ export class Rect extends Shape {
     return [this.x, this.y, this.width, this.height];
   }
 
-  public get_centered_position(): Point {
-    return new Point(this.x - this.width / 2, this.y - this.height / 2);
+  public get_centered_position(): Point2D {
+    return { x: this.x - this.width / 2, y: this.y - this.height / 2 };
   }
 
-  // **
-  // Resize the rectangle
-  // @param width - The new width of the rectangle
-  // @param height - The new height of the rectangle
-  // **
   public resize(width: number, height: number): void {
     this.#width = width;
     this.#height = height;
   }
 
   public changeOrigin(x: number, y: number): void {
-    this.position.set_x(x);
-    this.position.set_y(y);
+    this.setX(x);
+    this.setY(y);
   }
 
   public clear(): void {
     this.#height = 0;
     this.#width = 0;
-    this.position.set_x(0);
-    this.position.set_y(0);
+    this.setX(0);
+    this.setY(0);
   }
 
   get left(): number {
@@ -84,13 +77,11 @@ export class UPMRect extends Rect {
 
   public resize(width: number, height: number) {
     if (width < 0) {
-      const dx = this.x + width;
-      this.position.set_x(dx);
+      this.setX(this.x + width);
     }
 
     if (height < 0) {
-      const dy = this.y + height;
-      this.position.set_y(dy);
+      this.setY(this.y + height);
     }
 
     super.resize(Math.abs(width), Math.abs(height));

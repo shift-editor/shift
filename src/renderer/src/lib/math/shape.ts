@@ -1,26 +1,35 @@
-import { Point } from './point';
+import type { Point2D } from '@/types/math';
 
 export abstract class Shape {
-  #position: Point;
+  #x: number;
+  #y: number;
 
   constructor(x: number, y: number) {
-    this.#position = new Point(x, y);
-  }
-
-  get position(): Point {
-    return this.#position;
+    this.#x = x;
+    this.#y = y;
   }
 
   get x(): number {
-    return this.#position.x;
+    return this.#x;
   }
 
   get y(): number {
-    return this.#position.y;
+    return this.#y;
   }
 
-  // TODO: add tests
-  static shoelace(points: Point[]): number {
+  protected setX(x: number): void {
+    this.#x = x;
+  }
+
+  protected setY(y: number): void {
+    this.#y = y;
+  }
+
+  /**
+   * Calculate the signed area of a polygon using the shoelace formula.
+   * Positive for counter-clockwise, negative for clockwise.
+   */
+  static shoelace(points: Point2D[]): number {
     const n = points.length;
     let area = 0;
 

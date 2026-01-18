@@ -1,4 +1,4 @@
-import { Line } from '@/lib/math/line';
+import { Vec2 } from '@/lib/geo';
 import { HANDLE_STYLES } from '@/lib/styles/style';
 import type { IRenderer } from '@/types/graphics';
 import type { HandleState } from '@/types/handle';
@@ -103,19 +103,18 @@ export const drawLastHandle: LastHandleDrawFn = (ctx, pos, state) => {
   const style = HANDLE_STYLES.last[state];
   ctx.setStyle(style);
 
-  const theta = Math.atan2(pos.y1 - pos.y0, pos.x1 - pos.x0);
+  const p0 = { x: pos.x0, y: pos.y0 };
+  const p1 = { x: pos.x1, y: pos.y1 };
+
+  const theta = Vec2.angleTo(p0, p1);
   const arrowSize = style.size;
 
-  const edgePoint = Line.lerp(
-    { x: pos.x0, y: pos.y0 },
-    { x: pos.x1, y: pos.y1 },
-    LAST_HANDLE_EDGE_OFFSET
-  );
-  const distance = Math.hypot(edgePoint.x - pos.x0, edgePoint.y - pos.y0);
-  const lerp = LAST_HANDLE_LERP_SPACING / distance;
+  const edgePoint = Vec2.lerp(p0, p1, LAST_HANDLE_EDGE_OFFSET);
+  const distance = Vec2.dist(p0, edgePoint);
+  const lerpFactor = LAST_HANDLE_LERP_SPACING / distance;
 
-  for (const t of [0, lerp]) {
-    const { x, y } = Line.lerp({ x: pos.x0, y: pos.y0 }, { x: pos.x1, y: pos.y1 }, t);
+  for (const t of [0, lerpFactor]) {
+    const { x, y } = Vec2.lerp(p0, p1, t);
     drawArrowHead(ctx, x, y, theta + Math.PI, arrowSize);
   }
 };
