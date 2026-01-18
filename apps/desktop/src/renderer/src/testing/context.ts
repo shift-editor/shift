@@ -116,6 +116,9 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     movePointTo: vi.fn((id: PointId, x: number, y: number) => {
       fontEngine.editing.movePointTo(id, x, y);
     }),
+    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) => {
+      return fontEngine.editEngine.applyEdits(ids, dx, dy);
+    }),
     removePoints: vi.fn((ids: Iterable<PointId>) => {
       fontEngine.editing.removePoints([...ids]);
     }),

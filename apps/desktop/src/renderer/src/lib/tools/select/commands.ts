@@ -114,13 +114,7 @@ export class SelectCommands {
     const delta = Vec2.sub(currentPos, dragPoint);
 
     if (!Vec2.isZero(delta)) {
-      for (const pointId of ctx.selectedPoints) {
-        const point = allPoints.find((p) => p.id === pointId);
-        if (point) {
-          const newPos = Vec2.add(point, delta);
-          ctx.edit.movePointTo(pointId, newPos.x, newPos.y);
-        }
-      }
+      ctx.edit.applySmartEdits(ctx.selectedPoints, delta.x, delta.y);
     }
 
     return delta;
@@ -146,7 +140,7 @@ export class SelectCommands {
   toggleSmooth(pos: Point2D): boolean {
     const ctx = this.#editor.createToolContext();
     const { point, pointId } = this.hitTest(pos);
-    if (point && point.pointType === 'onCurve' && pointId) {
+    if (point && pointId && point.pointType === 'onCurve') {
       ctx.edit.toggleSmooth(pointId);
       ctx.requestRedraw();
       return true;

@@ -1,24 +1,32 @@
-import test from "ava";
+import { describe, it, expect } from "vitest";
+import { createRequire } from "module";
 
-import { FontService } from "../index.js";
+// Need to use createRequire for CommonJS modules in ESM context
+const require = createRequire(import.meta.url);
+const { FontEngine } = require("../index.js");
 
-test("FontService creation", (t) => {
-  const fontService = new FontService();
-  t.truthy(fontService);
-  t.is(typeof fontService.getFontFamily, "function");
-  t.is(typeof fontService.getFontStyle, "function");
-  t.is(typeof fontService.getFontVersion, "function");
-});
+describe("FontEngine", () => {
+  it("FontEngine creation", () => {
+    const engine = new FontEngine();
+    expect(engine).toBeTruthy();
+    expect(typeof engine.getMetadata).toBe("function");
+    expect(typeof engine.getMetrics).toBe("function");
+    expect(typeof engine.getGlyphCount).toBe("function");
+  });
 
-test("FontService default values", (t) => {
-  const fontService = new FontService();
-  t.is(fontService.getFontFamily(), "Untitled Font");
-  t.is(fontService.getFontStyle(), "Regular");
-  t.is(fontService.getFontVersion(), 1);
-  t.is(fontService.getUnitsPerEm(), 1000);
-  t.is(fontService.getAscender(), 750);
-  t.is(fontService.getDescender(), -200);
-  t.is(fontService.getCapHeight(), 700);
-  t.is(fontService.getXHeight(), 500);
-  t.is(fontService.getGlyphCount(), 0);
+  it("FontEngine default values", () => {
+    const engine = new FontEngine();
+    const metadata = engine.getMetadata();
+    const metrics = engine.getMetrics();
+
+    expect(metadata.family).toBe("Untitled Font");
+    expect(metadata.styleName).toBe("Regular");
+    expect(metadata.version).toBe(1);
+    expect(metrics.unitsPerEm).toBe(1000);
+    expect(metrics.ascender).toBe(750);
+    expect(metrics.descender).toBe(-200);
+    expect(metrics.capHeight).toBe(700);
+    expect(metrics.xHeight).toBe(500);
+    expect(engine.getGlyphCount()).toBe(0);
+  });
 });

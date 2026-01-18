@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@shift/tsconfig": "workspace:*",
     "typescript": "^5.3.0"
   }
 }

@@ -5,5 +5,10 @@
   "description": "Shared TypeScript configurations for Shift monorepo",
   "files": [
     "*.json"
-  ]
+  ],
+  "exports": {
+    "./base.json": "./base.json",
+    "./library.json": "./library.json",
+    "./react.json": "./react.json"
+  }
 }

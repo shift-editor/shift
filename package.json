@@ -28,8 +28,18 @@
   "license": "MIT",
   "devDependencies": {
     "prettier": "^3.4.2",
-    "turbo": "^2.3.0",
+    "turbo": "^2.7.5",
     "typescript": "^5.3.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "tar": ">=7.5.3",
+      "qs": ">=6.14.1",
+      "glob": ">=10.5.0",
+      "esbuild": ">=0.25.0",
+      "js-yaml": ">=4.1.1",
+      "tmp": ">=0.2.4"
+    }
   },
   "packageManager": "pnpm@9.0.0"
 }

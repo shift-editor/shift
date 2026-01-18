@@ -171,6 +171,9 @@ export class Editor {
         movePointTo: (id, x, y) => {
           fontEngine.editing.movePointTo(id, x, y);
         },
+        applySmartEdits: (ids, dx, dy) => {
+          return fontEngine.editEngine.applyEdits(ids, dx, dy);
+        },
         removePoints: (ids) => {
           const cmd = new RemovePointsCommand([...ids]);
           commands.execute(cmd);

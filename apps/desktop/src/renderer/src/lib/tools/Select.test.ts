@@ -67,6 +67,9 @@ function createMockEditor() {
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y)
     ),
+    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) =>
+      fontEngine.editEngine.applyEdits(ids, dx, dy)
+    ),
     removePoints: vi.fn((ids: Iterable<PointId>) =>
       fontEngine.editing.removePoints([...ids])
     ),
@@ -272,6 +275,30 @@ describe('Select tool', () => {
       select.onMouseMove(createMouseEvent('mousemove', 120, 120));
 
       getAllPoints(fontEngine.snapshot.value);
+    });
+
+    it('should use applySmartEdits for rule engine integration when dragging', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      mocks.edit.applySmartEdits.mockClear();
+      mocks.edit.movePointTo.mockClear();
+
+      select.onMouseMove(createMouseEvent('mousemove', 150, 150));
+
+      expect(mocks.edit.applySmartEdits).toHaveBeenCalled();
+      expect(mocks.edit.movePointTo).not.toHaveBeenCalled();
+    });
+
+    it('should call applySmartEdits with selected points and delta', () => {
+      select.onMouseDown(createMouseEvent('mousedown', 100, 100));
+      mocks.edit.applySmartEdits.mockClear();
+
+      select.onMouseMove(createMouseEvent('mousemove', 150, 160));
+
+      expect(mocks.edit.applySmartEdits).toHaveBeenCalledWith(
+        expect.any(Set),
+        50,
+        60
+      );
     });
   });
 

@@ -29,6 +29,7 @@ export interface EditContext {
   addPoint(x: number, y: number, type: 'onCurve' | 'offCurve'): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
+  applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
   addContour(): ContourId;
   closeContour(): void;
