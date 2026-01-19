@@ -314,6 +314,16 @@ export class Editor {
     this.#selectedSegmentIds.set(next);
   }
 
+  public toggleSegmentInSelection(segmentId: SegmentId): void {
+    const next = new Set(this.#selectedSegmentIds.peek());
+    if (next.has(segmentId)) {
+      next.delete(segmentId);
+    } else {
+      next.add(segmentId);
+    }
+    this.#selectedSegmentIds.set(next);
+  }
+
   public isSegmentSelected(segmentId: SegmentId): boolean {
     return this.#selectedSegmentIds.peek().has(segmentId);
   }

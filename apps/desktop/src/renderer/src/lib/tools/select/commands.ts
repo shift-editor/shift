@@ -336,6 +336,41 @@ export class SelectCommands {
   }
 
   /**
+   * Toggle a segment in the selection (and its anchor points).
+   * Returns the point IDs from the segment if it was added, empty array if removed.
+   */
+  toggleSegment(segmentId: SegmentId): PointId[] {
+    const ctx = this.#editor.createToolContext();
+    const wasSelected = this.#editor.isSegmentSelected(segmentId);
+
+    // Toggle the segment
+    this.#editor.toggleSegmentInSelection(segmentId);
+
+    if (wasSelected) {
+      // Segment was deselected - remove its anchor points from selection
+      const segment = findSegmentById(ctx.snapshot, segmentId);
+      if (segment) {
+        const anchorIds = this.#getAnchorPointIds(segment);
+        for (const id of anchorIds) {
+          this.#editor.removePointFromSelection(id);
+        }
+      }
+      return [];
+    } else {
+      // Segment was selected - add its anchor points to selection
+      const segment = findSegmentById(ctx.snapshot, segmentId);
+      if (segment) {
+        const anchorIds = this.#getAnchorPointIds(segment);
+        for (const id of anchorIds) {
+          this.#editor.addPointToSelection(id);
+        }
+        return getSegmentPointIds(segment);
+      }
+      return [];
+    }
+  }
+
+  /**
    * Get the hovered segment indicator if any.
    */
   getHoveredSegment(): SegmentIndicator | null {

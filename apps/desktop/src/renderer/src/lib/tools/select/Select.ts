@@ -148,10 +148,12 @@ export class Select implements Tool {
             segmentHit.segmentId,
           );
           if (this.#shiftModifierOn) {
-            // TODO: Toggle segment in selection
-            // For now, just select it
-            this.#commands.selectSegment(segmentHit.segmentId, true);
-            this.#sm.transition({ type: "selected", hoveredPointId: null });
+            this.#commands.toggleSegment(segmentHit.segmentId);
+            if (this.#commands.hasSelection()) {
+              this.#sm.transition({ type: "selected", hoveredPointId: null });
+            } else {
+              this.#sm.transition({ type: "ready", hoveredPointId: null });
+            }
           } else {
             if (!isSelected) {
               this.#commands.selectSegment(segmentHit.segmentId, false);

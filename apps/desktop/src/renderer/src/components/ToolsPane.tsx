@@ -56,16 +56,8 @@ export const ToolsPane: FC = () => {
   // Subscribe to the editor's activeTool signal
   const activeTool = useSyncExternalStore(
     (callback) => {
-      // Simple subscription using effect-like pattern
-      // The signal will trigger re-renders when it changes
-      const signal = editor.activeToolSignal;
-      const unsubscribe = () => {
-        // Signals don't have built-in unsubscribe, but we can use a flag
-      };
-      // Check value periodically or use a proper subscription mechanism
-      const interval = setInterval(() => {
-        callback();
-      }, 16); // ~60fps check
+      // Poll the signal value for changes
+      const interval = setInterval(callback, 16);
       return () => clearInterval(interval);
     },
     () => editor.activeTool,
