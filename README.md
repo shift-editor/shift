@@ -31,8 +31,6 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 
 The frontend handles UI and rendering via Electron, while all font data and editing operations live in Rust. Communication happens through native Node.js bindings, keeping performance-critical work off the main thread.
 
-See [docs/editor-integration.md](docs/editor-integration.md) for detailed architecture
-
 ## Getting Started
 
 ### Prerequisites
