@@ -10,8 +10,8 @@ export function applyThemeToCss(theme: ThemeTokens): void {
   root.style.setProperty("--color-bg-surface", theme.ui.bg.surface);
   root.style.setProperty("--color-bg-surface-hover", theme.ui.bg.surfaceHover);
 
-  root.style.setProperty("--color-border-default", theme.ui.border.default);
-  root.style.setProperty("--color-border-subtle", theme.ui.border.subtle);
+  root.style.setProperty("--color-line", theme.ui.border.default);
+  root.style.setProperty("--color-line-subtle", theme.ui.border.subtle);
 
   root.style.setProperty("--color-text-primary", theme.ui.text.primary);
   root.style.setProperty("--color-text-secondary", theme.ui.text.secondary);
@@ -40,8 +40,8 @@ export function getThemeFromCss(): Partial<ThemeTokens> {
         surfaceHover: style.getPropertyValue("--color-bg-surface-hover").trim(),
       },
       border: {
-        default: style.getPropertyValue("--color-border-default").trim(),
-        subtle: style.getPropertyValue("--color-border-subtle").trim(),
+        default: style.getPropertyValue("--color-line").trim(),
+        subtle: style.getPropertyValue("--color-line-subtle").trim(),
       },
       text: {
         primary: style.getPropertyValue("--color-text-primary").trim(),

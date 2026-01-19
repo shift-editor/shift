@@ -5,7 +5,7 @@ import { registerBuiltInTools } from "@/lib/tools/tools";
 
 interface AppState {
   editor: Editor;
-  fileName: string;
+  fileName: string | null;
   setFileName: (fileName: string) => void;
 }
 
@@ -18,7 +18,7 @@ const AppState = create<AppState>()((set) => {
 
   return {
     editor,
-    fileName: "",
+    fileName: null,
     setFileName: (fileName: string) => {
       set({ fileName });
     },

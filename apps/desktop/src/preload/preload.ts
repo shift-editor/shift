@@ -232,6 +232,13 @@ const electronAPI = {
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke("theme:get"),
   setTheme: (theme: ThemeName): Promise<void> =>
     ipcRenderer.invoke("theme:set", theme),
+
+  // Window controls
+  closeWindow: (): Promise<void> => ipcRenderer.invoke("window:close"),
+  minimizeWindow: (): Promise<void> => ipcRenderer.invoke("window:minimize"),
+  maximizeWindow: (): Promise<void> => ipcRenderer.invoke("window:maximize"),
+  isWindowMaximized: (): Promise<boolean> =>
+    ipcRenderer.invoke("window:isMaximized"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

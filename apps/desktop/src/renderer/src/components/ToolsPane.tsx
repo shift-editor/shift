@@ -1,11 +1,13 @@
-import { FC, useSyncExternalStore } from "react";
+import { FC } from "react";
 
 import {
+  Button,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@shift/ui";
+import { useSignalValue } from "@/lib/reactive/useSignal";
 import AppState, { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import { ToolName } from "@/types/tool";
@@ -27,16 +29,15 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
   return (
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
-        <div
-          className={`rounded p-1 transition-colors duration-200 ${
-            activeTool === name
-              ? "bg-toolbar-hover"
-              : "hover:bg-toolbar-hover"
-          }`}
+        <Button
+          className="h-7 w-7 p-1 rounded-md"
+          icon={<Icon width={18} height={18} className="text-primary" />}
+          aria-label={tooltip}
+          variant="toolbar"
+          isActive={activeTool === name}
           onClick={onClick}
-        >
-          <Icon width={18} height={18} className="text-primary" />
-        </div>
+          size="icon"
+        />
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
@@ -53,21 +54,15 @@ export const ToolsPane: FC = () => {
   const editor = getEditor();
   const fileName = AppState((state) => state.fileName);
 
-  // Subscribe to the editor's activeTool signal
-  const activeTool = useSyncExternalStore(
-    (callback) => {
-      // Poll the signal value for changes
-      const interval = setInterval(callback, 16);
-      return () => clearInterval(interval);
-    },
-    () => editor.activeTool,
-  );
+  const activeTool = useSignalValue(editor.activeToolSignal);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
-      <h1 className="text-xs text-secondary">{fileName}</h1>
+      {fileName && (
+        <h1 className="text-xs font-[400] mt-0.5">{fileName}</h1>
+      )}
       <TooltipProvider delayDuration={2000}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
           {Array.from(editor.tools.entries()).map(([name, { icon, tooltip }]) => (
             <ToolbarIcon
               key={name}

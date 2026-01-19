@@ -6,7 +6,7 @@ export const GlyphGrid = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="h-full w-full p-5">
+    <section className="h-full w-full p-5 bg-app">
       <div className="font-ui text-ui p-2 font-bold text-primary">
         <h1>Adobe Latin 1</h1>
       </div>

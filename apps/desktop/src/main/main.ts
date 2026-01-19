@@ -135,11 +135,13 @@ function createMenu() {
 }
 
 const createWindow = () => {
-  // Create the browser window.
+  // Create the browser window with frameless style for custom titlebar
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     title: "Shift",
+    titleBarStyle: "hidden",
+    trafficLightPosition: { x: -100, y: -100 }, // Hide native traffic lights off-screen
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -179,6 +181,27 @@ const createWindow = () => {
     );
   });
 };
+
+// Register IPC handlers before window creation
+ipcMain.handle("window:close", () => {
+  mainWindow?.close();
+});
+
+ipcMain.handle("window:minimize", () => {
+  mainWindow?.minimize();
+});
+
+ipcMain.handle("window:maximize", () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+
+ipcMain.handle("window:isMaximized", () => {
+  return mainWindow?.isMaximized() ?? false;
+});
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
