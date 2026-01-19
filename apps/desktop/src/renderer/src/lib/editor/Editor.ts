@@ -4,27 +4,17 @@ import {
   GUIDE_STYLES,
   SEGMENT_HOVER_STYLE,
 } from "@/lib/styles/style";
-import { tools } from "@/lib/tools/tools";
-import AppState from "@/store/store";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleState, HandleType } from "@/types/handle";
 import { Point2D, Rect2D } from "@/types/math";
-import { Tool, ToolContext } from "@/types/tool";
+import { Tool, ToolContext, ToolName } from "@/types/tool";
 import type { PointId } from "@/types/ids";
 import { asPointId, asContourId } from "@/types/ids";
+import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
 
 import { FrameHandler } from "./FrameHandler";
 import { drawHandle, drawHandleLast } from "./handles";
-import {
-  createIndicatorManager,
-  type IndicatorManager,
-} from "./IndicatorManager";
-import {
-  createSelectionManager,
-  type SelectionManager,
-  type SelectionMode,
-} from "./SelectionManager";
 import { Viewport } from "./Viewport";
 import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
@@ -81,15 +71,27 @@ function debug(...args: unknown[]) {
   }
 }
 
-export type { SelectionMode };
+// ============================================================================
+// Selection Types
+// ============================================================================
 
-interface EditorState {
-  fillContour: boolean;
+export type SelectionMode = "preview" | "committed";
+
+// ============================================================================
+// Visual State Types
+// ============================================================================
+
+export type VisualState = "idle" | "hovered" | "selected";
+
+// ============================================================================
+// Tool Registry Types
+// ============================================================================
+
+export interface ToolRegistryItem {
+  tool: Tool;
+  icon: React.FC<React.SVGProps<SVGSVGElement>>;
+  tooltip: string;
 }
-
-export const InitialEditorState: EditorState = {
-  fillContour: false,
-};
 
 function isContourClockwise(points: PointSnapshot[]): boolean {
   if (points.length < 3) return true;
@@ -105,18 +107,43 @@ function isContourClockwise(points: PointSnapshot[]): boolean {
 }
 
 export class Editor {
-  #state: EditorState;
-  #selection: SelectionManager;
-  #indicators: IndicatorManager;
+  // ============================================================================
+  // View State
+  // ============================================================================
+
+  #previewMode: WritableSignal<boolean>;
+
+  // ============================================================================
+  // Selection State (tldraw-style: directly on Editor)
+  // ============================================================================
+
+  #selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
+  #selectedSegmentIds: WritableSignal<ReadonlySet<SegmentId>>;
+  #selectionMode: WritableSignal<SelectionMode>;
+
+  // ============================================================================
+  // Hover State (tldraw-style: directly on Editor)
+  // ============================================================================
+
+  #hoveredPointId: WritableSignal<PointId | null>;
+  #hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
+
+  // ============================================================================
+  // Tools (moved from global registry)
+  // ============================================================================
+
+  #tools: Map<ToolName, ToolRegistryItem>;
+  #activeTool: WritableSignal<ToolName>;
+
+  // ============================================================================
+  // Core Infrastructure
+  // ============================================================================
 
   #viewport: Viewport;
   #frameHandler: FrameHandler;
-
   #commandHistory: CommandHistory;
-
   #staticContext: IGraphicContext | null;
   #interactiveContext: IGraphicContext | null;
-
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
 
@@ -124,32 +151,276 @@ export class Editor {
   #cursor: WritableSignal<string>;
 
   constructor() {
+    // Core infrastructure
     this.#viewport = new Viewport();
     this.#frameHandler = new FrameHandler();
-
     this.#fontEngine = new FontEngine();
-
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.snapshot.value,
     );
-
     this.#staticContext = null;
     this.#interactiveContext = null;
 
-    this.#state = { ...InitialEditorState };
-    this.#selection = createSelectionManager();
-    this.#indicators = createIndicatorManager();
+    // View state
+    this.#previewMode = signal(false);
     this.#cursor = signal("default");
 
+    // Selection state
+    this.#selectedPointIds = signal<ReadonlySet<PointId>>(new Set());
+    this.#selectedSegmentIds = signal<ReadonlySet<SegmentId>>(new Set());
+    this.#selectionMode = signal<SelectionMode>("committed");
+
+    // Hover state
+    this.#hoveredPointId = signal<PointId | null>(null);
+    this.#hoveredSegmentId = signal<SegmentIndicator | null>(null);
+
+    // Tools
+    this.#tools = new Map();
+    this.#activeTool = signal<ToolName>("select");
+
+    // Reactive redraw effect
     this.#redrawEffect = effect(() => {
+      // Track all reactive state that should trigger redraws
       this.#fontEngine.snapshot.value;
-      this.#selection.selectedPoints;
-      this.#selection.mode;
-      this.#indicators.hoveredPoint;
-      this.#indicators.hoveredSegment;
+      this.#selectedPointIds.value;
+      this.#selectedSegmentIds.value;
+      this.#selectionMode.value;
+      this.#hoveredPointId.value;
+      this.#hoveredSegmentId.value;
+      this.#previewMode.value;
       this.requestRedraw();
     });
+  }
+
+  // ============================================================================
+  // Tool Registration & Management
+  // ============================================================================
+
+  public registerTool(
+    name: ToolName,
+    tool: Tool,
+    icon: React.FC<React.SVGProps<SVGSVGElement>>,
+    tooltip: string,
+  ): void {
+    this.#tools.set(name, { tool, icon, tooltip });
+  }
+
+  public get tools(): ReadonlyMap<ToolName, ToolRegistryItem> {
+    return this.#tools;
+  }
+
+  public get activeTool(): ToolName {
+    return this.#activeTool.value;
+  }
+
+  public get activeToolSignal(): WritableSignal<ToolName> {
+    return this.#activeTool;
+  }
+
+  public setActiveTool(toolName: ToolName): void {
+    const currentToolName = this.#activeTool.value;
+    if (currentToolName === toolName) return;
+
+    // Deactivate the current tool
+    const oldTool = this.#tools.get(currentToolName);
+    if (oldTool) {
+      oldTool.tool.setIdle();
+    }
+
+    // Activate the new tool
+    const newTool = this.#tools.get(toolName);
+    if (newTool) {
+      newTool.tool.setReady();
+    }
+
+    this.#activeTool.set(toolName);
+  }
+
+  public getActiveTool(): Tool {
+    const tool = this.#tools.get(this.#activeTool.value);
+    if (!tool) {
+      throw new Error(`Tool ${this.#activeTool.value} not found`);
+    }
+    return tool.tool;
+  }
+
+  // ============================================================================
+  // Selection State API
+  // ============================================================================
+
+  // Point selection
+  public get selectedPointIds(): ReadonlySet<PointId> {
+    return this.#selectedPointIds.value;
+  }
+
+  public selectPoint(pointId: PointId): void {
+    this.#selectedPointIds.set(new Set([pointId]));
+  }
+
+  public selectPoints(pointIds: Set<PointId>): void {
+    this.#selectedPointIds.set(new Set(pointIds));
+  }
+
+  public addPointToSelection(pointId: PointId): void {
+    const next = new Set(this.#selectedPointIds.peek());
+    next.add(pointId);
+    this.#selectedPointIds.set(next);
+  }
+
+  public removePointFromSelection(pointId: PointId): void {
+    const next = new Set(this.#selectedPointIds.peek());
+    next.delete(pointId);
+    this.#selectedPointIds.set(next);
+  }
+
+  public togglePointSelection(pointId: PointId): void {
+    const next = new Set(this.#selectedPointIds.peek());
+    if (next.has(pointId)) {
+      next.delete(pointId);
+    } else {
+      next.add(pointId);
+    }
+    this.#selectedPointIds.set(next);
+  }
+
+  public isPointSelected(pointId: PointId): boolean {
+    return this.#selectedPointIds.peek().has(pointId);
+  }
+
+  // Segment selection
+  public get selectedSegmentIds(): ReadonlySet<SegmentId> {
+    return this.#selectedSegmentIds.value;
+  }
+
+  public selectSegment(segmentId: SegmentId): void {
+    this.#selectedSegmentIds.set(new Set([segmentId]));
+  }
+
+  public selectSegments(segmentIds: Set<SegmentId>): void {
+    this.#selectedSegmentIds.set(new Set(segmentIds));
+  }
+
+  public addSegmentToSelection(segmentId: SegmentId): void {
+    const next = new Set(this.#selectedSegmentIds.peek());
+    next.add(segmentId);
+    this.#selectedSegmentIds.set(next);
+  }
+
+  public removeSegmentFromSelection(segmentId: SegmentId): void {
+    const next = new Set(this.#selectedSegmentIds.peek());
+    next.delete(segmentId);
+    this.#selectedSegmentIds.set(next);
+  }
+
+  public isSegmentSelected(segmentId: SegmentId): boolean {
+    return this.#selectedSegmentIds.peek().has(segmentId);
+  }
+
+  // Combined selection operations
+  public clearSelection(): void {
+    this.#selectedPointIds.set(new Set());
+    this.#selectedSegmentIds.set(new Set());
+  }
+
+  public hasSelection(): boolean {
+    return (
+      this.#selectedPointIds.peek().size > 0 ||
+      this.#selectedSegmentIds.peek().size > 0
+    );
+  }
+
+  public get selectionMode(): SelectionMode {
+    return this.#selectionMode.value;
+  }
+
+  public setSelectionMode(mode: SelectionMode): void {
+    this.#selectionMode.set(mode);
+  }
+
+  // ============================================================================
+  // Hover State API
+  // ============================================================================
+
+  public get hoveredPointId(): PointId | null {
+    return this.#hoveredPointId.value;
+  }
+
+  public get hoveredSegmentId(): SegmentIndicator | null {
+    return this.#hoveredSegmentId.value;
+  }
+
+  public setHoveredPoint(pointId: PointId | null): void {
+    this.#hoveredPointId.set(pointId);
+    // Mutual exclusivity: clear segment hover when point is hovered
+    if (pointId !== null) {
+      this.#hoveredSegmentId.set(null);
+    }
+  }
+
+  public setHoveredSegment(indicator: SegmentIndicator | null): void {
+    this.#hoveredSegmentId.set(indicator);
+    // Mutual exclusivity: clear point hover when segment is hovered
+    if (indicator !== null) {
+      this.#hoveredPointId.set(null);
+    }
+  }
+
+  public clearHover(): void {
+    this.#hoveredPointId.set(null);
+    this.#hoveredSegmentId.set(null);
+  }
+
+  // ============================================================================
+  // Visual State Helpers (for rendering)
+  // ============================================================================
+
+  public getPointVisualState(pointId: PointId): VisualState {
+    if (this.isPointSelected(pointId)) {
+      return "selected";
+    }
+    if (this.#hoveredPointId.value === pointId) {
+      return "hovered";
+    }
+    // Check if point is part of hovered segment
+    const hoveredSegment = this.#hoveredSegmentId.value;
+    if (hoveredSegment) {
+      const segmentPointIds = this.#getPointIdsFromSegmentId(
+        hoveredSegment.segmentId,
+      );
+      if (segmentPointIds.has(pointId)) {
+        return "hovered";
+      }
+    }
+    return "idle";
+  }
+
+  public getSegmentVisualState(segmentId: SegmentId): VisualState {
+    if (this.isSegmentSelected(segmentId)) {
+      return "selected";
+    }
+    if (this.#hoveredSegmentId.value?.segmentId === segmentId) {
+      return "hovered";
+    }
+    return "idle";
+  }
+
+  #getPointIdsFromSegmentId(segmentId: SegmentId): Set<PointId> {
+    // Segment IDs are formatted as "pointId1:pointId2"
+    const [id1, id2] = segmentId.split(":");
+    return new Set([asPointId(id1), asPointId(id2)]);
+  }
+
+  // ============================================================================
+  // Preview Mode
+  // ============================================================================
+
+  public get previewMode(): boolean {
+    return this.#previewMode.value;
+  }
+
+  public setPreviewMode(enabled: boolean): void {
+    this.#previewMode.set(enabled);
   }
 
   public setStaticContext(context: IGraphicContext) {
@@ -176,19 +447,17 @@ export class Editor {
 
   public createToolContext(): ToolContext {
     const viewport = this.#viewport;
-    const selection = this.#selection;
-    const indicators = this.#indicators;
     const fontEngine = this.#fontEngine;
     const commands = this.#commandHistory;
     const requestRedraw = () => this.requestRedraw();
 
     return {
       snapshot: fontEngine.snapshot.value,
-      selectedPoints: selection.selectedPoints,
-      hoveredPoint: indicators.hoveredPoint,
-      hoveredSegment: indicators.hoveredSegment,
+      selectedPoints: this.selectedPointIds,
+      hoveredPoint: this.hoveredPointId,
+      hoveredSegment: this.hoveredSegmentId,
       mousePosition: viewport.getUpmMousePosition(),
-      selectionMode: selection.mode,
+      selectionMode: this.selectionMode,
 
       screen: {
         toUpmDistance: (px) => viewport.screenToUpmDistance(px),
@@ -199,20 +468,19 @@ export class Editor {
       },
 
       select: {
-        set: (ids) => selection.selectMultiple(ids),
-        add: (id) => selection.addToSelection(id),
-        remove: (id) => selection.removeFromSelection(id),
-        toggle: (id) => selection.toggleSelection(id),
-        clear: () => selection.clearSelection(),
-        has: () => selection.hasSelection(),
-        setMode: (mode) => selection.setMode(mode),
+        set: (ids) => this.selectPoints(ids),
+        add: (id) => this.addPointToSelection(id),
+        remove: (id) => this.removePointFromSelection(id),
+        toggle: (id) => this.togglePointSelection(id),
+        clear: () => this.clearSelection(),
+        has: () => this.hasSelection(),
+        setMode: (mode) => this.setSelectionMode(mode),
       },
 
       indicators: {
-        setHoveredPoint: (id) => indicators.setHoveredPoint(id),
-        setHoveredSegment: (indicator) =>
-          indicators.setHoveredSegment(indicator),
-        clearAll: () => indicators.clearAll(),
+        setHoveredPoint: (id) => this.setHoveredPoint(id),
+        setHoveredSegment: (indicator) => this.setHoveredSegment(indicator),
+        clearAll: () => this.clearHover(),
       },
 
       edit: {
@@ -258,15 +526,6 @@ export class Editor {
 
   public get commandHistory(): CommandHistory {
     return this.#commandHistory;
-  }
-
-  public activeTool(): Tool {
-    const activeTool = AppState.getState().activeTool;
-    const tool = tools.get(activeTool);
-    if (!tool) {
-      throw new Error(`Tool ${activeTool} not found`);
-    }
-    return tool.tool;
   }
 
   public undo() {
@@ -343,13 +602,7 @@ export class Editor {
   }
 
   public getHandleState(pointId: PointId): HandleState {
-    if (this.#selection.isSelected(pointId)) {
-      return "selected";
-    }
-    if (this.#indicators.hoveredPoint === pointId) {
-      return "hovered";
-    }
-    return "idle";
+    return this.getPointVisualState(pointId);
   }
 
   public paintHandle(
@@ -375,10 +628,6 @@ export class Editor {
     this.#fontEngine.io.loadFont(filePath);
   }
 
-  public get selectedPoints(): ReadonlySet<PointId> {
-    return this.#selection.selectedPoints;
-  }
-
   /** Get the current cursor value */
   public get cursor(): string {
     return this.#cursor.value;
@@ -395,11 +644,9 @@ export class Editor {
   }
 
   public deleteSelectedPoints(): void {
-    if (this.#selection.selectedPoints.size > 0) {
-      this.#fontEngine.editing.removePoints([
-        ...this.#selection.selectedPoints,
-      ]);
-      this.#selection.clearSelection();
+    if (this.#selectedPointIds.peek().size > 0) {
+      this.#fontEngine.editing.removePoints([...this.#selectedPointIds.peek()]);
+      this.clearSelection();
       this.requestRedraw();
     }
   }
@@ -417,7 +664,7 @@ export class Editor {
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
-    for (const pointId of this.#selection.selectedPoints) {
+    for (const pointId of this.#selectedPointIds.peek()) {
       const found = findPointInSnapshot(snapshot, pointId);
       if (found) {
         result.push({ x: found.point.x, y: found.point.y });
@@ -428,10 +675,6 @@ export class Editor {
 
   #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
     return this.#viewport.screenToUpmDistance(screenPixels);
-  }
-
-  public setFillContour(fillContour: boolean) {
-    this.#state.fillContour = fillContour;
   }
 
   #applyUserTransforms(ctx: IRenderer) {
@@ -475,7 +718,7 @@ export class Editor {
 
     this.#prepareCanvas(ctx);
 
-    const tool = this.activeTool();
+    const tool = this.getActiveTool();
     if (tool.drawInteractive) {
       tool.drawInteractive(ctx);
     }
@@ -501,7 +744,7 @@ export class Editor {
       ctx.setStyle(GUIDE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
 
-      if (!this.#state.fillContour) {
+      if (!this.previewMode) {
         renderGuides(ctx, guides);
       }
 
@@ -509,7 +752,7 @@ export class Editor {
       ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
       const hasClosed = renderGlyph(ctx, snapshot);
 
-      if (hasClosed && this.#state.fillContour) {
+      if (hasClosed && this.previewMode) {
         ctx.fillStyle = "black";
         for (const contour of snapshot.contours) {
           if (contour.closed) {
@@ -524,14 +767,14 @@ export class Editor {
       }
     }
 
-    if (!this.#state.fillContour && snapshot) {
+    if (!this.previewMode && snapshot) {
       this.#drawSegmentIndicator(ctx, snapshot);
     }
 
     const shouldDrawBoundingRect =
-      this.#selection.selectedPoints.size > 0 &&
-      !this.#state.fillContour &&
-      this.#selection.mode === "committed";
+      this.#selectedPointIds.peek().size > 0 &&
+      !this.previewMode &&
+      this.selectionMode === "committed";
 
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#getSelectedPointData();
@@ -546,7 +789,7 @@ export class Editor {
     ctx.restore();
     ctx.save();
 
-    if (!this.#state.fillContour && snapshot) {
+    if (!this.previewMode && snapshot) {
       this.#drawHandlesFromSnapshot(ctx, snapshot);
     }
 
@@ -566,7 +809,7 @@ export class Editor {
   }
 
   #drawSegmentIndicator(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    const hoveredSegment = this.#indicators.hoveredSegment;
+    const hoveredSegment = this.#hoveredSegmentId.value;
     if (!hoveredSegment) return;
 
     for (const contour of snapshot.contours) {

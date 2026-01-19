@@ -42,10 +42,10 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     initEditor();
 
-    editor.activeTool().setReady();
+    editor.getActiveTool().setReady();
 
     return () => {
-      editor.activeTool().setIdle();
+      editor.getActiveTool().setIdle();
       editor.endEditSession();
     };
   }, [glyphId]);
