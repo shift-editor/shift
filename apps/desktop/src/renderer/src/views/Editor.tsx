@@ -12,8 +12,6 @@ export const Editor = () => {
 
   useEffect(() => {
     const editor = AppState.getState().editor;
-    const switchTool = AppState.getState().setActiveTool;
-    const activeTool = editor.activeTool();
 
     const keyDownHandler = (e: KeyboardEvent) => {
       // Zoom in: Cmd+= OR Cmd+Shift++ (both work)
@@ -34,36 +32,36 @@ export const Editor = () => {
 
       if (e.key === "h") {
         e.preventDefault();
-        switchTool("hand");
+        editor.setActiveTool("hand");
         editor.requestRedraw();
         return;
       }
 
       if (e.key === " " && !e.repeat) {
         e.preventDefault();
-        switchTool("hand");
-        editor.setFillContour(true);
+        editor.setActiveTool("hand");
+        editor.setPreviewMode(true);
         editor.requestRedraw();
         return;
       }
 
       if (e.key === "p") {
         e.preventDefault();
-        switchTool("pen");
+        editor.setActiveTool("pen");
         editor.requestRedraw();
         return;
       }
 
       if (e.key === "s") {
         e.preventDefault();
-        switchTool("shape");
+        editor.setActiveTool("shape");
         editor.requestRedraw();
         return;
       }
 
       if (e.key === "v") {
         e.preventDefault();
-        switchTool("select");
+        editor.setActiveTool("select");
         editor.requestRedraw();
         return;
       }
@@ -86,6 +84,7 @@ export const Editor = () => {
         return;
       }
 
+      const activeTool = editor.getActiveTool();
       if (activeTool.keyDownHandler) {
         activeTool.keyDownHandler(e);
       }
@@ -93,11 +92,12 @@ export const Editor = () => {
 
     const keyUpHandler = (e: KeyboardEvent) => {
       if (e.key == " ") {
-        switchTool("select");
-        editor.setFillContour(false);
+        editor.setActiveTool("select");
+        editor.setPreviewMode(false);
         editor.requestRedraw();
       }
 
+      const activeTool = editor.getActiveTool();
       if (activeTool.keyUpHandler) {
         activeTool.keyUpHandler(e);
       }

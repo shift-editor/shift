@@ -1,50 +1,24 @@
 import { create } from "zustand";
 
 import { Editor } from "@/lib/editor/Editor";
-import { createToolRegistry, tools } from "@/lib/tools/tools";
-import { ToolName } from "@/types/tool";
-import type { GlyphSnapshot } from "@/types/generated";
+import { registerBuiltInTools } from "@/lib/tools/tools";
 
 interface AppState {
   editor: Editor;
   fileName: string;
-  currentGlyph: GlyphSnapshot | null;
-  activeTool: ToolName;
-  setActiveTool: (tool: ToolName) => void;
-  setActiveGlyph: (glyph: GlyphSnapshot) => void;
   setFileName: (fileName: string) => void;
 }
 
-const AppState = create<AppState>()((set, get) => {
+const AppState = create<AppState>()((set) => {
   const editor = new Editor();
-  createToolRegistry(editor);
+  registerBuiltInTools(editor);
+
+  // Set select tool as ready on startup
+  editor.setActiveTool("select");
 
   return {
     editor,
-    currentGlyph: null,
     fileName: "",
-    activeTool: "select",
-    setActiveTool: (tool: ToolName) => {
-      const currentTool = get().activeTool;
-      if (currentTool === tool) return;
-
-      // Deactivate the current tool
-      const oldTool = tools.get(currentTool);
-      if (oldTool) {
-        oldTool.tool.setIdle();
-      }
-
-      // Activate the new tool
-      const newTool = tools.get(tool);
-      if (newTool) {
-        newTool.tool.setReady();
-      }
-
-      set({ activeTool: tool });
-    },
-    setActiveGlyph: (glyph: GlyphSnapshot) => {
-      set({ currentGlyph: glyph });
-    },
     setFileName: (fileName: string) => {
       set({ fileName });
     },

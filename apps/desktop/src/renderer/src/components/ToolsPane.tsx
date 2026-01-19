@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useSyncExternalStore } from "react";
 
 import {
   Tooltip,
@@ -6,7 +6,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { tools } from "@/lib/tools/tools";
 import AppState, { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import { ToolName } from "@/types/tool";
@@ -51,18 +50,25 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
 };
 
 export const ToolsPane: FC = () => {
-  const activeTool = AppState((state) => state.activeTool);
-  const setActiveTool = AppState((state) => state.setActiveTool);
   const editor = getEditor();
-
   const fileName = AppState((state) => state.fileName);
+
+  // Subscribe to the editor's activeTool signal
+  const activeTool = useSyncExternalStore(
+    (callback) => {
+      // Poll the signal value for changes
+      const interval = setInterval(callback, 16);
+      return () => clearInterval(interval);
+    },
+    () => editor.activeTool,
+  );
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
       <h1 className="text-xs text-secondary">{fileName}</h1>
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2">
-          {Array.from(tools.entries()).map(([name, { icon, tooltip }]) => (
+          {Array.from(editor.tools.entries()).map(([name, { icon, tooltip }]) => (
             <ToolbarIcon
               key={name}
               Icon={icon}
@@ -70,8 +76,7 @@ export const ToolsPane: FC = () => {
               tooltip={tooltip}
               activeTool={activeTool}
               onClick={() => {
-                setActiveTool(name);
-                editor.activeTool().setReady();
+                editor.setActiveTool(name);
               }}
             />
           ))}

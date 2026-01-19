@@ -68,6 +68,7 @@ export class Select implements Tool {
 
     this.#sm.when("ready", () => {
       if (pointId) {
+        // Point hit - select and start dragging
         this.#commands.selectPoint(pointId, false);
         const freshCtx = this.#editor.createToolContext();
         this.#draggedPointIds = [...freshCtx.selectedPoints];
@@ -77,21 +78,45 @@ export class Select implements Tool {
           drag: {
             anchorPointId: pointId,
             startPos: pos,
+            lastPos: pos,
             totalDelta: { x: 0, y: 0 },
           },
         });
       } else {
-        ctx.select.setMode("preview");
-        this.#editor.setCursor({ type: "crosshair" });
-        this.#sm.transition({
-          type: "selecting",
-          selection: { startPos: pos, currentPos: pos },
-        });
+        // No point hit - check for segment hit
+        const segmentHit = this.#commands.hitTestSegment(pos);
+        if (segmentHit) {
+          // Segment hit - select and start dragging
+          const pointIds = this.#commands.selectSegment(
+            segmentHit.segmentId,
+            false,
+          );
+          this.#draggedPointIds = pointIds;
+          this.#editor.setCursor({ type: "move" });
+          this.#sm.transition({
+            type: "dragging",
+            drag: {
+              anchorPointId: pointIds[0],
+              startPos: pos,
+              lastPos: pos,
+              totalDelta: { x: 0, y: 0 },
+            },
+          });
+        } else {
+          // Nothing hit - start rectangle selection
+          ctx.select.setMode("preview");
+          this.#editor.setCursor({ type: "default" });
+          this.#sm.transition({
+            type: "selecting",
+            selection: { startPos: pos, currentPos: pos },
+          });
+        }
       }
     });
 
     this.#sm.when("selected", () => {
       if (pointId) {
+        // Point hit
         const isSelected = this.#commands.isPointSelected(pointId);
         if (this.#shiftModifierOn) {
           this.#commands.togglePointInSelection(pointId);
@@ -112,18 +137,53 @@ export class Select implements Tool {
             drag: {
               anchorPointId: pointId,
               startPos: pos,
+              lastPos: pos,
               totalDelta: { x: 0, y: 0 },
             },
           });
         }
       } else {
-        this.#commands.clearSelection();
-        ctx.select.setMode("preview");
-        this.#editor.setCursor({ type: "crosshair" });
-        this.#sm.transition({
-          type: "selecting",
-          selection: { startPos: pos, currentPos: pos },
-        });
+        // No point hit - check for segment hit
+        const segmentHit = this.#commands.hitTestSegment(pos);
+        if (segmentHit) {
+          // Segment hit
+          const isSelected = this.#commands.isSegmentSelected(
+            segmentHit.segmentId,
+          );
+          if (this.#shiftModifierOn) {
+            this.#commands.toggleSegment(segmentHit.segmentId);
+            if (this.#commands.hasSelection()) {
+              this.#sm.transition({ type: "selected", hoveredPointId: null });
+            } else {
+              this.#sm.transition({ type: "ready", hoveredPointId: null });
+            }
+          } else {
+            if (!isSelected) {
+              this.#commands.selectSegment(segmentHit.segmentId, false);
+            }
+            const freshCtx = this.#editor.createToolContext();
+            this.#draggedPointIds = [...freshCtx.selectedPoints];
+            this.#editor.setCursor({ type: "move" });
+            this.#sm.transition({
+              type: "dragging",
+              drag: {
+                anchorPointId: this.#draggedPointIds[0],
+                startPos: pos,
+                lastPos: pos,
+                totalDelta: { x: 0, y: 0 },
+              },
+            });
+          }
+        } else {
+          // Nothing hit - start rectangle selection
+          this.#commands.clearSelection();
+          ctx.select.setMode("preview");
+          this.#editor.setCursor({ type: "default" });
+          this.#sm.transition({
+            type: "selecting",
+            selection: { startPos: pos, currentPos: pos },
+          });
+        }
       }
     });
 
@@ -149,14 +209,16 @@ export class Select implements Tool {
     });
 
     this.#sm.when("dragging", (state) => {
-      const delta = this.#commands.moveSelectedPoints(
-        state.drag.anchorPointId,
-        pos,
-      );
+      const delta = {
+        x: pos.x - state.drag.lastPos.x,
+        y: pos.y - state.drag.lastPos.y,
+      };
+      this.#commands.moveSelectedPointsByDelta(delta);
       this.#sm.transition({
         type: "dragging",
         drag: {
           ...state.drag,
+          lastPos: pos,
           totalDelta: {
             x: state.drag.totalDelta.x + delta.x,
             y: state.drag.totalDelta.y + delta.y,

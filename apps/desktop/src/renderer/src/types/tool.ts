@@ -3,7 +3,7 @@ import type { GlyphSnapshot } from "./generated";
 import type { PointId, ContourId } from "./ids";
 import type { Point2D } from "./math";
 import type { CommandHistory } from "@/lib/commands";
-import type { SelectionMode } from "@/lib/editor/SelectionManager";
+import type { SelectionMode } from "@/lib/editor/Editor";
 import type { SegmentIndicator } from "./indicator";
 
 export type ToolName = "select" | "pen" | "hand" | "shape" | "disabled";
