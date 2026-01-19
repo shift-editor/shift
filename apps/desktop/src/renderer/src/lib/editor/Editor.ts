@@ -3,6 +3,7 @@ import {
   DEFAULT_STYLES,
   GUIDE_STYLES,
   SEGMENT_HOVER_STYLE,
+  SEGMENT_SELECTED_STYLE,
 } from "@/lib/styles/style";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleState, HandleType } from "@/types/handle";
@@ -768,7 +769,7 @@ export class Editor {
     }
 
     if (!this.previewMode && snapshot) {
-      this.#drawSegmentIndicator(ctx, snapshot);
+      this.#drawSegmentHighlights(ctx, snapshot);
     }
 
     const shouldDrawBoundingRect =
@@ -808,47 +809,61 @@ export class Editor {
     };
   }
 
-  #drawSegmentIndicator(ctx: IRenderer, snapshot: GlyphSnapshot): void {
+  #drawSegmentHighlights(ctx: IRenderer, snapshot: GlyphSnapshot): void {
     const hoveredSegment = this.#hoveredSegmentId.value;
-    if (!hoveredSegment) return;
+    const selectedSegments = this.#selectedSegmentIds.peek();
+
+    // Nothing to draw
+    if (!hoveredSegment && selectedSegments.size === 0) return;
 
     for (const contour of snapshot.contours) {
       const segments = parseSegments(contour.points, contour.closed);
 
       for (const segment of segments) {
         const segmentId = Segment.id(segment);
-        if (segmentId !== hoveredSegment.segmentId) continue;
+        const isHovered = hoveredSegment?.segmentId === segmentId;
+        const isSelected = selectedSegments.has(segmentId);
 
-        ctx.setStyle(SEGMENT_HOVER_STYLE);
-        ctx.lineWidth = this.#lineWidthUpm(SEGMENT_HOVER_STYLE.lineWidth);
+        if (!isHovered && !isSelected) continue;
 
-        const curve = Segment.toCurve(segment);
-        ctx.beginPath();
-        ctx.moveTo(curve.p0.x, curve.p0.y);
+        // Selected takes priority over hovered for styling
+        const style = isSelected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
+        ctx.setStyle(style);
+        ctx.lineWidth = this.#lineWidthUpm(style.lineWidth);
 
-        switch (curve.type) {
-          case "line":
-            ctx.lineTo(curve.p1.x, curve.p1.y);
-            break;
-          case "quadratic":
-            ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
-            break;
-          case "cubic":
-            ctx.cubicTo(
-              curve.c0.x,
-              curve.c0.y,
-              curve.c1.x,
-              curve.c1.y,
-              curve.p1.x,
-              curve.p1.y,
-            );
-            break;
-        }
-
-        ctx.stroke();
-        return;
+        this.#drawSegmentCurve(ctx, segment);
       }
     }
+  }
+
+  #drawSegmentCurve(
+    ctx: IRenderer,
+    segment: ReturnType<typeof parseSegments>[number],
+  ): void {
+    const curve = Segment.toCurve(segment);
+    ctx.beginPath();
+    ctx.moveTo(curve.p0.x, curve.p0.y);
+
+    switch (curve.type) {
+      case "line":
+        ctx.lineTo(curve.p1.x, curve.p1.y);
+        break;
+      case "quadratic":
+        ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
+        break;
+      case "cubic":
+        ctx.cubicTo(
+          curve.c0.x,
+          curve.c0.y,
+          curve.c1.x,
+          curve.c1.y,
+          curve.p1.x,
+          curve.p1.y,
+        );
+        break;
+    }
+
+    ctx.stroke();
   }
 
   #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {

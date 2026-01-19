@@ -3,11 +3,13 @@ import { UPMRect } from "@/lib/math/rect";
 import type { Point2D } from "@/types/math";
 import type { PointId } from "@/types/ids";
 import { asPointId } from "@/types/ids";
+import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { PointSnapshot, GlyphSnapshot } from "@/types/generated";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 import { Vec2, Segment } from "@/lib/geo";
 import { parseSegments } from "@/engine/segments";
 import type { SegmentHitResult } from "@/lib/geo";
+import type { Segment as SegmentType } from "@/types/segments";
 
 function findPointAtPosition(
   points: PointSnapshot[],
@@ -58,9 +60,64 @@ function hitTestSegments(
   return null;
 }
 
+/**
+ * Get all point IDs from a segment (anchors + control points).
+ */
+function getSegmentPointIds(segment: SegmentType): PointId[] {
+  switch (segment.type) {
+    case "line":
+      return [
+        asPointId(segment.points.anchor1.id),
+        asPointId(segment.points.anchor2.id),
+      ];
+    case "quad":
+      return [
+        asPointId(segment.points.anchor1.id),
+        asPointId(segment.points.control.id),
+        asPointId(segment.points.anchor2.id),
+      ];
+    case "cubic":
+      return [
+        asPointId(segment.points.anchor1.id),
+        asPointId(segment.points.control1.id),
+        asPointId(segment.points.control2.id),
+        asPointId(segment.points.anchor2.id),
+      ];
+  }
+}
+
+/**
+ * Find a segment by its ID in the snapshot.
+ */
+function findSegmentById(
+  snapshot: GlyphSnapshot | null,
+  segmentId: SegmentId,
+): SegmentType | null {
+  if (!snapshot) return null;
+
+  for (const contour of snapshot.contours) {
+    const segments = parseSegments(contour.points, contour.closed);
+    for (const segment of segments) {
+      if (Segment.id(segment) === segmentId) {
+        return segment;
+      }
+    }
+  }
+
+  return null;
+}
+
 export interface HitTestResult {
   point: PointSnapshot | null;
   pointId: PointId | null;
+}
+
+export interface SegmentHitTestResult {
+  segmentId: SegmentId;
+  segment: SegmentType;
+  closestPoint: Point2D;
+  t: number;
+  pointIds: PointId[];
 }
 
 export interface RectSelectResult {
@@ -188,5 +245,100 @@ export class SelectCommands {
       return true;
     }
     return false;
+  }
+
+  // ============================================================================
+  // Segment Selection
+  // ============================================================================
+
+  /**
+   * Hit test for segments (called when no point is hit).
+   */
+  hitTestSegment(pos: Point2D): SegmentHitTestResult | null {
+    const ctx = this.#editor.createToolContext();
+    const hitRadius = ctx.screen.hitRadius;
+    const hit = hitTestSegments(ctx.snapshot, pos, hitRadius);
+
+    if (!hit) return null;
+
+    const segment = findSegmentById(ctx.snapshot, hit.segmentId);
+    if (!segment) return null;
+
+    return {
+      segmentId: hit.segmentId,
+      segment,
+      closestPoint: hit.point,
+      t: hit.t,
+      pointIds: getSegmentPointIds(segment),
+    };
+  }
+
+  /**
+   * Select a segment (selects both the segment and its anchor points for movement).
+   */
+  selectSegment(segmentId: SegmentId, additive: boolean): PointId[] {
+    const ctx = this.#editor.createToolContext();
+    const segment = findSegmentById(ctx.snapshot, segmentId);
+
+    if (!segment) return [];
+
+    const pointIds = getSegmentPointIds(segment);
+
+    // Select the segment
+    if (additive) {
+      this.#editor.addSegmentToSelection(segmentId);
+    } else {
+      this.#editor.selectSegment(segmentId);
+    }
+
+    // Also select the segment's anchor points (for movement)
+    // We only select anchor points, not control points, to match typical behavior
+    const anchorIds = this.#getAnchorPointIds(segment);
+    if (additive) {
+      for (const id of anchorIds) {
+        this.#editor.addPointToSelection(id);
+      }
+    } else {
+      this.#editor.selectPoints(new Set(anchorIds));
+    }
+
+    return pointIds;
+  }
+
+  /**
+   * Get only the anchor point IDs from a segment (not control points).
+   */
+  #getAnchorPointIds(segment: SegmentType): PointId[] {
+    switch (segment.type) {
+      case "line":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+      case "quad":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+      case "cubic":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+    }
+  }
+
+  /**
+   * Check if a segment is currently selected.
+   */
+  isSegmentSelected(segmentId: SegmentId): boolean {
+    return this.#editor.isSegmentSelected(segmentId);
+  }
+
+  /**
+   * Get the hovered segment indicator if any.
+   */
+  getHoveredSegment(): SegmentIndicator | null {
+    return this.#editor.hoveredSegmentId;
   }
 }

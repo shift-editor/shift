@@ -31,3 +31,13 @@ export function createSegmentHoverStyles(theme: ThemeTokens): DrawStyle {
     dashPattern: [],
   };
 }
+
+export function createSegmentSelectedStyles(theme: ThemeTokens): DrawStyle {
+  return {
+    lineWidth: 2,
+    strokeStyle: theme.canvas.blue,
+    fillStyle: "transparent",
+    antiAlias: true,
+    dashPattern: [],
+  };
+}

@@ -68,6 +68,7 @@ export class Select implements Tool {
 
     this.#sm.when("ready", () => {
       if (pointId) {
+        // Point hit - select and start dragging
         this.#commands.selectPoint(pointId, false);
         const freshCtx = this.#editor.createToolContext();
         this.#draggedPointIds = [...freshCtx.selectedPoints];
@@ -81,17 +82,39 @@ export class Select implements Tool {
           },
         });
       } else {
-        ctx.select.setMode("preview");
-        this.#editor.setCursor({ type: "crosshair" });
-        this.#sm.transition({
-          type: "selecting",
-          selection: { startPos: pos, currentPos: pos },
-        });
+        // No point hit - check for segment hit
+        const segmentHit = this.#commands.hitTestSegment(pos);
+        if (segmentHit) {
+          // Segment hit - select and start dragging
+          const pointIds = this.#commands.selectSegment(
+            segmentHit.segmentId,
+            false,
+          );
+          this.#draggedPointIds = pointIds;
+          this.#editor.setCursor({ type: "move" });
+          this.#sm.transition({
+            type: "dragging",
+            drag: {
+              anchorPointId: pointIds[0], // Use first point as anchor
+              startPos: pos,
+              totalDelta: { x: 0, y: 0 },
+            },
+          });
+        } else {
+          // Nothing hit - start rectangle selection
+          ctx.select.setMode("preview");
+          this.#editor.setCursor({ type: "crosshair" });
+          this.#sm.transition({
+            type: "selecting",
+            selection: { startPos: pos, currentPos: pos },
+          });
+        }
       }
     });
 
     this.#sm.when("selected", () => {
       if (pointId) {
+        // Point hit
         const isSelected = this.#commands.isPointSelected(pointId);
         if (this.#shiftModifierOn) {
           this.#commands.togglePointInSelection(pointId);
@@ -117,13 +140,44 @@ export class Select implements Tool {
           });
         }
       } else {
-        this.#commands.clearSelection();
-        ctx.select.setMode("preview");
-        this.#editor.setCursor({ type: "crosshair" });
-        this.#sm.transition({
-          type: "selecting",
-          selection: { startPos: pos, currentPos: pos },
-        });
+        // No point hit - check for segment hit
+        const segmentHit = this.#commands.hitTestSegment(pos);
+        if (segmentHit) {
+          // Segment hit
+          const isSelected = this.#commands.isSegmentSelected(
+            segmentHit.segmentId,
+          );
+          if (this.#shiftModifierOn) {
+            // TODO: Toggle segment in selection
+            // For now, just select it
+            this.#commands.selectSegment(segmentHit.segmentId, true);
+            this.#sm.transition({ type: "selected", hoveredPointId: null });
+          } else {
+            if (!isSelected) {
+              this.#commands.selectSegment(segmentHit.segmentId, false);
+            }
+            const freshCtx = this.#editor.createToolContext();
+            this.#draggedPointIds = [...freshCtx.selectedPoints];
+            this.#editor.setCursor({ type: "move" });
+            this.#sm.transition({
+              type: "dragging",
+              drag: {
+                anchorPointId: this.#draggedPointIds[0],
+                startPos: pos,
+                totalDelta: { x: 0, y: 0 },
+              },
+            });
+          }
+        } else {
+          // Nothing hit - start rectangle selection
+          this.#commands.clearSelection();
+          ctx.select.setMode("preview");
+          this.#editor.setCursor({ type: "crosshair" });
+          this.#sm.transition({
+            type: "selecting",
+            selection: { startPos: pos, currentPos: pos },
+          });
+        }
       }
     });
 
