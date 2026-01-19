@@ -62,7 +62,7 @@ function TooltipContent({
       <BaseTooltip.Positioner side={side} sideOffset={sideOffset}>
         <BaseTooltip.Popup
           className={cn(
-            "z-50 rounded-md bg-bg-surface px-3 py-1.5 text-xs text-text-primary border border-border shadow-sm",
+            "z-50 rounded-md bg-surface px-3 py-1.5 text-xs text-primary border shadow-sm",
             "animate-in fade-in-0 zoom-in-95",
             className,
           )}

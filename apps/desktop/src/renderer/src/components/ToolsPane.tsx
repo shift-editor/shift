@@ -31,18 +31,18 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
         <div
           className={`rounded p-1 transition-colors duration-200 ${
             activeTool === name
-              ? "bg-bg-toolbar-hover"
-              : "hover:bg-bg-toolbar-hover"
+              ? "bg-toolbar-hover"
+              : "hover:bg-toolbar-hover"
           }`}
           onClick={onClick}
         >
-          <Icon width={18} height={18} className="text-text-primary" />
+          <Icon width={18} height={18} className="text-primary" />
         </div>
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
         sideOffset={5}
-        className="bg-bg-surface px-2 py-1 text-text-primary border border-border shadow-sm"
+        className="bg-surface px-2 py-1 text-primary border shadow-sm"
       >
         <p className="mb-1 font-sans text-[0.6rem] font-light">{tooltip}</p>
       </TooltipContent>
@@ -59,7 +59,7 @@ export const ToolsPane: FC = () => {
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
-      <h1 className="text-xs text-text-secondary">{fileName}</h1>
+      <h1 className="text-xs text-secondary">{fileName}</h1>
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2">
           {Array.from(tools.entries()).map(([name, { icon, tooltip }]) => (

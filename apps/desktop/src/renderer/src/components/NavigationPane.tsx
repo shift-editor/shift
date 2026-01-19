@@ -12,10 +12,10 @@ export interface NavigationItemProps {
 export const NavigationItem: FC<NavigationItemProps> = ({ Icon, onClick }) => {
   return (
     <div
-      className="h-fit w-fit rounded-sm p-1 hover:bg-bg-toolbar-hover"
+      className="h-fit w-fit rounded-sm p-1 hover:bg-toolbar-hover"
       onClick={onClick}
     >
-      <Icon width={26} height={26} className="text-text-primary" />
+      <Icon width={26} height={26} className="text-primary" />
     </div>
   );
 };
