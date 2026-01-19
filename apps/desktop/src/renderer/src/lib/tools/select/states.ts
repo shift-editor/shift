@@ -16,5 +16,6 @@ export interface SelectionData {
 export interface DragData {
   anchorPointId: PointId;
   startPos: Point2D;
+  lastPos: Point2D;
   totalDelta: Point2D;
 }

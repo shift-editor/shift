@@ -108,37 +108,18 @@ function isContourClockwise(points: PointSnapshot[]): boolean {
 }
 
 export class Editor {
-  // ============================================================================
-  // View State
-  // ============================================================================
-
   #previewMode: WritableSignal<boolean>;
-
-  // ============================================================================
-  // Selection State (tldraw-style: directly on Editor)
-  // ============================================================================
 
   #selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
   #selectedSegmentIds: WritableSignal<ReadonlySet<SegmentId>>;
   #selectionMode: WritableSignal<SelectionMode>;
 
-  // ============================================================================
-  // Hover State (tldraw-style: directly on Editor)
-  // ============================================================================
-
   #hoveredPointId: WritableSignal<PointId | null>;
   #hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
-
-  // ============================================================================
-  // Tools (moved from global registry)
-  // ============================================================================
 
   #tools: Map<ToolName, ToolRegistryItem>;
   #activeTool: WritableSignal<ToolName>;
 
-  // ============================================================================
-  // Core Infrastructure
-  // ============================================================================
 
   #viewport: Viewport;
   #frameHandler: FrameHandler;
@@ -152,7 +133,6 @@ export class Editor {
   #cursor: WritableSignal<string>;
 
   constructor() {
-    // Core infrastructure
     this.#viewport = new Viewport();
     this.#frameHandler = new FrameHandler();
     this.#fontEngine = new FontEngine();
@@ -163,26 +143,20 @@ export class Editor {
     this.#staticContext = null;
     this.#interactiveContext = null;
 
-    // View state
     this.#previewMode = signal(false);
     this.#cursor = signal("default");
 
-    // Selection state
     this.#selectedPointIds = signal<ReadonlySet<PointId>>(new Set());
     this.#selectedSegmentIds = signal<ReadonlySet<SegmentId>>(new Set());
     this.#selectionMode = signal<SelectionMode>("committed");
 
-    // Hover state
     this.#hoveredPointId = signal<PointId | null>(null);
     this.#hoveredSegmentId = signal<SegmentIndicator | null>(null);
 
-    // Tools
     this.#tools = new Map();
     this.#activeTool = signal<ToolName>("select");
 
-    // Reactive redraw effect
     this.#redrawEffect = effect(() => {
-      // Track all reactive state that should trigger redraws
       this.#fontEngine.snapshot.value;
       this.#selectedPointIds.value;
       this.#selectedSegmentIds.value;
@@ -193,10 +167,6 @@ export class Editor {
       this.requestRedraw();
     });
   }
-
-  // ============================================================================
-  // Tool Registration & Management
-  // ============================================================================
 
   public registerTool(
     name: ToolName,
@@ -246,11 +216,6 @@ export class Editor {
     return tool.tool;
   }
 
-  // ============================================================================
-  // Selection State API
-  // ============================================================================
-
-  // Point selection
   public get selectedPointIds(): ReadonlySet<PointId> {
     return this.#selectedPointIds.value;
   }
@@ -289,7 +254,6 @@ export class Editor {
     return this.#selectedPointIds.peek().has(pointId);
   }
 
-  // Segment selection
   public get selectedSegmentIds(): ReadonlySet<SegmentId> {
     return this.#selectedSegmentIds.value;
   }
@@ -328,7 +292,6 @@ export class Editor {
     return this.#selectedSegmentIds.peek().has(segmentId);
   }
 
-  // Combined selection operations
   public clearSelection(): void {
     this.#selectedPointIds.set(new Set());
     this.#selectedSegmentIds.set(new Set());
@@ -349,10 +312,6 @@ export class Editor {
     this.#selectionMode.set(mode);
   }
 
-  // ============================================================================
-  // Hover State API
-  // ============================================================================
-
   public get hoveredPointId(): PointId | null {
     return this.#hoveredPointId.value;
   }
@@ -363,7 +322,6 @@ export class Editor {
 
   public setHoveredPoint(pointId: PointId | null): void {
     this.#hoveredPointId.set(pointId);
-    // Mutual exclusivity: clear segment hover when point is hovered
     if (pointId !== null) {
       this.#hoveredSegmentId.set(null);
     }
@@ -371,7 +329,6 @@ export class Editor {
 
   public setHoveredSegment(indicator: SegmentIndicator | null): void {
     this.#hoveredSegmentId.set(indicator);
-    // Mutual exclusivity: clear point hover when segment is hovered
     if (indicator !== null) {
       this.#hoveredPointId.set(null);
     }
@@ -382,10 +339,6 @@ export class Editor {
     this.#hoveredSegmentId.set(null);
   }
 
-  // ============================================================================
-  // Visual State Helpers (for rendering)
-  // ============================================================================
-
   public getPointVisualState(pointId: PointId): VisualState {
     if (this.isPointSelected(pointId)) {
       return "selected";
@@ -393,7 +346,7 @@ export class Editor {
     if (this.#hoveredPointId.value === pointId) {
       return "hovered";
     }
-    // Check if point is part of hovered segment
+
     const hoveredSegment = this.#hoveredSegmentId.value;
     if (hoveredSegment) {
       const segmentPointIds = this.#getPointIdsFromSegmentId(
@@ -417,14 +370,9 @@ export class Editor {
   }
 
   #getPointIdsFromSegmentId(segmentId: SegmentId): Set<PointId> {
-    // Segment IDs are formatted as "pointId1:pointId2"
     const [id1, id2] = segmentId.split(":");
     return new Set([asPointId(id1), asPointId(id2)]);
   }
-
-  // ============================================================================
-  // Preview Mode
-  // ============================================================================
 
   public get previewMode(): boolean {
     return this.#previewMode.value;

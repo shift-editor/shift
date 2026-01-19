@@ -78,6 +78,7 @@ export class Select implements Tool {
           drag: {
             anchorPointId: pointId,
             startPos: pos,
+            lastPos: pos,
             totalDelta: { x: 0, y: 0 },
           },
         });
@@ -95,15 +96,16 @@ export class Select implements Tool {
           this.#sm.transition({
             type: "dragging",
             drag: {
-              anchorPointId: pointIds[0], // Use first point as anchor
+              anchorPointId: pointIds[0],
               startPos: pos,
+              lastPos: pos,
               totalDelta: { x: 0, y: 0 },
             },
           });
         } else {
           // Nothing hit - start rectangle selection
           ctx.select.setMode("preview");
-          this.#editor.setCursor({ type: "crosshair" });
+          this.#editor.setCursor({ type: "default" });
           this.#sm.transition({
             type: "selecting",
             selection: { startPos: pos, currentPos: pos },
@@ -135,6 +137,7 @@ export class Select implements Tool {
             drag: {
               anchorPointId: pointId,
               startPos: pos,
+              lastPos: pos,
               totalDelta: { x: 0, y: 0 },
             },
           });
@@ -166,6 +169,7 @@ export class Select implements Tool {
               drag: {
                 anchorPointId: this.#draggedPointIds[0],
                 startPos: pos,
+                lastPos: pos,
                 totalDelta: { x: 0, y: 0 },
               },
             });
@@ -174,7 +178,7 @@ export class Select implements Tool {
           // Nothing hit - start rectangle selection
           this.#commands.clearSelection();
           ctx.select.setMode("preview");
-          this.#editor.setCursor({ type: "crosshair" });
+          this.#editor.setCursor({ type: "default" });
           this.#sm.transition({
             type: "selecting",
             selection: { startPos: pos, currentPos: pos },
@@ -205,14 +209,16 @@ export class Select implements Tool {
     });
 
     this.#sm.when("dragging", (state) => {
-      const delta = this.#commands.moveSelectedPoints(
-        state.drag.anchorPointId,
-        pos,
-      );
+      const delta = {
+        x: pos.x - state.drag.lastPos.x,
+        y: pos.y - state.drag.lastPos.y,
+      };
+      this.#commands.moveSelectedPointsByDelta(delta);
       this.#sm.transition({
         type: "dragging",
         drag: {
           ...state.drag,
+          lastPos: pos,
           totalDelta: {
             x: state.drag.totalDelta.x + delta.x,
             y: state.drag.totalDelta.y + delta.y,

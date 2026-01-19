@@ -3,10 +3,6 @@ import { create } from "zustand";
 import { Editor } from "@/lib/editor/Editor";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 
-/**
- * AppState is now minimal - just holds the editor singleton and UI-only state.
- * Tool state, selection, and hover are all managed on the Editor directly.
- */
 interface AppState {
   editor: Editor;
   fileName: string;

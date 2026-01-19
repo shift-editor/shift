@@ -202,6 +202,13 @@ export class SelectCommands {
     return delta;
   }
 
+  moveSelectedPointsByDelta(delta: Point2D): void {
+    const ctx = this.#editor.createToolContext();
+    if (!Vec2.isZero(delta)) {
+      ctx.edit.applySmartEdits(ctx.selectedPoints, delta.x, delta.y);
+    }
+  }
+
   nudgeSelectedPoints(dx: number, dy: number): void {
     const ctx = this.#editor.createToolContext();
     if (ctx.selectedPoints.size > 0) {
@@ -247,13 +254,6 @@ export class SelectCommands {
     return false;
   }
 
-  // ============================================================================
-  // Segment Selection
-  // ============================================================================
-
-  /**
-   * Hit test for segments (called when no point is hit).
-   */
   hitTestSegment(pos: Point2D): SegmentHitTestResult | null {
     const ctx = this.#editor.createToolContext();
     const hitRadius = ctx.screen.hitRadius;
@@ -273,9 +273,6 @@ export class SelectCommands {
     };
   }
 
-  /**
-   * Select a segment (selects both the segment and its anchor points for movement).
-   */
   selectSegment(segmentId: SegmentId, additive: boolean): PointId[] {
     const ctx = this.#editor.createToolContext();
     const segment = findSegmentById(ctx.snapshot, segmentId);
@@ -291,54 +288,22 @@ export class SelectCommands {
       this.#editor.selectSegment(segmentId);
     }
 
-    // Also select the segment's anchor points (for movement)
-    // We only select anchor points, not control points, to match typical behavior
-    const anchorIds = this.#getAnchorPointIds(segment);
+    // Also select all the segment's points (anchors + control points)
     if (additive) {
-      for (const id of anchorIds) {
+      for (const id of pointIds) {
         this.#editor.addPointToSelection(id);
       }
     } else {
-      this.#editor.selectPoints(new Set(anchorIds));
+      this.#editor.selectPoints(new Set(pointIds));
     }
 
     return pointIds;
   }
 
-  /**
-   * Get only the anchor point IDs from a segment (not control points).
-   */
-  #getAnchorPointIds(segment: SegmentType): PointId[] {
-    switch (segment.type) {
-      case "line":
-        return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.anchor2.id),
-        ];
-      case "quad":
-        return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.anchor2.id),
-        ];
-      case "cubic":
-        return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.anchor2.id),
-        ];
-    }
-  }
-
-  /**
-   * Check if a segment is currently selected.
-   */
   isSegmentSelected(segmentId: SegmentId): boolean {
     return this.#editor.isSegmentSelected(segmentId);
   }
 
-  /**
-   * Toggle a segment in the selection (and its anchor points).
-   * Returns the point IDs from the segment if it was added, empty array if removed.
-   */
   toggleSegment(segmentId: SegmentId): PointId[] {
     const ctx = this.#editor.createToolContext();
     const wasSelected = this.#editor.isSegmentSelected(segmentId);
@@ -346,33 +311,26 @@ export class SelectCommands {
     // Toggle the segment
     this.#editor.toggleSegmentInSelection(segmentId);
 
+    const segment = findSegmentById(ctx.snapshot, segmentId);
+    if (!segment) return [];
+
+    const pointIds = getSegmentPointIds(segment);
+
     if (wasSelected) {
-      // Segment was deselected - remove its anchor points from selection
-      const segment = findSegmentById(ctx.snapshot, segmentId);
-      if (segment) {
-        const anchorIds = this.#getAnchorPointIds(segment);
-        for (const id of anchorIds) {
-          this.#editor.removePointFromSelection(id);
-        }
+      // Segment was deselected - remove all its points from selection
+      for (const id of pointIds) {
+        this.#editor.removePointFromSelection(id);
       }
       return [];
     } else {
-      // Segment was selected - add its anchor points to selection
-      const segment = findSegmentById(ctx.snapshot, segmentId);
-      if (segment) {
-        const anchorIds = this.#getAnchorPointIds(segment);
-        for (const id of anchorIds) {
-          this.#editor.addPointToSelection(id);
-        }
-        return getSegmentPointIds(segment);
+      // Segment was selected - add all its points to selection
+      for (const id of pointIds) {
+        this.#editor.addPointToSelection(id);
       }
-      return [];
+      return pointIds;
     }
   }
 
-  /**
-   * Get the hovered segment indicator if any.
-   */
   getHoveredSegment(): SegmentIndicator | null {
     return this.#editor.hoveredSegmentId;
   }
