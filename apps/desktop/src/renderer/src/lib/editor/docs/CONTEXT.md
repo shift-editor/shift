@@ -1,6 +1,7 @@
 # Editor - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Canvas-based glyph editor with dual layers, transforms, and selection
 - **Language**: TypeScript
 - **Key Files**: `Editor.ts`, `Viewport.ts`, `Scene.ts`, `SelectionManager.ts`, `handles/`
@@ -8,6 +9,7 @@
 - **Dependents**: views/Editor.tsx, tools
 
 ## File Structure
+
 ```
 src/renderer/src/lib/editor/
 ├── Editor.ts              # Main orchestrator (665 lines)
@@ -26,6 +28,7 @@ src/renderer/src/lib/editor/
 ## Core Abstractions
 
 ### Editor (Editor.ts:65-100)
+
 ```typescript
 class Editor {
   #staticContext: IGraphicContext | null;
@@ -41,6 +44,7 @@ class Editor {
 ```
 
 ### Viewport (Viewport.ts)
+
 ```typescript
 class Viewport {
   #upm = 1000;        // Units per em
@@ -55,6 +59,7 @@ class Viewport {
 ```
 
 ### Scene (Scene.ts)
+
 ```typescript
 class Scene {
   readonly snapshot: WritableSignal<GlyphSnapshot | null>;
@@ -68,11 +73,12 @@ class Scene {
 ```
 
 ### SelectionManager (SelectionManager.ts)
+
 ```typescript
 class SelectionManager {
   #selectedPoints = new Set<PointId>();
   #hoveredPoint: PointId | null = null;
-  #mode: SelectionMode = 'committed';
+  #mode: SelectionMode = "committed";
 
   getHandleState(pointId: PointId): HandleState;
 }
@@ -81,6 +87,7 @@ class SelectionManager {
 ## Key Patterns
 
 ### Transform Stack (Editor.ts:440-478)
+
 ```typescript
 #applyUserTransforms(ctx: IRenderer): void {
   // Zoom + pan around canvas center
@@ -96,6 +103,7 @@ class SelectionManager {
 ```
 
 ### Reactive Redraw (Editor.ts:109-115)
+
 ```typescript
 this.#snapshotEffect = effect(() => {
   const snapshot = this.#fontEngine.snapshot.value;
@@ -105,6 +113,7 @@ this.#snapshotEffect = effect(() => {
 ```
 
 ### Handle Rendering (Editor.ts:558-633)
+
 ```typescript
 #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
   for (const contour of snapshot.contours) {
@@ -128,23 +137,24 @@ this.#snapshotEffect = effect(() => {
 
 ## API Surface
 
-| Class | Method | Purpose |
-|-------|--------|---------|
-| Editor | requestRedraw() | Schedule RAF redraw |
-| Editor | projectScreenToUpm(x, y) | Coordinate transform |
-| Editor | setSelectedPoints(ids) | Update selection |
-| Editor | getHandleState(id) | Get render state |
-| Editor | createToolContext() | Context for tools |
-| Viewport | pan(dx, dy) | Pan canvas |
-| Viewport | zoomIn() / zoomOut() | Zoom controls |
-| Scene | setSnapshot(s) | Update glyph |
-| Scene | rebuildGlyphPath() | Rebuild Path2D |
-| SelectionManager | select(id) | Single select |
-| SelectionManager | addToSelection(id) | Multi-select |
+| Class            | Method                   | Purpose              |
+| ---------------- | ------------------------ | -------------------- |
+| Editor           | requestRedraw()          | Schedule RAF redraw  |
+| Editor           | projectScreenToUpm(x, y) | Coordinate transform |
+| Editor           | setSelectedPoints(ids)   | Update selection     |
+| Editor           | getHandleState(id)       | Get render state     |
+| Editor           | createToolContext()      | Context for tools    |
+| Viewport         | pan(dx, dy)              | Pan canvas           |
+| Viewport         | zoomIn() / zoomOut()     | Zoom controls        |
+| Scene            | setSnapshot(s)           | Update glyph         |
+| Scene            | rebuildGlyphPath()       | Rebuild Path2D       |
+| SelectionManager | select(id)               | Single select        |
+| SelectionManager | addToSelection(id)       | Multi-select         |
 
 ## Common Operations
 
 ### Setup editor
+
 ```typescript
 const editor = new Editor({
   staticContext,
@@ -156,6 +166,7 @@ editor.setViewportRect(bounds);
 ```
 
 ### Handle mouse events
+
 ```typescript
 const upmPos = editor.projectScreenToUpm(e.clientX, e.clientY);
 const pointId = hitTest(upmPos, snapshot);
@@ -163,6 +174,7 @@ if (pointId) editor.addToSelection(pointId);
 ```
 
 ### Draw cycle
+
 ```typescript
 // Automatic via effect, or manual:
 editor.requestRedraw();
@@ -171,6 +183,7 @@ editor.requestRedraw();
 ```
 
 ### Tool context
+
 ```typescript
 const ctx = editor.createToolContext();
 // ctx.snapshot, ctx.selectedPoints, ctx.viewport, ctx.mousePosition

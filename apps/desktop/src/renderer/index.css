@@ -1,7 +1,41 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg-app: #ffffff;
+  --color-bg-canvas: #f8f9fa;
+  --color-bg-toolbar: #fafafa;
+  --color-bg-toolbar-hover: #f0f0f0;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-hover: #f5f5f5;
+
+  --color-border: #e5e5e5;
+  --color-border-subtle: #f0f0f0;
+
+  --color-text-primary: #171717;
+  --color-text-secondary: #525252;
+  --color-text-muted: #737373;
+
+  --color-canvas-purple: #8b5cf6;
+  --color-canvas-orange: #f97316;
+  --color-canvas-green: #22c55e;
+  --color-canvas-indigo: #6366f1;
+  --color-canvas-blue: #3b82f6;
+  --color-canvas-cyan: #06b6d4;
+}
+
 :root {
   --font-ui: "Inter";
   --text-ui: 0.85rem;
-  --color-secondary: #3a3a3a;
+
+  --color-bg-app: #ffffff;
+  --color-bg-canvas: #f8f9fa;
+  --color-bg-toolbar: #fafafa;
+  --color-bg-toolbar-hover: #f0f0f0;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-hover: #f5f5f5;
+  --color-border-default: #e5e5e5;
+  --color-border-subtle: #f0f0f0;
+  --color-text-primary: #171717;
+  --color-text-secondary: #525252;
+  --color-text-muted: #737373;
 }

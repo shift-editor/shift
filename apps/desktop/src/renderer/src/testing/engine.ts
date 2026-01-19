@@ -6,7 +6,12 @@
  */
 
 import { vi } from "vitest";
-import type { GlyphSnapshot, PointSnapshot, ContourSnapshot, PointTypeString } from "@/types/generated";
+import type {
+  GlyphSnapshot,
+  PointSnapshot,
+  ContourSnapshot,
+  PointTypeString,
+} from "@/types/generated";
 import { asPointId, asContourId } from "@/types/ids";
 import { FontEngine, MockNativeFontEngine } from "@/engine";
 
@@ -98,13 +103,21 @@ export function createMockEditing() {
   let contourIdCounter = 0;
 
   return {
-    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    addPoint: vi
+      .fn()
+      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    addPointToContour: vi
+      .fn()
+      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    insertPointBefore: vi
+      .fn()
+      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
     removePoints: vi.fn(),
-    addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
+    addContour: vi
+      .fn()
+      .mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
     closeContour: vi.fn(),
     getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
   };
@@ -172,7 +185,9 @@ export interface TestPointConfig {
  * });
  * ```
  */
-export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapshot {
+export function createTestSnapshot(
+  config: TestSnapshotConfig = {},
+): GlyphSnapshot {
   let pointIdCounter = 0;
   let contourIdCounter = 0;
 
@@ -198,7 +213,9 @@ export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapsh
     name: String.fromCodePoint(unicode),
     xAdvance: 500,
     contours,
-    activeContourId: config.activeContourId ?? (contours.length > 0 ? contours[contours.length - 1].id : null),
+    activeContourId:
+      config.activeContourId ??
+      (contours.length > 0 ? contours[contours.length - 1].id : null),
   };
 }
 
@@ -207,7 +224,10 @@ export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapsh
  *
  * Starts an edit session and creates all contours/points from the snapshot.
  */
-export function populateEngine(engine: FontEngine, snapshot: GlyphSnapshot): void {
+export function populateEngine(
+  engine: FontEngine,
+  snapshot: GlyphSnapshot,
+): void {
   engine.session.startEditSession(snapshot.unicode);
 
   for (const contour of snapshot.contours) {
@@ -232,7 +252,7 @@ export function findPointAt(
   snapshot: GlyphSnapshot | null,
   x: number,
   y: number,
-  tolerance: number = 5
+  tolerance: number = 5,
 ): PointSnapshot | null {
   if (!snapshot) return null;
 
@@ -265,7 +285,7 @@ export function getAllPoints(snapshot: GlyphSnapshot | null): PointSnapshot[] {
  */
 export function findPointById(
   snapshot: GlyphSnapshot | null,
-  pointId: string
+  pointId: string,
 ): PointSnapshot | null {
   if (!snapshot) return null;
 

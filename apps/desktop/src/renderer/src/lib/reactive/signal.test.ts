@@ -1,31 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
-import { signal, computed, effect, batch, untracked, isTracking } from './signal';
+import { describe, it, expect, vi } from "vitest";
+import {
+  signal,
+  computed,
+  effect,
+  batch,
+  untracked,
+  isTracking,
+} from "./signal";
 
-describe('signal', () => {
-  it('should store and return a value', () => {
+describe("signal", () => {
+  it("should store and return a value", () => {
     const s = signal(42);
     expect(s.value).toBe(42);
   });
 
-  it('should update value with set()', () => {
+  it("should update value with set()", () => {
     const s = signal(1);
     s.set(2);
     expect(s.value).toBe(2);
   });
 
-  it('should update value with assignment', () => {
+  it("should update value with assignment", () => {
     const s = signal(1);
     s.value = 2;
     expect(s.value).toBe(2);
   });
 
-  it('should update value with update()', () => {
+  it("should update value with update()", () => {
     const s = signal(5);
     s.update((v) => v * 2);
     expect(s.value).toBe(10);
   });
 
-  it('should return value without tracking via peek()', () => {
+  it("should return value without tracking via peek()", () => {
     const s = signal(10);
     const fn = vi.fn(() => s.peek());
 
@@ -37,7 +44,7 @@ describe('signal', () => {
     expect(c.peek()).toBe(10);
   });
 
-  it('should not notify if value is the same (Object.is)', () => {
+  it("should not notify if value is the same (Object.is)", () => {
     const s = signal(1);
     const fn = vi.fn();
 
@@ -55,7 +62,7 @@ describe('signal', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it('should handle NaN correctly', () => {
+  it("should handle NaN correctly", () => {
     const s = signal(NaN);
     const fn = vi.fn();
 
@@ -71,8 +78,8 @@ describe('signal', () => {
   });
 });
 
-describe('computed', () => {
-  it('should derive value from signals', () => {
+describe("computed", () => {
+  it("should derive value from signals", () => {
     const a = signal(2);
     const b = signal(3);
     const sum = computed(() => a.value + b.value);
@@ -80,7 +87,7 @@ describe('computed', () => {
     expect(sum.value).toBe(5);
   });
 
-  it('should auto-update when dependencies change', () => {
+  it("should auto-update when dependencies change", () => {
     const a = signal(1);
     const doubled = computed(() => a.value * 2);
 
@@ -90,7 +97,7 @@ describe('computed', () => {
     expect(doubled.value).toBe(10);
   });
 
-  it('should be lazy (only compute when accessed)', () => {
+  it("should be lazy (only compute when accessed)", () => {
     const fn = vi.fn(() => 42);
     const c = computed(fn);
 
@@ -104,7 +111,7 @@ describe('computed', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('should chain computed values', () => {
+  it("should chain computed values", () => {
     const a = signal(1);
     const b = computed(() => a.value * 2);
     const c = computed(() => b.value + 10);
@@ -115,7 +122,7 @@ describe('computed', () => {
     expect(c.value).toBe(20);
   });
 
-  it('should support peek() without dependency tracking', () => {
+  it("should support peek() without dependency tracking", () => {
     const a = signal(1);
     const c = computed(() => a.peek() * 2);
 
@@ -126,7 +133,7 @@ describe('computed', () => {
     expect(c.peek()).toBe(2);
   });
 
-  it('should clean up old dependencies on recompute', () => {
+  it("should clean up old dependencies on recompute", () => {
     const condition = signal(true);
     const a = signal(1);
     const b = signal(2);
@@ -163,7 +170,7 @@ describe('computed', () => {
     expect(fn).toHaveBeenCalledTimes(4);
   });
 
-  it('should support invalidate()', () => {
+  it("should support invalidate()", () => {
     const fn = vi.fn(() => Math.random());
     const c = computed(fn);
 
@@ -177,14 +184,14 @@ describe('computed', () => {
   });
 });
 
-describe('effect', () => {
-  it('should run immediately', () => {
+describe("effect", () => {
+  it("should run immediately", () => {
     const fn = vi.fn();
     effect(fn);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('should re-run when dependencies change', () => {
+  it("should re-run when dependencies change", () => {
     const s = signal(1);
     const fn = vi.fn();
 
@@ -202,7 +209,7 @@ describe('effect', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it('should stop running after dispose()', () => {
+  it("should stop running after dispose()", () => {
     const s = signal(1);
     const fn = vi.fn();
 
@@ -219,7 +226,7 @@ describe('effect', () => {
     expect(fn).toHaveBeenCalledTimes(1); // No additional calls
   });
 
-  it('should run cleanup function before re-execution', () => {
+  it("should run cleanup function before re-execution", () => {
     const s = signal(1);
     const cleanup = vi.fn();
     const executed = vi.fn();
@@ -242,7 +249,7 @@ describe('effect', () => {
     expect(cleanup).toHaveBeenCalledTimes(2);
   });
 
-  it('should run cleanup on dispose', () => {
+  it("should run cleanup on dispose", () => {
     const cleanup = vi.fn();
     const fx = effect(() => cleanup);
 
@@ -252,7 +259,7 @@ describe('effect', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it('should update dependencies on re-run', () => {
+  it("should update dependencies on re-run", () => {
     const condition = signal(true);
     const a = signal(1);
     const b = signal(2);
@@ -289,7 +296,7 @@ describe('effect', () => {
     expect(fn).toHaveBeenCalledTimes(4);
   });
 
-  it('should react to computed dependencies', () => {
+  it("should react to computed dependencies", () => {
     const s = signal(2);
     const doubled = computed(() => s.value * 2);
     const fn = vi.fn();
@@ -306,8 +313,8 @@ describe('effect', () => {
   });
 });
 
-describe('batch', () => {
-  it('should defer effect execution until batch completes', () => {
+describe("batch", () => {
+  it("should defer effect execution until batch completes", () => {
     const a = signal(1);
     const b = signal(2);
     const fn = vi.fn();
@@ -329,14 +336,14 @@ describe('batch', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it('should return the value from the batch function', () => {
+  it("should return the value from the batch function", () => {
     const result = batch(() => {
       return 42;
     });
     expect(result).toBe(42);
   });
 
-  it('should handle nested batches', () => {
+  it("should handle nested batches", () => {
     const s = signal(0);
     const fn = vi.fn();
 
@@ -361,7 +368,7 @@ describe('batch', () => {
     expect(s.value).toBe(4);
   });
 
-  it('should update computed immediately within batch', () => {
+  it("should update computed immediately within batch", () => {
     const a = signal(1);
     const doubled = computed(() => a.value * 2);
 
@@ -377,8 +384,8 @@ describe('batch', () => {
   });
 });
 
-describe('untracked', () => {
-  it('should read signals without creating dependencies', () => {
+describe("untracked", () => {
+  it("should read signals without creating dependencies", () => {
     const a = signal(1);
     const b = signal(2);
     const fn = vi.fn();
@@ -401,19 +408,19 @@ describe('untracked', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it('should return the value from the function', () => {
+  it("should return the value from the function", () => {
     const s = signal(42);
     const result = untracked(() => s.value * 2);
     expect(result).toBe(84);
   });
 });
 
-describe('isTracking', () => {
-  it('should return false outside reactive context', () => {
+describe("isTracking", () => {
+  it("should return false outside reactive context", () => {
     expect(isTracking()).toBe(false);
   });
 
-  it('should return true inside computed', () => {
+  it("should return true inside computed", () => {
     let wasTracking = false;
     const c = computed(() => {
       wasTracking = isTracking();
@@ -423,7 +430,7 @@ describe('isTracking', () => {
     expect(wasTracking).toBe(true);
   });
 
-  it('should return true inside effect', () => {
+  it("should return true inside effect", () => {
     let wasTracking = false;
     effect(() => {
       wasTracking = isTracking();
@@ -431,7 +438,7 @@ describe('isTracking', () => {
     expect(wasTracking).toBe(true);
   });
 
-  it('should return false inside untracked', () => {
+  it("should return false inside untracked", () => {
     let wasTracking = true;
     effect(() => {
       untracked(() => {
@@ -442,8 +449,8 @@ describe('isTracking', () => {
   });
 });
 
-describe('edge cases', () => {
-  it('should handle circular computed (diamond problem)', () => {
+describe("edge cases", () => {
+  it("should handle circular computed (diamond problem)", () => {
     const a = signal(1);
     const b = computed(() => a.value + 1);
     const c = computed(() => a.value + 2);
@@ -455,7 +462,7 @@ describe('edge cases', () => {
     expect(d.value).toBe(23); // (10+1) + (10+2)
   });
 
-  it('should handle object values', () => {
+  it("should handle object values", () => {
     const obj = signal({ count: 0 });
     const fn = vi.fn();
 
@@ -475,7 +482,7 @@ describe('edge cases', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it('should handle multiple effects on same signal', () => {
+  it("should handle multiple effects on same signal", () => {
     const s = signal(0);
     const fn1 = vi.fn();
     const fn2 = vi.fn();
@@ -497,7 +504,7 @@ describe('edge cases', () => {
     expect(fn2).toHaveBeenCalledTimes(2);
   });
 
-  it('should handle effect disposal during another effect execution', () => {
+  it("should handle effect disposal during another effect execution", () => {
     const s = signal(0);
     const fn = vi.fn();
 

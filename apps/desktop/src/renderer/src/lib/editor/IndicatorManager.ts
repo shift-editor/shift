@@ -1,6 +1,6 @@
-import type { PointId } from '@/types/ids';
-import type { SegmentIndicator } from '@/types/indicator';
-import { signal, type WritableSignal } from '../reactive/signal';
+import type { PointId } from "@/types/ids";
+import type { SegmentIndicator } from "@/types/indicator";
+import { signal, type WritableSignal } from "../reactive/signal";
 
 export interface IndicatorManager {
   readonly hoveredPoint: PointId | null;

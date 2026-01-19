@@ -28,11 +28,16 @@
  * ```
  */
 
-import type { Point2D } from '@/types/math';
-import type { Segment as SegmentType, LineSegment, QuadSegment, CubicSegment } from '@/types/segments';
-import type { SegmentId } from '@/types/indicator';
-import { asSegmentId } from '@/types/indicator';
-import { Curve, type CurveType } from './Curve';
+import type { Point2D } from "@/types/math";
+import type {
+  Segment as SegmentType,
+  LineSegment,
+  QuadSegment,
+  CubicSegment,
+} from "@/types/segments";
+import type { SegmentId } from "@/types/indicator";
+import { asSegmentId } from "@/types/indicator";
+import { Curve, type CurveType } from "./Curve";
 
 export interface SegmentHitResult {
   segment: SegmentType;
@@ -45,31 +50,37 @@ export interface SegmentHitResult {
 export const Segment = {
   id(segment: SegmentType): SegmentId {
     switch (segment.type) {
-      case 'line':
-        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
-      case 'quad':
-        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
-      case 'cubic':
-        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
+      case "line":
+        return asSegmentId(
+          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
+        );
+      case "quad":
+        return asSegmentId(
+          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
+        );
+      case "cubic":
+        return asSegmentId(
+          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
+        );
     }
   },
 
   toCurve(segment: SegmentType): CurveType {
     switch (segment.type) {
-      case 'line':
+      case "line":
         return Curve.line(segment.points.anchor1, segment.points.anchor2);
-      case 'quad':
+      case "quad":
         return Curve.quadratic(
           segment.points.anchor1,
           segment.points.control,
-          segment.points.anchor2
+          segment.points.anchor2,
         );
-      case 'cubic':
+      case "cubic":
         return Curve.cubic(
           segment.points.anchor1,
           segment.points.control1,
           segment.points.control2,
-          segment.points.anchor2
+          segment.points.anchor2,
         );
     }
   },
@@ -79,7 +90,11 @@ export const Segment = {
     return Curve.bounds(curve);
   },
 
-  hitTest(segment: SegmentType, pos: Point2D, radius: number): SegmentHitResult | null {
+  hitTest(
+    segment: SegmentType,
+    pos: Point2D,
+    radius: number,
+  ): SegmentHitResult | null {
     const bounds = Segment.bounds(segment);
     const expandedMin = { x: bounds.min.x - radius, y: bounds.min.y - radius };
     const expandedMax = { x: bounds.max.x + radius, y: bounds.max.y + radius };
@@ -112,7 +127,7 @@ export const Segment = {
   hitTestMultiple(
     segments: SegmentType[],
     pos: Point2D,
-    radius: number
+    radius: number,
   ): SegmentHitResult | null {
     let bestHit: SegmentHitResult | null = null;
 
@@ -127,14 +142,14 @@ export const Segment = {
   },
 
   isLine(segment: SegmentType): segment is LineSegment {
-    return segment.type === 'line';
+    return segment.type === "line";
   },
 
   isQuad(segment: SegmentType): segment is QuadSegment {
-    return segment.type === 'quad';
+    return segment.type === "quad";
   },
 
   isCubic(segment: SegmentType): segment is CubicSegment {
-    return segment.type === 'cubic';
+    return segment.type === "cubic";
   },
 } as const;

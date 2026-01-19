@@ -99,11 +99,13 @@ stroke(path: ShiftPath2D): void {
 ## API Reference
 
 ### IGraphicContext
+
 - `resizeCanvas(canvas, rect)` - Handle resize
 - `getContext(): IRenderer` - Get renderer
 - `destroy()` - Cleanup
 
 ### IRenderer
+
 - `save() / restore()` - State stack
 - `clear()` - Clear canvas
 - `drawLine(x0, y0, x1, y1)` - Draw line
@@ -116,6 +118,7 @@ stroke(path: ShiftPath2D): void {
 - `transform(a, b, c, d, e, f)` - 2D transform
 
 ### DrawStyle
+
 ```typescript
 interface DrawStyle {
   lineWidth: number;
@@ -128,17 +131,19 @@ interface DrawStyle {
 ## Usage Examples
 
 ### Basic Drawing
+
 ```typescript
 const ctx = graphicContext.getContext();
 
 ctx.save();
 ctx.lineWidth = 2;
-ctx.strokeStyle = '#000000';
+ctx.strokeStyle = "#000000";
 ctx.drawLine(0, 0, 100, 100);
 ctx.restore();
 ```
 
 ### Path Operations
+
 ```typescript
 const path = ctx.createPath();
 path.moveTo(0, 0);
@@ -146,12 +151,13 @@ path.lineTo(100, 0);
 path.lineTo(100, 100);
 path.closePath();
 
-ctx.fillStyle = '#ff0000';
+ctx.fillStyle = "#ff0000";
 ctx.fill(path);
 ctx.stroke(path);
 ```
 
 ### Using ShiftPath2D
+
 ```typescript
 const glyphPath = new Path2D();
 glyphPath.moveTo(0, 0);
@@ -163,8 +169,9 @@ glyphPath.invalidated = true;
 ```
 
 ### Style Presets
+
 ```typescript
-import { GUIDE_STYLES, HANDLE_STYLES } from './style';
+import { GUIDE_STYLES, HANDLE_STYLES } from "./style";
 
 ctx.setStyle(GUIDE_STYLES);
 ctx.stroke(guidePath);

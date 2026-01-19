@@ -34,55 +34,61 @@ Rust implementation (shift-core)
 Secure IPC replacement using Electron's contextBridge:
 
 ```typescript
-const { contextBridge } = require('electron');
-const { FontEngine } = require('shift-node');
+const { contextBridge } = require("electron");
+const { FontEngine } = require("shift-node");
 
 const fontEngineInstance = new FontEngine();
 
-contextBridge.exposeInMainWorld('shiftFont', fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 ```
 
 ### API Categories
 
 The exposed API is organized into functional groups:
 
-| Category | Methods |
-|----------|---------|
-| Font Loading | `loadFont` |
-| Font Info | `getMetadata`, `getMetrics`, `getGlyphCount` |
-| Session | `startEditSession`, `endEditSession`, `hasEditSession`, `getEditingUnicode` |
-| Snapshots | `getSnapshot`, `getSnapshotData` |
-| Contours | `addEmptyContour`, `addContour`, `getActiveContourId`, `closeContour` |
-| Points | `addPoint`, `addPointToContour`, `movePoints`, `removePoints`, `insertPointBefore`, `toggleSmooth` |
-| Unified Edit | `applyEditsUnified` |
+| Category     | Methods                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| Font Loading | `loadFont`                                                                                         |
+| Font Info    | `getMetadata`, `getMetrics`, `getGlyphCount`                                                       |
+| Session      | `startEditSession`, `endEditSession`, `hasEditSession`, `getEditingUnicode`                        |
+| Snapshots    | `getSnapshot`, `getSnapshotData`                                                                   |
+| Contours     | `addEmptyContour`, `addContour`, `getActiveContourId`, `closeContour`                              |
+| Points       | `addPoint`, `addPointToContour`, `movePoints`, `removePoints`, `insertPointBefore`, `toggleSmooth` |
+| Unified Edit | `applyEditsUnified`                                                                                |
 
 ## API Reference
 
 ### Font Loading
+
 - `loadFont(path: string): void`
 
 ### Font Info
+
 - `getMetadata(): FontMetadata`
 - `getMetrics(): FontMetrics`
 - `getGlyphCount(): number`
 
 ### Session Management
+
 - `startEditSession(unicode: number): void`
 - `endEditSession(): void`
 - `hasEditSession(): boolean`
 - `getEditingUnicode(): number | null`
 
 ### Snapshots
+
 - `getSnapshot(): string | null` - JSON string
 - `getSnapshotData(): NativeGlyphSnapshot` - Native object
 
 ### Contour Operations
+
 - `addEmptyContour(): string`
 - `addContour(): string`
 - `getActiveContourId(): string | null`
 - `closeContour(): string`
 
 ### Point Operations
+
 - `addPoint(x, y, pointType, smooth): string`
 - `addPointToContour(contourId, x, y, pointType, smooth): string`
 - `movePoints(pointIds, dx, dy): string`
@@ -91,25 +97,28 @@ The exposed API is organized into functional groups:
 - `toggleSmooth(pointId): string`
 
 ### Unified Edit
+
 - `applyEditsUnified(pointIds, dx, dy): string`
 
 ## Usage Examples
 
 ### Renderer Access
+
 ```typescript
 // In renderer (after preload runs)
 const engine = window.shiftFont;
 
-engine.loadFont('/path/to/font.ufo');
+engine.loadFont("/path/to/font.ufo");
 engine.startEditSession(65);
 
-const result = JSON.parse(engine.addPoint(100, 200, 'onCurve', false));
+const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
 if (result.success) {
-  console.log('Added point:', result.affectedPointIds[0]);
+  console.log("Added point:", result.affectedPointIds[0]);
 }
 ```
 
 ### Type Safety
+
 ```typescript
 // types/electron.d.ts provides types
 declare global {
@@ -120,9 +129,10 @@ declare global {
 ```
 
 ### Engine Wrapper Access
+
 ```typescript
 // engine/native.ts provides safe access
-import { getNative, hasNative } from '@/engine/native';
+import { getNative, hasNative } from "@/engine/native";
 
 if (hasNative()) {
   const native = getNative();

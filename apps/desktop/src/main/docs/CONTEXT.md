@@ -1,6 +1,7 @@
 # Main - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Electron main process for app lifecycle and window management
 - **Language**: TypeScript
 - **Key Files**: `main.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: preload, renderer
 
 ## File Structure
+
 ```
 src/main/
 └── main.ts    # Single file, ~90 lines
@@ -16,14 +18,15 @@ src/main/
 ## Core Abstractions
 
 ### Window Creation (main.ts:15-53)
+
 ```typescript
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
-    title: 'Shift',
+    title: "Shift",
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       sandbox: false,
     },
   });
@@ -33,9 +36,7 @@ function createWindow(): void {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(
-      path.join(__dirname, `../renderer/index.html`)
-    );
+    mainWindow.loadFile(path.join(__dirname, `../renderer/index.html`));
   }
 
   mainWindow.webContents.openDevTools();
@@ -43,37 +44,39 @@ function createWindow(): void {
 ```
 
 ### Shortcut Registration (main.ts:41-52)
+
 ```typescript
-mainWindow.webContents.on('did-finish-load', () => {
+mainWindow.webContents.on("did-finish-load", () => {
   globalShortcut.register(
-    process.platform === 'darwin' ? 'Command+Shift+R' : 'Control+Shift+R',
-    () => mainWindow?.reload()
+    process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R",
+    () => mainWindow?.reload(),
   );
 
   globalShortcut.register(
-    process.platform === 'darwin' ? 'Command+Q' : 'Control+Q',
-    () => app.quit()
+    process.platform === "darwin" ? "Command+Q" : "Control+Q",
+    () => app.quit(),
   );
 });
 ```
 
 ### App Events (main.ts:55-86)
+
 ```typescript
 // App ready
 app.whenReady().then(createWindow);
 
 // Window closed
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
 
 // macOS activate
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
 // Cleanup
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   globalShortcut.unregisterAll();
 });
 ```
@@ -81,26 +84,27 @@ app.on('will-quit', () => {
 ## Key Patterns
 
 ### Platform Detection
+
 ```typescript
 // macOS vs others
-process.platform === 'darwin'
-  ? 'Command+Shift+R'
-  : 'Control+Shift+R'
+process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R";
 
 // macOS keeps app alive with no windows
-if (process.platform !== 'darwin') {
+if (process.platform !== "darwin") {
   app.quit();
 }
 ```
 
 ### Squirrel Startup (Windows)
+
 ```typescript
-if (require('electron-squirrel-startup')) {
+if (require("electron-squirrel-startup")) {
   app.quit();
 }
 ```
 
 ### Deferred Shortcut Registration
+
 ```typescript
 // Register after window content loads
 mainWindow.webContents.on('did-finish-load', () => {
@@ -115,39 +119,42 @@ app.on('will-quit', () => {
 
 ## API Surface
 
-| Event/Method | Trigger | Action |
-|--------------|---------|--------|
-| `app.whenReady()` | App initialized | Create window |
-| `window-all-closed` | All windows closed | Quit (non-macOS) |
-| `activate` | Dock click (macOS) | Recreate window |
-| `will-quit` | Before quit | Cleanup shortcuts |
-| `Cmd/Ctrl+Shift+R` | Global shortcut | Reload window |
-| `Cmd/Ctrl+Q` | Global shortcut | Force quit |
+| Event/Method        | Trigger            | Action            |
+| ------------------- | ------------------ | ----------------- |
+| `app.whenReady()`   | App initialized    | Create window     |
+| `window-all-closed` | All windows closed | Quit (non-macOS)  |
+| `activate`          | Dock click (macOS) | Recreate window   |
+| `will-quit`         | Before quit        | Cleanup shortcuts |
+| `Cmd/Ctrl+Shift+R`  | Global shortcut    | Reload window     |
+| `Cmd/Ctrl+Q`        | Global shortcut    | Force quit        |
 
 ## Common Operations
 
 ### Create window
+
 ```typescript
 const win = new BrowserWindow({
   webPreferences: {
-    preload: path.join(__dirname, 'preload.js'),
+    preload: path.join(__dirname, "preload.js"),
     sandbox: false,
   },
 });
 win.maximize();
-win.loadFile('index.html');
+win.loadFile("index.html");
 ```
 
 ### Register shortcut
+
 ```typescript
-globalShortcut.register('CommandOrControl+K', () => {
+globalShortcut.register("CommandOrControl+K", () => {
   // Action
 });
 ```
 
 ### Check platform
+
 ```typescript
-if (process.platform === 'darwin') {
+if (process.platform === "darwin") {
   app.dock.setIcon(iconPath);
 }
 ```
@@ -155,6 +162,7 @@ if (process.platform === 'darwin') {
 ## Build Configuration
 
 ### Electron Forge (forge.config.ts)
+
 ```typescript
 {
   entry: 'src/main/main.ts',
@@ -163,6 +171,7 @@ if (process.platform === 'darwin') {
 ```
 
 ### Vite Main Config (vite.main.config.ts)
+
 - Externalize dependencies
 - Target: electron-main
 - Output: .vite/build/main.js

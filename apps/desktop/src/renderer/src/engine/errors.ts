@@ -23,11 +23,7 @@ export class NoEditSessionError extends FontEngineError {
  */
 export class NativeOperationError extends FontEngineError {
   constructor(operation: string, details?: string) {
-    super(
-      details
-        ? `${operation} failed: ${details}`
-        : `${operation} failed`
-    );
+    super(details ? `${operation} failed: ${details}` : `${operation} failed`);
     this.name = "NativeOperationError";
   }
 }

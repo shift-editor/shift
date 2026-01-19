@@ -1,10 +1,11 @@
-import './App.css';
-import { useEffect } from 'react';
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import "./App.css";
+import { useEffect } from "react";
+import { HashRouter, Route, Routes } from "react-router-dom";
 
-import AppState from '@/store/store';
+import { ThemeProvider } from "@/context/ThemeContext";
+import AppState from "@/store/store";
 
-import { routes } from './routes';
+import { routes } from "./routes";
 
 export const App = () => {
   useEffect(() => {
@@ -12,7 +13,7 @@ export const App = () => {
       const editor = AppState.getState().editor;
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
-      AppState.getState().setFileName(filePath.split('/').pop() ?? '');
+      AppState.getState().setFileName(filePath.split("/").pop() ?? "");
     });
 
     return () => {
@@ -21,13 +22,19 @@ export const App = () => {
   }, []);
 
   return (
-    <HashRouter>
-      <Routes>
-        {routes.map((route) => (
-          <Route key={route.id} path={route.path} element={<route.component />} />
-        ))}
-      </Routes>
-    </HashRouter>
+    <ThemeProvider defaultTheme="light">
+      <HashRouter>
+        <Routes>
+          {routes.map((route) => (
+            <Route
+              key={route.id}
+              path={route.path}
+              element={<route.component />}
+            />
+          ))}
+        </Routes>
+      </HashRouter>
+    </ThemeProvider>
   );
 };
 

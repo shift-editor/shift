@@ -27,19 +27,19 @@
  */
 
 // Core vector operations
-export { Vec2 } from './Vec2';
-export type { Point2D } from './Vec2';
+export { Vec2 } from "./Vec2";
+export type { Point2D } from "./Vec2";
 
 // Curve primitives (pure geometry)
-export { Curve } from './Curve';
+export { Curve } from "./Curve";
 export type {
   LineCurve,
   QuadraticCurve,
   CubicCurve,
   CurveType,
   ClosestPointResult,
-} from './Curve';
+} from "./Curve";
 
 // Segment operations (font editing segments with IDs)
-export { Segment } from './Segment';
-export type { SegmentHitResult } from './Segment';
+export { Segment } from "./Segment";
+export type { SegmentHitResult } from "./Segment";

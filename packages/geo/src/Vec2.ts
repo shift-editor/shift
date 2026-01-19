@@ -24,7 +24,7 @@
  * ```
  */
 
-import type { Point2D } from './types';
+import type { Point2D } from "./types";
 
 /**
  * Epsilon for floating point comparisons

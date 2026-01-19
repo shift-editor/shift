@@ -28,7 +28,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean = false
+    smooth: boolean = false,
   ) {
     super();
     this.#x = x;
@@ -42,7 +42,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
       this.#x,
       this.#y,
       this.#pointType,
-      this.#smooth
+      this.#smooth,
     );
     return this.#resultId;
   }
@@ -134,7 +134,7 @@ export class MovePointToCommand extends BaseCommand<void> {
       ctx.fontEngine.editing.movePointTo(
         this.#pointId,
         this.#originalX,
-        this.#originalY
+        this.#originalY,
       );
     }
   }

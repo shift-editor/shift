@@ -1,22 +1,30 @@
-import { vi } from 'vitest';
-import type { ToolContext, ScreenContext, SelectContext, EditContext, IndicatorContext } from '@/types/tool';
-import type { PointId } from '@/types/ids';
-import type { Rect2D } from '@/types/math';
-import type { GlyphSnapshot } from '@/types/generated';
-import type { CommandContext } from '@/lib/commands/Command';
-import type { SegmentIndicator } from '@/types/indicator';
-import { CommandHistory } from '@/lib/commands';
-import { Viewport } from '@/lib/editor/Viewport';
-import { asContourId } from '@/types/ids';
+import { vi } from "vitest";
+import type {
+  ToolContext,
+  ScreenContext,
+  SelectContext,
+  EditContext,
+  IndicatorContext,
+} from "@/types/tool";
+import type { PointId } from "@/types/ids";
+import type { Rect2D } from "@/types/math";
+import type { GlyphSnapshot } from "@/types/generated";
+import type { CommandContext } from "@/lib/commands/Command";
+import type { SegmentIndicator } from "@/types/indicator";
+import { CommandHistory } from "@/lib/commands";
+import { Viewport } from "@/lib/editor/Viewport";
+import { asContourId } from "@/types/ids";
 import {
   createMockFontEngine,
   createMockEditing,
   createTestSnapshot,
   populateEngine,
   type TestSnapshotConfig,
-} from './engine';
+} from "./engine";
 
-export function createMockCommandContext(snapshot: GlyphSnapshot | null = null): CommandContext {
+export function createMockCommandContext(
+  snapshot: GlyphSnapshot | null = null,
+): CommandContext {
   return {
     fontEngine: {
       editing: createMockEditing(),
@@ -51,7 +59,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
 
   const commandHistory = new CommandHistory(
     fontEngine,
-    () => fontEngine.snapshot.value
+    () => fontEngine.snapshot.value,
   );
 
   if (options.snapshot) {
@@ -65,7 +73,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   let selectedPoints = options.selectedPoints ?? new Set<PointId>();
   let hoveredPoint: PointId | null = options.hoveredPoint ?? null;
   let hoveredSegment: SegmentIndicator | null = null;
-  let selectionMode: 'preview' | 'committed' = 'committed';
+  let selectionMode: "preview" | "committed" = "committed";
   let redrawCount = 0;
 
   const screen: ScreenContext = {
@@ -100,7 +108,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
       selectedPoints = new Set();
     }),
     has: vi.fn(() => selectedPoints.size > 0),
-    setMode: vi.fn((mode: 'preview' | 'committed') => {
+    setMode: vi.fn((mode: "preview" | "committed") => {
       selectionMode = mode;
     }),
   };
@@ -121,7 +129,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   };
 
   const edit: EditContext = {
-    addPoint: vi.fn((x: number, y: number, type: 'onCurve' | 'offCurve') => {
+    addPoint: vi.fn((x: number, y: number, type: "onCurve" | "offCurve") => {
       return fontEngine.editing.addPoint(x, y, type, false);
     }),
     movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) => {
@@ -130,9 +138,11 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     movePointTo: vi.fn((id: PointId, x: number, y: number) => {
       fontEngine.editing.movePointTo(id, x, y);
     }),
-    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) => {
-      return fontEngine.editEngine.applyEdits(ids, dx, dy);
-    }),
+    applySmartEdits: vi.fn(
+      (ids: ReadonlySet<PointId>, dx: number, dy: number) => {
+        return fontEngine.editEngine.applyEdits(ids, dx, dy);
+      },
+    ),
     removePoints: vi.fn((ids: Iterable<PointId>) => {
       fontEngine.editing.removePoints([...ids]);
     }),

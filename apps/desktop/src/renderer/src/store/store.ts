@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { Editor } from "@/lib/editor/Editor";
-import { createToolRegistry } from "@/lib/tools/tools";
+import { createToolRegistry, tools } from "@/lib/tools/tools";
 import { ToolName } from "@/types/tool";
 import type { GlyphSnapshot } from "@/types/generated";
 
@@ -15,7 +15,7 @@ interface AppState {
   setFileName: (fileName: string) => void;
 }
 
-const AppState = create<AppState>()((set) => {
+const AppState = create<AppState>()((set, get) => {
   const editor = new Editor();
   createToolRegistry(editor);
 
@@ -25,6 +25,21 @@ const AppState = create<AppState>()((set) => {
     fileName: "",
     activeTool: "select",
     setActiveTool: (tool: ToolName) => {
+      const currentTool = get().activeTool;
+      if (currentTool === tool) return;
+
+      // Deactivate the current tool
+      const oldTool = tools.get(currentTool);
+      if (oldTool) {
+        oldTool.tool.setIdle();
+      }
+
+      // Activate the new tool
+      const newTool = tools.get(tool);
+      if (newTool) {
+        newTool.tool.setReady();
+      }
+
       set({ activeTool: tool });
     },
     setActiveGlyph: (glyph: GlyphSnapshot) => {

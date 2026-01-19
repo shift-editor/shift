@@ -3,37 +3,81 @@ import {
   DEFAULT_STYLES,
   GUIDE_STYLES,
   SEGMENT_HOVER_STYLE,
-} from '@/lib/styles/style';
-import { tools } from '@/lib/tools/tools';
-import AppState from '@/store/store';
-import { IGraphicContext, IRenderer } from '@/types/graphics';
-import { HandleState, HandleType } from '@/types/handle';
-import { Point2D, Rect2D } from '@/types/math';
-import { Tool, ToolContext } from '@/types/tool';
-import type { PointId } from '@/types/ids';
-import { asPointId, asContourId } from '@/types/ids';
-import type { GlyphSnapshot, PointSnapshot } from '@/types/generated';
+} from "@/lib/styles/style";
+import { tools } from "@/lib/tools/tools";
+import AppState from "@/store/store";
+import { IGraphicContext, IRenderer } from "@/types/graphics";
+import { HandleState, HandleType } from "@/types/handle";
+import { Point2D, Rect2D } from "@/types/math";
+import { Tool, ToolContext } from "@/types/tool";
+import type { PointId } from "@/types/ids";
+import { asPointId, asContourId } from "@/types/ids";
+import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
 
-import { FrameHandler } from './FrameHandler';
-import { drawHandle, drawHandleLast } from './handles';
-import { createIndicatorManager, type IndicatorManager } from './IndicatorManager';
-import { createSelectionManager, type SelectionManager, type SelectionMode } from './SelectionManager';
-import { Viewport } from './Viewport';
-import { getBoundingRect } from '../math/rect';
-import { FontEngine } from '@/engine';
-import { findPointInSnapshot, renderGlyph, renderGuides, type Guides } from './render';
-import { CommandHistory, AddPointCommand, MovePointsCommand, RemovePointsCommand, CloseContourCommand, AddContourCommand } from '../commands';
-import { effect, type Effect } from '../reactive/signal';
-import { parseSegments } from '@/engine/segments';
-import { Segment } from '../geo';
+import { FrameHandler } from "./FrameHandler";
+import { drawHandle, drawHandleLast } from "./handles";
+import {
+  createIndicatorManager,
+  type IndicatorManager,
+} from "./IndicatorManager";
+import {
+  createSelectionManager,
+  type SelectionManager,
+  type SelectionMode,
+} from "./SelectionManager";
+import { Viewport } from "./Viewport";
+import { getBoundingRect } from "../math/rect";
+import { FontEngine } from "@/engine";
+import {
+  findPointInSnapshot,
+  renderGlyph,
+  renderGuides,
+  type Guides,
+} from "./render";
+import {
+  CommandHistory,
+  AddPointCommand,
+  MovePointsCommand,
+  RemovePointsCommand,
+  CloseContourCommand,
+  AddContourCommand,
+} from "../commands";
+import { effect, type Effect } from "../reactive/signal";
+import { parseSegments } from "@/engine/segments";
+import { Segment } from "../geo";
+import { signal, type WritableSignal } from "../reactive/signal";
 
 const DEBUG = false;
+
+// ============================================================================
+// Cursor Types
+// ============================================================================
+
+export type CursorType =
+  | { type: "default" }
+  | { type: "pointer" }
+  | { type: "grab" }
+  | { type: "grabbing" }
+  | { type: "move" }
+  | { type: "crosshair" }
+  | { type: "pen" }
+  | { type: "not-allowed" };
+
+/** Convert a CursorType to a CSS cursor string */
+function cursorToCSS(cursor: CursorType): string {
+  switch (cursor.type) {
+    case "pen":
+      return `-webkit-image-set(url("/cursors/pen@32.svg") 1x, url("/cursors/pen@64.svg") 2x) 8 8, crosshair`;
+    default:
+      return cursor.type;
+  }
+}
 const SCREEN_HIT_RADIUS = 8;
 const SCREEN_LINE_WIDTH = 1;
 
 function debug(...args: unknown[]) {
   if (DEBUG) {
-    console.log('[Editor]', ...args);
+    console.log("[Editor]", ...args);
   }
 }
 
@@ -76,6 +120,9 @@ export class Editor {
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
 
+  /** Reactive cursor signal - subscribe to this for cursor changes */
+  #cursor: WritableSignal<string>;
+
   constructor() {
     this.#viewport = new Viewport();
     this.#frameHandler = new FrameHandler();
@@ -84,7 +131,7 @@ export class Editor {
 
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
-      () => this.#fontEngine.snapshot.value
+      () => this.#fontEngine.snapshot.value,
     );
 
     this.#staticContext = null;
@@ -93,6 +140,7 @@ export class Editor {
     this.#state = { ...InitialEditorState };
     this.#selection = createSelectionManager();
     this.#indicators = createIndicatorManager();
+    this.#cursor = signal("default");
 
     this.#redrawEffect = effect(() => {
       this.#fontEngine.snapshot.value;
@@ -113,7 +161,7 @@ export class Editor {
   }
 
   public startEditSession(unicode: number): void {
-    debug('Starting edit session for unicode:', unicode);
+    debug("Starting edit session for unicode:", unicode);
     this.#fontEngine.session.startEditSession(unicode);
     this.#fontEngine.editing.addContour();
   }
@@ -162,7 +210,8 @@ export class Editor {
 
       indicators: {
         setHoveredPoint: (id) => indicators.setHoveredPoint(id),
-        setHoveredSegment: (indicator) => indicators.setHoveredSegment(indicator),
+        setHoveredSegment: (indicator) =>
+          indicators.setHoveredSegment(indicator),
         clearAll: () => indicators.clearAll(),
       },
 
@@ -281,7 +330,11 @@ export class Editor {
     this.#viewport.zoomOut();
   }
 
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+  public zoomToPoint(
+    screenX: number,
+    screenY: number,
+    zoomDelta: number,
+  ): void {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
@@ -291,21 +344,21 @@ export class Editor {
 
   public getHandleState(pointId: PointId): HandleState {
     if (this.#selection.isSelected(pointId)) {
-      return 'selected';
+      return "selected";
     }
     if (this.#indicators.hoveredPoint === pointId) {
-      return 'hovered';
+      return "hovered";
     }
-    return 'idle';
+    return "idle";
   }
 
   public paintHandle(
     ctx: IRenderer,
     x: number,
     y: number,
-    handleType: Exclude<HandleType, 'last'>,
+    handleType: Exclude<HandleType, "last">,
     state: HandleState,
-    isCounterClockWise?: boolean
+    isCounterClockWise?: boolean,
   ) {
     drawHandle(ctx, handleType, x, y, state, { isCounterClockWise });
   }
@@ -326,9 +379,26 @@ export class Editor {
     return this.#selection.selectedPoints;
   }
 
+  /** Get the current cursor value */
+  public get cursor(): string {
+    return this.#cursor.value;
+  }
+
+  /** Get the cursor signal for reactive subscriptions */
+  public get cursorSignal(): WritableSignal<string> {
+    return this.#cursor;
+  }
+
+  /** Set the cursor style using a discriminated union type */
+  public setCursor(cursor: CursorType): void {
+    this.#cursor.set(cursorToCSS(cursor));
+  }
+
   public deleteSelectedPoints(): void {
     if (this.#selection.selectedPoints.size > 0) {
-      this.#fontEngine.editing.removePoints([...this.#selection.selectedPoints]);
+      this.#fontEngine.editing.removePoints([
+        ...this.#selection.selectedPoints,
+      ]);
       this.#selection.clearSelection();
       this.requestRedraw();
     }
@@ -375,21 +445,17 @@ export class Editor {
       0,
       zoom,
       panX + center.x * (1 - zoom),
-      panY + center.y * (1 - zoom)
+      panY + center.y * (1 - zoom),
     );
   }
 
   #applyUpmTransforms(ctx: IRenderer) {
     const scale = this.#viewport.upmScale;
-    const baselineY = this.#viewport.logicalHeight - this.#viewport.padding - this.#viewport.descender * scale;
-    ctx.transform(
-      scale,
-      0,
-      0,
-      -scale,
-      this.#viewport.padding,
-      baselineY
-    );
+    const baselineY =
+      this.#viewport.logicalHeight -
+      this.#viewport.padding -
+      this.#viewport.descender * scale;
+    ctx.transform(scale, 0, 0, -scale, this.#viewport.padding, baselineY);
   }
 
   public redrawGlyph() {
@@ -423,7 +489,7 @@ export class Editor {
 
     const snapshot = this.#fontEngine.snapshot.value;
 
-    debug('drawStatic: snapshot contours:', snapshot?.contours.length ?? 0);
+    debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
 
     ctx.clear();
     ctx.save();
@@ -444,7 +510,7 @@ export class Editor {
       const hasClosed = renderGlyph(ctx, snapshot);
 
       if (hasClosed && this.#state.fillContour) {
-        ctx.fillStyle = 'black';
+        ctx.fillStyle = "black";
         for (const contour of snapshot.contours) {
           if (contour.closed) {
             ctx.beginPath();
@@ -465,7 +531,7 @@ export class Editor {
     const shouldDrawBoundingRect =
       this.#selection.selectedPoints.size > 0 &&
       !this.#state.fillContour &&
-      this.#selection.mode === 'committed';
+      this.#selection.mode === "committed";
 
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#getSelectedPointData();
@@ -518,20 +584,20 @@ export class Editor {
         ctx.moveTo(curve.p0.x, curve.p0.y);
 
         switch (curve.type) {
-          case 'line':
+          case "line":
             ctx.lineTo(curve.p1.x, curve.p1.y);
             break;
-          case 'quadratic':
+          case "quadratic":
             ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
             break;
-          case 'cubic':
+          case "cubic":
             ctx.cubicTo(
               curve.c0.x,
               curve.c0.y,
               curve.c1.x,
               curve.c1.y,
               curve.p1.x,
-              curve.p1.y
+              curve.p1.y,
             );
             break;
         }
@@ -555,7 +621,7 @@ export class Editor {
         const handleState = this.getHandleState(asPointId(point.id));
 
         if (numPoints === 1) {
-          this.paintHandle(ctx, x, y, 'corner', handleState);
+          this.paintHandle(ctx, x, y, "corner", handleState);
           continue;
         }
 
@@ -565,9 +631,9 @@ export class Editor {
         if (isFirst) {
           if (contour.closed) {
             const clockwise = isContourClockwise(points);
-            this.paintHandle(ctx, x, y, 'direction', handleState, !clockwise);
+            this.paintHandle(ctx, x, y, "direction", handleState, !clockwise);
           } else {
-            this.paintHandle(ctx, x, y, 'first', handleState);
+            this.paintHandle(ctx, x, y, "first", handleState);
           }
           continue;
         }
@@ -576,31 +642,31 @@ export class Editor {
           const prevPoint = points[idx - 1];
           const { x: px, y: py } = this.#viewport.projectUpmToScreen(
             prevPoint.x,
-            prevPoint.y
+            prevPoint.y,
           );
           drawHandleLast(ctx, { x0: x, y0: y, x1: px, y1: py }, handleState);
           continue;
         }
 
-        if (point.pointType === 'onCurve') {
+        if (point.pointType === "onCurve") {
           if (point.smooth) {
-            this.paintHandle(ctx, x, y, 'smooth', handleState);
+            this.paintHandle(ctx, x, y, "smooth", handleState);
           } else {
-            this.paintHandle(ctx, x, y, 'corner', handleState);
+            this.paintHandle(ctx, x, y, "corner", handleState);
           }
         } else {
           const nextPoint = points[(idx + 1) % numPoints];
           const prevPoint = points[idx - 1];
 
           const anchor =
-            nextPoint.pointType === 'offCurve' ? prevPoint : nextPoint;
+            nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
 
           const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
             anchor.x,
-            anchor.y
+            anchor.y,
           );
 
-          this.paintHandle(ctx, x, y, 'control', handleState);
+          this.paintHandle(ctx, x, y, "control", handleState);
 
           ctx.setStyle(DEFAULT_STYLES);
           ctx.drawLine(anchorX, anchorY, x, y);

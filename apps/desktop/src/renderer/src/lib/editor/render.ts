@@ -5,7 +5,11 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type { GlyphSnapshot, PointSnapshot, ContourSnapshot } from "@/types/generated";
+import type {
+  GlyphSnapshot,
+  PointSnapshot,
+  ContourSnapshot,
+} from "@/types/generated";
 import type { PointId } from "@/types/ids";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
@@ -48,7 +52,7 @@ export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
             segment.points.control.x,
             segment.points.control.y,
             segment.points.anchor2.x,
-            segment.points.anchor2.y
+            segment.points.anchor2.y,
           );
           break;
         case "cubic":
@@ -58,7 +62,7 @@ export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
             segment.points.control2.x,
             segment.points.control2.y,
             segment.points.anchor2.x,
-            segment.points.anchor2.y
+            segment.points.anchor2.y,
           );
           break;
       }
@@ -83,7 +87,7 @@ export function renderGuides(ctx: IRenderer, guides: Guides): void {
     guides.capHeight.y,
     guides.xHeight.y,
     guides.baseline.y,
-    guides.descender.y
+    guides.descender.y,
   ]) {
     ctx.moveTo(0, y);
     ctx.lineTo(guides.xAdvance, y);
@@ -102,7 +106,7 @@ export function renderGuides(ctx: IRenderer, guides: Guides): void {
  */
 export function getPointHandleState(
   pointId: string,
-  state: HandleRenderState
+  state: HandleRenderState,
 ): "idle" | "hovered" | "selected" {
   if (state.selectedPoints.has(pointId as PointId)) {
     return "selected";
@@ -119,7 +123,7 @@ export function getPointHandleState(
 export function getHandleType(
   point: PointSnapshot,
   index: number,
-  contour: ContourSnapshot
+  contour: ContourSnapshot,
 ): "first" | "last" | "direction" | "corner" | "smooth" | "control" {
   const points = contour.points;
   const isFirst = index === 0;
@@ -158,7 +162,7 @@ export function getHandleType(
  */
 export function findPointInSnapshot(
   snapshot: GlyphSnapshot,
-  pointId: PointId
+  pointId: PointId,
 ): { point: PointSnapshot; contour: ContourSnapshot; index: number } | null {
   for (const contour of snapshot.contours) {
     const index = contour.points.findIndex((p) => p.id === pointId);
@@ -177,9 +181,13 @@ export function findPointInSnapshot(
  * Get all points from a snapshot as a flat array with contour info.
  */
 export function getAllPointsFromSnapshot(
-  snapshot: GlyphSnapshot
+  snapshot: GlyphSnapshot,
 ): Array<{ point: PointSnapshot; contour: ContourSnapshot; index: number }> {
-  const result: Array<{ point: PointSnapshot; contour: ContourSnapshot; index: number }> = [];
+  const result: Array<{
+    point: PointSnapshot;
+    contour: ContourSnapshot;
+    index: number;
+  }> = [];
 
   for (const contour of snapshot.contours) {
     for (let i = 0; i < contour.points.length; i++) {

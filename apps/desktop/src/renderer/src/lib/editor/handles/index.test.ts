@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { drawHandle, drawHandleLast } from './index';
-import type { IRenderer } from '@/types/graphics';
-import type { HandleState, HandleType } from '@/types/handle';
+import { drawHandle, drawHandleLast } from "./index";
+import type { IRenderer } from "@/types/graphics";
+import type { HandleState, HandleType } from "@/types/handle";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -12,8 +12,8 @@ function createMockRenderer(): IRenderer {
     clear: vi.fn(),
     dispose: vi.fn(),
     lineWidth: 1,
-    strokeStyle: 'black',
-    fillStyle: 'white',
+    strokeStyle: "black",
+    fillStyle: "white",
     antiAlias: false,
     dashPattern: [],
     setStyle: vi.fn(),
@@ -38,44 +38,49 @@ function createMockRenderer(): IRenderer {
   };
 }
 
-describe('handles API', () => {
+describe("handles API", () => {
   let ctx: IRenderer;
 
   beforeEach(() => {
     ctx = createMockRenderer();
   });
 
-  describe('drawHandle', () => {
-    const handleTypes: Exclude<HandleType, 'last'>[] = [
-      'corner',
-      'control',
-      'smooth',
-      'first',
-      'direction',
+  describe("drawHandle", () => {
+    const handleTypes: Exclude<HandleType, "last">[] = [
+      "corner",
+      "control",
+      "smooth",
+      "first",
+      "direction",
     ];
 
-    const handleStates: HandleState[] = ['idle', 'hovered', 'selected'];
+    const handleStates: HandleState[] = ["idle", "hovered", "selected"];
 
-    it.each(handleTypes)('should dispatch to correct renderer for %s handle', (type) => {
-      drawHandle(ctx, type, 100, 100, 'idle');
+    it.each(handleTypes)(
+      "should dispatch to correct renderer for %s handle",
+      (type) => {
+        drawHandle(ctx, type, 100, 100, "idle");
+        expect(ctx.setStyle).toHaveBeenCalled();
+      },
+    );
+
+    it.each(handleStates)("should work for %s state", (state) => {
+      drawHandle(ctx, "corner", 50, 50, state);
       expect(ctx.setStyle).toHaveBeenCalled();
     });
 
-    it.each(handleStates)('should work for %s state', (state) => {
-      drawHandle(ctx, 'corner', 50, 50, state);
-      expect(ctx.setStyle).toHaveBeenCalled();
-    });
-
-    it('should pass options to direction handle', () => {
-      drawHandle(ctx, 'direction', 100, 100, 'idle', { isCounterClockWise: true });
+    it("should pass options to direction handle", () => {
+      drawHandle(ctx, "direction", 100, 100, "idle", {
+        isCounterClockWise: true,
+      });
       expect(ctx.setStyle).toHaveBeenCalled();
       expect(ctx.arcTo).toHaveBeenCalled();
     });
   });
 
-  describe('drawHandleLast', () => {
-    it('should draw last handle with position data', () => {
-      drawHandleLast(ctx, { x0: 100, y0: 100, x1: 200, y1: 200 }, 'idle');
+  describe("drawHandleLast", () => {
+    it("should draw last handle with position data", () => {
+      drawHandleLast(ctx, { x0: 100, y0: 100, x1: 200, y1: 200 }, "idle");
 
       expect(ctx.setStyle).toHaveBeenCalled();
       expect(ctx.stroke).toHaveBeenCalled();

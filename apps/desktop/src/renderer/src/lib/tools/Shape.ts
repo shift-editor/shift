@@ -1,23 +1,23 @@
-import { Editor } from '@/lib/editor/Editor';
-import { DEFAULT_STYLES } from '@/lib/styles/style';
-import { IRenderer } from '@/types/graphics';
-import { Point2D, Rect2D } from '@/types/math';
-import { Tool, ToolName } from '@/types/tool';
+import { Editor } from "@/lib/editor/Editor";
+import { DEFAULT_STYLES } from "@/lib/styles/style";
+import { IRenderer } from "@/types/graphics";
+import { Point2D, Rect2D } from "@/types/math";
+import { Tool, ToolName } from "@/types/tool";
 
 export type ShapeState =
-  | { type: 'idle' }
-  | { type: 'ready' }
-  | { type: 'dragging'; startPos: Point2D };
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "dragging"; startPos: Point2D };
 
 export class Shape implements Tool {
-  public readonly name: ToolName = 'shape';
+  public readonly name: ToolName = "shape";
   #editor: Editor;
   #state: ShapeState;
   #rect: Rect2D;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#state = { type: 'idle' };
+    this.#state = { type: "idle" };
     this.#rect = {
       x: 0,
       y: 0,
@@ -31,37 +31,42 @@ export class Shape implements Tool {
   }
 
   setIdle(): void {
-    this.#state = { type: 'idle' };
+    this.#state = { type: "idle" };
   }
 
   setReady(): void {
-    this.#state = { type: 'ready' };
+    this.#state = { type: "ready" };
+    this.#editor.setCursor({ type: "crosshair" });
   }
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-    this.#state = { type: 'dragging', startPos: { x, y } };
+    this.#state = { type: "dragging", startPos: { x, y } };
   }
 
   onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = { type: 'ready' };
+    this.#state = { type: "ready" };
 
     const ctx = this.#editor.createToolContext();
 
-    ctx.edit.addPoint(this.#rect.x, this.#rect.y, 'onCurve');
-    ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, 'onCurve');
+    ctx.edit.addPoint(this.#rect.x, this.#rect.y, "onCurve");
+    ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, "onCurve");
     ctx.edit.addPoint(
       this.#rect.x + this.#rect.width,
       this.#rect.y + this.#rect.height,
-      'onCurve'
+      "onCurve",
     );
-    ctx.edit.addPoint(this.#rect.x, this.#rect.y + this.#rect.height, 'onCurve');
+    ctx.edit.addPoint(
+      this.#rect.x,
+      this.#rect.y + this.#rect.height,
+      "onCurve",
+    );
     ctx.edit.closeContour();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state.type !== 'dragging') return;
+    if (this.#state.type !== "dragging") return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
@@ -85,13 +90,18 @@ export class Shape implements Tool {
   }
 
   drawInteractive(ctx: IRenderer): void {
-    if (this.#state.type !== 'dragging') return;
+    if (this.#state.type !== "dragging") return;
 
     ctx.setStyle({
       ...DEFAULT_STYLES,
-      fillStyle: 'transparent',
+      fillStyle: "transparent",
     });
 
-    ctx.strokeRect(this.#rect.x, this.#rect.y, this.#rect.width, this.#rect.height);
+    ctx.strokeRect(
+      this.#rect.x,
+      this.#rect.y,
+      this.#rect.width,
+      this.#rect.height,
+    );
   }
 }

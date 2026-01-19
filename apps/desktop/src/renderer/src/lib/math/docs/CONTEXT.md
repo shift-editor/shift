@@ -1,6 +1,7 @@
 # Math - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Geometry utilities for 2D vector math, points, rectangles
 - **Language**: TypeScript
 - **Key Files**: `point.ts`, `vector.ts`, `rect.ts`, `line.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: lib/editor, lib/tools
 
 ## File Structure
+
 ```
 src/renderer/src/lib/math/
 ├── point.ts        # Point class
@@ -22,21 +24,28 @@ src/renderer/src/lib/math/
 ## Core Abstractions
 
 ### Point2D (types/math.ts)
+
 ```typescript
 type Point2D = { x: number; y: number };
 ```
 
 ### Rect2D (types/math.ts)
+
 ```typescript
 type Rect2D = {
-  x: number; y: number;
-  width: number; height: number;
-  left: number; top: number;
-  right: number; bottom: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 };
 ```
 
 ### Point Class (point.ts)
+
 ```typescript
 class Point {
   #x: number;
@@ -49,7 +58,7 @@ class Point {
   lerp(p: Point, t: number): Point {
     return new Point(
       Math.floor(this.#x + (p.x - this.#x) * t),
-      Math.floor(this.#y + (p.y - this.#y) * t)
+      Math.floor(this.#y + (p.y - this.#y) * t),
     );
   }
 
@@ -60,6 +69,7 @@ class Point {
 ```
 
 ### Vector2D Class (vector.ts)
+
 ```typescript
 class Vector2D {
   #x: number;
@@ -94,14 +104,19 @@ class Vector2D {
 ```
 
 ### Rect Class (rect.ts)
+
 ```typescript
 class Rect extends Shape {
   #width: number;
   #height: number;
 
   hit(x: number, y: number): boolean {
-    return x >= this.x && x <= this.x + this.#width &&
-           y >= this.y && y <= this.y + this.#height;
+    return (
+      x >= this.x &&
+      x <= this.x + this.#width &&
+      y >= this.y &&
+      y <= this.y + this.#height
+    );
   }
 
   static fromBounds(left, top, right, bottom): Rect {
@@ -111,10 +126,13 @@ class Rect extends Shape {
 ```
 
 ### getBoundingRect (rect.ts)
+
 ```typescript
 function getBoundingRect(points: Point2D[]): Rect2D {
-  let minX = Infinity, minY = Infinity;
-  let maxX = -Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    minY = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity;
 
   for (const p of points) {
     minX = Math.min(minX, p.x);
@@ -124,9 +142,14 @@ function getBoundingRect(points: Point2D[]): Rect2D {
   }
 
   return {
-    x: minX, y: minY,
-    width: maxX - minX, height: maxY - minY,
-    left: minX, top: minY, right: maxX, bottom: maxY
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    left: minX,
+    top: minY,
+    right: maxX,
+    bottom: maxY,
   };
 }
 ```
@@ -134,53 +157,58 @@ function getBoundingRect(points: Point2D[]): Rect2D {
 ## Key Patterns
 
 ### Immutable Vector Operations
+
 ```typescript
 // All operations return new instances
 const v1 = new Vector2D(1, 0);
-const v2 = v1.multiply(5);  // v1 unchanged
-const v3 = v2.normalize();   // v2 unchanged
+const v2 = v1.multiply(5); // v1 unchanged
+const v3 = v2.normalize(); // v2 unchanged
 ```
 
 ### Static Factory Methods
+
 ```typescript
-Vector2D.from(x0, y0, x1, y1)     // Direction vector
-Vector2D.unitFrom(x0, y0, x1, y1) // Unit direction
-Rect.fromBounds(l, t, r, b)       // From boundaries
+Vector2D.from(x0, y0, x1, y1); // Direction vector
+Vector2D.unitFrom(x0, y0, x1, y1); // Unit direction
+Rect.fromBounds(l, t, r, b); // From boundaries
 ```
 
 ### Numerically Stable Distance
+
 ```typescript
 // Always use Math.hypot for distance
-Math.hypot(dx, dy)  // Not Math.sqrt(dx*dx + dy*dy)
+Math.hypot(dx, dy); // Not Math.sqrt(dx*dx + dy*dy)
 ```
 
 ## API Surface
 
-| Class | Method | Return |
-|-------|--------|--------|
-| Point | distance(x, y) | number |
-| Point | lerp(p, t) | Point |
-| Point | static distance(x0, y0, x1, y1) | number |
-| Vector2D | length() | number |
-| Vector2D | normalize() | Vector2D |
-| Vector2D | dot(v) | number |
-| Vector2D | cross(v) | number |
-| Vector2D | project(v) | Vector2D |
-| Vector2D | projectOntoLine(start, end) | Vector2D |
-| Rect | hit(x, y) | boolean |
-| Rect | resize(w, h) | void |
-| Line | static lerp(p1, p2, t) | Point2D |
-| - | getBoundingRect(points) | Rect2D |
+| Class    | Method                          | Return   |
+| -------- | ------------------------------- | -------- |
+| Point    | distance(x, y)                  | number   |
+| Point    | lerp(p, t)                      | Point    |
+| Point    | static distance(x0, y0, x1, y1) | number   |
+| Vector2D | length()                        | number   |
+| Vector2D | normalize()                     | Vector2D |
+| Vector2D | dot(v)                          | number   |
+| Vector2D | cross(v)                        | number   |
+| Vector2D | project(v)                      | Vector2D |
+| Vector2D | projectOntoLine(start, end)     | Vector2D |
+| Rect     | hit(x, y)                       | boolean  |
+| Rect     | resize(w, h)                    | void     |
+| Line     | static lerp(p1, p2, t)          | Point2D  |
+| -        | getBoundingRect(points)         | Rect2D   |
 
 ## Common Operations
 
 ### Vector from two points
+
 ```typescript
 const direction = Vector2D.from(startX, startY, endX, endY);
 const unit = direction.normalize();
 ```
 
 ### Point-in-rect test
+
 ```typescript
 const rect = new Rect(x, y, width, height);
 if (rect.hit(mouseX, mouseY)) {
@@ -189,21 +217,24 @@ if (rect.hit(mouseX, mouseY)) {
 ```
 
 ### Bounding box from points
+
 ```typescript
-const allPoints = contours.flatMap(c => c.points);
+const allPoints = contours.flatMap((c) => c.points);
 const bounds = getBoundingRect(allPoints);
 ```
 
 ### Linear interpolation
+
 ```typescript
 // t=0 returns p1, t=1 returns p2
 const midpoint = Line.lerp(p1, p2, 0.5);
 ```
 
 ### Vector projection
+
 ```typescript
 const v = new Vector2D(dragX, dragY);
-const axis = new Vector2D(1, 0);  // X axis
+const axis = new Vector2D(1, 0); // X axis
 const projected = v.project(axis);
 ```
 

@@ -5,9 +5,7 @@
     "src/renderer/**/*",
     "src/preload/*.d.ts"
   ],
-  "exclude": [
-    "src/**/*.test.ts"
-  ],
+  "exclude": ["src/**/*.test.ts"],
   "compilerOptions": {
     "useDefineForClassFields": true,
     "strict": false,
@@ -16,21 +14,11 @@
     "checkJs": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
-      "@/*": [
-        "./src/renderer/src/*"
-      ],
-      "@assets/*": [
-        "./src/renderer/src/assets/*"
-      ],
-      "@components/*": [
-        "./src/renderer/src/components/*"
-      ],
-      "@types/*": [
-        "./src/renderer/src/types/*"
-      ],
-      "@data/*": [
-        "./src/renderer/src/charsets/*"
-      ]
+      "@/*": ["./src/renderer/src/*"],
+      "@assets/*": ["./src/renderer/src/assets/*"],
+      "@components/*": ["./src/renderer/src/components/*"],
+      "@types/*": ["./src/renderer/src/types/*"],
+      "@data/*": ["./src/renderer/src/charsets/*"]
     }
   },
   "references": [{ "path": "./tsconfig.node.json" }]

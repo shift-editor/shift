@@ -1,6 +1,7 @@
 # Engine - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: TypeScript facade wrapping native Rust FontEngine with reactive state
 - **Language**: TypeScript
 - **Key Files**: `FontEngine.ts`, `editing.ts`, `session.ts`, `segments.ts`, `native.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: lib/editor, lib/tools, views
 
 ## File Structure
+
 ```
 src/renderer/src/engine/
 ├── index.ts           # Public exports barrel
@@ -26,6 +28,7 @@ src/renderer/src/engine/
 ## Core Abstractions
 
 ### FontEngine (FontEngine.ts:25-60)
+
 ```typescript
 export class FontEngine {
   readonly snapshot: WritableSignal<GlyphSnapshot | null>;
@@ -39,6 +42,7 @@ export class FontEngine {
 ```
 
 ### Manager Context (FontEngine.ts:35-45)
+
 ```typescript
 interface ManagerContext {
   native: NativeFontEngine;
@@ -48,6 +52,7 @@ interface ManagerContext {
 ```
 
 ### NativeFontEngine (native.ts)
+
 ```typescript
 interface NativeFontEngine {
   loadFont(path: string): void;
@@ -62,16 +67,24 @@ interface NativeFontEngine {
 ```
 
 ### Segment Types (segments.ts)
+
 ```typescript
-type LineSegment = { type: 'line'; start: Point2D; end: Point2D }
-type QuadSegment = { type: 'quad'; start: Point2D; cp: Point2D; end: Point2D }
-type CubicSegment = { type: 'cubic'; start: Point2D; cp1: Point2D; cp2: Point2D; end: Point2D }
-type Segment = LineSegment | QuadSegment | CubicSegment
+type LineSegment = { type: "line"; start: Point2D; end: Point2D };
+type QuadSegment = { type: "quad"; start: Point2D; cp: Point2D; end: Point2D };
+type CubicSegment = {
+  type: "cubic";
+  start: Point2D;
+  cp1: Point2D;
+  cp2: Point2D;
+  end: Point2D;
+};
+type Segment = LineSegment | QuadSegment | CubicSegment;
 ```
 
 ## Key Patterns
 
 ### Manager Pattern with Shared Context
+
 ```typescript
 // FontEngine passes same context to all managers
 const ctx = {
@@ -85,6 +98,7 @@ this.session = new SessionManager(ctx);
 ```
 
 ### Session Validation
+
 ```typescript
 class EditingManager {
   #requireSession(): void {
@@ -103,65 +117,76 @@ class EditingManager {
 ```
 
 ### Native Access Pattern
+
 ```typescript
 // Native accessor with availability check
 export function getNative(): NativeFontEngine {
-  if (!window.shiftFont) throw new Error('Native not available');
+  if (!window.shiftFont) throw new Error("Native not available");
   return window.shiftFont;
 }
 
 export function hasNative(): boolean {
-  return typeof window.shiftFont !== 'undefined';
+  return typeof window.shiftFont !== "undefined";
 }
 ```
 
 ## API Surface
 
-| Class | Method | Return |
-|-------|--------|--------|
-| FontEngine | constructor() | FontEngine |
-| EditingManager | addPoint(x, y, type, smooth) | PointId |
-| EditingManager | addContour() | ContourId |
-| EditingManager | movePoints(ids, dx, dy) | void |
-| EditingManager | removePoints(ids) | void |
-| SessionManager | startEditSession(unicode) | void |
-| SessionManager | endEditSession() | void |
-| SessionManager | isActive() | boolean |
-| InfoManager | getMetadata() | FontMetadata |
-| InfoManager | getMetrics() | FontMetrics |
-| EditEngine | applyEdits(selected, dx, dy) | PointId[] |
+| Class          | Method                       | Return       |
+| -------------- | ---------------------------- | ------------ |
+| FontEngine     | constructor()                | FontEngine   |
+| EditingManager | addPoint(x, y, type, smooth) | PointId      |
+| EditingManager | addContour()                 | ContourId    |
+| EditingManager | movePoints(ids, dx, dy)      | void         |
+| EditingManager | removePoints(ids)            | void         |
+| SessionManager | startEditSession(unicode)    | void         |
+| SessionManager | endEditSession()             | void         |
+| SessionManager | isActive()                   | boolean      |
+| InfoManager    | getMetadata()                | FontMetadata |
+| InfoManager    | getMetrics()                 | FontMetrics  |
+| EditEngine     | applyEdits(selected, dx, dy) | PointId[]    |
 
 ## Common Operations
 
 ### Initialize and track state
+
 ```typescript
 const engine = new FontEngine();
 
 effect(() => {
   const snapshot = engine.snapshot.value;
-  console.log('Glyph changed:', snapshot?.name);
+  console.log("Glyph changed:", snapshot?.name);
 });
 ```
 
 ### Edit workflow
+
 ```typescript
-engine.io.loadFont('/path/to/font.ufo');
+engine.io.loadFont("/path/to/font.ufo");
 engine.session.startEditSession(65);
 
 const contourId = engine.editing.addContour();
-const p1 = engine.editing.addPoint(0, 0, 'onCurve', false);
-const p2 = engine.editing.addPoint(100, 200, 'offCurve', false);
+const p1 = engine.editing.addPoint(0, 0, "onCurve", false);
+const p2 = engine.editing.addPoint(100, 200, "offCurve", false);
 
 engine.editing.movePoints([p1, p2], 50, 0);
 engine.session.endEditSession();
 ```
 
 ### Parse segments for rendering
+
 ```typescript
 const segments = parseSegments(contour.points, contour.closed);
 for (const seg of segments) {
-  if (seg.type === 'cubic') {
-    ctx.bezierCurveTo(seg.cp1.x, seg.cp1.y, seg.cp2.x, seg.cp2.y, seg.end.x, seg.end.y);
+  if (seg.type === "cubic") {
+    ctx.bezierCurveTo(
+      seg.cp1.x,
+      seg.cp1.y,
+      seg.cp2.x,
+      seg.cp2.y,
+      seg.end.x,
+      seg.end.y,
+    );
   }
 }
 ```

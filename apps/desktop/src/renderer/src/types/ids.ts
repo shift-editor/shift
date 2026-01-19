@@ -19,7 +19,9 @@ export type PointId = string & { readonly [PointIdBrand]: typeof PointIdBrand };
  * A contour identifier from Rust.
  * Branded string type - can't be confused with PointId or plain strings.
  */
-export type ContourId = string & { readonly [ContourIdBrand]: typeof ContourIdBrand };
+export type ContourId = string & {
+  readonly [ContourIdBrand]: typeof ContourIdBrand;
+};
 
 /**
  * Convert a string ID from Rust to a typed PointId.

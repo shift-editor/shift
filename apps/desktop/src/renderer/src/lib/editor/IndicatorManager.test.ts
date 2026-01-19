@@ -1,45 +1,48 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { createIndicatorManager, type IndicatorManager } from './IndicatorManager';
-import type { PointId } from '@/types/ids';
-import type { SegmentIndicator } from '@/types/indicator';
-import { asSegmentId } from '@/types/indicator';
-import { effect } from '../reactive/signal';
+import {
+  createIndicatorManager,
+  type IndicatorManager,
+} from "./IndicatorManager";
+import type { PointId } from "@/types/ids";
+import type { SegmentIndicator } from "@/types/indicator";
+import { asSegmentId } from "@/types/indicator";
+import { effect } from "../reactive/signal";
 
 const asPointId = (id: number): PointId => id as unknown as PointId;
 
-describe('IndicatorManager', () => {
+describe("IndicatorManager", () => {
   let manager: IndicatorManager;
 
   beforeEach(() => {
     manager = createIndicatorManager();
   });
 
-  describe('initial state', () => {
-    it('should start with no hovered point', () => {
+  describe("initial state", () => {
+    it("should start with no hovered point", () => {
       expect(manager.hoveredPoint).toBeNull();
     });
 
-    it('should start with no hovered segment', () => {
+    it("should start with no hovered segment", () => {
       expect(manager.hoveredSegment).toBeNull();
     });
   });
 
-  describe('setHoveredPoint', () => {
-    it('should set hovered point', () => {
+  describe("setHoveredPoint", () => {
+    it("should set hovered point", () => {
       manager.setHoveredPoint(asPointId(1));
       expect(manager.hoveredPoint).toBe(asPointId(1));
     });
 
-    it('should allow null', () => {
+    it("should allow null", () => {
       manager.setHoveredPoint(asPointId(1));
       manager.setHoveredPoint(null);
       expect(manager.hoveredPoint).toBeNull();
     });
 
-    it('should clear hovered segment when setting point', () => {
+    it("should clear hovered segment when setting point", () => {
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -49,10 +52,10 @@ describe('IndicatorManager', () => {
     });
   });
 
-  describe('setHoveredSegment', () => {
-    it('should set hovered segment', () => {
+  describe("setHoveredSegment", () => {
+    it("should set hovered segment", () => {
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -60,9 +63,9 @@ describe('IndicatorManager', () => {
       expect(manager.hoveredSegment).toEqual(segmentIndicator);
     });
 
-    it('should allow null', () => {
+    it("should allow null", () => {
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -71,10 +74,10 @@ describe('IndicatorManager', () => {
       expect(manager.hoveredSegment).toBeNull();
     });
 
-    it('should clear hovered point when setting segment', () => {
+    it("should clear hovered point when setting segment", () => {
       manager.setHoveredPoint(asPointId(1));
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -83,16 +86,16 @@ describe('IndicatorManager', () => {
     });
   });
 
-  describe('clearAll', () => {
-    it('should clear hovered point', () => {
+  describe("clearAll", () => {
+    it("should clear hovered point", () => {
       manager.setHoveredPoint(asPointId(1));
       manager.clearAll();
       expect(manager.hoveredPoint).toBeNull();
     });
 
-    it('should clear hovered segment', () => {
+    it("should clear hovered segment", () => {
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -102,10 +105,10 @@ describe('IndicatorManager', () => {
     });
   });
 
-  describe('mutual exclusivity', () => {
-    it('should ensure only point or segment is hovered at a time', () => {
+  describe("mutual exclusivity", () => {
+    it("should ensure only point or segment is hovered at a time", () => {
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };
@@ -124,8 +127,8 @@ describe('IndicatorManager', () => {
     });
   });
 
-  describe('signal reactivity', () => {
-    it('should trigger effect when hoveredPoint changes', () => {
+  describe("signal reactivity", () => {
+    it("should trigger effect when hoveredPoint changes", () => {
       const callback = vi.fn();
       const fx = effect(() => {
         manager.hoveredPoint;
@@ -143,7 +146,7 @@ describe('IndicatorManager', () => {
       fx.dispose();
     });
 
-    it('should trigger effect when hoveredSegment changes', () => {
+    it("should trigger effect when hoveredSegment changes", () => {
       const callback = vi.fn();
       const fx = effect(() => {
         manager.hoveredSegment;
@@ -152,7 +155,7 @@ describe('IndicatorManager', () => {
 
       callback.mockClear();
       const segmentIndicator: SegmentIndicator = {
-        segmentId: asSegmentId('p1:p2'),
+        segmentId: asSegmentId("p1:p2"),
         closestPoint: { x: 50, y: 50 },
         t: 0.5,
       };

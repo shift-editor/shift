@@ -1,6 +1,7 @@
 # Graphics - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Rendering abstraction with Canvas 2D backend and path caching
 - **Language**: TypeScript
 - **Key Files**: `Path.ts`, `backends/Canvas2DRenderer.ts`, `style.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: lib/editor, lib/tools
 
 ## File Structure
+
 ```
 src/renderer/src/lib/graphics/
 ├── Path.ts                         # ShiftPath2D class
@@ -20,6 +22,7 @@ src/renderer/src/lib/graphics/
 ## Core Abstractions
 
 ### IRenderer (types/graphics.ts)
+
 ```typescript
 interface IRenderer {
   lineWidth: number;
@@ -57,21 +60,22 @@ interface IRenderer {
 ```
 
 ### Path2D / ShiftPath2D (Path.ts)
+
 ```typescript
 class Path2D {
   #commands: PathCommand[] = [];
   invalidated = false;
 
   moveTo(x: number, y: number): void {
-    this.#commands.push({ type: 'moveTo', x, y });
+    this.#commands.push({ type: "moveTo", x, y });
   }
 
   lineTo(x: number, y: number): void {
-    this.#commands.push({ type: 'lineTo', x, y });
+    this.#commands.push({ type: "lineTo", x, y });
   }
 
   cubicTo(cp1x, cp1y, cp2x, cp2y, x, y): void {
-    this.#commands.push({ type: 'cubicTo', cp1x, cp1y, cp2x, cp2y, x, y });
+    this.#commands.push({ type: "cubicTo", cp1x, cp1y, cp2x, cp2y, x, y });
   }
 
   clear(): void {
@@ -86,16 +90,26 @@ class Path2D {
 ```
 
 ### PathCommand (types/graphics.ts)
+
 ```typescript
 type PathCommand =
-  | { type: 'moveTo'; x: number; y: number }
-  | { type: 'lineTo'; x: number; y: number }
-  | { type: 'quadTo'; cp1x: number; cp1y: number; x: number; y: number }
-  | { type: 'cubicTo'; cp1x: number; cp1y: number; cp2x: number; cp2y: number; x: number; y: number }
-  | { type: 'close' };
+  | { type: "moveTo"; x: number; y: number }
+  | { type: "lineTo"; x: number; y: number }
+  | { type: "quadTo"; cp1x: number; cp1y: number; x: number; y: number }
+  | {
+      type: "cubicTo";
+      cp1x: number;
+      cp1y: number;
+      cp2x: number;
+      cp2y: number;
+      x: number;
+      y: number;
+    }
+  | { type: "close" };
 ```
 
 ### Canvas2DRenderer (backends/Canvas2DRenderer.ts)
+
 ```typescript
 class Canvas2DRenderer implements IRenderer {
   #ctx: CanvasRenderingContext2D;
@@ -131,6 +145,7 @@ class Canvas2DRenderer implements IRenderer {
 ## Key Patterns
 
 ### Path Caching with Invalidation
+
 ```typescript
 // Scene marks path dirty when snapshot changes
 glyphPath.invalidated = true;
@@ -139,11 +154,12 @@ glyphPath.invalidated = true;
 if (!cached || path.invalidated) {
   cached = this.#constructPath(path);
   this.#cachedPaths.set(path, cached);
-  path.invalidated = false;  // Reset flag after rebuild
+  path.invalidated = false; // Reset flag after rebuild
 }
 ```
 
 ### Style Application
+
 ```typescript
 setStyle(style: DrawStyle): void {
   this.lineWidth = style.lineWidth;
@@ -157,19 +173,20 @@ setStyle(style: DrawStyle): void {
 
 ## API Surface
 
-| Class | Method | Purpose |
-|-------|--------|---------|
-| Canvas2DContext | getContext() | Get IRenderer |
-| Canvas2DContext | resizeCanvas() | Handle resize |
-| Canvas2DRenderer | stroke(path) | Stroke with caching |
-| Canvas2DRenderer | fill(path) | Fill with caching |
-| Canvas2DRenderer | transform(...) | Apply 2D transform |
-| Path2D | moveTo/lineTo/cubicTo | Build path |
-| Path2D | clear() | Reset + invalidate |
+| Class            | Method                | Purpose             |
+| ---------------- | --------------------- | ------------------- |
+| Canvas2DContext  | getContext()          | Get IRenderer       |
+| Canvas2DContext  | resizeCanvas()        | Handle resize       |
+| Canvas2DRenderer | stroke(path)          | Stroke with caching |
+| Canvas2DRenderer | fill(path)            | Fill with caching   |
+| Canvas2DRenderer | transform(...)        | Apply 2D transform  |
+| Path2D           | moveTo/lineTo/cubicTo | Build path          |
+| Path2D           | clear()               | Reset + invalidate  |
 
 ## Common Operations
 
 ### Create and draw path
+
 ```typescript
 const path = new Path2D();
 path.moveTo(0, 0);
@@ -180,20 +197,23 @@ ctx.stroke(path);
 ```
 
 ### Apply transforms
+
 ```typescript
 ctx.save();
-ctx.transform(1, 0, 0, -1, 0, height);  // Flip Y
+ctx.transform(1, 0, 0, -1, 0, height); // Flip Y
 ctx.stroke(path);
 ctx.restore();
 ```
 
 ### Use style presets
+
 ```typescript
 ctx.setStyle(GUIDE_STYLES);
 ctx.drawLine(0, baseline, width, baseline);
 ```
 
 ### Invalidate and rebuild
+
 ```typescript
 // When glyph changes:
 scene.glyphPath.clear();

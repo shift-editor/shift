@@ -1,4 +1,4 @@
-import { Point2D } from '@/types/math';
+import { Point2D } from "@/types/math";
 
 /**
  * 2D Affine Transformation Matrix (3x2 representation)
@@ -29,7 +29,14 @@ export class Mat implements MatModel {
   e = 0.0;
   f = 0.0;
 
-  constructor(a: number, b: number, c: number, d: number, e: number, f: number) {
+  constructor(
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+  ) {
     this.a = a;
     this.b = b;
     this.c = c;
@@ -63,7 +70,7 @@ export class Mat implements MatModel {
     const denom = a * d - b * c;
 
     if (denom === 0) {
-      throw new Error('Cannot invert singular matrix');
+      throw new Error("Cannot invert singular matrix");
     }
 
     this.a = d / denom;
@@ -146,7 +153,7 @@ export class Mat implements MatModel {
       m1.a * m2.c + m1.c * m2.d,
       m1.b * m2.c + m1.d * m2.d,
       m1.a * m2.e + m1.c * m2.f + m1.e,
-      m1.b * m2.e + m1.d * m2.f + m1.f
+      m1.b * m2.e + m1.d * m2.f + m1.f,
     );
   }
 

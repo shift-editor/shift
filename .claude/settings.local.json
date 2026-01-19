@@ -30,7 +30,10 @@
       "Bash(git log:*)",
       "Bash(pnpm build:native:*)",
       "Bash(tree:*)",
-      "Bash(pnpm format:check:*)"
+      "Bash(pnpm format:check:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm remove:*)",
+      "WebFetch(domain:base-ui.com)"
     ]
   }
 }

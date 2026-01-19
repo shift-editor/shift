@@ -1,6 +1,7 @@
 # Reactive - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Fine-grained reactivity system with automatic dependency tracking
 - **Language**: TypeScript
 - **Key Files**: `signal.ts` (385 lines)
@@ -8,6 +9,7 @@
 - **Dependents**: engine, editor, commands, tools (used throughout)
 
 ## File Structure
+
 ```
 src/renderer/src/lib/reactive/
 ├── signal.ts           # Complete implementation
@@ -17,15 +19,17 @@ src/renderer/src/lib/reactive/
 ## Core Abstractions
 
 ### Global State (signal.ts:11-20)
+
 ```typescript
-let currentComputation: Computation | null = null;  // Active context
-let batchDepth = 0;                                  // Nested batch count
-const pendingEffects = new Set<EffectImpl>();        // Queued effects
-let isNotifying = false;                             // Re-entrance guard
+let currentComputation: Computation | null = null; // Active context
+let batchDepth = 0; // Nested batch count
+const pendingEffects = new Set<EffectImpl>(); // Queued effects
+let isNotifying = false; // Re-entrance guard
 const pendingNotifications = new Set<SignalImpl>(); // Deferred notifications
 ```
 
 ### WritableSignal<T> (signal.ts:51-126)
+
 ```typescript
 class SignalImpl<T> {
   #value: T;
@@ -49,6 +53,7 @@ class SignalImpl<T> {
 ```
 
 ### ComputedSignal<T> (signal.ts:144-224)
+
 ```typescript
 class ComputedImpl<T> {
   #fn: () => T;
@@ -68,6 +73,7 @@ class ComputedImpl<T> {
 ```
 
 ### Effect (signal.ts:243-304)
+
 ```typescript
 class EffectImpl {
   #fn: () => void | (() => void);
@@ -80,7 +86,7 @@ class EffectImpl {
     this.#cleanup?.();
     // Clear old deps, run fn, collect new deps
     const result = this.#fn();
-    if (typeof result === 'function') {
+    if (typeof result === "function") {
       this.#cleanup = result;
     }
   }
@@ -96,17 +102,19 @@ class EffectImpl {
 ## Key Patterns
 
 ### Dependency Tracking
+
 ```typescript
 // During computation execution
 currentComputation = this;
 try {
-  result = fn();  // Any signal.value reads will subscribe
+  result = fn(); // Any signal.value reads will subscribe
 } finally {
   currentComputation = null;
 }
 ```
 
 ### Dirty Propagation
+
 ```typescript
 // Computed marks dirty, notifies own subscribers
 execute(): void {
@@ -119,6 +127,7 @@ execute(): void {
 ```
 
 ### Batch Deferral
+
 ```typescript
 function batch<T>(fn: () => T): T {
   batchDepth++;
@@ -139,24 +148,26 @@ function batch<T>(fn: () => T): T {
 
 ## API Surface
 
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `signal` | `<T>(initial: T) => WritableSignal<T>` | Create writable signal |
-| `computed` | `<T>(fn: () => T) => ComputedSignal<T>` | Create derived signal |
-| `effect` | `(fn: () => void \| (() => void)) => Effect` | Create side effect |
-| `batch` | `<T>(fn: () => T) => T` | Batch updates |
-| `untracked` | `<T>(fn: () => T) => T` | Read without tracking |
-| `isTracking` | `() => boolean` | Check reactive context |
+| Function     | Signature                                    | Purpose                |
+| ------------ | -------------------------------------------- | ---------------------- |
+| `signal`     | `<T>(initial: T) => WritableSignal<T>`       | Create writable signal |
+| `computed`   | `<T>(fn: () => T) => ComputedSignal<T>`      | Create derived signal  |
+| `effect`     | `(fn: () => void \| (() => void)) => Effect` | Create side effect     |
+| `batch`      | `<T>(fn: () => T) => T`                      | Batch updates          |
+| `untracked`  | `<T>(fn: () => T) => T`                      | Read without tracking  |
+| `isTracking` | `() => boolean`                              | Check reactive context |
 
 ## Common Operations
 
 ### Create reactive state
+
 ```typescript
 const count = signal(0);
 const doubled = computed(() => count.value * 2);
 ```
 
 ### React to changes
+
 ```typescript
 const fx = effect(() => {
   document.title = `Count: ${count.value}`;
@@ -164,6 +175,7 @@ const fx = effect(() => {
 ```
 
 ### Cleanup resources
+
 ```typescript
 effect(() => {
   const id = setInterval(() => tick(), 1000);
@@ -172,6 +184,7 @@ effect(() => {
 ```
 
 ### Batch multiple updates
+
 ```typescript
 batch(() => {
   x.set(newX);
@@ -181,10 +194,11 @@ batch(() => {
 ```
 
 ### Read without subscribing
+
 ```typescript
 computed(() => {
-  const tracked = a.value;    // Creates dependency
-  const ignored = b.peek();   // No dependency
+  const tracked = a.value; // Creates dependency
+  const ignored = b.peek(); // No dependency
   return tracked + ignored;
 });
 ```
@@ -202,21 +216,24 @@ computed(() => {
 ## Design Guidance
 
 ### Signals vs Callbacks
+
 - **Before**: `createManager(onChange?: () => void)` - manual notify
 - **After**: `createManager()` with internal signals - automatic tracking
 
 ### Accessing Signal State
+
 - `signal.value` - read AND track as dependency (use in effect/computed)
 - `signal.peek()` - read WITHOUT tracking (use when building new values)
 
 ### Immutable Updates for Collections
+
 ```typescript
 // Signals use Object.is() - mutating same object won't trigger
 const set = signal(new Set());
-set.value.add(1);  // ❌ Won't notify - same Set reference
+set.value.add(1); // ❌ Won't notify - same Set reference
 
 // Create new collection to trigger update
 const next = new Set(set.peek());
 next.add(1);
-set.value = next;  // ✅ New reference triggers notify
+set.value = next; // ✅ New reference triggers notify
 ```

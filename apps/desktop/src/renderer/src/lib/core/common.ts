@@ -1,4 +1,4 @@
-import { mod } from '../utils/utils';
+import { mod } from "../utils/utils";
 
 /**
  * A cycling collection that wraps an array

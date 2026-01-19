@@ -31,7 +31,7 @@ describe("AddBezierAnchorCommand", () => {
       100,
       100,
       "onCurve",
-      true // smooth
+      true, // smooth
     );
   });
 
@@ -47,7 +47,7 @@ describe("AddBezierAnchorCommand", () => {
       150,
       120,
       "offCurve",
-      false
+      false,
     );
   });
 
@@ -65,7 +65,7 @@ describe("AddBezierAnchorCommand", () => {
       50, // 2 * 100 - 150
       80, // 2 * 100 - 120
       "offCurve",
-      false
+      false,
     );
   });
 
@@ -173,7 +173,7 @@ describe("NudgePointsCommand", () => {
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(
       pointIds,
       1,
-      0
+      0,
     );
   });
 
@@ -188,7 +188,7 @@ describe("NudgePointsCommand", () => {
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenLastCalledWith(
       pointIds,
       -5,
-      10 // Negative of original
+      10, // Negative of original
     );
   });
 

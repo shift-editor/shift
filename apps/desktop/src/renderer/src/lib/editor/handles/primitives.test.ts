@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import {
   drawFilledCircle,
@@ -7,8 +7,8 @@ import {
   drawStrokedRect,
   drawArrowHead,
   drawDirectionArrow,
-} from './primitives';
-import type { IRenderer } from '@/types/graphics';
+} from "./primitives";
+import type { IRenderer } from "@/types/graphics";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -18,8 +18,8 @@ function createMockRenderer(): IRenderer {
     clear: vi.fn(),
     dispose: vi.fn(),
     lineWidth: 1,
-    strokeStyle: 'black',
-    fillStyle: 'white',
+    strokeStyle: "black",
+    fillStyle: "white",
     antiAlias: false,
     dashPattern: [],
     setStyle: vi.fn(),
@@ -43,43 +43,43 @@ function createMockRenderer(): IRenderer {
   };
 }
 
-describe('primitives', () => {
+describe("primitives", () => {
   let ctx: IRenderer;
 
   beforeEach(() => {
     ctx = createMockRenderer();
   });
 
-  describe('drawFilledCircle', () => {
-    it('should call fillCircle with correct parameters', () => {
+  describe("drawFilledCircle", () => {
+    it("should call fillCircle with correct parameters", () => {
       drawFilledCircle(ctx, 10, 20, 5);
       expect(ctx.fillCircle).toHaveBeenCalledWith(10, 20, 5);
     });
   });
 
-  describe('drawStrokedCircle', () => {
-    it('should call strokeCircle with correct parameters', () => {
+  describe("drawStrokedCircle", () => {
+    it("should call strokeCircle with correct parameters", () => {
       drawStrokedCircle(ctx, 15, 25, 8);
       expect(ctx.strokeCircle).toHaveBeenCalledWith(15, 25, 8);
     });
   });
 
-  describe('drawFilledRect', () => {
-    it('should call fillRect centered on the given position', () => {
+  describe("drawFilledRect", () => {
+    it("should call fillRect centered on the given position", () => {
       drawFilledRect(ctx, 100, 100, 10);
       expect(ctx.fillRect).toHaveBeenCalledWith(95, 95, 10, 10);
     });
   });
 
-  describe('drawStrokedRect', () => {
-    it('should call strokeRect centered on the given position', () => {
+  describe("drawStrokedRect", () => {
+    it("should call strokeRect centered on the given position", () => {
       drawStrokedRect(ctx, 50, 50, 20);
       expect(ctx.strokeRect).toHaveBeenCalledWith(40, 40, 20, 20);
     });
   });
 
-  describe('drawArrowHead', () => {
-    it('should draw arrow head with beginPath, moveTo, lineTo, and stroke', () => {
+  describe("drawArrowHead", () => {
+    it("should draw arrow head with beginPath, moveTo, lineTo, and stroke", () => {
       drawArrowHead(ctx, 100, 100, 0, 8);
 
       expect(ctx.beginPath).toHaveBeenCalled();
@@ -88,7 +88,7 @@ describe('primitives', () => {
       expect(ctx.stroke).toHaveBeenCalled();
     });
 
-    it('should call moveTo twice for two arrow lines', () => {
+    it("should call moveTo twice for two arrow lines", () => {
       drawArrowHead(ctx, 100, 100, Math.PI / 2, 10);
 
       expect(ctx.moveTo).toHaveBeenCalledTimes(2);
@@ -96,9 +96,9 @@ describe('primitives', () => {
     });
   });
 
-  describe('drawDirectionArrow', () => {
-    it('should draw upward arrow when direction is up', () => {
-      drawDirectionArrow(ctx, 50, 50, 'up', 8);
+  describe("drawDirectionArrow", () => {
+    it("should draw upward arrow when direction is up", () => {
+      drawDirectionArrow(ctx, 50, 50, "up", 8);
 
       expect(ctx.beginPath).toHaveBeenCalled();
       expect(ctx.moveTo).toHaveBeenCalled();
@@ -106,8 +106,8 @@ describe('primitives', () => {
       expect(ctx.stroke).toHaveBeenCalled();
     });
 
-    it('should draw downward arrow when direction is down', () => {
-      drawDirectionArrow(ctx, 50, 50, 'down', 8);
+    it("should draw downward arrow when direction is down", () => {
+      drawDirectionArrow(ctx, 50, 50, "down", 8);
 
       expect(ctx.beginPath).toHaveBeenCalled();
       expect(ctx.moveTo).toHaveBeenCalledTimes(2);

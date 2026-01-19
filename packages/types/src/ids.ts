@@ -19,7 +19,9 @@ export type PointId = string & { readonly [PointIdBrand]: typeof PointIdBrand };
  * A contour identifier from Rust.
  * Branded string type - can't be confused with PointId or plain strings.
  */
-export type ContourId = string & { readonly [ContourIdBrand]: typeof ContourIdBrand };
+export type ContourId = string & {
+  readonly [ContourIdBrand]: typeof ContourIdBrand;
+};
 
 /**
  * Convert a string ID from Rust to a typed PointId.
@@ -42,7 +44,7 @@ export function asContourId(id: string): ContourId {
  * Useful for runtime validation in debug builds.
  */
 export function isValidPointId(id: unknown): id is PointId {
-  return typeof id === 'string' && id.length > 0;
+  return typeof id === "string" && id.length > 0;
 }
 
 /**
@@ -50,5 +52,5 @@ export function isValidPointId(id: unknown): id is PointId {
  * Useful for runtime validation in debug builds.
  */
 export function isValidContourId(id: unknown): id is ContourId {
-  return typeof id === 'string' && id.length > 0;
+  return typeof id === "string" && id.length > 0;
 }

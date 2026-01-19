@@ -1,12 +1,12 @@
-import type { IRenderer } from './graphics';
-import type { GlyphSnapshot } from './generated';
-import type { PointId, ContourId } from './ids';
-import type { Point2D } from './math';
-import type { CommandHistory } from '@/lib/commands';
-import type { SelectionMode } from '@/lib/editor/SelectionManager';
-import type { SegmentIndicator } from './indicator';
+import type { IRenderer } from "./graphics";
+import type { GlyphSnapshot } from "./generated";
+import type { PointId, ContourId } from "./ids";
+import type { Point2D } from "./math";
+import type { CommandHistory } from "@/lib/commands";
+import type { SelectionMode } from "@/lib/editor/SelectionManager";
+import type { SegmentIndicator } from "./indicator";
 
-export type ToolName = 'select' | 'pen' | 'hand' | 'shape' | 'disabled';
+export type ToolName = "select" | "pen" | "hand" | "shape" | "disabled";
 
 export interface ScreenContext {
   toUpmDistance(pixels: number): number;
@@ -31,7 +31,7 @@ export interface IndicatorContext {
 }
 
 export interface EditContext {
-  addPoint(x: number, y: number, type: 'onCurve' | 'offCurve'): PointId;
+  addPoint(x: number, y: number, type: "onCurve" | "offCurve"): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
   applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[];

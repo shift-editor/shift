@@ -47,7 +47,7 @@ effect(() => {
 
 // Manager access
 engine.session.startEditSession(65);
-engine.editing.addPoint(100, 200, 'onCurve', false);
+engine.editing.addPoint(100, 200, "onCurve", false);
 ```
 
 ### Shared Context
@@ -56,7 +56,7 @@ All managers receive identical context for coordination:
 
 ```typescript
 const ctx = {
-  native: window.shiftFont,           // NAPI bindings
+  native: window.shiftFont, // NAPI bindings
   hasSession: () => session.isActive(), // Session check
   emitSnapshot: (s) => snapshot.set(s), // State updates
 };
@@ -74,6 +74,7 @@ const segments = parseSegments(contour.points, contour.closed);
 ## API Reference
 
 ### FontEngine
+
 - `snapshot: WritableSignal<GlyphSnapshot | null>` - Reactive glyph state
 - `editing: EditingManager` - Point/contour operations
 - `editEngine: EditEngine` - Unified edits with rules
@@ -83,6 +84,7 @@ const segments = parseSegments(contour.points, contour.closed);
 - `io: IOManager` - File I/O
 
 ### EditingManager
+
 - `addPoint(x, y, type, smooth): PointId`
 - `addContour(): ContourId`
 - `movePoints(ids, dx, dy): void`
@@ -90,16 +92,19 @@ const segments = parseSegments(contour.points, contour.closed);
 - `toggleSmooth(id): void`
 
 ### SessionManager
+
 - `startEditSession(unicode): void`
 - `endEditSession(): void`
 - `isActive(): boolean`
 
 ### InfoManager
+
 - `getMetadata(): FontMetadata`
 - `getMetrics(): FontMetrics`
 - `getGlyphCount(): number`
 
 ### Errors
+
 - `FontEngineError` - Base error class
 - `NoEditSessionError` - Operation requires session
 - `NativeOperationError` - Rust operation failed
@@ -107,11 +112,12 @@ const segments = parseSegments(contour.points, contour.closed);
 ## Usage Examples
 
 ### Basic Workflow
+
 ```typescript
 const engine = createFontEngine();
 
 // Load and start editing
-engine.io.loadFont('/path/to/font.ufo');
+engine.io.loadFont("/path/to/font.ufo");
 engine.session.startEditSession(65);
 
 // React to changes
@@ -122,16 +128,14 @@ effect(() => {
 
 // Add geometry
 const contourId = engine.editing.addContour();
-const pointId = engine.editing.addPoint(100, 200, 'onCurve', false);
+const pointId = engine.editing.addPoint(100, 200, "onCurve", false);
 
 // Apply rule-driven edits
-const affected = engine.editEngine.applyEdits(
-  new Set([pointId]),
-  50, 0
-);
+const affected = engine.editEngine.applyEdits(new Set([pointId]), 50, 0);
 ```
 
 ### Segment Rendering
+
 ```typescript
 const snapshot = engine.snapshot.value;
 const segmentMap = parseGlyphSegments(snapshot.contours);
@@ -139,9 +143,15 @@ const segmentMap = parseGlyphSegments(snapshot.contours);
 for (const [contourId, segments] of segmentMap) {
   for (const segment of segments) {
     switch (segment.type) {
-      case 'line': drawLine(segment.start, segment.end); break;
-      case 'quad': drawQuad(segment.start, segment.cp, segment.end); break;
-      case 'cubic': drawCubic(segment.start, segment.cp1, segment.cp2, segment.end); break;
+      case "line":
+        drawLine(segment.start, segment.end);
+        break;
+      case "quad":
+        drawQuad(segment.start, segment.cp, segment.end);
+        break;
+      case "cubic":
+        drawCubic(segment.start, segment.cp1, segment.cp2, segment.end);
+        break;
     }
   }
 }

@@ -36,10 +36,10 @@ Editor
 
 Two overlapping canvases for performance:
 
-| Canvas | Content | Redraw Frequency |
-|--------|---------|------------------|
-| Static | Guides, outlines, handles | On snapshot change |
-| Interactive | Tool overlays, selection rect | On mouse events |
+| Canvas      | Content                       | Redraw Frequency   |
+| ----------- | ----------------------------- | ------------------ |
+| Static      | Guides, outlines, handles     | On snapshot change |
+| Interactive | Tool overlays, selection rect | On mouse events    |
 
 ### Coordinate Systems
 
@@ -77,10 +77,10 @@ The Shift editor uses **2D affine transformation matrices** (3x2 representation)
 //             | b  d  f |
 //             | 0  0  1 | (implicit)
 
-const m = Mat.Identity()              // Create identity matrix
-  .translate(100, 50)                 // Translate
-  .scale(2, 3)                        // Scale
-  .rotate(Math.PI / 4);               // Rotate (future)
+const m = Mat.Identity() // Create identity matrix
+  .translate(100, 50) // Translate
+  .scale(2, 3) // Scale
+  .rotate(Math.PI / 4); // Rotate (future)
 
 // Transform a point
 const point = Mat.applyToPoint(m, { x: 10, y: 20 });
@@ -95,6 +95,7 @@ const inverse = Mat.Inverse(m);
 #### Transformation Pipeline
 
 **UPM → Screen Transform:**
+
 1. Scale to canvas space and flip Y-axis
 2. Position baseline at padding
 3. Apply zoom around canvas center
@@ -102,18 +103,17 @@ const inverse = Mat.Inverse(m);
 
 ```typescript
 // Example: baseline at 600px, scale 0.4 UPM/px, zoom 1.5, pan (50, 0)
-upmTransform = Identity
-  .translate(300, 600)  // Position baseline
-  .scale(0.4, -0.4);    // Scale and flip Y
+upmTransform = Identity.translate(300, 600) // Position baseline
+  .scale(0.4, -0.4); // Scale and flip Y
 
-screenTransform = Identity
-  .translate(50, 0)     // Pan
-  .scale(1.5, 1.5);     // Zoom
+screenTransform = Identity.translate(50, 0) // Pan
+  .scale(1.5, 1.5); // Zoom
 
 result = Compose(screenTransform, upmTransform);
 ```
 
 **Screen → UPM Transform:**
+
 - Inverse of UPM → Screen
 - Applied to mouse events to convert screen coordinates to UPM space
 
@@ -144,7 +144,7 @@ const flipY = Mat.Scale(1, -1);
 
 // Skew (modify matrix components)
 const skewed = Mat.Identity();
-skewed.c = Math.tan(angleX);  // X-axis skew
+skewed.c = Math.tan(angleX); // X-axis skew
 ```
 
 ### Selection Management
@@ -152,19 +152,21 @@ skewed.c = Math.tan(angleX);  // X-axis skew
 Three handle states based on selection:
 
 ```typescript
-type HandleState = 'idle' | 'hovered' | 'selected';
-type SelectionMode = 'preview' | 'committed';
+type HandleState = "idle" | "hovered" | "selected";
+type SelectionMode = "preview" | "committed";
 ```
 
 ## API Reference
 
 ### Editor
+
 - `snapshot: GlyphSnapshot | null` - Current glyph state
 - `selectedPoints: ReadonlySet<PointId>` - Selected point IDs
 - `requestRedraw()` - Schedule redraw
 - `projectScreenToUpm(x, y): Point2D` - Coordinate transform
 
 ### Viewport
+
 - `pan(dx, dy)` - Pan canvas
 - `zoomIn() / zoomOut()` - Zoom to canvas center (1.25x / 0.8x)
 - `zoomToPoint(screenX, screenY, zoomDelta)` - Zoom toward cursor position
@@ -176,6 +178,7 @@ type SelectionMode = 'preview' | 'committed';
 - `setViewportUpm(upm)` - Set units per em
 
 ### SelectionManager
+
 - `select(id)` - Single selection
 - `selectMultiple(ids)` - Multi-select
 - `addToSelection(id)` - Add to selection
@@ -183,6 +186,7 @@ type SelectionMode = 'preview' | 'committed';
 - `setHovered(id)` - Hover state
 
 ### Scene
+
 - `setSnapshot(snapshot)` - Update glyph data
 - `rebuildGlyphPath()` - Reconstruct path
 - `glyphPath: Path2D` - Cached path
@@ -190,6 +194,7 @@ type SelectionMode = 'preview' | 'committed';
 ## Usage Examples
 
 ### Initialize Editor
+
 ```typescript
 const editor = new Editor({
   staticContext,
@@ -202,6 +207,7 @@ editor.setViewportRect(canvasBounds);
 ```
 
 ### Reactive Updates
+
 ```typescript
 // Editor internally sets up:
 effect(() => {
@@ -212,6 +218,7 @@ effect(() => {
 ```
 
 ### Coordinate Conversion
+
 ```typescript
 canvas.onMouseMove = (e) => {
   const upmPos = editor.projectScreenToUpm(e.clientX, e.clientY);
@@ -220,6 +227,7 @@ canvas.onMouseMove = (e) => {
 ```
 
 ### Selection
+
 ```typescript
 // Single select
 editor.setSelectedPoints(new Set([pointId]));

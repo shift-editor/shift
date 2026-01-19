@@ -1,6 +1,7 @@
 # Preload - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Electron contextBridge exposing native FontEngine to renderer
 - **Language**: TypeScript
 - **Key Files**: `preload.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: renderer/engine
 
 ## File Structure
+
 ```
 src/preload/
 └── preload.ts    # Single file, ~100 lines
@@ -16,9 +18,10 @@ src/preload/
 ## Core Abstractions
 
 ### API Exposure (preload.ts)
+
 ```typescript
-const { contextBridge } = require('electron');
-const { FontEngine } = require('shift-node');
+const { contextBridge } = require("electron");
+const { FontEngine } = require("shift-node");
 
 const fontEngineInstance = new FontEngine();
 
@@ -32,7 +35,8 @@ const fontEngineAPI = {
   getGlyphCount: () => fontEngineInstance.getGlyphCount(),
 
   // Session Management
-  startEditSession: (unicode: number) => fontEngineInstance.startEditSession(unicode),
+  startEditSession: (unicode: number) =>
+    fontEngineInstance.startEditSession(unicode),
   endEditSession: () => fontEngineInstance.endEditSession(),
   hasEditSession: () => fontEngineInstance.hasEditSession(),
   getEditingUnicode: () => fontEngineInstance.getEditingUnicode(),
@@ -54,22 +58,27 @@ const fontEngineAPI = {
     fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth),
   movePoints: (pointIds, dx, dy) =>
     fontEngineInstance.movePoints(pointIds, dx, dy),
-  removePoints: (pointIds) =>
-    fontEngineInstance.removePoints(pointIds),
+  removePoints: (pointIds) => fontEngineInstance.removePoints(pointIds),
   insertPointBefore: (beforePointId, x, y, pointType, smooth) =>
-    fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth),
-  toggleSmooth: (pointId) =>
-    fontEngineInstance.toggleSmooth(pointId),
+    fontEngineInstance.insertPointBefore(
+      beforePointId,
+      x,
+      y,
+      pointType,
+      smooth,
+    ),
+  toggleSmooth: (pointId) => fontEngineInstance.toggleSmooth(pointId),
 
   // Unified Edit
   applyEditsUnified: (pointIds, dx, dy) =>
     fontEngineInstance.applyEditsUnified(pointIds, dx, dy),
 };
 
-contextBridge.exposeInMainWorld('shiftFont', fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 ```
 
 ### Type Export (preload.ts)
+
 ```typescript
 export type FontEngineAPI = typeof fontEngineAPI;
 ```
@@ -77,6 +86,7 @@ export type FontEngineAPI = typeof fontEngineAPI;
 ## Key Patterns
 
 ### Explicit Method Wrapping
+
 ```typescript
 // Each method explicitly wrapped
 addPoint: (x, y, pointType, smooth) =>
@@ -87,6 +97,7 @@ addPoint: (x, y, pointType, smooth) =>
 ```
 
 ### Single Instance
+
 ```typescript
 // One FontEngine for entire app
 const fontEngineInstance = new FontEngine();
@@ -94,47 +105,53 @@ const fontEngineInstance = new FontEngine();
 ```
 
 ### Controlled Namespace
+
 ```typescript
 // All APIs under single namespace
-contextBridge.exposeInMainWorld('shiftFont', fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 // Renderer accesses via window.shiftFont
 ```
 
 ## API Surface
 
-| Category | Methods | Return Type |
-|----------|---------|-------------|
-| Loading | loadFont | void |
-| Info | getMetadata, getMetrics, getGlyphCount | object/number |
-| Session | startEditSession, endEditSession, hasEditSession, getEditingUnicode | void/boolean/number |
-| Snapshots | getSnapshot, getSnapshotData | string/object |
-| Contours | addEmptyContour, addContour, getActiveContourId, closeContour | string |
-| Points | addPoint, addPointToContour, movePoints, removePoints, insertPointBefore, toggleSmooth | string |
-| Edit | applyEditsUnified | string |
+| Category  | Methods                                                                                | Return Type         |
+| --------- | -------------------------------------------------------------------------------------- | ------------------- |
+| Loading   | loadFont                                                                               | void                |
+| Info      | getMetadata, getMetrics, getGlyphCount                                                 | object/number       |
+| Session   | startEditSession, endEditSession, hasEditSession, getEditingUnicode                    | void/boolean/number |
+| Snapshots | getSnapshot, getSnapshotData                                                           | string/object       |
+| Contours  | addEmptyContour, addContour, getActiveContourId, closeContour                          | string              |
+| Points    | addPoint, addPointToContour, movePoints, removePoints, insertPointBefore, toggleSmooth | string              |
+| Edit      | applyEditsUnified                                                                      | string              |
 
 ## Common Operations
 
 ### Basic usage in renderer
+
 ```typescript
 // window.shiftFont available after preload
-window.shiftFont.loadFont('/path/to/font.ufo');
+window.shiftFont.loadFont("/path/to/font.ufo");
 window.shiftFont.startEditSession(65);
 
-const result = JSON.parse(window.shiftFont.addPoint(100, 200, 'onCurve', false));
+const result = JSON.parse(
+  window.shiftFont.addPoint(100, 200, "onCurve", false),
+);
 ```
 
 ### Check availability
+
 ```typescript
-if (typeof window.shiftFont !== 'undefined') {
+if (typeof window.shiftFont !== "undefined") {
   // Safe to use
 }
 ```
 
 ### Type-safe access
+
 ```typescript
 // engine/native.ts
 export function getNative(): NativeFontEngine {
-  if (!window.shiftFont) throw new Error('Native not available');
+  if (!window.shiftFont) throw new Error("Native not available");
   return window.shiftFont;
 }
 ```
@@ -142,6 +159,7 @@ export function getNative(): NativeFontEngine {
 ## Build Configuration
 
 ### Vite Preload Config (vite.preload.config.ts)
+
 ```typescript
 {
   plugins: [externalizeDepsPlugin()],
@@ -150,6 +168,7 @@ export function getNative(): NativeFontEngine {
 ```
 
 ### Main Process Config
+
 ```typescript
 webPreferences: {
   preload: path.join(__dirname, 'preload.js'),

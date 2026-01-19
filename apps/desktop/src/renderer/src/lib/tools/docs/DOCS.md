@@ -43,7 +43,7 @@ All tools implement this contract:
 
 ```typescript
 interface Tool {
-  name: ToolName;  // 'select' | 'pen' | 'hand' | 'shape'
+  name: ToolName; // 'select' | 'pen' | 'hand' | 'shape'
   setIdle(): void;
   setReady(): void;
   onMouseDown(e: MouseEvent): void;
@@ -59,11 +59,13 @@ interface Tool {
 Generic state management with type-safe transitions:
 
 ```typescript
-const sm = createStateMachine<PenState>({ type: 'idle' });
+const sm = createStateMachine<PenState>({ type: "idle" });
 
-sm.transition({ type: 'ready' });
-sm.isIn('ready', 'idle');  // true
-sm.when('ready', (state) => { /* handle ready */ });
+sm.transition({ type: "ready" });
+sm.isIn("ready", "idle"); // true
+sm.when("ready", (state) => {
+  /* handle ready */
+});
 ```
 
 ### Tool Context
@@ -96,6 +98,7 @@ States: idle → ready ↔ selected
 ```
 
 Features:
+
 - Click to select point
 - Shift+click for multi-select
 - Drag to move selected points
@@ -111,6 +114,7 @@ States: idle → ready → anchored → dragging → ready
 ```
 
 Features:
+
 - Click to place anchor
 - Drag to create handles
 - Automatic handle mirroring
@@ -125,6 +129,7 @@ States: idle → ready → dragging
 ```
 
 Features:
+
 - Drag to pan canvas
 - Space bar activation
 
@@ -137,12 +142,14 @@ States: idle → ready → dragging
 ```
 
 Features:
+
 - Drag to create rectangle
 - Auto-closes contour
 
 ## API Reference
 
 ### StateMachine<TState>
+
 - `state: WritableSignal<TState>` - Current state signal
 - `current: TState` - Current state value
 - `currentType: string` - Current state type
@@ -152,10 +159,12 @@ Features:
 - `match(handlers): R` - Pattern match states
 
 ### Tool Registry
+
 - `createToolRegistry(editor)` - Initialize all tools
 - `tools.get(name): ToolRegistryItem` - Get tool
 
 ### Keyboard Shortcuts
+
 - `V` - Select tool
 - `P` - Pen tool
 - `H` - Hand tool
@@ -164,9 +173,10 @@ Features:
 ## Usage Examples
 
 ### Using a Tool
+
 ```typescript
 const pen = new Pen(editor);
-pen.setReady();  // Activate
+pen.setReady(); // Activate
 
 // Events handled automatically via editor:
 canvas.onMouseDown = (e) => pen.onMouseDown(e);
@@ -175,24 +185,26 @@ canvas.onMouseUp = (e) => pen.onMouseUp(e);
 ```
 
 ### State Machine Usage
+
 ```typescript
-const sm = createStateMachine<SelectState>({ type: 'idle' });
+const sm = createStateMachine<SelectState>({ type: "idle" });
 
-sm.transition({ type: 'ready', hoveredPointId: null });
+sm.transition({ type: "ready", hoveredPointId: null });
 
-sm.when('dragging', (state) => {
+sm.when("dragging", (state) => {
   const { drag } = state;
   movePoints(drag.pointIds, drag.dx, drag.dy);
 });
 
 sm.match({
-  idle: () => cursor = 'default',
-  ready: () => cursor = 'crosshair',
-  dragging: () => cursor = 'grabbing',
+  idle: () => (cursor = "default"),
+  ready: () => (cursor = "crosshair"),
+  dragging: () => (cursor = "grabbing"),
 });
 ```
 
 ### Tool Commands
+
 ```typescript
 // Pen commands
 const anchor = PenCommands.placeAnchor(pos);

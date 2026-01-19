@@ -1,7 +1,7 @@
-import type { PointId } from '@/types/ids';
-import { signal, type WritableSignal } from '../reactive/signal';
+import type { PointId } from "@/types/ids";
+import { signal, type WritableSignal } from "../reactive/signal";
 
-export type SelectionMode = 'preview' | 'committed';
+export type SelectionMode = "preview" | "committed";
 
 export interface SelectionManager {
   readonly selectedPoints: ReadonlySet<PointId>;
@@ -19,8 +19,10 @@ export interface SelectionManager {
 }
 
 export function createSelectionManager(): SelectionManager {
-  const selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal(new Set());
-  const mode: WritableSignal<SelectionMode> = signal('committed');
+  const selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal(
+    new Set(),
+  );
+  const mode: WritableSignal<SelectionMode> = signal("committed");
 
   return {
     get selectedPoints(): ReadonlySet<PointId> {

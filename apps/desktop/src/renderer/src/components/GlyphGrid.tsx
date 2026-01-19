@@ -7,7 +7,7 @@ export const GlyphGrid = () => {
 
   return (
     <section className="h-full w-full p-5">
-      <div className="font-ui text-ui p-2 font-bold text-white/80">
+      <div className="font-ui text-ui p-2 font-bold text-text-primary">
         <h1>Adobe Latin 1</h1>
       </div>
       <div className="grid grid-cols-6 gap-2 p-4 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13">
@@ -15,7 +15,7 @@ export const GlyphGrid = () => {
           return (
             <div key={glyph.char_name}>
               <button
-                className="border-secondary-200 h-ful flex aspect-square w-full items-center justify-center rounded-md bg-black/75 text-center text-4xl text-white/60 transition-colors duration-200 hover:bg-[#868686]"
+                className="flex aspect-square w-full items-center justify-center rounded-md border border-border bg-bg-surface text-center text-4xl text-text-secondary transition-colors duration-200 hover:bg-bg-surface-hover"
                 onClick={() => navigate(`/editor/${glyph.unicode}`)}
               >
                 {String.fromCharCode(parseInt(glyph.unicode, 16))}

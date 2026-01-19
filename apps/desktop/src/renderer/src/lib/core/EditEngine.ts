@@ -24,7 +24,11 @@ export class EditEngine {
     this.#ctx = ctx;
   }
 
-  applyEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
+  applyEdits(
+    selectedPoints: ReadonlySet<PointId>,
+    dx: number,
+    dy: number,
+  ): PointId[] {
     if (!this.#ctx.hasSession()) {
       return [];
     }

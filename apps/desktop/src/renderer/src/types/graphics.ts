@@ -54,7 +54,7 @@ export interface IRenderer {
     cpx2: number,
     cpy2: number,
     x: number,
-    y: number
+    y: number,
   ): void;
   arcTo(
     x: number,
@@ -62,7 +62,7 @@ export interface IRenderer {
     radius: number,
     startAngle: number,
     endAngle: number,
-    isCounterClockwise?: boolean
+    isCounterClockwise?: boolean,
   ): void;
 
   closePath(): void;
@@ -87,7 +87,7 @@ export interface IRenderer {
     c: number,
     d: number,
     e: number,
-    f: number
+    f: number,
   ): void;
 }
 

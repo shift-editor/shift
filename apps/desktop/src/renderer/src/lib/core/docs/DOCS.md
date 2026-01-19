@@ -28,8 +28,9 @@ Unified edit operations with rule matching:
 const engine = new EditEngine(ctx);
 
 const affected = engine.applyEdits(
-  selectedPoints,  // Set<PointId>
-  dx, dy           // Movement delta
+  selectedPoints, // Set<PointId>
+  dx,
+  dy, // Movement delta
 );
 // Returns all affected point IDs including rule-moved handles
 ```
@@ -37,11 +38,13 @@ const affected = engine.applyEdits(
 ## API Reference
 
 ### EditEngine
+
 - `applyEdits(selectedPoints, dx, dy): PointId[]` - Apply edits with rules
 
 ## Usage Examples
 
 ### EditEngine
+
 ```typescript
 const ctx = {
   native: window.shiftFont,

@@ -128,10 +128,11 @@ export class MockNativeFontEngine implements NativeFontEngine {
   }
 
   closeContour(): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     const activeContour = this.#snapshot.contours.find(
-      (c) => c.id === this.#snapshot!.activeContourId
+      (c) => c.id === this.#snapshot!.activeContourId,
     );
     if (activeContour) {
       activeContour.closed = true;
@@ -148,9 +149,10 @@ export class MockNativeFontEngine implements NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     // Auto-create contour if needed
     if (!this.#snapshot.activeContourId) {
@@ -158,7 +160,7 @@ export class MockNativeFontEngine implements NativeFontEngine {
     }
 
     const activeContour = this.#snapshot.contours.find(
-      (c) => c.id === this.#snapshot!.activeContourId
+      (c) => c.id === this.#snapshot!.activeContourId,
     );
     if (!activeContour) {
       return this.#makeResult(false, [], "No active contour");
@@ -181,9 +183,10 @@ export class MockNativeFontEngine implements NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     const contour = this.#snapshot.contours.find((c) => c.id === contourId);
     if (!contour) {
@@ -203,7 +206,8 @@ export class MockNativeFontEngine implements NativeFontEngine {
   }
 
   movePoints(pointIds: string[], dx: number, dy: number): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     const moved: string[] = [];
 
@@ -221,7 +225,8 @@ export class MockNativeFontEngine implements NativeFontEngine {
   }
 
   removePoints(pointIds: string[]): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     for (const contour of this.#snapshot.contours) {
       contour.points = contour.points.filter((p) => !pointIds.includes(p.id));
@@ -235,9 +240,10 @@ export class MockNativeFontEngine implements NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     // Find the contour and index of the reference point
     for (const contour of this.#snapshot.contours) {
@@ -261,7 +267,8 @@ export class MockNativeFontEngine implements NativeFontEngine {
   }
 
   toggleSmooth(pointId: string): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
 
     for (const contour of this.#snapshot.contours) {
       const point = contour.points.find((p) => p.id === pointId);
@@ -316,7 +323,7 @@ export class MockNativeFontEngine implements NativeFontEngine {
   #makeResult(
     success: boolean,
     affectedPointIds: string[],
-    error?: string
+    error?: string,
   ): string {
     const result: CommandResult = {
       success,

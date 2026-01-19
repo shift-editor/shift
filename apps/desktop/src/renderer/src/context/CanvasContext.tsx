@@ -1,8 +1,8 @@
-import { createContext, useEffect, useRef } from 'react';
+import { createContext, useEffect, useRef } from "react";
 
-import { Canvas2DContext } from '@/lib/graphics/backends/Canvas2DRenderer';
-import AppState from '@/store/store';
-import { CanvasRef } from '@/types/graphics';
+import { Canvas2DContext } from "@/lib/graphics/backends/Canvas2DRenderer";
+import AppState from "@/store/store";
+import { CanvasRef } from "@/types/graphics";
 
 interface CanvasContext {
   interactiveCanvasRef: CanvasRef;
@@ -14,7 +14,11 @@ export const CanvasContext = createContext<CanvasContext>({
   staticCanvasRef: { current: null },
 });
 
-export const CanvasContextProvider = ({ children }: { children: React.ReactNode }) => {
+export const CanvasContextProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -43,7 +47,9 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       const resizeCanvas = (entries: ResizeObserverEntry[]) => {
         const [interactiveCanvas, staticCanvas] = entries;
 
-        interactiveContext.resizeCanvas(interactiveCanvas.target as HTMLCanvasElement);
+        interactiveContext.resizeCanvas(
+          interactiveCanvas.target as HTMLCanvasElement,
+        );
         staticContext.resizeCanvas(staticCanvas.target as HTMLCanvasElement);
 
         editor.requestImmediateRedraw();

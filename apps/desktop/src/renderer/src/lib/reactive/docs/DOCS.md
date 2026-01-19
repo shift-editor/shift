@@ -28,34 +28,41 @@ signal.value
 ## When to Use Signals
 
 **Use signals for:**
+
 - Continuous state that changes over time (selection, hover, zoom)
 - State accessed by multiple consumers
 - Derived/computed values
 - UI state that triggers redraws
 
 **Use signals + effect() for:**
+
 - Triggering side effects when state changes
 - Auto-subscribing to dependencies
 - Cleanup on state change (return cleanup function)
 
 **Don't use signals for:**
+
 - One-shot operations (use functions)
-- Event payloads with specific data (if you need to know *what* changed, pass it directly)
+- Event payloads with specific data (if you need to know _what_ changed, pass it directly)
 - State that never changes after initialization
 - React component state that doesn't need editor access (use Zustand)
 
 **Signals vs Zustand:**
+
 - **Signals**: Editor internals (canvas, rendering, tools, commands)
 - **Zustand**: React UI state (filename, active tool, panels, preferences)
 
 **Pattern: Manager + Signals**
+
 ```typescript
 function createSelectionManager() {
   const selectedPoints = signal<ReadonlySet<PointId>>(new Set());
 
   return {
     // Getter tracks dependency when accessed inside effect()
-    get selectedPoints() { return selectedPoints.value; },
+    get selectedPoints() {
+      return selectedPoints.value;
+    },
 
     // Mutator uses peek() to read without tracking, .value to write
     addToSelection(id) {
@@ -87,7 +94,7 @@ console.log(count.value);
 
 // Write (notifies subscribers)
 count.set(1);
-count.update(n => n + 1);
+count.update((n) => n + 1);
 
 // Read without tracking
 count.peek();
@@ -114,10 +121,10 @@ Side effects that re-run when dependencies change:
 
 ```typescript
 const fx = effect(() => {
-  console.log('Count is:', count.value);
+  console.log("Count is:", count.value);
 
   // Optional cleanup
-  return () => console.log('Cleaning up');
+  return () => console.log("Cleaning up");
 });
 
 // Stop the effect
@@ -139,70 +146,78 @@ batch(() => {
 ## API Reference
 
 ### signal<T>(initial: T): WritableSignal<T>
+
 - `.value` - Get/set the value (tracks on read)
 - `.set(value)` - Set new value
 - `.update(fn)` - Functional update
 - `.peek()` - Read without tracking
 
 ### computed<T>(fn: () => T): ComputedSignal<T>
+
 - `.value` - Get derived value (lazy, cached)
 - `.invalidate()` - Force recomputation on next access
 
 ### effect(fn: () => void | (() => void)): Effect
+
 - Returns Effect with `.dispose()` method
 - Function can return cleanup callback
 
 ### batch<T>(fn: () => T): T
+
 - Defers effect execution until batch completes
 - Supports nesting
 
 ### untracked<T>(fn: () => T): T
+
 - Execute without tracking dependencies
 
 ### isTracking(): boolean
+
 - Check if currently in reactive context
 
 ## Usage Examples
 
 ### Basic Reactivity
+
 ```typescript
-const name = signal('Alice');
+const name = signal("Alice");
 const greeting = computed(() => `Hello, ${name.value}!`);
 
 effect(() => {
   console.log(greeting.value);
 });
 
-name.set('Bob'); // Logs: "Hello, Bob!"
+name.set("Bob"); // Logs: "Hello, Bob!"
 ```
 
 ### Dynamic Dependencies
+
 ```typescript
 const condition = signal(true);
 const a = signal(1);
 const b = signal(2);
 
-const value = computed(() =>
-  condition.value ? a.value : b.value
-);
+const value = computed(() => (condition.value ? a.value : b.value));
 
 // Initially depends only on `condition` and `a`
 // When condition becomes false, depends on `condition` and `b`
 ```
 
 ### Cleanup Pattern
+
 ```typescript
 effect(() => {
   const handler = () => console.log(signal.value);
-  window.addEventListener('resize', handler);
+  window.addEventListener("resize", handler);
 
   return () => {
-    window.removeEventListener('resize', handler);
+    window.removeEventListener("resize", handler);
   };
 });
 ```
 
 ### Batch Updates
+
 ```typescript
 const x = signal(0);
 const y = signal(0);

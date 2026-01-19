@@ -24,17 +24,17 @@
  */
 
 // Types
-export type { Point2D, BBox } from './types';
+export type { Point2D, BBox } from "./types";
 
 // Core vector operations
-export { Vec2 } from './Vec2';
+export { Vec2 } from "./Vec2";
 
 // Curve primitives (pure geometry)
-export { Curve } from './Curve';
+export { Curve } from "./Curve";
 export type {
   LineCurve,
   QuadraticCurve,
   CubicCurve,
   CurveType,
   ClosestPointResult,
-} from './Curve';
+} from "./Curve";

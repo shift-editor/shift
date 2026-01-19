@@ -1,6 +1,7 @@
 # Commands - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Command pattern with undo/redo for editing operations
 - **Language**: TypeScript
 - **Key Files**: `Command.ts`, `CommandHistory.ts`, `PointCommands.ts`, `BezierCommands.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: lib/editor, lib/tools
 
 ## File Structure
+
 ```
 src/renderer/src/lib/commands/
 ├── index.ts              # Public exports
@@ -23,6 +25,7 @@ src/renderer/src/lib/commands/
 ## Core Abstractions
 
 ### Command Interface (Command.ts:34-55)
+
 ```typescript
 interface Command<TResult = void> {
   readonly name: string;
@@ -38,6 +41,7 @@ interface CommandContext {
 ```
 
 ### BaseCommand (Command.ts:60-73)
+
 ```typescript
 abstract class BaseCommand<TResult = void> implements Command<TResult> {
   abstract readonly name: string;
@@ -45,12 +49,13 @@ abstract class BaseCommand<TResult = void> implements Command<TResult> {
   abstract undo(ctx: CommandContext): void;
 
   redo(ctx: CommandContext): TResult {
-    return this.execute(ctx);  // Default: re-execute
+    return this.execute(ctx); // Default: re-execute
   }
 }
 ```
 
 ### CompositeCommand (Command.ts:79-106)
+
 ```typescript
 class CompositeCommand implements Command<void> {
   #commands: Command<unknown>[];
@@ -69,6 +74,7 @@ class CompositeCommand implements Command<void> {
 ```
 
 ### CommandHistory (CommandHistory.ts)
+
 ```typescript
 class CommandHistory {
   #undoStack: Command<unknown>[] = [];
@@ -83,7 +89,7 @@ class CommandHistory {
   execute<T>(cmd: Command<T>): T {
     const result = cmd.execute(this.#createContext());
     this.#undoStack.push(cmd);
-    this.#redoStack = [];  // Clear redo on new action
+    this.#redoStack = []; // Clear redo on new action
     return result;
   }
 }
@@ -92,6 +98,7 @@ class CommandHistory {
 ## Key Patterns
 
 ### State Storage for Undo
+
 ```typescript
 class MovePointToCommand extends BaseCommand {
   #originalX?: number;
@@ -107,12 +114,17 @@ class MovePointToCommand extends BaseCommand {
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.movePointTo(this.#pointId, this.#originalX!, this.#originalY!);
+    ctx.fontEngine.editing.movePointTo(
+      this.#pointId,
+      this.#originalX!,
+      this.#originalY!,
+    );
   }
 }
 ```
 
 ### Inverse Operation
+
 ```typescript
 class MovePointsCommand extends BaseCommand {
   undo(ctx: CommandContext): void {
@@ -123,11 +135,13 @@ class MovePointsCommand extends BaseCommand {
 ```
 
 ### Data Snapshot for Restore
+
 ```typescript
 class RemovePointsCommand extends BaseCommand {
   #removedPoints: Array<{
     contourId: string;
-    x: number; y: number;
+    x: number;
+    y: number;
     pointType: PointTypeString;
     smooth: boolean;
   }> = [];
@@ -145,23 +159,24 @@ class RemovePointsCommand extends BaseCommand {
 
 ## API Surface
 
-| Class | Method | Purpose |
-|-------|--------|---------|
-| CommandHistory | execute(cmd) | Execute and push to undo |
-| CommandHistory | undo() | Undo last command |
-| CommandHistory | redo() | Redo last undone |
-| CommandHistory | clear() | Clear both stacks |
-| AddPointCommand | execute | Add point, store ID |
-| MovePointsCommand | execute | Move by delta |
-| MovePointToCommand | execute | Move to absolute pos |
-| RemovePointsCommand | execute | Remove, store data |
-| AddBezierAnchorCommand | execute | Add anchor + handles |
-| CloseContourCommand | execute | Close contour |
-| NudgePointsCommand | execute | Small movements |
+| Class                  | Method       | Purpose                  |
+| ---------------------- | ------------ | ------------------------ |
+| CommandHistory         | execute(cmd) | Execute and push to undo |
+| CommandHistory         | undo()       | Undo last command        |
+| CommandHistory         | redo()       | Redo last undone         |
+| CommandHistory         | clear()      | Clear both stacks        |
+| AddPointCommand        | execute      | Add point, store ID      |
+| MovePointsCommand      | execute      | Move by delta            |
+| MovePointToCommand     | execute      | Move to absolute pos     |
+| RemovePointsCommand    | execute      | Remove, store data       |
+| AddBezierAnchorCommand | execute      | Add anchor + handles     |
+| CloseContourCommand    | execute      | Close contour            |
+| NudgePointsCommand     | execute      | Small movements          |
 
 ## Common Operations
 
 ### Execute with history
+
 ```typescript
 const history = new CommandHistory(fontEngine, () => snapshot);
 const cmd = new MovePointsCommand([pointId], 50, 0);
@@ -169,25 +184,28 @@ history.execute(cmd);
 ```
 
 ### Undo/redo
+
 ```typescript
 history.undo();
 history.redo();
 ```
 
 ### Check availability
+
 ```typescript
 if (history.canUndo.value) {
-  console.log('Can undo:', history.getUndoLabel());
+  console.log("Can undo:", history.getUndoLabel());
 }
 ```
 
 ### Composite command
+
 ```typescript
-const composite = new CompositeCommand('Add Rectangle', [
-  new AddPointCommand(0, 0, 'onCurve', false),
-  new AddPointCommand(100, 0, 'onCurve', false),
-  new AddPointCommand(100, 100, 'onCurve', false),
-  new AddPointCommand(0, 100, 'onCurve', false),
+const composite = new CompositeCommand("Add Rectangle", [
+  new AddPointCommand(0, 0, "onCurve", false),
+  new AddPointCommand(100, 0, "onCurve", false),
+  new AddPointCommand(100, 100, "onCurve", false),
+  new AddPointCommand(0, 100, "onCurve", false),
 ]);
 history.execute(composite);
 ```

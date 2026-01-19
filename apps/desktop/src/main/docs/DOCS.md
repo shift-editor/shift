@@ -40,10 +40,10 @@ BrowserWindow configured for the editor:
 mainWindow = new BrowserWindow({
   width: 800,
   height: 600,
-  title: 'Shift',
+  title: "Shift",
   webPreferences: {
-    preload: path.join(__dirname, 'preload.js'),
-    sandbox: false,  // Required for shift-node
+    preload: path.join(__dirname, "preload.js"),
+    sandbox: false, // Required for shift-node
   },
 });
 mainWindow.maximize();
@@ -57,7 +57,7 @@ Development vs production loading:
 if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
   mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
 } else {
-  mainWindow.loadFile('../renderer/index.html');
+  mainWindow.loadFile("../renderer/index.html");
 }
 ```
 
@@ -67,12 +67,12 @@ Registered after window loads:
 
 ```typescript
 // Full reload (includes preload and native modules)
-globalShortcut.register('CommandOrControl+Shift+R', () => {
+globalShortcut.register("CommandOrControl+Shift+R", () => {
   mainWindow?.reload();
 });
 
 // Force quit
-globalShortcut.register('CommandOrControl+Q', () => {
+globalShortcut.register("CommandOrControl+Q", () => {
   app.quit();
 });
 ```
@@ -80,16 +80,19 @@ globalShortcut.register('CommandOrControl+Q', () => {
 ## API Reference
 
 ### App Events
+
 - `ready` - Create main window
 - `window-all-closed` - Quit on non-macOS
 - `activate` - Recreate window on macOS
 - `will-quit` - Cleanup shortcuts
 
 ### Global Shortcuts
+
 - `Cmd/Ctrl+Shift+R` - Full reload
 - `Cmd/Ctrl+Q` - Force quit
 
 ### Window Methods
+
 - `mainWindow.maximize()` - Maximize on creation
 - `mainWindow.reload()` - Reload window
 - `mainWindow.webContents.openDevTools()` - Open DevTools
@@ -97,43 +100,46 @@ globalShortcut.register('CommandOrControl+Q', () => {
 ## Usage Examples
 
 ### App Lifecycle
+
 ```typescript
 app.whenReady().then(() => {
   createWindow();
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 ```
 
 ### Shortcut Registration
+
 ```typescript
-mainWindow.webContents.on('did-finish-load', () => {
+mainWindow.webContents.on("did-finish-load", () => {
   globalShortcut.register(
-    process.platform === 'darwin' ? 'Command+Shift+R' : 'Control+Shift+R',
-    () => mainWindow?.reload()
+    process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R",
+    () => mainWindow?.reload(),
   );
 });
 
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   globalShortcut.unregisterAll();
 });
 ```
 
 ### macOS Dock Icon
+
 ```typescript
 app.whenReady().then(() => {
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, 'icon.png'));
+  if (process.platform === "darwin") {
+    app.dock.setIcon(path.join(__dirname, "icon.png"));
   }
 });
 ```

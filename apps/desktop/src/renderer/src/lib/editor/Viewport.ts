@@ -1,7 +1,12 @@
-import { clamp } from '@/lib/utils/utils';
-import { Point2D, Rect2D } from '@/types/math';
-import { Mat } from '@/lib/primitives/Mat';
-import { signal, computed, type WritableSignal, type Signal } from '@/lib/reactive/signal';
+import { clamp } from "@/lib/utils/utils";
+import { Point2D, Rect2D } from "@/types/math";
+import { Mat } from "@/lib/primitives/Mat";
+import {
+  signal,
+  computed,
+  type WritableSignal,
+  type Signal,
+} from "@/lib/reactive/signal";
 
 export class Viewport {
   // Reactive viewport state (signals auto-invalidate derived matrices)
@@ -35,7 +40,8 @@ export class Viewport {
     this.#descender = signal(-200);
     this.#padding = signal(300);
 
-    this.#dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    this.#dpr =
+      typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
     this.#mouseX = 0;
     this.#mouseY = 0;
@@ -58,7 +64,10 @@ export class Viewport {
     // Automatically recomputes when zoom, pan, upm, descender, or padding change
     this.#upmToScreenMatrix = computed(() => {
       const scale = this.upmScale;
-      const baselineY = this.logicalHeight - this.#padding.value - this.#descender.value * scale;
+      const baselineY =
+        this.logicalHeight -
+        this.#padding.value -
+        this.#descender.value * scale;
       const center = this.getCentrePoint();
       const zoom = this.#zoom.value;
 
@@ -263,7 +272,11 @@ export class Viewport {
    * 3. Get UPM coordinate at cursor AFTER zoom (same screen position, different UPM due to new matrices)
    * 4. Adjust pan by the delta to keep cursor over same UPM coordinate
    */
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+  public zoomToPoint(
+    screenX: number,
+    screenY: number,
+    zoomDelta: number,
+  ): void {
     const before = this.projectScreenToUpm(screenX, screenY);
 
     const newZoom = clamp(this.#zoom.value * zoomDelta, 0.1, 6);

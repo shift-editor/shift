@@ -11,5 +11,5 @@
  */
 
 // Command pattern
-export type { Command, CommandContext } from './commands';
-export { BaseCommand, CompositeCommand } from './commands';
+export type { Command, CommandContext } from "./commands";
+export { BaseCommand, CompositeCommand } from "./commands";

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
+import {
+  AddPointCommand,
+  MovePointsCommand,
+  RemovePointsCommand,
+} from "./PointCommands";
 import { asPointId } from "@/types/ids";
 import { createMockCommandContext } from "@/testing";
 
@@ -15,7 +19,7 @@ describe("AddPointCommand", () => {
       100,
       200,
       "onCurve",
-      false
+      false,
     );
   });
 
@@ -29,7 +33,7 @@ describe("AddPointCommand", () => {
       50,
       75,
       "onCurve",
-      true
+      true,
     );
   });
 
@@ -43,7 +47,7 @@ describe("AddPointCommand", () => {
       30,
       40,
       "offCurve",
-      false
+      false,
     );
   });
 
@@ -74,7 +78,7 @@ describe("MovePointsCommand", () => {
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(
       pointIds,
       10,
-      20
+      20,
     );
   });
 
@@ -89,7 +93,7 @@ describe("MovePointsCommand", () => {
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(
       pointIds,
       -15,
-      5
+      5,
     );
   });
 
@@ -117,7 +121,7 @@ describe("MovePointsCommand", () => {
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenLastCalledWith(
       pointIds,
       5,
-      5
+      5,
     );
   });
 
@@ -153,8 +157,20 @@ describe("RemovePointsCommand", () => {
         {
           id: "contour-1",
           points: [
-            { id: "p1", x: 100, y: 200, pointType: "onCurve" as const, smooth: false },
-            { id: "p2", x: 150, y: 250, pointType: "offCurve" as const, smooth: false },
+            {
+              id: "p1",
+              x: 100,
+              y: 200,
+              pointType: "onCurve" as const,
+              smooth: false,
+            },
+            {
+              id: "p2",
+              x: 150,
+              y: 250,
+              pointType: "offCurve" as const,
+              smooth: false,
+            },
           ],
           closed: false,
         },
@@ -172,7 +188,7 @@ describe("RemovePointsCommand", () => {
       100,
       200,
       "onCurve",
-      false
+      false,
     );
   });
 

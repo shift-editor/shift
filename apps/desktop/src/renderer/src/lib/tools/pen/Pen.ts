@@ -1,30 +1,34 @@
-import { Editor } from '@/lib/editor/Editor';
-import { Vec2 } from '@/lib/geo';
-import { effect, type Effect } from '@/lib/reactive/signal';
-import { createStateMachine, type StateMachine } from '@/lib/tools/core';
-import { IRenderer } from '@/types/graphics';
-import { Tool, ToolName } from '@/types/tool';
-import type { ContourSnapshot, PointSnapshot } from '@/types/generated';
+import { Editor } from "@/lib/editor/Editor";
+import { Vec2 } from "@/lib/geo";
+import { effect, type Effect } from "@/lib/reactive/signal";
+import { createStateMachine, type StateMachine } from "@/lib/tools/core";
+import { IRenderer } from "@/types/graphics";
+import { Tool, ToolName } from "@/types/tool";
+import type { ContourSnapshot, PointSnapshot } from "@/types/generated";
 
-import { DEFAULT_STYLES } from '../../styles/style';
-import { PenCommands } from './commands';
+import { DEFAULT_STYLES } from "../../styles/style";
+import { PenCommands } from "./commands";
 import {
   type ContourContext,
   type PenState,
   CLOSE_HIT_RADIUS,
   DRAG_THRESHOLD,
-} from './states';
+} from "./states";
 
 function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
   return contour.points.length > 0 ? contour.points[0] : null;
 }
 
-function isNearPoint(pos: { x: number; y: number }, point: PointSnapshot, radius: number): boolean {
+function isNearPoint(
+  pos: { x: number; y: number },
+  point: PointSnapshot,
+  radius: number,
+): boolean {
   return Vec2.dist(pos, point) < radius;
 }
 
 export class Pen implements Tool {
-  public readonly name: ToolName = 'pen';
+  public readonly name: ToolName = "pen";
 
   #editor: Editor;
   #sm: StateMachine<PenState>;
@@ -33,22 +37,23 @@ export class Pen implements Tool {
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#sm = createStateMachine<PenState>({ type: 'idle' });
+    this.#sm = createStateMachine<PenState>({ type: "idle" });
     this.#commands = new PenCommands(editor);
 
     this.#renderEffect = effect(() => {
-      if (this.#sm.isIn('dragging', 'ready')) {
+      if (this.#sm.isIn("dragging", "ready")) {
         editor.requestRedraw();
       }
     });
   }
 
   setIdle(): void {
-    this.#sm.transition({ type: 'idle' });
+    this.#sm.transition({ type: "idle" });
   }
 
   setReady(): void {
-    this.#sm.transition({ type: 'ready' });
+    this.#sm.transition({ type: "ready" });
+    this.#editor.setCursor({ type: "pen" });
   }
 
   dispose(): void {
@@ -61,27 +66,27 @@ export class Pen implements Tool {
 
   onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (e.button !== 0) return;
-    if (!this.#sm.isIn('ready')) return;
+    if (!this.#sm.isIn("ready")) return;
 
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
     const ctx = this.#editor.createToolContext();
 
     if (this.shouldCloseContour(x, y)) {
-      ctx.commands.beginBatch('Close Contour');
+      ctx.commands.beginBatch("Close Contour");
       this.#commands.closeContour();
       ctx.commands.endBatch();
       return;
     }
 
-    ctx.commands.beginBatch('Add Point');
+    ctx.commands.beginBatch("Add Point");
 
     const context = this.buildContourContext();
 
     const result = this.#commands.placeAnchor({ x, y });
 
     this.#sm.transition({
-      type: 'anchored',
+      type: "anchored",
       anchor: {
         position: { x, y },
         pointId: result.pointId,
@@ -92,11 +97,11 @@ export class Pen implements Tool {
 
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
     const ctx = this.#editor.createToolContext();
-    if (this.#sm.isIn('anchored', 'dragging')) {
+    if (this.#sm.isIn("anchored", "dragging")) {
       if (ctx.commands.isBatching) {
         ctx.commands.endBatch();
       }
-      this.#sm.transition({ type: 'ready' });
+      this.#sm.transition({ type: "ready" });
     }
   }
 
@@ -104,7 +109,7 @@ export class Pen implements Tool {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
 
-    this.#sm.when('anchored', (state) => {
+    this.#sm.when("anchored", (state) => {
       const { anchor } = state;
       const dist = Vec2.dist(anchor.position, mousePos);
 
@@ -112,7 +117,7 @@ export class Pen implements Tool {
         const result = this.#commands.createHandles(anchor, mousePos);
 
         this.#sm.transition({
-          type: 'dragging',
+          type: "dragging",
           anchor,
           handles: result.handles,
           mousePos,
@@ -120,7 +125,7 @@ export class Pen implements Tool {
       }
     });
 
-    this.#sm.when('dragging', (state) => {
+    this.#sm.when("dragging", (state) => {
       const { anchor, handles } = state;
 
       this.#commands.updateHandles(anchor, handles, mousePos);
@@ -137,17 +142,19 @@ export class Pen implements Tool {
     const snapshot = ctx.snapshot;
     if (!snapshot) {
       return {
-        previousPointType: 'none',
+        previousPointType: "none",
         previousOnCurvePosition: null,
         isFirstPoint: true,
       };
     }
 
     const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
     if (!activeContour || activeContour.points.length === 0) {
       return {
-        previousPointType: 'none',
+        previousPointType: "none",
         previousOnCurvePosition: null,
         isFirstPoint: true,
       };
@@ -158,14 +165,15 @@ export class Pen implements Tool {
 
     let previousOnCurvePosition: { x: number; y: number } | null = null;
     for (let i = points.length - 1; i >= 0; i--) {
-      if (points[i].pointType === 'onCurve') {
+      if (points[i].pointType === "onCurve") {
         previousOnCurvePosition = { x: points[i].x, y: points[i].y };
         break;
       }
     }
 
     return {
-      previousPointType: lastPoint.pointType === 'offCurve' ? 'offCurve' : 'onCurve',
+      previousPointType:
+        lastPoint.pointType === "offCurve" ? "offCurve" : "onCurve",
       previousOnCurvePosition,
       isFirstPoint: false,
     };
@@ -175,18 +183,26 @@ export class Pen implements Tool {
     const ctx = this.#editor.createToolContext();
     const snapshot = ctx.snapshot;
     const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot?.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+    if (
+      !activeContour ||
+      activeContour.closed ||
+      activeContour.points.length < 2
+    ) {
       return false;
     }
 
     const firstPoint = getFirstPoint(activeContour);
-    return firstPoint !== null && isNearPoint({ x, y }, firstPoint, CLOSE_HIT_RADIUS);
+    return (
+      firstPoint !== null && isNearPoint({ x, y }, firstPoint, CLOSE_HIT_RADIUS)
+    );
   }
 
   drawInteractive(ctx: IRenderer): void {
-    this.#sm.when('dragging', (state) => {
+    this.#sm.when("dragging", (state) => {
       const { anchor, mousePos } = state;
 
       ctx.setStyle({
@@ -216,6 +232,6 @@ export class Pen implements Tool {
   }
 
   private drawHandle(ctx: IRenderer, x: number, y: number): void {
-    this.#editor.paintHandle(ctx, x, y, 'control', 'idle');
+    this.#editor.paintHandle(ctx, x, y, "control", "idle");
   }
 }

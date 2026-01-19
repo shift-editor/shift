@@ -1,8 +1,8 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-const { contextBridge, ipcRenderer } = require('electron');
-const { FontEngine } = require('shift-node');
+const { contextBridge, ipcRenderer } = require("electron");
+const { FontEngine } = require("shift-node");
 
 // Create a single FontEngine instance
 const fontEngineInstance = new FontEngine();
@@ -117,8 +117,8 @@ const fontEngineAPI = {
   addPoint: (
     x: number,
     y: number,
-    pointType: 'onCurve' | 'offCurve',
-    smooth: boolean
+    pointType: "onCurve" | "offCurve",
+    smooth: boolean,
   ): string => {
     return fontEngineInstance.addPoint(x, y, pointType, smooth);
   },
@@ -131,21 +131,23 @@ const fontEngineAPI = {
     contourId: string,
     x: number,
     y: number,
-    pointType: 'onCurve' | 'offCurve',
-    smooth: boolean
+    pointType: "onCurve" | "offCurve",
+    smooth: boolean,
   ): string => {
-    return fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth);
+    return fontEngineInstance.addPointToContour(
+      contourId,
+      x,
+      y,
+      pointType,
+      smooth,
+    );
   },
 
   /**
    * Move multiple points by a delta.
    * Returns CommandResult JSON with affected point IDs.
    */
-  movePoints: (
-    pointIds: string[],
-    dx: number,
-    dy: number
-  ): string => {
+  movePoints: (pointIds: string[], dx: number, dy: number): string => {
     return fontEngineInstance.movePoints(pointIds, dx, dy);
   },
 
@@ -165,10 +167,16 @@ const fontEngineAPI = {
     beforePointId: string,
     x: number,
     y: number,
-    pointType: 'onCurve' | 'offCurve',
-    smooth: boolean
+    pointType: "onCurve" | "offCurve",
+    smooth: boolean,
   ): string => {
-    return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
+    return fontEngineInstance.insertPointBefore(
+      beforePointId,
+      x,
+      y,
+      pointType,
+      smooth,
+    );
   },
 
   /**
@@ -194,29 +202,39 @@ const fontEngineAPI = {
 };
 
 // Expose to renderer via contextBridge
-contextBridge.exposeInMainWorld('shiftFont', fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
+
+type ThemeName = "light" | "dark" | "system";
 
 const electronAPI = {
   onMenuOpenFont: (callback: (path: string) => void) => {
     const handler = (_event: any, path: string) => callback(path);
-    ipcRenderer.on('menu:open-font', handler);
-    return () => ipcRenderer.removeListener('menu:open-font', handler);
+    ipcRenderer.on("menu:open-font", handler);
+    return () => ipcRenderer.removeListener("menu:open-font", handler);
   },
   onMenuUndo: (callback: () => void) => {
-    ipcRenderer.on('menu:undo', callback);
-    return () => ipcRenderer.removeListener('menu:undo', callback);
+    ipcRenderer.on("menu:undo", callback);
+    return () => ipcRenderer.removeListener("menu:undo", callback);
   },
   onMenuRedo: (callback: () => void) => {
-    ipcRenderer.on('menu:redo', callback);
-    return () => ipcRenderer.removeListener('menu:redo', callback);
+    ipcRenderer.on("menu:redo", callback);
+    return () => ipcRenderer.removeListener("menu:redo", callback);
   },
   onMenuDelete: (callback: () => void) => {
-    ipcRenderer.on('menu:delete', callback);
-    return () => ipcRenderer.removeListener('menu:delete', callback);
+    ipcRenderer.on("menu:delete", callback);
+    return () => ipcRenderer.removeListener("menu:delete", callback);
   },
+  onSetTheme: (callback: (theme: ThemeName) => void) => {
+    const handler = (_event: any, theme: ThemeName) => callback(theme);
+    ipcRenderer.on("theme:set", handler);
+    return () => ipcRenderer.removeListener("theme:set", handler);
+  },
+  getTheme: (): Promise<ThemeName> => ipcRenderer.invoke("theme:get"),
+  setTheme: (theme: ThemeName): Promise<void> =>
+    ipcRenderer.invoke("theme:set", theme),
 };
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+contextBridge.exposeInMainWorld("electronAPI", electronAPI);
 
 // Export type for TypeScript
 export type FontEngineAPI = typeof fontEngineAPI;

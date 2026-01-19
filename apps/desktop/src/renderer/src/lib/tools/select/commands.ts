@@ -1,13 +1,13 @@
-import type { Editor } from '@/lib/editor/Editor';
-import { UPMRect } from '@/lib/math/rect';
-import type { Point2D } from '@/types/math';
-import type { PointId } from '@/types/ids';
-import { asPointId } from '@/types/ids';
-import type { PointSnapshot, GlyphSnapshot } from '@/types/generated';
-import { NUDGES_VALUES, type NudgeMagnitude } from '@/types/nudge';
-import { Vec2, Segment } from '@/lib/geo';
-import { parseSegments } from '@/engine/segments';
-import type { SegmentHitResult } from '@/lib/geo';
+import type { Editor } from "@/lib/editor/Editor";
+import { UPMRect } from "@/lib/math/rect";
+import type { Point2D } from "@/types/math";
+import type { PointId } from "@/types/ids";
+import { asPointId } from "@/types/ids";
+import type { PointSnapshot, GlyphSnapshot } from "@/types/generated";
+import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
+import { Vec2, Segment } from "@/lib/geo";
+import { parseSegments } from "@/engine/segments";
+import type { SegmentHitResult } from "@/lib/geo";
 
 function findPointAtPosition(
   points: PointSnapshot[],
@@ -22,11 +22,16 @@ function findPointAtPosition(
   return null;
 }
 
-function findPointsInRect(points: PointSnapshot[], rect: UPMRect): PointSnapshot[] {
+function findPointsInRect(
+  points: PointSnapshot[],
+  rect: UPMRect,
+): PointSnapshot[] {
   return points.filter((p) => rect.hit(p.x, p.y));
 }
 
-function getAllPoints(snapshot: { contours: Array<{ points: PointSnapshot[] }> } | null): PointSnapshot[] {
+function getAllPoints(
+  snapshot: { contours: Array<{ points: PointSnapshot[] }> } | null,
+): PointSnapshot[] {
   if (!snapshot) return [];
   const result: PointSnapshot[] = [];
   for (const contour of snapshot.contours) {
@@ -35,7 +40,11 @@ function getAllPoints(snapshot: { contours: Array<{ points: PointSnapshot[] }> }
   return result;
 }
 
-function hitTestSegments(snapshot: GlyphSnapshot | null, pos: Point2D, hitRadius: number): SegmentHitResult | null {
+function hitTestSegments(
+  snapshot: GlyphSnapshot | null,
+  pos: Point2D,
+  hitRadius: number,
+): SegmentHitResult | null {
   if (!snapshot) return null;
 
   for (const contour of snapshot.contours) {
@@ -173,7 +182,7 @@ export class SelectCommands {
   toggleSmooth(pos: Point2D): boolean {
     const ctx = this.#editor.createToolContext();
     const { point, pointId } = this.hitTest(pos);
-    if (point && pointId && point.pointType === 'onCurve') {
+    if (point && pointId && point.pointType === "onCurve") {
       ctx.edit.toggleSmooth(pointId);
       ctx.requestRedraw();
       return true;

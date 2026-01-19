@@ -28,7 +28,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean = false
+    smooth: boolean = false,
   ) {
     super();
     this.#beforePointId = beforePointId;
@@ -44,7 +44,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
       this.#x,
       this.#y,
       this.#pointType,
-      this.#smooth
+      this.#smooth,
     );
     return this.#resultId;
   }
@@ -93,7 +93,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
     anchorX: number,
     anchorY: number,
     leadingX: number,
-    leadingY: number
+    leadingY: number,
   ) {
     super();
     this.#anchorX = anchorX;
@@ -112,7 +112,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
       this.#anchorX,
       this.#anchorY,
       "onCurve",
-      true
+      true,
     );
 
     // Add leading control point (in drag direction)
@@ -120,7 +120,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
       this.#leadingX,
       this.#leadingY,
       "offCurve",
-      false
+      false,
     );
 
     // TODO: When insertPointAt is available, insert trailing BEFORE anchor
@@ -130,7 +130,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
       this.#trailingX,
       this.#trailingY,
       "offCurve",
-      false
+      false,
     );
 
     return this.#anchorId;
@@ -199,7 +199,9 @@ export class TogglePointSmoothCommand extends BaseCommand<void> {
 
     // TODO: Add toggleSmooth to FontEngine API
     // For now this is a placeholder
-    console.warn("TogglePointSmoothCommand: FontEngine.toggleSmooth not yet implemented");
+    console.warn(
+      "TogglePointSmoothCommand: FontEngine.toggleSmooth not yet implemented",
+    );
   }
 
   undo(_ctx: CommandContext): void {
@@ -228,7 +230,9 @@ export class CloseContourCommand extends BaseCommand<void> {
 
     // Check if already closed
     if (ctx.snapshot && this.#contourId) {
-      const contour = ctx.snapshot.contours.find((c) => c.id === this.#contourId);
+      const contour = ctx.snapshot.contours.find(
+        (c) => c.id === this.#contourId,
+      );
       this.#wasClosed = contour?.closed ?? false;
     }
 
@@ -240,7 +244,9 @@ export class CloseContourCommand extends BaseCommand<void> {
   undo(_ctx: CommandContext): void {
     // TODO: Add openContour to FontEngine API to reverse this
     // For now, closing is not easily reversible
-    console.warn("CloseContourCommand.undo: Opening closed contour not yet supported");
+    console.warn(
+      "CloseContourCommand.undo: Opening closed contour not yet supported",
+    );
   }
 }
 

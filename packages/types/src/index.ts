@@ -9,11 +9,16 @@
  */
 
 // Math types
-export type { Point2D, Rect2D, TransformMatrix } from './math';
+export type { Point2D, Rect2D, TransformMatrix } from "./math";
 
 // ID types
-export type { PointId, ContourId } from './ids';
-export { asPointId, asContourId, isValidPointId, isValidContourId } from './ids';
+export type { PointId, ContourId } from "./ids";
+export {
+  asPointId,
+  asContourId,
+  isValidPointId,
+  isValidContourId,
+} from "./ids";
 
 // Font types (includes generated types)
 export type {
@@ -26,11 +31,11 @@ export type {
   MatchedRule,
   FontMetadata,
   FontMetrics,
-} from './font';
+} from "./font";
 
 export {
   createEmptyGlyphSnapshot,
   findPointInSnapshot,
   findContourInSnapshot,
   getAllPointIds,
-} from './font';
+} from "./font";

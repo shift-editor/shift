@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 
-import { getEditor } from '@/store/store';
+import { getEditor } from "@/store/store";
 
 export const Metrics = () => {
   const xRef = useRef<HTMLDivElement>(null);
@@ -17,10 +17,10 @@ export const Metrics = () => {
       yRef.current.textContent = Math.round(y).toString();
     };
 
-    window.addEventListener('mousemove', updateMouseMetrics);
+    window.addEventListener("mousemove", updateMouseMetrics);
 
     return () => {
-      window.removeEventListener('mousemove', updateMouseMetrics);
+      window.removeEventListener("mousemove", updateMouseMetrics);
     };
   }, []);
 

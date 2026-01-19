@@ -45,11 +45,11 @@ Full vector math operations:
 
 ```typescript
 const v = new Vector2D(3, 4);
-v.length();        // 5 (magnitude)
-v.normalize();     // Vector2D(0.6, 0.8)
-v.dot(other);      // Dot product
-v.cross(other);    // 2D cross product (scalar)
-v.project(onto);   // Vector projection
+v.length(); // 5 (magnitude)
+v.normalize(); // Vector2D(0.6, 0.8)
+v.dot(other); // Dot product
+v.cross(other); // 2D cross product (scalar)
+v.project(onto); // Vector projection
 ```
 
 ### Rect2D Type
@@ -58,10 +58,14 @@ Rectangle with boundary accessors:
 
 ```typescript
 type Rect2D = {
-  x: number; y: number;
-  width: number; height: number;
-  left: number; top: number;
-  right: number; bottom: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 };
 ```
 
@@ -77,12 +81,14 @@ const rect = getBoundingRect(points);
 ## API Reference
 
 ### Point Class
+
 - `distance(x, y): number` - Distance to coordinates
 - `lerp(p, t): Point` - Linear interpolation
 - `clone(): Point` - Copy point
 - `static distance(x0, y0, x1, y1): number` - Static distance
 
 ### Vector2D Class
+
 - `length(): number` - Magnitude
 - `normalize(): Vector2D` - Unit vector
 - `dot(v): number` - Dot product
@@ -94,23 +100,27 @@ const rect = getBoundingRect(points);
 - `reverse(): Vector2D` - Negate
 
 ### Rect Class
+
 - `hit(x, y): boolean` - Point-in-rect test
 - `resize(w, h): void` - Change dimensions
 - `get_centered_position(): Point` - Center point
 - `static fromBounds(l, t, r, b): Rect` - Create from bounds
 
 ### Line Class
+
 - `length: number` - Segment length
 - `startPoint / endPoint: Point` - Endpoints
 - `static lerp(p1, p2, t): Point2D` - Interpolate
 
 ### Utilities
+
 - `getBoundingRect(points): Rect2D` - Bounding box
 - `Shape.shoelace(points): number` - Polygon area
 
 ## Usage Examples
 
 ### Vector Operations
+
 ```typescript
 // Create from two points
 const v = Vector2D.from(0, 0, 100, 50);
@@ -124,6 +134,7 @@ const projected = point.projectOntoLine(lineStart, lineEnd);
 ```
 
 ### Distance Calculations
+
 ```typescript
 // Point to point
 const d = Point.distance(x1, y1, x2, y2);
@@ -133,13 +144,15 @@ const len = new Vector2D(dx, dy).length();
 ```
 
 ### Bounding Rectangles
+
 ```typescript
-const points = snapshot.contours.flatMap(c => c.points);
+const points = snapshot.contours.flatMap((c) => c.points);
 const bounds = getBoundingRect(points);
 // bounds.left, bounds.right, bounds.top, bounds.bottom
 ```
 
 ### Linear Interpolation
+
 ```typescript
 // Point along line at t (0-1)
 const midpoint = Line.lerp(start, end, 0.5);
@@ -149,6 +162,7 @@ const p = point.lerp(target, 0.25);
 ```
 
 ### Hit Testing
+
 ```typescript
 const rect = new Rect(x, y, width, height);
 if (rect.hit(mouseX, mouseY)) {

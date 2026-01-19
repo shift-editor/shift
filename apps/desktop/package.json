@@ -31,12 +31,12 @@
     "@electron-forge/plugin-fuses": "^7.8.1",
     "@electron-forge/plugin-vite": "^7.8.1",
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "electron-vite": "^2.3.0",
     "@electron/fuses": "^1.8.0",
     "@tailwindcss/vite": "^4.1.11",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@vitejs/plugin-react": "^4.6.0",
     "electron": "37.3.1",
+    "electron-vite": "^2.3.0",
     "oxlint": "^0.16.0",
     "tailwindcss": "^4.1.11",
     "vite": "^5.4.21",
@@ -45,7 +45,7 @@
     "vitest": "^4.0.17"
   },
   "dependencies": {
-    "@radix-ui/react-tooltip": "^1.2.7",
+    "@base-ui-components/react": "1.0.0-rc.0",
     "@shift/editor": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/types": "workspace:*",

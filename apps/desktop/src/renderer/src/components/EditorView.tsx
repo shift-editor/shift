@@ -1,35 +1,30 @@
-import { FC, useEffect, useMemo, useRef } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
-import AppState, { getEditor } from "@/store/store";
-import { ToolName } from "@/types/tool";
+import { effect } from "@/lib/reactive/signal";
+import { getEditor } from "@/store/store";
 
 import { InteractiveScene } from "./InteractiveScene";
 import { Metrics as MetricsComponent } from "./Metrics";
 import { StaticScene } from "./StaticScene";
-
-function getCursorStyle(tool: ToolName): string {
-  switch (tool) {
-    case "pen":
-      // Use image-set for retina support: 1x (32px) and 2x (64px) versions
-      return `-webkit-image-set(url("/cursors/pen@1.svg") 1x, url("/cursors/pen@2.svg") 2x) 16 8, crosshair`;
-    case "hand":
-      return "grab";
-    case "select":
-      return "default";
-    default:
-      return "default";
-  }
-}
 
 interface EditorViewProps {
   glyphId: string;
 }
 
 export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
-  const activeTool = AppState((state) => state.activeTool);
   const editor = getEditor();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to the reactive cursor signal
+  const [cursor, setCursor] = useState(() => editor.cursor);
+
+  useEffect(() => {
+    const fx = effect(() => {
+      setCursor(editor.cursorSignal.value);
+    });
+    return () => fx.dispose();
+  }, [editor]);
 
   useEffect(() => {
     // Parse glyphId as hex (e.g., "0041" for 'A')
@@ -80,13 +75,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     return () => element.removeEventListener("wheel", handleWheel);
   }, []);
 
-  const cursorStyle = useMemo(() => getCursorStyle(activeTool), [activeTool]);
-
   return (
     <div
       ref={containerRef}
       className="relative z-20 h-full w-full overflow-hidden"
-      style={{ cursor: cursorStyle }}
+      style={{ cursor }}
       onMouseMove={(e) => {
         const position = editor.getMousePosition(e.clientX, e.clientY);
         const { x, y } = editor.projectScreenToUpm(position.x, position.y);

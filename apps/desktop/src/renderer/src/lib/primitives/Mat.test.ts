@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { Mat } from './Mat';
+import { describe, it, expect } from "vitest";
+import { Mat } from "./Mat";
 
-describe('Mat - 2D Affine Transform Matrix', () => {
-  describe('constructor', () => {
-    it('should create a matrix with specified components', () => {
+describe("Mat - 2D Affine Transform Matrix", () => {
+  describe("constructor", () => {
+    it("should create a matrix with specified components", () => {
       const m = new Mat(2, 3, 4, 5, 6, 7);
       expect(m.a).toBe(2);
       expect(m.b).toBe(3);
@@ -14,8 +14,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('Identity', () => {
-    it('should create identity matrix', () => {
+  describe("Identity", () => {
+    it("should create identity matrix", () => {
       const m = Mat.Identity();
       expect(m.a).toBe(1);
       expect(m.b).toBe(0);
@@ -25,7 +25,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(m.f).toBe(0);
     });
 
-    it('should leave point unchanged when applied', () => {
+    it("should leave point unchanged when applied", () => {
       const m = Mat.Identity();
       const p = Mat.applyToPoint(m, { x: 10, y: 20 });
       expect(p.x).toBe(10);
@@ -33,42 +33,42 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('translate', () => {
-    it('should translate by x and y', () => {
+  describe("translate", () => {
+    it("should translate by x and y", () => {
       const m = Mat.Identity().translate(5, 10);
       expect(m.e).toBe(5);
       expect(m.f).toBe(10);
     });
 
-    it('should affect point transformation', () => {
+    it("should affect point transformation", () => {
       const m = Mat.Identity().translate(5, 10);
       const p = Mat.applyToPoint(m, { x: 1, y: 2 });
       expect(p.x).toBe(6);
       expect(p.y).toBe(12);
     });
 
-    it('should be chainable', () => {
+    it("should be chainable", () => {
       const m = Mat.Identity().translate(5, 10).translate(3, 4);
       expect(m.e).toBe(8);
       expect(m.f).toBe(14);
     });
   });
 
-  describe('scale', () => {
-    it('should scale x and y independently', () => {
+  describe("scale", () => {
+    it("should scale x and y independently", () => {
       const m = Mat.Identity().scale(2, 3);
       expect(m.a).toBe(2);
       expect(m.d).toBe(3);
     });
 
-    it('should affect point transformation', () => {
+    it("should affect point transformation", () => {
       const m = Mat.Identity().scale(2, 3);
       const p = Mat.applyToPoint(m, { x: 4, y: 5 });
       expect(p.x).toBe(8);
       expect(p.y).toBe(15);
     });
 
-    it('should support negative scale (flip)', () => {
+    it("should support negative scale (flip)", () => {
       const m = Mat.Identity().scale(-1, 1);
       const p = Mat.applyToPoint(m, { x: 5, y: 10 });
       expect(p.x).toBe(-5);
@@ -76,15 +76,15 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('rotate', () => {
-    it('should rotate by angle in radians', () => {
+  describe("rotate", () => {
+    it("should rotate by angle in radians", () => {
       const m = Mat.Identity().rotate(Math.PI / 2);
       const p = Mat.applyToPoint(m, { x: 1, y: 0 });
       expect(p.x).toBeCloseTo(0);
       expect(p.y).toBeCloseTo(1);
     });
 
-    it('should rotate 90 degrees correctly', () => {
+    it("should rotate 90 degrees correctly", () => {
       const m = Mat.Identity().rotate(Math.PI / 2);
       expect(m.a).toBeCloseTo(0);
       expect(m.b).toBeCloseTo(1);
@@ -92,7 +92,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(m.d).toBeCloseTo(0);
     });
 
-    it('should rotate 180 degrees correctly', () => {
+    it("should rotate 180 degrees correctly", () => {
       const m = Mat.Identity().rotate(Math.PI);
       const p = Mat.applyToPoint(m, { x: 5, y: 10 });
       expect(p.x).toBeCloseTo(-5);
@@ -100,8 +100,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('multiply', () => {
-    it('should compose two transforms', () => {
+  describe("multiply", () => {
+    it("should compose two transforms", () => {
       const m1 = Mat.Identity().translate(5, 10);
       const m2 = Mat.Identity().scale(2, 3);
       m1.multiply(m2);
@@ -111,7 +111,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(p.y).toBeCloseTo(13); // (1 * 3) + 10
     });
 
-    it('should be chainable', () => {
+    it("should be chainable", () => {
       const m = Mat.Identity()
         .translate(5, 10)
         .multiply(Mat.Scale(2, 2))
@@ -120,7 +120,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(m).toBeDefined();
     });
 
-    it('should handle order of operations correctly', () => {
+    it("should handle order of operations correctly", () => {
       const m2 = new Mat(2, 0, 0, 1, 0, 0); // scale (2, 1)
       const result = new Mat(1, 0, 0, 1, 5, 0).multiply(m2); // translate (5, 0) then scale
 
@@ -130,8 +130,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('Compose static', () => {
-    it('should compose two matrices', () => {
+  describe("Compose static", () => {
+    it("should compose two matrices", () => {
       const m1 = Mat.Translate(5, 10);
       const m2 = Mat.Scale(2, 2);
       const result = Mat.Compose(m1, m2);
@@ -142,8 +142,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('invert', () => {
-    it('should invert an identity matrix', () => {
+  describe("invert", () => {
+    it("should invert an identity matrix", () => {
       const m = Mat.Identity().invert();
       expect(m.a).toBeCloseTo(1);
       expect(m.b).toBeCloseTo(0);
@@ -153,19 +153,19 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(m.f).toBeCloseTo(0);
     });
 
-    it('should invert translation', () => {
+    it("should invert translation", () => {
       const m = Mat.Translate(5, 10).invert();
       expect(m.e).toBe(-5);
       expect(m.f).toBe(-10);
     });
 
-    it('should invert scale', () => {
+    it("should invert scale", () => {
       const m = Mat.Scale(2, 4).invert();
       expect(m.a).toBeCloseTo(0.5);
       expect(m.d).toBeCloseTo(0.25);
     });
 
-    it('should round-trip with composition', () => {
+    it("should round-trip with composition", () => {
       const m = Mat.Translate(5, 10).scale(2, 3);
       const inv = Mat.Inverse(m);
       const identity = Mat.Compose(m, inv);
@@ -178,12 +178,12 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(identity.f).toBeCloseTo(0, 5);
     });
 
-    it('should throw on singular matrix', () => {
+    it("should throw on singular matrix", () => {
       const m = new Mat(0, 0, 0, 0, 0, 0);
       expect(() => m.invert()).toThrow();
     });
 
-    it('should invert rotation matrix', () => {
+    it("should invert rotation matrix", () => {
       const m = Mat.Rotate(Math.PI / 4);
       const inv = Mat.Inverse(m);
 
@@ -195,15 +195,15 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(inv.d).toBeCloseTo(m2.d);
     });
 
-    it('should be chainable', () => {
+    it("should be chainable", () => {
       const m = Mat.Identity().translate(5, 10).invert();
       expect(m.e).toBe(-5);
       expect(m.f).toBe(-10);
     });
   });
 
-  describe('Inverse static', () => {
-    it('should create inverse without mutating original', () => {
+  describe("Inverse static", () => {
+    it("should create inverse without mutating original", () => {
       const m = Mat.Translate(5, 10);
       const inv = Mat.Inverse(m);
 
@@ -212,22 +212,22 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('applyToPoint', () => {
-    it('should transform a point correctly', () => {
+  describe("applyToPoint", () => {
+    it("should transform a point correctly", () => {
       const m = Mat.Translate(10, 20);
       const p = Mat.applyToPoint(m, { x: 5, y: 5 });
       expect(p.x).toBe(15);
       expect(p.y).toBe(25);
     });
 
-    it('should handle scale transformation', () => {
+    it("should handle scale transformation", () => {
       const m = Mat.Scale(2, 3);
       const p = Mat.applyToPoint(m, { x: 4, y: 5 });
       expect(p.x).toBe(8);
       expect(p.y).toBe(15);
     });
 
-    it('should handle combined transformation', () => {
+    it("should handle combined transformation", () => {
       const m = Mat.Identity().translate(5, 10).scale(2, 2);
       const p = Mat.applyToPoint(m, { x: 1, y: 1 });
       expect(p.x).toBeCloseTo(7);
@@ -235,8 +235,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('toCanvasTransform', () => {
-    it('should return array in correct order', () => {
+  describe("toCanvasTransform", () => {
+    it("should return array in correct order", () => {
       const m = new Mat(1, 2, 3, 4, 5, 6);
       const [a, b, c, d, e, f] = m.toCanvasTransform();
       expect(a).toBe(1);
@@ -248,8 +248,8 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('clone', () => {
-    it('should create independent copy', () => {
+  describe("clone", () => {
+    it("should create independent copy", () => {
       const m1 = new Mat(1, 2, 3, 4, 5, 6);
       const m2 = m1.clone();
 
@@ -258,7 +258,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(m2.a).toBe(10);
     });
 
-    it('should have same values as original', () => {
+    it("should have same values as original", () => {
       const m1 = Mat.Identity().translate(5, 10).scale(2, 3);
       const m2 = m1.clone();
 
@@ -271,44 +271,46 @@ describe('Mat - 2D Affine Transform Matrix', () => {
     });
   });
 
-  describe('complex transforms', () => {
-    it('should handle scale + translate correctly', () => {
+  describe("complex transforms", () => {
+    it("should handle scale + translate correctly", () => {
       const m = Mat.Identity().scale(2, 2).translate(5, 10);
       const p = Mat.applyToPoint(m, { x: 1, y: 1 });
       expect(p.x).toBeCloseTo(7);
       expect(p.y).toBeCloseTo(12);
     });
 
-    it('should handle translate + scale correctly', () => {
+    it("should handle translate + scale correctly", () => {
       const m = Mat.Identity().translate(5, 10).scale(2, 2);
       const p = Mat.applyToPoint(m, { x: 1, y: 1 });
       expect(p.x).toBeCloseTo(7);
       expect(p.y).toBeCloseTo(12);
     });
 
-    it('should handle rotate + translate', () => {
-      const m = Mat.Identity().rotate(Math.PI / 2).translate(1, 0);
+    it("should handle rotate + translate", () => {
+      const m = Mat.Identity()
+        .rotate(Math.PI / 2)
+        .translate(1, 0);
       const p = Mat.applyToPoint(m, { x: 1, y: 0 });
       expect(p.x).toBeCloseTo(1);
       expect(p.y).toBeCloseTo(1);
     });
   });
 
-  describe('determinant and singular matrix', () => {
-    it('should detect non-invertible matrices', () => {
+  describe("determinant and singular matrix", () => {
+    it("should detect non-invertible matrices", () => {
       const m = new Mat(1, 0, 1, 0, 0, 0); // Singular: det = 0
       expect(() => Mat.Inverse(m)).toThrow();
     });
 
-    it('should work with non-singular matrices', () => {
+    it("should work with non-singular matrices", () => {
       const m = new Mat(2, 1, 3, 2, 4, 5); // Non-singular
       const inv = Mat.Inverse(m);
       expect(inv).toBeDefined();
     });
   });
 
-  describe('round-trip transforms', () => {
-    it('should preserve point after scale and inverse scale', () => {
+  describe("round-trip transforms", () => {
+    it("should preserve point after scale and inverse scale", () => {
       const m = Mat.Scale(2, 3);
       const inv = Mat.Inverse(m);
       const result = Mat.Compose(m, inv);
@@ -320,7 +322,7 @@ describe('Mat - 2D Affine Transform Matrix', () => {
       expect(transformed.y).toBeCloseTo(p.y);
     });
 
-    it('should preserve point after complex transform and inverse', () => {
+    it("should preserve point after complex transform and inverse", () => {
       const m = Mat.Identity()
         .translate(5, 10)
         .scale(2, 3)

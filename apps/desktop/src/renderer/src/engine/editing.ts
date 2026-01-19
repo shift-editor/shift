@@ -4,7 +4,11 @@
  * All mutations to glyph geometry go through this manager.
  */
 
-import type { PointTypeString, CommandResult, GlyphSnapshot } from "@/types/generated";
+import type {
+  PointTypeString,
+  CommandResult,
+  GlyphSnapshot,
+} from "@/types/generated";
 import type { PointId, ContourId } from "@/types/ids";
 import { asPointId, asContourId } from "@/types/ids";
 import type { NativeFontEngine } from "./native";
@@ -53,7 +57,7 @@ export class EditingManager {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean = false
+    smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
@@ -72,7 +76,8 @@ export class EditingManager {
     const pointId = result.affectedPointIds?.[0];
     if (!pointId) {
       // Fallback: get ID from the last point of the last contour
-      const lastContour = result.snapshot?.contours[result.snapshot.contours.length - 1];
+      const lastContour =
+        result.snapshot?.contours[result.snapshot.contours.length - 1];
       const lastPoint = lastContour?.points[lastContour.points.length - 1];
       return asPointId(lastPoint?.id ?? "");
     }
@@ -89,7 +94,7 @@ export class EditingManager {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean = false
+    smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
@@ -98,12 +103,15 @@ export class EditingManager {
       x,
       y,
       pointType,
-      smooth
+      smooth,
     );
     const result = parseCommandResult(resultJson);
 
     if (!result.success) {
-      throw new NativeOperationError("addPointToContour", result.error ?? undefined);
+      throw new NativeOperationError(
+        "addPointToContour",
+        result.error ?? undefined,
+      );
     }
 
     if (result.snapshot) {
@@ -197,7 +205,7 @@ export class EditingManager {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean = false
+    smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
@@ -206,12 +214,15 @@ export class EditingManager {
       x,
       y,
       pointType,
-      smooth
+      smooth,
     );
     const result = parseCommandResult(resultJson);
 
     if (!result.success) {
-      throw new NativeOperationError("insertPointBefore", result.error ?? undefined);
+      throw new NativeOperationError(
+        "insertPointBefore",
+        result.error ?? undefined,
+      );
     }
 
     if (result.snapshot) {

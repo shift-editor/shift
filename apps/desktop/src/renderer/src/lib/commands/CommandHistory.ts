@@ -11,7 +11,12 @@
  * during a batch are grouped into a single undo step.
  */
 
-import { signal, computed, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
+import {
+  signal,
+  computed,
+  type WritableSignal,
+  type ComputedSignal,
+} from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
 import type { FontEngine } from "@/engine/FontEngine";
@@ -44,7 +49,7 @@ export class CommandHistory {
   constructor(
     fontEngine: FontEngine,
     getSnapshot: () => GlyphSnapshot | null,
-    options: CommandHistoryOptions = {}
+    options: CommandHistoryOptions = {},
   ) {
     this.#fontEngine = fontEngine;
     this.#getSnapshot = getSnapshot;

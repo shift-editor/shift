@@ -24,7 +24,7 @@
  * ```
  */
 
-import type { Point2D } from '@/types/math';
+import type { Point2D } from "@/types/math";
 
 // Re-export Point2D for convenience
 export type { Point2D };

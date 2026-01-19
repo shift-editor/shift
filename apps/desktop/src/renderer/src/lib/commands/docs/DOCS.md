@@ -41,7 +41,7 @@ All commands implement this contract:
 
 ```typescript
 interface Command<TResult = void> {
-  readonly name: string;           // Human-readable label
+  readonly name: string; // Human-readable label
   execute(ctx: CommandContext): TResult;
   undo(ctx: CommandContext): void;
   redo(ctx: CommandContext): TResult;
@@ -64,10 +64,10 @@ interface CommandContext {
 Groups commands into atomic operations:
 
 ```typescript
-const composite = new CompositeCommand('Add Bezier Curve', [
-  new AddPointCommand(x1, y1, 'onCurve'),
-  new AddPointCommand(cx, cy, 'offCurve'),
-  new AddPointCommand(x2, y2, 'onCurve'),
+const composite = new CompositeCommand("Add Bezier Curve", [
+  new AddPointCommand(x1, y1, "onCurve"),
+  new AddPointCommand(cx, cy, "offCurve"),
+  new AddPointCommand(x2, y2, "onCurve"),
 ]);
 
 history.execute(composite);
@@ -77,6 +77,7 @@ history.undo(); // Undoes all three in reverse order
 ## API Reference
 
 ### CommandHistory
+
 - `execute<T>(cmd): T` - Execute and push to undo stack
 - `undo(): void` - Undo last command
 - `redo(): void` - Redo last undone command
@@ -87,12 +88,14 @@ history.undo(); // Undoes all three in reverse order
 - `canRedo: ComputedSignal<boolean>` - Reactive redo availability
 
 ### Point Commands
+
 - `AddPointCommand` - Add point to contour
 - `MovePointsCommand` - Move points by delta
 - `MovePointToCommand` - Move point to absolute position
 - `RemovePointsCommand` - Remove points
 
 ### Bezier Commands
+
 - `AddBezierAnchorCommand` - Add smooth anchor with handles
 - `CloseContourCommand` - Close active contour
 - `AddContourCommand` - Create new contour
@@ -101,6 +104,7 @@ history.undo(); // Undoes all three in reverse order
 ## Usage Examples
 
 ### Basic Undo/Redo
+
 ```typescript
 const history = new CommandHistory(fontEngine, () => snapshot);
 
@@ -115,6 +119,7 @@ history.redo();
 ```
 
 ### Reactive UI Binding
+
 ```typescript
 effect(() => {
   undoButton.disabled = !history.canUndo.value;
@@ -123,6 +128,7 @@ effect(() => {
 ```
 
 ### Composite Operations
+
 ```typescript
 const addBezier = new AddBezierAnchorCommand(100, 200, 150, 250);
 history.execute(addBezier);
@@ -134,9 +140,10 @@ const trailingId = addBezier.trailingId;
 ```
 
 ### Custom Command
+
 ```typescript
 class ScalePointsCommand extends BaseCommand {
-  readonly name = 'Scale Points';
+  readonly name = "Scale Points";
   #pointIds: PointId[];
   #scale: number;
   #originalPositions: Map<PointId, Point2D>;

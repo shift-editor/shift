@@ -1,6 +1,7 @@
 # Tools - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: State machine-based editing tools (Pen, Select, Hand, Shape)
 - **Language**: TypeScript
 - **Key Files**: `core/StateMachine.ts`, `pen/Pen.ts`, `select/Select.ts`, `Hand.ts`, `Shape.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: views/Editor.tsx
 
 ## File Structure
+
 ```
 src/renderer/src/lib/tools/
 ├── core/
@@ -34,26 +36,33 @@ src/renderer/src/lib/tools/
 ## Core Abstractions
 
 ### StateMachine<TState> (core/StateMachine.ts)
+
 ```typescript
 interface StateMachine<TState extends { type: string }> {
   readonly state: WritableSignal<TState>;
-  readonly currentType: TState['type'];
+  readonly currentType: TState["type"];
   readonly current: TState;
 
   transition(newState: TState): void;
-  isIn<T extends TState['type']>(...types: T[]): boolean;
-  when<T extends TState['type']>(type: T, handler: (state) => void): void;
-  match<R>(handlers: { [K in TState['type']]?: (state) => R }): R | undefined;
+  isIn<T extends TState["type"]>(...types: T[]): boolean;
+  when<T extends TState["type"]>(type: T, handler: (state) => void): void;
+  match<R>(handlers: { [K in TState["type"]]?: (state) => R }): R | undefined;
 }
 ```
 
 ### PenState (pen/states.ts)
+
 ```typescript
 type PenState =
-  | { type: 'idle' }
-  | { type: 'ready' }
-  | { type: 'anchored'; anchor: AnchorData }
-  | { type: 'dragging'; anchor: AnchorData; handles: HandleData; mousePos: Point2D };
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "anchored"; anchor: AnchorData }
+  | {
+      type: "dragging";
+      anchor: AnchorData;
+      handles: HandleData;
+      mousePos: Point2D;
+    };
 
 interface AnchorData {
   position: Point2D;
@@ -63,13 +72,14 @@ interface AnchorData {
 ```
 
 ### SelectState (select/states.ts)
+
 ```typescript
 type SelectState =
-  | { type: 'idle' }
-  | { type: 'ready'; hoveredPointId: PointId | null }
-  | { type: 'selecting'; selection: SelectionData }
-  | { type: 'selected'; hoveredPointId: PointId | null }
-  | { type: 'dragging'; drag: DragData };
+  | { type: "idle" }
+  | { type: "ready"; hoveredPointId: PointId | null }
+  | { type: "selecting"; selection: SelectionData }
+  | { type: "selected"; hoveredPointId: PointId | null }
+  | { type: "dragging"; drag: DragData };
 
 interface DragData {
   anchorPointId: PointId;
@@ -79,6 +89,7 @@ interface DragData {
 ```
 
 ### Tool Interface (types/tool.ts)
+
 ```typescript
 interface Tool {
   name: ToolName;
@@ -98,20 +109,24 @@ interface Tool {
 ## Key Patterns
 
 ### State Machine with Signals
+
 ```typescript
 class Select implements Tool {
-  #sm = createStateMachine<SelectState>({ type: 'idle' });
+  #sm = createStateMachine<SelectState>({ type: "idle" });
 
   #renderEffect = effect(() => {
-    if (!this.#sm.isIn('idle')) {
+    if (!this.#sm.isIn("idle")) {
       this.#editor.requestRedraw();
     }
   });
 
   onMouseDown(e: MouseEvent): void {
-    this.#sm.when('ready', (state) => {
+    this.#sm.when("ready", (state) => {
       if (state.hoveredPointId) {
-        this.#sm.transition({ type: 'selected', hoveredPointId: state.hoveredPointId });
+        this.#sm.transition({
+          type: "selected",
+          hoveredPointId: state.hoveredPointId,
+        });
       }
     });
   }
@@ -119,6 +134,7 @@ class Select implements Tool {
 ```
 
 ### Commands Separation
+
 ```typescript
 // pen/commands.ts - Pure geometry operations
 export const PenCommands = {
@@ -135,13 +151,14 @@ onMouseDown(e) {
 ```
 
 ### Tool Context Usage
+
 ```typescript
 class Pen implements Tool {
   onMouseMove(e: MouseEvent): void {
     const ctx = this.#editor.createToolContext();
     const upmPos = ctx.viewport.projectScreenToUpm(e.clientX, e.clientY);
 
-    this.#sm.when('dragging', (state) => {
+    this.#sm.when("dragging", (state) => {
       PenCommands.updateHandles(state.anchor, state.handles, upmPos);
       ctx.requestRedraw();
     });
@@ -151,25 +168,27 @@ class Pen implements Tool {
 
 ## API Surface
 
-| Tool | States | Key Methods |
-|------|--------|-------------|
-| Select | idle, ready, selecting, selected, dragging | hitTest, selectPoint, moveSelectedPoints |
-| Pen | idle, ready, anchored, dragging | placeAnchor, createHandles, updateHandles |
-| Hand | idle, ready, dragging | pan viewport |
-| Shape | idle, ready, dragging | create rectangle |
+| Tool   | States                                     | Key Methods                               |
+| ------ | ------------------------------------------ | ----------------------------------------- |
+| Select | idle, ready, selecting, selected, dragging | hitTest, selectPoint, moveSelectedPoints  |
+| Pen    | idle, ready, anchored, dragging            | placeAnchor, createHandles, updateHandles |
+| Hand   | idle, ready, dragging                      | pan viewport                              |
+| Shape  | idle, ready, dragging                      | create rectangle                          |
 
 ## Common Operations
 
 ### Create and use state machine
+
 ```typescript
-const sm = createStateMachine<MyState>({ type: 'idle' });
-sm.transition({ type: 'active', data: 123 });
-if (sm.isIn('active')) {
-  sm.when('active', (s) => console.log(s.data));
+const sm = createStateMachine<MyState>({ type: "idle" });
+sm.transition({ type: "active", data: 123 });
+if (sm.isIn("active")) {
+  sm.when("active", (s) => console.log(s.data));
 }
 ```
 
 ### Tool event handling
+
 ```typescript
 onMouseDown(e: MouseEvent): void {
   const pos = this.#editor.projectScreenToUpm(e.clientX, e.clientY);
@@ -182,6 +201,7 @@ onMouseDown(e: MouseEvent): void {
 ```
 
 ### Interactive drawing
+
 ```typescript
 drawInteractive(ctx: IRenderer): void {
   this.#sm.when('selecting', (state) => {
@@ -195,12 +215,12 @@ drawInteractive(ctx: IRenderer): void {
 
 ```typescript
 // Pen
-const DRAG_THRESHOLD = 3;      // UPM units before handles created
-const CLOSE_HIT_RADIUS = 8;    // Detect close click
+const DRAG_THRESHOLD = 3; // UPM units before handles created
+const CLOSE_HIT_RADIUS = 8; // Detect close click
 
 // Select
-const HIT_RADIUS = 4;          // Point hit detection
-const DRAG_THRESHOLD = 2;      // UPM units before drag
+const HIT_RADIUS = 4; // Point hit detection
+const DRAG_THRESHOLD = 2; // UPM units before drag
 ```
 
 ## Constraints and Invariants

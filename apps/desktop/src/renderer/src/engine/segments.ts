@@ -27,7 +27,7 @@ function debug(...args: unknown[]) {
  */
 export function parseSegments(
   points: PointSnapshot[],
-  closed: boolean
+  closed: boolean,
 ): Segment[] {
   debug("parseSegments called with", points.length, "points, closed:", closed);
 
@@ -38,7 +38,16 @@ export function parseSegments(
 
   // Log all points
   for (let i = 0; i < points.length; i++) {
-    debug(`  Point[${i}]:`, points[i].id, "x:", points[i].x, "y:", points[i].y, "type:", points[i].pointType);
+    debug(
+      `  Point[${i}]:`,
+      points[i].id,
+      "x:",
+      points[i].x,
+      "y:",
+      points[i].y,
+      "type:",
+      points[i].pointType,
+    );
   }
 
   const segments: Segment[] = [];
@@ -48,11 +57,15 @@ export function parseSegments(
     const p1 = points[index];
     const p2 = points[index + 1];
 
-    debug(`  Processing index ${index}: p1.type=${p1.pointType}, p2.type=${p2.pointType}`);
+    debug(
+      `  Processing index ${index}: p1.type=${p1.pointType}, p2.type=${p2.pointType}`,
+    );
 
     // Line segment: onCurve → onCurve
     if (p1.pointType === "onCurve" && p2.pointType === "onCurve") {
-      debug(`    Creating LINE segment from (${p1.x}, ${p1.y}) to (${p2.x}, ${p2.y})`);
+      debug(
+        `    Creating LINE segment from (${p1.x}, ${p1.y}) to (${p2.x}, ${p2.y})`,
+      );
       segments.push({
         type: "line",
         points: { anchor1: p1, anchor2: p2 },
@@ -130,7 +143,7 @@ export function parseSegments(
  * Parse all contours from a glyph snapshot into segments.
  */
 export function parseGlyphSegments(
-  contours: ContourSnapshot[]
+  contours: ContourSnapshot[],
 ): Map<string, Segment[]> {
   const result = new Map<string, Segment[]>();
 

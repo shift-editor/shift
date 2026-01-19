@@ -5,18 +5,23 @@
  * The state machine knows WHEN to do things, commands know HOW.
  */
 
-import type { Point2D } from '@/types/math';
-import type { PointId } from '@/types/ids';
+import type { Point2D } from "@/types/math";
+import type { PointId } from "@/types/ids";
 
 // ============================================================================
 // State Machine States
 // ============================================================================
 
 export type PenState =
-  | { type: 'idle' }
-  | { type: 'ready' }
-  | { type: 'anchored'; anchor: AnchorData }
-  | { type: 'dragging'; anchor: AnchorData; handles: HandleData; mousePos: Point2D };
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "anchored"; anchor: AnchorData }
+  | {
+      type: "dragging";
+      anchor: AnchorData;
+      handles: HandleData;
+      mousePos: Point2D;
+    };
 
 // ============================================================================
 // State Data Structures
@@ -58,7 +63,7 @@ export interface HandleData {
  */
 export interface ContourContext {
   /** Type of the previous point in the contour */
-  previousPointType: 'none' | 'onCurve' | 'offCurve';
+  previousPointType: "none" | "onCurve" | "offCurve";
   /** Position of the previous on-curve point (needed for 1/3 calculation) */
   previousOnCurvePosition: Point2D | null;
   /** True if this is the first point in the contour */

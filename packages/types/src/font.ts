@@ -11,10 +11,14 @@ export type {
   CommandResult,
   RuleId,
   MatchedRule,
-} from './generated';
+} from "./generated";
 
 // Import for use in helper functions
-import type { PointSnapshot, ContourSnapshot, GlyphSnapshot } from './generated';
+import type {
+  PointSnapshot,
+  ContourSnapshot,
+  GlyphSnapshot,
+} from "./generated";
 
 /**
  * Font metadata returned from the native API
@@ -42,7 +46,7 @@ export interface FontMetrics {
 export function createEmptyGlyphSnapshot(unicode: number): GlyphSnapshot {
   return {
     unicode,
-    name: '',
+    name: "",
     xAdvance: 500,
     contours: [],
     activeContourId: null,
@@ -54,7 +58,7 @@ export function createEmptyGlyphSnapshot(unicode: number): GlyphSnapshot {
  */
 export function findPointInSnapshot(
   snapshot: GlyphSnapshot,
-  pointId: string
+  pointId: string,
 ): PointSnapshot | undefined {
   for (const contour of snapshot.contours) {
     const point = contour.points.find((p) => p.id === pointId);
@@ -68,7 +72,7 @@ export function findPointInSnapshot(
  */
 export function findContourInSnapshot(
   snapshot: GlyphSnapshot,
-  contourId: string
+  contourId: string,
 ): ContourSnapshot | undefined {
   return snapshot.contours.find((c) => c.id === contourId);
 }

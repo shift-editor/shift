@@ -9,7 +9,11 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "./CommandHistory";
-import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
+import {
+  AddPointCommand,
+  MovePointsCommand,
+  RemovePointsCommand,
+} from "./PointCommands";
 import { NudgePointsCommand } from "./BezierCommands";
 import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
 

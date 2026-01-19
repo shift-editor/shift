@@ -120,7 +120,7 @@ export interface NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string;
 
   /** Add a point to a specific contour. Returns CommandResult JSON. */
@@ -129,7 +129,7 @@ export interface NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string;
 
   /** Move multiple points by a delta. Returns CommandResult JSON. */
@@ -144,7 +144,7 @@ export interface NativeFontEngine {
     x: number,
     y: number,
     pointType: PointTypeString,
-    smooth: boolean
+    smooth: boolean,
   ): string;
 
   /** Toggle the smooth property of a point. Returns CommandResult JSON. */
@@ -169,7 +169,7 @@ export interface NativeFontEngine {
 export function getNative(): NativeFontEngine {
   if (typeof window === "undefined" || !window.shiftFont) {
     throw new Error(
-      "Native FontEngine not available. Are you running in Electron with the preload script?"
+      "Native FontEngine not available. Are you running in Electron with the preload script?",
     );
   }
   return window.shiftFont as NativeFontEngine;

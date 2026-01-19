@@ -1,4 +1,4 @@
-import { Shape } from '@/lib/math/shape';
+import { Shape } from "@/lib/math/shape";
 
 export class Circle extends Shape {
   #radius: number;

@@ -10,7 +10,9 @@ export const FontInfo = () => {
     <>
       <Toolbar />
       <main className="text-light flex h-screen w-screen flex-col items-center justify-center text-white">
-        <h1>{metadata.family} {metadata.styleName}</h1>
+        <h1>
+          {metadata.family} {metadata.styleName}
+        </h1>
         <div>
           <p>Units per em: {metrics.unitsPerEm}</p>
           <p>Ascender: {metrics.ascender}</p>

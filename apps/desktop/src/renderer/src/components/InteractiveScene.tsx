@@ -1,7 +1,7 @@
-import { useContext } from 'react';
+import { useContext } from "react";
 
-import { CanvasContext } from '@/context/CanvasContext';
-import AppState from '@/store/store';
+import { CanvasContext } from "@/context/CanvasContext";
+import AppState from "@/store/store";
 
 export const InteractiveScene = () => {
   const { interactiveCanvasRef } = useContext(CanvasContext);

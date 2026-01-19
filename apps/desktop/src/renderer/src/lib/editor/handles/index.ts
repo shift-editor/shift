@@ -1,5 +1,5 @@
-import type { IRenderer } from '@/types/graphics';
-import type { HandleState, HandleType } from '@/types/handle';
+import type { IRenderer } from "@/types/graphics";
+import type { HandleState, HandleType } from "@/types/handle";
 
 import {
   drawControlHandle,
@@ -11,12 +11,12 @@ import {
   type HandleDrawFn,
   type HandleOptions,
   type LastHandlePosition,
-} from './renderers';
+} from "./renderers";
 
-export type { HandleOptions, LastHandlePosition } from './renderers';
-export * from './constants';
+export type { HandleOptions, LastHandlePosition } from "./renderers";
+export * from "./constants";
 
-const handleDrawers: Record<Exclude<HandleType, 'last'>, HandleDrawFn> = {
+const handleDrawers: Record<Exclude<HandleType, "last">, HandleDrawFn> = {
   corner: drawCornerHandle,
   control: drawControlHandle,
   smooth: drawSmoothHandle,
@@ -26,11 +26,11 @@ const handleDrawers: Record<Exclude<HandleType, 'last'>, HandleDrawFn> = {
 
 export function drawHandle(
   ctx: IRenderer,
-  type: Exclude<HandleType, 'last'>,
+  type: Exclude<HandleType, "last">,
   x: number,
   y: number,
   state: HandleState,
-  options?: HandleOptions
+  options?: HandleOptions,
 ): void {
   handleDrawers[type](ctx, x, y, state, options);
 }
@@ -38,7 +38,7 @@ export function drawHandle(
 export function drawHandleLast(
   ctx: IRenderer,
   pos: LastHandlePosition,
-  state: HandleState
+  state: HandleState,
 ): void {
   drawLastHandle(ctx, pos, state);
 }

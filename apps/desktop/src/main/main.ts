@@ -1,4 +1,12 @@
-import { app, BrowserWindow, globalShortcut, Menu, dialog } from "electron";
+import {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  Menu,
+  dialog,
+  ipcMain,
+  nativeTheme,
+} from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -11,60 +19,115 @@ if (started) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let currentTheme: "light" | "dark" | "system" = "light";
+
+function setTheme(theme: "light" | "dark" | "system") {
+  currentTheme = theme;
+  mainWindow?.webContents.send("theme:set", theme);
+
+  if (theme === "system") {
+    nativeTheme.themeSource = "system";
+  } else {
+    nativeTheme.themeSource = theme;
+  }
+}
 
 function createMenu() {
-  const isMac = process.platform === 'darwin';
+  const isMac = process.platform === "darwin";
 
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: 'appMenu' as const }] : []),
+    ...(isMac ? [{ role: "appMenu" as const }] : []),
     {
-      label: 'File',
+      label: "File",
       submenu: [
         {
-          label: 'Open Font...',
-          accelerator: 'CmdOrCtrl+O',
+          label: "Open Font...",
+          accelerator: "CmdOrCtrl+O",
           click: async () => {
             const result = await dialog.showOpenDialog({
-              properties: ['openFile', 'openDirectory'],
+              properties: ["openFile", "openDirectory"],
               filters: [
-                { name: 'Font Files', extensions: ['ufo', 'ttf', 'otf'] },
-              ]
+                { name: "Font Files", extensions: ["ufo", "ttf", "otf"] },
+              ],
             });
             if (!result.canceled && result.filePaths[0]) {
-              mainWindow?.webContents.send('menu:open-font', result.filePaths[0]);
+              mainWindow?.webContents.send(
+                "menu:open-font",
+                result.filePaths[0],
+              );
             }
-          }
+          },
         },
-        { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
-      ]
+        { type: "separator" },
+        isMac ? { role: "close" } : { role: "quit" },
+      ],
     },
     {
-      label: 'Edit',
+      label: "Edit",
       submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => mainWindow?.webContents.send('menu:undo') },
-        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => mainWindow?.webContents.send('menu:redo') },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { label: 'Delete', accelerator: 'Backspace', click: () => mainWindow?.webContents.send('menu:delete') },
-        { type: 'separator' },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => mainWindow?.webContents.send('menu:select-all') },
-      ]
+        {
+          label: "Undo",
+          accelerator: "CmdOrCtrl+Z",
+          click: () => mainWindow?.webContents.send("menu:undo"),
+        },
+        {
+          label: "Redo",
+          accelerator: "CmdOrCtrl+Shift+Z",
+          click: () => mainWindow?.webContents.send("menu:redo"),
+        },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        {
+          label: "Delete",
+          accelerator: "Backspace",
+          click: () => mainWindow?.webContents.send("menu:delete"),
+        },
+        { type: "separator" },
+        {
+          label: "Select All",
+          accelerator: "CmdOrCtrl+A",
+          click: () => mainWindow?.webContents.send("menu:select-all"),
+        },
+      ],
     },
     {
-      label: 'View',
+      label: "View",
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { role: 'resetZoom' },
-      ]
-    }
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { role: "resetZoom" },
+        { type: "separator" },
+        {
+          label: "Theme",
+          submenu: [
+            {
+              label: "Light",
+              type: "radio",
+              checked: currentTheme === "light",
+              click: () => setTheme("light"),
+            },
+            {
+              label: "Dark",
+              type: "radio",
+              checked: currentTheme === "dark",
+              click: () => setTheme("dark"),
+            },
+            {
+              label: "System",
+              type: "radio",
+              checked: currentTheme === "system",
+              click: () => setTheme("system"),
+            },
+          ],
+        },
+      ],
+    },
   ];
 
   const menu = Menu.buildFromTemplate(template);
@@ -99,15 +162,21 @@ const createWindow = () => {
   // Register keyboard shortcuts for reload
   mainWindow.webContents.once("did-finish-load", () => {
     // Cmd+Shift+R or Ctrl+Shift+R for full reload (reloads preload script and native modules)
-    globalShortcut.register(process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R", () => {
-      // Reload the window - this will reload the preload script and pick up new native modules
-      mainWindow?.reload();
-    });
+    globalShortcut.register(
+      process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R",
+      () => {
+        // Reload the window - this will reload the preload script and pick up new native modules
+        mainWindow?.reload();
+      },
+    );
 
     // Cmd+Q or Ctrl+Q to force quit
-    globalShortcut.register(process.platform === "darwin" ? "Command+Q" : "Control+Q", () => {
-      app.quit();
-    });
+    globalShortcut.register(
+      process.platform === "darwin" ? "Command+Q" : "Control+Q",
+      () => {
+        app.quit();
+      },
+    );
   });
 };
 
@@ -138,8 +207,19 @@ app.on("activate", () => {
 
 app.whenReady().then(() => {
   if (process.platform === "darwin") {
-    app.dock?.setIcon(path.join(__dirname, "../../icons/icon.png"));
+    // app.getAppPath() returns the app directory (apps/desktop in dev, app.asar in prod)
+    // This is more reliable than __dirname which varies based on build output location
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, "icon.png")
+      : path.join(app.getAppPath(), "../../icons/icon.png");
+    app.dock?.setIcon(iconPath);
   }
+
+  ipcMain.handle("theme:get", () => currentTheme);
+  ipcMain.handle("theme:set", (_event, theme: "light" | "dark" | "system") => {
+    setTheme(theme);
+    createMenu();
+  });
 });
 
 // Clean up shortcuts on quit

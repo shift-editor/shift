@@ -1,9 +1,9 @@
-import { FC } from 'react';
+import { FC } from "react";
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 
-import { routes } from '@/app/routes';
-import { Svg } from '@/types/common';
+import { routes } from "@/app/routes";
+import { Svg } from "@/types/common";
 
 export interface NavigationItemProps {
   Icon: Svg;
@@ -11,8 +11,11 @@ export interface NavigationItemProps {
 }
 export const NavigationItem: FC<NavigationItemProps> = ({ Icon, onClick }) => {
   return (
-    <div className="h-fit w-fit rounded-sm p-1 hover:bg-[#4a4a54]" onClick={onClick}>
-      <Icon width={26} height={26} />
+    <div
+      className="h-fit w-fit rounded-sm p-1 hover:bg-bg-toolbar-hover"
+      onClick={onClick}
+    >
+      <Icon width={26} height={26} className="text-text-primary" />
     </div>
   );
 };

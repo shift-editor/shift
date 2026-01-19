@@ -29,7 +29,7 @@ export function createMouseEvent(
     shiftKey?: boolean;
     ctrlKey?: boolean;
     metaKey?: boolean;
-  }
+  },
 ): React.MouseEvent<HTMLCanvasElement> {
   return {
     type,
@@ -64,7 +64,7 @@ export function createKeyboardEvent(
     shiftKey?: boolean;
     ctrlKey?: boolean;
     metaKey?: boolean;
-  }
+  },
 ): KeyboardEvent {
   return {
     type,
@@ -92,9 +92,21 @@ export function createKeyboardEvent(
  * tool.onMouseUp(up);
  * ```
  */
-export function simulateClick(x: number, y: number, options?: { shiftKey?: boolean }) {
-  const down = createMouseEvent("mousedown", { clientX: x, clientY: y, ...options });
-  const up = createMouseEvent("mouseup", { clientX: x, clientY: y, ...options });
+export function simulateClick(
+  x: number,
+  y: number,
+  options?: { shiftKey?: boolean },
+) {
+  const down = createMouseEvent("mousedown", {
+    clientX: x,
+    clientY: y,
+    ...options,
+  });
+  const up = createMouseEvent("mouseup", {
+    clientX: x,
+    clientY: y,
+    ...options,
+  });
   return { down, up };
 }
 
@@ -115,9 +127,12 @@ export function simulateDrag(
   fromY: number,
   toX: number,
   toY: number,
-  steps: number = 5
+  steps: number = 5,
 ) {
-  const down = createMouseEvent("mousedown", { clientX: fromX, clientY: fromY });
+  const down = createMouseEvent("mousedown", {
+    clientX: fromX,
+    clientY: fromY,
+  });
 
   const moves: React.MouseEvent<HTMLCanvasElement>[] = [];
   for (let i = 1; i <= steps; i++) {

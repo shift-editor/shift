@@ -10,7 +10,7 @@ import type {
   FontMetrics,
   GlyphSnapshot,
   CommandResult,
-} from './snapshots';
+} from "./snapshots";
 
 // ═══════════════════════════════════════════════════════════
 // NATIVE SNAPSHOT TYPES (returned by getSnapshotData)
@@ -138,8 +138,8 @@ export interface NativeFontEngine {
   addPoint(
     x: number,
     y: number,
-    pointType: 'onCurve' | 'offCurve',
-    smooth: boolean
+    pointType: "onCurve" | "offCurve",
+    smooth: boolean,
   ): string;
 
   /**
@@ -150,19 +150,15 @@ export interface NativeFontEngine {
     contourId: string,
     x: number,
     y: number,
-    pointType: 'onCurve' | 'offCurve',
-    smooth: boolean
+    pointType: "onCurve" | "offCurve",
+    smooth: boolean,
   ): string;
 
   /**
    * Move multiple points by a delta.
    * Returns a CommandResult JSON string with affected point IDs.
    */
-  movePoints(
-    pointIds: string[],
-    dx: number,
-    dy: number
-  ): string;
+  movePoints(pointIds: string[], dx: number, dy: number): string;
 
   /**
    * Remove multiple points by their IDs.
@@ -175,11 +171,16 @@ export interface NativeFontEngine {
 // ELECTRON IPC API
 // ═══════════════════════════════════════════════════════════
 
+export type ThemeName = "light" | "dark" | "system";
+
 export interface ElectronAPI {
   onMenuOpenFont: (callback: (path: string) => void) => () => void;
   onMenuUndo: (callback: () => void) => () => void;
   onMenuRedo: (callback: () => void) => () => void;
   onMenuDelete: (callback: () => void) => () => void;
+  onSetTheme: (callback: (theme: ThemeName) => void) => () => void;
+  getTheme: () => Promise<ThemeName>;
+  setTheme: (theme: ThemeName) => Promise<void>;
 }
 
 // ═══════════════════════════════════════════════════════════

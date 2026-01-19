@@ -143,7 +143,9 @@ export class Canvas2DRenderer implements IRenderer {
   }
 
   createPath(): IPath {
-    throw new Error("createPath is not supported - use immediate mode rendering");
+    throw new Error(
+      "createPath is not supported - use immediate mode rendering",
+    );
   }
 
   beginPath(): void {
@@ -168,7 +170,7 @@ export class Canvas2DRenderer implements IRenderer {
     cpx2: number,
     cpy2: number,
     x: number,
-    y: number
+    y: number,
   ): void {
     this.#path.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
@@ -179,7 +181,7 @@ export class Canvas2DRenderer implements IRenderer {
     radius: number,
     startAngle: number,
     endAngle: number,
-    isCounterClockwise?: boolean
+    isCounterClockwise?: boolean,
   ): void {
     this.#path.arc(x, y, radius, startAngle, endAngle, isCounterClockwise);
   }
@@ -212,7 +214,7 @@ export class Canvas2DRenderer implements IRenderer {
     c: number,
     d: number,
     e: number,
-    f: number
+    f: number,
   ): void {
     // Canvas 2D transform uses the same matrix format
     this.#renderCtx.transform(a, b, c, d, e, f);

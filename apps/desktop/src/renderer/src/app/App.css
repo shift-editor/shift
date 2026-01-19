@@ -1,5 +1,5 @@
 body {
-  background-color: var(--color-secondary);
+  background-color: var(--color-bg-canvas);
   overflow: hidden;
 }
 
@@ -12,12 +12,16 @@ body {
 
 /* Custom pen cursor with retina support */
 .cursor-pen {
-  cursor: url("/cursors/pen@1.svg") 15 8, auto;
+  cursor:
+    url("/cursors/pen@32.svg") 8 8,
+    auto;
 }
 
 @media (min-resolution: 2dppx) {
   .cursor-pen {
-    cursor: url("/cursors/pen@2.svg") 15 8, auto;
+    cursor:
+      url("/cursors/pen@64.svg") 16 16,
+      auto;
   }
 }
 
