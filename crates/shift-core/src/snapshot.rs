@@ -1,22 +1,7 @@
-//! Snapshot types for serializing glyph state to TypeScript
-//!
-//! These types are auto-exported to TypeScript via ts-rs.
-//! Run `cargo test` to regenerate the TypeScript bindings in `bindings/`.
-
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{
-    contour::Contour,
-    edit_session::EditSession,
-    entity::PointId,
-    glyph::Glyph,
-    point::{Point, PointType},
-};
-
-// ═══════════════════════════════════════════════════════════
-// POINT SNAPSHOT
-// ═══════════════════════════════════════════════════════════
+use crate::{edit_session::EditSession, Contour, Point, PointId, PointType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -37,11 +22,12 @@ pub enum PointTypeString {
     OffCurve,
 }
 
-impl From<&PointType> for PointTypeString {
-    fn from(pt: &PointType) -> Self {
+impl From<PointType> for PointTypeString {
+    fn from(pt: PointType) -> Self {
         match pt {
             PointType::OnCurve => PointTypeString::OnCurve,
             PointType::OffCurve => PointTypeString::OffCurve,
+            PointType::QCurve => PointTypeString::OnCurve,
         }
     }
 }
@@ -57,10 +43,6 @@ impl From<&Point> for PointSnapshot {
         }
     }
 }
-
-// ═══════════════════════════════════════════════════════════
-// CONTOUR SNAPSHOT
-// ═══════════════════════════════════════════════════════════
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -81,10 +63,6 @@ impl From<&Contour> for ContourSnapshot {
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-// GLYPH SNAPSHOT
-// ═══════════════════════════════════════════════════════════
-
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
@@ -99,33 +77,16 @@ pub struct GlyphSnapshot {
 }
 
 impl GlyphSnapshot {
-    /// Create a snapshot from a glyph without an active contour
-    pub fn from_glyph(glyph: &Glyph) -> Self {
-        Self {
-            unicode: glyph.unicode(),
-            name: glyph.name().to_string(),
-            x_advance: glyph.x_advance(),
-            contours: glyph.contours_iter().map(ContourSnapshot::from).collect(),
-            active_contour_id: None,
-        }
-    }
-
-    /// Create a snapshot from an edit session (includes active contour)
     pub fn from_edit_session(session: &EditSession) -> Self {
-        let glyph = session.glyph();
         Self {
-            unicode: glyph.unicode(),
-            name: glyph.name().to_string(),
-            x_advance: glyph.x_advance(),
-            contours: glyph.contours_iter().map(ContourSnapshot::from).collect(),
+            unicode: session.unicode(),
+            name: session.glyph_name().to_string(),
+            x_advance: session.width(),
+            contours: session.contours_iter().map(ContourSnapshot::from).collect(),
             active_contour_id: session.active_contour_id().map(|id| id.raw().to_string()),
         }
     }
 }
-
-// ═══════════════════════════════════════════════════════════
-// COMMAND RESULT
-// ═══════════════════════════════════════════════════════════
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +106,6 @@ pub struct CommandResult {
 }
 
 impl CommandResult {
-    /// Create a successful result
     pub fn success(session: &EditSession, affected_point_ids: Vec<PointId>) -> Self {
         Self {
             success: true,
@@ -157,12 +117,11 @@ impl CommandResult {
                     .map(|id| id.raw().to_string())
                     .collect(),
             ),
-            can_undo: false, // TODO: implement undo tracking
-            can_redo: false, // TODO: implement redo tracking
+            can_undo: false,
+            can_redo: false,
         }
     }
 
-    /// Create a successful result without affected points
     pub fn success_simple(session: &EditSession) -> Self {
         Self {
             success: true,
@@ -174,7 +133,6 @@ impl CommandResult {
         }
     }
 
-    /// Create an error result
     pub fn error(message: impl Into<String>) -> Self {
         Self {
             success: false,
@@ -190,8 +148,7 @@ impl CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contour::Contour;
-    use crate::point::PointType;
+    use crate::{Contour, GlyphLayer, PointType};
 
     #[test]
     fn point_snapshot_from_point() {
@@ -223,8 +180,7 @@ mod tests {
 
     #[test]
     fn glyph_snapshot_from_edit_session() {
-        let glyph = Glyph::new("A".to_string(), 65, 600.0);
-        let mut session = EditSession::new(glyph);
+        let mut session = EditSession::new("A".to_string(), 65, GlyphLayer::with_width(600.0));
         let contour_id = session.add_empty_contour();
         session
             .add_point(50.0, 50.0, PointType::OnCurve, false)
@@ -245,8 +201,7 @@ mod tests {
 
     #[test]
     fn command_result_success() {
-        let glyph = Glyph::new("B".to_string(), 66, 500.0);
-        let session = EditSession::new(glyph);
+        let session = EditSession::new("B".to_string(), 66, GlyphLayer::with_width(500.0));
 
         let result = CommandResult::success_simple(&session);
 
@@ -266,8 +221,7 @@ mod tests {
 
     #[test]
     fn snapshot_serializes_to_json() {
-        let glyph = Glyph::new("C".to_string(), 67, 550.0);
-        let mut session = EditSession::new(glyph);
+        let mut session = EditSession::new("C".to_string(), 67, GlyphLayer::with_width(550.0));
         session.add_empty_contour();
         session
             .add_point(10.0, 20.0, PointType::OnCurve, false)
@@ -276,7 +230,6 @@ mod tests {
         let snapshot = GlyphSnapshot::from_edit_session(&session);
         let json = serde_json::to_string(&snapshot).unwrap();
 
-        // Verify it contains expected fields
         assert!(json.contains("\"unicode\":67"));
         assert!(json.contains("\"name\":\"C\""));
         assert!(json.contains("\"xAdvance\":550"));

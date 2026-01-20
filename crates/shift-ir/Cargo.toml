@@ -1,0 +1,13 @@
+[package]
+name = "shift-ir"
+version = "0.1.0"
+edition = "2021"
+description = "Intermediate representation for font data - a rich, format-agnostic font model"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+ts-rs = "11.0.1"

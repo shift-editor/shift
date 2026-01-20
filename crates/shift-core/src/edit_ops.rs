@@ -2,10 +2,9 @@ use std::collections::HashSet;
 
 use crate::{
     edit_session::EditSession,
-    entity::PointId,
     pattern::{maintain_tangency, MatchedRule, PatternMatcher, RuleId},
-    point::PointType,
     snapshot::GlyphSnapshot,
+    PointId, PointType,
 };
 
 #[derive(Debug, Clone)]
@@ -32,7 +31,7 @@ pub fn apply_edits(
 
     for &point_id in selected_ids {
         if let Some(contour_id) = session.find_point_contour(point_id) {
-            if let Some(contour) = session.glyph().contour(contour_id) {
+            if let Some(contour) = session.contour(contour_id) {
                 if let Some(rule) = matcher.match_rule(contour, point_id, selected_ids) {
                     matched_rules.push(rule);
                 }
@@ -84,7 +83,7 @@ fn move_anchor_handles(
     };
 
     let handles_to_move = {
-        let Some(contour) = session.glyph().contour(contour_id) else {
+        let Some(contour) = session.contour(contour_id) else {
             return vec![];
         };
 
@@ -94,11 +93,11 @@ fn move_anchor_handles(
         };
 
         let mut handles = Vec::new();
-        if anchor_idx > 0 && points[anchor_idx - 1].point_type() == &PointType::OffCurve {
+        if anchor_idx > 0 && points[anchor_idx - 1].point_type() == PointType::OffCurve {
             handles.push(points[anchor_idx - 1].id());
         }
         if anchor_idx + 1 < points.len()
-            && points[anchor_idx + 1].point_type() == &PointType::OffCurve
+            && points[anchor_idx + 1].point_type() == PointType::OffCurve
         {
             handles.push(points[anchor_idx + 1].id());
         }
@@ -135,13 +134,11 @@ fn apply_maintain_tangency_rule(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph::Glyph;
-    use crate::point::PointType;
+    use crate::GlyphLayer;
 
     fn create_smooth_bezier_session() -> (EditSession, PointId, PointId, PointId, PointId, PointId)
     {
-        let glyph = Glyph::new("test".to_string(), 65, 500.0);
-        let mut session = EditSession::new(glyph);
+        let mut session = EditSession::new("test".to_string(), 65, GlyphLayer::with_width(500.0));
         session.add_empty_contour();
 
         let corner = session
@@ -176,7 +173,7 @@ mod tests {
         assert!(result.affected_point_ids.contains(&corner));
 
         let contour_id = session.active_contour_id().unwrap();
-        let contour = session.glyph().contour(contour_id).unwrap();
+        let contour = session.contour(contour_id).unwrap();
         let point = contour.get_point(corner).unwrap();
         assert_eq!(point.x(), 10.0);
         assert_eq!(point.y(), 20.0);
@@ -216,7 +213,7 @@ mod tests {
             .any(|r| r.rule_id == RuleId::MaintainTangencyRight));
 
         let contour_id = session.active_contour_id().unwrap();
-        let contour = session.glyph().contour(contour_id).unwrap();
+        let contour = session.contour(contour_id).unwrap();
 
         let smooth_pt = contour.get_point(smooth).unwrap();
         let h1 = contour.get_point(handle1).unwrap();

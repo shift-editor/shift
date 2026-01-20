@@ -1,4 +1,4 @@
-use crate::{edit_session::EditSession, entity::PointId, vec2::Vec2};
+use crate::{edit_session::EditSession, vec2::Vec2, PointId};
 
 pub fn maintain_tangency(
     session: &mut EditSession,
@@ -12,7 +12,7 @@ pub fn maintain_tangency(
         return vec![];
     };
 
-    let Some(contour) = session.glyph().contour(anchor_contour_id) else {
+    let Some(contour) = session.contour(anchor_contour_id) else {
         return vec![];
     };
 
@@ -37,7 +37,7 @@ pub fn maintain_tangency(
         anchor + (-normalized * opposite_magnitude)
     };
 
-    let Ok(contour) = session.glyph_mut().contour_mut(anchor_contour_id) else {
+    let Some(contour) = session.contour_mut(anchor_contour_id) else {
         return vec![];
     };
 
@@ -52,12 +52,10 @@ pub fn maintain_tangency(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph::Glyph;
-    use crate::point::PointType;
+    use crate::{GlyphLayer, PointType};
 
     fn create_smooth_point_session() -> (EditSession, PointId, PointId, PointId) {
-        let glyph = Glyph::new("test".to_string(), 65, 500.0);
-        let mut session = EditSession::new(glyph);
+        let mut session = EditSession::new("test".to_string(), 65, GlyphLayer::with_width(500.0));
         session.add_empty_contour();
 
         let handle1 = session
@@ -79,7 +77,7 @@ mod tests {
 
         {
             let contour_id = session.active_contour_id().unwrap();
-            let contour = session.glyph_mut().contour_mut(contour_id).unwrap();
+            let contour = session.contour_mut(contour_id).unwrap();
             let h2 = contour.get_point_mut(handle2).unwrap();
             h2.set_position(100.0, 50.0);
         }
@@ -90,7 +88,7 @@ mod tests {
         assert!(affected.contains(&handle1));
 
         let contour_id = session.active_contour_id().unwrap();
-        let contour = session.glyph().contour(contour_id).unwrap();
+        let contour = session.contour(contour_id).unwrap();
         let h1 = contour.get_point(handle1).unwrap();
 
         let smooth_pt = contour.get_point(smooth).unwrap();
@@ -112,7 +110,7 @@ mod tests {
 
         let original_magnitude = {
             let contour_id = session.active_contour_id().unwrap();
-            let contour = session.glyph().contour(contour_id).unwrap();
+            let contour = session.contour(contour_id).unwrap();
             let anchor = contour.get_point(smooth).unwrap();
             let h1 = contour.get_point(handle1).unwrap();
             let anchor_pos = Vec2::from(anchor);
@@ -122,7 +120,7 @@ mod tests {
 
         {
             let contour_id = session.active_contour_id().unwrap();
-            let contour = session.glyph_mut().contour_mut(contour_id).unwrap();
+            let contour = session.contour_mut(contour_id).unwrap();
             let h2 = contour.get_point_mut(handle2).unwrap();
             h2.set_position(100.0, 50.0);
         }
@@ -131,7 +129,7 @@ mod tests {
 
         let new_magnitude = {
             let contour_id = session.active_contour_id().unwrap();
-            let contour = session.glyph().contour(contour_id).unwrap();
+            let contour = session.contour(contour_id).unwrap();
             let anchor = contour.get_point(smooth).unwrap();
             let h1 = contour.get_point(handle1).unwrap();
             let anchor_pos = Vec2::from(anchor);

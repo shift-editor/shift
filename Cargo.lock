@@ -1352,6 +1352,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-backends"
+version = "0.1.0"
+dependencies = [
+ "fontc",
+ "norad 0.16.0",
+ "plist",
+ "shift-ir",
+ "skrifa",
+]
+
+[[package]]
 name = "shift-core"
 version = "0.0.0"
 dependencies = [
@@ -1360,7 +1371,17 @@ dependencies = [
  "norad 0.16.0",
  "serde",
  "serde_json",
+ "shift-backends",
+ "shift-ir",
  "skrifa",
+ "ts-rs",
+]
+
+[[package]]
+name = "shift-ir"
+version = "0.1.0"
+dependencies = [
+ "serde",
  "ts-rs",
 ]
 

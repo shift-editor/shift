@@ -5,27 +5,20 @@ use napi_derive::napi;
 use shift_core::{
   edit_ops::apply_edits,
   edit_session::EditSession,
-  entity::PointId,
-  font::Font,
   font_loader::FontLoader,
   pattern::MatchedRule,
-  point::PointType,
   snapshot::{CommandResult, GlyphSnapshot},
+  ContourId, Font, Glyph, GlyphLayer, LayerId, PointId, PointType,
 };
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
 
-/// FontEngine is the main entry point for the Rust font editing system.
-///
-/// It owns the font data and manages edit sessions. When a session is active,
-/// the glyph being edited is owned by the session. When the session ends,
-/// the glyph is returned to the font.
 #[napi]
 pub struct FontEngine {
   font_loader: FontLoader,
   current_edit_session: Option<EditSession>,
-  /// Unicode of the glyph being edited (for returning it to the font)
-  editing_unicode: Option<u32>,
+  editing_glyph: Option<Glyph>,
+  editing_layer_id: Option<LayerId>,
   font: Font,
 }
 
@@ -42,7 +35,8 @@ impl FontEngine {
     Self {
       font_loader: FontLoader::new(),
       current_edit_session: None,
-      editing_unicode: None,
+      editing_glyph: None,
+      editing_layer_id: None,
       font: Font::default(),
     }
   }
@@ -58,21 +52,19 @@ impl FontEngine {
 
   #[napi]
   pub fn get_metadata(&self) -> JSFontMetaData {
-    self.font.get_metadata().clone().into()
+    self.font.metadata().into()
   }
 
   #[napi]
   pub fn get_metrics(&self) -> JSFontMetrics {
-    (*self.font.get_metrics()).into()
+    self.font.metrics().into()
   }
 
   #[napi]
   pub fn get_glyph_count(&self) -> u32 {
-    self.font.get_glyph_count() as u32
+    self.font.glyph_count() as u32
   }
 
-  /// Start an edit session for a glyph.
-  /// Takes ownership of the glyph from the font.
   #[napi]
   pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
     if self.current_edit_session.is_some() {
@@ -82,12 +74,34 @@ impl FontEngine {
       ));
     }
 
-    // Take ownership of the glyph from the font
-    let glyph = self.font.take_glyph(unicode);
-    let edit_session = EditSession::new(glyph);
+    let glyph_name = self
+      .font
+      .glyph_by_unicode(unicode)
+      .map(|g| g.name().to_string());
+
+    let mut glyph = if let Some(name) = &glyph_name {
+      self
+        .font
+        .take_glyph(name)
+        .unwrap_or_else(|| Glyph::with_unicode(name.clone(), unicode))
+    } else {
+      let name = char::from_u32(unicode)
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| format!("uni{unicode:04X}"));
+      Glyph::with_unicode(name, unicode)
+    };
+
+    let layer_id = self.font.default_layer_id();
+    let layer = glyph
+      .remove_layer(layer_id)
+      .unwrap_or_else(|| GlyphLayer::with_width(500.0));
+
+    let edit_session = EditSession::new(glyph.name().to_string(), unicode, layer);
 
     self.current_edit_session = Some(edit_session);
-    self.editing_unicode = Some(unicode);
+    self.editing_glyph = Some(glyph);
+    self.editing_layer_id = Some(layer_id);
+
     Ok(())
   }
 
@@ -98,8 +112,6 @@ impl FontEngine {
       .ok_or(Error::new(Status::GenericFailure, "No edit session active"))
   }
 
-  /// End the current edit session.
-  /// Returns the glyph to the font.
   #[napi]
   pub fn end_edit_session(&mut self) -> Result<()> {
     let session = self
@@ -107,28 +119,33 @@ impl FontEngine {
       .take()
       .ok_or(Error::new(Status::GenericFailure, "No edit session to end"))?;
 
-    // Return the glyph to the font
-    let glyph = session.into_glyph();
+    let mut glyph = self.editing_glyph.take().ok_or(Error::new(
+      Status::GenericFailure,
+      "No glyph stored for session",
+    ))?;
+
+    let layer_id = self.editing_layer_id.take().ok_or(Error::new(
+      Status::GenericFailure,
+      "No layer ID stored for session",
+    ))?;
+
+    let layer = session.into_layer();
+    glyph.set_layer(layer_id, layer);
     self.font.put_glyph(glyph);
-    self.editing_unicode = None;
 
     Ok(())
   }
 
-  /// Check if an edit session is active
   #[napi]
   pub fn has_edit_session(&self) -> bool {
     self.current_edit_session.is_some()
   }
 
-  /// Get the unicode of the glyph being edited
   #[napi]
   pub fn get_editing_unicode(&self) -> Option<u32> {
-    self.editing_unicode
+    self.current_edit_session.as_ref().map(|s| s.unicode())
   }
 
-  /// Add an empty contour to the current glyph and set it as active.
-  /// Returns the contour ID as a string.
   #[napi]
   pub fn add_empty_contour(&mut self) -> Result<String> {
     let edit_session = self.get_edit_session()?;
@@ -136,18 +153,14 @@ impl FontEngine {
     Ok(contour_id.to_string())
   }
 
-  /// Get the active contour ID
   #[napi]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
     Ok(edit_session.active_contour_id().map(|id| id.to_string()))
   }
 
-  /// Set the active contour by ID
   #[napi]
   pub fn set_active_contour(&mut self, _contour_id: String) -> Result<()> {
-    // For now, we need to parse the string back to ContourId
-    // This is a simplification - in a full implementation we'd have proper ID handling
     Err(Error::new(
       Status::GenericFailure,
       "set_active_contour not yet implemented - contour IDs need proper serialization",
@@ -158,8 +171,6 @@ impl FontEngine {
   // SNAPSHOT METHODS
   // ═══════════════════════════════════════════════════════════
 
-  /// Get the current glyph snapshot as JSON.
-  /// Returns null if no edit session is active.
   #[napi]
   pub fn get_snapshot(&self) -> Option<String> {
     self.current_edit_session.as_ref().map(|session| {
@@ -168,8 +179,6 @@ impl FontEngine {
     })
   }
 
-  /// Get the current glyph snapshot as a parsed object (avoids JSON overhead).
-  /// This is more efficient for frequent reads.
   #[napi]
   pub fn get_snapshot_data(&self) -> Result<JSGlyphSnapshot> {
     let session = self
@@ -184,8 +193,6 @@ impl FontEngine {
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  /// Add a point to the active contour.
-  /// Returns a CommandResult JSON string.
   #[napi]
   pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
     let session = self.get_edit_session()?;
@@ -212,8 +219,6 @@ impl FontEngine {
     }
   }
 
-  /// Add a point to a specific contour.
-  /// Returns a CommandResult JSON string.
   #[napi]
   pub fn add_point_to_contour(
     &mut self,
@@ -238,9 +243,8 @@ impl FontEngine {
       }
     };
 
-    // Parse contour ID (stored as u128 string)
     let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => shift_core::entity::ContourId::from_raw(raw),
+      Ok(raw) => ContourId::from_raw(raw),
       Err(_) => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
@@ -260,8 +264,6 @@ impl FontEngine {
     }
   }
 
-  /// Insert a point before an existing point.
-  /// Returns a CommandResult JSON string with the new point ID.
   #[napi]
   pub fn insert_point_before(
     &mut self,
@@ -286,9 +288,8 @@ impl FontEngine {
       }
     };
 
-    // Parse point ID (stored as u128 string)
     let before_id = match before_point_id.parse::<u128>() {
-      Ok(raw) => shift_core::entity::PointId::from_raw(raw),
+      Ok(raw) => PointId::from_raw(raw),
       Err(_) => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
@@ -308,7 +309,6 @@ impl FontEngine {
     }
   }
 
-  /// Add an empty contour and return a CommandResult JSON string.
   #[napi]
   pub fn add_contour(&mut self) -> Result<String> {
     let session = self.get_edit_session()?;
@@ -317,7 +317,6 @@ impl FontEngine {
     Ok(serde_json::to_string(&result).unwrap())
   }
 
-  /// Close the active contour.
   #[napi]
   pub fn close_contour(&mut self) -> Result<String> {
     let session = self.get_edit_session()?;
@@ -338,22 +337,13 @@ impl FontEngine {
     }
   }
 
-  /// Move multiple points by a delta (dx, dy).
-  /// Takes an array of point ID strings.
-  /// Returns a CommandResult JSON string with affected point IDs.
   #[napi]
   pub fn move_points(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
     let session = self.get_edit_session()?;
 
-    // Parse point IDs from strings
-    let parsed_ids: Vec<shift_core::entity::PointId> = point_ids
+    let parsed_ids: Vec<PointId> = point_ids
       .iter()
-      .filter_map(|id_str| {
-        id_str
-          .parse::<u128>()
-          .ok()
-          .map(shift_core::entity::PointId::from_raw)
-      })
+      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
@@ -367,22 +357,13 @@ impl FontEngine {
     Ok(serde_json::to_string(&result).unwrap())
   }
 
-  /// Remove multiple points by their IDs.
-  /// Takes an array of point ID strings.
-  /// Returns a CommandResult JSON string.
   #[napi]
   pub fn remove_points(&mut self, point_ids: Vec<String>) -> Result<String> {
     let session = self.get_edit_session()?;
 
-    // Parse point IDs from strings
-    let parsed_ids: Vec<shift_core::entity::PointId> = point_ids
+    let parsed_ids: Vec<PointId> = point_ids
       .iter()
-      .filter_map(|id_str| {
-        id_str
-          .parse::<u128>()
-          .ok()
-          .map(shift_core::entity::PointId::from_raw)
-      })
+      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
@@ -396,15 +377,12 @@ impl FontEngine {
     Ok(serde_json::to_string(&result).unwrap())
   }
 
-  /// Toggle the smooth property of a point.
-  /// Returns a CommandResult JSON string.
   #[napi]
   pub fn toggle_smooth(&mut self, point_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
 
-    // Parse point ID from string
     let parsed_id = match point_id.parse::<u128>() {
-      Ok(raw) => shift_core::entity::PointId::from_raw(raw),
+      Ok(raw) => PointId::from_raw(raw),
       Err(_) => {
         return Ok(
           serde_json::to_string(&CommandResult::error(format!(
@@ -428,17 +406,6 @@ impl FontEngine {
   // UNIFIED EDIT OPERATION
   // ═══════════════════════════════════════════════════════════
 
-  /// Apply edits to selected points with automatic rule matching and application.
-  /// This is a unified operation that combines:
-  /// 1. Moving the selected points
-  /// 2. Matching rules based on point context
-  /// 3. Applying matched rules (handle movement, tangency maintenance)
-  ///
-  /// Returns a JSON object with:
-  /// - success: boolean
-  /// - snapshot: the updated glyph snapshot
-  /// - affectedPointIds: all points that were modified
-  /// - matchedRules: rules that were matched and applied
   #[napi]
   pub fn apply_edits_unified(
     &mut self,
@@ -450,7 +417,7 @@ impl FontEngine {
 
     let selected_ids: HashSet<PointId> = point_ids
       .iter()
-      .filter_map(|id_str| id_str.parse().ok())
+      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
       .collect();
 
     if selected_ids.is_empty() && !point_ids.is_empty() {
@@ -491,7 +458,6 @@ struct EditResultJson {
 // JS-NATIVE SNAPSHOT TYPES (no JSON serialization)
 // ═══════════════════════════════════════════════════════════
 
-/// Point snapshot as native NAPI object (more efficient than JSON)
 #[napi(object)]
 pub struct JSPointSnapshot {
   pub id: String,
@@ -501,7 +467,6 @@ pub struct JSPointSnapshot {
   pub smooth: bool,
 }
 
-/// Contour snapshot as native NAPI object
 #[napi(object)]
 pub struct JSContourSnapshot {
   pub id: String,
@@ -509,7 +474,6 @@ pub struct JSContourSnapshot {
   pub closed: bool,
 }
 
-/// Glyph snapshot as native NAPI object
 #[napi(object)]
 pub struct JSGlyphSnapshot {
   pub unicode: u32,
@@ -521,12 +485,11 @@ pub struct JSGlyphSnapshot {
 
 impl JSGlyphSnapshot {
   pub fn from_edit_session(session: &EditSession) -> Self {
-    let glyph = session.glyph();
     Self {
-      unicode: glyph.unicode(),
-      name: glyph.name().to_string(),
-      x_advance: glyph.x_advance(),
-      contours: glyph
+      unicode: session.unicode(),
+      name: session.glyph_name().to_string(),
+      x_advance: session.width(),
+      contours: session
         .contours_iter()
         .map(|c| JSContourSnapshot {
           id: c.id().to_string(),
@@ -538,7 +501,7 @@ impl JSGlyphSnapshot {
               x: p.x(),
               y: p.y(),
               point_type: match p.point_type() {
-                PointType::OnCurve => "onCurve".to_string(),
+                PointType::OnCurve | PointType::QCurve => "onCurve".to_string(),
                 PointType::OffCurve => "offCurve".to_string(),
               },
               smooth: p.is_smooth(),
@@ -567,12 +530,10 @@ mod tests {
   fn test_start_and_end_session() {
     let mut engine = FontEngine::new();
 
-    // Start session for 'A' (65)
     engine.start_edit_session(65).unwrap();
     assert!(engine.has_edit_session());
     assert_eq!(engine.get_editing_unicode(), Some(65));
 
-    // End session
     engine.end_edit_session().unwrap();
     assert!(!engine.has_edit_session());
     assert_eq!(engine.get_editing_unicode(), None);
@@ -596,7 +557,6 @@ mod tests {
     let contour_id = engine.add_empty_contour().unwrap();
     assert!(!contour_id.is_empty());
 
-    // Active contour should be set
     let active = engine.get_active_contour_id().unwrap();
     assert_eq!(active, Some(contour_id));
   }

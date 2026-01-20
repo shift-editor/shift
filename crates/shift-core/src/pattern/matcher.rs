@@ -1,10 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    contour::Contour,
-    entity::PointId,
-    point::{Point, PointType},
-};
+use crate::{Contour, Point, PointId, PointType};
 
 use super::{
     parser::{TOKEN_CORNER, TOKEN_HANDLE, TOKEN_NO_POINT, TOKEN_SELECTED, TOKEN_SMOOTH},
@@ -45,7 +41,7 @@ impl PatternMatcher {
                     TOKEN_SELECTED
                 } else {
                     match p.point_type() {
-                        PointType::OnCurve => {
+                        PointType::OnCurve | PointType::QCurve => {
                             if p.is_smooth() {
                                 TOKEN_SMOOTH
                             } else {
@@ -60,7 +56,7 @@ impl PatternMatcher {
     }
 
     fn get_point_at_offset(contour: &Contour, center_idx: usize, offset: i32) -> Option<&Point> {
-        checked_offset_index(center_idx, offset, contour.length()).map(|idx| &contour.points()[idx])
+        checked_offset_index(center_idx, offset, contour.len()).map(|idx| &contour.points()[idx])
     }
 
     fn build_pattern(
@@ -148,19 +144,17 @@ impl PatternMatcher {
             }
             RuleId::MaintainTangencyRight => {
                 if point_index > 0 {
-                    affected.push(points[point_index - 1].id().to_string()); // anchor
+                    affected.push(points[point_index - 1].id().to_string());
                     if point_index > 1 {
                         affected.push(points[point_index - 2].id().to_string());
-                        // opposite handle
                     }
                 }
             }
             RuleId::MaintainTangencyLeft => {
                 if point_index + 1 < points.len() {
-                    affected.push(points[point_index + 1].id().to_string()); // anchor
+                    affected.push(points[point_index + 1].id().to_string());
                     if point_index + 2 < points.len() {
                         affected.push(points[point_index + 2].id().to_string());
-                        // opposite handle
                     }
                 }
             }
@@ -197,8 +191,6 @@ impl Default for PatternMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contour::Contour;
-    use crate::point::PointType;
 
     fn create_smooth_bezier_contour() -> (Contour, PointId, PointId, PointId, PointId, PointId) {
         let mut contour = Contour::new();
@@ -222,7 +214,7 @@ mod tests {
         let matcher = PatternMatcher::new();
         let patterns = matcher.build_patterns(&contour, smooth, &selected);
 
-        assert_eq!(patterns[0], "HSH"); // 3-point window: handle, smooth, handle
+        assert_eq!(patterns[0], "HSH");
     }
 
     #[test]
@@ -236,7 +228,7 @@ mod tests {
         let matcher = PatternMatcher::new();
         let patterns = matcher.build_patterns(&contour, handle2, &selected);
 
-        assert_eq!(patterns[0], "SHC"); // 3-point window: smooth, handle, corner
+        assert_eq!(patterns[0], "SHC");
     }
 
     #[test]
@@ -251,7 +243,7 @@ mod tests {
         let matcher = PatternMatcher::new();
         let patterns = matcher.build_patterns(&contour, smooth, &selected);
 
-        assert_eq!(patterns[0], "@SH"); // handle1 is selected (shown as @), smooth is central, handle2
+        assert_eq!(patterns[0], "@SH");
     }
 
     #[test]
@@ -268,7 +260,7 @@ mod tests {
         assert!(matched.is_some());
         let rule = matched.unwrap();
         assert_eq!(rule.rule_id, RuleId::MoveBothHandles);
-        assert_eq!(rule.affected_point_ids.len(), 2); // Both handles
+        assert_eq!(rule.affected_point_ids.len(), 2);
     }
 
     #[test]
@@ -283,13 +275,12 @@ mod tests {
         let patterns = matcher.build_patterns(&contour, handle2, &selected);
 
         assert_eq!(patterns[0], "SHC");
-        assert_eq!(patterns[1], "HSHCN"); // 5-window matches MaintainTangencyRight
+        assert_eq!(patterns[1], "HSHCN");
 
         let matched = matcher.match_rule(&contour, handle2, &selected);
         assert!(matched.is_some());
 
         let rule = matched.unwrap();
-        // Selected handle is to the RIGHT of smooth, so MaintainTangencyRight
         assert_eq!(rule.rule_id, RuleId::MaintainTangencyRight);
     }
 
@@ -321,6 +312,6 @@ mod tests {
         let matcher = PatternMatcher::new();
         let matched = matcher.match_rule(&contour, corner1, &selected);
 
-        assert!(matched.is_none()); // No rule for corner-to-corner
+        assert!(matched.is_none());
     }
 }

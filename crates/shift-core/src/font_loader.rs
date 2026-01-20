@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::binary::BytesFontAdaptor;
-use crate::font::Font;
-use crate::ufo::UfoFontAdaptor;
+use shift_backends::ufo::UfoReader;
+use shift_backends::FontReader;
+use shift_ir::Font;
 
 #[derive(Hash, Eq, PartialEq)]
 pub enum FontFormat {
@@ -15,6 +16,20 @@ pub enum FontFormat {
 pub trait FontAdaptor {
     fn read_font(&self, path: &str) -> Result<Font, String>;
     fn write_font(&self, font: &Font, path: &str) -> Result<(), String>;
+}
+
+struct UfoFontAdaptor;
+
+impl FontAdaptor for UfoFontAdaptor {
+    fn read_font(&self, path: &str) -> Result<Font, String> {
+        UfoReader::new().load(path)
+    }
+
+    fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
+        use shift_backends::ufo::UfoWriter;
+        use shift_backends::FontWriter;
+        UfoWriter::new().save(font, path)
+    }
 }
 
 pub struct FontLoader {
