@@ -119,14 +119,18 @@ if (result.success) {
 
 ### Type Safety
 
+The preload uses TypeScript's `satisfies` operator for compile-time safety:
+
 ```typescript
-// types/electron.d.ts provides types
-declare global {
-  interface Window {
-    shiftFont: NativeFontEngine;
-  }
-}
+import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
+
+const fontEngineAPI = {
+  // ... method implementations
+} satisfies FontEngineAPI; // TypeScript error if method missing
 ```
+
+Types are defined in `@shared/bridge/FontEngineAPI.ts` (single source of truth).
+See [bridge docs](../../shared/bridge/docs/DOCS.md) for details.
 
 ### Engine Wrapper Access
 
@@ -162,6 +166,7 @@ Renderer parses JSON result
 
 ## Related Systems
 
+- [bridge](../../shared/bridge/docs/DOCS.md) - Type-safe bridge definitions
 - [shift-node](../../../crates/shift-node/docs/DOCS.md) - Native module
 - [main](../main/docs/DOCS.md) - Loads preload script
 - [engine](../renderer/src/engine/docs/DOCS.md) - TypeScript wrapper

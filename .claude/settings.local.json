@@ -40,7 +40,13 @@
       "Bash(cargo doc:*)",
       "Bash(cargo clippy:*)",
       "Bash(cargo fmt:*)",
-      "Bash(xattr:*)"
+      "Bash(xattr:*)",
+      "Bash(node -e:*)",
+      "Bash(pgrep:*)",
+      "Bash(pkill:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(cargo clean:*)",
+      "Bash(pnpm run build)"
     ]
   }
 }

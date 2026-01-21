@@ -36,15 +36,21 @@ export {
 } from "./segments";
 
 // Mock for testing
-export { MockNativeFontEngine, createMockNative } from "./mock";
+export { MockFontEngine, createMockNative } from "./mock";
 
 // Native types (for advanced use)
 export type {
+  FontEngineAPI,
   NativeFontEngine,
   NativeFontMetadata,
   NativeFontMetrics,
   NativeGlyphSnapshot,
   NativeContourSnapshot,
   NativePointSnapshot,
+  JsGlyphSnapshot,
+  JsContourSnapshot,
+  JsPointSnapshot,
+  JsFontMetrics,
+  JsFontMetaData,
 } from "./native";
 export { getNative, hasNative } from "./native";

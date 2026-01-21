@@ -7,10 +7,11 @@
       "inputs": ["src/**", "package.json", "tsconfig.json"]
     },
     "build:native": {
-      "cache": false,
-      "dependsOn": []
+      "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
+      "outputs": ["crates/shift-node/index.js", "crates/shift-node/index.d.ts", "crates/shift-node/*.node"]
     },
     "dev": {
+      "dependsOn": ["build:native"],
       "cache": false,
       "persistent": true
     },

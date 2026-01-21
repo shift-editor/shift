@@ -121,6 +121,8 @@ Features:
 - Drag to create handles
 - Automatic handle mirroring
 - Click first point to close contour
+- Continue contour: Click start/end point of existing open contour (after Escape)
+- Split contour: Click middle point of existing open contour (after Escape)
 
 ### Hand Tool
 
@@ -178,20 +180,22 @@ Features:
 All tools support the Escape key for cancellation via the optional `cancel()` method.
 
 **Behavior:**
+
 - Escape cancels the current in-progress operation
 - Progressive: cancels one level at a time
 - Command batches are cancelled (not committed)
 
 **Per-tool behavior:**
 
-| Tool | Cancel Action |
-|------|---------------|
-| Pen | Cancel point placement → abandon contour |
-| Select | Cancel drag → clear selection → ready |
-| Shape | Cancel rectangle preview |
-| Hand | Stop panning |
+| Tool   | Cancel Action                            |
+| ------ | ---------------------------------------- |
+| Pen    | Cancel point placement → abandon contour |
+| Select | Cancel drag → clear selection → ready    |
+| Shape  | Cancel rectangle preview                 |
+| Hand   | Stop panning                             |
 
 **Implementation pattern:**
+
 ```typescript
 cancel(): void {
   // 1. Check for in-progress operation

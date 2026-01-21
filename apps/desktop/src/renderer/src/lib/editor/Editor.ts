@@ -478,6 +478,21 @@ export class Editor {
           const id = fontEngine.editing.getActiveContourId();
           return id ? asContourId(id) : null;
         },
+        setActiveContour: (contourId) => {
+          fontEngine.editing.setActiveContour(contourId);
+        },
+        reverseContour: (contourId) => {
+          fontEngine.editing.reverseContour(contourId);
+        },
+        addPointToContour: (contourId, x, y, type, smooth) => {
+          return fontEngine.editing.addPointToContour(
+            contourId,
+            x,
+            y,
+            type as any,
+            smooth,
+          );
+        },
       },
 
       commands,

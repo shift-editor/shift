@@ -201,6 +201,15 @@ impl EditSession {
         Ok(())
     }
 
+    pub fn reverse_contour(&mut self, contour_id: ContourId) -> Result<(), String> {
+        let contour = self
+            .layer
+            .contour_mut(contour_id)
+            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        contour.reverse();
+        Ok(())
+    }
+
     pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {
         for contour in self.layer.contours_iter() {
             if contour.get_point(point_id).is_some() {

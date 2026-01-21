@@ -6,7 +6,7 @@ import type {
   EditContext,
   IndicatorContext,
 } from "@/types/tool";
-import type { PointId } from "@/types/ids";
+import type { PointId, ContourId } from "@/types/ids";
 import type { Rect2D } from "@/types/math";
 import type { GlyphSnapshot } from "@/types/generated";
 import type { CommandContext } from "@/lib/commands/Command";
@@ -159,6 +159,29 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
       const id = fontEngine.editing.getActiveContourId();
       return id ? asContourId(id) : null;
     }),
+    setActiveContour: vi.fn((contourId: ContourId) => {
+      fontEngine.editing.setActiveContour(contourId);
+    }),
+    reverseContour: vi.fn((contourId: ContourId) => {
+      fontEngine.editing.reverseContour(contourId);
+    }),
+    addPointToContour: vi.fn(
+      (
+        contourId: ContourId,
+        x: number,
+        y: number,
+        type: string,
+        smooth: boolean,
+      ) => {
+        return fontEngine.editing.addPointToContour(
+          contourId,
+          x,
+          y,
+          type as any,
+          smooth,
+        );
+      },
+    ),
   };
 
   const ctx: ToolContext = {

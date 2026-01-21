@@ -52,7 +52,7 @@ export declare class FontEngine {
   getEditingUnicode(): number | null
   addEmptyContour(): string
   getActiveContourId(): string | null
-  setActiveContour(contourId: string): void
+  setActiveContour(contourId: string): string
   getSnapshot(): string | null
   getSnapshotData(): JSGlyphSnapshot
   addPoint(x: number, y: number, pointType: string, smooth: boolean): string
@@ -60,6 +60,7 @@ export declare class FontEngine {
   insertPointBefore(beforePointId: string, x: number, y: number, pointType: string, smooth: boolean): string
   addContour(): string
   closeContour(): string
+  reverseContour(contourId: string): string
   movePoints(pointIds: Array<string>, dx: number, dy: number): string
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string

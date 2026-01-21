@@ -6,14 +6,18 @@ import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
 import type { ContourSnapshot, PointSnapshot } from "@/types/generated";
 import type { Point2D } from "@/types/math";
+import type { ContourId } from "@/types/ids";
 
 import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
 import { PenCommands } from "./commands";
-import {
-  type ContourContext,
-  type PenState,
-  DRAG_THRESHOLD,
-} from "./states";
+import { type ContourContext, type PenState, DRAG_THRESHOLD } from "./states";
+
+export type PointHitResult = {
+  contourId: ContourId;
+  pointIndex: number;
+  position: "start" | "end" | "middle";
+  contour: ContourSnapshot;
+};
 
 function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
   return contour.points.length > 0 ? contour.points[0] : null;
@@ -96,6 +100,39 @@ export class Pen implements Tool {
       return;
     }
 
+    if (!this.hasActiveDrawingContour()) {
+      const hitResult = this.findHitPoint(x, y);
+      if (hitResult && !hitResult.contour.closed) {
+        if (hitResult.position === "start" || hitResult.position === "end") {
+          ctx.commands.beginBatch("Continue Contour");
+          try {
+            this.#commands.continueContour(
+              hitResult.contourId,
+              hitResult.position === "start",
+            );
+            ctx.commands.endBatch();
+          } catch (e) {
+            ctx.commands.cancelBatch();
+            throw e;
+          }
+          return;
+        } else if (hitResult.position === "middle") {
+          ctx.commands.beginBatch("Split Contour");
+          try {
+            this.#commands.splitContour(
+              hitResult.contourId,
+              hitResult.pointIndex,
+            );
+            ctx.commands.endBatch();
+          } catch (e) {
+            ctx.commands.cancelBatch();
+            throw e;
+          }
+          return;
+        }
+      }
+    }
+
     ctx.commands.beginBatch("Add Point");
 
     const context = this.buildContourContext();
@@ -129,6 +166,21 @@ export class Pen implements Tool {
     const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
 
     this.#sm.when("ready", () => {
+      if (!this.hasActiveDrawingContour()) {
+        const hitResult = this.findHitPoint(mousePos.x, mousePos.y);
+        if (hitResult && !hitResult.contour.closed) {
+          if (hitResult.position === "start" || hitResult.position === "end") {
+            this.#editor.setCursor({ type: "pen-end" });
+          } else if (hitResult.position === "middle") {
+            this.#editor.setCursor({ type: "pen-end" });
+          } else {
+            this.#editor.setCursor({ type: "pen" });
+          }
+          this.#sm.transition({ type: "ready", mousePos });
+          return;
+        }
+      }
+
       const isOverPoint = this.isNearAnyPoint(mousePos.x, mousePos.y);
       if (isOverPoint) {
         this.#editor.setCursor({ type: "pen-end" });
@@ -226,9 +278,7 @@ export class Pen implements Tool {
 
     const hitRadius = ctx.screen.hitRadius;
     const firstPoint = getFirstPoint(activeContour);
-    return (
-      firstPoint !== null && isNearPoint({ x, y }, firstPoint, hitRadius)
-    );
+    return firstPoint !== null && isNearPoint({ x, y }, firstPoint, hitRadius);
   }
 
   private isNearAnyPoint(x: number, y: number): boolean {
@@ -245,6 +295,53 @@ export class Pen implements Tool {
       }
     }
     return false;
+  }
+
+  private findHitPoint(x: number, y: number): PointHitResult | null {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return null;
+
+    const hitRadius = ctx.screen.hitRadius;
+    for (const contour of snapshot.contours) {
+      for (let i = 0; i < contour.points.length; i++) {
+        const point = contour.points[i];
+        if (isNearPoint({ x, y }, point, hitRadius)) {
+          let position: "start" | "end" | "middle";
+          if (i === 0) {
+            position = "start";
+          } else if (i === contour.points.length - 1) {
+            position = "end";
+          } else {
+            position = "middle";
+          }
+          return {
+            contourId: contour.id as ContourId,
+            pointIndex: i,
+            position,
+            contour,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  private hasActiveDrawingContour(): boolean {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return false;
+
+    const activeContourId = ctx.edit.getActiveContourId();
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
+
+    return (
+      activeContour !== undefined &&
+      !activeContour.closed &&
+      activeContour.points.length > 0
+    );
   }
 
   private getLastOnCurvePoint(): Point2D | null {

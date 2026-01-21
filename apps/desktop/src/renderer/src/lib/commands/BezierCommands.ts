@@ -303,3 +303,53 @@ export class NudgePointsCommand extends BaseCommand<void> {
     ctx.fontEngine.editing.movePoints(this.#pointIds, -this.#dx, -this.#dy);
   }
 }
+
+/**
+ * Set the active contour.
+ * Used when continuing an existing contour.
+ */
+export class SetActiveContourCommand extends BaseCommand<void> {
+  readonly name = "Set Active Contour";
+
+  #contourId: ContourId;
+  #previousActiveId: ContourId | null = null;
+
+  constructor(contourId: ContourId) {
+    super();
+    this.#contourId = contourId;
+  }
+
+  execute(ctx: CommandContext): void {
+    this.#previousActiveId = ctx.fontEngine.editing.getActiveContourId();
+    ctx.fontEngine.editing.setActiveContour(this.#contourId);
+  }
+
+  undo(ctx: CommandContext): void {
+    if (this.#previousActiveId) {
+      ctx.fontEngine.editing.setActiveContour(this.#previousActiveId);
+    }
+  }
+}
+
+/**
+ * Reverse the points in a contour.
+ * Used when continuing from the start of a contour.
+ */
+export class ReverseContourCommand extends BaseCommand<void> {
+  readonly name = "Reverse Contour";
+
+  #contourId: ContourId;
+
+  constructor(contourId: ContourId) {
+    super();
+    this.#contourId = contourId;
+  }
+
+  execute(ctx: CommandContext): void {
+    ctx.fontEngine.editing.reverseContour(this.#contourId);
+  }
+
+  undo(ctx: CommandContext): void {
+    ctx.fontEngine.editing.reverseContour(this.#contourId);
+  }
+}

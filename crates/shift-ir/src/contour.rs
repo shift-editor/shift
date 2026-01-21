@@ -72,6 +72,10 @@ impl Contour {
         self.closed = false;
     }
 
+    pub fn reverse(&mut self) {
+        self.points.reverse();
+    }
+
     pub fn add_point(&mut self, x: f64, y: f64, point_type: PointType, smooth: bool) -> PointId {
         let id = PointId::new();
         let point = Point::new(id, x, y, point_type, smooth);

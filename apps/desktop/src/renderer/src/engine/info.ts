@@ -46,9 +46,9 @@ export class InfoManager {
   getMetadata(): FontMetadata {
     const meta = this.#ctx.native.getMetadata();
     return {
-      family: meta.family,
-      styleName: meta.styleName,
-      version: meta.version,
+      family: meta.family ?? "",
+      styleName: meta.styleName ?? "",
+      version: meta.versionMajor ?? 1,
     };
   }
 

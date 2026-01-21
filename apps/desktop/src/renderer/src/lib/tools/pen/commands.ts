@@ -1,12 +1,14 @@
 import type { Editor } from "@/lib/editor/Editor";
 import type { Point2D } from "@/types/math";
-import type { PointId } from "@/types/ids";
+import type { PointId, ContourId } from "@/types/ids";
 import type { AnchorData, HandleData } from "./states";
 import { AddPointCommand } from "@/lib/commands/PointCommands";
 import {
   InsertPointCommand,
   CloseContourCommand,
   AddContourCommand,
+  SetActiveContourCommand,
+  ReverseContourCommand,
 } from "@/lib/commands/BezierCommands";
 import { Vec2 } from "@/lib/geo";
 
@@ -145,10 +147,63 @@ export class PenCommands {
       (c) => c.id === activeContourId,
     );
 
-    if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
+    if (
+      !activeContour ||
+      activeContour.points.length === 0 ||
+      activeContour.closed
+    ) {
       return;
     }
 
     ctx.commands.execute(new AddContourCommand());
+  }
+
+  continueContour(contourId: ContourId, fromStart: boolean): void {
+    const ctx = this.#editor.createToolContext();
+    const history = ctx.commands;
+
+    history.execute(new SetActiveContourCommand(contourId));
+
+    if (fromStart) {
+      history.execute(new ReverseContourCommand(contourId));
+    }
+  }
+
+  splitContour(contourId: ContourId, atPointIndex: number): void {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return;
+
+    const contour = snapshot.contours.find((c) => c.id === contourId);
+    if (!contour) return;
+
+    if (atPointIndex <= 0 || atPointIndex >= contour.points.length - 1) {
+      return;
+    }
+
+    const pointsAfterSplit = contour.points.slice(atPointIndex);
+
+    const history = ctx.commands;
+    history.execute(new AddContourCommand());
+
+    const newContourId = ctx.edit.getActiveContourId();
+    if (!newContourId) return;
+
+    for (const point of pointsAfterSplit) {
+      ctx.edit.addPointToContour(
+        newContourId,
+        point.x,
+        point.y,
+        point.pointType,
+        point.smooth,
+      );
+    }
+
+    const pointIdsToRemove = pointsAfterSplit
+      .slice(1)
+      .map((p) => p.id as PointId);
+    if (pointIdsToRemove.length > 0) {
+      ctx.edit.removePoints(pointIdsToRemove);
+    }
   }
 }

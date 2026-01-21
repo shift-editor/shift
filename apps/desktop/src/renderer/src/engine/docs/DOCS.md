@@ -62,6 +62,20 @@ const ctx = {
 };
 ```
 
+### Bridge Types
+
+Native types are imported from the shared bridge:
+
+```typescript
+import type {
+  FontEngineAPI,
+  JsGlyphSnapshot,
+  JsFontMetrics,
+} from "@shared/bridge/FontEngineAPI";
+```
+
+See [bridge docs](../../../shared/bridge/docs/DOCS.md) for type-safe bridge architecture.
+
 ### Segment Parsing
 
 Converts snapshot points to renderable path segments:
@@ -179,6 +193,7 @@ UI Updates Automatically
 
 ## Related Systems
 
+- [bridge](../../../shared/bridge/docs/DOCS.md) - Type-safe bridge definitions
 - [shift-node](../../../crates/shift-node/docs/DOCS.md) - Native NAPI bindings
 - [preload](../../preload/docs/DOCS.md) - Context bridge exposure
 - [reactive](../lib/reactive/docs/DOCS.md) - Signal system

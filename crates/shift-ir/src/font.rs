@@ -12,7 +12,7 @@ use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FontMetadata {
     pub family_name: Option<String>,
     pub style_name: Option<String>,
@@ -28,6 +28,27 @@ pub struct FontMetadata {
     pub license_url: Option<String>,
     pub description: Option<String>,
     pub note: Option<String>,
+}
+
+impl Default for FontMetadata {
+    fn default() -> Self {
+        Self {
+            family_name: Some("Untitled Font".to_string()),
+            style_name: Some("Regular".to_string()),
+            version_major: Some(1),
+            version_minor: Some(0),
+            copyright: None,
+            trademark: None,
+            designer: None,
+            designer_url: None,
+            manufacturer: None,
+            manufacturer_url: None,
+            license: None,
+            license_url: None,
+            description: None,
+            note: None,
+        }
+    }
 }
 
 impl FontMetadata {

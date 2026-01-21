@@ -32,6 +32,13 @@ export interface IndicatorContext {
 
 export interface EditContext {
   addPoint(x: number, y: number, type: "onCurve" | "offCurve"): PointId;
+  addPointToContour(
+    contourId: ContourId,
+    x: number,
+    y: number,
+    type: string,
+    smooth: boolean,
+  ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
   applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[];
@@ -40,6 +47,8 @@ export interface EditContext {
   closeContour(): void;
   toggleSmooth(id: PointId): void;
   getActiveContourId(): ContourId | null;
+  setActiveContour(contourId: ContourId): void;
+  reverseContour(contourId: ContourId): void;
 }
 
 export interface ToolContext {

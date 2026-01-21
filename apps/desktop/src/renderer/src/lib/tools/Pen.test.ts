@@ -69,6 +69,14 @@ function createMockEditor() {
     closeContour: vi.fn(() => fontEngine.editing.closeContour()),
     toggleSmooth: vi.fn((id: PointId) => fontEngine.editing.toggleSmooth(id)),
     getActiveContourId: vi.fn(() => fontEngine.editing.getActiveContourId()),
+    setActiveContour: vi.fn((id: any) =>
+      fontEngine.editing.setActiveContour(id),
+    ),
+    reverseContour: vi.fn((id: any) => fontEngine.editing.reverseContour(id)),
+    addPointToContour: vi.fn(
+      (contourId: any, x: number, y: number, type: string, smooth: boolean) =>
+        fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
+    ),
   };
 
   const screenMocks = {
@@ -336,7 +344,9 @@ describe("Pen tool", () => {
 
       mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
       pen.onMouseMove(createMouseEvent("mousemove", 102, 102));
-      expect(mockEditor.setCursor).toHaveBeenLastCalledWith({ type: "pen-end" });
+      expect(mockEditor.setCursor).toHaveBeenLastCalledWith({
+        type: "pen-end",
+      });
 
       mockEditor.projectScreenToUpm.mockReturnValue({ x: 300, y: 300 });
       pen.onMouseMove(createMouseEvent("mousemove", 300, 300));
@@ -433,7 +443,9 @@ describe("Pen tool", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 110, 110));
 
       expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Add Point");
-      expect(mocks.commands.beginBatch).not.toHaveBeenCalledWith("Close Contour");
+      expect(mocks.commands.beginBatch).not.toHaveBeenCalledWith(
+        "Close Contour",
+      );
     });
 
     it("should use zoom-aware hit radius for point hover detection", () => {
@@ -535,6 +547,150 @@ describe("Pen tool", () => {
       const contourCountAfter = getContourCount(fontEngine.snapshot.value);
       expect(contourCountAfter).toBe(contourCountBefore);
       expect(pen.getState().type).toBe("ready");
+    });
+  });
+
+  describe("continue contour", () => {
+    it("should continue from end point when no active drawing contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+
+      pen.cancel();
+
+      mocks.commands.execute.mockClear();
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 302, y: 302 });
+      pen.onMouseDown(createMouseEvent("mousedown", 302, 302));
+
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith(
+        "Continue Contour",
+      );
+      expect(mocks.commands.endBatch).toHaveBeenCalled();
+    });
+
+    it("should continue from start point with reverse when no active drawing contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+
+      pen.cancel();
+
+      mocks.commands.execute.mockClear();
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
+      pen.onMouseDown(createMouseEvent("mousedown", 102, 102));
+
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith(
+        "Continue Contour",
+      );
+      expect(mocks.commands.endBatch).toHaveBeenCalled();
+    });
+
+    it("should not continue when there is an active drawing contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 202, y: 202 });
+      pen.onMouseDown(createMouseEvent("mousedown", 202, 202));
+
+      expect(mocks.commands.beginBatch).not.toHaveBeenCalledWith(
+        "Continue Contour",
+      );
+    });
+  });
+
+  describe("split contour", () => {
+    it("should split at middle point when no active drawing contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+      pen.onMouseDown(createMouseEvent("mousedown", 400, 400));
+      pen.onMouseUp(createMouseEvent("mouseup", 400, 400));
+
+      pen.cancel();
+
+      mocks.commands.execute.mockClear();
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 202, y: 202 });
+      pen.onMouseDown(createMouseEvent("mousedown", 202, 202));
+
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Split Contour");
+      expect(mocks.commands.endBatch).toHaveBeenCalled();
+    });
+
+    it("should not split when there is an active drawing contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+      pen.onMouseDown(createMouseEvent("mousedown", 400, 400));
+      pen.onMouseUp(createMouseEvent("mouseup", 400, 400));
+
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 202, y: 202 });
+      pen.onMouseDown(createMouseEvent("mousedown", 202, 202));
+
+      expect(mocks.commands.beginBatch).not.toHaveBeenCalledWith(
+        "Split Contour",
+      );
+    });
+  });
+
+  describe("cursor feedback for continue/split", () => {
+    it("should show pen-end cursor when hovering over endpoint of non-active contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+
+      pen.cancel();
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 302, y: 302 });
+      pen.onMouseMove(createMouseEvent("mousemove", 302, 302));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen-end" });
+    });
+
+    it("should show pen-end cursor when hovering over middle point of non-active contour", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+      pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
+      pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
+      pen.onMouseDown(createMouseEvent("mousedown", 400, 400));
+      pen.onMouseUp(createMouseEvent("mouseup", 400, 400));
+
+      pen.cancel();
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 202, y: 202 });
+      pen.onMouseMove(createMouseEvent("mousemove", 202, 202));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen-end" });
     });
   });
 });

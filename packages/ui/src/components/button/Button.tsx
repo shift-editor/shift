@@ -46,7 +46,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           variantStyles[variant],
           sizeStyles[size],
           className,
-          "data-[active=true]:bg-hover",
         )}
         disabled={disabled}
         data-active={isActive ? true : undefined}

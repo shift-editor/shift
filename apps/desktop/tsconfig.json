@@ -3,7 +3,8 @@
   "include": [
     "src/renderer/env.d.ts",
     "src/renderer/**/*",
-    "src/preload/*.d.ts"
+    "src/preload/*.d.ts",
+    "src/shared/**/*"
   ],
   "exclude": ["src/**/*.test.ts"],
   "compilerOptions": {
@@ -18,8 +19,8 @@
       "@assets/*": ["./src/renderer/src/assets/*"],
       "@components/*": ["./src/renderer/src/components/*"],
       "@types/*": ["./src/renderer/src/types/*"],
-      "@data/*": ["./src/renderer/src/charsets/*"]
+      "@data/*": ["./src/renderer/src/charsets/*"],
+      "@shared/*": ["./src/shared/*"]
     }
-  },
-  "references": [{ "path": "./tsconfig.node.json" }]
+  }
 }

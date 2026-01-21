@@ -1,23 +1,23 @@
 /**
  * MockFontEngine - In-memory implementation for testing.
  *
- * Implements the NativeFontEngine interface without requiring
+ * Implements the FontEngineAPI interface without requiring
  * the Rust backend or Electron context.
  */
 
 import type {
-  NativeFontEngine,
-  NativeFontMetadata,
-  NativeFontMetrics,
-  NativeGlyphSnapshot,
-} from "./native";
+  FontEngineAPI,
+  JsFontMetaData,
+  JsFontMetrics,
+  JsGlyphSnapshot,
+} from "@shared/bridge/FontEngineAPI";
 import type { PointTypeString, CommandResult } from "@/types/generated";
 
 /**
- * Mock implementation of NativeFontEngine for testing.
+ * Mock implementation of FontEngineAPI for testing.
  */
-export class MockNativeFontEngine implements NativeFontEngine {
-  #snapshot: NativeGlyphSnapshot | null = null;
+export class MockFontEngine implements FontEngineAPI {
+  #snapshot: JsGlyphSnapshot | null = null;
   #nextId = 1;
 
   #generateId(): string {
@@ -40,15 +40,16 @@ export class MockNativeFontEngine implements NativeFontEngine {
   // FONT INFO
   // ═══════════════════════════════════════════════════════════
 
-  getMetadata(): NativeFontMetadata {
+  getMetadata(): JsFontMetaData {
     return {
       family: "Mock Font",
       styleName: "Regular",
-      version: 1,
+      versionMajor: 1,
+      versionMinor: 0,
     };
   }
 
-  getMetrics(): NativeFontMetrics {
+  getMetrics(): JsFontMetrics {
     return {
       unitsPerEm: 1000,
       ascender: 800,
@@ -97,7 +98,7 @@ export class MockNativeFontEngine implements NativeFontEngine {
     return JSON.stringify(this.#snapshot);
   }
 
-  getSnapshotData(): NativeGlyphSnapshot {
+  getSnapshotData(): JsGlyphSnapshot {
     if (!this.#snapshot) {
       throw new Error("No active edit session");
     }
@@ -142,6 +143,32 @@ export class MockNativeFontEngine implements NativeFontEngine {
       activeContour.closed = true;
     }
 
+    return this.#makeResult(true, []);
+  }
+
+  setActiveContour(contourId: string): string {
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
+
+    const contour = this.#snapshot.contours.find((c) => c.id === contourId);
+    if (!contour) {
+      return this.#makeResult(false, [], `Contour ${contourId} not found`);
+    }
+
+    this.#snapshot.activeContourId = contourId;
+    return this.#makeResult(true, []);
+  }
+
+  reverseContour(contourId: string): string {
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
+
+    const contour = this.#snapshot.contours.find((c) => c.id === contourId);
+    if (!contour) {
+      return this.#makeResult(false, [], `Contour ${contourId} not found`);
+    }
+
+    contour.points.reverse();
     return this.#makeResult(true, []);
   }
 
@@ -342,8 +369,8 @@ export class MockNativeFontEngine implements NativeFontEngine {
 }
 
 /**
- * Create a mock NativeFontEngine for testing.
+ * Create a mock FontEngineAPI for testing.
  */
-export function createMockNative(): NativeFontEngine {
-  return new MockNativeFontEngine();
+export function createMockNative(): FontEngineAPI {
+  return new MockFontEngine();
 }

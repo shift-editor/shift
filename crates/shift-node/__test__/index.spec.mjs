@@ -21,9 +21,10 @@ describe("FontEngine", () => {
 
     expect(metadata.family).toBe("Untitled Font");
     expect(metadata.styleName).toBe("Regular");
-    expect(metadata.version).toBe(1);
+    expect(metadata.versionMajor).toBe(1);
+    expect(metadata.versionMinor).toBe(0);
     expect(metrics.unitsPerEm).toBe(1000);
-    expect(metrics.ascender).toBe(750);
+    expect(metrics.ascender).toBe(800);
     expect(metrics.descender).toBe(-200);
     expect(metrics.capHeight).toBe(700);
     expect(metrics.xHeight).toBe(500);

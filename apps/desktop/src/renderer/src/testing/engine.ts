@@ -13,7 +13,7 @@ import type {
   PointTypeString,
 } from "@/types/generated";
 import { asPointId, asContourId } from "@/types/ids";
-import { FontEngine, MockNativeFontEngine } from "@/engine";
+import { FontEngine, MockFontEngine } from "@/engine";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TEST FONTENGINE
@@ -31,7 +31,7 @@ export class TestFontEngine extends FontEngine {
   private _callLog: Array<{ method: string; args: unknown[] }> = [];
 
   constructor() {
-    super(new MockNativeFontEngine());
+    super(new MockFontEngine());
   }
 
   /**
@@ -65,10 +65,10 @@ export function createTestFontEngine(): TestFontEngine {
 
 /**
  * Create a mock FontEngine for testing.
- * This is a simple wrapper around MockNativeFontEngine.
+ * This is a simple wrapper around MockFontEngine.
  */
 export function createMockFontEngine(): FontEngine {
-  return new FontEngine(new MockNativeFontEngine());
+  return new FontEngine(new MockFontEngine());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

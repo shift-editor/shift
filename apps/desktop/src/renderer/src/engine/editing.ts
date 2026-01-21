@@ -289,6 +289,48 @@ export class EditingManager {
     return id ? asContourId(id) : null;
   }
 
+  /**
+   * Set the active contour by ID.
+   */
+  setActiveContour(contourId: ContourId): void {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.setActiveContour(contourId);
+    const result = parseCommandResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError(
+        "setActiveContour",
+        result.error ?? undefined,
+      );
+    }
+
+    if (result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+  }
+
+  /**
+   * Reverse the points in a contour.
+   */
+  reverseContour(contourId: ContourId): void {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.reverseContour(contourId);
+    const result = parseCommandResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError(
+        "reverseContour",
+        result.error ?? undefined,
+      );
+    }
+
+    if (result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // POINT PROPERTIES
   // ═══════════════════════════════════════════════════════════

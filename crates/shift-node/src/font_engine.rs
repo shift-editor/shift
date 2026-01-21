@@ -187,11 +187,24 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn set_active_contour(&mut self, _contour_id: String) -> Result<()> {
-    Err(Error::new(
-      Status::GenericFailure,
-      "set_active_contour not yet implemented - contour IDs need proper serialization",
-    ))
+  pub fn set_active_contour(&mut self, contour_id: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let cid = match contour_id.parse::<u128>() {
+      Ok(raw) => ContourId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid contour ID: {contour_id}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    session.set_active_contour(cid);
+    let result = CommandResult::success_simple(session);
+    Ok(serde_json::to_string(&result).unwrap())
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -356,6 +369,31 @@ impl FontEngine {
     };
 
     match session.close_contour(contour_id) {
+      Ok(_) => {
+        let result = CommandResult::success_simple(session);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+
+  #[napi]
+  pub fn reverse_contour(&mut self, contour_id: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let cid = match contour_id.parse::<u128>() {
+      Ok(raw) => ContourId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid contour ID: {contour_id}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.reverse_contour(cid) {
       Ok(_) => {
         let result = CommandResult::success_simple(session);
         Ok(serde_json::to_string(&result).unwrap())

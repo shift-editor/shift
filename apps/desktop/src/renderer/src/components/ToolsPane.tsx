@@ -31,8 +31,17 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
         <Button
-          className={cn("h-7 w-7 p-1 rounded-md", activeTool === name && 'bg-accent hover:bg-accent')}
-          icon={<Icon width={18} height={18} className={activeTool === name ? 'text-white' : 'text-primary'} />}
+          className={cn(
+            "h-7 w-7 p-1 rounded-md",
+            activeTool === name && "bg-accent hover:bg-accent",
+          )}
+          icon={
+            <Icon
+              width={18}
+              height={18}
+              className={activeTool === name ? "text-white" : "text-primary"}
+            />
+          }
           aria-label={tooltip}
           variant="ghost"
           isActive={activeTool === name}

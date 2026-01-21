@@ -3,6 +3,7 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 const { FontEngine } = require("shift-node");
+import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
 
 // Create a single FontEngine instance
 const fontEngineInstance = new FontEngine();
@@ -110,6 +111,22 @@ const fontEngineAPI = {
     return fontEngineInstance.closeContour();
   },
 
+  /**
+   * Set the active contour by ID.
+   * Returns CommandResult JSON.
+   */
+  setActiveContour: (contourId: string): string => {
+    return fontEngineInstance.setActiveContour(contourId);
+  },
+
+  /**
+   * Reverse the points in a contour.
+   * Returns CommandResult JSON.
+   */
+  reverseContour: (contourId: string): string => {
+    return fontEngineInstance.reverseContour(contourId);
+  },
+
   // ═══════════════════════════════════════════════════════════
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════
@@ -203,7 +220,7 @@ const fontEngineAPI = {
   applyEditsUnified: (pointIds: string[], dx: number, dy: number): string => {
     return fontEngineInstance.applyEditsUnified(pointIds, dx, dy);
   },
-};
+} satisfies FontEngineAPI;
 
 // Expose to renderer via contextBridge
 contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
@@ -260,6 +277,4 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
 
-// Export type for TypeScript
-export type FontEngineAPI = typeof fontEngineAPI;
 export type ElectronAPI = typeof electronAPI;
