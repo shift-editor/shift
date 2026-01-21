@@ -117,16 +117,16 @@ describe("Viewport", () => {
 
     it("should clamp zoom to valid range", () => {
       // Zoom in to max
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 50; i++) {
         viewport.zoomIn();
       }
-      expect(viewport.zoom).toBeLessThanOrEqual(6);
+      expect(viewport.zoom).toBeLessThanOrEqual(32);
 
       // Zoom out to min
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 100; i++) {
         viewport.zoomOut();
       }
-      expect(viewport.zoom).toBeGreaterThanOrEqual(0.1);
+      expect(viewport.zoom).toBeGreaterThanOrEqual(0.01);
     });
   });
 
@@ -161,11 +161,11 @@ describe("Viewport", () => {
     });
 
     it("should clamp zoom to valid range", () => {
-      viewport.zoomToPoint(500, 400, 100);
-      expect(viewport.zoom).toBeLessThanOrEqual(6);
+      viewport.zoomToPoint(500, 400, 1000);
+      expect(viewport.zoom).toBeLessThanOrEqual(32);
 
-      viewport.zoomToPoint(500, 400, 0.001);
-      expect(viewport.zoom).toBeGreaterThanOrEqual(0.1);
+      viewport.zoomToPoint(500, 400, 0.00001);
+      expect(viewport.zoom).toBeGreaterThanOrEqual(0.01);
     });
 
     it("should handle zoom at different zoom levels", () => {
@@ -469,16 +469,16 @@ describe("Viewport", () => {
 
     it("should maintain zoom bounds across operations", () => {
       // Zoom in aggressively
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 100; i++) {
         viewport.zoomToPoint(500, 400, 1.2);
       }
-      expect(viewport.zoom).toBeLessThanOrEqual(6);
+      expect(viewport.zoom).toBeLessThanOrEqual(32);
 
       // Zoom out aggressively
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 200; i++) {
         viewport.zoomToPoint(500, 400, 0.9);
       }
-      expect(viewport.zoom).toBeGreaterThanOrEqual(0.1);
+      expect(viewport.zoom).toBeGreaterThanOrEqual(0.01);
     });
   });
 });

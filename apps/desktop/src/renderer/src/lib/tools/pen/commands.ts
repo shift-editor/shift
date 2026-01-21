@@ -134,4 +134,21 @@ export class PenCommands {
     history.execute(new CloseContourCommand());
     history.execute(new AddContourCommand());
   }
+
+  abandonContour(): void {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return;
+
+    const activeContourId = ctx.edit.getActiveContourId();
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
+
+    if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
+      return;
+    }
+
+    ctx.commands.execute(new AddContourCommand());
+  }
 }

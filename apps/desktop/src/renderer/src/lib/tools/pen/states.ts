@@ -14,7 +14,7 @@ import type { PointId } from "@/types/ids";
 
 export type PenState =
   | { type: "idle" }
-  | { type: "ready" }
+  | { type: "ready"; mousePos: Point2D }
   | { type: "anchored"; anchor: AnchorData }
   | {
       type: "dragging";
@@ -76,6 +76,3 @@ export interface ContourContext {
 
 /** Drag threshold in UPM units - handles aren't created until drag exceeds this */
 export const DRAG_THRESHOLD = 3;
-
-/** Hit radius for detecting clicks near the first point (for closing contour) */
-export const CLOSE_HIT_RADIUS = 8;

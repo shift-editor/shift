@@ -8,6 +8,9 @@ import {
   type Signal,
 } from "@/lib/reactive/signal";
 
+const MIN_ZOOM = 0.01;
+const MAX_ZOOM = 32;
+
 export class Viewport {
   // Reactive viewport state (signals auto-invalidate derived matrices)
   readonly #zoom: WritableSignal<number>;
@@ -279,7 +282,7 @@ export class Viewport {
   ): void {
     const before = this.projectScreenToUpm(screenX, screenY);
 
-    const newZoom = clamp(this.#zoom.value * zoomDelta, 0.1, 6);
+    const newZoom = clamp(this.#zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
     this.#zoom.value = newZoom;
 
     const after = this.projectScreenToUpm(screenX, screenY);

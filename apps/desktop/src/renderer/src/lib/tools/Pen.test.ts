@@ -7,6 +7,7 @@ import {
 } from "@/testing";
 import type { PointId } from "@/types/ids";
 import type { ToolContext } from "@/types/tool";
+import type { Editor } from "@/lib/editor/Editor";
 
 function createMockEditor() {
   const fontEngine = createMockFontEngine();
@@ -303,6 +304,237 @@ describe("Pen tool", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
       expect(mocks.commands.execute).toHaveBeenCalled();
       expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
+    });
+  });
+
+  describe("cursor behavior", () => {
+    it("should show pen-end cursor when hovering over an existing point", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
+      pen.onMouseMove(createMouseEvent("mousemove", 102, 102));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen-end" });
+    });
+
+    it("should show pen cursor when not hovering over a point", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 200, y: 200 });
+      pen.onMouseMove(createMouseEvent("mousemove", 200, 200));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen" });
+    });
+
+    it("should switch cursor when moving from point to empty space", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 102, y: 102 });
+      pen.onMouseMove(createMouseEvent("mousemove", 102, 102));
+      expect(mockEditor.setCursor).toHaveBeenLastCalledWith({ type: "pen-end" });
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 300, y: 300 });
+      pen.onMouseMove(createMouseEvent("mousemove", 300, 300));
+      expect(mockEditor.setCursor).toHaveBeenLastCalledWith({ type: "pen" });
+    });
+  });
+
+  describe("preview line", () => {
+    it("should track mouse position in ready state", () => {
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 150, y: 250 });
+      pen.onMouseMove(createMouseEvent("mousemove", 150, 250));
+
+      const state = pen.getState();
+      expect(state.type).toBe("ready");
+      if (state.type === "ready") {
+        expect(state.mousePos).toEqual({ x: 150, y: 250 });
+      }
+    });
+
+    it("should update mouse position as cursor moves", () => {
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 100, y: 100 });
+      pen.onMouseMove(createMouseEvent("mousemove", 100, 100));
+
+      let state = pen.getState();
+      if (state.type === "ready") {
+        expect(state.mousePos).toEqual({ x: 100, y: 100 });
+      }
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 200, y: 300 });
+      pen.onMouseMove(createMouseEvent("mousemove", 200, 300));
+
+      state = pen.getState();
+      if (state.type === "ready") {
+        expect(state.mousePos).toEqual({ x: 200, y: 300 });
+      }
+    });
+
+    it("should initialize with zero mousePos when entering ready state", () => {
+      const newPen = new Pen(mockEditor as unknown as Editor);
+      newPen.setReady();
+
+      const state = newPen.getState();
+      expect(state.type).toBe("ready");
+      if (state.type === "ready") {
+        expect(state.mousePos).toEqual({ x: 0, y: 0 });
+      }
+    });
+
+    it("should preserve mouse position when transitioning to ready after placing point", () => {
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 100, y: 100 });
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 150, y: 150 });
+      pen.onMouseUp(createMouseEvent("mouseup", 150, 150));
+
+      const state = pen.getState();
+      expect(state.type).toBe("ready");
+      if (state.type === "ready") {
+        expect(state.mousePos).toEqual({ x: 150, y: 150 });
+      }
+    });
+  });
+
+  describe("zoom-aware hit testing", () => {
+    it("should use zoom-aware hit radius for contour closing", () => {
+      mocks.screen.hitRadius = 10;
+
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+
+      mocks.commands.execute.mockClear();
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 105, y: 105 });
+      pen.onMouseDown(createMouseEvent("mousedown", 105, 105));
+
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Close Contour");
+    });
+
+    it("should not close contour when outside zoom-aware hit radius", () => {
+      mocks.screen.hitRadius = 5;
+
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+
+      mocks.commands.execute.mockClear();
+      mocks.commands.beginBatch.mockClear();
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 110, y: 110 });
+      pen.onMouseDown(createMouseEvent("mousedown", 110, 110));
+
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Add Point");
+      expect(mocks.commands.beginBatch).not.toHaveBeenCalledWith("Close Contour");
+    });
+
+    it("should use zoom-aware hit radius for point hover detection", () => {
+      mocks.screen.hitRadius = 10;
+
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 105, y: 105 });
+      pen.onMouseMove(createMouseEvent("mousemove", 105, 105));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen-end" });
+    });
+
+    it("should not show pen-end cursor when outside zoom-aware hit radius", () => {
+      mocks.screen.hitRadius = 5;
+
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.setCursor.mockClear();
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 110, y: 110 });
+      pen.onMouseMove(createMouseEvent("mousemove", 110, 110));
+
+      expect(mockEditor.setCursor).toHaveBeenCalledWith({ type: "pen" });
+    });
+  });
+
+  describe("zoom-adjusted preview line", () => {
+    it("should call screen.lineWidth when rendering preview line", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 150, y: 150 });
+      pen.onMouseMove(createMouseEvent("mousemove", 150, 150));
+
+      mocks.screen.lineWidth.mockClear();
+
+      const mockRenderer = {
+        setStyle: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        stroke: vi.fn(),
+        set lineWidth(_: number) {},
+      };
+
+      pen.drawInteractive(mockRenderer as any);
+
+      expect(mocks.screen.lineWidth).toHaveBeenCalled();
+    });
+  });
+
+  describe("cancel", () => {
+    it("should cancel point placement on Escape during anchored state", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      expect(pen.getState().type).toBe("anchored");
+      expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Add Point");
+
+      pen.cancel();
+
+      expect(mocks.commands.cancelBatch).toHaveBeenCalled();
+      expect(pen.getState().type).toBe("ready");
+    });
+
+    it("should cancel point placement on Escape during dragging state", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      mockEditor.projectScreenToUpm.mockReturnValue({ x: 120, y: 100 });
+      pen.onMouseMove(createMouseEvent("mousemove", 120, 100));
+      expect(pen.getState().type).toBe("dragging");
+
+      pen.cancel();
+
+      expect(mocks.commands.cancelBatch).toHaveBeenCalled();
+      expect(pen.getState().type).toBe("ready");
+    });
+
+    it("should abandon contour on Escape when in ready state with points", () => {
+      pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
+      pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
+      pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
+      pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
+
+      const contourCountBefore = getContourCount(fontEngine.snapshot.value);
+
+      pen.cancel();
+
+      const contourCountAfter = getContourCount(fontEngine.snapshot.value);
+      expect(contourCountAfter).toBe(contourCountBefore + 1);
+      expect(pen.getState().type).toBe("ready");
+    });
+
+    it("should do nothing on Escape when no points in contour", () => {
+      const contourCountBefore = getContourCount(fontEngine.snapshot.value);
+
+      pen.cancel();
+
+      const contourCountAfter = getContourCount(fontEngine.snapshot.value);
+      expect(contourCountAfter).toBe(contourCountBefore);
+      expect(pen.getState().type).toBe("ready");
     });
   });
 });

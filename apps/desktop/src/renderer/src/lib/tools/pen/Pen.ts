@@ -5,13 +5,13 @@ import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
 import type { ContourSnapshot, PointSnapshot } from "@/types/generated";
+import type { Point2D } from "@/types/math";
 
-import { DEFAULT_STYLES } from "../../styles/style";
+import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
 import { PenCommands } from "./commands";
 import {
   type ContourContext,
   type PenState,
-  CLOSE_HIT_RADIUS,
   DRAG_THRESHOLD,
 } from "./states";
 
@@ -52,12 +52,29 @@ export class Pen implements Tool {
   }
 
   setReady(): void {
-    this.#sm.transition({ type: "ready" });
+    this.#sm.transition({ type: "ready", mousePos: { x: 0, y: 0 } });
     this.#editor.setCursor({ type: "pen" });
   }
 
   dispose(): void {
     this.#renderEffect.dispose();
+  }
+
+  cancel(): void {
+    const ctx = this.#editor.createToolContext();
+
+    if (this.#sm.isIn("anchored", "dragging")) {
+      if (ctx.commands.isBatching) {
+        ctx.commands.cancelBatch();
+      }
+      this.#sm.transition({ type: "ready", mousePos: { x: 0, y: 0 } });
+      return;
+    }
+
+    this.#sm.when("ready", (state) => {
+      this.#commands.abandonContour();
+      this.#sm.transition({ type: "ready", mousePos: state.mousePos });
+    });
   }
 
   getState(): PenState {
@@ -95,19 +112,31 @@ export class Pen implements Tool {
     });
   }
 
-  onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
+  onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
     const ctx = this.#editor.createToolContext();
     if (this.#sm.isIn("anchored", "dragging")) {
       if (ctx.commands.isBatching) {
         ctx.commands.endBatch();
       }
-      this.#sm.transition({ type: "ready" });
+      const position = this.#editor.getMousePosition(e.clientX, e.clientY);
+      const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
+      this.#sm.transition({ type: "ready", mousePos });
     }
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     const position = this.#editor.getMousePosition(e.clientX, e.clientY);
     const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
+
+    this.#sm.when("ready", () => {
+      const isOverPoint = this.isNearAnyPoint(mousePos.x, mousePos.y);
+      if (isOverPoint) {
+        this.#editor.setCursor({ type: "pen-end" });
+      } else {
+        this.#editor.setCursor({ type: "pen" });
+      }
+      this.#sm.transition({ type: "ready", mousePos });
+    });
 
     this.#sm.when("anchored", (state) => {
       const { anchor } = state;
@@ -195,19 +224,78 @@ export class Pen implements Tool {
       return false;
     }
 
+    const hitRadius = ctx.screen.hitRadius;
     const firstPoint = getFirstPoint(activeContour);
     return (
-      firstPoint !== null && isNearPoint({ x, y }, firstPoint, CLOSE_HIT_RADIUS)
+      firstPoint !== null && isNearPoint({ x, y }, firstPoint, hitRadius)
     );
   }
 
+  private isNearAnyPoint(x: number, y: number): boolean {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return false;
+
+    const hitRadius = ctx.screen.hitRadius;
+    for (const contour of snapshot.contours) {
+      for (const point of contour.points) {
+        if (isNearPoint({ x, y }, point, hitRadius)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private getLastOnCurvePoint(): Point2D | null {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return null;
+
+    const activeContourId = ctx.edit.getActiveContourId();
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
+
+    if (
+      !activeContour ||
+      activeContour.points.length === 0 ||
+      activeContour.closed
+    ) {
+      return null;
+    }
+
+    for (let i = activeContour.points.length - 1; i >= 0; i--) {
+      if (activeContour.points[i].pointType === "onCurve") {
+        return {
+          x: activeContour.points[i].x,
+          y: activeContour.points[i].y,
+        };
+      }
+    }
+    return null;
+  }
+
   drawInteractive(ctx: IRenderer): void {
+    const toolCtx = this.#editor.createToolContext();
+
+    this.#sm.when("ready", (state) => {
+      const lastPoint = this.getLastOnCurvePoint();
+      if (!lastPoint) return;
+
+      ctx.setStyle(PREVIEW_LINE_STYLE);
+      ctx.lineWidth = toolCtx.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
+      ctx.beginPath();
+      ctx.moveTo(lastPoint.x, lastPoint.y);
+      ctx.lineTo(state.mousePos.x, state.mousePos.y);
+      ctx.stroke();
+    });
+
     this.#sm.when("dragging", (state) => {
       const { anchor, mousePos } = state;
 
-      ctx.setStyle({
-        ...DEFAULT_STYLES,
-      });
+      ctx.setStyle(DEFAULT_STYLES);
+      ctx.lineWidth = toolCtx.screen.lineWidth(DEFAULT_STYLES.lineWidth);
 
       const anchorX = anchor.position.x;
       const anchorY = anchor.position.y;

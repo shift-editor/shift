@@ -84,6 +84,14 @@ export const Editor = () => {
         return;
       }
 
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const activeTool = editor.getActiveTool();
+        activeTool.cancel?.();
+        editor.requestRedraw();
+        return;
+      }
+
       const activeTool = editor.getActiveTool();
       if (activeTool.keyDownHandler) {
         activeTool.keyDownHandler(e);

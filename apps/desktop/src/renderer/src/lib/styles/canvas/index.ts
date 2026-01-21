@@ -7,6 +7,7 @@ import {
   createBoundingRectangleStyles,
   createSegmentHoverStyles,
   createSegmentSelectedStyles,
+  createPreviewLineStyles,
 } from "./selection";
 
 export interface CanvasStyles {
@@ -17,6 +18,7 @@ export interface CanvasStyles {
   boundingRectangle: DrawStyle;
   segmentHover: DrawStyle;
   segmentSelected: DrawStyle;
+  previewLine: DrawStyle;
 }
 
 export function getCanvasStyles(theme: ThemeTokens): CanvasStyles {
@@ -28,6 +30,7 @@ export function getCanvasStyles(theme: ThemeTokens): CanvasStyles {
     boundingRectangle: createBoundingRectangleStyles(theme),
     segmentHover: createSegmentHoverStyles(theme),
     segmentSelected: createSegmentSelectedStyles(theme),
+    previewLine: createPreviewLineStyles(theme),
   };
 }
 

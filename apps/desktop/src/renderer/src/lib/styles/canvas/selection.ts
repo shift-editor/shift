@@ -41,3 +41,13 @@ export function createSegmentSelectedStyles(theme: ThemeTokens): DrawStyle {
     dashPattern: [],
   };
 }
+
+export function createPreviewLineStyles(theme: ThemeTokens): DrawStyle {
+  return {
+    lineWidth: 1,
+    strokeStyle: theme.canvas.indicator,
+    fillStyle: "transparent",
+    antiAlias: true,
+    dashPattern: [],
+  };
+}

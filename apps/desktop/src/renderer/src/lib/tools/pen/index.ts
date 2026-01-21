@@ -11,5 +11,5 @@ export type {
   HandleData,
   ContourContext,
 } from "./states";
-export { DRAG_THRESHOLD, CLOSE_HIT_RADIUS } from "./states";
+export { DRAG_THRESHOLD } from "./states";
 export { PenCommands } from "./commands";

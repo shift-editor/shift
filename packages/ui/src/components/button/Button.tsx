@@ -3,7 +3,7 @@ import { cn } from "../../lib/utils";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
-  variant?: "default" | "ghost" | "toolbar";
+  variant?: "default" | "ghost";
   size?: "sm" | "md" | "lg" | "icon";
   isActive?: boolean;
   icon?: React.ReactNode;
@@ -11,8 +11,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantStyles = {
   default: "bg-surface border border-line-subtle hover:bg-surface-hover",
-  ghost: "hover:bg-surface-hover",
-  toolbar: "hover:bg-toolbar-hover",
+  ghost: "hover:bg-hover",
 };
 
 const sizeStyles = {
@@ -32,6 +31,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       disabled,
       icon,
       children,
+      style,
       ...props
     },
     ref,
@@ -46,7 +46,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           variantStyles[variant],
           sizeStyles[size],
           className,
-          "data-[active=true]:bg-toolbar-hover",
+          "data-[active=true]:bg-hover",
         )}
         disabled={disabled}
         data-active={isActive ? true : undefined}

@@ -11,6 +11,7 @@ import { useSignalValue } from "@/lib/reactive/useSignal";
 import AppState, { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import { ToolName } from "@/types/tool";
+import { cn } from "@/lib/utils";
 
 interface ToolbarIconProps {
   Icon: Svg;
@@ -30,10 +31,10 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
         <Button
-          className="h-7 w-7 p-1 rounded-md"
-          icon={<Icon width={18} height={18} className="text-primary" />}
+          className={cn("h-7 w-7 p-1 rounded-md", activeTool === name && 'bg-accent hover:bg-accent')}
+          icon={<Icon width={18} height={18} className={activeTool === name ? 'text-white' : 'text-primary'} />}
           aria-label={tooltip}
-          variant="toolbar"
+          variant="ghost"
           isActive={activeTool === name}
           onClick={onClick}
           size="icon"

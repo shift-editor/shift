@@ -20,7 +20,7 @@ export const NavigationPane = () => {
                     <Icon width={26} height={26} className="text-primary" />
                   }
                   aria-label={route.description}
-                  variant="toolbar"
+                  variant="ghost"
                   size="icon"
                   className="h-10 w-10 p-1.5"
                   onClick={() => navigate(route.path)}

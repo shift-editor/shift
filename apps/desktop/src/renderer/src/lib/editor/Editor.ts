@@ -52,6 +52,7 @@ export type CursorType =
   | { type: "move" }
   | { type: "crosshair" }
   | { type: "pen" }
+  | { type: "pen-end" }
   | { type: "not-allowed" };
 
 /** Convert a CursorType to a CSS cursor string */
@@ -59,6 +60,8 @@ function cursorToCSS(cursor: CursorType): string {
   switch (cursor.type) {
     case "pen":
       return `-webkit-image-set(url("/cursors/pen@32.svg") 1x, url("/cursors/pen@64.svg") 2x) 8 8, crosshair`;
+    case "pen-end":
+      return `-webkit-image-set(url("/cursors/pen@32-end.svg") 1x, url("/cursors/pen@64-end.svg") 2x) 8 8, crosshair`;
     default:
       return cursor.type;
   }

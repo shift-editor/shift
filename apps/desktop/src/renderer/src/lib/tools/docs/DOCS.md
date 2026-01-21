@@ -15,7 +15,8 @@ Tool Interface
 ├── onMouseDown/Move/Up()
 ├── keyDownHandler?() / keyUpHandler?()
 ├── drawInteractive?(ctx)
-└── dispose?()
+├── dispose?()
+└── cancel?()
 
 StateMachine<TState>
 ├── state: WritableSignal<TState>
@@ -51,6 +52,7 @@ interface Tool {
   onMouseMove(e: MouseEvent): void;
   keyDownHandler?(e: KeyboardEvent): void;
   drawInteractive?(ctx: IRenderer): void;
+  cancel?(): void; // Called on Escape key
 }
 ```
 
@@ -169,6 +171,40 @@ Features:
 - `P` - Pen tool
 - `H` - Hand tool
 - `S` - Shape tool
+- `Escape` - Cancel current operation
+
+### Cancel System
+
+All tools support the Escape key for cancellation via the optional `cancel()` method.
+
+**Behavior:**
+- Escape cancels the current in-progress operation
+- Progressive: cancels one level at a time
+- Command batches are cancelled (not committed)
+
+**Per-tool behavior:**
+
+| Tool | Cancel Action |
+|------|---------------|
+| Pen | Cancel point placement → abandon contour |
+| Select | Cancel drag → clear selection → ready |
+| Shape | Cancel rectangle preview |
+| Hand | Stop panning |
+
+**Implementation pattern:**
+```typescript
+cancel(): void {
+  // 1. Check for in-progress operation
+  if (this.#sm.isIn("dragging")) {
+    if (ctx.commands.isBatching) {
+      ctx.commands.cancelBatch();
+    }
+    this.#sm.transition({ type: "ready" });
+    return;
+  }
+  // 2. Tool-specific idle cleanup
+}
+```
 
 ## Usage Examples
 

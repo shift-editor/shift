@@ -19,3 +19,4 @@ export const BOUNDING_RECTANGLE_STYLES: DrawStyle =
 export const SEGMENT_HOVER_STYLE: DrawStyle = defaultCanvasStyles.segmentHover;
 export const SEGMENT_SELECTED_STYLE: DrawStyle =
   defaultCanvasStyles.segmentSelected;
+export const PREVIEW_LINE_STYLE: DrawStyle = defaultCanvasStyles.previewLine;

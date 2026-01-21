@@ -76,4 +76,6 @@ export interface Tool {
   drawInteractive?(ctx: IRenderer): void;
 
   dispose?(): void;
+
+  cancel?(): void;
 }
