@@ -32,6 +32,10 @@ export class MockNativeFontEngine implements NativeFontEngine {
     // No-op in mock
   }
 
+  saveFont(_path: string): void {
+    // No-op in mock
+  }
+
   // ═══════════════════════════════════════════════════════════
   // FONT INFO
   // ═══════════════════════════════════════════════════════════

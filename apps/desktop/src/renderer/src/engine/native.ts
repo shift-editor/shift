@@ -63,10 +63,11 @@ export interface NativeGlyphSnapshot {
  */
 export interface NativeFontEngine {
   // ═══════════════════════════════════════════════════════════
-  // FONT LOADING
+  // FONT LOADING & SAVING
   // ═══════════════════════════════════════════════════════════
 
   loadFont(path: string): void;
+  saveFont(path: string): void;
 
   // ═══════════════════════════════════════════════════════════
   // FONT INFO

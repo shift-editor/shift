@@ -29,10 +29,9 @@ export class IOManager {
 
   /**
    * Save the current font to a file path.
-   * TODO: Implement when Rust backend supports save.
    */
-  saveFont(_path: string): void {
-    console.warn("IOManager.saveFont() not yet implemented in Rust backend");
+  saveFont(path: string): void {
+    this.#ctx.native.saveFont(path);
   }
 
   /**

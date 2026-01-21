@@ -17,6 +17,10 @@ const fontEngineAPI = {
     return fontEngineInstance.loadFont(path);
   },
 
+  saveFont: (path: string) => {
+    return fontEngineInstance.saveFont(path);
+  },
+
   // ═══════════════════════════════════════════════════════════
   // FONT INFO
   // ═══════════════════════════════════════════════════════════
@@ -212,6 +216,11 @@ const electronAPI = {
     ipcRenderer.on("menu:open-font", handler);
     return () => ipcRenderer.removeListener("menu:open-font", handler);
   },
+  onMenuSaveFont: (callback: (path: string) => void) => {
+    const handler = (_event: any, path: string) => callback(path);
+    ipcRenderer.on("menu:save-font", handler);
+    return () => ipcRenderer.removeListener("menu:save-font", handler);
+  },
   onMenuUndo: (callback: () => void) => {
     ipcRenderer.on("menu:undo", callback);
     return () => ipcRenderer.removeListener("menu:undo", callback);
@@ -239,6 +248,14 @@ const electronAPI = {
   maximizeWindow: (): Promise<void> => ipcRenderer.invoke("window:maximize"),
   isWindowMaximized: (): Promise<boolean> =>
     ipcRenderer.invoke("window:isMaximized"),
+
+  // Document state
+  setDocumentDirty: (dirty: boolean): Promise<void> =>
+    ipcRenderer.invoke("document:setDirty", dirty),
+  setDocumentFilePath: (filePath: string | null): Promise<void> =>
+    ipcRenderer.invoke("document:setFilePath", filePath),
+  saveCompleted: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke("document:saveCompleted", filePath),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

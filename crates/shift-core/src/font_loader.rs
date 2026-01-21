@@ -81,4 +81,22 @@ impl FontLoader {
         self.file_name = path.file_name().unwrap().to_str().unwrap().to_string();
         Ok(font)
     }
+
+    pub fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
+        let path_obj = Path::new(path);
+        let extension = path_obj
+            .extension()
+            .ok_or_else(|| "File has no extension".to_string())?
+            .to_str()
+            .ok_or_else(|| "Invalid UTF-8 in extension".to_string())?;
+
+        let adaptor = match extension {
+            "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
+            _ => {
+                return Err(format!("Unsupported font format for writing: {extension}"));
+            }
+        };
+
+        adaptor.write_font(font, path)
+    }
 }

@@ -51,6 +51,33 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn save_font(&self, path: String) -> Result<()> {
+    if let (Some(session), Some(glyph), Some(layer_id)) = (
+      &self.current_edit_session,
+      &self.editing_glyph,
+      &self.editing_layer_id,
+    ) {
+      let mut glyph_copy = glyph.clone();
+      let layer = session.layer().clone();
+      glyph_copy.set_layer(*layer_id, layer);
+
+      let mut font_with_edits = self.font.clone();
+      font_with_edits.put_glyph(glyph_copy);
+
+      self
+        .font_loader
+        .write_font(&font_with_edits, &path)
+        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    } else {
+      self
+        .font_loader
+        .write_font(&self.font, &path)
+        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    }
+    Ok(())
+  }
+
+  #[napi]
   pub fn get_metadata(&self) -> JSFontMetaData {
     self.font.metadata().into()
   }

@@ -9,15 +9,38 @@ import { routes } from "./routes";
 
 export const App = () => {
   useEffect(() => {
+    const editor = AppState.getState().editor;
+    editor.startEditSession(65);
+    AppState.getState().setFilePath(null);
+    AppState.getState().clearDirty();
+  }, []);
+
+  useEffect(() => {
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
       const editor = AppState.getState().editor;
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
-      AppState.getState().setFileName(filePath.split("/").pop() ?? "");
+      AppState.getState().setFilePath(filePath);
+      AppState.getState().clearDirty();
     });
+
+    const unsubscribeSave = window.electronAPI?.onMenuSaveFont(
+      async (savePath) => {
+        try {
+          const editor = AppState.getState().editor;
+          editor.saveFont(savePath);
+          AppState.getState().setFilePath(savePath);
+          AppState.getState().clearDirty();
+          await window.electronAPI?.saveCompleted(savePath);
+        } catch (error) {
+          console.error("Failed to save font:", error);
+        }
+      },
+    );
 
     return () => {
       unsubscribeOpen?.();
+      unsubscribeSave?.();
     };
   }, []);
 

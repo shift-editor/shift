@@ -92,8 +92,8 @@ describe("Canvas Styles", () => {
       );
     });
 
-    it("should create segment hover styles with cyan", () => {
-      expect(styles.segmentHover.strokeStyle).toBe(lightTheme.canvas.cyan);
+    it("should create segment hover styles with indicator color", () => {
+      expect(styles.segmentHover.strokeStyle).toBe(lightTheme.canvas.indicator);
     });
 
     it("should have idle, hovered, and selected states for handles", () => {

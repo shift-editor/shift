@@ -24,8 +24,8 @@ export function createBoundingRectangleStyles(theme: ThemeTokens): DrawStyle {
 
 export function createSegmentHoverStyles(theme: ThemeTokens): DrawStyle {
   return {
-    lineWidth: 2,
-    strokeStyle: theme.canvas.cyan,
+    lineWidth: 1,
+    strokeStyle: theme.canvas.indicator,
     fillStyle: "transparent",
     antiAlias: true,
     dashPattern: [],
@@ -34,8 +34,8 @@ export function createSegmentHoverStyles(theme: ThemeTokens): DrawStyle {
 
 export function createSegmentSelectedStyles(theme: ThemeTokens): DrawStyle {
   return {
-    lineWidth: 2,
-    strokeStyle: theme.canvas.blue,
+    lineWidth: 1.5,
+    strokeStyle: theme.canvas.indicator,
     fillStyle: "transparent",
     antiAlias: true,
     dashPattern: [],

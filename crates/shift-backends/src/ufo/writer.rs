@@ -188,6 +188,12 @@ impl Default for UfoWriter {
 
 impl FontWriter for UfoWriter {
     fn save(&self, font: &Font, path: &str) -> Result<(), String> {
+        let path_obj = Path::new(path);
+        if path_obj.exists() {
+            std::fs::remove_dir_all(path_obj)
+                .map_err(|e| format!("Failed to remove existing UFO: {e}"))?;
+        }
+
         let mut norad_font = NoradFont::new();
 
         norad_font.font_info.family_name = font.metadata().family_name.clone();

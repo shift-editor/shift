@@ -48,11 +48,14 @@ export interface NativeGlyphSnapshot {
  */
 export interface NativeFontEngine {
   // ─────────────────────────────────────────────────────────
-  // Font Loading
+  // Font Loading & Saving
   // ─────────────────────────────────────────────────────────
 
   /** Load a font file from the given path */
   loadFont(path: string): void;
+
+  /** Save the font to the given path */
+  saveFont(path: string): void;
 
   // ─────────────────────────────────────────────────────────
   // Font Info
@@ -175,6 +178,7 @@ export type ThemeName = "light" | "dark" | "system";
 
 export interface ElectronAPI {
   onMenuOpenFont: (callback: (path: string) => void) => () => void;
+  onMenuSaveFont: (callback: (path: string) => void) => () => void;
   onMenuUndo: (callback: () => void) => () => void;
   onMenuRedo: (callback: () => void) => () => void;
   onMenuDelete: (callback: () => void) => () => void;
@@ -187,6 +191,11 @@ export interface ElectronAPI {
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<void>;
   isWindowMaximized: () => Promise<boolean>;
+
+  // Document state
+  setDocumentDirty: (dirty: boolean) => Promise<void>;
+  setDocumentFilePath: (filePath: string | null) => Promise<void>;
+  saveCompleted: (filePath: string) => Promise<void>;
 }
 
 // ═══════════════════════════════════════════════════════════

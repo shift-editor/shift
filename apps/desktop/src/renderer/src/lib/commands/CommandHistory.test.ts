@@ -298,6 +298,79 @@ describe("batching", () => {
   });
 });
 
+describe("onDirty callback", () => {
+  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let history: CommandHistory;
+  let onDirtyCalled: number;
+
+  beforeEach(() => {
+    fontEngine = createMockFontEngine();
+    onDirtyCalled = 0;
+    history = new CommandHistory(fontEngine, () => fontEngine.snapshot.value, {
+      onDirty: () => {
+        onDirtyCalled++;
+      },
+    });
+    fontEngine.session.startEditSession(65);
+    fontEngine.editing.addContour();
+  });
+
+  it("should call onDirty when command is executed", () => {
+    expect(onDirtyCalled).toBe(0);
+    history.execute(new AddPointCommand(100, 200, "onCurve"));
+    expect(onDirtyCalled).toBe(1);
+  });
+
+  it("should call onDirty for each executed command", () => {
+    history.execute(new AddPointCommand(100, 200, "onCurve"));
+    history.execute(new AddPointCommand(150, 250, "onCurve"));
+    expect(onDirtyCalled).toBe(2);
+  });
+
+  it("should call onDirty when command is recorded", () => {
+    const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+    fontEngine.editing.movePoints([pointId], 50, 50);
+    expect(onDirtyCalled).toBe(0);
+
+    history.record(new MovePointsCommand([pointId], 50, 50));
+    expect(onDirtyCalled).toBe(1);
+  });
+
+  it("should call onDirty during batch for each command", () => {
+    history.beginBatch("Add Points");
+    history.execute(new AddPointCommand(100, 100, "onCurve"));
+    expect(onDirtyCalled).toBe(1);
+    history.execute(new AddPointCommand(200, 200, "onCurve"));
+    expect(onDirtyCalled).toBe(2);
+    history.endBatch();
+    expect(onDirtyCalled).toBe(2);
+  });
+
+  it("should allow setting onDirty callback after construction", () => {
+    const historyNoCallback = new CommandHistory(
+      fontEngine,
+      () => fontEngine.snapshot.value,
+    );
+    let lateDirtyCalled = 0;
+    historyNoCallback.setOnDirty(() => {
+      lateDirtyCalled++;
+    });
+
+    historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
+    expect(lateDirtyCalled).toBe(1);
+  });
+
+  it("should not throw if onDirty is not set", () => {
+    const historyNoCallback = new CommandHistory(
+      fontEngine,
+      () => fontEngine.snapshot.value,
+    );
+    expect(() => {
+      historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
+    }).not.toThrow();
+  });
+});
+
 describe("Command integration with history", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
   let history: CommandHistory;

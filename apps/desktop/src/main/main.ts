@@ -20,6 +20,8 @@ if (started) {
 
 let mainWindow: BrowserWindow | null = null;
 let currentTheme: "light" | "dark" | "system" = "light";
+let currentFilePath: string | null = null;
+let documentIsDirty = false;
 
 function setTheme(theme: "light" | "dark" | "system") {
   currentTheme = theme;
@@ -30,6 +32,53 @@ function setTheme(theme: "light" | "dark" | "system") {
   } else {
     nativeTheme.themeSource = theme;
   }
+}
+
+function updateWindowTitle() {
+  if (!mainWindow) return;
+
+  let title: string;
+  if (currentFilePath) {
+    const fileName = path.basename(currentFilePath);
+    title = `${fileName}${documentIsDirty ? "— Edited" : ""}`;
+  } else {
+    title = `Untitled Font${documentIsDirty ? "— Edited" : ""}`;
+  }
+
+  mainWindow.setTitle(title);
+  mainWindow.setDocumentEdited(documentIsDirty);
+}
+
+function setCurrentFilePath(filePath: string | null) {
+  currentFilePath = filePath;
+  updateWindowTitle();
+}
+
+function setDocumentDirty(dirty: boolean) {
+  documentIsDirty = dirty;
+  updateWindowTitle();
+}
+
+async function saveFont(saveAs = false) {
+  let savePath = currentFilePath;
+
+  if (!savePath || saveAs) {
+    const result = await dialog.showSaveDialog({
+      defaultPath: currentFilePath || "Untitled.ufo",
+      filters: [{ name: "UFO Files", extensions: ["ufo"] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return;
+    }
+
+    savePath = result.filePath;
+    if (!savePath.endsWith(".ufo")) {
+      savePath += ".ufo";
+    }
+  }
+
+  mainWindow?.webContents.send("menu:save-font", savePath);
 }
 
 function createMenu() {
@@ -46,17 +95,26 @@ function createMenu() {
           click: async () => {
             const result = await dialog.showOpenDialog({
               properties: ["openFile", "openDirectory"],
-              filters: [
-                { name: "Font Files", extensions: ["ufo", "ttf", "otf"] },
-              ],
             });
             if (!result.canceled && result.filePaths[0]) {
+              setCurrentFilePath(result.filePaths[0]);
               mainWindow?.webContents.send(
                 "menu:open-font",
                 result.filePaths[0],
               );
             }
           },
+        },
+        { type: "separator" },
+        {
+          label: "Save",
+          accelerator: "CmdOrCtrl+S",
+          click: () => saveFont(false),
+        },
+        {
+          label: "Save As...",
+          accelerator: "CmdOrCtrl+Shift+S",
+          click: () => saveFont(true),
         },
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
@@ -151,6 +209,9 @@ const createWindow = () => {
   // Maximize the window
   mainWindow.maximize();
 
+  // Set initial window title
+  updateWindowTitle();
+
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -160,6 +221,32 @@ const createWindow = () => {
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+
+  mainWindow.on("close", async (event) => {
+    if (!documentIsDirty) return;
+
+    event.preventDefault();
+
+    const fileName = currentFilePath
+      ? path.basename(currentFilePath)
+      : "Untitled";
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: "question",
+      buttons: ["Don't Save", "Cancel", "Save"],
+      defaultId: 2,
+      cancelId: 1,
+      message: `Do you want to save changes to "${fileName}"?`,
+      detail: "Your changes will be lost if you don't save.",
+    });
+
+    if (response === 0) {
+      mainWindow.destroy();
+    } else if (response === 2) {
+      await saveFont(false);
+      mainWindow.destroy();
+    }
+  });
 
   // Register keyboard shortcuts for reload
   mainWindow.webContents.once("did-finish-load", () => {
@@ -201,6 +288,19 @@ ipcMain.handle("window:maximize", () => {
 
 ipcMain.handle("window:isMaximized", () => {
   return mainWindow?.isMaximized() ?? false;
+});
+
+ipcMain.handle("document:setDirty", (_event, dirty: boolean) => {
+  setDocumentDirty(dirty);
+});
+
+ipcMain.handle("document:setFilePath", (_event, filePath: string | null) => {
+  setCurrentFilePath(filePath);
+});
+
+ipcMain.handle("document:saveCompleted", (_event, filePath: string) => {
+  setCurrentFilePath(filePath);
+  setDocumentDirty(false);
 });
 
 // This method will be called when Electron has finished

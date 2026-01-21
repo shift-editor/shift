@@ -147,7 +147,9 @@ function createMockEditor() {
         selectedSegments.add(segmentId);
       }
     }),
-    isSegmentSelected: vi.fn((segmentId: SegmentId) => selectedSegments.has(segmentId)),
+    isSegmentSelected: vi.fn((segmentId: SegmentId) =>
+      selectedSegments.has(segmentId),
+    ),
     get hoveredSegmentId() {
       return hoveredSegment;
     },

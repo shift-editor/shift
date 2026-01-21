@@ -120,7 +120,6 @@ export class Editor {
   #tools: Map<ToolName, ToolRegistryItem>;
   #activeTool: WritableSignal<ToolName>;
 
-
   #viewport: Viewport;
   #frameHandler: FrameHandler;
   #commandHistory: CommandHistory;
@@ -584,7 +583,16 @@ export class Editor {
   }
 
   public loadFont(filePath: string): void {
+    if (this.#fontEngine.session.isActive()) {
+      this.#fontEngine.session.endEditSession();
+    }
     this.#fontEngine.io.loadFont(filePath);
+    this.#commandHistory.clear();
+    this.startEditSession(65);
+  }
+
+  public saveFont(filePath: string): void {
+    this.#fontEngine.io.saveFont(filePath);
   }
 
   /** Get the current cursor value */

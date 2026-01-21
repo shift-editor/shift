@@ -42,6 +42,7 @@ export const enum PointTypeJS {
 export declare class FontEngine {
   constructor()
   loadFont(path: string): void
+  saveFont(path: string): void
   getMetadata(): JSFontMetaData
   getMetrics(): JSFontMetrics
   getGlyphCount(): number

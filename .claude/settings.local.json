@@ -33,7 +33,14 @@
       "Bash(pnpm format:check:*)",
       "WebFetch(domain:github.com)",
       "Bash(pnpm remove:*)",
-      "WebFetch(domain:base-ui.com)"
+      "WebFetch(domain:base-ui.com)",
+      "Bash(wc:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(cargo doc:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(xattr:*)"
     ]
   }
 }

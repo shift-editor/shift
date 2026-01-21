@@ -5,13 +5,13 @@
   /* Background colors: bg-app, bg-canvas, bg-toolbar, etc. */
   --color-app: #ffffff;
   --color-canvas: #f8f9fa;
-  --color-toolbar: #E2E2E2;
+  --color-toolbar: #e2e2e2;
   --color-toolbar-hover: #f0f0f0;
   --color-surface: #ffffff;
   --color-surface-hover: #f5f5f5;
 
   /* Border colors: border-line, border-line-subtle */
-  --color-line: #2C2C2C;
+  --color-line: #2c2c2c;
   --color-line-subtle: #f0f0f0;
 
   /* Text colors: text-primary, text-secondary, text-muted */

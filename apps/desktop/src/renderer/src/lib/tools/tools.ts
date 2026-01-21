@@ -14,7 +14,12 @@ import { Shape } from "./Shape";
  * This should be called once when the editor is created.
  */
 export function registerBuiltInTools(editor: Editor): void {
-  editor.registerTool("select", new Select(editor), SelectIcon, "Select Tool (V)");
+  editor.registerTool(
+    "select",
+    new Select(editor),
+    SelectIcon,
+    "Select Tool (V)",
+  );
   editor.registerTool("pen", new Pen(editor), PenIcon, "Pen Tool (P)");
   editor.registerTool("hand", new Hand(editor), HandIcon, "Hand Tool (H)");
   editor.registerTool("shape", new Shape(editor), ShapeIcon, "Shape Tool (S)");

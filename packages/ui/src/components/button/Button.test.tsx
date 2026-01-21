@@ -69,9 +69,7 @@ describe("Button", () => {
   });
 
   it("renders icon when provided", () => {
-    render(
-      <Button icon={<svg data-testid="test-icon" />}>With Icon</Button>,
-    );
+    render(<Button icon={<svg data-testid="test-icon" />}>With Icon</Button>);
     expect(screen.getByTestId("test-icon")).toBeInTheDocument();
     expect(screen.getByText("With Icon")).toBeInTheDocument();
   });
@@ -85,6 +83,9 @@ describe("Button", () => {
       />,
     );
     expect(screen.getByTestId("test-icon")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toHaveAttribute("aria-label", "Icon button");
+    expect(screen.getByRole("button")).toHaveAttribute(
+      "aria-label",
+      "Icon button",
+    );
   });
 });

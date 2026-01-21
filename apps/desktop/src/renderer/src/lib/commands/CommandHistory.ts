@@ -25,6 +25,8 @@ import type { GlyphSnapshot } from "@/types/generated";
 export interface CommandHistoryOptions {
   /** Maximum number of commands to keep in history */
   maxHistory?: number;
+  /** Callback invoked when commands are executed or recorded */
+  onDirty?: () => void;
 }
 
 interface BatchState {
@@ -39,6 +41,7 @@ export class CommandHistory {
   #fontEngine: FontEngine;
   #getSnapshot: () => GlyphSnapshot | null;
   #batch: BatchState | null = null;
+  #onDirty?: () => void;
 
   // Reactive signals for UI binding
   readonly undoCount: WritableSignal<number>;
@@ -54,6 +57,7 @@ export class CommandHistory {
     this.#fontEngine = fontEngine;
     this.#getSnapshot = getSnapshot;
     this.#maxHistory = options.maxHistory ?? 100;
+    this.#onDirty = options.onDirty;
 
     this.undoCount = signal(0);
     this.redoCount = signal(0);
@@ -63,6 +67,10 @@ export class CommandHistory {
 
   get isBatching(): boolean {
     return this.#batch !== null;
+  }
+
+  setOnDirty(callback: () => void): void {
+    this.#onDirty = callback;
   }
 
   #createContext(): CommandContext {
@@ -146,6 +154,8 @@ export class CommandHistory {
       this.#addToUndoStack(command);
     }
 
+    this.#onDirty?.();
+
     return result;
   }
 
@@ -163,6 +173,8 @@ export class CommandHistory {
     } else {
       this.#addToUndoStack(command);
     }
+
+    this.#onDirty?.();
   }
 
   /**
