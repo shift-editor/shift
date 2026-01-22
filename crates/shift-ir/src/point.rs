@@ -2,6 +2,7 @@ use crate::entity::PointId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PointType {
     OnCurve,
     OffCurve,

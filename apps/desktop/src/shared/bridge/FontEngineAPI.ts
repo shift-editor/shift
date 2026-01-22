@@ -24,6 +24,7 @@ export interface FontEngineAPI {
   closeContour(): string;
   setActiveContour(contourId: string): string;
   reverseContour(contourId: string): string;
+  removeContour(contourId: string): string;
   addPoint(
     x: number,
     y: number,
@@ -48,6 +49,7 @@ export interface FontEngineAPI {
   ): string;
   toggleSmooth(pointId: string): string;
   applyEditsUnified(pointIds: string[], dx: number, dy: number): string;
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
 }
 
 declare global {

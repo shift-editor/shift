@@ -64,5 +64,7 @@ export declare class FontEngine {
   movePoints(pointIds: Array<string>, dx: number, dy: number): string
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
+  removeContour(contourId: string): string
   applyEditsUnified(pointIds: Array<string>, dx: number, dy: number): string
 }

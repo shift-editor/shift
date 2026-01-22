@@ -8,7 +8,7 @@ use shift_core::{
   font_loader::FontLoader,
   pattern::MatchedRule,
   snapshot::{CommandResult, GlyphSnapshot},
-  ContourId, Font, Glyph, GlyphLayer, LayerId, PointId, PointType,
+  ContourId, Font, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
 };
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
@@ -468,6 +468,76 @@ impl FontEngine {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // CLIPBOARD OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  #[napi]
+  pub fn paste_contours(
+    &mut self,
+    contours_json: String,
+    offset_x: f64,
+    offset_y: f64,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let contours: Vec<PasteContour> = match serde_json::from_str(&contours_json) {
+      Ok(c) => c,
+      Err(e) => {
+        return Ok(
+          serde_json::to_string(&PasteResultJson {
+            success: false,
+            created_point_ids: vec![],
+            created_contour_ids: vec![],
+            error: Some(format!("Failed to parse contours: {e}")),
+          })
+          .unwrap(),
+        )
+      }
+    };
+
+    let result = session.paste_contours(contours, offset_x, offset_y);
+
+    Ok(
+      serde_json::to_string(&PasteResultJson {
+        success: result.success,
+        created_point_ids: result
+          .created_point_ids
+          .iter()
+          .map(|id| id.to_string())
+          .collect(),
+        created_contour_ids: result
+          .created_contour_ids
+          .iter()
+          .map(|id| id.to_string())
+          .collect(),
+        error: result.error,
+      })
+      .unwrap(),
+    )
+  }
+
+  #[napi]
+  pub fn remove_contour(&mut self, contour_id: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let cid = match contour_id.parse::<u128>() {
+      Ok(raw) => ContourId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid contour ID: {contour_id}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    session.remove_contour(cid);
+    let result = CommandResult::success_simple(session);
+    Ok(serde_json::to_string(&result).unwrap())
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // UNIFIED EDIT OPERATION
   // ═══════════════════════════════════════════════════════════
 
@@ -516,6 +586,15 @@ struct EditResultJson {
   snapshot: Option<GlyphSnapshot>,
   affected_point_ids: Vec<String>,
   matched_rules: Vec<MatchedRule>,
+  error: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PasteResultJson {
+  success: bool,
+  created_point_ids: Vec<String>,
+  created_contour_ids: Vec<String>,
   error: Option<String>,
 }
 

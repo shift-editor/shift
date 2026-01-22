@@ -1,4 +1,9 @@
 import { Editor } from "@/lib/editor/Editor";
+import {
+  AddContourCommand,
+  CloseContourCommand,
+} from "@/lib/commands/BezierCommands";
+import { AddPointCommand } from "@/lib/commands/PointCommands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 import { IRenderer } from "@/types/graphics";
 import { Point2D, Rect2D } from "@/types/math";
@@ -50,19 +55,39 @@ export class Shape implements Tool {
 
     const ctx = this.#editor.createToolContext();
 
-    ctx.edit.addPoint(this.#rect.x, this.#rect.y, "onCurve");
-    ctx.edit.addPoint(this.#rect.x + this.#rect.width, this.#rect.y, "onCurve");
-    ctx.edit.addPoint(
-      this.#rect.x + this.#rect.width,
-      this.#rect.y + this.#rect.height,
-      "onCurve",
+    ctx.commands.beginBatch("Draw Rectangle");
+
+    ctx.commands.execute(
+      new AddPointCommand(this.#rect.x, this.#rect.y, "onCurve", false),
     );
-    ctx.edit.addPoint(
-      this.#rect.x,
-      this.#rect.y + this.#rect.height,
-      "onCurve",
+    ctx.commands.execute(
+      new AddPointCommand(
+        this.#rect.x + this.#rect.width,
+        this.#rect.y,
+        "onCurve",
+        false,
+      ),
     );
-    ctx.edit.closeContour();
+    ctx.commands.execute(
+      new AddPointCommand(
+        this.#rect.x + this.#rect.width,
+        this.#rect.y + this.#rect.height,
+        "onCurve",
+        false,
+      ),
+    );
+    ctx.commands.execute(
+      new AddPointCommand(
+        this.#rect.x,
+        this.#rect.y + this.#rect.height,
+        "onCurve",
+        false,
+      ),
+    );
+    ctx.commands.execute(new CloseContourCommand());
+    ctx.commands.execute(new AddContourCommand());
+
+    ctx.commands.endBatch();
   }
 
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {

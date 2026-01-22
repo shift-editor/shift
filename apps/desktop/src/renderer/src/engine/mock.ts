@@ -172,6 +172,27 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, []);
   }
 
+  removeContour(contourId: string): string {
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
+
+    const index = this.#snapshot.contours.findIndex((c) => c.id === contourId);
+    if (index === -1) {
+      return this.#makeResult(false, [], `Contour ${contourId} not found`);
+    }
+
+    this.#snapshot.contours.splice(index, 1);
+
+    if (this.#snapshot.activeContourId === contourId) {
+      this.#snapshot.activeContourId =
+        this.#snapshot.contours.length > 0
+          ? this.#snapshot.contours[0].id
+          : null;
+    }
+
+    return this.#makeResult(true, []);
+  }
+
   // ═══════════════════════════════════════════════════════════
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════
@@ -345,6 +366,63 @@ export class MockFontEngine implements FontEngineAPI {
       matchedRules: [],
       error: null,
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CLIPBOARD OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string {
+    if (!this.#snapshot) {
+      return JSON.stringify({
+        success: false,
+        createdPointIds: [],
+        createdContourIds: [],
+        error: "No active edit session",
+      });
+    }
+
+    try {
+      const contours = JSON.parse(contoursJson);
+      const createdPointIds: string[] = [];
+      const createdContourIds: string[] = [];
+
+      for (const pasteContour of contours) {
+        const contourId = this.#generateId();
+        const newContour = {
+          id: contourId,
+          closed: pasteContour.closed ?? false,
+          points: pasteContour.points.map((p: any) => {
+            const pointId = this.#generateId();
+            createdPointIds.push(pointId);
+            return {
+              id: pointId,
+              x: p.x + offsetX,
+              y: p.y + offsetY,
+              pointType: p.pointType,
+              smooth: p.smooth ?? false,
+            };
+          }),
+        };
+
+        this.#snapshot.contours.push(newContour);
+        createdContourIds.push(contourId);
+      }
+
+      return JSON.stringify({
+        success: true,
+        createdPointIds,
+        createdContourIds,
+        error: null,
+      });
+    } catch (e) {
+      return JSON.stringify({
+        success: false,
+        createdPointIds: [],
+        createdContourIds: [],
+        error: `Failed to parse contours: ${e}`,
+      });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════

@@ -14,3 +14,5 @@ pub use shift_ir::{
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};
 pub use shift_backends::{FontBackend, FontReader, FontWriter};
+
+pub use edit_session::{PasteContour, PastePoint, PasteResult};

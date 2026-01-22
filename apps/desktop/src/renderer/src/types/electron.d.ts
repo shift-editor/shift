@@ -25,6 +25,9 @@ export interface ElectronAPI {
   setDocumentDirty: (dirty: boolean) => Promise<void>;
   setDocumentFilePath: (filePath: string | null) => Promise<void>;
   saveCompleted: (filePath: string) => Promise<void>;
+
+  clipboardReadText: () => string;
+  clipboardWriteText: (text: string) => void;
 }
 
 declare global {

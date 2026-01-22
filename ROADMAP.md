@@ -141,11 +141,11 @@
 ### Phase 0: Complete Basic Vector Editing ⭐ Priority
 
 **Clipboard Operations**
-- [ ] `Cmd+C` - copy selected points (serialize to clipboard)
-- [ ] `Cmd+X` - cut (copy + delete)
-- [ ] `Cmd+V` - paste at cursor position
-- [ ] Paste in place (same coordinates)
-- [ ] Support pasting between glyphs
+- [x] `Cmd+C` - copy selected points (serialize to clipboard)
+- [x] `Cmd+X` - cut (copy + delete)
+- [x] `Cmd+V` - paste (same position as copied)
+- [x] Support pasting between glyphs
+- [x] SVG path import (paste SVG from Figma, Illustrator, etc.)
 
 **Selection Improvements**
 - [ ] `Cmd+A` - select all points in glyph
@@ -165,7 +165,7 @@
 - [x] Track `hoveredSegmentId` in Select tool state
 - [x] Highlight hovered segment (different stroke color/width)
 - [x] Show control handles when hovering near curve
-- [ ] Cursor change on segment hover (crosshair)
+- [x] Cursor change on segment hover (crosshair)
 
 **Point Insertion**
 - [ ] Click on hovered segment → insert point at t parameter
@@ -454,7 +454,7 @@ interface ShiftScriptContext {
 - Export to TTF
 
 ### v0.2 - Beta
-- Full editing toolkit (copy/paste, snapping)
+- Full editing toolkit (copy/paste ✓, snapping)
 - Segment hover/highlighting
 - Grid panel improvements (thumbnails, search)
 - Glyph add/delete/rename

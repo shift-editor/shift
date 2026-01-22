@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
 
@@ -127,6 +127,14 @@ const fontEngineAPI = {
     return fontEngineInstance.reverseContour(contourId);
   },
 
+  /**
+   * Remove a contour by ID.
+   * Returns CommandResult JSON.
+   */
+  removeContour: (contourId: string): string => {
+    return fontEngineInstance.removeContour(contourId);
+  },
+
   // ═══════════════════════════════════════════════════════════
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════
@@ -220,6 +228,18 @@ const fontEngineAPI = {
   applyEditsUnified: (pointIds: string[], dx: number, dy: number): string => {
     return fontEngineInstance.applyEditsUnified(pointIds, dx, dy);
   },
+
+  // ═══════════════════════════════════════════════════════════
+  // CLIPBOARD OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Paste contours into the current edit session.
+   * Returns PasteResult JSON with { success, createdPointIds, createdContourIds, error }.
+   */
+  pasteContours: (contoursJson: string, offsetX: number, offsetY: number): string => {
+    return fontEngineInstance.pasteContours(contoursJson, offsetX, offsetY);
+  },
 } satisfies FontEngineAPI;
 
 // Expose to renderer via contextBridge
@@ -273,6 +293,10 @@ const electronAPI = {
     ipcRenderer.invoke("document:setFilePath", filePath),
   saveCompleted: (filePath: string): Promise<void> =>
     ipcRenderer.invoke("document:saveCompleted", filePath),
+
+  // Clipboard
+  clipboardReadText: (): string => clipboard.readText(),
+  clipboardWriteText: (text: string): void => clipboard.writeText(text),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

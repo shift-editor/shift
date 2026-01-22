@@ -7,9 +7,9 @@ export const NavigationPane = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="flex-1">
+    <section className="h-full flex flex-1 items-center ml-1">
       <div className="flex flex-1 items-center">
-        <div className="bg-white rounded-lg border-b border-line">
+        <div className="bg-white rounded-lg border-b border-line p-0.5">
           {routes.map((route) => {
             if (route.icon) {
               const Icon = route.icon;
@@ -17,12 +17,11 @@ export const NavigationPane = () => {
                 <Button
                   key={route.id}
                   icon={
-                    <Icon width={26} height={26} className="text-primary" />
+                    <Icon width={20} height={20} className="text-primary" />
                   }
                   aria-label={route.description}
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 p-1.5"
                   onClick={() => navigate(route.path)}
                 />
               );

@@ -46,7 +46,10 @@
       "Bash(pkill:*)",
       "WebFetch(domain:www.npmjs.com)",
       "Bash(cargo clean:*)",
-      "Bash(pnpm run build)"
+      "Bash(pnpm run build)",
+      "Bash(pnpm vitest:*)",
+      "Bash(pnpm --filter shift-node run build:*)",
+      "Bash(pnpm tsc:*)"
     ]
   }
 }

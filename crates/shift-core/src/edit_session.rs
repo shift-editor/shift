@@ -273,6 +273,69 @@ impl EditSession {
     pub fn contours_count(&self) -> usize {
         self.layer.contours().len()
     }
+
+    pub fn paste_contours(
+        &mut self,
+        contours: Vec<PasteContour>,
+        offset_x: f64,
+        offset_y: f64,
+    ) -> PasteResult {
+        let mut created_point_ids = Vec::new();
+        let mut created_contour_ids = Vec::new();
+
+        for paste_contour in contours {
+            let mut contour = Contour::new();
+
+            for point in paste_contour.points {
+                let point_id = contour.add_point(
+                    point.x + offset_x,
+                    point.y + offset_y,
+                    point.point_type,
+                    point.smooth,
+                );
+                created_point_ids.push(point_id);
+            }
+
+            if paste_contour.closed {
+                contour.close();
+            }
+
+            let contour_id = self.layer.add_contour(contour);
+            created_contour_ids.push(contour_id);
+        }
+
+        PasteResult {
+            success: true,
+            created_point_ids,
+            created_contour_ids,
+            error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PastePoint {
+    pub x: f64,
+    pub y: f64,
+    pub point_type: PointType,
+    pub smooth: bool,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasteContour {
+    pub points: Vec<PastePoint>,
+    pub closed: bool,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasteResult {
+    pub success: bool,
+    pub created_point_ids: Vec<PointId>,
+    pub created_contour_ids: Vec<ContourId>,
+    pub error: Option<String>,
 }
 
 #[cfg(test)]
@@ -514,5 +577,25 @@ mod tests {
         let result = session.insert_point_before(fake_id, 50.0, 50.0, PointType::OffCurve, false);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn paste_point_deserializes_camel_case() {
+        let json = r#"{"x":100,"y":200,"pointType":"onCurve","smooth":false}"#;
+        let point: PastePoint = serde_json::from_str(json).unwrap();
+        assert_eq!(point.x, 100.0);
+        assert_eq!(point.y, 200.0);
+        assert_eq!(point.point_type, PointType::OnCurve);
+        assert!(!point.smooth);
+    }
+
+    #[test]
+    fn paste_contour_deserializes_camel_case() {
+        let json =
+            r#"{"points":[{"x":10,"y":20,"pointType":"offCurve","smooth":true}],"closed":true}"#;
+        let contour: PasteContour = serde_json::from_str(json).unwrap();
+        assert_eq!(contour.points.len(), 1);
+        assert_eq!(contour.points[0].point_type, PointType::OffCurve);
+        assert!(contour.closed);
     }
 }

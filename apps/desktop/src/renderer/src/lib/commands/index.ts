@@ -20,3 +20,4 @@ export {
   AddContourCommand,
   NudgePointsCommand,
 } from "./BezierCommands";
+export { PasteCommand } from "./ClipboardCommands";

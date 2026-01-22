@@ -59,10 +59,28 @@ export const Editor = () => {
         return;
       }
 
-      if (e.key === "v") {
+      if (e.key === "v" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         editor.setActiveTool("select");
         editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "c" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.copy();
+        return;
+      }
+
+      if (e.key === "x" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.cut();
+        return;
+      }
+
+      if (e.key === "v" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.paste();
         return;
       }
 

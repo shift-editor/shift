@@ -24,7 +24,7 @@ export interface ManagerContext {
  * Parse a CommandResult JSON string from Rust.
  */
 function parseCommandResult(json: string): CommandResult {
-  const raw = JSON.parse(json);
+  const raw = JSON.parse(json) as CommandResult
   return {
     success: raw.success,
     snapshot: raw.snapshot ?? null,
@@ -32,6 +32,23 @@ function parseCommandResult(json: string): CommandResult {
     affectedPointIds: raw.affectedPointIds ?? null,
     canUndo: raw.canUndo ?? false,
     canRedo: raw.canRedo ?? false,
+  };
+}
+
+export interface PasteResult {
+  success: boolean;
+  createdPointIds: PointId[];
+  createdContourIds: ContourId[];
+  error?: string;
+}
+
+function parsePasteResult(json: string): PasteResult {
+  const raw = JSON.parse(json);
+  return {
+    success: raw.success,
+    createdPointIds: (raw.createdPointIds ?? []).map(asPointId),
+    createdContourIds: (raw.createdContourIds ?? []).map(asContourId),
+    error: raw.error ?? undefined,
   };
 }
 
@@ -329,6 +346,57 @@ export class EditingManager {
     if (result.snapshot) {
       this.#ctx.emitSnapshot(result.snapshot);
     }
+  }
+
+  /**
+   * Remove a contour by ID.
+   */
+  removeContour(contourId: ContourId): void {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.removeContour(contourId);
+    const result = parseCommandResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError(
+        "removeContour",
+        result.error ?? undefined,
+      );
+    }
+
+    if (result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CLIPBOARD OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Paste contours into the current edit session.
+   * @returns Result with created point and contour IDs.
+   */
+  pasteContours(
+    contoursJson: string,
+    offsetX: number,
+    offsetY: number,
+  ): PasteResult {
+    this.#requireSession();
+
+    const resultJson = this.#ctx.native.pasteContours(contoursJson, offsetX, offsetY);
+    const result = parsePasteResult(resultJson);
+
+    if (!result.success) {
+      throw new NativeOperationError("pasteContours", result.error ?? undefined);
+    }
+
+    const snapshotJson = this.#ctx.native.getSnapshot();
+    if (snapshotJson) {
+      this.#ctx.emitSnapshot(JSON.parse(snapshotJson));
+    }
+
+    return result;
   }
 
   // ═══════════════════════════════════════════════════════════

@@ -32,11 +32,13 @@ import {
   RemovePointsCommand,
   CloseContourCommand,
   AddContourCommand,
+  PasteCommand,
 } from "../commands";
 import { effect, type Effect } from "../reactive/signal";
 import { parseSegments } from "@/engine/segments";
 import { Segment } from "../geo";
 import { signal, type WritableSignal } from "../reactive/signal";
+import { ClipboardManager } from "../clipboard";
 
 const DEBUG = false;
 
@@ -130,6 +132,7 @@ export class Editor {
   #interactiveContext: IGraphicContext | null;
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
+  #clipboardManager: ClipboardManager;
 
   /** Reactive cursor signal - subscribe to this for cursor changes */
   #cursor: WritableSignal<string>;
@@ -157,6 +160,15 @@ export class Editor {
 
     this.#tools = new Map();
     this.#activeTool = signal<ToolName>("select");
+
+    this.#clipboardManager = new ClipboardManager({
+      getSnapshot: () => this.#fontEngine.snapshot.value,
+      getSelectedPointIds: () => this.#selectedPointIds.peek(),
+      getSelectedSegmentIds: () => this.#selectedSegmentIds.peek(),
+      getGlyphName: () => this.#fontEngine.snapshot.value?.name,
+      pasteContours: (json, x, y) => this.#fontEngine.editing.pasteContours(json, x, y),
+      selectPoints: (ids) => this.selectPoints(ids),
+    });
 
     this.#redrawEffect = effect(() => {
       this.#fontEngine.snapshot.value;
@@ -634,6 +646,34 @@ export class Editor {
       this.clearSelection();
       this.requestRedraw();
     }
+  }
+
+  public async copy(): Promise<boolean> {
+    return this.#clipboardManager.copy();
+  }
+
+  public async cut(): Promise<boolean> {
+    const copied = await this.#clipboardManager.cut();
+    if (copied) {
+      this.deleteSelectedPoints();
+    }
+    return copied;
+  }
+
+  public async paste(): Promise<void> {
+    const content = this.#clipboardManager.getInternalClipboard();
+    if (!content) {
+      const result = await this.#clipboardManager.paste();
+      if (result?.success) {
+        this.requestRedraw();
+      }
+      return;
+    }
+
+    const cmd = new PasteCommand(content, 0, 0);
+    this.#commandHistory.execute(cmd);
+    this.selectPoints(new Set(cmd.createdPointIds));
+    this.requestRedraw();
   }
 
   public findPoint(pointId: PointId): PointSnapshot | null {
