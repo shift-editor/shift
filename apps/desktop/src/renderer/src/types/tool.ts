@@ -5,6 +5,7 @@ import type { Point2D } from "./math";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode } from "@/lib/editor/Editor";
 import type { SegmentIndicator } from "./indicator";
+import type { ReflectAxis, SelectionBounds } from "@/lib/transform";
 
 export type ToolName = "select" | "pen" | "hand" | "shape" | "disabled";
 
@@ -51,6 +52,67 @@ export interface EditContext {
   reverseContour(contourId: ContourId): void;
 }
 
+export interface TransformContext {
+  /**
+   * Rotate selected points.
+   * @param angle - Rotation in radians (positive = counter-clockwise)
+   * @param origin - Optional origin point; defaults to selection center
+   */
+  rotate(angle: number, origin?: Point2D): void;
+
+  /**
+   * Scale selected points.
+   * @param sx - Scale factor X
+   * @param sy - Scale factor Y (defaults to sx for uniform scale)
+   * @param origin - Optional origin; defaults to selection center
+   */
+  scale(sx: number, sy?: number, origin?: Point2D): void;
+
+  /**
+   * Reflect (mirror) selected points across an axis.
+   * @param axis - 'horizontal' | 'vertical' | { angle: number }
+   * @param origin - Optional origin; defaults to selection center
+   */
+  reflect(axis: ReflectAxis, origin?: Point2D): void;
+
+  /**
+   * Rotate 90° counter-clockwise.
+   */
+  rotate90CCW(): void;
+
+  /**
+   * Rotate 90° clockwise.
+   */
+  rotate90CW(): void;
+
+  /**
+   * Rotate 180°.
+   */
+  rotate180(): void;
+
+  /**
+   * Flip horizontally (mirror across horizontal axis).
+   */
+  flipHorizontal(): void;
+
+  /**
+   * Flip vertically (mirror across vertical axis).
+   */
+  flipVertical(): void;
+
+  /**
+   * Get the bounding box and center of the current selection.
+   * Returns null if no points are selected.
+   */
+  getSelectionBounds(): SelectionBounds | null;
+
+  /**
+   * Get the center of the current selection's bounding box.
+   * Returns null if no points are selected.
+   */
+  getSelectionCenter(): Point2D | null;
+}
+
 export interface ToolContext {
   readonly snapshot: GlyphSnapshot | null;
   readonly selectedPoints: ReadonlySet<PointId>;
@@ -63,6 +125,7 @@ export interface ToolContext {
   readonly select: SelectContext;
   readonly indicators: IndicatorContext;
   readonly edit: EditContext;
+  readonly transform: TransformContext;
 
   readonly commands: CommandHistory;
   requestRedraw(): void;

@@ -1,0 +1,43 @@
+/**
+ * Transform System
+ *
+ * Provides geometry transformation operations for selected points:
+ * - Rotate
+ * - Scale
+ * - Reflect (mirror/flip)
+ * - Arbitrary matrix transforms
+ *
+ * @example
+ * ```ts
+ * import { TransformService, RotatePointsCommand } from '@/lib/transform';
+ *
+ * // Pure function usage (for preview/calculations)
+ * const rotated = TransformService.rotatePoints(points, Math.PI/2, center);
+ *
+ * // Command usage (for undo/redo)
+ * const cmd = new RotatePointsCommand(pointIds, Math.PI/2, center);
+ * commandHistory.execute(cmd);
+ * ```
+ */
+
+// Types
+export type {
+  TransformablePoint,
+  TransformedPoint,
+  TransformOrigin,
+  ReflectAxis,
+  TransformOptions,
+  ScaleOptions,
+  SelectionBounds,
+} from "./types";
+
+// Pure transform functions
+export { TransformService } from "./TransformService";
+
+// Commands for undo/redo
+export {
+  RotatePointsCommand,
+  ScalePointsCommand,
+  ReflectPointsCommand,
+  TransformMatrixCommand,
+} from "./TransformCommands";

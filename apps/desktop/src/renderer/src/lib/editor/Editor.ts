@@ -34,6 +34,15 @@ import {
   AddContourCommand,
   PasteCommand,
 } from "../commands";
+import {
+  TransformService,
+  RotatePointsCommand,
+  ScalePointsCommand,
+  ReflectPointsCommand,
+  type ReflectAxis,
+  type TransformablePoint,
+  type SelectionBounds,
+} from "../transform";
 import { effect, type Effect } from "../reactive/signal";
 import { parseSegments } from "@/engine/segments";
 import { Segment } from "../geo";
@@ -507,6 +516,39 @@ export class Editor {
         },
       },
 
+      transform: {
+        rotate: (angle, origin) => {
+          this.rotateSelection(angle, origin);
+        },
+        scale: (sx, sy, origin) => {
+          this.scaleSelection(sx, sy ?? sx, origin);
+        },
+        reflect: (axis, origin) => {
+          this.reflectSelection(axis, origin);
+        },
+        rotate90CCW: () => {
+          this.rotateSelection(Math.PI / 2);
+        },
+        rotate90CW: () => {
+          this.rotateSelection(-Math.PI / 2);
+        },
+        rotate180: () => {
+          this.rotateSelection(Math.PI);
+        },
+        flipHorizontal: () => {
+          this.reflectSelection("horizontal");
+        },
+        flipVertical: () => {
+          this.reflectSelection("vertical");
+        },
+        getSelectionBounds: () => {
+          return this.getSelectionBounds();
+        },
+        getSelectionCenter: () => {
+          return this.getSelectionCenter();
+        },
+      },
+
       commands,
       requestRedraw,
     };
@@ -676,6 +718,80 @@ export class Editor {
     this.requestRedraw();
   }
 
+  // ============================================================================
+  // Transform Operations
+  // ============================================================================
+
+  /**
+   * Get the bounding box and center of the current selection.
+   * Returns null if no points are selected.
+   */
+  public getSelectionBounds(): SelectionBounds | null {
+    const points = this.#getTransformablePoints();
+    return TransformService.getSelectionBounds(points);
+  }
+
+  /**
+   * Get the center of the current selection's bounding box.
+   * Returns null if no points are selected.
+   */
+  public getSelectionCenter(): Point2D | null {
+    const bounds = this.getSelectionBounds();
+    return bounds?.center ?? null;
+  }
+
+  /**
+   * Rotate selected points.
+   * @param angle - Rotation in radians (positive = counter-clockwise)
+   * @param origin - Optional origin point; defaults to selection center
+   */
+  public rotateSelection(angle: number, origin?: Point2D): void {
+    const pointIds = [...this.#selectedPointIds.peek()];
+    if (pointIds.length === 0) return;
+
+    const center = origin ?? this.getSelectionCenter();
+    if (!center) return;
+
+    const cmd = new RotatePointsCommand(pointIds, angle, center);
+    this.#commandHistory.execute(cmd);
+    this.requestRedraw();
+  }
+
+  /**
+   * Scale selected points.
+   * @param sx - Scale factor X
+   * @param sy - Scale factor Y
+   * @param origin - Optional origin; defaults to selection center
+   */
+  public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
+    const pointIds = [...this.#selectedPointIds.peek()];
+    if (pointIds.length === 0) return;
+
+    const center = origin ?? this.getSelectionCenter();
+    if (!center) return;
+
+    const cmd = new ScalePointsCommand(pointIds, sx, sy, center);
+    this.#commandHistory.execute(cmd);
+    this.requestRedraw();
+  }
+
+  /**
+   * Reflect (mirror) selected points across an axis.
+   * @param axis - 'horizontal' | 'vertical' | { angle: number }
+   * @param origin - Optional origin; defaults to selection center
+   */
+  public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
+    const pointIds = [...this.#selectedPointIds.peek()];
+    if (pointIds.length === 0) return;
+
+    const center = origin ?? this.getSelectionCenter();
+    if (!center) return;
+
+    const cmd = new ReflectPointsCommand(pointIds, axis, center);
+    this.#commandHistory.execute(cmd);
+    this.requestRedraw();
+  }
+
   public findPoint(pointId: PointId): PointSnapshot | null {
     const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return null;
@@ -693,6 +809,27 @@ export class Editor {
       const found = findPointInSnapshot(snapshot, pointId);
       if (found) {
         result.push({ x: found.point.x, y: found.point.y });
+      }
+    }
+    return result;
+  }
+
+  #getTransformablePoints(): TransformablePoint[] {
+    const snapshot = this.#fontEngine.snapshot.value;
+    if (!snapshot) return [];
+
+    const result: TransformablePoint[] = [];
+    const selectedIds = this.#selectedPointIds.peek();
+
+    for (const contour of snapshot.contours) {
+      for (const point of contour.points) {
+        if (selectedIds.has(point.id as PointId)) {
+          result.push({
+            id: point.id as PointId,
+            x: point.x,
+            y: point.y,
+          });
+        }
       }
     }
     return result;

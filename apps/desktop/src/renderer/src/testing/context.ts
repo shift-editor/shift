@@ -5,6 +5,7 @@ import type {
   SelectContext,
   EditContext,
   IndicatorContext,
+  TransformContext,
 } from "@/types/tool";
 import type { PointId, ContourId } from "@/types/ids";
 import type { Rect2D } from "@/types/math";
@@ -184,6 +185,19 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     ),
   };
 
+  const transform: TransformContext = {
+    rotate: vi.fn(),
+    scale: vi.fn(),
+    reflect: vi.fn(),
+    rotate90CCW: vi.fn(),
+    rotate90CW: vi.fn(),
+    rotate180: vi.fn(),
+    flipHorizontal: vi.fn(),
+    flipVertical: vi.fn(),
+    getSelectionBounds: vi.fn(() => null),
+    getSelectionCenter: vi.fn(() => null),
+  };
+
   const ctx: ToolContext = {
     get snapshot() {
       return fontEngine.snapshot.value;
@@ -205,6 +219,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     select,
     indicators,
     edit,
+    transform,
     commands: commandHistory,
     requestRedraw: vi.fn(() => {
       redrawCount++;
