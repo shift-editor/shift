@@ -19,12 +19,10 @@
  * ```
  */
 
-import { Vec2 } from "@shift/geo";
 import { Mat, type MatModel } from "@/lib/primitives/Mat";
 import type { Point2D } from "@/types/math";
 import type {
   TransformablePoint,
-  TransformedPoint,
   ReflectAxis,
   SelectionBounds,
 } from "./types";
@@ -49,11 +47,8 @@ export const Transform = {
     points: readonly TransformablePoint[],
     angle: number,
     origin: Point2D,
-  ): TransformedPoint[] {
-    return points.map((p) => {
-      const rotated = Vec2.rotateAround({ x: p.x, y: p.y }, origin, angle);
-      return { id: p.id, x: rotated.x, y: rotated.y };
-    });
+  ): TransformablePoint[] {
+    return Transform.applyMatrix(points, Mat.Rotate(angle), origin);
   },
 
   /**
@@ -70,12 +65,8 @@ export const Transform = {
     sx: number,
     sy: number,
     origin: Point2D,
-  ): TransformedPoint[] {
-    return points.map((p) => ({
-      id: p.id,
-      x: origin.x + (p.x - origin.x) * sx,
-      y: origin.y + (p.y - origin.y) * sy,
-    }));
+  ): TransformablePoint[] {
+    return Transform.applyMatrix(points, Mat.Scale(sx, sy), origin);
   },
 
   /**
@@ -90,46 +81,14 @@ export const Transform = {
     points: readonly TransformablePoint[],
     axis: ReflectAxis,
     origin: Point2D,
-  ): TransformedPoint[] {
-    if (axis === "horizontal") {
-      // Flip across horizontal axis (X axis) - inverts Y
-      return points.map((p) => ({
-        id: p.id,
-        x: p.x,
-        y: origin.y - (p.y - origin.y),
-      }));
-    }
-
-    if (axis === "vertical") {
-      // Flip across vertical axis (Y axis) - inverts X
-      return points.map((p) => ({
-        id: p.id,
-        x: origin.x - (p.x - origin.x),
-        y: p.y,
-      }));
-    }
-
-    // Reflect across axis at arbitrary angle
-    const { angle } = axis;
-    const cos2a = Math.cos(2 * angle);
-    const sin2a = Math.sin(2 * angle);
-
-    return points.map((p) => {
-      // Translate to origin
-      const dx = p.x - origin.x;
-      const dy = p.y - origin.y;
-
-      // Apply reflection matrix: [cos2θ  sin2θ] [x]
-      //                         [sin2θ -cos2θ] [y]
-      const rx = dx * cos2a + dy * sin2a;
-      const ry = dx * sin2a - dy * cos2a;
-
-      return {
-        id: p.id,
-        x: origin.x + rx,
-        y: origin.y + ry,
-      };
-    });
+  ): TransformablePoint[] {
+    const matrix =
+      axis === "horizontal"
+        ? Mat.ReflectHorizontal()
+        : axis === "vertical"
+          ? Mat.ReflectVertical()
+          : Mat.ReflectAxis(axis.angle);
+    return Transform.applyMatrix(points, matrix, origin);
   },
 
   /**
@@ -145,7 +104,7 @@ export const Transform = {
     points: readonly TransformablePoint[],
     matrix: MatModel,
     origin: Point2D = { x: 0, y: 0 },
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     // Build composite: Translate(-origin) → Matrix → Translate(origin)
     // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
     const toOrigin = Mat.Translate(-origin.x, -origin.y);
@@ -217,48 +176,11 @@ export const Transform = {
    * Pre-built transformation matrices for common operations.
    */
   matrices: {
-    /**
-     * Create a rotation matrix.
-     * @param angle - Rotation in radians (positive = counter-clockwise)
-     */
-    rotate(angle: number): Mat {
-      return Mat.Rotate(angle);
-    },
-
-    /**
-     * Create a scale matrix.
-     * @param sx - Scale factor X
-     * @param sy - Scale factor Y (defaults to sx for uniform scale)
-     */
-    scale(sx: number, sy: number = sx): Mat {
-      return Mat.Scale(sx, sy);
-    },
-
-    /**
-     * Create a horizontal reflection matrix (flip across X axis).
-     * This inverts Y coordinates.
-     */
-    reflectHorizontal(): Mat {
-      return new Mat(1, 0, 0, -1, 0, 0);
-    },
-
-    /**
-     * Create a vertical reflection matrix (flip across Y axis).
-     * This inverts X coordinates.
-     */
-    reflectVertical(): Mat {
-      return new Mat(-1, 0, 0, 1, 0, 0);
-    },
-
-    /**
-     * Create a reflection matrix across an axis at the given angle.
-     * @param angle - Angle of the reflection axis in radians
-     */
-    reflectAxis(angle: number): Mat {
-      const cos2a = Math.cos(2 * angle);
-      const sin2a = Math.sin(2 * angle);
-      return new Mat(cos2a, sin2a, sin2a, -cos2a, 0, 0);
-    },
+    rotate: Mat.Rotate,
+    scale: Mat.Scale,
+    reflectHorizontal: Mat.ReflectHorizontal,
+    reflectVertical: Mat.ReflectVertical,
+    reflectAxis: Mat.ReflectAxis,
   },
 
   // ============================================
@@ -271,7 +193,7 @@ export const Transform = {
   rotate90CCW(
     points: readonly TransformablePoint[],
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.rotatePoints(points, Math.PI / 2, origin);
   },
 
@@ -281,7 +203,7 @@ export const Transform = {
   rotate90CW(
     points: readonly TransformablePoint[],
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.rotatePoints(points, -Math.PI / 2, origin);
   },
 
@@ -291,7 +213,7 @@ export const Transform = {
   rotate180(
     points: readonly TransformablePoint[],
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.rotatePoints(points, Math.PI, origin);
   },
 
@@ -302,7 +224,7 @@ export const Transform = {
     points: readonly TransformablePoint[],
     factor: number,
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.scalePoints(points, factor, factor, origin);
   },
 
@@ -312,7 +234,7 @@ export const Transform = {
   flipHorizontal(
     points: readonly TransformablePoint[],
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.reflectPoints(points, "horizontal", origin);
   },
 
@@ -322,7 +244,7 @@ export const Transform = {
   flipVertical(
     points: readonly TransformablePoint[],
     origin: Point2D,
-  ): TransformedPoint[] {
+  ): TransformablePoint[] {
     return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;

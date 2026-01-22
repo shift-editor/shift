@@ -8,87 +8,58 @@
 import type { Point2D } from "@/types/math";
 import type { PointId } from "@/types/ids";
 import type { GlyphSnapshot } from "@/types/generated";
+import type { MatModel } from "@/lib/primitives/Mat";
+import { findPointsInSnapshot } from "@/types/snapshots";
 import { BaseCommand, type CommandContext } from "../commands/Command";
 import { Transform } from "./Transform";
 import type { ReflectAxis, TransformablePoint } from "./types";
 
-/**
- * Helper to extract points from snapshot by IDs.
- */
 function getPointsFromSnapshot(
   snapshot: GlyphSnapshot | null,
   pointIds: PointId[],
 ): TransformablePoint[] {
   if (!snapshot) return [];
-
-  const result: TransformablePoint[] = [];
-  const idSet = new Set(pointIds);
-
-  for (const contour of snapshot.contours) {
-    for (const point of contour.points) {
-      if (idSet.has(point.id as PointId)) {
-        result.push({ id: point.id as PointId, x: point.x, y: point.y });
-      }
-    }
-  }
-
-  return result;
+  return findPointsInSnapshot(snapshot, pointIds).map((p) => ({
+    id: p.id as PointId,
+    x: p.x,
+    y: p.y,
+  }));
 }
 
-/**
- * Rotate selected points around an origin.
- */
-export class RotatePointsCommand extends BaseCommand<void> {
-  readonly name = "Rotate Points";
+abstract class BaseTransformCommand extends BaseCommand<void> {
+  abstract readonly name: string;
 
   #pointIds: PointId[];
-  #angle: number;
-  #origin: Point2D;
-
-  // Stored for undo - original positions before transform
   #originalPositions: Map<PointId, Point2D> = new Map();
 
-  /**
-   * @param pointIds - IDs of points to rotate
-   * @param angle - Rotation angle in radians (positive = counter-clockwise)
-   * @param origin - Center of rotation
-   */
-  constructor(pointIds: PointId[], angle: number, origin: Point2D) {
+  constructor(pointIds: PointId[]) {
     super();
     this.#pointIds = [...pointIds];
-    this.#angle = angle;
-    this.#origin = origin;
   }
+
+  protected abstract transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[];
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    // Get current points from snapshot
     const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
     if (points.length === 0) return;
 
-    // Store original positions for undo (only on first execute)
     if (this.#originalPositions.size === 0) {
       for (const p of points) {
         this.#originalPositions.set(p.id, { x: p.x, y: p.y });
       }
     }
 
-    // Calculate new positions
-    const transformed = Transform.rotatePoints(
-      points,
-      this.#angle,
-      this.#origin,
-    );
-
-    // Apply transforms
+    const transformed = this.transformPoints(points);
     for (const p of transformed) {
       ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
-    // Restore original positions
     for (const [id, pos] of this.#originalPositions) {
       ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
     }
@@ -97,253 +68,92 @@ export class RotatePointsCommand extends BaseCommand<void> {
   redo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    // Re-apply rotation from original positions
     const points: TransformablePoint[] = [];
     for (const [id, pos] of this.#originalPositions) {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const transformed = Transform.rotatePoints(
-      points,
-      this.#angle,
-      this.#origin,
-    );
-
+    const transformed = this.transformPoints(points);
     for (const p of transformed) {
       ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
   }
 }
 
-/**
- * Scale selected points from an origin.
- */
-export class ScalePointsCommand extends BaseCommand<void> {
+export class RotatePointsCommand extends BaseTransformCommand {
+  readonly name = "Rotate Points";
+
+  #angle: number;
+  #origin: Point2D;
+
+  constructor(pointIds: PointId[], angle: number, origin: Point2D) {
+    super(pointIds);
+    this.#angle = angle;
+    this.#origin = origin;
+  }
+
+  protected transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[] {
+    return Transform.rotatePoints(points, this.#angle, this.#origin);
+  }
+}
+
+export class ScalePointsCommand extends BaseTransformCommand {
   readonly name = "Scale Points";
 
-  #pointIds: PointId[];
   #sx: number;
   #sy: number;
   #origin: Point2D;
 
-  #originalPositions: Map<PointId, Point2D> = new Map();
-
-  /**
-   * @param pointIds - IDs of points to scale
-   * @param sx - Scale factor X
-   * @param sy - Scale factor Y
-   * @param origin - Center of scaling
-   */
   constructor(pointIds: PointId[], sx: number, sy: number, origin: Point2D) {
-    super();
-    this.#pointIds = [...pointIds];
+    super(pointIds);
     this.#sx = sx;
     this.#sy = sy;
     this.#origin = origin;
   }
 
-  execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
-    if (points.length === 0) return;
-
-    // Store original positions for undo
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    const transformed = Transform.scalePoints(
-      points,
-      this.#sx,
-      this.#sy,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
-    }
-  }
-
-  redo(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points: TransformablePoint[] = [];
-    for (const [id, pos] of this.#originalPositions) {
-      points.push({ id, x: pos.x, y: pos.y });
-    }
-
-    const transformed = Transform.scalePoints(
-      points,
-      this.#sx,
-      this.#sy,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
+  protected transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[] {
+    return Transform.scalePoints(points, this.#sx, this.#sy, this.#origin);
   }
 }
 
-/**
- * Reflect (mirror) selected points across an axis.
- */
-export class ReflectPointsCommand extends BaseCommand<void> {
+export class ReflectPointsCommand extends BaseTransformCommand {
   readonly name = "Reflect Points";
 
-  #pointIds: PointId[];
   #axis: ReflectAxis;
   #origin: Point2D;
 
-  #originalPositions: Map<PointId, Point2D> = new Map();
-
-  /**
-   * @param pointIds - IDs of points to reflect
-   * @param axis - Axis of reflection
-   * @param origin - Point the axis passes through
-   */
   constructor(pointIds: PointId[], axis: ReflectAxis, origin: Point2D) {
-    super();
-    this.#pointIds = [...pointIds];
+    super(pointIds);
     this.#axis = axis;
     this.#origin = origin;
   }
 
-  execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
-    if (points.length === 0) return;
-
-    // Store original positions for undo
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    const transformed = Transform.reflectPoints(
-      points,
-      this.#axis,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
-    }
-  }
-
-  redo(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points: TransformablePoint[] = [];
-    for (const [id, pos] of this.#originalPositions) {
-      points.push({ id, x: pos.x, y: pos.y });
-    }
-
-    const transformed = Transform.reflectPoints(
-      points,
-      this.#axis,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
+  protected transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[] {
+    return Transform.reflectPoints(points, this.#axis, this.#origin);
   }
 }
 
-/**
- * Apply an arbitrary transformation matrix to points.
- * Useful for compound transforms or custom operations.
- */
-export class TransformMatrixCommand extends BaseCommand<void> {
+export class TransformMatrixCommand extends BaseTransformCommand {
   readonly name = "Transform Points";
 
-  #pointIds: PointId[];
-  #matrix: {
-    a: number;
-    b: number;
-    c: number;
-    d: number;
-    e: number;
-    f: number;
-  };
+  #matrix: MatModel;
   #origin: Point2D;
 
-  #originalPositions: Map<PointId, Point2D> = new Map();
-
-  constructor(
-    pointIds: PointId[],
-    matrix: { a: number; b: number; c: number; d: number; e: number; f: number },
-    origin: Point2D,
-  ) {
-    super();
-    this.#pointIds = [...pointIds];
+  constructor(pointIds: PointId[], matrix: MatModel, origin: Point2D) {
+    super(pointIds);
     this.#matrix = { ...matrix };
     this.#origin = origin;
   }
 
-  execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
-    if (points.length === 0) return;
-
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    const transformed = Transform.applyMatrix(
-      points,
-      this.#matrix,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
-  }
-
-  undo(ctx: CommandContext): void {
-    for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
-    }
-  }
-
-  redo(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points: TransformablePoint[] = [];
-    for (const [id, pos] of this.#originalPositions) {
-      points.push({ id, x: pos.x, y: pos.y });
-    }
-
-    const transformed = Transform.applyMatrix(
-      points,
-      this.#matrix,
-      this.#origin,
-    );
-
-    for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
-    }
+  protected transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[] {
+    return Transform.applyMatrix(points, this.#matrix, this.#origin);
   }
 }

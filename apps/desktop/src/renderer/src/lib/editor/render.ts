@@ -13,6 +13,7 @@ import type {
 import type { PointId } from "@/types/ids";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
+import { Polygon } from "@shift/geo";
 
 export interface Guides {
   xAdvance: number;
@@ -206,15 +207,5 @@ export function getAllPointsFromSnapshot(
  * Check if a contour is clockwise using the shoelace formula.
  */
 export function isContourClockwise(contour: ContourSnapshot): boolean {
-  const points = contour.points;
-  if (points.length < 3) return true;
-
-  let sum = 0;
-  for (let i = 0; i < points.length; i++) {
-    const p1 = points[i];
-    const p2 = points[(i + 1) % points.length];
-    sum += (p2.x - p1.x) * (p2.y + p1.y);
-  }
-
-  return sum > 0;
+  return Polygon.isClockwise(contour.points);
 }

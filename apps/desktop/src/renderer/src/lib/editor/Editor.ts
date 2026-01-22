@@ -13,6 +13,7 @@ import type { PointId } from "@/types/ids";
 import { asPointId, asContourId } from "@/types/ids";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
+import { findPointsInSnapshot } from "@/types/snapshots";
 
 import { FrameHandler } from "./FrameHandler";
 import { drawHandle, drawHandleLast } from "./handles";
@@ -48,6 +49,7 @@ import { parseSegments } from "@/engine/segments";
 import { Segment } from "../geo";
 import { signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
+import { Polygon } from "@shift/geo";
 
 const DEBUG = false;
 
@@ -86,21 +88,11 @@ function debug(...args: unknown[]) {
   }
 }
 
-// ============================================================================
-// Selection Types
-// ============================================================================
 
 export type SelectionMode = "preview" | "committed";
 
-// ============================================================================
-// Visual State Types
-// ============================================================================
 
 export type VisualState = "idle" | "hovered" | "selected";
-
-// ============================================================================
-// Tool Registry Types
-// ============================================================================
 
 export interface ToolRegistryItem {
   tool: Tool;
@@ -108,18 +100,6 @@ export interface ToolRegistryItem {
   tooltip: string;
 }
 
-function isContourClockwise(points: PointSnapshot[]): boolean {
-  if (points.length < 3) return true;
-
-  let sum = 0;
-  for (let i = 0; i < points.length; i++) {
-    const p1 = points[i];
-    const p2 = points[(i + 1) % points.length];
-    sum += (p2.x - p1.x) * (p2.y + p1.y);
-  }
-
-  return sum > 0;
-}
 
 export class Editor {
   #previewMode: WritableSignal<boolean>;
@@ -718,9 +698,6 @@ export class Editor {
     this.requestRedraw();
   }
 
-  // ============================================================================
-  // Transform Operations
-  // ============================================================================
 
   /**
    * Get the bounding box and center of the current selection.
@@ -754,7 +731,6 @@ export class Editor {
 
     const cmd = new RotatePointsCommand(pointIds, angle, center);
     this.#commandHistory.execute(cmd);
-    this.requestRedraw();
   }
 
   /**
@@ -767,12 +743,11 @@ export class Editor {
     const pointIds = [...this.#selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
-    const center = origin ?? this.getSelectionCenter();
-    if (!center) return;
+    const o = origin ?? this.getSelectionCenter();
+    if (!o) return;
 
-    const cmd = new ScalePointsCommand(pointIds, sx, sy, center);
+    const cmd = new ScalePointsCommand(pointIds, sx, sy, o);
     this.#commandHistory.execute(cmd);
-    this.requestRedraw();
   }
 
   /**
@@ -789,7 +764,6 @@ export class Editor {
 
     const cmd = new ReflectPointsCommand(pointIds, axis, center);
     this.#commandHistory.execute(cmd);
-    this.requestRedraw();
   }
 
   public findPoint(pointId: PointId): PointSnapshot | null {
@@ -818,21 +792,13 @@ export class Editor {
     const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return [];
 
-    const result: TransformablePoint[] = [];
-    const selectedIds = this.#selectedPointIds.peek();
-
-    for (const contour of snapshot.contours) {
-      for (const point of contour.points) {
-        if (selectedIds.has(point.id as PointId)) {
-          result.push({
-            id: point.id as PointId,
-            x: point.x,
-            y: point.y,
-          });
-        }
-      }
-    }
-    return result;
+    return findPointsInSnapshot(snapshot, this.#selectedPointIds.peek()).map(
+      (p) => ({
+        id: p.id as PointId,
+        x: p.x,
+        y: p.y,
+      }),
+    );
   }
 
   #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
@@ -1049,7 +1015,7 @@ export class Editor {
 
         if (isFirst) {
           if (contour.closed) {
-            const clockwise = isContourClockwise(points);
+            const clockwise = Polygon.isClockwise(points);
             this.paintHandle(ctx, x, y, "direction", handleState, !clockwise);
           } else {
             this.paintHandle(ctx, x, y, "first", handleState);

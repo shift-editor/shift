@@ -23,8 +23,6 @@
 // Types
 export type {
   TransformablePoint,
-  TransformedPoint,
-  TransformOrigin,
   ReflectAxis,
   TransformOptions,
   ScaleOptions,

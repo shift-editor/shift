@@ -10,30 +10,13 @@ import type { PointId } from "@/types/ids";
 /**
  * A point that can be transformed.
  * Contains ID for tracking and coordinates for transformation.
+ * Also used for transform output since input/output structure is identical.
  */
 export interface TransformablePoint {
   readonly id: PointId;
   readonly x: number;
   readonly y: number;
 }
-
-/**
- * Result of a transform operation - same structure as input.
- */
-export interface TransformedPoint {
-  readonly id: PointId;
-  readonly x: number;
-  readonly y: number;
-}
-
-/**
- * Defines the origin (pivot point) for a transformation.
- */
-export type TransformOrigin =
-  | { type: "selection-center" }
-  | { type: "contour-centers" }
-  | { type: "point"; point: Point2D }
-  | { type: "bbox-corner"; corner: "tl" | "tr" | "bl" | "br" };
 
 /**
  * Axis for reflection transforms.

@@ -144,6 +144,32 @@ export class Mat implements MatModel {
   }
 
   /**
+   * Reflect across horizontal axis (X axis).
+   * This inverts Y coordinates.
+   */
+  static ReflectHorizontal(): Mat {
+    return new Mat(1, 0, 0, -1, 0, 0);
+  }
+
+  /**
+   * Reflect across vertical axis (Y axis).
+   * This inverts X coordinates.
+   */
+  static ReflectVertical(): Mat {
+    return new Mat(-1, 0, 0, 1, 0, 0);
+  }
+
+  /**
+   * Reflect across an axis at the given angle.
+   * @param angle - Angle of the reflection axis in radians
+   */
+  static ReflectAxis(angle: number): Mat {
+    const cos2a = Math.cos(2 * angle);
+    const sin2a = Math.sin(2 * angle);
+    return new Mat(cos2a, sin2a, sin2a, -cos2a, 0, 0);
+  }
+
+  /**
    * Compose two matrices: result = m1 × m2
    */
   static Compose(m1: MatModel, m2: MatModel): Mat {

@@ -6,10 +6,11 @@
  * Modules:
  * - Vec2: Core 2D vector operations
  * - Curve: Pure geometry curve primitives (line, quadratic, cubic bezier)
+ * - Polygon: Polygon operations (area, winding direction)
  *
  * @example
  * ```ts
- * import { Vec2, Curve } from '@shift/geo';
+ * import { Vec2, Curve, Polygon } from '@shift/geo';
  *
  * // Vector operations
  * const sum = Vec2.add(a, b);
@@ -20,6 +21,10 @@
  * const cubic = Curve.cubic(p0, c0, c1, p1);
  * const midpoint = Curve.pointAt(cubic, 0.5);
  * const closest = Curve.closestPoint(cubic, mousePos);
+ *
+ * // Polygons
+ * const isClockwise = Polygon.isClockwise(points);
+ * const area = Polygon.area(points);
  * ```
  */
 
@@ -31,6 +36,9 @@ export { Vec2 } from "./Vec2";
 
 // Curve primitives (pure geometry)
 export { Curve } from "./Curve";
+
+// Polygon operations
+export { Polygon } from "./Polygon";
 export type {
   LineCurve,
   QuadraticCurve,

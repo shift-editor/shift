@@ -71,6 +71,28 @@ export function findPointInSnapshot(
 }
 
 /**
+ * Finds multiple points by IDs across all contours.
+ * Returns points in the order they appear in the contours (not the input order).
+ */
+export function findPointsInSnapshot(
+  snapshot: GlyphSnapshot,
+  pointIds: Iterable<string>,
+): PointSnapshot[] {
+  const idSet = new Set(pointIds);
+  const result: PointSnapshot[] = [];
+
+  for (const contour of snapshot.contours) {
+    for (const point of contour.points) {
+      if (idSet.has(point.id)) {
+        result.push(point);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Finds a contour by ID
  */
 export function findContourInSnapshot(
