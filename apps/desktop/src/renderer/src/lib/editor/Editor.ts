@@ -35,7 +35,7 @@ import {
   PasteCommand,
 } from "../commands";
 import {
-  TransformService,
+  Transform,
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
@@ -728,7 +728,7 @@ export class Editor {
    */
   public getSelectionBounds(): SelectionBounds | null {
     const points = this.#getTransformablePoints();
-    return TransformService.getSelectionBounds(points);
+    return Transform.getSelectionBounds(points);
   }
 
   /**

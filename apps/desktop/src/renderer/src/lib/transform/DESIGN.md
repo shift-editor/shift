@@ -50,12 +50,12 @@ Future extensions:
               │                     │                    │
               ▼                     ▼                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  TransformService (Pure Functions)               │
+│                  Transform (Pure Functions)               │
 │                                                                  │
-│   TransformService.rotatePoints(points, angle, origin)          │
-│   TransformService.scalePoints(points, sx, sy, origin)          │
-│   TransformService.reflectPoints(points, axis, origin)          │
-│   TransformService.applyMatrix(points, matrix)                  │
+│   Transform.rotatePoints(points, angle, origin)          │
+│   Transform.scalePoints(points, sx, sy, origin)          │
+│   Transform.reflectPoints(points, axis, origin)          │
+│   Transform.applyMatrix(points, matrix)                  │
 │                                                                  │
 │   Uses: Mat.ts, Vec2.ts, getBoundingRect()                      │
 └────────────────────────────┬────────────────────────────────────┘
@@ -88,7 +88,7 @@ type TransformOrigin =
 
 ### 2. Pure Transform Functions
 
-Transform math lives in `TransformService` as pure functions. No side effects.
+Transform math lives in `Transform` as pure functions. No side effects.
 This allows:
 - Easy testing
 - Reuse across commands and tools
@@ -158,18 +158,18 @@ If batch isn't available yet, fall back to individual `movePointTo` calls.
 ```
 src/lib/transform/
 ├── index.ts                 # Public exports
-├── TransformService.ts      # Pure transform functions
+├── Transform.ts             # Pure transform functions
 ├── TransformCommands.ts     # Command implementations
 ├── types.ts                 # TransformOrigin, TransformResult, etc.
-└── DESIGN.md               # This file
+└── DESIGN.md                # This file
 ```
 
 ## API Design
 
-### TransformService (Pure Functions)
+### Transform (Pure Functions)
 
 ```typescript
-export const TransformService = {
+export const Transform = {
   /**
    * Rotate points around an origin.
    */
@@ -295,7 +295,7 @@ ctx.transform.scale(2, 2);
 // During drag
 const angle = Vec2.angleTo(origin, currentMouse) - Vec2.angleTo(origin, startMouse);
 // Preview: apply transform to visual only, don't commit
-preview.setTransform(TransformService.rotatePoints(selected, angle, origin));
+preview.setTransform(Transform.rotatePoints(selected, angle, origin));
 
 // On drag end: commit
 ctx.transform.rotate(angle, origin);
@@ -303,8 +303,8 @@ ctx.transform.rotate(angle, origin);
 
 ## Implementation Order
 
-1. **TransformService** - Pure math functions (no dependencies on Editor)
-2. **TransformCommands** - Commands that use TransformService
+1. **Transform** - Pure math functions (no dependencies on Editor)
+2. **TransformCommands** - Commands that use Transform
 3. **ToolContext.transform** - Wire up to Editor
 4. **Transform Tool** (optional) - Interactive canvas-based transforms
 

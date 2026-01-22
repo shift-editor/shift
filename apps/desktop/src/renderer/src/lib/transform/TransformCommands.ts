@@ -9,7 +9,7 @@ import type { Point2D } from "@/types/math";
 import type { PointId } from "@/types/ids";
 import type { GlyphSnapshot } from "@/types/generated";
 import { BaseCommand, type CommandContext } from "../commands/Command";
-import { TransformService } from "./TransformService";
+import { Transform } from "./Transform";
 import type { ReflectAxis, TransformablePoint } from "./types";
 
 /**
@@ -75,7 +75,7 @@ export class RotatePointsCommand extends BaseCommand<void> {
     }
 
     // Calculate new positions
-    const transformed = TransformService.rotatePoints(
+    const transformed = Transform.rotatePoints(
       points,
       this.#angle,
       this.#origin,
@@ -103,7 +103,7 @@ export class RotatePointsCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const transformed = TransformService.rotatePoints(
+    const transformed = Transform.rotatePoints(
       points,
       this.#angle,
       this.#origin,
@@ -155,7 +155,7 @@ export class ScalePointsCommand extends BaseCommand<void> {
       }
     }
 
-    const transformed = TransformService.scalePoints(
+    const transformed = Transform.scalePoints(
       points,
       this.#sx,
       this.#sy,
@@ -181,7 +181,7 @@ export class ScalePointsCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const transformed = TransformService.scalePoints(
+    const transformed = Transform.scalePoints(
       points,
       this.#sx,
       this.#sy,
@@ -231,7 +231,7 @@ export class ReflectPointsCommand extends BaseCommand<void> {
       }
     }
 
-    const transformed = TransformService.reflectPoints(
+    const transformed = Transform.reflectPoints(
       points,
       this.#axis,
       this.#origin,
@@ -256,7 +256,7 @@ export class ReflectPointsCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const transformed = TransformService.reflectPoints(
+    const transformed = Transform.reflectPoints(
       points,
       this.#axis,
       this.#origin,
@@ -311,7 +311,7 @@ export class TransformMatrixCommand extends BaseCommand<void> {
       }
     }
 
-    const transformed = TransformService.applyMatrix(
+    const transformed = Transform.applyMatrix(
       points,
       this.#matrix,
       this.#origin,
@@ -336,7 +336,7 @@ export class TransformMatrixCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const transformed = TransformService.applyMatrix(
+    const transformed = Transform.applyMatrix(
       points,
       this.#matrix,
       this.#origin,

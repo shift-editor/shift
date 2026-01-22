@@ -1,8 +1,22 @@
 /**
- * TransformService - Pure geometry transformation functions.
+ * Transform - Pure geometry transformation functions.
  *
  * All functions are pure (no side effects) and operate on arrays of points.
  * These are the building blocks for transform commands and tools.
+ *
+ * @example
+ * ```ts
+ * import { Transform } from '@/lib/transform';
+ *
+ * // Rotate points 90° around center
+ * const rotated = Transform.rotatePoints(points, Math.PI / 2, center);
+ *
+ * // Scale points 2x from origin
+ * const scaled = Transform.scalePoints(points, 2, 2, origin);
+ *
+ * // Flip horizontally
+ * const flipped = Transform.reflectPoints(points, 'horizontal', center);
+ * ```
  */
 
 import { Vec2 } from "@shift/geo";
@@ -18,7 +32,7 @@ import type {
 /**
  * Pure transformation functions for geometry manipulation.
  */
-export const TransformService = {
+export const Transform = {
   // ============================================
   // Core Transform Operations
   // ============================================
@@ -133,9 +147,10 @@ export const TransformService = {
     origin: Point2D = { x: 0, y: 0 },
   ): TransformedPoint[] {
     // Build composite: Translate(-origin) → Matrix → Translate(origin)
+    // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
     const toOrigin = Mat.Translate(-origin.x, -origin.y);
     const fromOrigin = Mat.Translate(origin.x, origin.y);
-    const composite = Mat.Compose(Mat.Compose(toOrigin, matrix), fromOrigin);
+    const composite = Mat.Compose(Mat.Compose(fromOrigin, matrix), toOrigin);
 
     return points.map((p) => {
       const transformed = Mat.applyToPoint(composite, { x: p.x, y: p.y });
@@ -153,7 +168,9 @@ export const TransformService = {
    * @param points - Points to analyze
    * @returns Bounds object with center, extents, and dimensions
    */
-  getSelectionBounds(points: readonly TransformablePoint[]): SelectionBounds | null {
+  getSelectionBounds(
+    points: readonly TransformablePoint[],
+  ): SelectionBounds | null {
     if (points.length === 0) {
       return null;
     }
@@ -188,7 +205,7 @@ export const TransformService = {
    * @returns Center point or null if no points
    */
   getSelectionCenter(points: readonly TransformablePoint[]): Point2D | null {
-    const bounds = TransformService.getSelectionBounds(points);
+    const bounds = Transform.getSelectionBounds(points);
     return bounds?.center ?? null;
   },
 
@@ -255,7 +272,7 @@ export const TransformService = {
     points: readonly TransformablePoint[],
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.rotatePoints(points, Math.PI / 2, origin);
+    return Transform.rotatePoints(points, Math.PI / 2, origin);
   },
 
   /**
@@ -265,7 +282,7 @@ export const TransformService = {
     points: readonly TransformablePoint[],
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.rotatePoints(points, -Math.PI / 2, origin);
+    return Transform.rotatePoints(points, -Math.PI / 2, origin);
   },
 
   /**
@@ -275,7 +292,7 @@ export const TransformService = {
     points: readonly TransformablePoint[],
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.rotatePoints(points, Math.PI, origin);
+    return Transform.rotatePoints(points, Math.PI, origin);
   },
 
   /**
@@ -286,7 +303,7 @@ export const TransformService = {
     factor: number,
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.scalePoints(points, factor, factor, origin);
+    return Transform.scalePoints(points, factor, factor, origin);
   },
 
   /**
@@ -296,7 +313,7 @@ export const TransformService = {
     points: readonly TransformablePoint[],
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.reflectPoints(points, "horizontal", origin);
+    return Transform.reflectPoints(points, "horizontal", origin);
   },
 
   /**
@@ -306,6 +323,6 @@ export const TransformService = {
     points: readonly TransformablePoint[],
     origin: Point2D,
   ): TransformedPoint[] {
-    return TransformService.reflectPoints(points, "vertical", origin);
+    return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;

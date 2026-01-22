@@ -9,10 +9,10 @@
  *
  * @example
  * ```ts
- * import { TransformService, RotatePointsCommand } from '@/lib/transform';
+ * import { Transform, RotatePointsCommand } from '@/lib/transform';
  *
  * // Pure function usage (for preview/calculations)
- * const rotated = TransformService.rotatePoints(points, Math.PI/2, center);
+ * const rotated = Transform.rotatePoints(points, Math.PI/2, center);
  *
  * // Command usage (for undo/redo)
  * const cmd = new RotatePointsCommand(pointIds, Math.PI/2, center);
@@ -32,7 +32,7 @@ export type {
 } from "./types";
 
 // Pure transform functions
-export { TransformService } from "./TransformService";
+export { Transform } from "./Transform";
 
 // Commands for undo/redo
 export {
