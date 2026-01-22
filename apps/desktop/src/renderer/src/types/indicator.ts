@@ -1,5 +1,4 @@
-import type { Point2D } from "./math";
-import type { PointId } from "./ids";
+import type { Point2D, PointId } from "@shift/types";
 
 declare const SegmentIdBrand: unique symbol;
 

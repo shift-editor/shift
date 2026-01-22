@@ -1,4 +1,4 @@
-import type { Point2D, Rect2D } from "@/types/math";
+import type { Point2D, Rect2D } from "@shift/types";
 
 import { Shape } from "./shape";
 

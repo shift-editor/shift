@@ -20,7 +20,7 @@
  */
 
 import { Mat, type MatModel } from "@/lib/primitives/Mat";
-import type { Point2D } from "@/types/math";
+import type { Point2D } from "@shift/types";
 import type {
   TransformablePoint,
   ReflectAxis,

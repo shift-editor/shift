@@ -11,7 +11,7 @@ import type {
   JsFontMetrics,
   JsGlyphSnapshot,
 } from "@shared/bridge/FontEngineAPI";
-import type { PointTypeString, CommandResult } from "@/types/generated";
+import type { PointTypeString, CommandResult } from "@shift/types";
 
 /**
  * Mock implementation of FontEngineAPI for testing.

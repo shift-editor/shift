@@ -7,13 +7,12 @@ import {
 } from "@/lib/styles/style";
 import { IGraphicContext, IRenderer } from "@/types/graphics";
 import { HandleState, HandleType } from "@/types/handle";
-import { Point2D, Rect2D } from "@/types/math";
+import type { CursorType, SelectionMode, ToolRegistryItem, VisualState } from "@/types/editor";
+import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
+import { asPointId, asContourId } from "@shift/types";
+import { findPointInSnapshot, findPointsInSnapshot } from "../utils/snapshot";
 import { Tool, ToolContext, ToolName } from "@/types/tool";
-import type { PointId } from "@/types/ids";
-import { asPointId, asContourId } from "@/types/ids";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { GlyphSnapshot, PointSnapshot } from "@/types/generated";
-import { findPointsInSnapshot } from "@/types/snapshots";
 
 import { FrameHandler } from "./FrameHandler";
 import { drawHandle, drawHandleLast } from "./handles";
@@ -21,7 +20,6 @@ import { Viewport } from "./Viewport";
 import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
 import {
-  findPointInSnapshot,
   renderGlyph,
   renderGuides,
   type Guides,
@@ -46,29 +44,15 @@ import {
 } from "../transform";
 import { effect, type Effect } from "../reactive/signal";
 import { parseSegments } from "@/engine/segments";
-import { Segment } from "../geo";
+import { Segment } from "@/lib/geo/Segment";
 import { signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
 import { Polygon } from "@shift/geo";
 
 const DEBUG = false;
+const SCREEN_HIT_RADIUS = 8;
+const SCREEN_LINE_WIDTH = 1;
 
-// ============================================================================
-// Cursor Types
-// ============================================================================
-
-export type CursorType =
-  | { type: "default" }
-  | { type: "pointer" }
-  | { type: "grab" }
-  | { type: "grabbing" }
-  | { type: "move" }
-  | { type: "crosshair" }
-  | { type: "pen" }
-  | { type: "pen-end" }
-  | { type: "not-allowed" };
-
-/** Convert a CursorType to a CSS cursor string */
 function cursorToCSS(cursor: CursorType): string {
   switch (cursor.type) {
     case "pen":
@@ -79,25 +63,11 @@ function cursorToCSS(cursor: CursorType): string {
       return cursor.type;
   }
 }
-const SCREEN_HIT_RADIUS = 8;
-const SCREEN_LINE_WIDTH = 1;
 
 function debug(...args: unknown[]) {
   if (DEBUG) {
     console.log("[Editor]", ...args);
   }
-}
-
-
-export type SelectionMode = "preview" | "committed";
-
-
-export type VisualState = "idle" | "hovered" | "selected";
-
-export interface ToolRegistryItem {
-  tool: Tool;
-  icon: React.FC<React.SVGProps<SVGSVGElement>>;
-  tooltip: string;
 }
 
 
@@ -458,7 +428,7 @@ export class Editor {
           fontEngine.editing.movePointTo(id, x, y);
         },
         applySmartEdits: (ids, dx, dy) => {
-          return fontEngine.editEngine.applyEdits(ids, dx, dy);
+          return fontEngine.editing.applySmartEdits(ids, dx, dy);
         },
         removePoints: (ids) => {
           const cmd = new RemovePointsCommand([...ids]);

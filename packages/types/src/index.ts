@@ -9,7 +9,7 @@
  */
 
 // Math types
-export type { Point2D, Rect2D, TransformMatrix } from "./math";
+export type { Point2D, Rect2D, TransformMatrix, A, B, C, D, E, F } from "./math";
 
 // ID types
 export type { PointId, ContourId } from "./ids";
@@ -31,11 +31,4 @@ export type {
   MatchedRule,
   FontMetadata,
   FontMetrics,
-} from "./font";
-
-export {
-  createEmptyGlyphSnapshot,
-  findPointInSnapshot,
-  findContourInSnapshot,
-  getAllPointIds,
 } from "./font";

@@ -18,7 +18,6 @@ export { FontEngine, createFontEngine } from "./FontEngine";
 export { EditingManager } from "./editing";
 export { SessionManager } from "./session";
 export { InfoManager, type FontMetadata, type FontMetrics } from "./info";
-export { HistoryManager } from "./history";
 export { IOManager } from "./io";
 
 // Errors

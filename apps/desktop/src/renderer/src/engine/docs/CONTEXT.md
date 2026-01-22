@@ -14,10 +14,9 @@
 src/renderer/src/engine/
 ├── index.ts           # Public exports barrel
 ├── FontEngine.ts      # Main orchestrator class
-├── editing.ts         # EditingManager (point/contour ops)
+├── editing.ts         # EditingManager (point/contour ops, smart edits)
 ├── session.ts         # SessionManager (lifecycle)
 ├── info.ts            # InfoManager (metadata)
-├── history.ts         # HistoryManager (undo/redo)
 ├── io.ts              # IOManager (file ops)
 ├── segments.ts        # Contour → segment parsing
 ├── errors.ts          # Custom error classes
@@ -33,10 +32,8 @@ src/renderer/src/engine/
 export class FontEngine {
   readonly snapshot: WritableSignal<GlyphSnapshot | null>;
   readonly editing: EditingManager;
-  readonly editEngine: EditEngine;
   readonly session: SessionManager;
   readonly info: InfoManager;
-  readonly history: HistoryManager;
   readonly io: IOManager;
 }
 ```
@@ -132,19 +129,19 @@ export function hasNative(): boolean {
 
 ## API Surface
 
-| Class          | Method                       | Return       |
-| -------------- | ---------------------------- | ------------ |
-| FontEngine     | constructor()                | FontEngine   |
-| EditingManager | addPoint(x, y, type, smooth) | PointId      |
-| EditingManager | addContour()                 | ContourId    |
-| EditingManager | movePoints(ids, dx, dy)      | void         |
-| EditingManager | removePoints(ids)            | void         |
-| SessionManager | startEditSession(unicode)    | void         |
-| SessionManager | endEditSession()             | void         |
-| SessionManager | isActive()                   | boolean      |
-| InfoManager    | getMetadata()                | FontMetadata |
-| InfoManager    | getMetrics()                 | FontMetrics  |
-| EditEngine     | applyEdits(selected, dx, dy) | PointId[]    |
+| Class          | Method                            | Return       |
+| -------------- | --------------------------------- | ------------ |
+| FontEngine     | constructor()                     | FontEngine   |
+| EditingManager | addPoint(x, y, type, smooth)      | PointId      |
+| EditingManager | addContour()                      | ContourId    |
+| EditingManager | movePoints(ids, dx, dy)           | void         |
+| EditingManager | removePoints(ids)                 | void         |
+| EditingManager | applySmartEdits(selected, dx, dy) | PointId[]    |
+| SessionManager | startEditSession(unicode)         | void         |
+| SessionManager | endEditSession()                  | void         |
+| SessionManager | isActive()                        | boolean      |
+| InfoManager    | getMetadata()                     | FontMetadata |
+| InfoManager    | getMetrics()                      | FontMetrics  |
 
 ## Common Operations
 
@@ -171,6 +168,13 @@ const p2 = engine.editing.addPoint(100, 200, "offCurve", false);
 
 engine.editing.movePoints([p1, p2], 50, 0);
 engine.session.endEditSession();
+```
+
+### Smart edits (constraint-aware)
+
+```typescript
+// Uses Rust rule engine for constraint handling
+const affectedIds = engine.editing.applySmartEdits(selectedPoints, dx, dy);
 ```
 
 ### Parse segments for rendering

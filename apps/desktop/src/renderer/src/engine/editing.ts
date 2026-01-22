@@ -8,11 +8,21 @@ import type {
   PointTypeString,
   CommandResult,
   GlyphSnapshot,
-} from "@/types/generated";
-import type { PointId, ContourId } from "@/types/ids";
-import { asPointId, asContourId } from "@/types/ids";
+  PointId,
+  ContourId,
+  MatchedRule,
+} from "@shift/types";
+import { asPointId, asContourId } from "@shift/types";
 import type { NativeFontEngine } from "./native";
 import { NoEditSessionError, NativeOperationError } from "./errors";
+
+interface SmartEditResult {
+  success: boolean;
+  snapshot: GlyphSnapshot | null;
+  affectedPointIds: string[];
+  matchedRules: MatchedRule[];
+  error: string | null;
+}
 
 export interface ManagerContext {
   native: NativeFontEngine;
@@ -419,6 +429,35 @@ export class EditingManager {
     if (result.snapshot) {
       this.#ctx.emitSnapshot(result.snapshot);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SMART EDITING (CONSTRAINT-AWARE)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Apply edits with constraint awareness.
+   * Uses the Rust unified edit API for smart constraint handling.
+   * @returns The IDs of points that were actually affected.
+   */
+  applySmartEdits(
+    selectedPoints: ReadonlySet<PointId>,
+    dx: number,
+    dy: number,
+  ): PointId[] {
+    if (!this.#ctx.hasSession()) {
+      return [];
+    }
+
+    const pointIds = [...selectedPoints];
+    const resultJson = this.#ctx.native.applyEditsUnified(pointIds, dx, dy);
+    const result: SmartEditResult = JSON.parse(resultJson);
+
+    if (result.success && result.snapshot) {
+      this.#ctx.emitSnapshot(result.snapshot);
+    }
+
+    return result.affectedPointIds?.map(asPointId) ?? [];
   }
 
   // ═══════════════════════════════════════════════════════════

@@ -11,8 +11,8 @@ import type {
   PointSnapshot,
   ContourSnapshot,
   PointTypeString,
-} from "@/types/generated";
-import { asPointId, asContourId } from "@/types/ids";
+} from "@shift/types";
+import { asPointId, asContourId } from "@shift/types";
 import { FontEngine, MockFontEngine } from "@/engine";
 
 // ═══════════════════════════════════════════════════════════════════════════

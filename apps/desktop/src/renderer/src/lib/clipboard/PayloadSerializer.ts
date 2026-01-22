@@ -1,4 +1,4 @@
-import type { Rect2D } from "@/types/math";
+import type { Rect2D } from "@shift/types";
 import type { ClipboardContent, ClipboardPayload } from "./types";
 
 export class PayloadSerializer {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Transform } from "./Transform";
-import { asPointId } from "@/types/ids";
+import { asPointId } from "@shift/types";
 
 describe("Transform", () => {
   // Helper to create test points

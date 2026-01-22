@@ -29,6 +29,27 @@ Tool Registry
 └── Map<ToolName, { tool, icon, tooltip }>
 ```
 
+### File Organization
+
+```
+tools/
+├── core/               # State machine infrastructure
+│   └── StateMachine.ts
+├── pen/                # Bezier curve drawing
+│   ├── Pen.ts
+│   ├── commands.ts
+│   └── states.ts
+├── select/             # Point selection and dragging
+│   ├── Select.ts
+│   ├── commands.ts
+│   └── states.ts
+├── hand/               # Canvas panning
+│   └── Hand.ts
+├── shape/              # Rectangle creation
+│   └── Shape.ts
+└── tools.ts            # Tool registry
+```
+
 ### Key Design Decisions
 
 1. **State Machine Pattern**: Each tool uses discriminated union states

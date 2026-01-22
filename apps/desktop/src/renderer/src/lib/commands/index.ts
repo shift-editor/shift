@@ -1,23 +1,36 @@
-// Command pattern exports
+// Core command infrastructure
 export {
   type Command,
   type CommandContext,
   BaseCommand,
   CompositeCommand,
-} from "./Command";
-export { CommandHistory, type CommandHistoryOptions } from "./CommandHistory";
+  CommandHistory,
+  type CommandHistoryOptions,
+} from "./core";
+
+// Primitive commands (point, bezier operations)
 export {
   AddPointCommand,
   MovePointsCommand,
   MovePointToCommand,
   RemovePointsCommand,
-} from "./PointCommands";
-export {
   InsertPointCommand,
   AddBezierAnchorCommand,
   TogglePointSmoothCommand,
   CloseContourCommand,
   AddContourCommand,
+  SetActiveContourCommand,
+  ReverseContourCommand,
   NudgePointsCommand,
-} from "./BezierCommands";
-export { PasteCommand } from "./ClipboardCommands";
+} from "./primitives";
+
+// Clipboard commands
+export { PasteCommand } from "./clipboard";
+
+// Transform commands
+export {
+  RotatePointsCommand,
+  ScalePointsCommand,
+  ReflectPointsCommand,
+  TransformMatrixCommand,
+} from "./transform";

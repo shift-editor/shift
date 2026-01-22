@@ -1,5 +1,4 @@
-import type { PointSnapshot } from "@/types/generated";
-import type { Rect2D } from "@/types/math";
+import type { PointSnapshot, Rect2D } from "@shift/types";
 
 export type { PasteResult } from "@/engine/editing";
 

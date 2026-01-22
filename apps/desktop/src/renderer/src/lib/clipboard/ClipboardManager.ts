@@ -1,5 +1,4 @@
-import type { GlyphSnapshot } from "@/types/generated";
-import type { PointId } from "@/types/ids";
+import type { GlyphSnapshot, PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { ClipboardContent, PasteResult } from "./types";
 import { ContentResolver } from "./ContentResolver";

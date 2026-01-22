@@ -4,7 +4,7 @@
 
 - **Purpose**: State machine-based editing tools (Pen, Select, Hand, Shape)
 - **Language**: TypeScript
-- **Key Files**: `core/StateMachine.ts`, `pen/Pen.ts`, `select/Select.ts`, `Hand.ts`, `Shape.ts`
+- **Key Files**: `core/StateMachine.ts`, `pen/Pen.ts`, `select/Select.ts`, `hand/Hand.ts`, `shape/Shape.ts`
 - **Dependencies**: lib/reactive, lib/editor, lib/commands
 - **Dependents**: views/Editor.tsx
 
@@ -26,11 +26,18 @@ src/renderer/src/lib/tools/
 │   ├── states.ts            # SelectState types
 │   ├── commands.ts          # Selection operations
 │   └── index.ts
-├── Hand.ts                  # Pan tool
-├── Shape.ts                 # Rectangle tool
+├── hand/
+│   ├── Hand.ts              # Pan tool
+│   └── index.ts
+├── shape/
+│   ├── Shape.ts             # Rectangle tool
+│   └── index.ts
 ├── tools.ts                 # Tool registry
 ├── Pen.test.ts
-└── Select.test.ts
+├── Select.test.ts
+└── docs/
+    ├── CONTEXT.md
+    └── DOCS.md
 ```
 
 ## Core Abstractions

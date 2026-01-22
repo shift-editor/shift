@@ -156,7 +156,7 @@ export class SvgImporter implements ClipboardImporter {
 
         case "C": {
           let idx = 0;
-          while (idx + 5 < args.length || idx + 5 === args.length) {
+          while (idx + 5 <= args.length) {
             const c1x = isRelative ? currentX + args[idx] : args[idx];
             const c1y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
             const c2x = isRelative ? currentX + args[idx + 2] : args[idx + 2];
@@ -179,7 +179,7 @@ export class SvgImporter implements ClipboardImporter {
 
         case "S": {
           let idx = 0;
-          while (idx + 3 < args.length || idx + 3 === args.length) {
+          while (idx + 3 <= args.length) {
             const c1x = 2 * currentX - lastControlX;
             const c1y = 2 * currentY - lastControlY;
             const c2x = isRelative ? currentX + args[idx] : args[idx];
@@ -202,7 +202,7 @@ export class SvgImporter implements ClipboardImporter {
 
         case "Q": {
           let idx = 0;
-          while (idx + 3 < args.length || idx + 3 === args.length) {
+          while (idx + 3 <= args.length) {
             const cx = isRelative ? currentX + args[idx] : args[idx];
             const cy = isRelative ? currentY + args[idx + 1] : args[idx + 1];
             const x = isRelative ? currentX + args[idx + 2] : args[idx + 2];
@@ -222,7 +222,7 @@ export class SvgImporter implements ClipboardImporter {
 
         case "T": {
           let idx = 0;
-          while (idx + 1 < args.length || idx + 1 === args.length) {
+          while (idx + 1 <= args.length) {
             const cx = 2 * currentX - lastControlX;
             const cy = 2 * currentY - lastControlY;
             const x = isRelative ? currentX + args[idx] : args[idx];
@@ -249,7 +249,7 @@ export class SvgImporter implements ClipboardImporter {
 
         case "A": {
           let idx = 0;
-          while (idx + 6 < args.length || idx + 6 === args.length) {
+          while (idx + 6 <= args.length) {
             const x = isRelative ? currentX + args[idx + 5] : args[idx + 5];
             const y = isRelative ? currentY + args[idx + 6] : args[idx + 6];
             addOnCurve(x, y);

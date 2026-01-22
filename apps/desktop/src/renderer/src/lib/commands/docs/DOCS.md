@@ -26,6 +26,22 @@ CompositeCommand
 └── #commands: Command[]  (executes in order, undoes in reverse)
 ```
 
+### File Organization
+
+```
+commands/
+├── core/           # Base classes and history
+│   ├── Command.ts
+│   └── CommandHistory.ts
+├── primitives/     # Point and bezier operations
+│   ├── PointCommands.ts
+│   └── BezierCommands.ts
+├── transform/      # Geometry transformations
+│   └── TransformCommands.ts
+└── clipboard/      # Copy/paste operations
+    └── ClipboardCommands.ts
+```
+
 ### Key Design Decisions
 
 1. **Two-Stack Pattern**: Separate undo and redo stacks with classic semantics
@@ -87,19 +103,30 @@ history.undo(); // Undoes all three in reverse order
 - `canUndo: ComputedSignal<boolean>` - Reactive undo availability
 - `canRedo: ComputedSignal<boolean>` - Reactive redo availability
 
-### Point Commands
+### Point Commands (primitives/)
 
 - `AddPointCommand` - Add point to contour
 - `MovePointsCommand` - Move points by delta
 - `MovePointToCommand` - Move point to absolute position
 - `RemovePointsCommand` - Remove points
 
-### Bezier Commands
+### Bezier Commands (primitives/)
 
 - `AddBezierAnchorCommand` - Add smooth anchor with handles
 - `CloseContourCommand` - Close active contour
 - `AddContourCommand` - Create new contour
 - `NudgePointsCommand` - Small arrow-key movements
+
+### Transform Commands (transform/)
+
+- `RotatePointsCommand` - Rotate points around origin
+- `ScalePointsCommand` - Scale points from origin
+- `ReflectPointsCommand` - Mirror points across axis
+- `TransformMatrixCommand` - Apply arbitrary matrix transform
+
+### Clipboard Commands (clipboard/)
+
+- `PasteCommand` - Paste contours from clipboard
 
 ## Usage Examples
 
@@ -125,6 +152,22 @@ effect(() => {
   undoButton.disabled = !history.canUndo.value;
   redoButton.disabled = !history.canRedo.value;
 });
+```
+
+### Transform Operations
+
+```typescript
+// Rotate 90 degrees counter-clockwise
+const rotate = new RotatePointsCommand(pointIds, Math.PI / 2, center);
+history.execute(rotate);
+
+// Scale 2x from center
+const scale = new ScalePointsCommand(pointIds, 2, 2, center);
+history.execute(scale);
+
+// Reflect horizontally
+const reflect = new ReflectPointsCommand(pointIds, "horizontal", center);
+history.execute(reflect);
 ```
 
 ### Composite Operations
@@ -190,3 +233,4 @@ history.undo()
 - [reactive](../reactive/docs/DOCS.md) - Signals for state
 - [editor](../editor/docs/DOCS.md) - Orchestrates command execution
 - [tools](../tools/docs/DOCS.md) - Tools create commands
+- [lib/utils/snapshot](../utils/snapshot.ts) - Snapshot query utilities

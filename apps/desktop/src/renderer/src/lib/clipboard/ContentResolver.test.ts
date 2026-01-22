@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ContentResolver } from "./ContentResolver";
-import { asPointId } from "@/types/ids";
+import { asPointId } from "@shift/types";
 import { asSegmentId } from "@/types/indicator";
-import type { GlyphSnapshot } from "@/types/generated";
+import type { GlyphSnapshot } from "@shift/types";
 
 function createSnapshot(config: {
   contours: Array<{

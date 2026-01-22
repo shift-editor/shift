@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Viewport } from "./Viewport";
-import type { Rect2D } from "@/types/math";
+import type { Rect2D } from "@shift/types";
 
 describe("Viewport", () => {
   let viewport: Viewport;

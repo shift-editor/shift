@@ -5,7 +5,6 @@
  * - editing: Point and contour mutations
  * - session: Edit session lifecycle
  * - info: Font metadata and metrics
- * - history: Undo/redo operations
  * - io: File operations
  *
  * Usage:
@@ -29,15 +28,13 @@
  * ```
  */
 
-import type { GlyphSnapshot } from "@/types/generated";
+import type { GlyphSnapshot } from "@shift/types";
 import { signal, type WritableSignal } from "@/lib/reactive/signal";
 import { getNative, hasNative, type NativeFontEngine } from "./native";
 import { EditingManager } from "./editing";
 import { SessionManager } from "./session";
 import { InfoManager } from "./info";
-import { HistoryManager } from "./history";
 import { IOManager } from "./io";
-import { EditEngine } from "@/lib/core/EditEngine";
 
 /**
  * FontEngine is the primary interface to the Rust font editing system.
@@ -52,10 +49,8 @@ import { EditEngine } from "@/lib/core/EditEngine";
  */
 export class FontEngine {
   readonly editing: EditingManager;
-  readonly editEngine: EditEngine;
   readonly session: SessionManager;
   readonly info: InfoManager;
-  readonly history: HistoryManager;
   readonly io: IOManager;
 
   /**
@@ -81,10 +76,8 @@ export class FontEngine {
 
     // Initialize managers
     this.editing = new EditingManager(ctx);
-    this.editEngine = new EditEngine(ctx);
     this.session = new SessionManager(ctx);
     this.info = new InfoManager(ctx);
-    this.history = new HistoryManager(ctx);
     this.io = new IOManager(ctx);
   }
 

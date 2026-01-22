@@ -20,7 +20,7 @@
  * ```
  */
 
-// Types
+// Types (re-export from centralized types)
 export type {
   TransformablePoint,
   ReflectAxis,
@@ -32,10 +32,10 @@ export type {
 // Pure transform functions
 export { Transform } from "./Transform";
 
-// Commands for undo/redo
+// Commands for undo/redo (re-export from commands/transform)
 export {
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
   TransformMatrixCommand,
-} from "./TransformCommands";
+} from "../commands/transform";

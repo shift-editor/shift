@@ -9,8 +9,8 @@ import type {
   GlyphSnapshot,
   PointSnapshot,
   ContourSnapshot,
-} from "@/types/generated";
-import type { PointId } from "@/types/ids";
+  PointId,
+} from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
 import { Polygon } from "@shift/geo";
@@ -158,50 +158,6 @@ export function getHandleType(
   return "corner";
 }
 
-/**
- * Find a point in a snapshot by ID.
- */
-export function findPointInSnapshot(
-  snapshot: GlyphSnapshot,
-  pointId: PointId,
-): { point: PointSnapshot; contour: ContourSnapshot; index: number } | null {
-  for (const contour of snapshot.contours) {
-    const index = contour.points.findIndex((p) => p.id === pointId);
-    if (index !== -1) {
-      return {
-        point: contour.points[index],
-        contour,
-        index,
-      };
-    }
-  }
-  return null;
-}
-
-/**
- * Get all points from a snapshot as a flat array with contour info.
- */
-export function getAllPointsFromSnapshot(
-  snapshot: GlyphSnapshot,
-): Array<{ point: PointSnapshot; contour: ContourSnapshot; index: number }> {
-  const result: Array<{
-    point: PointSnapshot;
-    contour: ContourSnapshot;
-    index: number;
-  }> = [];
-
-  for (const contour of snapshot.contours) {
-    for (let i = 0; i < contour.points.length; i++) {
-      result.push({
-        point: contour.points[i],
-        contour,
-        index: i,
-      });
-    }
-  }
-
-  return result;
-}
 
 /**
  * Check if a contour is clockwise using the shoelace formula.

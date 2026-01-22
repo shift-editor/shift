@@ -7,14 +7,12 @@ import type {
   IndicatorContext,
   TransformContext,
 } from "@/types/tool";
-import type { PointId, ContourId } from "@/types/ids";
-import type { Rect2D } from "@/types/math";
-import type { GlyphSnapshot } from "@/types/generated";
-import type { CommandContext } from "@/lib/commands/Command";
+import type { PointId, ContourId, Rect2D, GlyphSnapshot } from "@shift/types";
+import { asContourId } from "@shift/types";
+import type { CommandContext } from "@/lib/commands";
 import type { SegmentIndicator } from "@/types/indicator";
 import { CommandHistory } from "@/lib/commands";
 import { Viewport } from "@/lib/editor/Viewport";
-import { asContourId } from "@/types/ids";
 import {
   createMockFontEngine,
   createMockEditing,
@@ -141,7 +139,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
     }),
     applySmartEdits: vi.fn(
       (ids: ReadonlySet<PointId>, dx: number, dy: number) => {
-        return fontEngine.editEngine.applyEdits(ids, dx, dy);
+        return fontEngine.editing.applySmartEdits(ids, dx, dy);
       },
     ),
     removePoints: vi.fn((ids: Iterable<PointId>) => {

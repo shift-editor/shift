@@ -28,7 +28,7 @@
  * ```
  */
 
-import type { Point2D } from "@/types/math";
+import { Curve, type CurveType, type Point2D } from "@shift/geo";
 import type {
   Segment as SegmentType,
   LineSegment,
@@ -37,7 +37,6 @@ import type {
 } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
-import { Curve, type CurveType } from "./Curve";
 
 export interface SegmentHitResult {
   segment: SegmentType;

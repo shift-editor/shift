@@ -1,24 +1,20 @@
 import type { Editor } from "@/lib/editor/Editor";
-import type { Point2D } from "@/types/math";
-import type { PointId, ContourId } from "@/types/ids";
-import type { AnchorData, HandleData } from "./states";
-import { AddPointCommand } from "@/lib/commands/PointCommands";
+import type { Point2D, PointId, ContourId } from "@shift/types";
+import type {
+  AnchorData,
+  HandleData,
+  PlaceAnchorResult,
+  CreateHandlesResult,
+} from "@/types/pen";
 import {
+  AddPointCommand,
   InsertPointCommand,
   CloseContourCommand,
   AddContourCommand,
   SetActiveContourCommand,
   ReverseContourCommand,
-} from "@/lib/commands/BezierCommands";
-import { Vec2 } from "@/lib/geo";
-
-export interface PlaceAnchorResult {
-  pointId: PointId;
-}
-
-export interface CreateHandlesResult {
-  handles: HandleData;
-}
+} from "@/lib/commands";
+import { Vec2 } from "@shift/geo";
 
 export class PenCommands {
   #editor: Editor;

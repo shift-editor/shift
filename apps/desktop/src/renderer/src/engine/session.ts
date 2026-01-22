@@ -5,7 +5,7 @@
  * Only one glyph can be edited at a time.
  */
 
-import type { GlyphSnapshot } from "@/types/generated";
+import type { GlyphSnapshot } from "@shift/types";
 import type { NativeFontEngine, NativeGlyphSnapshot } from "./native";
 
 export interface SessionManagerContext {

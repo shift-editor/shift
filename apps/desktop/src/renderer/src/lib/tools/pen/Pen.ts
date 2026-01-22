@@ -1,23 +1,15 @@
 import { Editor } from "@/lib/editor/Editor";
-import { Vec2 } from "@/lib/geo";
+import { Vec2 } from "@shift/geo";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
-import type { ContourSnapshot, PointSnapshot } from "@/types/generated";
-import type { Point2D } from "@/types/math";
-import type { ContourId } from "@/types/ids";
+import type { PointHitResult, ContourContext, PenState } from "@/types/pen";
+import { DRAG_THRESHOLD } from "@/types/pen";
+import type { ContourSnapshot, PointSnapshot, Point2D, ContourId } from "@shift/types";
 
 import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
 import { PenCommands } from "./commands";
-import { type ContourContext, type PenState, DRAG_THRESHOLD } from "./states";
-
-export type PointHitResult = {
-  contourId: ContourId;
-  pointIndex: number;
-  position: "start" | "end" | "middle";
-  contour: ContourSnapshot;
-};
 
 function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
   return contour.points.length > 0 ? contour.points[0] : null;

@@ -1,14 +1,13 @@
 import type { Editor } from "@/lib/editor/Editor";
 import { UPMRect } from "@/lib/math/rect";
-import type { Point2D } from "@/types/math";
-import type { PointId } from "@/types/ids";
-import { asPointId } from "@/types/ids";
+import type { Point2D, PointId, PointSnapshot, GlyphSnapshot } from "@shift/types";
+import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { PointSnapshot, GlyphSnapshot } from "@/types/generated";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
-import { Vec2, Segment } from "@/lib/geo";
+import { Vec2 } from "@shift/geo";
+import { Segment } from "@/lib/geo/Segment";
 import { parseSegments } from "@/engine/segments";
-import type { SegmentHitResult } from "@/lib/geo";
+import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { Segment as SegmentType } from "@/types/segments";
 
 function findPointAtPosition(

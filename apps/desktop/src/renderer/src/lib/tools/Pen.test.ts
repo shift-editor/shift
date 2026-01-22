@@ -5,7 +5,7 @@ import {
   getPointCount,
   getContourCount,
 } from "@/testing";
-import type { PointId } from "@/types/ids";
+import type { PointId } from "@shift/types";
 import type { ToolContext } from "@/types/tool";
 import type { Editor } from "@/lib/editor/Editor";
 

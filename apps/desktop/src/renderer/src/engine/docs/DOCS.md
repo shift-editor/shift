@@ -11,11 +11,9 @@ The engine layer provides a high-level TypeScript API for font editing, organizi
 ```
 FontEngine
 ├── snapshot: WritableSignal<GlyphSnapshot | null>
-├── editing: EditingManager      (point/contour mutations)
-├── editEngine: EditEngine       (unified rule-based edits)
+├── editing: EditingManager      (point/contour mutations, smart edits)
 ├── session: SessionManager      (edit session lifecycle)
 ├── info: InfoManager            (font metadata)
-├── history: HistoryManager      (undo/redo tracking)
 └── io: IOManager                (file operations)
     ↓
 Shared Context { native, hasSession(), emitSnapshot() }
@@ -90,11 +88,9 @@ const segments = parseSegments(contour.points, contour.closed);
 ### FontEngine
 
 - `snapshot: WritableSignal<GlyphSnapshot | null>` - Reactive glyph state
-- `editing: EditingManager` - Point/contour operations
-- `editEngine: EditEngine` - Unified edits with rules
+- `editing: EditingManager` - Point/contour operations and smart edits
 - `session: SessionManager` - Session lifecycle
 - `info: InfoManager` - Font metadata
-- `history: HistoryManager` - Undo/redo
 - `io: IOManager` - File I/O
 
 ### EditingManager
@@ -104,6 +100,7 @@ const segments = parseSegments(contour.points, contour.closed);
 - `movePoints(ids, dx, dy): void`
 - `removePoints(ids): void`
 - `toggleSmooth(id): void`
+- `applySmartEdits(selectedPoints, dx, dy): PointId[]` - Constraint-aware edits
 
 ### SessionManager
 
@@ -144,8 +141,8 @@ effect(() => {
 const contourId = engine.editing.addContour();
 const pointId = engine.editing.addPoint(100, 200, "onCurve", false);
 
-// Apply rule-driven edits
-const affected = engine.editEngine.applyEdits(new Set([pointId]), 50, 0);
+// Apply constraint-aware edits (uses Rust rule engine)
+const affected = engine.editing.applySmartEdits(new Set([pointId]), 50, 0);
 ```
 
 ### Segment Rendering

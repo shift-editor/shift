@@ -5,7 +5,7 @@
  * line, quadratic bezier, and cubic bezier segments for rendering.
  */
 
-import type { PointSnapshot, ContourSnapshot } from "@/types/generated";
+import type { PointSnapshot, ContourSnapshot } from "@shift/types";
 import type { Segment, SegmentPoint } from "@/types/segments";
 
 const DEBUG = false;

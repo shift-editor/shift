@@ -4,27 +4,41 @@
 
 - **Purpose**: Command pattern with undo/redo for editing operations
 - **Language**: TypeScript
-- **Key Files**: `Command.ts`, `CommandHistory.ts`, `PointCommands.ts`, `BezierCommands.ts`
-- **Dependencies**: lib/reactive (signals), engine (FontEngine)
+- **Key Files**: `core/Command.ts`, `core/CommandHistory.ts`, `primitives/PointCommands.ts`, `primitives/BezierCommands.ts`, `transform/TransformCommands.ts`
+- **Dependencies**: lib/reactive (signals), engine (FontEngine), lib/utils/snapshot
 - **Dependents**: lib/editor, lib/tools
 
 ## File Structure
 
 ```
 src/renderer/src/lib/commands/
-├── index.ts              # Public exports
-├── Command.ts            # Command interface, BaseCommand, CompositeCommand
-├── CommandHistory.ts     # Undo/redo stack management
-├── PointCommands.ts      # Point mutation commands
-├── BezierCommands.ts     # Bezier-specific commands
-├── CommandHistory.test.ts
-├── PointCommands.test.ts
-└── BezierCommands.test.ts
+├── index.ts                        # Public exports barrel
+├── core/
+│   ├── index.ts                    # Core exports
+│   ├── Command.ts                  # Command interface, BaseCommand, CompositeCommand
+│   ├── CommandHistory.ts           # Undo/redo stack management
+│   └── CommandHistory.test.ts
+├── primitives/
+│   ├── index.ts                    # Primitives exports
+│   ├── PointCommands.ts            # Point mutation commands
+│   ├── PointCommands.test.ts
+│   ├── BezierCommands.ts           # Bezier-specific commands
+│   └── BezierCommands.test.ts
+├── transform/
+│   ├── index.ts                    # Transform exports
+│   ├── TransformCommands.ts        # Rotate, scale, reflect commands
+│   └── TransformCommands.test.ts
+├── clipboard/
+│   ├── index.ts                    # Clipboard exports
+│   └── ClipboardCommands.ts        # Copy/paste commands
+└── docs/
+    ├── CONTEXT.md
+    └── DOCS.md
 ```
 
 ## Core Abstractions
 
-### Command Interface (Command.ts:34-55)
+### Command Interface (core/Command.ts:34-55)
 
 ```typescript
 interface Command<TResult = void> {
@@ -40,7 +54,7 @@ interface CommandContext {
 }
 ```
 
-### BaseCommand (Command.ts:60-73)
+### BaseCommand (core/Command.ts:60-73)
 
 ```typescript
 abstract class BaseCommand<TResult = void> implements Command<TResult> {
@@ -54,7 +68,7 @@ abstract class BaseCommand<TResult = void> implements Command<TResult> {
 }
 ```
 
-### CompositeCommand (Command.ts:79-106)
+### CompositeCommand (core/Command.ts:79-106)
 
 ```typescript
 class CompositeCommand implements Command<void> {
@@ -73,7 +87,7 @@ class CompositeCommand implements Command<void> {
 }
 ```
 
-### CommandHistory (CommandHistory.ts)
+### CommandHistory (core/CommandHistory.ts)
 
 ```typescript
 class CommandHistory {
@@ -172,6 +186,10 @@ class RemovePointsCommand extends BaseCommand {
 | AddBezierAnchorCommand | execute      | Add anchor + handles     |
 | CloseContourCommand    | execute      | Close contour            |
 | NudgePointsCommand     | execute      | Small movements          |
+| RotatePointsCommand    | execute      | Rotate around origin     |
+| ScalePointsCommand     | execute      | Scale from origin        |
+| ReflectPointsCommand   | execute      | Mirror across axis       |
+| PasteCommand           | execute      | Paste clipboard content  |
 
 ## Common Operations
 
@@ -208,6 +226,16 @@ const composite = new CompositeCommand("Add Rectangle", [
   new AddPointCommand(0, 100, "onCurve", false),
 ]);
 history.execute(composite);
+```
+
+### Transform commands
+
+```typescript
+const rotate = new RotatePointsCommand(pointIds, Math.PI / 2, center);
+history.execute(rotate);
+
+const scale = new ScalePointsCommand(pointIds, 2, 2, origin);
+history.execute(scale);
 ```
 
 ## Constraints and Invariants

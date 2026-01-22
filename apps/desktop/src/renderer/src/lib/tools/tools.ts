@@ -4,10 +4,10 @@ import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
 import { Editor } from "@/lib/editor/Editor";
 
-import { Hand } from "./Hand";
+import { Hand } from "./hand";
 import { Pen } from "./pen";
 import { Select } from "./select";
-import { Shape } from "./Shape";
+import { Shape } from "./shape";
 
 /**
  * Register all built-in tools with the editor.

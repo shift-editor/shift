@@ -1,4 +1,4 @@
-import { Vec2 } from "@/lib/geo";
+import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { IRenderer } from "@/types/graphics";
 import type { HandleState } from "@/types/handle";

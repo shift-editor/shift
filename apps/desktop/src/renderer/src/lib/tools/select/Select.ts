@@ -1,13 +1,12 @@
 import { Editor } from "@/lib/editor/Editor";
-import { MovePointsCommand } from "@/lib/commands/PointCommands";
-import { NudgePointsCommand } from "@/lib/commands/BezierCommands";
+import { MovePointsCommand, NudgePointsCommand } from "@/lib/commands";
 import { UPMRect } from "@/lib/math/rect";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
-import type { PointId } from "@/types/ids";
+import type { PointId } from "@shift/types";
 
 import { SelectCommands } from "./commands";
 import type { SelectState } from "./states";

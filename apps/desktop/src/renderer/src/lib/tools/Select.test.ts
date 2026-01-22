@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Select } from "./select";
 import { createMockFontEngine, getAllPoints } from "@/testing";
-import type { PointId } from "@/types/ids";
+import type { PointId } from "@shift/types";
 import type { ToolContext } from "@/types/tool";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Editor } from "@/lib/editor/Editor";
@@ -83,7 +83,7 @@ function createMockEditor() {
     ),
     applySmartEdits: vi.fn(
       (ids: ReadonlySet<PointId>, dx: number, dy: number) =>
-        fontEngine.editEngine.applyEdits(ids, dx, dy),
+        fontEngine.editing.applySmartEdits(ids, dx, dy),
     ),
     removePoints: vi.fn((ids: Iterable<PointId>) =>
       fontEngine.editing.removePoints([...ids]),

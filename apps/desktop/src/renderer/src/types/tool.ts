@@ -1,9 +1,7 @@
 import type { IRenderer } from "./graphics";
-import type { GlyphSnapshot } from "./generated";
-import type { PointId, ContourId } from "./ids";
-import type { Point2D } from "./math";
+import type { GlyphSnapshot, PointId, ContourId, Point2D } from "@shift/types";
 import type { CommandHistory } from "@/lib/commands";
-import type { SelectionMode } from "@/lib/editor/Editor";
+import type { SelectionMode } from "./editor";
 import type { SegmentIndicator } from "./indicator";
 import type { ReflectAxis, SelectionBounds } from "@/lib/transform";
 
