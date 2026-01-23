@@ -150,6 +150,7 @@ export class SelectCommands {
       newSelection.add(pointId);
       ctx.select.set(newSelection);
     } else {
+      this.#editor.clearSelection();
       ctx.select.set(new Set([pointId]));
     }
   }
@@ -159,6 +160,7 @@ export class SelectCommands {
     const allPoints = getAllPoints(ctx.snapshot);
     const hitPoints = findPointsInRect(allPoints, rect);
     const pointIds = new Set(hitPoints.map((p) => asPointId(p.id)));
+    this.#editor.clearSelection();
     ctx.select.set(pointIds);
     return { points: hitPoints, pointIds };
   }

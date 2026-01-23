@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
@@ -5,7 +6,16 @@ import { Button, Input } from "@shift/ui";
 
 export const GlyphGrid = () => {
   const navigate = useNavigate();
-  const glyphStr = (unicode: string) => String.fromCharCode(parseInt(unicode, 16))
+  const glyphStr = (unicode: string) => String.fromCharCode(parseInt(unicode, 16));
+
+  const initialValues = Object.fromEntries(
+    Object.values(ADOBE_LATIN_1).map((glyph) => [glyph.unicode, glyphStr(glyph.unicode)])
+  );
+  const [inputValues, setInputValues] = useState<Record<string, string>>(initialValues);
+
+  const handleInputChange = (unicode: string, value: string) => {
+    setInputValues((prev) => ({ ...prev, [unicode]: value }));
+  };
 
   return (
     <section className="h-full w-full p-5 bg-canvas">
@@ -20,7 +30,13 @@ export const GlyphGrid = () => {
               >
                 {glyphStr(glyph.unicode)}
               </Button>
-              <Input className="w-full text-center" value={glyphStr(glyph.unicode)} onClick={(e) => e.stopPropagation()} />
+              <Input
+                className="w-full text-center"
+                value={inputValues[glyph.unicode]}
+                onChange={(e) => handleInputChange(glyph.unicode, e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
           );
         })}

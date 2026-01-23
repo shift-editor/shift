@@ -163,6 +163,10 @@ function createMockEditor() {
     removePointFromSelection: vi.fn((id: PointId) => {
       selectedPoints.delete(id);
     }),
+    clearSelection: vi.fn(() => {
+      selectedPoints = new Set();
+      selectedSegments = new Set();
+    }),
   };
 
   return {
@@ -591,6 +595,16 @@ describe("Select tool", () => {
       // When clicking directly on a point, should select point not segment
       select.onMouseDown(createMouseEvent("mousedown", 100, 100));
       expect(mocks.select.set).toHaveBeenCalled();
+    });
+
+    it("should deselect segment when clicking on a point", () => {
+      // Click on a point (non-additively) - this should clear any existing selection
+      // including segments before selecting the new point
+      select.onMouseDown(createMouseEvent("mousedown", 100, 100));
+
+      // clearSelection should be called to clear both points and segments
+      // before selecting the new point
+      expect(mockEditor.clearSelection).toHaveBeenCalled();
     });
   });
 
