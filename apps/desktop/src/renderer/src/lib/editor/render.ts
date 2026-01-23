@@ -5,12 +5,7 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type {
-  GlyphSnapshot,
-  PointSnapshot,
-  ContourSnapshot,
-  PointId,
-} from "@shift/types";
+import type { GlyphSnapshot, ContourSnapshot } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { parseSegments } from "@/engine/segments";
 import { Polygon } from "@shift/geo";
@@ -24,56 +19,53 @@ export interface Guides {
   descender: { y: number };
 }
 
-export interface HandleRenderState {
-  selectedPoints: ReadonlySet<PointId>;
-  hoveredPoint: PointId | null;
+export function buildContourPath(
+  ctx: IRenderer,
+  contour: ContourSnapshot,
+): boolean {
+  if (contour.points.length < 2) return false;
+  const segments = parseSegments(contour.points, contour.closed);
+  if (segments.length === 0) return false;
+
+  ctx.beginPath();
+  ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
+
+  for (const segment of segments) {
+    switch (segment.type) {
+      case "line":
+        ctx.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
+        break;
+      case "quad":
+        ctx.quadTo(
+          segment.points.control.x,
+          segment.points.control.y,
+          segment.points.anchor2.x,
+          segment.points.anchor2.y,
+        );
+        break;
+      case "cubic":
+        ctx.cubicTo(
+          segment.points.control1.x,
+          segment.points.control1.y,
+          segment.points.control2.x,
+          segment.points.control2.y,
+          segment.points.anchor2.x,
+          segment.points.anchor2.y,
+        );
+        break;
+    }
+  }
+
+  if (contour.closed) ctx.closePath();
+  return contour.closed;
 }
 
 export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
   let hasClosed = false;
 
   for (const contour of snapshot.contours) {
-    if (contour.points.length < 2) {
-      continue;
-    }
-
-    const segments = parseSegments(contour.points, contour.closed);
-    if (segments.length === 0) continue;
-
-    ctx.beginPath();
-    ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
-
-    for (const segment of segments) {
-      switch (segment.type) {
-        case "line":
-          ctx.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
-          break;
-        case "quad":
-          ctx.quadTo(
-            segment.points.control.x,
-            segment.points.control.y,
-            segment.points.anchor2.x,
-            segment.points.anchor2.y,
-          );
-          break;
-        case "cubic":
-          ctx.cubicTo(
-            segment.points.control1.x,
-            segment.points.control1.y,
-            segment.points.control2.x,
-            segment.points.control2.y,
-            segment.points.anchor2.x,
-            segment.points.anchor2.y,
-          );
-          break;
-      }
-    }
-
-    if (contour.closed) {
-      ctx.closePath();
-      hasClosed = true;
-    }
-
+    const isClosed = buildContourPath(ctx, contour);
+    if (isClosed) hasClosed = true;
     ctx.stroke();
   }
 
@@ -102,66 +94,6 @@ export function renderGuides(ctx: IRenderer, guides: Guides): void {
   ctx.stroke();
 }
 
-/**
- * Get the handle state for a point (idle, hovered, selected).
- */
-export function getPointHandleState(
-  pointId: string,
-  state: HandleRenderState,
-): "idle" | "hovered" | "selected" {
-  if (state.selectedPoints.has(pointId as PointId)) {
-    return "selected";
-  }
-  if (state.hoveredPoint === pointId) {
-    return "hovered";
-  }
-  return "idle";
-}
-
-/**
- * Determine the handle type for a point in a contour.
- */
-export function getHandleType(
-  point: PointSnapshot,
-  index: number,
-  contour: ContourSnapshot,
-): "first" | "last" | "direction" | "corner" | "smooth" | "control" {
-  const points = contour.points;
-  const isFirst = index === 0;
-  const isLast = index === points.length - 1;
-
-  // First point in open contour
-  if (isFirst && !contour.closed) {
-    return "first";
-  }
-
-  // First point in closed contour (direction indicator)
-  if (isFirst && contour.closed) {
-    return "direction";
-  }
-
-  // Last point in open contour
-  if (isLast && !contour.closed) {
-    return "last";
-  }
-
-  // Off-curve control point
-  if (point.pointType === "offCurve") {
-    return "control";
-  }
-
-  // On-curve point
-  if (point.smooth) {
-    return "smooth";
-  }
-
-  return "corner";
-}
-
-
-/**
- * Check if a contour is clockwise using the shoelace formula.
- */
 export function isContourClockwise(contour: ContourSnapshot): boolean {
   return Polygon.isClockwise(contour.points);
 }

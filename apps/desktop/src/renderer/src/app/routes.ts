@@ -1,6 +1,7 @@
 import GridSvg from "@assets/toolbar/grid.svg";
 import InfoSvg from "@assets/toolbar/info.svg";
 import type { Svg } from "@/types/common";
+import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { FontInfo } from "@/views/FontInfo";
 import { Editor } from "@/views/Editor";
@@ -15,8 +16,14 @@ interface Route {
 
 export const routes: Route[] = [
   {
-    id: "home",
+    id: "landing",
     path: "/",
+    component: Landing,
+    description: "Landing page with load/new font options",
+  },
+  {
+    id: "home",
+    path: "/home",
     icon: GridSvg,
     component: Home,
     description: "Display all glyphs",

@@ -8,6 +8,7 @@
 export type ThemeName = "light" | "dark" | "system";
 
 export interface ElectronAPI {
+  openFontDialog: () => Promise<string | null>;
   onMenuOpenFont: (callback: (path: string) => void) => () => void;
   onMenuSaveFont: (callback: (path: string) => void) => () => void;
   onMenuUndo: (callback: () => void) => () => void;

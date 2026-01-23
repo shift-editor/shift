@@ -9,13 +9,6 @@ import { routes } from "./routes";
 
 export const App = () => {
   useEffect(() => {
-    const editor = AppState.getState().editor;
-    editor.startEditSession(65);
-    AppState.getState().setFilePath(null);
-    AppState.getState().clearDirty();
-  }, []);
-
-  useEffect(() => {
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
       const editor = AppState.getState().editor;
       editor.loadFont(filePath);

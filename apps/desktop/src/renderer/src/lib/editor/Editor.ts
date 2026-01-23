@@ -1,29 +1,15 @@
-import {
-  BOUNDING_RECTANGLE_STYLES,
-  DEFAULT_STYLES,
-  GUIDE_STYLES,
-  SEGMENT_HOVER_STYLE,
-  SEGMENT_SELECTED_STYLE,
-} from "@/lib/styles/style";
-import { IGraphicContext, IRenderer } from "@/types/graphics";
-import { HandleState, HandleType } from "@/types/handle";
-import type { CursorType, SelectionMode, ToolRegistryItem, VisualState } from "@/types/editor";
+import type { IGraphicContext, IRenderer } from "@/types/graphics";
+import type { HandleState, HandleType } from "@/types/handle";
+import type { CursorType, ToolRegistryItem, VisualState } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
-import { asPointId, asContourId } from "@shift/types";
+import { asContourId } from "@shift/types";
 import { findPointInSnapshot, findPointsInSnapshot } from "../utils/snapshot";
 import { Tool, ToolContext, ToolName } from "@/types/tool";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 
-import { FrameHandler } from "./FrameHandler";
-import { drawHandle, drawHandleLast } from "./handles";
+import { drawHandle } from "./handles";
 import { Viewport } from "./Viewport";
-import { getBoundingRect } from "../math/rect";
 import { FontEngine } from "@/engine";
-import {
-  renderGlyph,
-  renderGuides,
-  type Guides,
-} from "./render";
 import {
   CommandHistory,
   AddPointCommand,
@@ -43,15 +29,14 @@ import {
   type SelectionBounds,
 } from "../transform";
 import { effect, type Effect } from "../reactive/signal";
-import { parseSegments } from "@/engine/segments";
-import { Segment } from "@/lib/geo/Segment";
 import { signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
-import { Polygon } from "@shift/geo";
+import { SelectionManager } from "./SelectionManager";
+import { HoverManager } from "./HoverManager";
+import { GlyphRenderer } from "./GlyphRenderer";
 
 const DEBUG = false;
 const SCREEN_HIT_RADIUS = 8;
-const SCREEN_LINE_WIDTH = 1;
 
 function cursorToCSS(cursor: CursorType): string {
   switch (cursor.type) {
@@ -74,21 +59,15 @@ function debug(...args: unknown[]) {
 export class Editor {
   #previewMode: WritableSignal<boolean>;
 
-  #selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
-  #selectedSegmentIds: WritableSignal<ReadonlySet<SegmentId>>;
-  #selectionMode: WritableSignal<SelectionMode>;
-
-  #hoveredPointId: WritableSignal<PointId | null>;
-  #hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
+  #selection: SelectionManager;
+  #hover: HoverManager;
+  #renderer: GlyphRenderer;
 
   #tools: Map<ToolName, ToolRegistryItem>;
   #activeTool: WritableSignal<ToolName>;
 
   #viewport: Viewport;
-  #frameHandler: FrameHandler;
   #commandHistory: CommandHistory;
-  #staticContext: IGraphicContext | null;
-  #interactiveContext: IGraphicContext | null;
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
   #clipboardManager: ClipboardManager;
@@ -98,44 +77,53 @@ export class Editor {
 
   constructor() {
     this.#viewport = new Viewport();
-    this.#frameHandler = new FrameHandler();
     this.#fontEngine = new FontEngine();
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.snapshot.value,
     );
-    this.#staticContext = null;
-    this.#interactiveContext = null;
 
     this.#previewMode = signal(false);
     this.#cursor = signal("default");
 
-    this.#selectedPointIds = signal<ReadonlySet<PointId>>(new Set());
-    this.#selectedSegmentIds = signal<ReadonlySet<SegmentId>>(new Set());
-    this.#selectionMode = signal<SelectionMode>("committed");
-
-    this.#hoveredPointId = signal<PointId | null>(null);
-    this.#hoveredSegmentId = signal<SegmentIndicator | null>(null);
+    this.#selection = new SelectionManager();
+    this.#hover = new HoverManager();
 
     this.#tools = new Map();
     this.#activeTool = signal<ToolName>("select");
 
+    this.#renderer = new GlyphRenderer({
+      viewport: this.#viewport,
+      getSnapshot: () => this.#fontEngine.snapshot.value,
+      getFontMetrics: () => this.#fontEngine.info.getMetrics(),
+      getActiveTool: () => this.getActiveTool(),
+      selection: this.#selection,
+      hover: this.#hover,
+      getPreviewMode: () => this.previewMode,
+      getHandleState: (pointId) => this.getHandleState(pointId),
+      paintHandle: (ctx, x, y, handleType, state, isCounterClockWise) =>
+        this.paintHandle(ctx, x, y, handleType, state, isCounterClockWise),
+      getSelectedPointData: () => this.#getSelectedPointData(),
+    });
+
     this.#clipboardManager = new ClipboardManager({
       getSnapshot: () => this.#fontEngine.snapshot.value,
-      getSelectedPointIds: () => this.#selectedPointIds.peek(),
-      getSelectedSegmentIds: () => this.#selectedSegmentIds.peek(),
+      getSelectedPointIds: () => this.#selection.selectedPointIdsSignal.peek(),
+      getSelectedSegmentIds: () =>
+        this.#selection.selectedSegmentIdsSignal.peek(),
       getGlyphName: () => this.#fontEngine.snapshot.value?.name,
-      pasteContours: (json, x, y) => this.#fontEngine.editing.pasteContours(json, x, y),
+      pasteContours: (json, x, y) =>
+        this.#fontEngine.editing.pasteContours(json, x, y),
       selectPoints: (ids) => this.selectPoints(ids),
     });
 
     this.#redrawEffect = effect(() => {
       this.#fontEngine.snapshot.value;
-      this.#selectedPointIds.value;
-      this.#selectedSegmentIds.value;
-      this.#selectionMode.value;
-      this.#hoveredPointId.value;
-      this.#hoveredSegmentId.value;
+      this.#selection.selectedPointIdsSignal.value;
+      this.#selection.selectedSegmentIdsSignal.value;
+      this.#selection.selectionModeSignal.value;
+      this.#hover.hoveredPointIdSignal.value;
+      this.#hover.hoveredSegmentIdSignal.value;
       this.#previewMode.value;
       this.requestRedraw();
     });
@@ -190,161 +178,107 @@ export class Editor {
   }
 
   public get selectedPointIds(): ReadonlySet<PointId> {
-    return this.#selectedPointIds.value;
+    return this.#selection.selectedPointIds;
   }
 
   public selectPoint(pointId: PointId): void {
-    this.#selectedPointIds.set(new Set([pointId]));
+    this.#selection.selectPoint(pointId);
   }
 
   public selectPoints(pointIds: Set<PointId>): void {
-    this.#selectedPointIds.set(new Set(pointIds));
+    this.#selection.selectPoints(pointIds);
   }
 
   public addPointToSelection(pointId: PointId): void {
-    const next = new Set(this.#selectedPointIds.peek());
-    next.add(pointId);
-    this.#selectedPointIds.set(next);
+    this.#selection.addPointToSelection(pointId);
   }
 
   public removePointFromSelection(pointId: PointId): void {
-    const next = new Set(this.#selectedPointIds.peek());
-    next.delete(pointId);
-    this.#selectedPointIds.set(next);
+    this.#selection.removePointFromSelection(pointId);
   }
 
   public togglePointSelection(pointId: PointId): void {
-    const next = new Set(this.#selectedPointIds.peek());
-    if (next.has(pointId)) {
-      next.delete(pointId);
-    } else {
-      next.add(pointId);
-    }
-    this.#selectedPointIds.set(next);
+    this.#selection.togglePointSelection(pointId);
   }
 
   public isPointSelected(pointId: PointId): boolean {
-    return this.#selectedPointIds.peek().has(pointId);
+    return this.#selection.isPointSelected(pointId);
   }
 
   public get selectedSegmentIds(): ReadonlySet<SegmentId> {
-    return this.#selectedSegmentIds.value;
+    return this.#selection.selectedSegmentIds;
   }
 
   public selectSegment(segmentId: SegmentId): void {
-    this.#selectedSegmentIds.set(new Set([segmentId]));
+    this.#selection.selectSegment(segmentId);
   }
 
   public selectSegments(segmentIds: Set<SegmentId>): void {
-    this.#selectedSegmentIds.set(new Set(segmentIds));
+    this.#selection.selectSegments(segmentIds);
   }
 
   public addSegmentToSelection(segmentId: SegmentId): void {
-    const next = new Set(this.#selectedSegmentIds.peek());
-    next.add(segmentId);
-    this.#selectedSegmentIds.set(next);
+    this.#selection.addSegmentToSelection(segmentId);
   }
 
   public removeSegmentFromSelection(segmentId: SegmentId): void {
-    const next = new Set(this.#selectedSegmentIds.peek());
-    next.delete(segmentId);
-    this.#selectedSegmentIds.set(next);
+    this.#selection.removeSegmentFromSelection(segmentId);
   }
 
   public toggleSegmentInSelection(segmentId: SegmentId): void {
-    const next = new Set(this.#selectedSegmentIds.peek());
-    if (next.has(segmentId)) {
-      next.delete(segmentId);
-    } else {
-      next.add(segmentId);
-    }
-    this.#selectedSegmentIds.set(next);
+    this.#selection.toggleSegmentInSelection(segmentId);
   }
 
   public isSegmentSelected(segmentId: SegmentId): boolean {
-    return this.#selectedSegmentIds.peek().has(segmentId);
+    return this.#selection.isSegmentSelected(segmentId);
   }
 
   public clearSelection(): void {
-    this.#selectedPointIds.set(new Set());
-    this.#selectedSegmentIds.set(new Set());
+    this.#selection.clearSelection();
   }
 
   public hasSelection(): boolean {
-    return (
-      this.#selectedPointIds.peek().size > 0 ||
-      this.#selectedSegmentIds.peek().size > 0
-    );
+    return this.#selection.hasSelection();
   }
 
-  public get selectionMode(): SelectionMode {
-    return this.#selectionMode.value;
+  public get selectionMode() {
+    return this.#selection.selectionMode;
   }
 
-  public setSelectionMode(mode: SelectionMode): void {
-    this.#selectionMode.set(mode);
+  public setSelectionMode(mode: "preview" | "committed"): void {
+    this.#selection.setSelectionMode(mode);
   }
 
   public get hoveredPointId(): PointId | null {
-    return this.#hoveredPointId.value;
+    return this.#hover.hoveredPointId;
   }
 
   public get hoveredSegmentId(): SegmentIndicator | null {
-    return this.#hoveredSegmentId.value;
+    return this.#hover.hoveredSegmentId;
   }
 
   public setHoveredPoint(pointId: PointId | null): void {
-    this.#hoveredPointId.set(pointId);
-    if (pointId !== null) {
-      this.#hoveredSegmentId.set(null);
-    }
+    this.#hover.setHoveredPoint(pointId);
   }
 
   public setHoveredSegment(indicator: SegmentIndicator | null): void {
-    this.#hoveredSegmentId.set(indicator);
-    if (indicator !== null) {
-      this.#hoveredPointId.set(null);
-    }
+    this.#hover.setHoveredSegment(indicator);
   }
 
   public clearHover(): void {
-    this.#hoveredPointId.set(null);
-    this.#hoveredSegmentId.set(null);
+    this.#hover.clearHover();
   }
 
   public getPointVisualState(pointId: PointId): VisualState {
-    if (this.isPointSelected(pointId)) {
-      return "selected";
-    }
-    if (this.#hoveredPointId.value === pointId) {
-      return "hovered";
-    }
-
-    const hoveredSegment = this.#hoveredSegmentId.value;
-    if (hoveredSegment) {
-      const segmentPointIds = this.#getPointIdsFromSegmentId(
-        hoveredSegment.segmentId,
-      );
-      if (segmentPointIds.has(pointId)) {
-        return "hovered";
-      }
-    }
-    return "idle";
+    return this.#hover.getPointVisualState(pointId, (id) =>
+      this.#selection.isPointSelected(id),
+    );
   }
 
   public getSegmentVisualState(segmentId: SegmentId): VisualState {
-    if (this.isSegmentSelected(segmentId)) {
-      return "selected";
-    }
-    if (this.#hoveredSegmentId.value?.segmentId === segmentId) {
-      return "hovered";
-    }
-    return "idle";
-  }
-
-  #getPointIdsFromSegmentId(segmentId: SegmentId): Set<PointId> {
-    const [id1, id2] = segmentId.split(":");
-    return new Set([asPointId(id1), asPointId(id2)]);
+    return this.#hover.getSegmentVisualState(segmentId, (id) =>
+      this.#selection.isSegmentSelected(id),
+    );
   }
 
   public get previewMode(): boolean {
@@ -356,11 +290,11 @@ export class Editor {
   }
 
   public setStaticContext(context: IGraphicContext) {
-    this.#staticContext = context;
+    this.#renderer.setStaticContext(context);
   }
 
   public setInteractiveContext(context: IGraphicContext) {
-    this.#interactiveContext = context;
+    this.#renderer.setInteractiveContext(context);
   }
 
   public startEditSession(unicode: number): void {
@@ -633,8 +567,9 @@ export class Editor {
   }
 
   public deleteSelectedPoints(): void {
-    if (this.#selectedPointIds.peek().size > 0) {
-      this.#fontEngine.editing.removePoints([...this.#selectedPointIds.peek()]);
+    const selectedIds = this.#selection.selectedPointIdsSignal.peek();
+    if (selectedIds.size > 0) {
+      this.#fontEngine.editing.removePoints([...selectedIds]);
       this.clearSelection();
       this.requestRedraw();
     }
@@ -693,7 +628,7 @@ export class Editor {
    * @param origin - Optional origin point; defaults to selection center
    */
   public rotateSelection(angle: number, origin?: Point2D): void {
-    const pointIds = [...this.#selectedPointIds.peek()];
+    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
@@ -710,7 +645,7 @@ export class Editor {
    * @param origin - Optional origin; defaults to selection center
    */
   public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
-    const pointIds = [...this.#selectedPointIds.peek()];
+    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
     if (pointIds.length === 0) return;
 
     const o = origin ?? this.getSelectionCenter();
@@ -726,7 +661,7 @@ export class Editor {
    * @param origin - Optional origin; defaults to selection center
    */
   public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
-    const pointIds = [...this.#selectedPointIds.peek()];
+    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
@@ -749,7 +684,7 @@ export class Editor {
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
-    for (const pointId of this.#selectedPointIds.peek()) {
+    for (const pointId of this.#selection.selectedPointIdsSignal.peek()) {
       const found = findPointInSnapshot(snapshot, pointId);
       if (found) {
         result.push({ x: found.point.x, y: found.point.y });
@@ -762,300 +697,34 @@ export class Editor {
     const snapshot = this.#fontEngine.snapshot.value;
     if (!snapshot) return [];
 
-    return findPointsInSnapshot(snapshot, this.#selectedPointIds.peek()).map(
-      (p) => ({
-        id: p.id as PointId,
-        x: p.x,
-        y: p.y,
-      }),
-    );
-  }
-
-  #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
-    return this.#viewport.screenToUpmDistance(screenPixels);
-  }
-
-  #applyUserTransforms(ctx: IRenderer) {
-    const center = this.#viewport.getCentrePoint();
-    const zoom = this.#viewport.zoom;
-    const { panX, panY } = this.#viewport;
-
-    ctx.transform(
-      zoom,
-      0,
-      0,
-      zoom,
-      panX + center.x * (1 - zoom),
-      panY + center.y * (1 - zoom),
-    );
-  }
-
-  #applyUpmTransforms(ctx: IRenderer) {
-    const scale = this.#viewport.upmScale;
-    const baselineY =
-      this.#viewport.logicalHeight -
-      this.#viewport.padding -
-      this.#viewport.descender * scale;
-    ctx.transform(scale, 0, 0, -scale, this.#viewport.padding, baselineY);
+    return findPointsInSnapshot(
+      snapshot,
+      this.#selection.selectedPointIdsSignal.peek(),
+    ).map((p) => ({
+      id: p.id as PointId,
+      x: p.x,
+      y: p.y,
+    }));
   }
 
   public redrawGlyph() {
     this.requestRedraw();
   }
 
-  #prepareCanvas(ctx: IRenderer) {
-    this.#applyUserTransforms(ctx);
-    this.#applyUpmTransforms(ctx);
-  }
-
-  #drawInteractive() {
-    if (!this.#interactiveContext) return;
-    const ctx = this.#interactiveContext.getContext();
-    ctx.clear();
-    ctx.save();
-
-    this.#prepareCanvas(ctx);
-
-    const tool = this.getActiveTool();
-    if (tool.drawInteractive) {
-      tool.drawInteractive(ctx);
-    }
-
-    ctx.restore();
-  }
-
-  #drawStatic() {
-    if (!this.#staticContext) return;
-    const ctx = this.#staticContext.getContext();
-
-    const snapshot = this.#fontEngine.snapshot.value;
-
-    debug("drawStatic: snapshot contours:", snapshot?.contours.length ?? 0);
-
-    ctx.clear();
-    ctx.save();
-
-    this.#prepareCanvas(ctx);
-
-    if (snapshot) {
-      const guides = this.#getGuides(snapshot);
-      ctx.setStyle(GUIDE_STYLES);
-      ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
-
-      if (!this.previewMode) {
-        renderGuides(ctx, guides);
-      }
-
-      ctx.setStyle(DEFAULT_STYLES);
-      ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
-      const hasClosed = renderGlyph(ctx, snapshot);
-
-      if (hasClosed && this.previewMode) {
-        ctx.fillStyle = "black";
-        for (const contour of snapshot.contours) {
-          if (contour.closed) {
-            ctx.beginPath();
-            for (const point of contour.points) {
-              ctx.lineTo(point.x, point.y);
-            }
-            ctx.closePath();
-            ctx.fill();
-          }
-        }
-      }
-    }
-
-    if (!this.previewMode && snapshot) {
-      this.#drawSegmentHighlights(ctx, snapshot);
-    }
-
-    const shouldDrawBoundingRect =
-      this.#selectedPointIds.peek().size > 0 &&
-      !this.previewMode &&
-      this.selectionMode === "committed";
-
-    if (shouldDrawBoundingRect) {
-      const selectedPointData = this.#getSelectedPointData();
-      if (selectedPointData.length > 0) {
-        const bbRect = getBoundingRect(selectedPointData);
-        ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
-        ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
-        ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
-      }
-    }
-
-    ctx.restore();
-    ctx.save();
-
-    if (!this.previewMode && snapshot) {
-      this.#drawHandlesFromSnapshot(ctx, snapshot);
-    }
-
-    ctx.restore();
-  }
-
-  #getGuides(snapshot: GlyphSnapshot): Guides {
-    const metrics = this.#fontEngine.info.getMetrics();
-    return {
-      ascender: { y: metrics.ascender },
-      capHeight: { y: metrics.capHeight },
-      xHeight: { y: metrics.xHeight },
-      baseline: { y: 0 },
-      descender: { y: metrics.descender },
-      xAdvance: snapshot.xAdvance,
-    };
-  }
-
-  #drawSegmentHighlights(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    const hoveredSegment = this.#hoveredSegmentId.value;
-    const selectedSegments = this.#selectedSegmentIds.peek();
-
-    // Nothing to draw
-    if (!hoveredSegment && selectedSegments.size === 0) return;
-
-    for (const contour of snapshot.contours) {
-      const segments = parseSegments(contour.points, contour.closed);
-
-      for (const segment of segments) {
-        const segmentId = Segment.id(segment);
-        const isHovered = hoveredSegment?.segmentId === segmentId;
-        const isSelected = selectedSegments.has(segmentId);
-
-        if (!isHovered && !isSelected) continue;
-
-        // Selected takes priority over hovered for styling
-        const style = isSelected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
-        ctx.setStyle(style);
-        ctx.lineWidth = this.#lineWidthUpm(style.lineWidth);
-
-        this.#drawSegmentCurve(ctx, segment);
-      }
-    }
-  }
-
-  #drawSegmentCurve(
-    ctx: IRenderer,
-    segment: ReturnType<typeof parseSegments>[number],
-  ): void {
-    const curve = Segment.toCurve(segment);
-    ctx.beginPath();
-    ctx.moveTo(curve.p0.x, curve.p0.y);
-
-    switch (curve.type) {
-      case "line":
-        ctx.lineTo(curve.p1.x, curve.p1.y);
-        break;
-      case "quadratic":
-        ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
-        break;
-      case "cubic":
-        ctx.cubicTo(
-          curve.c0.x,
-          curve.c0.y,
-          curve.c1.x,
-          curve.c1.y,
-          curve.p1.x,
-          curve.p1.y,
-        );
-        break;
-    }
-
-    ctx.stroke();
-  }
-
-  #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    for (const contour of snapshot.contours) {
-      const points = contour.points;
-      const numPoints = points.length;
-
-      if (numPoints === 0) continue;
-
-      for (let idx = 0; idx < numPoints; idx++) {
-        const point = points[idx];
-        const { x, y } = this.#viewport.projectUpmToScreen(point.x, point.y);
-        const handleState = this.getHandleState(asPointId(point.id));
-
-        if (numPoints === 1) {
-          this.paintHandle(ctx, x, y, "corner", handleState);
-          continue;
-        }
-
-        const isFirst = idx === 0;
-        const isLast = idx === numPoints - 1;
-
-        if (isFirst) {
-          if (contour.closed) {
-            const clockwise = Polygon.isClockwise(points);
-            this.paintHandle(ctx, x, y, "direction", handleState, !clockwise);
-          } else {
-            this.paintHandle(ctx, x, y, "first", handleState);
-          }
-          continue;
-        }
-
-        if (isLast && !contour.closed) {
-          const prevPoint = points[idx - 1];
-          const { x: px, y: py } = this.#viewport.projectUpmToScreen(
-            prevPoint.x,
-            prevPoint.y,
-          );
-          drawHandleLast(ctx, { x0: x, y0: y, x1: px, y1: py }, handleState);
-          continue;
-        }
-
-        if (point.pointType === "onCurve") {
-          if (point.smooth) {
-            this.paintHandle(ctx, x, y, "smooth", handleState);
-          } else {
-            this.paintHandle(ctx, x, y, "corner", handleState);
-          }
-        } else {
-          const nextPoint = points[(idx + 1) % numPoints];
-          const prevPoint = points[idx - 1];
-
-          const anchor =
-            nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
-
-          const { x: anchorX, y: anchorY } = this.#viewport.projectUpmToScreen(
-            anchor.x,
-            anchor.y,
-          );
-
-          this.paintHandle(ctx, x, y, "control", handleState);
-
-          ctx.setStyle(DEFAULT_STYLES);
-          ctx.drawLine(anchorX, anchorY, x, y);
-        }
-      }
-    }
-  }
-
-  #draw() {
-    this.#drawInteractive();
-    this.#drawStatic();
-  }
-
   public requestRedraw() {
-    this.#frameHandler.requestUpdate(() => this.#draw());
+    this.#renderer.requestRedraw();
   }
 
   public requestImmediateRedraw() {
-    this.#draw();
+    this.#renderer.requestImmediateRedraw();
   }
 
   public cancelRedraw() {
-    this.#frameHandler.cancelUpdate();
+    this.#renderer.cancelRedraw();
   }
 
   public destroy() {
     this.#redrawEffect.dispose();
-
-    if (this.#staticContext) {
-      this.#staticContext.destroy();
-    }
-
-    if (this.#interactiveContext) {
-      this.#interactiveContext.destroy();
-    }
+    this.#renderer.destroy();
   }
 }

@@ -248,6 +248,8 @@ contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 type ThemeName = "light" | "dark" | "system";
 
 const electronAPI = {
+  openFontDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke("dialog:openFont"),
   onMenuOpenFont: (callback: (path: string) => void) => {
     const handler = (_event: any, path: string) => callback(path);
     ipcRenderer.on("menu:open-font", handler);

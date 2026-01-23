@@ -130,7 +130,7 @@
 
 ## 🚧 In Progress / Partial Implementation
 
-- [ ] Font file opening in app (loader exists, UI integration needed)
+- [x] Font file opening in app (loader exists, UI integration needed)
 - [ ] Shape tool (placeholder only)
 - [ ] Visual feedback in UI for undo/redo ("Undo Move Point")
 
@@ -179,6 +179,14 @@
 - [ ] Open contour endpoint markers
 - [ ] Smooth point tangent lines
 
+**Additional Drawing Tools**
+- [ ] Ruler tool (measure distance/angle between points)
+- [ ] Knife tool (cut contours at intersection)
+- [ ] Bend curves with mouse (drag segment to reshape)
+- [ ] Shape tool: rectangles with corner radius
+- [ ] Shape tool: circles and ellipses
+- [ ] Shape tool: regular polygons (triangle, pentagon, etc.)
+
 ---
 
 ### Phase 2: Snapping & Precision
@@ -201,6 +209,20 @@
 **Angle Constraint**
 - [ ] Hold `Shift` to constrain to 0°/45°/90°
 - [ ] Perpendicular constraint for smooth points
+
+**Measurement & Guidelines**
+- [ ] Measurement tool (measure distance/angle between any two points)
+- [ ] Draggable global guidelines
+- [ ] Per-glyph local guidelines
+- [ ] Guideline snapping
+
+**Tools Panel (Sidebar)**
+- [ ] Align tools (left, center, right, top, middle, bottom)
+- [ ] Distribute tools (horizontal, vertical spacing)
+- [ ] Transform panel (move X/Y, scale, rotate, skew/shear)
+- [ ] Numeric input fields for precise transforms
+- [ ] Flip horizontal/vertical
+- [ ] Rotate 90°/180°
 
 ---
 
@@ -235,6 +257,28 @@
 - [ ] Unencoded glyphs (`.notdef`, ligatures)
 - [ ] AGL (Adobe Glyph List) name lookup
 - [ ] Rename glyph with cascade
+
+---
+
+### Phase 3.5: Contour Operations
+
+**Boolean Operations**
+- [ ] Union (merge overlapping contours)
+- [ ] Subtract (cut one contour from another)
+- [ ] Intersect (keep only overlapping area)
+- [ ] Difference (XOR - exclude overlap)
+
+**Path Cleanup**
+- [ ] Remove overlap (flatten to non-overlapping paths)
+- [ ] Correct path direction (outer clockwise, inner counter-clockwise)
+- [ ] Reverse contour direction
+- [ ] Remove redundant points (on-curve points on straight lines)
+
+**Path Modification**
+- [ ] Offset path (grow/shrink contours)
+- [ ] Round corners (add curves at corners)
+- [ ] Add corners (convert smooth to corner)
+- [ ] Simplify path (reduce point count while maintaining shape)
 
 ---
 
@@ -299,10 +343,39 @@
 
 ---
 
+### Phase 5.5: Spacing & Kerning
+
+**Sidebearing Editing**
+- [ ] Draggable sidebearing handles in editor
+- [ ] Numeric sidebearing input in glyph info panel
+- [ ] Link sidebearings (left = right)
+- [ ] Copy metrics from another glyph
+
+**Spacing View**
+- [ ] Text layout view (multiple glyphs on same canvas)
+- [ ] Double-click glyph in text view to edit
+- [ ] Spacing string presets (HOHOHOnnnooo, etc.)
+- [ ] Custom spacing strings
+- [ ] Adjust spacing while viewing in context
+
+**Kerning Editor**
+- [ ] Visual kerning pair editor
+- [ ] Kern class management (group similar letters)
+- [ ] Kerning preview in context
+- [ ] Import/export kerning data
+- [ ] Auto-kerning suggestions
+
+**Metrics Classes**
+- [ ] Width classes (glyphs that share metrics)
+- [ ] Sync metrics across class members
+- [ ] Metrics inheritance
+
+---
+
 ### Phase 6: Font I/O & Build Pipeline
 
 **Loading Improvements**
-- [ ] File → Open dialog (UFO, TTF, OTF)
+- [x] File → Open dialog (UFO, TTF, OTF)
 - [ ] Drag-and-drop font files
 - [ ] Recent files list
 - [ ] Variable font axis reading from binary
@@ -328,13 +401,85 @@
 
 ---
 
+### Phase 6.5: Preview & Proofing
+
+**Preview Panel**
+- [ ] Preview glyph in context with other glyphs
+- [ ] Configurable preview strings (before/after current glyph)
+- [ ] Real-time update as glyph is edited
+- [ ] Multiple preview lines
+- [ ] Preview size slider
+
+**Waterfall View**
+- [ ] Same text at multiple sizes (12, 16, 24, 36, 48, 72pt)
+- [ ] Configurable size list
+- [ ] Pixel rendering preview (simulated rasterization)
+
+**Sample Text & Proofing**
+- [ ] Sample text presets (pangrams, language samples)
+- [ ] Custom sample text input
+- [ ] Adhesion text (show only glyphs that exist)
+- [ ] Dark mode preview (light-on-dark testing)
+
+**Comparison Tools**
+- [ ] Compare similar glyphs side-by-side (n/m, o/c, b/d)
+- [ ] Overlay glyphs for comparison
+- [ ] Compare across masters (variable fonts)
+
+---
+
+### Phase 6.6: OpenType Features
+
+**Feature Editor**
+- [ ] Visual GSUB rule editor (substitutions)
+- [ ] Visual GPOS rule editor (positioning)
+- [ ] Feature code syntax highlighting
+- [ ] Feature code validation/error checking
+
+**Common Features**
+- [ ] Ligature editor (ffi, fl, etc.)
+- [ ] Stylistic alternates management
+- [ ] Small caps mapping
+- [ ] Oldstyle/lining figures toggle
+- [ ] Fractions builder
+
+**Feature Testing**
+- [ ] Live feature preview toggle
+- [ ] Test specific features in isolation
+- [ ] Language/script selector for testing
+
+---
+
 ### Phase 7: UI Polish
+
+**Landing Page**
+- [ ] Welcome screen on app launch
+- [ ] Recent files list
+- [ ] New font / Open font buttons
+- [ ] Quick start templates
+
+**Multi-Tab Editing**
+- [ ] Multiple glyph tabs open simultaneously
+- [ ] Tab bar with glyph names/characters
+- [ ] Close/reorder tabs
+- [ ] Keyboard shortcuts to switch tabs (Cmd+1-9, Cmd+Shift+[ ])
+- [ ] Tab context menu (close others, close all)
+
+**Glyph Info Sidebar**
+- [ ] Unicode codepoint display/edit
+- [ ] Glyph name
+- [ ] Advance width (x-advance)
+- [ ] Left/right sidebearings
+- [ ] Vertical metrics (if applicable)
+- [ ] Kerning pairs involving this glyph
+- [ ] Component list (if composite)
+- [ ] Contour/point count summary
 
 **Inspector Panel**
 - [ ] Selected point coordinates (editable)
 - [ ] Point type toggle
 - [ ] Contour info (point count, closed/open)
-- [ ] Transform inputs
+- [ ] Transform inputs (panel)
 
 **Menu System**
 - File: New, Open, Open Recent, Close, Save, Save As, Revert, Export, Quit
@@ -359,6 +504,23 @@
 - [ ] Editor (grid size, snap threshold, handle size)
 - [ ] Appearance (theme, colors)
 - [ ] Shortcuts (customizable keybindings)
+
+**Workflow Improvements**
+- [ ] Zoom to selection (fit view to selected points)
+- [ ] Center glyph in view
+- [ ] Lock layers (prevent accidental edits)
+- [ ] Template/background layer (reference image)
+- [ ] Find/replace contours (search for shape, replace with another)
+- [ ] Glyph notes/comments (annotations per glyph)
+- [ ] Multiple selection across glyphs (batch edit)
+
+**Validation & Quality**
+- [ ] Validation panel (check for common issues)
+- [ ] Open path detection
+- [ ] Wrong direction warning
+- [ ] Missing extrema points
+- [ ] Overlapping points detection
+- [ ] Outline consistency checker
 
 ---
 
