@@ -19,5 +19,12 @@ export default defineConfig(async () => {
       svgr({ include: "**/*.svg" }),
       tsconfigPaths(),
     ],
+    resolve: {
+      preserveSymlinks: true,
+    },
+    optimizeDeps: {
+      include: ["@shift/ui", "@shift/geo", "@shift/types"],
+      force: true,
+    },
   };
 });

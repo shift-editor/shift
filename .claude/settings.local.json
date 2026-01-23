@@ -49,7 +49,16 @@
       "Bash(pnpm run build)",
       "Bash(pnpm vitest:*)",
       "Bash(pnpm --filter shift-node run build:*)",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "mcp__figma__get_design_context",
+      "mcp__figma__get_screenshot",
+      "mcp__figma__get_metadata",
+      "Bash(pnpm --filter @shift/ui typecheck:*)",
+      "WebFetch(domain:tanstack.com)",
+      "WebFetch(domain:bluewings.github.io)",
+      "WebFetch(domain:bhaireshm.medium.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:web.dev)"
     ]
   }
 }

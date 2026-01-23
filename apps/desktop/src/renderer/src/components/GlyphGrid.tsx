@@ -1,25 +1,26 @@
 import { useNavigate } from "react-router-dom";
 
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
+import { Button, Input } from "@shift/ui";
 
 export const GlyphGrid = () => {
   const navigate = useNavigate();
+  const glyphStr = (unicode: string) => String.fromCharCode(parseInt(unicode, 16))
 
   return (
-    <section className="h-full w-full p-5 bg-app">
-      <div className="font-ui text-ui p-2 font-bold text-primary">
-        <h1>Adobe Latin 1</h1>
-      </div>
+    <section className="h-full w-full p-5 bg-canvas">
       <div className="grid grid-cols-6 gap-2 p-4 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13">
         {Object.values(ADOBE_LATIN_1).map((glyph) => {
           return (
-            <div key={glyph.char_name}>
-              <button
-                className="flex aspect-square w-full items-center justify-center rounded-md border bg-surface text-center text-4xl text-secondary transition-colors duration-200 hover:bg-surface-hover"
+            <div key={glyph.unicode} className="flex flex-col items-center justify-center gap-4">
+              <Button
+                className="w-full h-full text-5xl text-muted p-4"
                 onClick={() => navigate(`/editor/${glyph.unicode}`)}
+                variant="ghost"
               >
-                {String.fromCharCode(parseInt(glyph.unicode, 16))}
-              </button>
+                {glyphStr(glyph.unicode)}
+              </Button>
+              <Input className="w-full text-center" value={glyphStr(glyph.unicode)} onClick={(e) => e.stopPropagation()} />
             </div>
           );
         })}

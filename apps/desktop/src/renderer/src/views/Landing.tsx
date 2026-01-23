@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import AppState from "@/store/store";
-import { Toolbar } from "@/components/Toolbar";
+import logo from "@/assets/logo@1024.png";
+import { Button } from "@shift/ui";
 
 export const Landing = () => {
   const navigate = useNavigate();
@@ -26,24 +27,27 @@ export const Landing = () => {
   };
 
   return (
-    <main className="grid h-full w-full grid-rows-[auto_1fr]">
-      <Toolbar />
-      <section className="bg-secondary flex h-[90vh] items-center justify-center">
-        <div className="flex gap-4">
-          <button
+      <section className="bg-canvas flex h-screen flex-col items-center justify-center gap-8">
+        <div className="flex flex-col items-center gap-2">
+          <img src={logo} alt="Shift" className="h-32 w-32" />
+          <h1 className="font-display text-4xl font-extrabold tracking-tight text-primary">
+            Shift <span className="ml-[-0.4rem]">.</span>
+          </h1>
+        </div>
+        <div className="flex gap-2 sm:flex-row">
+          <Button
             onClick={handleLoadFont}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-6 py-3 font-medium"
+            variant="ghost"
           >
-            load font
-          </button>
-          <button
+            Load font
+          </Button>
+          <Button
             onClick={handleNewFont}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-6 py-3 font-medium"
+            variant="ghost"
           >
-            new font
-          </button>
+            New font
+          </Button>
         </div>
       </section>
-    </main>
   );
 };

@@ -219,8 +219,12 @@ export class Viewport {
     this.#mouseY = y;
   }
 
+  #projectScreenToUpmRaw(x: number, y: number): Point2D {
+    return Mat.applyToPoint(this.#screenToUpmMatrix.value, { x, y });
+  }
+
   public projectScreenToUpm(x: number, y: number) {
-    const result = Mat.applyToPoint(this.#screenToUpmMatrix.value, { x, y });
+    const result = this.#projectScreenToUpmRaw(x, y);
     return {
       x: Math.floor(result.x),
       y: Math.floor(result.y),
@@ -280,12 +284,12 @@ export class Viewport {
     screenY: number,
     zoomDelta: number,
   ): void {
-    const before = this.projectScreenToUpm(screenX, screenY);
+    const before = this.#projectScreenToUpmRaw(screenX, screenY);
 
     const newZoom = clamp(this.#zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
     this.#zoom.value = newZoom;
 
-    const after = this.projectScreenToUpm(screenX, screenY);
+    const after = this.#projectScreenToUpmRaw(screenX, screenY);
 
     const scale = this.upmScale;
     const deltaX = (before.x - after.x) * scale * newZoom;

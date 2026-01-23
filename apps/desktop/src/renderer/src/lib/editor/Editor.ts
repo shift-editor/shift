@@ -249,6 +249,10 @@ export class Editor {
     this.#selection.setSelectionMode(mode);
   }
 
+  public get selectedPointIdsSignal() {
+    return this.#selection.selectedPointIdsSignal;
+  }
+
   public get hoveredPointId(): PointId | null {
     return this.#hover.hoveredPointId;
   }

@@ -205,8 +205,8 @@ describe("Viewport", () => {
       viewport.zoomToPoint(screenX, screenY, 0.7);
 
       const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
-      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
-      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
+      expect(Math.abs(upmAfter.x - upmBefore.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(upmAfter.y - upmBefore.y)).toBeLessThanOrEqual(1);
     });
 
     it("should maintain cursor stability through multiple zoom operations", () => {

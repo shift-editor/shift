@@ -8,6 +8,10 @@
 * Consult the documentation and code together
 * When completing a feature YOU MUST check if it ticks off an item in the roadmap, and tick it off if so
 
+## Frontend
+Always use BaseUI components. If we don't have a component BaseUI wrapper then create one.
+
+
 ## Package Manager
 
 This project uses **pnpm** (v9.0.0) as its package manager.

@@ -9,7 +9,7 @@ export const StaticScene = () => {
     <canvas
       id="static-canvas"
       ref={staticCanvasRef}
-      className="pointer-events-none absolute inset-0 z-0 h-full w-full"
+      className="pointer-events-none absolute inset-0 z-0 h-full w-full bg-canvas"
     />
   );
 };

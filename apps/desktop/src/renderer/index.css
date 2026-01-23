@@ -1,14 +1,24 @@
 @import "tailwindcss";
 @source "../../../../packages/ui/src/**/*.tsx";
 
+@font-face {
+  font-family: "Host Grotesk";
+  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   /* Background colors: bg-app, bg-canvas, bg-toolbar, etc. */
   --color-app: #ffffff;
-  --color-canvas: #f8f9fa;
+  --color-canvas: #F2F2F2;
   --color-toolbar: #e2e2e2;
   --color-hover: #e5e5e5;
   --color-surface: #ffffff;
   --color-surface-hover: #f5f5f5;
+  --color-panel: #f6f6f6;
+  --color-input: #ededed;
 
   /* Border colors: border-line, border-line-subtle */
   --color-line: #2c2c2c;
@@ -17,7 +27,7 @@
   /* Text colors: text-primary, text-secondary, text-muted */
   --color-primary: #171717;
   --color-secondary: #525252;
-  --color-muted: #737373;
+  --color-muted: #BABABA;
 
   --color-accent: #0c92f4;
 
@@ -31,6 +41,7 @@
 
   /* Typography: font-ui, text-ui */
   --font-ui: "Inter";
+  --font-display: "Host Grotesk";
   --text-ui: 0.85rem;
 }
 

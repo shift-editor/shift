@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 
 import { Toolbar } from "@/components/Toolbar";
+import { Sidebar } from "@/components/sidebar";
 import AppState from "@/store/store";
 
 import { EditorView } from "../components/EditorView";
@@ -155,9 +156,12 @@ export const Editor = () => {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center bg-white">
+    <div className="flex h-screen w-screen flex-col bg-white">
       <Toolbar />
-      <EditorView glyphId={glyphId ?? ""} />
+      <div className="flex flex-1 overflow-hidden">
+        <EditorView glyphId={glyphId ?? ""} />
+        <Sidebar />
+      </div>
     </div>
   );
 };

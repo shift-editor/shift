@@ -23,11 +23,10 @@ export function buildContourPath(
   ctx: IRenderer,
   contour: ContourSnapshot,
 ): boolean {
+  ctx.beginPath();
   if (contour.points.length < 2) return false;
   const segments = parseSegments(contour.points, contour.closed);
   if (segments.length === 0) return false;
-
-  ctx.beginPath();
   ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
 
   for (const segment of segments) {
