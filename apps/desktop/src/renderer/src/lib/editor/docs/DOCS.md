@@ -267,6 +267,52 @@ FrameHandler schedules RAF
         └── tool.drawInteractive(ctx)
 ```
 
+## Winding and Fill Rules
+
+Font glyphs use the **nonzero winding rule** for fills. This determines how overlapping contours create holes (like the inside of an "O").
+
+### Winding Conventions
+
+In font coordinate space (Y-up):
+- **Outer contours**: counter-clockwise winding
+- **Inner contours (holes)**: clockwise winding
+
+The editor applies a Y-axis flip (`-scale`) to convert from font coords to screen coords. This reverses the visual winding direction, but the nonzero rule still works correctly.
+
+### Path Building Pattern
+
+All contours must be built into a **single path** before calling `fill()`:
+
+```typescript
+// Correct: single path, single fill
+ctx.beginPath();
+for (const contour of snapshot.contours) {
+  buildContourPath(ctx, contour);
+}
+ctx.fill();
+
+// Wrong: fills each contour separately (holes render as solid)
+for (const contour of snapshot.contours) {
+  ctx.beginPath();
+  buildContourPath(ctx, contour);
+  ctx.fill();
+}
+```
+
+### API Design
+
+`buildContourPath(ctx, contour)` is a pure path-building function:
+- Does **not** call `beginPath()` - caller owns path lifecycle
+- Adds contour segments to the current path via `moveTo`, `lineTo`, `cubicTo`, `closePath`
+- Returns `true` if contour is closed
+
+Higher-level functions like `renderGlyph()` handle the full lifecycle:
+```typescript
+ctx.beginPath();
+// ... build all contours
+ctx.stroke(); // or ctx.fill()
+```
+
 ## Related Systems
 
 - [engine](../../engine/docs/DOCS.md) - FontEngine state source

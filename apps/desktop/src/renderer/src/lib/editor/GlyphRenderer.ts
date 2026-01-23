@@ -176,11 +176,11 @@ export class GlyphRenderer {
 
       if (hasClosed && this.#deps.getPreviewMode()) {
         ctx.fillStyle = "black";
+        ctx.beginPath();
         for (const contour of snapshot.contours) {
-          if (buildContourPath(ctx, contour)) {
-            ctx.fill();
-          }
+          buildContourPath(ctx, contour);
         }
+        ctx.fill();
       }
     }
 

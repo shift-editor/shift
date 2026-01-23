@@ -23,7 +23,6 @@ export function buildContourPath(
   ctx: IRenderer,
   contour: ContourSnapshot,
 ): boolean {
-  ctx.beginPath();
   if (contour.points.length < 2) return false;
   const segments = parseSegments(contour.points, contour.closed);
   if (segments.length === 0) return false;
@@ -62,11 +61,12 @@ export function buildContourPath(
 export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
   let hasClosed = false;
 
+  ctx.beginPath();
   for (const contour of snapshot.contours) {
     const isClosed = buildContourPath(ctx, contour);
     if (isClosed) hasClosed = true;
-    ctx.stroke();
   }
+  ctx.stroke();
 
   return hasClosed;
 }
