@@ -45,6 +45,14 @@ function cursorToCSS(cursor: CursorType): string {
       return `-webkit-image-set(url("/cursors/pen@32-add.svg") 1x, url("/cursors/pen@64-add.svg") 2x) 8 8, crosshair`;
     case "pen-end":
       return `-webkit-image-set(url("/cursors/pen@32-end.svg") 1x, url("/cursors/pen@64-end.svg") 2x) 8 8, crosshair`;
+    case "ew-resize":
+      return `-webkit-image-set(url("/cursors/resize-ew@32.svg") 1x, url("/cursors/resize-ew@64.svg") 2x) 16 16, ew-resize`;
+    case "ns-resize":
+      return `-webkit-image-set(url("/cursors/resize-ns@32.svg") 1x, url("/cursors/resize-ns@64.svg") 2x) 16 16, ns-resize`;
+    case "nwse-resize":
+      return `-webkit-image-set(url("/cursors/resize-nwse@32.svg") 1x, url("/cursors/resize-nwse@64.svg") 2x) 16 16, nwse-resize`;
+    case "nesw-resize":
+      return `-webkit-image-set(url("/cursors/resize-nesw@32.svg") 1x, url("/cursors/resize-nesw@64.svg") 2x) 16 16, nesw-resize`;
     default:
       return cursor.type;
   }

@@ -14,11 +14,11 @@ export function createSelectionRectangleStyles(theme: ThemeTokens): DrawStyle {
 
 export function createBoundingRectangleStyles(theme: ThemeTokens): DrawStyle {
   return {
-    lineWidth: 0.5,
-    strokeStyle: theme.ui.text.secondary,
+    lineWidth: 1,
+    strokeStyle: theme.canvas.indicator,
     fillStyle: "transparent",
     antiAlias: false,
-    dashPattern: [5, 5],
+    dashPattern: [],
   };
 }
 

@@ -22,7 +22,7 @@ export const lightTheme: ThemeTokens = {
     },
   },
   canvas: {
-    indicator: "#36A6F8",
+    indicator: "#1886D7",
     purple: "#8b5cf6",
     orange: "#f97316",
     green: "#03D211",

@@ -1,6 +1,6 @@
 import type { Editor } from "@/lib/editor/Editor";
-import { UPMRect } from "@/lib/math/rect";
-import type { Point2D, PointId, PointSnapshot, GlyphSnapshot } from "@shift/types";
+import { UPMRect, getBoundingRect } from "@/lib/math/rect";
+import type { Point2D, PointId, PointSnapshot, GlyphSnapshot, Rect2D } from "@shift/types";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
@@ -9,6 +9,8 @@ import { Segment } from "@/lib/geo/Segment";
 import { parseSegments } from "@/engine/segments";
 import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { Segment as SegmentType } from "@/types/segments";
+
+export type BoundingRectEdge = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | null;
 
 function findPointAtPosition(
   points: PointSnapshot[],
@@ -334,5 +336,58 @@ export class SelectCommands {
 
   getHoveredSegment(): SegmentIndicator | null {
     return this.#editor.hoveredSegmentId.peek();
+  }
+
+  /**
+   * Get the bounding rectangle of selected points.
+   * Returns null if no points are selected or selection is in preview mode.
+   */
+  getSelectionBoundingRect(): Rect2D | null {
+    const ctx = this.#editor.createToolContext();
+    if (ctx.selectedPoints.size === 0) return null;
+    if (ctx.selectionMode !== "committed") return null;
+
+    const allPoints = getAllPoints(ctx.snapshot);
+    const selectedPoints = allPoints.filter((p) =>
+      ctx.selectedPoints.has(asPointId(p.id)),
+    );
+
+    if (selectedPoints.length === 0) return null;
+
+    return getBoundingRect(selectedPoints);
+  }
+
+  /**
+   * Hit test against the edges of the bounding rectangle.
+   * Returns which edge is being hovered, or null if not on any edge.
+   */
+  hitTestBoundingRectEdge(pos: Point2D): BoundingRectEdge {
+    const rect = this.getSelectionBoundingRect();
+    if (!rect) return null;
+
+    const ctx = this.#editor.createToolContext();
+    const tolerance = ctx.screen.hitRadius;
+
+    const onLeft = Math.abs(pos.x - rect.left) < tolerance;
+    const onRight = Math.abs(pos.x - rect.right) < tolerance;
+    const onTop = Math.abs(pos.y - rect.top) < tolerance;
+    const onBottom = Math.abs(pos.y - rect.bottom) < tolerance;
+
+    const withinX = pos.x >= rect.left - tolerance && pos.x <= rect.right + tolerance;
+    const withinY = pos.y >= rect.top - tolerance && pos.y <= rect.bottom + tolerance;
+
+    // Check corners first (they take priority)
+    if (onLeft && onTop) return "bottom-left";
+    if (onRight && onTop) return "bottom-right";
+    if (onLeft && onBottom) return "top-left";
+    if (onRight && onBottom) return "top-right";
+
+    // Check edges
+    if (onLeft && withinY) return "left";
+    if (onRight && withinY) return "right";
+    if (onTop && withinX) return "top";
+    if (onBottom && withinX) return "bottom";
+
+    return null;
   }
 }

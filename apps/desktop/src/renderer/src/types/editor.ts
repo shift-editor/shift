@@ -10,7 +10,11 @@ export type CursorType =
   | { type: "pen" }
   | { type: "pen-add" }
   | { type: "pen-end" }
-  | { type: "not-allowed" };
+  | { type: "not-allowed" }
+  | { type: "ew-resize" }
+  | { type: "ns-resize" }
+  | { type: "nwse-resize" }
+  | { type: "nesw-resize" };
 
 export type SelectionMode = "preview" | "committed";
 

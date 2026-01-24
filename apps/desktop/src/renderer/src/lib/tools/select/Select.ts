@@ -6,10 +6,30 @@ import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
+import type { CursorType } from "@/types/editor";
 import type { PointId } from "@shift/types";
 
-import { SelectCommands } from "./commands";
+import { SelectCommands, type BoundingRectEdge } from "./commands";
 import type { SelectState } from "./states";
+
+function edgeToCursor(edge: BoundingRectEdge): CursorType {
+  switch (edge) {
+    case "left":
+    case "right":
+      return { type: "ew-resize" };
+    case "top":
+    case "bottom":
+      return { type: "ns-resize" };
+    case "top-left":
+    case "bottom-right":
+      return { type: "nwse-resize" };
+    case "top-right":
+    case "bottom-left":
+      return { type: "nesw-resize" };
+    default:
+      return { type: "default" };
+  }
+}
 
 export class Select implements Tool {
   public readonly name: ToolName = "select";
@@ -235,6 +255,17 @@ export class Select implements Tool {
     this.#sm.when("selected", () => {
       const { pointId } = this.#commands.hitTest(pos);
       this.#commands.updateHover(pos);
+
+      // Check for bounding rect edge hover
+      const edge = this.#commands.hitTestBoundingRectEdge(pos);
+      if (edge && !pointId) {
+        this.#editor.setCursor(edgeToCursor(edge));
+      } else if (pointId) {
+        this.#editor.setCursor({ type: "move" });
+      } else {
+        this.#editor.setCursor({ type: "default" });
+      }
+
       this.#sm.transition({ type: "selected", hoveredPointId: pointId });
     });
   }
