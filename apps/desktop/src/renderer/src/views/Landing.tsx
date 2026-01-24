@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import AppState from "@/store/store";
+import AppState, { getEditor } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 
@@ -9,7 +9,7 @@ export const Landing = () => {
   const handleLoadFont = async () => {
     const filePath = await window.electronAPI?.openFontDialog();
     if (filePath) {
-      const editor = AppState.getState().editor;
+      const editor = getEditor();
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
       AppState.getState().setFilePath(filePath);
@@ -19,7 +19,7 @@ export const Landing = () => {
   };
 
   const handleNewFont = () => {
-    const editor = AppState.getState().editor;
+    const editor = getEditor();
     editor.startEditSession(65);
     AppState.getState().setFilePath(null);
     AppState.getState().clearDirty();

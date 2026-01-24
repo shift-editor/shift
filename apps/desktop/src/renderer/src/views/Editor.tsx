@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 
 import { Toolbar } from "@/components/Toolbar";
 import { Sidebar } from "@/components/sidebar";
-import AppState from "@/store/store";
+import { getEditor } from "@/store/store";
 
 import { EditorView } from "../components/EditorView";
 
@@ -12,7 +12,7 @@ export const Editor = () => {
   const { glyphId } = useParams();
 
   useEffect(() => {
-    const editor = AppState.getState().editor;
+    const editor = getEditor();
 
     const keyDownHandler = (e: KeyboardEvent) => {
       // Zoom in: Cmd+= OR Cmd+Shift++ (both work)
@@ -140,7 +140,7 @@ export const Editor = () => {
   }, [glyphId]);
 
   useEffect(() => {
-    const editor = AppState.getState().editor;
+    const editor = getEditor();
 
     const unsubscribeUndo = window.electronAPI?.onMenuUndo(() => editor.undo());
     const unsubscribeRedo = window.electronAPI?.onMenuRedo(() => editor.redo());

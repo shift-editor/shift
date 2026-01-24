@@ -3,14 +3,14 @@ import { useEffect } from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
 
 import { ThemeProvider } from "@/context/ThemeContext";
-import AppState from "@/store/store";
+import AppState, { getEditor } from "@/store/store";
 
 import { routes } from "./routes";
 
 export const App = () => {
   useEffect(() => {
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
-      const editor = AppState.getState().editor;
+      const editor = getEditor();
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
       AppState.getState().setFilePath(filePath);
@@ -20,7 +20,7 @@ export const App = () => {
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(
       async (savePath) => {
         try {
-          const editor = AppState.getState().editor;
+          const editor = getEditor();
           editor.saveFont(savePath);
           AppState.getState().setFilePath(savePath);
           AppState.getState().clearDirty();

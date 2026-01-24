@@ -1,7 +1,7 @@
 import { createContext, useEffect, useRef } from "react";
 
 import { Canvas2DContext } from "@/lib/graphics/backends/Canvas2DRenderer";
-import AppState from "@/store/store";
+import { getEditor } from "@/store/store";
 import { CanvasRef } from "@/types/graphics";
 
 interface CanvasContext {
@@ -29,7 +29,7 @@ export const CanvasContextProvider = ({
       return ctx;
     };
 
-    const editor = AppState.getState().editor;
+    const editor = getEditor();
 
     const setUpContexts = ({
       interactiveCanvas,

@@ -52,6 +52,20 @@ signal.value
 - **Signals**: Editor internals (canvas, rendering, tools, commands)
 - **Zustand**: React UI state (filename, active tool, panels, preferences)
 
+**Editor Access Pattern:**
+
+The Editor singleton is stored in Zustand but accessed via `getEditor()`:
+
+```typescript
+import { getEditor } from "@/store/store";
+
+// In React components, effects, callbacks, or non-React code
+const editor = getEditor();
+editor.doSomething();
+```
+
+The Editor is a stable singleton that never changes, so `getEditor()` works everywhere without needing a React hook.
+
 **Pattern: Manager + Signals**
 
 ```typescript

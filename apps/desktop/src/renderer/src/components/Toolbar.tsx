@@ -4,7 +4,7 @@ import { ToolsPane } from "./ToolsPane";
 
 export const Toolbar = () => {
   return (
-    <header className="titlebar-drag flex min-h-12 w-screen items-center border-line border-b bg-toolbar py-1">
+    <header className="titlebar-drag flex min-h-12 w-screen items-center bg-toolbar py-1">
       <Titlebar />
       <NavigationPane />
       <ToolsPane />
