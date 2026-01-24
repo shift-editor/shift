@@ -9,7 +9,7 @@ import type { PointId, ContourId, PointTypeString, Point2D } from "@shift/types"
 import { asPointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { Segment } from "@/types/segments";
+import type { Segment, QuadSegment, CubicSegment } from "@/types/segments";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 
 /**
@@ -392,8 +392,6 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    const curve = SegmentOps.toCurve(this.#segment);
-
     switch (this.#segment.type) {
       case "line":
         return this.#splitLine(ctx);
@@ -424,7 +422,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const curve = SegmentOps.toCurve(this.#segment) as QuadraticCurve;
+    const segment = this.#segment as QuadSegment;
+    const curve = SegmentOps.toCurve(segment) as QuadraticCurve;
     const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
       QuadraticCurve,
       QuadraticCurve,
@@ -436,23 +435,23 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const mid = curveA.p1; // same as curveB.p0
     const cB = curveB.c;
 
-    const controlId = asPointId(this.#segment.points.control.id);
-    const anchor2Id = asPointId(this.#segment.points.anchor2.id);
+    const controlId = asPointId(segment.points.control.id);
+    const anchor2Id = asPointId(segment.points.anchor2.id);
 
     // Store original control position for undo
     this.#originalPositions.set(controlId, {
-      x: this.#segment.points.control.x,
-      y: this.#segment.points.control.y,
+      x: segment.points.control.x,
+      y: segment.points.control.y,
     });
 
     // Insert points before anchor2 (they will be inserted in order)
-    // 1. Insert mid (onCurve) before anchor2
+    // 1. Insert mid (onCurve, smooth) before anchor2
     this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(
       anchor2Id,
       mid.x,
       mid.y,
       "onCurve",
-      false,
+      true,
     );
     this.#insertedPointIds.push(this.#splitPointId);
 
@@ -473,7 +472,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const curve = SegmentOps.toCurve(this.#segment) as CubicCurve;
+    const segment = this.#segment as CubicSegment;
+    const curve = SegmentOps.toCurve(segment) as CubicCurve;
     const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
       CubicCurve,
       CubicCurve,
@@ -487,18 +487,17 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const c0B = curveB.c0;
     const c1B = curveB.c1;
 
-    const control1Id = asPointId(this.#segment.points.control1.id);
-    const control2Id = asPointId(this.#segment.points.control2.id);
-    const anchor2Id = asPointId(this.#segment.points.anchor2.id);
+    const control1Id = asPointId(segment.points.control1.id);
+    const control2Id = asPointId(segment.points.control2.id);
 
     // Store original control positions for undo
     this.#originalPositions.set(control1Id, {
-      x: this.#segment.points.control1.x,
-      y: this.#segment.points.control1.y,
+      x: segment.points.control1.x,
+      y: segment.points.control1.y,
     });
     this.#originalPositions.set(control2Id, {
-      x: this.#segment.points.control2.x,
-      y: this.#segment.points.control2.y,
+      x: segment.points.control2.x,
+      y: segment.points.control2.y,
     });
 
     // Insert new points before control2 (so they end up in the right order)
@@ -521,7 +520,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       mid.x,
       mid.y,
       "onCurve",
-      false,
+      true,
     );
     this.#insertedPointIds.push(this.#splitPointId);
 

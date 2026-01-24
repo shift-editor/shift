@@ -7,7 +7,6 @@ import { Tool, ToolName } from "@/types/tool";
 import type { PointHitResult, ContourContext, PenState } from "@/types/pen";
 import { DRAG_THRESHOLD } from "@/types/pen";
 import type { ContourSnapshot, PointSnapshot, Point2D, ContourId } from "@shift/types";
-import type { Segment } from "@/types/segments";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 import { parseSegments } from "@/engine/segments";
 

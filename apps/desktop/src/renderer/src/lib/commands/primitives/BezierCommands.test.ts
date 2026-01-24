@@ -315,14 +315,14 @@ describe("SplitSegmentCommand", () => {
       // Should insert 2 points (mid and cB) before anchor2
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(2);
 
-      // First insertion: mid point (onCurve)
+      // First insertion: mid point (onCurve, smooth)
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         1,
         "p2",
         expect.any(Number), // mid x (should be 50 for t=0.5)
         expect.any(Number), // mid y (should be 50 for t=0.5)
         "onCurve",
-        false,
+        true,
       );
 
       // Second insertion: cB (offCurve)
@@ -403,14 +403,14 @@ describe("SplitSegmentCommand", () => {
         false,
       );
 
-      // Second insertion: mid (onCurve) before control2
+      // Second insertion: mid (onCurve, smooth) before control2
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         2,
         "c2",
         expect.any(Number),
         expect.any(Number),
         "onCurve",
-        false,
+        true,
       );
 
       // Third insertion: c0B (offCurve) before control2
