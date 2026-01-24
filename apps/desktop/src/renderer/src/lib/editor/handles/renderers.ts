@@ -1,26 +1,24 @@
-import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { IRenderer } from "@/types/graphics";
 import type { HandleState } from "@/types/handle";
 
 import {
-  ARROW_SIZE,
-  DIRECTION_INNER_SIZE_OFFSET,
-  DIRECTION_RING_OFFSET,
-  LAST_HANDLE_EDGE_OFFSET,
-  LAST_HANDLE_LERP_SPACING,
+  START_BAR_WIDTH,
+  START_TRIANGLE_SIZE,
+  START_TRIANGLE_GAP,
+  END_BAR_WIDTH,
 } from "./constants";
 import {
-  drawArrowHead,
-  drawDirectionArrow,
   drawFilledCircle,
   drawFilledRect,
   drawStrokedCircle,
   drawStrokedRect,
+  drawHorizontalLine,
+  drawTriangle,
 } from "./primitives";
 
 export interface HandleOptions {
-  isCounterClockWise?: boolean;
+  segmentAngle?: number;
 }
 
 export interface LastHandlePosition {
@@ -44,26 +42,25 @@ export type LastHandleDrawFn = (
   state: HandleState,
 ) => void;
 
-export const drawFirstHandle: HandleDrawFn = (ctx, x, y, state) => {
+export const drawFirstHandle: HandleDrawFn = (ctx, x, y, state, options) => {
   const style = HANDLE_STYLES.first[state];
   ctx.setStyle(style);
 
-  if (state === "selected") {
-    drawFilledCircle(ctx, x, y, style.size);
-  } else {
-    drawStrokedCircle(ctx, x, y, style.size);
-  }
+  const angle = options?.segmentAngle ?? 0;
+  const perpAngle = angle + Math.PI / 2;
+
+  drawHorizontalLine(ctx, x, y, START_BAR_WIDTH, perpAngle);
+
+  const triangleX = x + Math.cos(angle) * (START_TRIANGLE_GAP + START_TRIANGLE_SIZE);
+  const triangleY = y + Math.sin(angle) * (START_TRIANGLE_GAP + START_TRIANGLE_SIZE);
+  drawTriangle(ctx, triangleX, triangleY, START_TRIANGLE_SIZE, angle);
 };
 
 export const drawCornerHandle: HandleDrawFn = (ctx, x, y, state) => {
   const style = HANDLE_STYLES.corner[state];
   ctx.setStyle(style);
-
-  if (state === "selected") {
-    drawFilledRect(ctx, x, y, style.size);
-  } else {
-    drawStrokedRect(ctx, x, y, style.size);
-  }
+  drawFilledRect(ctx, x, y, style.size);
+  drawStrokedRect(ctx, x, y, style.size);
 };
 
 export const drawControlHandle: HandleDrawFn = (ctx, x, y, state) => {
@@ -90,37 +87,18 @@ export const drawDirectionHandle: HandleDrawFn = (
   const style = HANDLE_STYLES.direction[state];
   ctx.setStyle(style);
 
-  if (state === "selected") {
-    drawFilledCircle(ctx, x, y, style.size - DIRECTION_INNER_SIZE_OFFSET);
-  } else {
-    drawStrokedCircle(ctx, x, y, style.size - DIRECTION_INNER_SIZE_OFFSET);
-  }
-
-  ctx.beginPath();
-  const radius = style.size + DIRECTION_RING_OFFSET;
-  ctx.arcTo(x, y, radius, 0, Math.PI, true);
-  ctx.stroke();
-
-  const arrowX = options?.isCounterClockWise ? x - radius : x + radius;
-  drawDirectionArrow(ctx, arrowX, y, "up", ARROW_SIZE);
+  const angle = options?.segmentAngle ?? 0;
+  drawTriangle(ctx, x, y, START_TRIANGLE_SIZE, angle);
 };
 
 export const drawLastHandle: LastHandleDrawFn = (ctx, pos, state) => {
   const style = HANDLE_STYLES.last[state];
   ctx.setStyle(style);
 
-  const p0 = { x: pos.x0, y: pos.y0 };
-  const p1 = { x: pos.x1, y: pos.y1 };
+  const dx = pos.x1 - pos.x0;
+  const dy = pos.y1 - pos.y0;
+  const angle = Math.atan2(dy, dx);
+  const perpAngle = angle + Math.PI / 2;
 
-  const theta = Vec2.angleTo(p0, p1);
-  const arrowSize = style.size;
-
-  const edgePoint = Vec2.lerp(p0, p1, LAST_HANDLE_EDGE_OFFSET);
-  const distance = Vec2.dist(p0, edgePoint);
-  const lerpFactor = LAST_HANDLE_LERP_SPACING / distance;
-
-  for (const t of [0, lerpFactor]) {
-    const { x, y } = Vec2.lerp(p0, p1, t);
-    drawArrowHead(ctx, x, y, theta + Math.PI, arrowSize);
-  }
+  drawHorizontalLine(ctx, pos.x0, pos.y0, END_BAR_WIDTH, perpAngle);
 };

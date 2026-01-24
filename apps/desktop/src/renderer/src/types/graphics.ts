@@ -72,6 +72,7 @@ export interface IRenderer {
 
   scale(x: number, y: number): void;
   translate(x: number, y: number): void;
+  rotate(angle: number): void;
 
   /**
    * @param a - The scale factor for the x-axis

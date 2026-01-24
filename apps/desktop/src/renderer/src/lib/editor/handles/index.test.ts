@@ -34,6 +34,7 @@ function createMockRenderer(): IRenderer {
     fill: vi.fn(),
     scale: vi.fn(),
     translate: vi.fn(),
+    rotate: vi.fn(),
     transform: vi.fn(),
   };
 }
@@ -71,10 +72,10 @@ describe("handles API", () => {
 
     it("should pass options to direction handle", () => {
       drawHandle(ctx, "direction", 100, 100, "idle", {
-        isCounterClockWise: true,
+        segmentAngle: Math.PI / 4,
       });
       expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.arcTo).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
     });
   });
 
@@ -83,7 +84,8 @@ describe("handles API", () => {
       drawHandleLast(ctx, { x0: 100, y0: 100, x1: 200, y1: 200 }, "idle");
 
       expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.stroke).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
+      expect(ctx.drawLine).toHaveBeenCalled();
     });
   });
 });

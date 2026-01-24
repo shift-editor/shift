@@ -26,6 +26,7 @@ export interface CanvasAccentColors {
   indigo: string;
   blue: string;
   cyan: string;
+  gray: string;
 }
 
 export interface ThemeTokens {

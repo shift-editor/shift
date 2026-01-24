@@ -2,6 +2,40 @@ import type { IRenderer } from "@/types/graphics";
 
 import { ARROW_ANGLE } from "./constants";
 
+export function drawHorizontalLine(
+  ctx: IRenderer,
+  x: number,
+  y: number,
+  width: number,
+  angle: number,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.drawLine(-width / 2, 0, width / 2, 0);
+  ctx.restore();
+}
+
+export function drawTriangle(
+  ctx: IRenderer,
+  x: number,
+  y: number,
+  size: number,
+  angle: number,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size / 2, -size * 0.866);
+  ctx.lineTo(-size / 2, size * 0.866);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawFilledCircle(
   ctx: IRenderer,
   x: number,

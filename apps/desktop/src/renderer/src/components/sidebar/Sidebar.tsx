@@ -9,7 +9,7 @@ export const Sidebar = () => {
   const zoomPercent = Math.round(editor.zoom() * 100);
 
   return (
-    <aside className="w-[185px] h-full bg-panel border-l border-line-subtle flex flex-col">
+    <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">
       <div className="px-3 py-2 flex items-center justify-between">
         <span className="text-[9px] font-medium text-primary truncate">
           {fileName ?? "Untitled"}

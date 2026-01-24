@@ -23,6 +23,7 @@ export function applyThemeToCss(theme: ThemeTokens): void {
   root.style.setProperty("--color-canvas-indigo", theme.canvas.indigo);
   root.style.setProperty("--color-canvas-blue", theme.canvas.blue);
   root.style.setProperty("--color-canvas-cyan", theme.canvas.cyan);
+  root.style.setProperty("--color-canvas-gray", theme.canvas.gray);
 }
 
 export function getThemeFromCss(): Partial<ThemeTokens> {
@@ -57,6 +58,7 @@ export function getThemeFromCss(): Partial<ThemeTokens> {
       indigo: style.getPropertyValue("--color-canvas-indigo").trim(),
       blue: style.getPropertyValue("--color-canvas-blue").trim(),
       cyan: style.getPropertyValue("--color-canvas-cyan").trim(),
+      gray: style.getPropertyValue("--color-canvas-gray").trim(),
     },
   };
 }

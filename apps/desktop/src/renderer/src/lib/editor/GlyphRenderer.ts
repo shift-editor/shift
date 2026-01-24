@@ -23,7 +23,6 @@ import {
 } from "./render";
 import { parseSegments } from "@/engine/segments";
 import { Segment } from "@/lib/geo/Segment";
-import { Polygon } from "@shift/geo";
 import type { SelectionManager } from "./SelectionManager";
 import type { HoverManager } from "./HoverManager";
 
@@ -58,7 +57,7 @@ export interface RenderDependencies {
     y: number,
     handleType: Exclude<HandleType, "last">,
     state: HandleState,
-    isCounterClockWise?: boolean,
+    segmentAngle?: number,
   ) => void;
   getSelectedPointData: () => Array<{ x: number; y: number }>;
 }
@@ -284,6 +283,35 @@ export class GlyphRenderer {
   #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
     const viewport = this.#deps.viewport;
 
+    // First pass: draw all handle lines (so handles appear on top)
+    ctx.setStyle(DEFAULT_STYLES);
+    for (const contour of snapshot.contours) {
+      const points = contour.points;
+      const numPoints = points.length;
+
+      if (numPoints === 0) continue;
+
+      for (let idx = 0; idx < numPoints; idx++) {
+        const point = points[idx];
+        if (point.pointType !== "offCurve") continue;
+
+        const { x, y } = viewport.projectUpmToScreen(point.x, point.y);
+        const nextPoint = points[(idx + 1) % numPoints];
+        const prevPoint = points[idx - 1];
+
+        const anchor =
+          nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
+
+        const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(
+          anchor.x,
+          anchor.y,
+        );
+
+        ctx.drawLine(anchorX, anchorY, x, y);
+      }
+    }
+
+    // Second pass: draw all handles (on top of lines)
     for (const contour of snapshot.contours) {
       const points = contour.points;
       const numPoints = points.length;
@@ -304,18 +332,24 @@ export class GlyphRenderer {
         const isLast = idx === numPoints - 1;
 
         if (isFirst) {
+          const nextPoint = points[1];
+          const { x: nx, y: ny } = viewport.projectUpmToScreen(
+            nextPoint.x,
+            nextPoint.y,
+          );
+          const segmentAngle = Math.atan2(ny - y, nx - x);
+
           if (contour.closed) {
-            const clockwise = Polygon.isClockwise(points);
             this.#deps.paintHandle(
               ctx,
               x,
               y,
               "direction",
               handleState,
-              !clockwise,
+              segmentAngle,
             );
           } else {
-            this.#deps.paintHandle(ctx, x, y, "first", handleState);
+            this.#deps.paintHandle(ctx, x, y, "first", handleState, segmentAngle);
           }
           continue;
         }
@@ -337,21 +371,7 @@ export class GlyphRenderer {
             this.#deps.paintHandle(ctx, x, y, "corner", handleState);
           }
         } else {
-          const nextPoint = points[(idx + 1) % numPoints];
-          const prevPoint = points[idx - 1];
-
-          const anchor =
-            nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
-
-          const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(
-            anchor.x,
-            anchor.y,
-          );
-
           this.#deps.paintHandle(ctx, x, y, "control", handleState);
-
-          ctx.setStyle(DEFAULT_STYLES);
-          ctx.drawLine(anchorX, anchorY, x, y);
         }
       }
     }

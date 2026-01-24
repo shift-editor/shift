@@ -25,9 +25,10 @@ export const lightTheme: ThemeTokens = {
     indicator: "#36A6F8",
     purple: "#8b5cf6",
     orange: "#f97316",
-    green: "#22c55e",
+    green: "#03D211",
     indigo: "#6366f1",
     blue: "#3b82f6",
-    cyan: "#06b6d4",
+    cyan: "#0C92F4",
+    gray: "#B0B0B0",
   },
 };

@@ -34,12 +34,14 @@ function createMockRenderer(): IRenderer {
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     cubicTo: vi.fn(),
+    quadTo: vi.fn(),
     arcTo: vi.fn(),
     closePath: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
     scale: vi.fn(),
     translate: vi.fn(),
+    rotate: vi.fn(),
     transform: vi.fn(),
   };
 }
@@ -52,42 +54,45 @@ describe("renderers", () => {
   });
 
   describe("drawFirstHandle", () => {
-    it("should set style and draw filled circle when selected", () => {
-      drawFirstHandle(ctx, 10, 20, "selected");
+    it("should draw horizontal line and triangle", () => {
+      drawFirstHandle(ctx, 10, 20, "idle", { segmentAngle: 0 });
 
       expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.fillCircle).toHaveBeenCalled();
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.translate).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
+      expect(ctx.drawLine).toHaveBeenCalled();
+      expect(ctx.fill).toHaveBeenCalled();
+      expect(ctx.stroke).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
     });
 
-    it("should set style and draw stroked circle when idle", () => {
-      drawFirstHandle(ctx, 10, 20, "idle");
+    it("should use segment angle for orientation", () => {
+      const angle = Math.PI / 4;
+      drawFirstHandle(ctx, 10, 20, "idle", { segmentAngle: angle });
 
-      expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.strokeCircle).toHaveBeenCalled();
-    });
-
-    it("should set style and draw stroked circle when hovered", () => {
-      drawFirstHandle(ctx, 10, 20, "hovered");
-
-      expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.strokeCircle).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
     });
   });
 
   describe("drawCornerHandle", () => {
-    it("should set style and draw filled rect when selected", () => {
-      drawCornerHandle(ctx, 100, 100, "selected");
-
-      expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.fillRect).toHaveBeenCalled();
-    });
-
-    it("should set style and draw stroked rect when idle", () => {
+    it("should draw both filled and stroked rect", () => {
       drawCornerHandle(ctx, 100, 100, "idle");
 
       expect(ctx.setStyle).toHaveBeenCalled();
+      expect(ctx.fillRect).toHaveBeenCalled();
       expect(ctx.strokeRect).toHaveBeenCalled();
     });
+
+    it.each<HandleState>(["idle", "hovered", "selected"])(
+      "should work for state %s",
+      (state) => {
+        drawCornerHandle(ctx, 100, 100, state);
+        expect(ctx.setStyle).toHaveBeenCalled();
+        expect(ctx.fillRect).toHaveBeenCalled();
+        expect(ctx.strokeRect).toHaveBeenCalled();
+      },
+    );
   });
 
   describe("drawControlHandle", () => {
@@ -119,39 +124,40 @@ describe("renderers", () => {
   });
 
   describe("drawDirectionHandle", () => {
-    it("should draw inner circle and arc", () => {
-      drawDirectionHandle(ctx, 100, 100, "idle");
+    it("should draw triangle pointing in segment direction", () => {
+      drawDirectionHandle(ctx, 100, 100, "idle", { segmentAngle: 0 });
 
       expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.strokeCircle).toHaveBeenCalled();
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.translate).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
       expect(ctx.beginPath).toHaveBeenCalled();
-      expect(ctx.arcTo).toHaveBeenCalled();
+      expect(ctx.moveTo).toHaveBeenCalled();
+      expect(ctx.lineTo).toHaveBeenCalled();
+      expect(ctx.closePath).toHaveBeenCalled();
+      expect(ctx.fill).toHaveBeenCalled();
       expect(ctx.stroke).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
     });
 
-    it("should draw filled circle when selected", () => {
-      drawDirectionHandle(ctx, 100, 100, "selected");
+    it("should use segment angle for orientation", () => {
+      const angle = Math.PI / 2;
+      drawDirectionHandle(ctx, 100, 100, "idle", { segmentAngle: angle });
 
-      expect(ctx.fillCircle).toHaveBeenCalled();
-    });
-
-    it("should handle counter-clockwise option", () => {
-      drawDirectionHandle(ctx, 100, 100, "idle", { isCounterClockWise: true });
-
-      expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.stroke).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
     });
   });
 
   describe("drawLastHandle", () => {
-    it("should draw arrows along the direction", () => {
+    it("should draw horizontal line perpendicular to segment direction", () => {
       drawLastHandle(ctx, { x0: 100, y0: 100, x1: 200, y1: 200 }, "idle");
 
       expect(ctx.setStyle).toHaveBeenCalled();
-      expect(ctx.beginPath).toHaveBeenCalled();
-      expect(ctx.moveTo).toHaveBeenCalled();
-      expect(ctx.lineTo).toHaveBeenCalled();
-      expect(ctx.stroke).toHaveBeenCalled();
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.translate).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
+      expect(ctx.drawLine).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
     });
 
     it.each<HandleState>(["idle", "hovered", "selected"])(

@@ -31,10 +31,11 @@ describe("Theme Tokens", () => {
     it("should have all canvas accent color tokens", () => {
       expect(lightTheme.canvas.purple).toBe("#8b5cf6");
       expect(lightTheme.canvas.orange).toBe("#f97316");
-      expect(lightTheme.canvas.green).toBe("#22c55e");
+      expect(lightTheme.canvas.green).toBe("#03D211");
       expect(lightTheme.canvas.indigo).toBe("#6366f1");
       expect(lightTheme.canvas.blue).toBe("#3b82f6");
-      expect(lightTheme.canvas.cyan).toBe("#06b6d4");
+      expect(lightTheme.canvas.cyan).toBe("#0C92F4");
+      expect(lightTheme.canvas.gray).toBe("#B0B0B0");
     });
   });
 });
@@ -52,21 +53,21 @@ describe("Canvas Styles", () => {
       expect(styles.handles.last).toBeDefined();
     });
 
-    it("should use theme purple for anchor handles", () => {
+    it("should use theme cyan for anchor handles", () => {
       expect(styles.handles.corner.idle.strokeStyle).toBe(
-        lightTheme.canvas.purple,
+        lightTheme.canvas.cyan,
       );
       expect(styles.handles.first.idle.strokeStyle).toBe(
-        lightTheme.canvas.purple,
+        lightTheme.canvas.cyan,
       );
       expect(styles.handles.last.idle.strokeStyle).toBe(
-        lightTheme.canvas.purple,
+        lightTheme.canvas.cyan,
       );
     });
 
-    it("should use theme orange for control handles", () => {
+    it("should use theme gray for control handles", () => {
       expect(styles.handles.control.idle.strokeStyle).toBe(
-        lightTheme.canvas.orange,
+        lightTheme.canvas.gray,
       );
     });
 
@@ -76,9 +77,9 @@ describe("Canvas Styles", () => {
       );
     });
 
-    it("should use theme indigo for direction handles", () => {
+    it("should use theme cyan for direction handles", () => {
       expect(styles.handles.direction.idle.strokeStyle).toBe(
-        lightTheme.canvas.indigo,
+        lightTheme.canvas.cyan,
       );
     });
 

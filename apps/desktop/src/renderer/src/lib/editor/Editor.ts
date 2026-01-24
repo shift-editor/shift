@@ -103,8 +103,8 @@ export class Editor {
       hover: this.#hover,
       getPreviewMode: () => this.previewMode,
       getHandleState: (pointId) => this.getHandleState(pointId),
-      paintHandle: (ctx, x, y, handleType, state, isCounterClockWise) =>
-        this.paintHandle(ctx, x, y, handleType, state, isCounterClockWise),
+      paintHandle: (ctx, x, y, handleType, state, segmentAngle) =>
+        this.paintHandle(ctx, x, y, handleType, state, segmentAngle),
       getSelectedPointData: () => this.#getSelectedPointData(),
     });
 
@@ -531,9 +531,9 @@ export class Editor {
     y: number,
     handleType: Exclude<HandleType, "last">,
     state: HandleState,
-    isCounterClockWise?: boolean,
+    segmentAngle?: number,
   ) {
-    drawHandle(ctx, handleType, x, y, state, { isCounterClockWise });
+    drawHandle(ctx, handleType, x, y, state, { segmentAngle });
   }
 
   public getFontMetrics() {

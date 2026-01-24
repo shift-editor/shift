@@ -208,6 +208,10 @@ export class Canvas2DRenderer implements IRenderer {
     this.#renderCtx.translate(x, y);
   }
 
+  rotate(angle: number): void {
+    this.#renderCtx.rotate(angle);
+  }
+
   transform(
     a: number,
     b: number,
