@@ -1,51 +1,43 @@
-import { signal, type WritableSignal } from "../reactive/signal";
+import { signal, type WritableSignal, type Signal } from "../reactive/signal";
 import type { PointId } from "@shift/types";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { VisualState } from "@/types/editor";
 
 export class HoverManager {
-  #hoveredPointId: WritableSignal<PointId | null>;
-  #hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
+  private $hoveredPointId: WritableSignal<PointId | null>;
+  private $hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
 
   constructor() {
-    this.#hoveredPointId = signal<PointId | null>(null);
-    this.#hoveredSegmentId = signal<SegmentIndicator | null>(null);
+    this.$hoveredPointId = signal<PointId | null>(null);
+    this.$hoveredSegmentId = signal<SegmentIndicator | null>(null);
   }
 
-  get hoveredPointId(): PointId | null {
-    return this.#hoveredPointId.value;
+  get hoveredPointId(): Signal<PointId | null> {
+    return this.$hoveredPointId;
   }
 
-  get hoveredSegmentId(): SegmentIndicator | null {
-    return this.#hoveredSegmentId.value;
-  }
-
-  get hoveredPointIdSignal(): WritableSignal<PointId | null> {
-    return this.#hoveredPointId;
-  }
-
-  get hoveredSegmentIdSignal(): WritableSignal<SegmentIndicator | null> {
-    return this.#hoveredSegmentId;
+  get hoveredSegmentId(): Signal<SegmentIndicator | null> {
+    return this.$hoveredSegmentId;
   }
 
   setHoveredPoint(pointId: PointId | null): void {
-    this.#hoveredPointId.set(pointId);
+    this.$hoveredPointId.set(pointId);
     if (pointId !== null) {
-      this.#hoveredSegmentId.set(null);
+      this.$hoveredSegmentId.set(null);
     }
   }
 
   setHoveredSegment(indicator: SegmentIndicator | null): void {
-    this.#hoveredSegmentId.set(indicator);
+    this.$hoveredSegmentId.set(indicator);
     if (indicator !== null) {
-      this.#hoveredPointId.set(null);
+      this.$hoveredPointId.set(null);
     }
   }
 
   clearHover(): void {
-    this.#hoveredPointId.set(null);
-    this.#hoveredSegmentId.set(null);
+    this.$hoveredPointId.set(null);
+    this.$hoveredSegmentId.set(null);
   }
 
   getPointVisualState(
@@ -55,11 +47,11 @@ export class HoverManager {
     if (isPointSelected(pointId)) {
       return "selected";
     }
-    if (this.#hoveredPointId.value === pointId) {
+    if (this.$hoveredPointId.value === pointId) {
       return "hovered";
     }
 
-    const hoveredSegment = this.#hoveredSegmentId.value;
+    const hoveredSegment = this.$hoveredSegmentId.value;
     if (hoveredSegment) {
       const segmentPointIds = this.#getPointIdsFromSegmentId(
         hoveredSegment.segmentId,
@@ -78,7 +70,7 @@ export class HoverManager {
     if (isSegmentSelected(segmentId)) {
       return "selected";
     }
-    if (this.#hoveredSegmentId.value?.segmentId === segmentId) {
+    if (this.$hoveredSegmentId.value?.segmentId === segmentId) {
       return "hovered";
     }
     return "idle";

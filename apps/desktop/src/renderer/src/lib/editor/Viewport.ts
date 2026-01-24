@@ -12,15 +12,13 @@ const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 32;
 
 export class Viewport {
-  // Reactive viewport state (signals auto-invalidate derived matrices)
-  readonly #zoom: WritableSignal<number>;
-  readonly #panX: WritableSignal<number>;
-  readonly #panY: WritableSignal<number>;
-  readonly #upm: WritableSignal<number>;
-  readonly #descender: WritableSignal<number>;
-  readonly #padding: WritableSignal<number>;
+  private readonly $zoom: WritableSignal<number>;
+  private readonly $panX: WritableSignal<number>;
+  private readonly $panY: WritableSignal<number>;
+  private readonly $upm: WritableSignal<number>;
+  private readonly $descender: WritableSignal<number>;
+  private readonly $padding: WritableSignal<number>;
 
-  // Non-reactive state
   #canvasRect: Rect2D;
   #dpr: number;
 
@@ -30,18 +28,16 @@ export class Viewport {
   #upmX: number;
   #upmY: number;
 
-  // Computed matrices (automatically recompute when dependencies change)
-  readonly #upmToScreenMatrix: Signal<Mat>;
-  readonly #screenToUpmMatrix: Signal<Mat>;
+  private readonly $upmToScreenMatrix: Signal<Mat>;
+  private readonly $screenToUpmMatrix: Signal<Mat>;
 
   constructor() {
-    // Initialize signals
-    this.#zoom = signal(1);
-    this.#panX = signal(0);
-    this.#panY = signal(0);
-    this.#upm = signal(1000);
-    this.#descender = signal(-200);
-    this.#padding = signal(300);
+    this.$zoom = signal(1);
+    this.$panX = signal(0);
+    this.$panY = signal(0);
+    this.$upm = signal(1000);
+    this.$descender = signal(-200);
+    this.$padding = signal(300);
 
     this.#dpr =
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
@@ -63,25 +59,21 @@ export class Viewport {
       bottom: 0,
     };
 
-    // Computed matrix: UPM → Screen
-    // Automatically recomputes when zoom, pan, upm, descender, or padding change
-    this.#upmToScreenMatrix = computed(() => {
+    this.$upmToScreenMatrix = computed(() => {
       const scale = this.upmScale;
       const baselineY =
         this.logicalHeight -
-        this.#padding.value -
-        this.#descender.value * scale;
+        this.$padding.value -
+        this.$descender.value * scale;
       const center = this.getCentrePoint();
-      const zoom = this.#zoom.value;
+      const zoom = this.$zoom.value;
 
-      // 1. UPM → View: scale, flip Y, position baseline
       const upmTransform = Mat.Identity()
-        .translate(this.#padding.value, baselineY)
+        .translate(this.$padding.value, baselineY)
         .scale(scale, -scale);
 
-      // 2. View → Screen: zoom and pan around center
-      const panX = this.#panX.value + center.x * (1 - zoom);
-      const panY = this.#panY.value + center.y * (1 - zoom);
+      const panX = this.$panX.value + center.x * (1 - zoom);
+      const panY = this.$panY.value + center.y * (1 - zoom);
       const viewTransform = Mat.Identity()
         .translate(panX, panY)
         .scale(zoom, zoom);
@@ -89,10 +81,8 @@ export class Viewport {
       return Mat.Compose(viewTransform, upmTransform);
     });
 
-    // Computed matrix: Screen → UPM (inverse)
-    // Automatically recomputes when upmToScreenMatrix changes
-    this.#screenToUpmMatrix = computed(() => {
-      return Mat.Inverse(this.#upmToScreenMatrix.value);
+    this.$screenToUpmMatrix = computed(() => {
+      return Mat.Inverse(this.$upmToScreenMatrix.value);
     });
   }
 
@@ -105,34 +95,30 @@ export class Viewport {
     this.#canvasRect = rect;
   }
 
-  // **
-  // Get the upm of the viewport
-  // @returns The upm of the viewport
-  // **
   get upm(): number {
-    return this.#upm.value;
+    return this.$upm.value;
   }
 
   set upm(value: number) {
-    this.#upm.value = value;
+    this.$upm.value = value;
   }
 
   get descender(): number {
-    return this.#descender.value;
+    return this.$descender.value;
   }
 
   set descender(value: number) {
-    this.#descender.value = value;
+    this.$descender.value = value;
   }
 
   get padding(): number {
-    return this.#padding.value;
+    return this.$padding.value;
   }
 
   get upmScale(): number {
-    const availableHeight = this.logicalHeight - 2 * this.#padding.value;
-    if (availableHeight <= 0 || this.#upm.value <= 0) return 1;
-    return availableHeight / this.#upm.value;
+    const availableHeight = this.logicalHeight - 2 * this.$padding.value;
+    if (availableHeight <= 0 || this.$upm.value <= 0) return 1;
+    return availableHeight / this.$upm.value;
   }
 
   // **
@@ -169,24 +155,16 @@ export class Viewport {
     return this.#canvasRect.height;
   }
 
-  // **
-  // Get the scale of the viewport
-  // @returns The scale of the viewport
-  // **
   get scale(): number {
-    return this.#zoom.value;
+    return this.$zoom.value;
   }
 
-  // **
-  // Get the device pixel ratio of the viewport
-  // @returns The device pixel ratio of the viewport
-  // **
   get dpr(): number {
     return this.#dpr;
   }
 
-  public get zoom(): number {
-    return this.#zoom.value;
+  public get zoom(): Signal<number> {
+    return this.$zoom;
   }
 
   // **
@@ -220,7 +198,7 @@ export class Viewport {
   }
 
   #projectScreenToUpmRaw(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.#screenToUpmMatrix.value, { x, y });
+    return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
   }
 
   public projectScreenToUpm(x: number, y: number) {
@@ -232,7 +210,7 @@ export class Viewport {
   }
 
   public projectUpmToScreen(x: number, y: number) {
-    return Mat.applyToPoint(this.#upmToScreenMatrix.value, { x, y });
+    return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
   }
 
   // **
@@ -253,32 +231,18 @@ export class Viewport {
   }
 
   get panX(): number {
-    return this.#panX.value;
+    return this.$panX.value;
   }
 
   get panY(): number {
-    return this.#panY.value;
+    return this.$panY.value;
   }
 
-  // **
-  // Pan the viewport
-  // @param x - The x position of the mouse
-  // @param y - The y position of the mouse
-  // **
   pan(x: number, y: number): void {
-    this.#panX.value = x;
-    this.#panY.value = y;
+    this.$panX.value = x;
+    this.$panY.value = y;
   }
 
-  /**
-   * Zoom toward a specific screen point
-   *
-   * Algorithm:
-   * 1. Record UPM coordinate at cursor BEFORE zoom
-   * 2. Apply zoom factor
-   * 3. Get UPM coordinate at cursor AFTER zoom (same screen position, different UPM due to new matrices)
-   * 4. Adjust pan by the delta to keep cursor over same UPM coordinate
-   */
   public zoomToPoint(
     screenX: number,
     screenY: number,
@@ -286,8 +250,8 @@ export class Viewport {
   ): void {
     const before = this.#projectScreenToUpmRaw(screenX, screenY);
 
-    const newZoom = clamp(this.#zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
-    this.#zoom.value = newZoom;
+    const newZoom = clamp(this.$zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
+    this.$zoom.value = newZoom;
 
     const after = this.#projectScreenToUpmRaw(screenX, screenY);
 
@@ -295,8 +259,8 @@ export class Viewport {
     const deltaX = (before.x - after.x) * scale * newZoom;
     const deltaY = (before.y - after.y) * scale * newZoom;
 
-    this.#panX.value -= deltaX;
-    this.#panY.value += deltaY;
+    this.$panX.value -= deltaX;
+    this.$panY.value += deltaY;
   }
 
   zoomIn(): void {
@@ -309,32 +273,19 @@ export class Viewport {
     this.zoomToPoint(center.x, center.y, 0.8);
   }
 
-  /**
-   * Get the UPM to Screen transformation matrix
-   */
   public getUpmToScreenMatrix(): Mat {
-    return this.#upmToScreenMatrix.value.clone();
+    return this.$upmToScreenMatrix.value.clone();
   }
 
-  /**
-   * Get the Screen to UPM transformation matrix
-   */
   public getScreenToUpmMatrix(): Mat {
-    return this.#screenToUpmMatrix.value.clone();
+    return this.$screenToUpmMatrix.value.clone();
   }
 
-  /**
-   * Convert a screen-space distance to UPM-space distance.
-   * Accounts for both UPM scale and zoom level.
-   */
   public screenToUpmDistance(screenDistance: number): number {
-    return screenDistance / (this.upmScale * this.#zoom.value);
+    return screenDistance / (this.upmScale * this.$zoom.value);
   }
 
-  /**
-   * Get the effective scale factor (upmScale * zoom).
-   */
   public get effectiveScale(): number {
-    return this.upmScale * this.#zoom.value;
+    return this.upmScale * this.$zoom.value;
   }
 }

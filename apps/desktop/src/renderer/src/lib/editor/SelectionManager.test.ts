@@ -15,15 +15,15 @@ describe("SelectionManager", () => {
 
   describe("initialization", () => {
     it("should initialize with empty point selection", () => {
-      expect(selection.selectedPointIds.size).toBe(0);
+      expect(selection.selectedPointIds.peek().size).toBe(0);
     });
 
     it("should initialize with empty segment selection", () => {
-      expect(selection.selectedSegmentIds.size).toBe(0);
+      expect(selection.selectedSegmentIds.peek().size).toBe(0);
     });
 
     it("should initialize with committed selection mode", () => {
-      expect(selection.selectionMode).toBe("committed");
+      expect(selection.selectionMode.peek()).toBe("committed");
     });
 
     it("should report no selection", () => {
@@ -35,46 +35,46 @@ describe("SelectionManager", () => {
     it("should select a single point", () => {
       const pointId = asPointId("p1");
       selection.selectPoint(pointId);
-      expect(selection.selectedPointIds.has(pointId)).toBe(true);
-      expect(selection.selectedPointIds.size).toBe(1);
+      expect(selection.selectedPointIds.peek().has(pointId)).toBe(true);
+      expect(selection.selectedPointIds.peek().size).toBe(1);
     });
 
     it("should select multiple points", () => {
       const pointIds = new Set([asPointId("p1"), asPointId("p2"), asPointId("p3")]);
       selection.selectPoints(pointIds);
-      expect(selection.selectedPointIds.size).toBe(3);
-      expect(selection.selectedPointIds.has(asPointId("p1"))).toBe(true);
-      expect(selection.selectedPointIds.has(asPointId("p2"))).toBe(true);
-      expect(selection.selectedPointIds.has(asPointId("p3"))).toBe(true);
+      expect(selection.selectedPointIds.peek().size).toBe(3);
+      expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(true);
+      expect(selection.selectedPointIds.peek().has(asPointId("p2"))).toBe(true);
+      expect(selection.selectedPointIds.peek().has(asPointId("p3"))).toBe(true);
     });
 
     it("should add point to selection", () => {
       selection.selectPoint(asPointId("p1"));
       selection.addPointToSelection(asPointId("p2"));
-      expect(selection.selectedPointIds.size).toBe(2);
-      expect(selection.selectedPointIds.has(asPointId("p1"))).toBe(true);
-      expect(selection.selectedPointIds.has(asPointId("p2"))).toBe(true);
+      expect(selection.selectedPointIds.peek().size).toBe(2);
+      expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(true);
+      expect(selection.selectedPointIds.peek().has(asPointId("p2"))).toBe(true);
     });
 
     it("should remove point from selection", () => {
       selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
       selection.removePointFromSelection(asPointId("p1"));
-      expect(selection.selectedPointIds.size).toBe(1);
-      expect(selection.selectedPointIds.has(asPointId("p1"))).toBe(false);
-      expect(selection.selectedPointIds.has(asPointId("p2"))).toBe(true);
+      expect(selection.selectedPointIds.peek().size).toBe(1);
+      expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(false);
+      expect(selection.selectedPointIds.peek().has(asPointId("p2"))).toBe(true);
     });
 
     it("should toggle point selection (add)", () => {
       selection.selectPoint(asPointId("p1"));
       selection.togglePointSelection(asPointId("p2"));
-      expect(selection.selectedPointIds.size).toBe(2);
+      expect(selection.selectedPointIds.peek().size).toBe(2);
     });
 
     it("should toggle point selection (remove)", () => {
       selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
       selection.togglePointSelection(asPointId("p1"));
-      expect(selection.selectedPointIds.size).toBe(1);
-      expect(selection.selectedPointIds.has(asPointId("p1"))).toBe(false);
+      expect(selection.selectedPointIds.peek().size).toBe(1);
+      expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(false);
     });
 
     it("should check if point is selected", () => {
@@ -86,8 +86,8 @@ describe("SelectionManager", () => {
     it("should replace selection when selecting new point", () => {
       selection.selectPoint(asPointId("p1"));
       selection.selectPoint(asPointId("p2"));
-      expect(selection.selectedPointIds.size).toBe(1);
-      expect(selection.selectedPointIds.has(asPointId("p2"))).toBe(true);
+      expect(selection.selectedPointIds.peek().size).toBe(1);
+      expect(selection.selectedPointIds.peek().has(asPointId("p2"))).toBe(true);
     });
   });
 
@@ -95,8 +95,8 @@ describe("SelectionManager", () => {
     it("should select a single segment", () => {
       const segmentId = asSegmentId("p1:p2");
       selection.selectSegment(segmentId);
-      expect(selection.selectedSegmentIds.has(segmentId)).toBe(true);
-      expect(selection.selectedSegmentIds.size).toBe(1);
+      expect(selection.selectedSegmentIds.peek().has(segmentId)).toBe(true);
+      expect(selection.selectedSegmentIds.peek().size).toBe(1);
     });
 
     it("should select multiple segments", () => {
@@ -106,13 +106,13 @@ describe("SelectionManager", () => {
         asSegmentId("p3:p4"),
       ]);
       selection.selectSegments(segmentIds);
-      expect(selection.selectedSegmentIds.size).toBe(3);
+      expect(selection.selectedSegmentIds.peek().size).toBe(3);
     });
 
     it("should add segment to selection", () => {
       selection.selectSegment(asSegmentId("p1:p2"));
       selection.addSegmentToSelection(asSegmentId("p2:p3"));
-      expect(selection.selectedSegmentIds.size).toBe(2);
+      expect(selection.selectedSegmentIds.peek().size).toBe(2);
     });
 
     it("should remove segment from selection", () => {
@@ -120,8 +120,8 @@ describe("SelectionManager", () => {
         new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
       );
       selection.removeSegmentFromSelection(asSegmentId("p1:p2"));
-      expect(selection.selectedSegmentIds.size).toBe(1);
-      expect(selection.selectedSegmentIds.has(asSegmentId("p1:p2"))).toBe(
+      expect(selection.selectedSegmentIds.peek().size).toBe(1);
+      expect(selection.selectedSegmentIds.peek().has(asSegmentId("p1:p2"))).toBe(
         false,
       );
     });
@@ -129,7 +129,7 @@ describe("SelectionManager", () => {
     it("should toggle segment selection (add)", () => {
       selection.selectSegment(asSegmentId("p1:p2"));
       selection.toggleSegmentInSelection(asSegmentId("p2:p3"));
-      expect(selection.selectedSegmentIds.size).toBe(2);
+      expect(selection.selectedSegmentIds.peek().size).toBe(2);
     });
 
     it("should toggle segment selection (remove)", () => {
@@ -137,7 +137,7 @@ describe("SelectionManager", () => {
         new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
       );
       selection.toggleSegmentInSelection(asSegmentId("p1:p2"));
-      expect(selection.selectedSegmentIds.size).toBe(1);
+      expect(selection.selectedSegmentIds.peek().size).toBe(1);
     });
 
     it("should check if segment is selected", () => {
@@ -151,7 +151,7 @@ describe("SelectionManager", () => {
     it("should clear point selection", () => {
       selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
       selection.clearSelection();
-      expect(selection.selectedPointIds.size).toBe(0);
+      expect(selection.selectedPointIds.peek().size).toBe(0);
     });
 
     it("should clear segment selection", () => {
@@ -159,15 +159,15 @@ describe("SelectionManager", () => {
         new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
       );
       selection.clearSelection();
-      expect(selection.selectedSegmentIds.size).toBe(0);
+      expect(selection.selectedSegmentIds.peek().size).toBe(0);
     });
 
     it("should clear both point and segment selection", () => {
       selection.selectPoint(asPointId("p1"));
       selection.selectSegment(asSegmentId("p1:p2"));
       selection.clearSelection();
-      expect(selection.selectedPointIds.size).toBe(0);
-      expect(selection.selectedSegmentIds.size).toBe(0);
+      expect(selection.selectedPointIds.peek().size).toBe(0);
+      expect(selection.selectedSegmentIds.peek().size).toBe(0);
     });
   });
 
@@ -192,37 +192,37 @@ describe("SelectionManager", () => {
   describe("selection mode", () => {
     it("should set selection mode to preview", () => {
       selection.setSelectionMode("preview");
-      expect(selection.selectionMode).toBe("preview");
+      expect(selection.selectionMode.peek()).toBe("preview");
     });
 
     it("should set selection mode to committed", () => {
       selection.setSelectionMode("preview");
       selection.setSelectionMode("committed");
-      expect(selection.selectionMode).toBe("committed");
+      expect(selection.selectionMode.peek()).toBe("committed");
     });
   });
 
   describe("signals", () => {
     it("should provide access to selectedPointIds signal", () => {
-      const signal = selection.selectedPointIdsSignal;
+      const signal = selection.selectedPointIds;
       expect(signal).toBeDefined();
       expect(signal.value.size).toBe(0);
     });
 
     it("should provide access to selectedSegmentIds signal", () => {
-      const signal = selection.selectedSegmentIdsSignal;
+      const signal = selection.selectedSegmentIds;
       expect(signal).toBeDefined();
       expect(signal.value.size).toBe(0);
     });
 
     it("should provide access to selectionMode signal", () => {
-      const signal = selection.selectionModeSignal;
+      const signal = selection.selectionMode;
       expect(signal).toBeDefined();
       expect(signal.value).toBe("committed");
     });
 
     it("should update signal value when selecting points", () => {
-      const signal = selection.selectedPointIdsSignal;
+      const signal = selection.selectedPointIds;
       selection.selectPoint(asPointId("p1"));
       expect(signal.value.has(asPointId("p1"))).toBe(true);
     });

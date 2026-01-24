@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@shift/ui";
-import { useSignalValue } from "@/lib/reactive/useSignal";
+import { useValue } from "@/lib/reactive";
 import AppState, { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import { ToolName } from "@/types/tool";
@@ -65,7 +65,7 @@ export const ToolsPane: FC = () => {
   const fileName = AppState((state) => state.fileName);
   const isDirty = AppState((state) => state.isDirty);
 
-  const activeTool = useSignalValue(editor.activeToolSignal);
+  const activeTool = useValue(editor.activeTool);
 
   const displayName = fileName ?? "Untitled";
   const title = isDirty ? `${displayName}*` : displayName;

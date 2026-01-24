@@ -9,9 +9,9 @@ import { effect, type Signal } from "./signal";
  *
  * @example
  * const editor = getEditor();
- * const activeTool = useSignalValue(editor.activeToolSignal);
+ * const activeTool = useValue(editor.activeTool);
  */
-export function useSignalValue<T>(signal: Signal<T>): T {
+export function useValue<T>(signal: Signal<T>): T {
   return useSyncExternalStore(
     (callback) => {
       const fx = effect(() => {

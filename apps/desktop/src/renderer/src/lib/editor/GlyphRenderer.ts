@@ -106,7 +106,7 @@ export class GlyphRenderer {
   #applyUserTransforms(ctx: IRenderer): void {
     const viewport = this.#deps.viewport;
     const center = viewport.getCentrePoint();
-    const zoom = viewport.zoom;
+    const zoom = viewport.zoom.peek();
     const { panX, panY } = viewport;
 
     ctx.transform(
@@ -188,9 +188,9 @@ export class GlyphRenderer {
     }
 
     const shouldDrawBoundingRect =
-      this.#deps.selection.selectedPointIdsSignal.peek().size > 0 &&
+      this.#deps.selection.selectedPointIds.peek().size > 0 &&
       !this.#deps.getPreviewMode() &&
-      this.#deps.selection.selectionMode === "committed";
+      this.#deps.selection.selectionMode.peek() === "committed";
 
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#deps.getSelectedPointData();
@@ -225,9 +225,9 @@ export class GlyphRenderer {
   }
 
   #drawSegmentHighlights(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    const hoveredSegment = this.#deps.hover.hoveredSegmentId;
+    const hoveredSegment = this.#deps.hover.hoveredSegmentId.peek();
     const selectedSegments =
-      this.#deps.selection.selectedSegmentIdsSignal.peek();
+      this.#deps.selection.selectedSegmentIds.peek();
 
     if (!hoveredSegment && selectedSegments.size === 0) return;
 

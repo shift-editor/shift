@@ -25,6 +25,34 @@ signal.value
 3. **Batched Effects**: Effects queued during batch, executed at batch end
 4. **Cleanup Support**: Effects can return cleanup functions
 
+## Signal Naming Convention
+
+Classes that use signals follow a consistent naming pattern:
+
+**Internal (private) fields use `$` prefix:**
+```typescript
+private readonly $zoom: WritableSignal<number>;
+private readonly $selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
+```
+
+**Public getters return the Signal (not the value):**
+```typescript
+public get zoom(): Signal<number> {
+  return this.$zoom;
+}
+```
+
+**Usage patterns:**
+```typescript
+// Reactive - component re-renders on change
+const zoom = useValue(editor.zoom);
+
+// Non-reactive - reads without tracking ("unsafe" escape hatch)
+const zoom = editor.zoom.peek();
+```
+
+**Design principle:** The `$` prefix is internal documentation indicating a signal field. Use `private` keyword (not `#`) for signal fields to avoid `#$` awkwardness. Users opt into reactivity with `useValue()`, and use `.peek()` for imperative non-reactive reads.
+
 ## When to Use Signals
 
 **Use signals for:**
@@ -69,27 +97,35 @@ The Editor is a stable singleton that never changes, so `getEditor()` works ever
 **Pattern: Manager + Signals**
 
 ```typescript
-function createSelectionManager() {
-  const selectedPoints = signal<ReadonlySet<PointId>>(new Set());
+class SelectionManager {
+  private $selectedPoints: WritableSignal<ReadonlySet<PointId>>;
 
-  return {
-    // Getter tracks dependency when accessed inside effect()
-    get selectedPoints() {
-      return selectedPoints.value;
-    },
+  constructor() {
+    this.$selectedPoints = signal<ReadonlySet<PointId>>(new Set());
+  }
 
-    // Mutator uses peek() to read without tracking, .value to write
-    addToSelection(id) {
-      const next = new Set(selectedPoints.peek());
-      next.add(id);
-      selectedPoints.value = next;
-    },
-  };
+  // Public getter returns the Signal for reactive access
+  get selectedPoints(): Signal<ReadonlySet<PointId>> {
+    return this.$selectedPoints;
+  }
+
+  // Mutator uses peek() to read without tracking
+  addToSelection(id: PointId): void {
+    const next = new Set(this.$selectedPoints.peek());
+    next.add(id);
+    this.$selectedPoints.set(next);
+  }
 }
 
-// Consumer auto-subscribes via effect()
+// React component subscribes via useValue()
+function MyComponent() {
+  const selectedPoints = useValue(manager.selectedPoints);
+  return <div>Selected: {selectedPoints.size}</div>;
+}
+
+// Effect subscribes via .value
 effect(() => {
-  manager.selectedPoints; // Tracks dependency
+  manager.selectedPoints.value; // Tracks dependency
   redraw();
 });
 ```

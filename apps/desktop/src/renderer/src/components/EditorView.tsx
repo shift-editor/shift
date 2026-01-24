@@ -16,12 +16,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to the reactive cursor signal
-  const [cursor, setCursor] = useState(() => editor.cursor);
+  const [cursor, setCursor] = useState(() => editor.cursor.peek());
 
   useEffect(() => {
     const fx = effect(() => {
-      setCursor(editor.cursorSignal.value);
+      setCursor(editor.cursor.value);
     });
     return () => fx.dispose();
   }, [editor]);

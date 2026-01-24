@@ -333,6 +333,6 @@ export class SelectCommands {
   }
 
   getHoveredSegment(): SegmentIndicator | null {
-    return this.#editor.hoveredSegmentId;
+    return this.#editor.hoveredSegmentId.peek();
   }
 }

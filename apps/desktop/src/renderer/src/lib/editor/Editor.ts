@@ -1,6 +1,6 @@
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
 import type { HandleState, HandleType } from "@/types/handle";
-import type { CursorType, ToolRegistryItem, VisualState } from "@/types/editor";
+import type { CursorType, SelectionMode, ToolRegistryItem, VisualState } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asContourId } from "@shift/types";
 import { findPointInSnapshot, findPointsInSnapshot } from "../utils/snapshot";
@@ -28,8 +28,7 @@ import {
   type TransformablePoint,
   type SelectionBounds,
 } from "../transform";
-import { effect, type Effect } from "../reactive/signal";
-import { signal, type WritableSignal } from "../reactive/signal";
+import { effect, signal, type Effect, type Signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
 import { SelectionManager } from "./SelectionManager";
 import { HoverManager } from "./HoverManager";
@@ -59,14 +58,14 @@ function debug(...args: unknown[]) {
 
 
 export class Editor {
-  #previewMode: WritableSignal<boolean>;
+  private $previewMode: WritableSignal<boolean>;
 
   #selection: SelectionManager;
   #hover: HoverManager;
   #renderer: GlyphRenderer;
 
   #tools: Map<ToolName, ToolRegistryItem>;
-  #activeTool: WritableSignal<ToolName>;
+  private $activeTool: WritableSignal<ToolName>;
 
   #viewport: Viewport;
   #commandHistory: CommandHistory;
@@ -74,8 +73,7 @@ export class Editor {
   #redrawEffect: Effect;
   #clipboardManager: ClipboardManager;
 
-  /** Reactive cursor signal - subscribe to this for cursor changes */
-  #cursor: WritableSignal<string>;
+  private $cursor: WritableSignal<string>;
 
   constructor() {
     this.#viewport = new Viewport();
@@ -85,14 +83,14 @@ export class Editor {
       () => this.#fontEngine.snapshot.value,
     );
 
-    this.#previewMode = signal(false);
-    this.#cursor = signal("default");
+    this.$previewMode = signal(false);
+    this.$cursor = signal("default");
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
 
     this.#tools = new Map();
-    this.#activeTool = signal<ToolName>("select");
+    this.$activeTool = signal<ToolName>("select");
 
     this.#renderer = new GlyphRenderer({
       viewport: this.#viewport,
@@ -101,7 +99,7 @@ export class Editor {
       getActiveTool: () => this.getActiveTool(),
       selection: this.#selection,
       hover: this.#hover,
-      getPreviewMode: () => this.previewMode,
+      getPreviewMode: () => this.previewMode.peek(),
       getHandleState: (pointId) => this.getHandleState(pointId),
       paintHandle: (ctx, x, y, handleType, state, segmentAngle) =>
         this.paintHandle(ctx, x, y, handleType, state, segmentAngle),
@@ -110,9 +108,9 @@ export class Editor {
 
     this.#clipboardManager = new ClipboardManager({
       getSnapshot: () => this.#fontEngine.snapshot.value,
-      getSelectedPointIds: () => this.#selection.selectedPointIdsSignal.peek(),
+      getSelectedPointIds: () => this.#selection.selectedPointIds.peek(),
       getSelectedSegmentIds: () =>
-        this.#selection.selectedSegmentIdsSignal.peek(),
+        this.#selection.selectedSegmentIds.peek(),
       getGlyphName: () => this.#fontEngine.snapshot.value?.name,
       pasteContours: (json, x, y) =>
         this.#fontEngine.editing.pasteContours(json, x, y),
@@ -121,12 +119,12 @@ export class Editor {
 
     this.#redrawEffect = effect(() => {
       this.#fontEngine.snapshot.value;
-      this.#selection.selectedPointIdsSignal.value;
-      this.#selection.selectedSegmentIdsSignal.value;
-      this.#selection.selectionModeSignal.value;
-      this.#hover.hoveredPointIdSignal.value;
-      this.#hover.hoveredSegmentIdSignal.value;
-      this.#previewMode.value;
+      this.#selection.selectedPointIds.value;
+      this.#selection.selectedSegmentIds.value;
+      this.#selection.selectionMode.value;
+      this.#hover.hoveredPointId.value;
+      this.#hover.hoveredSegmentId.value;
+      this.$previewMode.value;
       this.requestRedraw();
     });
   }
@@ -144,42 +142,36 @@ export class Editor {
     return this.#tools;
   }
 
-  public get activeTool(): ToolName {
-    return this.#activeTool.value;
-  }
-
-  public get activeToolSignal(): WritableSignal<ToolName> {
-    return this.#activeTool;
+  public get activeTool(): Signal<ToolName> {
+    return this.$activeTool;
   }
 
   public setActiveTool(toolName: ToolName): void {
-    const currentToolName = this.#activeTool.value;
+    const currentToolName = this.$activeTool.value;
     if (currentToolName === toolName) return;
 
-    // Deactivate the current tool
     const oldTool = this.#tools.get(currentToolName);
     if (oldTool) {
       oldTool.tool.setIdle();
     }
 
-    // Activate the new tool
     const newTool = this.#tools.get(toolName);
     if (newTool) {
       newTool.tool.setReady();
     }
 
-    this.#activeTool.set(toolName);
+    this.$activeTool.set(toolName);
   }
 
   public getActiveTool(): Tool {
-    const tool = this.#tools.get(this.#activeTool.value);
+    const tool = this.#tools.get(this.$activeTool.value);
     if (!tool) {
-      throw new Error(`Tool ${this.#activeTool.value} not found`);
+      throw new Error(`Tool ${this.$activeTool.value} not found`);
     }
     return tool.tool;
   }
 
-  public get selectedPointIds(): ReadonlySet<PointId> {
+  public get selectedPointIds(): Signal<ReadonlySet<PointId>> {
     return this.#selection.selectedPointIds;
   }
 
@@ -207,7 +199,7 @@ export class Editor {
     return this.#selection.isPointSelected(pointId);
   }
 
-  public get selectedSegmentIds(): ReadonlySet<SegmentId> {
+  public get selectedSegmentIds(): Signal<ReadonlySet<SegmentId>> {
     return this.#selection.selectedSegmentIds;
   }
 
@@ -243,7 +235,7 @@ export class Editor {
     return this.#selection.hasSelection();
   }
 
-  public get selectionMode() {
+  public get selectionMode(): Signal<SelectionMode> {
     return this.#selection.selectionMode;
   }
 
@@ -251,15 +243,11 @@ export class Editor {
     this.#selection.setSelectionMode(mode);
   }
 
-  public get selectedPointIdsSignal() {
-    return this.#selection.selectedPointIdsSignal;
-  }
-
-  public get hoveredPointId(): PointId | null {
+  public get hoveredPointId(): Signal<PointId | null> {
     return this.#hover.hoveredPointId;
   }
 
-  public get hoveredSegmentId(): SegmentIndicator | null {
+  public get hoveredSegmentId(): Signal<SegmentIndicator | null> {
     return this.#hover.hoveredSegmentId;
   }
 
@@ -287,12 +275,12 @@ export class Editor {
     );
   }
 
-  public get previewMode(): boolean {
-    return this.#previewMode.value;
+  public get previewMode(): Signal<boolean> {
+    return this.$previewMode;
   }
 
   public setPreviewMode(enabled: boolean): void {
-    this.#previewMode.set(enabled);
+    this.$previewMode.set(enabled);
   }
 
   public setStaticContext(context: IGraphicContext) {
@@ -325,11 +313,11 @@ export class Editor {
 
     return {
       snapshot: fontEngine.snapshot.value,
-      selectedPoints: this.selectedPointIds,
-      hoveredPoint: this.hoveredPointId,
-      hoveredSegment: this.hoveredSegmentId,
+      selectedPoints: this.selectedPointIds.peek(),
+      hoveredPoint: this.hoveredPointId.peek(),
+      hoveredSegment: this.hoveredSegmentId.peek(),
       mousePosition: viewport.getUpmMousePosition(),
-      selectionMode: this.selectionMode,
+      selectionMode: this.selectionMode.peek(),
 
       screen: {
         toUpmDistance: (px) => viewport.screenToUpmDistance(px),
@@ -517,9 +505,6 @@ export class Editor {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
-  public zoom(): number {
-    return this.#viewport.zoom;
-  }
 
   public getHandleState(pointId: PointId): HandleState {
     return this.getPointVisualState(pointId);
@@ -557,23 +542,20 @@ export class Editor {
     this.#fontEngine.io.saveFont(filePath);
   }
 
-  /** Get the current cursor value */
-  public get cursor(): string {
-    return this.#cursor.value;
+  public get cursor(): Signal<string> {
+    return this.$cursor;
   }
 
-  /** Get the cursor signal for reactive subscriptions */
-  public get cursorSignal(): WritableSignal<string> {
-    return this.#cursor;
-  }
-
-  /** Set the cursor style using a discriminated union type */
   public setCursor(cursor: CursorType): void {
-    this.#cursor.set(cursorToCSS(cursor));
+    this.$cursor.set(cursorToCSS(cursor));
+  }
+
+  public get zoom(): Signal<number> {
+    return this.#viewport.zoom;
   }
 
   public deleteSelectedPoints(): void {
-    const selectedIds = this.#selection.selectedPointIdsSignal.peek();
+    const selectedIds = this.#selection.selectedPointIds.peek();
     if (selectedIds.size > 0) {
       this.#fontEngine.editing.removePoints([...selectedIds]);
       this.clearSelection();
@@ -634,7 +616,7 @@ export class Editor {
    * @param origin - Optional origin point; defaults to selection center
    */
   public rotateSelection(angle: number, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
@@ -644,14 +626,8 @@ export class Editor {
     this.#commandHistory.execute(cmd);
   }
 
-  /**
-   * Scale selected points.
-   * @param sx - Scale factor X
-   * @param sy - Scale factor Y
-   * @param origin - Optional origin; defaults to selection center
-   */
   public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
     const o = origin ?? this.getSelectionCenter();
@@ -661,13 +637,8 @@ export class Editor {
     this.#commandHistory.execute(cmd);
   }
 
-  /**
-   * Reflect (mirror) selected points across an axis.
-   * @param axis - 'horizontal' | 'vertical' | { angle: number }
-   * @param origin - Optional origin; defaults to selection center
-   */
   public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIdsSignal.peek()];
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
@@ -690,7 +661,7 @@ export class Editor {
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
-    for (const pointId of this.#selection.selectedPointIdsSignal.peek()) {
+    for (const pointId of this.#selection.selectedPointIds.peek()) {
       const found = findPointInSnapshot(snapshot, pointId);
       if (found) {
         result.push({ x: found.point.x, y: found.point.y });
@@ -705,7 +676,7 @@ export class Editor {
 
     return findPointsInSnapshot(
       snapshot,
-      this.#selection.selectedPointIdsSignal.peek(),
+      this.#selection.selectedPointIds.peek(),
     ).map((p) => ({
       id: p.id as PointId,
       x: p.x,

@@ -2,11 +2,13 @@ import { Divider } from "@shift/ui";
 import { TransformSection } from "./TransformSection";
 import { ScaleSection } from "./ScaleSection";
 import AppState, { getEditor } from "@/store/store";
+import { useValue } from "@/lib/reactive";
 
 export const Sidebar = () => {
   const fileName = AppState((state) => state.fileName);
   const editor = getEditor();
-  const zoomPercent = Math.round(editor.zoom() * 100);
+  const zoom = useValue(editor.zoom);
+  const zoomPercent = Math.round(zoom * 100);
 
   return (
     <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSignalValue } from "@/lib/reactive/useSignal";
+import { useValue } from "@/lib/reactive";
 import { getEditor } from "@/store/store";
 import type { SelectionBounds } from "@/types/transform";
 
@@ -13,7 +13,7 @@ export interface SelectionData {
 
 export function useSelectionBounds(): SelectionData {
   const editor = getEditor();
-  const selectedPointIds = useSignalValue(editor.selectedPointIdsSignal);
+  const selectedPointIds = useValue(editor.selectedPointIds);
 
   return useMemo(() => {
     if (selectedPointIds.size === 0) {
