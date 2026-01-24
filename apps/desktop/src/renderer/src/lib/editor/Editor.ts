@@ -43,9 +43,7 @@ function cursorToCSS(cursor: CursorType): string {
     case "pen":
       return `-webkit-image-set(url("/cursors/pen@32.svg") 1x, url("/cursors/pen@64.svg") 2x) 8 8, crosshair`;
     case "pen-add":
-      // Use crosshair for now to indicate adding a point on a curve
-      // TODO: Create a dedicated pen-add cursor icon
-      return `crosshair`;
+      return `-webkit-image-set(url("/cursors/pen@32-add.svg") 1x, url("/cursors/pen@64-add.svg") 2x) 8 8, crosshair`;
     case "pen-end":
       return `-webkit-image-set(url("/cursors/pen@32-end.svg") 1x, url("/cursors/pen@64-end.svg") 2x) 8 8, crosshair`;
     default:

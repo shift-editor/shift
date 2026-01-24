@@ -58,7 +58,8 @@
       "WebFetch(domain:bluewings.github.io)",
       "WebFetch(domain:bhaireshm.medium.com)",
       "WebFetch(domain:medium.com)",
-      "WebFetch(domain:web.dev)"
+      "WebFetch(domain:web.dev)",
+      "Bash(git push:*)"
     ]
   }
 }
