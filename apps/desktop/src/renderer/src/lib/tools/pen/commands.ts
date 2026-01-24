@@ -13,8 +13,10 @@ import {
   AddContourCommand,
   SetActiveContourCommand,
   ReverseContourCommand,
+  SplitSegmentCommand,
 } from "@/lib/commands";
 import { Vec2 } from "@shift/geo";
+import type { Segment } from "@/types/segments";
 
 export class PenCommands {
   #editor: Editor;
@@ -201,5 +203,19 @@ export class PenCommands {
     if (pointIdsToRemove.length > 0) {
       ctx.edit.removePoints(pointIdsToRemove);
     }
+  }
+
+  /**
+   * Split a curve segment at the given parameter t.
+   * Inserts a new on-curve point and adjusts control points accordingly.
+   *
+   * @param segment - The segment to split
+   * @param t - The parameter value (0-1) where to split
+   * @returns The ID of the new on-curve point, or null if split failed
+   */
+  splitSegment(segment: Segment, t: number): PointId | null {
+    const ctx = this.#editor.createToolContext();
+    const cmd = new SplitSegmentCommand(segment, t);
+    return ctx.commands.execute(cmd);
   }
 }

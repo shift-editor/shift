@@ -13,4 +13,5 @@ export {
   SetActiveContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
+  SplitSegmentCommand,
 } from "./BezierCommands";

@@ -7,6 +7,9 @@ import { Tool, ToolName } from "@/types/tool";
 import type { PointHitResult, ContourContext, PenState } from "@/types/pen";
 import { DRAG_THRESHOLD } from "@/types/pen";
 import type { ContourSnapshot, PointSnapshot, Point2D, ContourId } from "@shift/types";
+import type { Segment } from "@/types/segments";
+import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
+import { parseSegments } from "@/engine/segments";
 
 import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
 import { PenCommands } from "./commands";
@@ -93,6 +96,7 @@ export class Pen implements Tool {
     }
 
     if (!this.hasActiveDrawingContour()) {
+      // First check for point hits
       const hitResult = this.findHitPoint(x, y);
       if (hitResult && !hitResult.contour.closed) {
         if (hitResult.position === "start" || hitResult.position === "end") {
@@ -122,6 +126,20 @@ export class Pen implements Tool {
           }
           return;
         }
+      }
+
+      // Then check for segment hits (split curve at click point)
+      const segmentHit = this.findHitSegment(x, y);
+      if (segmentHit) {
+        ctx.commands.beginBatch("Split Segment");
+        try {
+          this.#commands.splitSegment(segmentHit.segment, segmentHit.t);
+          ctx.commands.endBatch();
+        } catch (e) {
+          ctx.commands.cancelBatch();
+          throw e;
+        }
+        return;
       }
     }
 
@@ -159,6 +177,7 @@ export class Pen implements Tool {
 
     this.#sm.when("ready", () => {
       if (!this.hasActiveDrawingContour()) {
+        // Check for point hits first
         const hitResult = this.findHitPoint(mousePos.x, mousePos.y);
         if (hitResult && !hitResult.contour.closed) {
           if (hitResult.position === "start" || hitResult.position === "end") {
@@ -168,6 +187,15 @@ export class Pen implements Tool {
           } else {
             this.#editor.setCursor({ type: "pen" });
           }
+          this.#sm.transition({ type: "ready", mousePos });
+          return;
+        }
+
+        // Check for segment hits (for split preview)
+        const segmentHit = this.findHitSegment(mousePos.x, mousePos.y);
+        if (segmentHit) {
+          // Use pen-add cursor to indicate we can add a point here
+          this.#editor.setCursor({ type: "pen-add" });
           this.#sm.transition({ type: "ready", mousePos });
           return;
         }
@@ -316,6 +344,25 @@ export class Pen implements Tool {
         }
       }
     }
+    return null;
+  }
+
+  private findHitSegment(x: number, y: number): SegmentHitResult | null {
+    const ctx = this.#editor.createToolContext();
+    const snapshot = ctx.snapshot;
+    if (!snapshot) return null;
+
+    const hitRadius = ctx.screen.hitRadius;
+    const pos = { x, y };
+
+    for (const contour of snapshot.contours) {
+      const segments = parseSegments(contour.points, contour.closed);
+      const hit = SegmentOps.hitTestMultiple(segments, pos, hitRadius);
+      if (hit) {
+        return hit;
+      }
+    }
+
     return null;
   }
 

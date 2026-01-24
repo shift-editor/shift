@@ -22,6 +22,7 @@ export {
   SetActiveContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
+  SplitSegmentCommand,
 } from "./primitives";
 
 // Clipboard commands

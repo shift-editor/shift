@@ -5,8 +5,12 @@
  * anchor points with control handles and converting point types.
  */
 
-import type { PointId, ContourId, PointTypeString } from "@shift/types";
+import type { PointId, ContourId, PointTypeString, Point2D } from "@shift/types";
+import { asPointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
+import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
+import type { Segment } from "@/types/segments";
+import { Segment as SegmentOps } from "@/lib/geo/Segment";
 
 /**
  * Insert a point before an existing point in a contour.
@@ -350,5 +354,216 @@ export class ReverseContourCommand extends BaseCommand<void> {
 
   undo(ctx: CommandContext): void {
     ctx.fontEngine.editing.reverseContour(this.#contourId);
+  }
+}
+
+/**
+ * Split a curve segment at a given parameter t.
+ *
+ * Uses De Casteljau's algorithm to split the curve and inserts
+ * the resulting control points into the contour.
+ *
+ * For a cubic curve: anchor1 → control1 → control2 → anchor2
+ * After split at t:  anchor1 → c0A → c1A → mid → c0B → c1B → anchor2
+ *
+ * For a quadratic curve: anchor1 → control → anchor2
+ * After split at t:      anchor1 → cA → mid → cB → anchor2
+ *
+ * For a line: anchor1 → anchor2
+ * After split: anchor1 → mid → anchor2
+ */
+export class SplitSegmentCommand extends BaseCommand<PointId> {
+  readonly name = "Split Segment";
+
+  #segment: Segment;
+  #t: number;
+
+  // Store inserted point IDs for undo
+  #insertedPointIds: PointId[] = [];
+  // Store original positions of moved control points for undo
+  #originalPositions: Map<PointId, Point2D> = new Map();
+  // The new on-curve point ID (the split point)
+  #splitPointId: PointId | null = null;
+
+  constructor(segment: Segment, t: number) {
+    super();
+    this.#segment = segment;
+    this.#t = t;
+  }
+
+  execute(ctx: CommandContext): PointId {
+    const curve = SegmentOps.toCurve(this.#segment);
+
+    switch (this.#segment.type) {
+      case "line":
+        return this.#splitLine(ctx);
+      case "quad":
+        return this.#splitQuadratic(ctx);
+      case "cubic":
+        return this.#splitCubic(ctx);
+    }
+  }
+
+  #splitLine(ctx: CommandContext): PointId {
+    const curve = SegmentOps.toCurve(this.#segment);
+    const splitPoint = Curve.pointAt(curve, this.#t);
+
+    // For a line, just insert the midpoint before anchor2
+    const anchor2Id = asPointId(this.#segment.points.anchor2.id);
+
+    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(
+      anchor2Id,
+      splitPoint.x,
+      splitPoint.y,
+      "onCurve",
+      false,
+    );
+    this.#insertedPointIds.push(this.#splitPointId);
+
+    return this.#splitPointId;
+  }
+
+  #splitQuadratic(ctx: CommandContext): PointId {
+    const curve = SegmentOps.toCurve(this.#segment) as QuadraticCurve;
+    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
+      QuadraticCurve,
+      QuadraticCurve,
+    ];
+
+    // curveA = quadratic(anchor1, cA, mid)
+    // curveB = quadratic(mid, cB, anchor2)
+    const cA = curveA.c;
+    const mid = curveA.p1; // same as curveB.p0
+    const cB = curveB.c;
+
+    const controlId = asPointId(this.#segment.points.control.id);
+    const anchor2Id = asPointId(this.#segment.points.anchor2.id);
+
+    // Store original control position for undo
+    this.#originalPositions.set(controlId, {
+      x: this.#segment.points.control.x,
+      y: this.#segment.points.control.y,
+    });
+
+    // Insert points before anchor2 (they will be inserted in order)
+    // 1. Insert mid (onCurve) before anchor2
+    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(
+      anchor2Id,
+      mid.x,
+      mid.y,
+      "onCurve",
+      false,
+    );
+    this.#insertedPointIds.push(this.#splitPointId);
+
+    // 2. Insert cB (offCurve) before anchor2
+    const cBId = ctx.fontEngine.editing.insertPointBefore(
+      anchor2Id,
+      cB.x,
+      cB.y,
+      "offCurve",
+      false,
+    );
+    this.#insertedPointIds.push(cBId);
+
+    // 3. Move original control to cA position
+    ctx.fontEngine.editing.movePointTo(controlId, cA.x, cA.y);
+
+    return this.#splitPointId;
+  }
+
+  #splitCubic(ctx: CommandContext): PointId {
+    const curve = SegmentOps.toCurve(this.#segment) as CubicCurve;
+    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
+      CubicCurve,
+      CubicCurve,
+    ];
+
+    // curveA = cubic(anchor1, c0A, c1A, mid)
+    // curveB = cubic(mid, c0B, c1B, anchor2)
+    const c0A = curveA.c0;
+    const c1A = curveA.c1;
+    const mid = curveA.p1; // same as curveB.p0
+    const c0B = curveB.c0;
+    const c1B = curveB.c1;
+
+    const control1Id = asPointId(this.#segment.points.control1.id);
+    const control2Id = asPointId(this.#segment.points.control2.id);
+    const anchor2Id = asPointId(this.#segment.points.anchor2.id);
+
+    // Store original control positions for undo
+    this.#originalPositions.set(control1Id, {
+      x: this.#segment.points.control1.x,
+      y: this.#segment.points.control1.y,
+    });
+    this.#originalPositions.set(control2Id, {
+      x: this.#segment.points.control2.x,
+      y: this.#segment.points.control2.y,
+    });
+
+    // Insert new points before control2 (so they end up in the right order)
+    // Order of insertions (all before control2):
+    // 1. c1A (offCurve) - will be between control1 and mid
+    // 2. mid (onCurve) - the split point
+    // 3. c0B (offCurve) - will be between mid and control2
+
+    const c1AId = ctx.fontEngine.editing.insertPointBefore(
+      control2Id,
+      c1A.x,
+      c1A.y,
+      "offCurve",
+      false,
+    );
+    this.#insertedPointIds.push(c1AId);
+
+    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(
+      control2Id,
+      mid.x,
+      mid.y,
+      "onCurve",
+      false,
+    );
+    this.#insertedPointIds.push(this.#splitPointId);
+
+    const c0BId = ctx.fontEngine.editing.insertPointBefore(
+      control2Id,
+      c0B.x,
+      c0B.y,
+      "offCurve",
+      false,
+    );
+    this.#insertedPointIds.push(c0BId);
+
+    // Move existing control points to their new positions
+    ctx.fontEngine.editing.movePointTo(control1Id, c0A.x, c0A.y);
+    ctx.fontEngine.editing.movePointTo(control2Id, c1B.x, c1B.y);
+
+    return this.#splitPointId;
+  }
+
+  undo(ctx: CommandContext): void {
+    // Remove inserted points
+    if (this.#insertedPointIds.length > 0) {
+      ctx.fontEngine.editing.removePoints(this.#insertedPointIds);
+    }
+
+    // Restore original positions of moved control points
+    for (const [pointId, pos] of this.#originalPositions) {
+      ctx.fontEngine.editing.movePointTo(pointId, pos.x, pos.y);
+    }
+  }
+
+  redo(ctx: CommandContext): PointId {
+    // Clear previous state
+    this.#insertedPointIds = [];
+    this.#originalPositions.clear();
+    this.#splitPointId = null;
+
+    return this.execute(ctx);
+  }
+
+  /** Get the split point ID after execution */
+  get splitPointId(): PointId | null {
+    return this.#splitPointId;
   }
 }

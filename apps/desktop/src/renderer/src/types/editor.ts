@@ -8,6 +8,7 @@ export type CursorType =
   | { type: "move" }
   | { type: "crosshair" }
   | { type: "pen" }
+  | { type: "pen-add" }
   | { type: "pen-end" }
   | { type: "not-allowed" };
 
