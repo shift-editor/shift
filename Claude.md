@@ -9,7 +9,25 @@
 * When completing a feature YOU MUST check if it ticks off an item in the roadmap, and tick it off if so
 
 ## Frontend
-Always use BaseUI components. If we don't have a component BaseUI wrapper then create one.
+
+### Base UI Components
+All UI components must wrap [Base UI](https://base-ui.com/react/components) primitives:
+- ALWAYS check if a Base UI component exists before creating a custom implementation
+- Wrapper components live in `packages/ui/src/components/{componentName}/`
+- Import Base UI as `import { Component as BaseComponent } from "@base-ui-components/react/component"`
+- Export a wrapped version that applies project styling and extends the Base UI props
+- Use the same name as Base UI (e.g., `Separator`, `Input`, `Tooltip`)
+
+Example wrapper structure:
+```tsx
+import { Separator as BaseSeparator } from "@base-ui-components/react/separator";
+
+export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
+  ({ className, ...props }, ref) => (
+    <BaseSeparator ref={ref} className={cn("project-styles", className)} {...props} />
+  ),
+);
+```
 
 
 ## Package Manager

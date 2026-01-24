@@ -1,15 +1,18 @@
 import * as React from "react";
+import { Separator as BaseSeparator } from "@base-ui-components/react/separator";
 import { cn } from "../../lib/utils";
 
-export interface DividerProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface SeparatorProps
+  extends React.ComponentPropsWithoutRef<typeof BaseSeparator> {
   orientation?: "horizontal" | "vertical";
 }
 
-export const Divider = React.forwardRef<HTMLDivElement, DividerProps>(
+export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
   ({ className, orientation = "horizontal", ...props }, ref) => {
     return (
-      <div
+      <BaseSeparator
         ref={ref}
+        orientation={orientation}
         className={cn(
           "bg-line-subtle",
           orientation === "horizontal" ? "h-px w-full" : "w-px h-full",
@@ -21,4 +24,4 @@ export const Divider = React.forwardRef<HTMLDivElement, DividerProps>(
   },
 );
 
-Divider.displayName = "Divider";
+Separator.displayName = "Separator";

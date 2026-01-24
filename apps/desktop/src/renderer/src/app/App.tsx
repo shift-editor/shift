@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
 
 import { ThemeProvider } from "@/context/ThemeContext";
-import AppState, { getEditor } from "@/store/store";
+import { clearDirty, getEditor, setFilePath } from "@/store/store";
 
 import { routes } from "./routes";
 
@@ -13,8 +13,8 @@ export const App = () => {
       const editor = getEditor();
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
-      AppState.getState().setFilePath(filePath);
-      AppState.getState().clearDirty();
+      setFilePath(filePath);
+      clearDirty();
     });
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(
@@ -22,8 +22,8 @@ export const App = () => {
         try {
           const editor = getEditor();
           editor.saveFont(savePath);
-          AppState.getState().setFilePath(savePath);
-          AppState.getState().clearDirty();
+          setFilePath(savePath);
+          clearDirty();
           await window.electronAPI?.saveCompleted(savePath);
         } catch (error) {
           console.error("Failed to save font:", error);

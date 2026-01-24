@@ -1,5 +1,5 @@
 export { Button, type ButtonProps } from "./components/button";
-export { Divider, type DividerProps } from "./components/divider";
+export { Separator, type SeparatorProps } from "./components/separator";
 export { Input, type InputProps } from "./components/input";
 export {
   Tooltip,

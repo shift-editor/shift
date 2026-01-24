@@ -18,10 +18,13 @@ if (started) {
   app.quit();
 }
 
+const AUTOSAVE_INTERVAL_MS = 30_000;
+
 let mainWindow: BrowserWindow | null = null;
 let currentTheme: "light" | "dark" | "system" = "light";
 let currentFilePath: string | null = null;
 let documentIsDirty = false;
+let autosaveIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function setTheme(theme: "light" | "dark" | "system") {
   currentTheme = theme;
@@ -81,6 +84,23 @@ async function saveFont(saveAs = false) {
   mainWindow?.webContents.send("menu:save-font", savePath);
 }
 
+function startAutosave() {
+  if (autosaveIntervalId) return;
+
+  autosaveIntervalId = setInterval(() => {
+    if (documentIsDirty && currentFilePath) {
+      saveFont(false);
+    }
+  }, AUTOSAVE_INTERVAL_MS);
+}
+
+function stopAutosave() {
+  if (autosaveIntervalId) {
+    clearInterval(autosaveIntervalId);
+    autosaveIntervalId = null;
+  }
+}
+
 function createMenu() {
   const isMac = process.platform === "darwin";
 
@@ -95,6 +115,7 @@ function createMenu() {
           click: async () => {
             const result = await dialog.showOpenDialog({
               properties: ["openFile", "openDirectory"],
+              filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo"] }],
             });
             if (!result.canceled && result.filePaths[0]) {
               setCurrentFilePath(result.filePaths[0]);
@@ -212,6 +233,9 @@ const createWindow = () => {
   // Set initial window title
   updateWindowTitle();
 
+  // Start autosave timer
+  startAutosave();
+
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -219,11 +243,11 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, `../renderer/index.html`));
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
-
   mainWindow.on("close", async (event) => {
-    if (!documentIsDirty) return;
+    if (!documentIsDirty) {
+      stopAutosave();
+      return;
+    }
 
     event.preventDefault();
 
@@ -241,9 +265,11 @@ const createWindow = () => {
     });
 
     if (response === 0) {
+      stopAutosave();
       mainWindow.destroy();
     } else if (response === 2) {
       await saveFont(false);
+      stopAutosave();
       mainWindow.destroy();
     }
   });

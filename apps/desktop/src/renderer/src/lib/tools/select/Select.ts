@@ -260,8 +260,6 @@ export class Select implements Tool {
       const edge = this.#commands.hitTestBoundingRectEdge(pos);
       if (edge && !pointId) {
         this.#editor.setCursor(edgeToCursor(edge));
-      } else if (pointId) {
-        this.#editor.setCursor({ type: "move" });
       } else {
         this.#editor.setCursor({ type: "default" });
       }

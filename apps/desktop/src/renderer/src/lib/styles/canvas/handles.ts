@@ -13,7 +13,10 @@ export interface HandleDimensions {
   size: number;
 }
 
-type HandleStyle = DrawStyle & HandleDimensions;
+type HandleStyle = DrawStyle &
+  HandleDimensions & {
+    overlayColor?: string;
+  };
 
 export interface HandleStyles {
   idle: HandleStyle;
@@ -26,6 +29,7 @@ export function createHandleStyles(
 ): Record<HandleType, HandleStyles> {
   const { cyan, gray, green } = theme.canvas;
   const white = theme.ui.bg.surface;
+  const hoverOverlay = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 
   return {
     first: {
@@ -38,12 +42,13 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 7,
-        lineWidth: 1.5,
+        size: 6,
+        lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.75),
       },
       selected: {
         size: 8,
@@ -64,19 +69,20 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 7,
-        lineWidth: 1.5,
+        size: 6,
+        lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.75),
       },
       selected: {
         size: 8,
         lineWidth: 2,
         antiAlias: false,
-        strokeStyle: cyan,
-        fillStyle: white,
+        strokeStyle: white,
+        fillStyle: cyan,
         dashPattern: [],
       },
     },
@@ -90,45 +96,47 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 4,
+        size: 3,
         lineWidth: 3,
         antiAlias: false,
         strokeStyle: gray,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.5),
       },
       selected: {
-        size: 5,
-        lineWidth: 3,
+        size: 4,
+        lineWidth: 4,
         antiAlias: false,
-        strokeStyle: gray,
-        fillStyle: white,
+        strokeStyle: white,
+        fillStyle: gray,
         dashPattern: [],
       },
     },
     smooth: {
       idle: {
-        size: 4,
-        lineWidth: 1,
+        size: 3,
+        lineWidth: 3,
         antiAlias: false,
         strokeStyle: green,
         fillStyle: white,
         dashPattern: [],
       },
       hovered: {
-        size: 5,
-        lineWidth: 1.5,
+        size: 3,
+        lineWidth: 3,
         antiAlias: false,
         strokeStyle: green,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.5),
       },
       selected: {
-        size: 6,
-        lineWidth: 2,
+        size: 4,
+        lineWidth: 4,
         antiAlias: false,
-        strokeStyle: green,
-        fillStyle: white,
+        strokeStyle: white,
+        fillStyle: green,
         dashPattern: [],
       },
     },
@@ -142,19 +150,20 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 7,
-        lineWidth: 1.5,
+        size: 6,
+        lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.5),
       },
       selected: {
         size: 8,
         lineWidth: 2,
         antiAlias: false,
-        strokeStyle: cyan,
-        fillStyle: white,
+        strokeStyle: white,
+        fillStyle: cyan,
         dashPattern: [],
       },
     },
@@ -168,15 +177,16 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 7,
-        lineWidth: 1.5,
+        size: 6,
+        lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
+        overlayColor: hoverOverlay(0.5),
       },
       selected: {
-        size: 8,
+        size: 7,
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: cyan,

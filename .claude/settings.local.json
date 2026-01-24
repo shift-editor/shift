@@ -59,7 +59,11 @@
       "WebFetch(domain:bhaireshm.medium.com)",
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:web.dev)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(pnpm exec tsc:*)",
+      "WebFetch(domain:tkdodo.eu)",
+      "Bash(pnpm list:*)",
+      "WebFetch(domain:releases.electronjs.org)"
     ]
   }
 }

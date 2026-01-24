@@ -68,11 +68,11 @@ export const ToolsPane: FC = () => {
   const activeTool = useValue(editor.activeTool);
 
   const displayName = fileName ?? "Untitled";
-  const title = isDirty ? `${displayName}*` : displayName;
+  const title = isDirty ? `${displayName} — Edited` : displayName;
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
-      <h1 className="text-xs font-[400] mt-0.5">{title}</h1>
+      <h1 className="text-ui mt-0.5">{title}</h1>
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
           {Array.from(editor.tools.entries()).map(

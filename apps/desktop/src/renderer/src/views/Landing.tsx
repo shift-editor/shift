@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import AppState, { getEditor } from "@/store/store";
+import { clearDirty, getEditor, setFilePath } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 
@@ -12,8 +12,8 @@ export const Landing = () => {
       const editor = getEditor();
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
-      AppState.getState().setFilePath(filePath);
-      AppState.getState().clearDirty();
+      setFilePath(filePath);
+      clearDirty();
       navigate("/home");
     }
   };
@@ -21,8 +21,8 @@ export const Landing = () => {
   const handleNewFont = () => {
     const editor = getEditor();
     editor.startEditSession(65);
-    AppState.getState().setFilePath(null);
-    AppState.getState().clearDirty();
+    setFilePath(null);
+    clearDirty();
     navigate("/home");
   };
 

@@ -3,7 +3,8 @@
 
 @font-face {
   font-family: "Host Grotesk";
-  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf") format("truetype");
+  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
+    format("truetype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -12,7 +13,7 @@
 @theme {
   /* Background colors: bg-app, bg-canvas, bg-toolbar, etc. */
   --color-app: #ffffff;
-  --color-canvas: #F2F2F2;
+  --color-canvas: #f2f2f2;
   --color-toolbar: #e2e2e2;
   --color-hover: #e5e5e5;
   --color-surface: #ffffff;
@@ -27,7 +28,7 @@
   /* Text colors: text-primary, text-secondary, text-muted */
   --color-primary: #171717;
   --color-secondary: #525252;
-  --color-muted: #BABABA;
+  --color-muted: #5f5f5f;
 
   --color-accent: #0c92f4;
 
@@ -42,7 +43,9 @@
   /* Typography: font-ui, text-ui */
   --font-ui: "Inter";
   --font-display: "Host Grotesk";
-  --text-ui: 0.85rem;
+  --text-sm: 0.75rem /* 12px */;
+  --text-ui: 0.6875rem /* 11px */;
+  --text-xs: 0.625rem /* 10px */;
 }
 
 /* Custom titlebar styles */
