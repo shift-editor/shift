@@ -1,8 +1,12 @@
+import { useCallback } from "react";
 import { Button } from "@shift/ui";
 import { SidebarSection } from "./SidebarSection";
+import { EditableSidebarInput } from "./EditableSidebarInput";
 import { SidebarInput } from "./SidebarInput";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
+import { anchorToPoint } from "@/lib/transform/anchor";
 import RotateIcon from "@/assets/sidebar/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar/rotate-cw.svg";
 import FlipHIcon from "@/assets/sidebar/flip-h.svg";
@@ -10,22 +14,48 @@ import FlipVIcon from "@/assets/sidebar/flip-v.svg";
 
 export const TransformSection = () => {
   const editor = getEditor();
-  const { x, y, hasSelection } = useSelectionBounds();
+  const { x, y, hasSelection, bounds } = useSelectionBounds();
+  const { anchor } = useTransformOrigin();
+
+  const getOrigin = () => {
+    if (!bounds) return undefined;
+    return anchorToPoint(anchor, bounds);
+  };
 
   const handleRotate90 = () => {
-    editor.rotateSelection(Math.PI / 2);
+    editor.rotateSelection(Math.PI / 2, getOrigin());
     editor.requestRedraw();
   };
 
   const handleFlipH = () => {
-    editor.reflectSelection("horizontal");
+    editor.reflectSelection("horizontal", getOrigin());
     editor.requestRedraw();
   };
 
   const handleFlipV = () => {
-    editor.reflectSelection("vertical");
+    editor.reflectSelection("vertical", getOrigin());
     editor.requestRedraw();
   };
+
+  const handleXChange = useCallback(
+    (newX: number) => {
+      if (!bounds) return;
+      const anchorPoint = anchorToPoint(anchor, bounds);
+      editor.moveSelectionTo(newX, anchorPoint.y, anchorPoint.x, anchorPoint.y);
+      editor.requestRedraw();
+    },
+    [bounds, anchor, editor],
+  );
+
+  const handleYChange = useCallback(
+    (newY: number) => {
+      if (!bounds) return;
+      const anchorPoint = anchorToPoint(anchor, bounds);
+      editor.moveSelectionTo(anchorPoint.x, newY, anchorPoint.x, anchorPoint.y);
+      editor.requestRedraw();
+    },
+    [bounds, anchor, editor],
+  );
 
   return (
     <SidebarSection title="Transform">
@@ -34,8 +64,18 @@ export const TransformSection = () => {
           Position
         </div>
         <div className="flex gap-2">
-          <SidebarInput label="X" value={hasSelection ? x : "-"} />
-          <SidebarInput label="Y" value={hasSelection ? y : "-"} />
+          <EditableSidebarInput
+            label="X"
+            value={hasSelection ? x : "-"}
+            onValueChange={handleXChange}
+            disabled={!hasSelection}
+          />
+          <EditableSidebarInput
+            label="Y"
+            value={hasSelection ? y : "-"}
+            onValueChange={handleYChange}
+            disabled={!hasSelection}
+          />
         </div>
       </div>
 

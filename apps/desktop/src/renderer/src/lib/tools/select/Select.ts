@@ -1,5 +1,5 @@
 import { Editor } from "@/lib/editor/Editor";
-import { MovePointsCommand, NudgePointsCommand } from "@/lib/commands";
+import { MovePointsCommand, NudgePointsCommand, ScalePointsCommand } from "@/lib/commands";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { createStateMachine, type StateMachine } from "@/lib/tools/core";
@@ -56,6 +56,7 @@ export class Select implements Tool {
   #renderEffect: Effect;
   #shiftModifierOn: boolean = false;
   #draggedPointIds: PointId[] = [];
+  #initialResizePositions: Map<PointId, Point2D> = new Map();
 
   constructor(editor: Editor) {
     this.#editor = editor;
@@ -148,6 +149,39 @@ export class Select implements Tool {
     });
 
     this.#sm.when("selected", () => {
+      // Check for bounding rect edge hit first (for resizing)
+      const edge = this.#commands.hitTestBoundingRectEdge(pos);
+      const bounds = this.#commands.getSelectionBoundingRect();
+
+      if (edge && bounds && !pointId) {
+        // Edge hit - start resizing
+        const anchorPoint = this.#commands.getAnchorPointForEdge(edge, bounds);
+        const freshCtx = this.#editor.createToolContext();
+        this.#draggedPointIds = [...freshCtx.selectedPoints];
+
+        // Store initial positions for undo
+        this.#initialResizePositions.clear();
+        const allPoints = ctx.glyph?.contours.flatMap(c => c.points) ?? [];
+        for (const p of allPoints) {
+          if (freshCtx.selectedPoints.has(p.id as PointId)) {
+            this.#initialResizePositions.set(p.id as PointId, { x: p.x, y: p.y });
+          }
+        }
+
+        this.#editor.setCursor(edgeToCursor(edge));
+        this.#sm.transition({
+          type: "resizing",
+          resize: {
+            edge,
+            startPos: pos,
+            lastPos: pos,
+            initialBounds: bounds,
+            anchorPoint,
+          },
+        });
+        return;
+      }
+
       if (pointId) {
         // Point hit
         const isSelected = this.#commands.isPointSelected(pointId);
@@ -254,6 +288,34 @@ export class Select implements Tool {
       });
     });
 
+    this.#sm.when("resizing", (state) => {
+      // Calculate scale factors based on current position
+      const { sx, sy } = this.#commands.calculateScaleFactors(
+        state.resize.edge,
+        pos,
+        state.resize.anchorPoint,
+        state.resize.initialBounds,
+        this.#shiftModifierOn,
+      );
+
+      // Reset to initial positions first, then apply new scale
+      for (const [id, initialPos] of this.#initialResizePositions) {
+        const anchor = state.resize.anchorPoint;
+        const newX = anchor.x + (initialPos.x - anchor.x) * sx;
+        const newY = anchor.y + (initialPos.y - anchor.y) * sy;
+        const ctx = this.#editor.createToolContext();
+        ctx.edit.movePointTo(id, newX, newY);
+      }
+
+      this.#sm.transition({
+        type: "resizing",
+        resize: {
+          ...state.resize,
+          lastPos: pos,
+        },
+      });
+    });
+
     this.#sm.when("ready", () => {
       const { pointId } = this.#commands.hitTest(pos);
       this.#commands.updateHover(pos);
@@ -308,6 +370,38 @@ export class Select implements Tool {
       }
 
       this.#draggedPointIds = [];
+      this.#editor.setCursor({ type: "default" });
+      this.#sm.transition({ type: "selected", hoveredPointId: null });
+    });
+
+    this.#sm.when("resizing", (state) => {
+      // Calculate final scale factors
+      const { sx, sy } = this.#commands.calculateScaleFactors(
+        state.resize.edge,
+        state.resize.lastPos,
+        state.resize.anchorPoint,
+        state.resize.initialBounds,
+        this.#shiftModifierOn,
+      );
+
+      // Restore initial positions first (undo the preview)
+      for (const [id, initialPos] of this.#initialResizePositions) {
+        ctx.edit.movePointTo(id, initialPos.x, initialPos.y);
+      }
+
+      // Create and execute the scale command if there was actual scaling
+      if (sx !== 1 || sy !== 1) {
+        const cmd = new ScalePointsCommand(
+          this.#draggedPointIds,
+          sx,
+          sy,
+          state.resize.anchorPoint,
+        );
+        ctx.commands.execute(cmd);
+      }
+
+      this.#draggedPointIds = [];
+      this.#initialResizePositions.clear();
       this.#editor.setCursor({ type: "default" });
       this.#sm.transition({ type: "selected", hoveredPointId: null });
     });

@@ -338,4 +338,159 @@ describe("Mat - 2D Affine Transform Matrix", () => {
       expect(transformed.y).toBeCloseTo(p.y, 5);
     });
   });
+
+  describe("fromDecomposed", () => {
+    it("should create identity matrix from default decomposed", () => {
+      const d = {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(d);
+      expect(m.a).toBeCloseTo(1);
+      expect(m.b).toBeCloseTo(0);
+      expect(m.c).toBeCloseTo(0);
+      expect(m.d).toBeCloseTo(1);
+      expect(m.e).toBeCloseTo(0);
+      expect(m.f).toBeCloseTo(0);
+    });
+
+    it("should create translation matrix", () => {
+      const d = {
+        translateX: 100,
+        translateY: 50,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(d);
+      const p = Mat.applyToPoint(m, { x: 10, y: 20 });
+      expect(p.x).toBeCloseTo(110);
+      expect(p.y).toBeCloseTo(70);
+    });
+
+    it("should create scale matrix", () => {
+      const d = {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 2,
+        scaleY: 3,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(d);
+      const p = Mat.applyToPoint(m, { x: 10, y: 20 });
+      expect(p.x).toBeCloseTo(20);
+      expect(p.y).toBeCloseTo(60);
+    });
+
+    it("should create rotation matrix", () => {
+      const d = {
+        translateX: 0,
+        translateY: 0,
+        rotation: 90,
+        scaleX: 1,
+        scaleY: 1,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(d);
+      const p = Mat.applyToPoint(m, { x: 1, y: 0 });
+      expect(p.x).toBeCloseTo(0);
+      expect(p.y).toBeCloseTo(1);
+    });
+  });
+
+  describe("toDecomposed", () => {
+    it("should decompose identity matrix", () => {
+      const m = Mat.Identity();
+      const d = Mat.toDecomposed(m);
+      expect(d.translateX).toBeCloseTo(0);
+      expect(d.translateY).toBeCloseTo(0);
+      expect(d.rotation).toBeCloseTo(0);
+      expect(d.scaleX).toBeCloseTo(1);
+      expect(d.scaleY).toBeCloseTo(1);
+    });
+
+    it("should decompose translation matrix", () => {
+      const m = Mat.Translate(100, 50);
+      const d = Mat.toDecomposed(m);
+      expect(d.translateX).toBeCloseTo(100);
+      expect(d.translateY).toBeCloseTo(50);
+      expect(d.scaleX).toBeCloseTo(1);
+      expect(d.scaleY).toBeCloseTo(1);
+    });
+
+    it("should decompose scale matrix", () => {
+      const m = Mat.Scale(2, 3);
+      const d = Mat.toDecomposed(m);
+      expect(d.scaleX).toBeCloseTo(2);
+      expect(d.scaleY).toBeCloseTo(3);
+      expect(d.rotation).toBeCloseTo(0);
+    });
+
+    it("should decompose rotation matrix", () => {
+      const m = Mat.Rotate(Math.PI / 2);
+      const d = Mat.toDecomposed(m);
+      expect(d.rotation).toBeCloseTo(90);
+      expect(d.scaleX).toBeCloseTo(1);
+      expect(d.scaleY).toBeCloseTo(1);
+    });
+  });
+
+  describe("decomposed roundtrip", () => {
+    it("should roundtrip translation + scale", () => {
+      const original = {
+        translateX: 50,
+        translateY: 100,
+        rotation: 0,
+        scaleX: 2,
+        scaleY: 1.5,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(original);
+      const roundtrip = Mat.toDecomposed(m);
+
+      expect(roundtrip.translateX).toBeCloseTo(original.translateX);
+      expect(roundtrip.translateY).toBeCloseTo(original.translateY);
+      expect(roundtrip.scaleX).toBeCloseTo(original.scaleX);
+      expect(roundtrip.scaleY).toBeCloseTo(original.scaleY);
+    });
+
+    it("should roundtrip rotation", () => {
+      const original = {
+        translateX: 0,
+        translateY: 0,
+        rotation: 45,
+        scaleX: 1,
+        scaleY: 1,
+        skewX: 0,
+        skewY: 0,
+        tCenterX: 0,
+        tCenterY: 0,
+      };
+      const m = Mat.fromDecomposed(original);
+      const roundtrip = Mat.toDecomposed(m);
+
+      expect(roundtrip.rotation).toBeCloseTo(original.rotation);
+    });
+  });
 });

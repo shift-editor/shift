@@ -5,4 +5,6 @@ export type {
   TransformOptions,
   ScaleOptions,
   SelectionBounds,
+  AlignmentType,
+  DistributeType,
 } from "@/types/transform";

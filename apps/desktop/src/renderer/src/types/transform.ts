@@ -28,3 +28,13 @@ export interface SelectionBounds {
   readonly width: number;
   readonly height: number;
 }
+
+export type AlignmentType =
+  | "left"
+  | "center-h"
+  | "right"
+  | "top"
+  | "center-v"
+  | "bottom";
+
+export type DistributeType = "horizontal" | "vertical";

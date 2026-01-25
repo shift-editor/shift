@@ -11,3 +11,4 @@ export type { RuleId } from "./RuleId";
 export type { MatchedRule } from "./MatchedRule";
 export type { FontMetrics } from "./FontMetrics";
 export type { FontMetadata } from "./FontMetadata";
+export type { DecomposedTransform } from "./DecomposedTransform";

@@ -27,10 +27,18 @@ export type {
   TransformOptions,
   ScaleOptions,
   SelectionBounds,
+  AlignmentType,
+  DistributeType,
 } from "./types";
 
 // Pure transform functions
 export { Transform } from "./Transform";
+
+// Alignment utilities
+export { Alignment } from "./Alignment";
+
+// Anchor utilities
+export { anchorToPoint } from "./anchor";
 
 // Commands for undo/redo (re-export from commands/transform)
 export {
@@ -38,4 +46,7 @@ export {
   ScalePointsCommand,
   ReflectPointsCommand,
   TransformMatrixCommand,
+  MoveSelectionToCommand,
+  AlignPointsCommand,
+  DistributePointsCommand,
 } from "../commands/transform";

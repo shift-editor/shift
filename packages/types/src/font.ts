@@ -13,4 +13,5 @@ export type {
   MatchedRule,
   FontMetrics,
   FontMetadata,
+  DecomposedTransform,
 } from "./generated";

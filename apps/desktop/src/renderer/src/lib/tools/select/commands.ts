@@ -392,4 +392,122 @@ export class SelectCommands {
 
     return null;
   }
+
+  /**
+   * Get the anchor point for a resize operation based on the edge being dragged.
+   * Returns the opposite corner/center point that stays fixed during resize.
+   */
+  getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
+    const centerX = (rect.left + rect.right) / 2;
+    const centerY = (rect.top + rect.bottom) / 2;
+
+    switch (edge) {
+      case "top-left":
+        return { x: rect.right, y: rect.top };
+      case "top-right":
+        return { x: rect.left, y: rect.top };
+      case "bottom-left":
+        return { x: rect.right, y: rect.bottom };
+      case "bottom-right":
+        return { x: rect.left, y: rect.bottom };
+      case "left":
+        return { x: rect.right, y: centerY };
+      case "right":
+        return { x: rect.left, y: centerY };
+      case "top":
+        return { x: centerX, y: rect.bottom };
+      case "bottom":
+        return { x: centerX, y: rect.top };
+    }
+  }
+
+  /**
+   * Calculate scale factors based on edge being dragged and mouse position.
+   */
+  calculateScaleFactors(
+    edge: Exclude<BoundingRectEdge, null>,
+    currentPos: Point2D,
+    anchorPoint: Point2D,
+    initialBounds: Rect2D,
+    uniform: boolean,
+  ): { sx: number; sy: number } {
+    const initialWidth = initialBounds.right - initialBounds.left;
+    const initialHeight = initialBounds.bottom - initialBounds.top;
+
+    if (initialWidth === 0 || initialHeight === 0) {
+      return { sx: 1, sy: 1 };
+    }
+
+    const newWidth = Math.abs(currentPos.x - anchorPoint.x);
+    const newHeight = Math.abs(currentPos.y - anchorPoint.y);
+
+    let sx = 1;
+    let sy = 1;
+
+    const isCorner = edge.includes("-");
+    const affectsX = edge === "left" || edge === "right" || isCorner;
+    const affectsY = edge === "top" || edge === "bottom" || isCorner;
+
+    if (affectsX) {
+      sx = newWidth / initialWidth;
+    }
+    if (affectsY) {
+      sy = newHeight / initialHeight;
+    }
+
+    if (uniform && isCorner) {
+      const uniformScale = Math.max(sx, sy);
+      sx = uniformScale;
+      sy = uniformScale;
+    }
+
+    let flipX = false;
+    let flipY = false;
+
+    if (edge === "left" || edge === "top-left" || edge === "bottom-left") {
+      flipX = currentPos.x > anchorPoint.x;
+    } else if (edge === "right" || edge === "top-right" || edge === "bottom-right") {
+      flipX = currentPos.x < anchorPoint.x;
+    }
+
+    if (edge === "top-left" || edge === "top-right") {
+      flipY = currentPos.y < anchorPoint.y;
+    } else if (edge === "bottom-left" || edge === "bottom-right") {
+      flipY = currentPos.y > anchorPoint.y;
+    } else if (edge === "top") {
+      flipY = currentPos.y > anchorPoint.y;
+    } else if (edge === "bottom") {
+      flipY = currentPos.y < anchorPoint.y;
+    }
+
+    if (flipX) sx = -sx;
+    if (flipY) sy = -sy;
+
+    return { sx, sy };
+  }
+
+  /**
+   * Apply a scale transformation to selected points around an anchor point.
+   */
+  scaleSelectedPoints(anchorPoint: Point2D, sx: number, sy: number): void {
+    const ctx = this.#editor.createToolContext();
+    if (ctx.selectedPoints.size === 0) return;
+
+    const allPoints = getAllPoints(ctx.glyph);
+    const selectedPointsData = allPoints.filter((p) =>
+      ctx.selectedPoints.has(asPointId(p.id)),
+    );
+
+    const moves: Array<{ pointId: PointId; x: number; y: number }> = [];
+
+    for (const point of selectedPointsData) {
+      const newX = anchorPoint.x + (point.x - anchorPoint.x) * sx;
+      const newY = anchorPoint.y + (point.y - anchorPoint.y) * sy;
+      moves.push({ pointId: asPointId(point.id), x: newX, y: newY });
+    }
+
+    for (const move of moves) {
+      ctx.edit.movePointTo(move.pointId, move.x, move.y);
+    }
+  }
 }

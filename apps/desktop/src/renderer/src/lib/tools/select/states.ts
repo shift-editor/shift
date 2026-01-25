@@ -3,4 +3,5 @@ export type {
   SelectState,
   SelectionData,
   DragData,
+  ResizeData,
 } from "@/types/select";

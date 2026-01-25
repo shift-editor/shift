@@ -66,16 +66,16 @@ impl UfoWriter {
     }
 
     fn convert_component(component: &shift_ir::Component) -> norad::Component {
-        let transform = component.transform();
+        let matrix = component.matrix();
         norad::Component::new(
             Name::new(component.base_glyph()).unwrap(),
             norad::AffineTransform {
-                x_scale: transform.xx,
-                xy_scale: transform.xy,
-                yx_scale: transform.yx,
-                y_scale: transform.yy,
-                x_offset: transform.dx,
-                y_offset: transform.dy,
+                x_scale: matrix.xx,
+                xy_scale: matrix.xy,
+                yx_scale: matrix.yx,
+                y_scale: matrix.yy,
+                x_offset: matrix.dx,
+                y_offset: matrix.dy,
             },
             None,
         )

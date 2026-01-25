@@ -31,4 +31,5 @@ export type {
   MatchedRule,
   FontMetadata,
   FontMetrics,
+  DecomposedTransform,
 } from "./font";

@@ -24,9 +24,14 @@ import {
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
+  MoveSelectionToCommand,
+  AlignPointsCommand,
+  DistributePointsCommand,
   type ReflectAxis,
   type TransformablePoint,
   type SelectionBounds,
+  type AlignmentType,
+  type DistributeType,
 } from "../transform";
 import { computed, effect, signal, type ComputedSignal, type Effect, type Signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
@@ -658,6 +663,41 @@ export class Editor {
     if (!center) return;
 
     const cmd = new ReflectPointsCommand(pointIds, axis, center);
+    this.#commandHistory.execute(cmd);
+  }
+
+  public moveSelectionTo(
+    targetX: number,
+    targetY: number,
+    anchorX: number,
+    anchorY: number,
+  ): void {
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    if (pointIds.length === 0) return;
+
+    const cmd = new MoveSelectionToCommand(
+      pointIds,
+      targetX,
+      targetY,
+      anchorX,
+      anchorY,
+    );
+    this.#commandHistory.execute(cmd);
+  }
+
+  public alignSelection(alignment: AlignmentType): void {
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    if (pointIds.length === 0) return;
+
+    const cmd = new AlignPointsCommand(pointIds, alignment);
+    this.#commandHistory.execute(cmd);
+  }
+
+  public distributeSelection(type: DistributeType): void {
+    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    if (pointIds.length < 3) return;
+
+    const cmd = new DistributePointsCommand(pointIds, type);
     this.#commandHistory.execute(cmd);
   }
 

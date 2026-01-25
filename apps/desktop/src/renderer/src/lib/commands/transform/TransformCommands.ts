@@ -155,3 +155,43 @@ export class TransformMatrixCommand extends BaseTransformCommand {
     return Transform.applyMatrix(points, this.#matrix, this.#origin);
   }
 }
+
+/**
+ * Move selection to an absolute position by translating all points.
+ * The anchor determines which point of the selection bounding box is positioned.
+ */
+export class MoveSelectionToCommand extends BaseTransformCommand {
+  readonly name = "Move Selection To";
+
+  #targetX: number;
+  #targetY: number;
+  #anchorX: number;
+  #anchorY: number;
+
+  constructor(
+    pointIds: PointId[],
+    targetX: number,
+    targetY: number,
+    anchorX: number,
+    anchorY: number,
+  ) {
+    super(pointIds);
+    this.#targetX = targetX;
+    this.#targetY = targetY;
+    this.#anchorX = anchorX;
+    this.#anchorY = anchorY;
+  }
+
+  protected transformPoints(
+    points: readonly TransformablePoint[],
+  ): TransformablePoint[] {
+    const dx = this.#targetX - this.#anchorX;
+    const dy = this.#targetY - this.#anchorY;
+
+    return points.map((p) => ({
+      id: p.id,
+      x: p.x + dx,
+      y: p.y + dy,
+    }));
+  }
+}

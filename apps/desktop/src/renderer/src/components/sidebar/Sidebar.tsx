@@ -1,6 +1,8 @@
 import { Separator } from "@shift/ui";
 import { TransformSection } from "./TransformSection";
 import { ScaleSection } from "./ScaleSection";
+import { AlignmentSection } from "./AlignmentSection";
+import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import AppState, { getEditor } from "@/store/store";
 import { useValue } from "@/lib/reactive";
 
@@ -19,10 +21,13 @@ export const Sidebar = () => {
         <span className="text-ui text-muted">{zoomPercent}%</span>
       </div>
       <Separator />
-      <div className="px-3 py-3 flex flex-col gap-4">
-        <TransformSection />
-        <ScaleSection />
-      </div>
+      <TransformOriginProvider>
+        <div className="px-3 py-3 flex flex-col gap-4">
+          <TransformSection />
+          <ScaleSection />
+          <AlignmentSection />
+        </div>
+      </TransformOriginProvider>
     </aside>
   );
 };

@@ -41,7 +41,7 @@ impl UfoReader {
     }
 
     fn convert_component(component: &norad::Component) -> Component {
-        let transform = Transform {
+        let matrix = Transform {
             xx: component.transform.x_scale,
             xy: component.transform.xy_scale,
             yx: component.transform.yx_scale,
@@ -49,7 +49,7 @@ impl UfoReader {
             dx: component.transform.x_offset,
             dy: component.transform.y_offset,
         };
-        Component::with_transform(component.base.to_string(), transform)
+        Component::with_matrix(component.base.to_string(), &matrix)
     }
 
     fn convert_anchor(anchor: &norad::Anchor) -> Option<Anchor> {

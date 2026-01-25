@@ -1,13 +1,13 @@
-import { useState } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarInput } from "./SidebarInput";
-import { TransformGrid, type AnchorPosition } from "./TransformGrid";
+import { TransformGrid } from "./TransformGrid";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { useTransformOrigin } from "@/context/TransformOriginContext";
 import ScaleIcon from "@/assets/sidebar/scale.svg";
 
 export const ScaleSection = () => {
   const { width, height, hasSelection } = useSelectionBounds();
-  const [anchor, setAnchor] = useState<AnchorPosition>("lm");
+  const { anchor, setAnchor } = useTransformOrigin();
 
   return (
     <SidebarSection title="Scale">

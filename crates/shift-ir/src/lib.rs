@@ -16,7 +16,7 @@ mod source;
 
 pub use anchor::Anchor;
 pub use axis::{Axis, Location};
-pub use component::{Component, Transform};
+pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::Contour;
 pub use entity::{
     AnchorId, ComponentId, ContourId, EntityId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
