@@ -3,7 +3,7 @@ import type { HandleState, HandleType } from "@/types/handle";
 import type { CursorType, SelectionMode, ToolRegistryItem, VisualState, RenderState } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asContourId } from "@shift/types";
-import { findPointInSnapshot, findPointsInSnapshot } from "../utils/snapshot";
+import { findPointInSnapshot } from "../utils/snapshot";
 import { Tool, ToolContext, ToolName } from "@/types/tool";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 
@@ -20,15 +20,14 @@ import {
   PasteCommand,
 } from "../commands";
 import {
-  Transform,
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
   MoveSelectionToCommand,
   AlignPointsCommand,
   DistributePointsCommand,
+  getSegmentAwareBounds,
   type ReflectAxis,
-  type TransformablePoint,
   type SelectionBounds,
   type AlignmentType,
   type DistributeType,
@@ -613,10 +612,12 @@ export class Editor {
   /**
    * Get the bounding box and center of the current selection.
    * Returns null if no points are selected.
+   * Uses segment-aware bounds for curves (includes extrema, not just anchor points).
    */
   public getSelectionBounds(): SelectionBounds | null {
-    const points = this.#getTransformablePoints();
-    return Transform.getSelectionBounds(points);
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+    return getSegmentAwareBounds(snapshot, this.#selection.selectedPointIds.peek());
   }
 
   /**
@@ -667,21 +668,13 @@ export class Editor {
   }
 
   public moveSelectionTo(
-    targetX: number,
-    targetY: number,
-    anchorX: number,
-    anchorY: number,
+    target: Point2D,
+    anchor: Point2D,
   ): void {
     const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
-    const cmd = new MoveSelectionToCommand(
-      pointIds,
-      targetX,
-      targetY,
-      anchorX,
-      anchorY,
-    );
+    const cmd = new MoveSelectionToCommand(pointIds, target, anchor);
     this.#commandHistory.execute(cmd);
   }
 
@@ -721,20 +714,6 @@ export class Editor {
       }
     }
     return result;
-  }
-
-  #getTransformablePoints(): TransformablePoint[] {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return [];
-
-    return findPointsInSnapshot(
-      snapshot,
-      this.#selection.selectedPointIds.peek(),
-    ).map((p) => ({
-      id: p.id as PointId,
-      x: p.x,
-      y: p.y,
-    }));
   }
 
   public redrawGlyph() {

@@ -7,7 +7,7 @@
 
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
 import { findPointsInSnapshot } from "@/lib/utils/snapshot";
-import type { MatModel } from "@shift/geo";
+import { Vec2, type MatModel } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
@@ -163,35 +163,27 @@ export class TransformMatrixCommand extends BaseTransformCommand {
 export class MoveSelectionToCommand extends BaseTransformCommand {
   readonly name = "Move Selection To";
 
-  #targetX: number;
-  #targetY: number;
-  #anchorX: number;
-  #anchorY: number;
+  #target: Point2D;
+  #anchor: Point2D;
 
   constructor(
     pointIds: PointId[],
-    targetX: number,
-    targetY: number,
-    anchorX: number,
-    anchorY: number,
+    target: Point2D,
+    anchor: Point2D,
   ) {
     super(pointIds);
-    this.#targetX = targetX;
-    this.#targetY = targetY;
-    this.#anchorX = anchorX;
-    this.#anchorY = anchorY;
+    this.#target = target;
+    this.#anchor = anchor;
   }
 
   protected transformPoints(
     points: readonly TransformablePoint[],
   ): TransformablePoint[] {
-    const dx = this.#targetX - this.#anchorX;
-    const dy = this.#targetY - this.#anchorY;
+    const delta = Vec2.sub(this.#target, this.#anchor);
 
-    return points.map((p) => ({
-      id: p.id,
-      x: p.x + dx,
-      y: p.y + dy,
-    }));
+    return points.map((p) => {
+      const newPos = Vec2.add(p, delta);
+      return { id: p.id, x: newPos.x, y: newPos.y };
+    });
   }
 }

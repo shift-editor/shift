@@ -19,7 +19,7 @@
  * ```
  */
 
-import { Mat, type MatModel } from "@shift/geo";
+import { Mat, Vec2, type MatModel } from "@shift/geo";
 import type { Point2D } from "@shift/types";
 import type {
   TransformablePoint,
@@ -147,7 +147,7 @@ export const Transform = {
     }
 
     return {
-      center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+      center: Vec2.midpoint({ x: minX, y: minY }, { x: maxX, y: maxY }),
       minX,
       minY,
       maxX,

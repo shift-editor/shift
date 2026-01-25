@@ -28,7 +28,7 @@
  * ```
  */
 
-import { Curve, type CurveType, type Point2D } from "@shift/geo";
+import { Curve, Vec2, type CurveType, type Point2D } from "@shift/geo";
 import type {
   Segment as SegmentType,
   LineSegment,
@@ -37,6 +37,8 @@ import type {
 } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
+import type { PointId } from "@shift/types";
+import { asPointId } from "@shift/types";
 
 export interface SegmentHitResult {
   segment: SegmentType;
@@ -95,8 +97,9 @@ export const Segment = {
     radius: number,
   ): SegmentHitResult | null {
     const bounds = Segment.bounds(segment);
-    const expandedMin = { x: bounds.min.x - radius, y: bounds.min.y - radius };
-    const expandedMax = { x: bounds.max.x + radius, y: bounds.max.y + radius };
+    const radiusVec = { x: radius, y: radius };
+    const expandedMin = Vec2.sub(bounds.min, radiusVec);
+    const expandedMax = Vec2.add(bounds.max, radiusVec);
 
     if (
       pos.x < expandedMin.x ||
@@ -150,5 +153,28 @@ export const Segment = {
 
   isCubic(segment: SegmentType): segment is CubicSegment {
     return segment.type === "cubic";
+  },
+
+  getPointIds(segment: SegmentType): PointId[] {
+    switch (segment.type) {
+      case "line":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+      case "quad":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.control.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+      case "cubic":
+        return [
+          asPointId(segment.points.anchor1.id),
+          asPointId(segment.points.control1.id),
+          asPointId(segment.points.control2.id),
+          asPointId(segment.points.anchor2.id),
+        ];
+    }
   },
 } as const;

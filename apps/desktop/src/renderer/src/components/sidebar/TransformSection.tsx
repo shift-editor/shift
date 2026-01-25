@@ -41,7 +41,7 @@ export const TransformSection = () => {
     (newX: number) => {
       if (!bounds) return;
       const anchorPoint = anchorToPoint(anchor, bounds);
-      editor.moveSelectionTo(newX, anchorPoint.y, anchorPoint.x, anchorPoint.y);
+      editor.moveSelectionTo({ x: newX, y: anchorPoint.y }, anchorPoint);
       editor.requestRedraw();
     },
     [bounds, anchor, editor],
@@ -51,7 +51,7 @@ export const TransformSection = () => {
     (newY: number) => {
       if (!bounds) return;
       const anchorPoint = anchorToPoint(anchor, bounds);
-      editor.moveSelectionTo(anchorPoint.x, newY, anchorPoint.x, anchorPoint.y);
+      editor.moveSelectionTo({ x: anchorPoint.x, y: newY }, anchorPoint);
       editor.requestRedraw();
     },
     [bounds, anchor, editor],

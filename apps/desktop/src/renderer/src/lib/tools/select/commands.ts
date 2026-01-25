@@ -398,8 +398,7 @@ export class SelectCommands {
    * Returns the opposite corner/center point that stays fixed during resize.
    */
   getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
-    const centerX = (rect.left + rect.right) / 2;
-    const centerY = (rect.top + rect.bottom) / 2;
+    const center = Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
 
     switch (edge) {
       case "top-left":
@@ -411,13 +410,13 @@ export class SelectCommands {
       case "bottom-right":
         return { x: rect.left, y: rect.bottom };
       case "left":
-        return { x: rect.right, y: centerY };
+        return { x: rect.right, y: center.y };
       case "right":
-        return { x: rect.left, y: centerY };
+        return { x: rect.left, y: center.y };
       case "top":
-        return { x: centerX, y: rect.bottom };
+        return { x: center.x, y: rect.bottom };
       case "bottom":
-        return { x: centerX, y: rect.top };
+        return { x: center.x, y: rect.top };
     }
   }
 
@@ -498,16 +497,17 @@ export class SelectCommands {
       ctx.selectedPoints.has(asPointId(p.id)),
     );
 
-    const moves: Array<{ pointId: PointId; x: number; y: number }> = [];
+    const moves: Array<{ pointId: PointId; pos: Point2D }> = [];
 
     for (const point of selectedPointsData) {
-      const newX = anchorPoint.x + (point.x - anchorPoint.x) * sx;
-      const newY = anchorPoint.y + (point.y - anchorPoint.y) * sy;
-      moves.push({ pointId: asPointId(point.id), x: newX, y: newY });
+      const offset = Vec2.sub(point, anchorPoint);
+      const scaled = Vec2.mul(offset, { x: sx, y: sy });
+      const newPos = Vec2.add(anchorPoint, scaled);
+      moves.push({ pointId: asPointId(point.id), pos: newPos });
     }
 
     for (const move of moves) {
-      ctx.edit.movePointTo(move.pointId, move.x, move.y);
+      ctx.edit.movePointTo(move.pointId, move.pos.x, move.pos.y);
     }
   }
 }

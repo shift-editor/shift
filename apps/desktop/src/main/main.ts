@@ -280,8 +280,9 @@ const createWindow = () => {
     globalShortcut.register(
       process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R",
       () => {
-        // Reload the window - this will reload the preload script and pick up new native modules
-        mainWindow?.reload();
+        if (mainWindow?.isFocused()) {
+          mainWindow?.reload();
+        }
       },
     );
 
@@ -289,7 +290,9 @@ const createWindow = () => {
     globalShortcut.register(
       process.platform === "darwin" ? "Command+Q" : "Control+Q",
       () => {
-        app.quit();
+        if (mainWindow?.isFocused()) {
+          app.quit();
+        }
       },
     );
   });

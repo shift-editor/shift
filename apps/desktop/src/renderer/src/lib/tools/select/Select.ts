@@ -7,24 +7,23 @@ import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
 import type { CursorType } from "@/types/editor";
 import type { PointId, Point2D, Rect2D } from "@shift/types";
+import { Vec2 } from "@shift/geo";
 
 import { SelectCommands, type BoundingRectEdge } from "./commands";
 import type { SelectState } from "./states";
 
 function normalizeRect(start: Point2D, current: Point2D): Rect2D {
-  const left = Math.min(start.x, current.x);
-  const right = Math.max(start.x, current.x);
-  const top = Math.min(start.y, current.y);
-  const bottom = Math.max(start.y, current.y);
+  const min = Vec2.min(start, current);
+  const max = Vec2.max(start, current);
   return {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top,
-    left,
-    top,
-    right,
-    bottom,
+    x: min.x,
+    y: min.y,
+    width: max.x - min.x,
+    height: max.y - min.y,
+    left: min.x,
+    top: min.y,
+    right: max.x,
+    bottom: max.y,
   };
 }
 
@@ -270,20 +269,14 @@ export class Select implements Tool {
     });
 
     this.#sm.when("dragging", (state) => {
-      const delta = {
-        x: pos.x - state.drag.lastPos.x,
-        y: pos.y - state.drag.lastPos.y,
-      };
+      const delta = Vec2.sub(pos, state.drag.lastPos);
       this.#commands.moveSelectedPointsByDelta(delta);
       this.#sm.transition({
         type: "dragging",
         drag: {
           ...state.drag,
           lastPos: pos,
-          totalDelta: {
-            x: state.drag.totalDelta.x + delta.x,
-            y: state.drag.totalDelta.y + delta.y,
-          },
+          totalDelta: Vec2.add(state.drag.totalDelta, delta),
         },
       });
     });
@@ -301,10 +294,11 @@ export class Select implements Tool {
       // Reset to initial positions first, then apply new scale
       for (const [id, initialPos] of this.#initialResizePositions) {
         const anchor = state.resize.anchorPoint;
-        const newX = anchor.x + (initialPos.x - anchor.x) * sx;
-        const newY = anchor.y + (initialPos.y - anchor.y) * sy;
+        const offset = Vec2.sub(initialPos, anchor);
+        const scaled = Vec2.mul(offset, { x: sx, y: sy });
+        const newPos = Vec2.add(anchor, scaled);
         const ctx = this.#editor.createToolContext();
-        ctx.edit.movePointTo(id, newX, newY);
+        ctx.edit.movePointTo(id, newPos.x, newPos.y);
       }
 
       this.#sm.transition({

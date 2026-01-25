@@ -1,5 +1,6 @@
 import { Tool, ToolName } from "@/types/tool";
 import type { HandState } from "@/types/hand";
+import { Vec2 } from "@shift/geo";
 
 import { Editor } from "@/lib/editor/Editor";
 
@@ -34,15 +35,11 @@ export class Hand implements Tool {
   onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
     if (this.#state.type !== "dragging") return;
 
-    const { x, y } = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const currentPos = this.#editor.getMousePosition(e.clientX, e.clientY);
+    const delta = Vec2.sub(currentPos, this.#state.startPos);
+    const pan = Vec2.add(this.#state.startPan, delta);
 
-    const dx = x - this.#state.startPos.x;
-    const dy = y - this.#state.startPos.y;
-
-    const panX = this.#state.startPan.x + dx;
-    const panY = this.#state.startPan.y + dy;
-
-    this.#editor.pan(panX, panY);
+    this.#editor.pan(pan.x, pan.y);
     this.#editor.requestRedraw();
   }
 

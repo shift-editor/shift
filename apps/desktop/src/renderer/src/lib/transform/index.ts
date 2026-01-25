@@ -40,6 +40,9 @@ export { Alignment } from "./Alignment";
 // Anchor utilities
 export { anchorToPoint } from "./anchor";
 
+// Selection bounds utilities
+export { getSegmentAwareBounds } from "./SelectionBounds";
+
 // Commands for undo/redo (re-export from commands/transform)
 export {
   RotatePointsCommand,
