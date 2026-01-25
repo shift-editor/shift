@@ -19,8 +19,8 @@ import type { GlyphSnapshot } from "@shift/types";
 export interface CommandContext {
   /** The font engine for performing mutations */
   readonly fontEngine: FontEngine;
-  /** Current glyph snapshot (read-only view of state) */
-  readonly snapshot: GlyphSnapshot | null;
+  /** Current glyph data (read-only view of state) */
+  readonly glyph: GlyphSnapshot | null;
 }
 
 /**

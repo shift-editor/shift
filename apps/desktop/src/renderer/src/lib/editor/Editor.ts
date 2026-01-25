@@ -1,6 +1,6 @@
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
 import type { HandleState, HandleType } from "@/types/handle";
-import type { CursorType, SelectionMode, ToolRegistryItem, VisualState } from "@/types/editor";
+import type { CursorType, SelectionMode, ToolRegistryItem, VisualState, RenderState } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asContourId } from "@shift/types";
 import { findPointInSnapshot, findPointsInSnapshot } from "../utils/snapshot";
@@ -28,7 +28,7 @@ import {
   type TransformablePoint,
   type SelectionBounds,
 } from "../transform";
-import { effect, signal, type Effect, type Signal, type WritableSignal } from "../reactive/signal";
+import { computed, effect, signal, type ComputedSignal, type Effect, type Signal, type WritableSignal } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
 import { SelectionManager } from "./SelectionManager";
 import { HoverManager } from "./HoverManager";
@@ -81,6 +81,7 @@ export class Editor {
   #redrawEffect: Effect;
   #clipboardManager: ClipboardManager;
 
+  $renderState: ComputedSignal<RenderState>;
   private $cursor: WritableSignal<string>;
 
   constructor() {
@@ -88,7 +89,7 @@ export class Editor {
     this.#fontEngine = new FontEngine();
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
-      () => this.#fontEngine.snapshot.value,
+      () => this.#fontEngine.$glyph.value,
     );
 
     this.$previewMode = signal(false);
@@ -102,7 +103,7 @@ export class Editor {
 
     this.#renderer = new GlyphRenderer({
       viewport: this.#viewport,
-      getSnapshot: () => this.#fontEngine.snapshot.value,
+      getSnapshot: () => this.#fontEngine.$glyph.value,
       getFontMetrics: () => this.#fontEngine.info.getMetrics(),
       getActiveTool: () => this.getActiveTool(),
       selection: this.#selection,
@@ -115,24 +116,28 @@ export class Editor {
     });
 
     this.#clipboardManager = new ClipboardManager({
-      getSnapshot: () => this.#fontEngine.snapshot.value,
+      getSnapshot: () => this.#fontEngine.$glyph.value,
       getSelectedPointIds: () => this.#selection.selectedPointIds.peek(),
       getSelectedSegmentIds: () =>
         this.#selection.selectedSegmentIds.peek(),
-      getGlyphName: () => this.#fontEngine.snapshot.value?.name,
+      getGlyphName: () => this.#fontEngine.$glyph.value?.name,
       pasteContours: (json, x, y) =>
         this.#fontEngine.editing.pasteContours(json, x, y),
       selectPoints: (ids) => this.selectPoints(ids),
     });
 
+    this.$renderState = computed<RenderState>(() => ({
+      glyph: this.#fontEngine.$glyph.value,
+      selectedPointIds: this.#selection.selectedPointIds.value,
+      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
+      hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+      selectionMode: this.#selection.selectionMode.value,
+      previewMode: this.$previewMode.value,
+    }));
+
     this.#redrawEffect = effect(() => {
-      this.#fontEngine.snapshot.value;
-      this.#selection.selectedPointIds.value;
-      this.#selection.selectedSegmentIds.value;
-      this.#selection.selectionMode.value;
-      this.#hover.hoveredPointId.value;
-      this.#hover.hoveredSegmentId.value;
-      this.$previewMode.value;
+      this.$renderState.value;
       this.requestRedraw();
     });
   }
@@ -310,7 +315,7 @@ export class Editor {
   }
 
   public getSnapshot(): GlyphSnapshot | null {
-    return this.#fontEngine.snapshot.value;
+    return this.#fontEngine.$glyph.value;
   }
 
   public createToolContext(): ToolContext {
@@ -320,7 +325,7 @@ export class Editor {
     const requestRedraw = () => this.requestRedraw();
 
     return {
-      snapshot: fontEngine.snapshot.value,
+      glyph: fontEngine.$glyph.value,
       selectedPoints: this.selectedPointIds.peek(),
       hoveredPoint: this.hoveredPointId.peek(),
       hoveredSegment: this.hoveredSegmentId.peek(),
@@ -657,7 +662,7 @@ export class Editor {
   }
 
   public findPoint(pointId: PointId): PointSnapshot | null {
-    const snapshot = this.#fontEngine.snapshot.value;
+    const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
     const result = findPointInSnapshot(snapshot, pointId);
@@ -665,7 +670,7 @@ export class Editor {
   }
 
   #getSelectedPointData(): Array<{ x: number; y: number }> {
-    const snapshot = this.#fontEngine.snapshot.value;
+    const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return [];
 
     const result: Array<{ x: number; y: number }> = [];
@@ -679,7 +684,7 @@ export class Editor {
   }
 
   #getTransformablePoints(): TransformablePoint[] {
-    const snapshot = this.#fontEngine.snapshot.value;
+    const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return [];
 
     return findPointsInSnapshot(

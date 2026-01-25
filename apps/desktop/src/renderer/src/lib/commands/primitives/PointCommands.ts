@@ -5,7 +5,7 @@
  * Each stores the state needed to undo the operation.
  */
 
-import type { PointTypeString, PointId } from "@shift/types";
+import type { PointType, PointId } from "@shift/types";
 import { asPointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
@@ -17,7 +17,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
 
   #x: number;
   #y: number;
-  #pointType: PointTypeString;
+  #pointType: PointType;
   #smooth: boolean;
 
   // Stored for undo
@@ -26,7 +26,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
   constructor(
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean = false,
   ) {
     super();
@@ -114,8 +114,8 @@ export class MovePointToCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     // Find and store original position
-    if (ctx.snapshot) {
-      for (const contour of ctx.snapshot.contours) {
+    if (ctx.glyph) {
+      for (const contour of ctx.glyph.contours) {
         const point = contour.points.find((p) => p.id === this.#pointId);
         if (point) {
           this.#originalX = point.x;
@@ -156,7 +156,7 @@ export class RemovePointsCommand extends BaseCommand<void> {
     contourId: string;
     x: number;
     y: number;
-    pointType: PointTypeString;
+    pointType: PointType;
     smooth: boolean;
   }> = [];
 
@@ -170,8 +170,8 @@ export class RemovePointsCommand extends BaseCommand<void> {
 
     // Store point data before removal for undo
     this.#removedPoints = [];
-    if (ctx.snapshot) {
-      for (const contour of ctx.snapshot.contours) {
+    if (ctx.glyph) {
+      for (const contour of ctx.glyph.contours) {
         for (const point of contour.points) {
           if (this.#pointIds.includes(asPointId(point.id))) {
             this.#removedPoints.push({

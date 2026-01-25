@@ -14,7 +14,7 @@ import type { Tool } from "@/types/tool";
 import { FrameHandler } from "./FrameHandler";
 import { drawHandleLast } from "./handles";
 import type { Viewport } from "./Viewport";
-import { getBoundingRect } from "../math/rect";
+import { Polygon } from "@shift/geo";
 import {
   renderGlyph,
   renderGuides,
@@ -194,8 +194,8 @@ export class GlyphRenderer {
 
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#deps.getSelectedPointData();
-      if (selectedPointData.length > 0) {
-        const bbRect = getBoundingRect(selectedPointData);
+      const bbRect = Polygon.boundingRect(selectedPointData);
+      if (bbRect) {
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
         ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
         ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);

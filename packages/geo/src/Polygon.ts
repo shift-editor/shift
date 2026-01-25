@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { Point2D } from "./types";
+import type { Point2D, Rect2D } from "./types";
 
 export const Polygon = {
   /**
@@ -57,5 +57,37 @@ export const Polygon = {
   isCounterClockwise(points: Point2D[]): boolean {
     if (points.length < 3) return false;
     return Polygon.signedArea(points) < 0;
+  },
+
+  /**
+   * Calculate the axis-aligned bounding rectangle of a set of points.
+   * Returns null for empty arrays.
+   */
+  boundingRect(points: Point2D[]): Rect2D | null {
+    if (points.length === 0) return null;
+
+    let minX = points[0].x;
+    let minY = points[0].y;
+    let maxX = points[0].x;
+    let maxY = points[0].y;
+
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      left: minX,
+      top: minY,
+      right: maxX,
+      bottom: maxY,
+    };
   },
 } as const;

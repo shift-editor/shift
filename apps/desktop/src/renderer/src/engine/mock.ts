@@ -11,7 +11,7 @@ import type {
   JsFontMetrics,
   JsGlyphSnapshot,
 } from "@shared/bridge/FontEngineAPI";
-import type { PointTypeString, CommandResult } from "@shift/types";
+import type { PointType, CommandResult } from "@shift/types";
 
 /**
  * Mock implementation of FontEngineAPI for testing.
@@ -200,7 +200,7 @@ export class MockFontEngine implements FontEngineAPI {
   addPoint(
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean,
   ): string {
     if (!this.#snapshot)
@@ -234,7 +234,7 @@ export class MockFontEngine implements FontEngineAPI {
     contourId: string,
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean,
   ): string {
     if (!this.#snapshot)
@@ -291,7 +291,7 @@ export class MockFontEngine implements FontEngineAPI {
     beforePointId: string,
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean,
   ): string {
     if (!this.#snapshot)

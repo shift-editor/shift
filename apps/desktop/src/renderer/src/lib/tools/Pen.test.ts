@@ -20,7 +20,7 @@ function createMockEditor() {
 
   const mockCommandHistory = {
     execute: vi.fn((cmd: any) =>
-      cmd.execute({ fontEngine, snapshot: fontEngine.snapshot.value }),
+      cmd.execute({ fontEngine, glyph: fontEngine.$glyph.value }),
     ),
     record: vi.fn(),
     beginBatch: vi.fn(() => {
@@ -88,7 +88,7 @@ function createMockEditor() {
   const requestRedrawMock = vi.fn();
 
   const createToolContext = (): ToolContext => ({
-    snapshot: fontEngine.snapshot.value,
+    glyph: fontEngine.$glyph.value,
     selectedPoints,
     hoveredPoint,
     mousePosition: { x: 0, y: 0 },
@@ -108,7 +108,7 @@ function createMockEditor() {
       y: y ?? 0,
     })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
-    getSnapshot: vi.fn(() => fontEngine.snapshot.value),
+    getSnapshot: vi.fn(() => fontEngine.$glyph.value),
     requestRedraw: vi.fn(),
     createToolContext: vi.fn(createToolContext),
     paintHandle: vi.fn(),
@@ -184,7 +184,7 @@ describe("Pen tool", () => {
 
       expect(mocks.commands.beginBatch).toHaveBeenCalledWith("Add Point");
       expect(mocks.commands.execute).toHaveBeenCalled();
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
     });
 
     it("should not add point on non-left click", () => {
@@ -211,7 +211,7 @@ describe("Pen tool", () => {
       pen.onMouseDown(event);
 
       expect(mocks.commands.execute).toHaveBeenCalled();
-      const snapshot = fontEngine.snapshot.value;
+      const snapshot = fontEngine.$glyph.value;
       expect(snapshot?.contours[0]?.points[0]?.x).toBe(150);
       expect(snapshot?.contours[0]?.points[0]?.y).toBe(250);
     });
@@ -223,29 +223,29 @@ describe("Pen tool", () => {
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
       pen.onMouseDown(createMouseEvent("mousedown", 300, 100));
 
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(3);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(3);
     });
   });
 
   describe("bezier drag (handle creation)", () => {
     it("should create control point when dragging far enough", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       pen.onMouseMove(createMouseEvent("mousemove", 120, 100));
 
-      expect(getPointCount(fontEngine.snapshot.value)).toBeGreaterThanOrEqual(
+      expect(getPointCount(fontEngine.$glyph.value)).toBeGreaterThanOrEqual(
         1,
       );
     });
 
     it("should not create control point for small drag", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 100, 100));
-      const initialCount = getPointCount(fontEngine.snapshot.value);
+      const initialCount = getPointCount(fontEngine.$glyph.value);
 
       pen.onMouseMove(createMouseEvent("mousemove", 101, 100));
 
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(initialCount);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(initialCount);
     });
   });
 
@@ -255,7 +255,7 @@ describe("Pen tool", () => {
       pen.onMouseUp(createMouseEvent("mouseup", 100, 100));
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
 
       mocks.commands.execute.mockClear();
       mocks.commands.beginBatch.mockClear();
@@ -295,7 +295,7 @@ describe("Pen tool", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 300, 300));
       pen.onMouseUp(createMouseEvent("mouseup", 300, 300));
 
-      expect(getContourCount(fontEngine.snapshot.value)).toBeGreaterThanOrEqual(
+      expect(getContourCount(fontEngine.$glyph.value)).toBeGreaterThanOrEqual(
         1,
       );
     });
@@ -311,7 +311,7 @@ describe("Pen tool", () => {
       mocks.commands.execute.mockClear();
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
       expect(mocks.commands.execute).toHaveBeenCalled();
-      expect(getPointCount(fontEngine.snapshot.value)).toBe(2);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
     });
   });
 
@@ -530,21 +530,21 @@ describe("Pen tool", () => {
       pen.onMouseDown(createMouseEvent("mousedown", 200, 200));
       pen.onMouseUp(createMouseEvent("mouseup", 200, 200));
 
-      const contourCountBefore = getContourCount(fontEngine.snapshot.value);
+      const contourCountBefore = getContourCount(fontEngine.$glyph.value);
 
       pen.cancel();
 
-      const contourCountAfter = getContourCount(fontEngine.snapshot.value);
+      const contourCountAfter = getContourCount(fontEngine.$glyph.value);
       expect(contourCountAfter).toBe(contourCountBefore + 1);
       expect(pen.getState().type).toBe("ready");
     });
 
     it("should do nothing on Escape when no points in contour", () => {
-      const contourCountBefore = getContourCount(fontEngine.snapshot.value);
+      const contourCountBefore = getContourCount(fontEngine.$glyph.value);
 
       pen.cancel();
 
-      const contourCountAfter = getContourCount(fontEngine.snapshot.value);
+      const contourCountAfter = getContourCount(fontEngine.$glyph.value);
       expect(contourCountAfter).toBe(contourCountBefore);
       expect(pen.getState().type).toBe("ready");
     });

@@ -6,12 +6,12 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  cn,
 } from "@shift/ui";
 import { useValue } from "@/lib/reactive";
 import AppState, { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import { ToolName } from "@/types/tool";
-import { cn } from "@/lib/utils";
 
 interface ToolbarIconProps {
   Icon: Svg;

@@ -239,7 +239,7 @@ export class Pen implements Tool {
 
   private buildContourContext(): ContourContext {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) {
       return {
         previousPointType: "none",
@@ -281,7 +281,7 @@ export class Pen implements Tool {
 
   private shouldCloseContour(x: number, y: number): boolean {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     const activeContourId = ctx.edit.getActiveContourId();
     const activeContour = snapshot?.contours.find(
       (c) => c.id === activeContourId,
@@ -302,7 +302,7 @@ export class Pen implements Tool {
 
   private isNearAnyPoint(x: number, y: number): boolean {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return false;
 
     const hitRadius = ctx.screen.hitRadius;
@@ -318,7 +318,7 @@ export class Pen implements Tool {
 
   private findHitPoint(x: number, y: number): PointHitResult | null {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return null;
 
     const hitRadius = ctx.screen.hitRadius;
@@ -348,7 +348,7 @@ export class Pen implements Tool {
 
   private findHitSegment(x: number, y: number): SegmentHitResult | null {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return null;
 
     const hitRadius = ctx.screen.hitRadius;
@@ -367,7 +367,7 @@ export class Pen implements Tool {
 
   private hasActiveDrawingContour(): boolean {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return false;
 
     const activeContourId = ctx.edit.getActiveContourId();
@@ -384,7 +384,7 @@ export class Pen implements Tool {
 
   private getLastOnCurvePoint(): Point2D | null {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return null;
 
     const activeContourId = ctx.edit.getActiveContourId();

@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "./types";
 
 /**
  * 2D Affine Transformation Matrix (3x2 representation)
@@ -45,12 +45,6 @@ export class Mat implements MatModel {
     this.f = f;
   }
 
-  // --- Instance Methods (mutating, for chaining) ---
-
-  /**
-   * Multiply this matrix by another (this = this × m)
-   * Used for composing transforms
-   */
   multiply(m: MatModel): this {
     const { a, b, c, d, e, f } = this;
     this.a = a * m.a + c * m.b;
@@ -62,9 +56,6 @@ export class Mat implements MatModel {
     return this;
   }
 
-  /**
-   * Invert this matrix (this = this⁻¹)
-   */
   invert(): this {
     const { a, b, c, d, e, f } = this;
     const denom = a * d - b * c;
@@ -82,18 +73,12 @@ export class Mat implements MatModel {
     return this;
   }
 
-  /**
-   * Translate by (x, y)
-   */
   translate(x: number, y: number): this {
     this.e += x;
     this.f += y;
     return this;
   }
 
-  /**
-   * Scale by (sx, sy)
-   */
   scale(sx: number, sy: number): this {
     this.a *= sx;
     this.b *= sx;
@@ -102,9 +87,6 @@ export class Mat implements MatModel {
     return this;
   }
 
-  /**
-   * Rotate by angle (radians)
-   */
   rotate(angle: number): this {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
@@ -116,14 +98,9 @@ export class Mat implements MatModel {
     return this;
   }
 
-  /**
-   * Convert to Canvas2D transform parameters
-   */
   toCanvasTransform(): [number, number, number, number, number, number] {
     return [this.a, this.b, this.c, this.d, this.e, this.f];
   }
-
-  // --- Static Methods (pure, functional style) ---
 
   static Identity(): Mat {
     return new Mat(1, 0, 0, 1, 0, 0);
@@ -143,35 +120,20 @@ export class Mat implements MatModel {
     return new Mat(cos, sin, -sin, cos, 0, 0);
   }
 
-  /**
-   * Reflect across horizontal axis (X axis).
-   * This inverts Y coordinates.
-   */
   static ReflectHorizontal(): Mat {
     return new Mat(1, 0, 0, -1, 0, 0);
   }
 
-  /**
-   * Reflect across vertical axis (Y axis).
-   * This inverts X coordinates.
-   */
   static ReflectVertical(): Mat {
     return new Mat(-1, 0, 0, 1, 0, 0);
   }
 
-  /**
-   * Reflect across an axis at the given angle.
-   * @param angle - Angle of the reflection axis in radians
-   */
   static ReflectAxis(angle: number): Mat {
     const cos2a = Math.cos(2 * angle);
     const sin2a = Math.sin(2 * angle);
     return new Mat(cos2a, sin2a, sin2a, -cos2a, 0, 0);
   }
 
-  /**
-   * Compose two matrices: result = m1 × m2
-   */
   static Compose(m1: MatModel, m2: MatModel): Mat {
     return new Mat(
       m1.a * m2.a + m1.c * m2.b,
@@ -183,16 +145,10 @@ export class Mat implements MatModel {
     );
   }
 
-  /**
-   * Invert a matrix: result = m⁻¹
-   */
   static Inverse(m: MatModel): Mat {
     return new Mat(m.a, m.b, m.c, m.d, m.e, m.f).invert();
   }
 
-  /**
-   * Apply matrix to a point
-   */
   static applyToPoint(m: MatModel, point: Point2D): Point2D {
     return {
       x: m.a * point.x + m.c * point.y + m.e,
@@ -200,9 +156,6 @@ export class Mat implements MatModel {
     };
   }
 
-  /**
-   * Clone this matrix
-   */
   clone(): Mat {
     return new Mat(this.a, this.b, this.c, this.d, this.e, this.f);
   }

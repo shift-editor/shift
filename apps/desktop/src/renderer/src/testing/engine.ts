@@ -10,7 +10,7 @@ import type {
   GlyphSnapshot,
   PointSnapshot,
   ContourSnapshot,
-  PointTypeString,
+  PointType,
 } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { FontEngine, MockFontEngine } from "@/engine";
@@ -162,7 +162,7 @@ export interface TestPointConfig {
   /** Y coordinate. */
   y: number;
   /** Point type (defaults to 'onCurve'). */
-  type?: PointTypeString;
+  type?: PointType;
   /** Whether the point is smooth. */
   smooth?: boolean;
 }

@@ -1,6 +1,6 @@
 import type { Editor } from "@/lib/editor/Editor";
-import { UPMRect, getBoundingRect } from "@/lib/math/rect";
 import type { Point2D, PointId, PointSnapshot, GlyphSnapshot, Rect2D } from "@shift/types";
+import { Polygon } from "@shift/geo";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
@@ -25,11 +25,15 @@ function findPointAtPosition(
   return null;
 }
 
+function pointInRect(p: Point2D, rect: Rect2D): boolean {
+  return p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
+}
+
 function findPointsInRect(
   points: PointSnapshot[],
-  rect: UPMRect,
+  rect: Rect2D,
 ): PointSnapshot[] {
-  return points.filter((p) => rect.hit(p.x, p.y));
+  return points.filter((p) => pointInRect(p, rect));
 }
 
 function getAllPoints(
@@ -135,7 +139,7 @@ export class SelectCommands {
 
   hitTest(pos: Point2D): HitTestResult {
     const ctx = this.#editor.createToolContext();
-    const allPoints = getAllPoints(ctx.snapshot);
+    const allPoints = getAllPoints(ctx.glyph);
     const hitRadius = ctx.screen.hitRadius;
     const hitPoint = findPointAtPosition(allPoints, pos, hitRadius);
 
@@ -157,9 +161,9 @@ export class SelectCommands {
     }
   }
 
-  selectPointsInRect(rect: UPMRect): RectSelectResult {
+  selectPointsInRect(rect: Rect2D): RectSelectResult {
     const ctx = this.#editor.createToolContext();
-    const allPoints = getAllPoints(ctx.snapshot);
+    const allPoints = getAllPoints(ctx.glyph);
     const hitPoints = findPointsInRect(allPoints, rect);
     const pointIds = new Set(hitPoints.map((p) => asPointId(p.id)));
     this.#editor.clearSelection();
@@ -189,7 +193,7 @@ export class SelectCommands {
 
   moveSelectedPoints(anchorId: PointId, currentPos: Point2D): Point2D {
     const ctx = this.#editor.createToolContext();
-    const allPoints = getAllPoints(ctx.snapshot);
+    const allPoints = getAllPoints(ctx.glyph);
     const dragPoint = allPoints.find((p) => p.id === anchorId);
 
     if (!dragPoint) {
@@ -233,7 +237,7 @@ export class SelectCommands {
       return;
     }
 
-    const segmentHit = hitTestSegments(ctx.snapshot, pos, hitRadius);
+    const segmentHit = hitTestSegments(ctx.glyph, pos, hitRadius);
     if (segmentHit) {
       ctx.indicators.setHoveredSegment({
         segmentId: segmentHit.segmentId,
@@ -260,11 +264,11 @@ export class SelectCommands {
   hitTestSegment(pos: Point2D): SegmentHitTestResult | null {
     const ctx = this.#editor.createToolContext();
     const hitRadius = ctx.screen.hitRadius;
-    const hit = hitTestSegments(ctx.snapshot, pos, hitRadius);
+    const hit = hitTestSegments(ctx.glyph, pos, hitRadius);
 
     if (!hit) return null;
 
-    const segment = findSegmentById(ctx.snapshot, hit.segmentId);
+    const segment = findSegmentById(ctx.glyph, hit.segmentId);
     if (!segment) return null;
 
     return {
@@ -278,7 +282,7 @@ export class SelectCommands {
 
   selectSegment(segmentId: SegmentId, additive: boolean): PointId[] {
     const ctx = this.#editor.createToolContext();
-    const segment = findSegmentById(ctx.snapshot, segmentId);
+    const segment = findSegmentById(ctx.glyph, segmentId);
 
     if (!segment) return [];
 
@@ -314,7 +318,7 @@ export class SelectCommands {
     // Toggle the segment
     this.#editor.toggleSegmentInSelection(segmentId);
 
-    const segment = findSegmentById(ctx.snapshot, segmentId);
+    const segment = findSegmentById(ctx.glyph, segmentId);
     if (!segment) return [];
 
     const pointIds = getSegmentPointIds(segment);
@@ -347,14 +351,12 @@ export class SelectCommands {
     if (ctx.selectedPoints.size === 0) return null;
     if (ctx.selectionMode !== "committed") return null;
 
-    const allPoints = getAllPoints(ctx.snapshot);
+    const allPoints = getAllPoints(ctx.glyph);
     const selectedPoints = allPoints.filter((p) =>
       ctx.selectedPoints.has(asPointId(p.id)),
     );
 
-    if (selectedPoints.length === 0) return null;
-
-    return getBoundingRect(selectedPoints);
+    return Polygon.boundingRect(selectedPoints);
   }
 
   /**

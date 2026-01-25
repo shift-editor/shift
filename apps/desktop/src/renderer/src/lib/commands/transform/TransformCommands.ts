@@ -7,7 +7,7 @@
 
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
 import { findPointsInSnapshot } from "@/lib/utils/snapshot";
-import type { MatModel } from "@/lib/primitives/Mat";
+import type { MatModel } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
@@ -42,7 +42,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
+    const points = getPointsFromSnapshot(ctx.glyph, this.#pointIds);
     if (points.length === 0) return;
 
     if (this.#originalPositions.size === 0) {

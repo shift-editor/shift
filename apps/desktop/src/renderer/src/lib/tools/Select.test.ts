@@ -19,7 +19,7 @@ function createMockEditor() {
 
   const mockCommandHistory = {
     execute: vi.fn((cmd: any) =>
-      cmd.execute({ fontEngine, snapshot: fontEngine.snapshot.value }),
+      cmd.execute({ fontEngine, glyph: fontEngine.$glyph.value }),
     ),
     record: vi.fn(),
     beginBatch: vi.fn(),
@@ -103,7 +103,7 @@ function createMockEditor() {
   const requestRedrawMock = vi.fn();
 
   const createToolContext = (): ToolContext => ({
-    snapshot: fontEngine.snapshot.value,
+    glyph: fontEngine.$glyph.value,
     selectedPoints,
     hoveredPoint,
     hoveredSegment,
@@ -125,7 +125,7 @@ function createMockEditor() {
       y: y ?? 0,
     })),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
-    getSnapshot: vi.fn(() => fontEngine.snapshot.value),
+    getSnapshot: vi.fn(() => fontEngine.$glyph.value),
     requestRedraw: vi.fn(),
     createToolContext: vi.fn(createToolContext),
     paintHandle: vi.fn(),
@@ -308,7 +308,7 @@ describe("Select tool", () => {
       select.onMouseDown(createMouseEvent("mousedown", 100, 100));
       select.onMouseMove(createMouseEvent("mousemove", 150, 150));
 
-      const points = getAllPoints(fontEngine.snapshot.value);
+      const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBe(150);
       expect(points[0].y).toBe(150);
     });
@@ -317,12 +317,12 @@ describe("Select tool", () => {
       select.onMouseDown(createMouseEvent("mousedown", 100, 100));
 
       select.onMouseMove(createMouseEvent("mousemove", 110, 110));
-      let points = getAllPoints(fontEngine.snapshot.value);
+      let points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBe(110);
       expect(points[0].y).toBe(110);
 
       select.onMouseMove(createMouseEvent("mousemove", 130, 130));
-      points = getAllPoints(fontEngine.snapshot.value);
+      points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBe(130);
       expect(points[0].y).toBe(130);
     });
@@ -332,7 +332,7 @@ describe("Select tool", () => {
       select.onMouseDown(createMouseEvent("mousedown", 100, 100));
       select.onMouseMove(createMouseEvent("mousemove", 120, 120));
 
-      getAllPoints(fontEngine.snapshot.value);
+      getAllPoints(fontEngine.$glyph.value);
     });
 
     it("should use applySmartEdits for rule engine integration when dragging", () => {
@@ -435,7 +435,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot.value);
+      const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBeGreaterThan(100);
     });
 
@@ -446,7 +446,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot.value);
+      const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBeLessThan(100);
     });
 
@@ -457,7 +457,7 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot.value);
+      const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].y).toBeGreaterThan(100);
     });
 
@@ -468,18 +468,18 @@ describe("Select tool", () => {
         select.keyDownHandler(event);
       }
 
-      const points = getAllPoints(fontEngine.snapshot.value);
+      const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].y).toBeLessThan(100);
     });
 
     it("should nudge by larger amount with shift key", () => {
-      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const before = getAllPoints(fontEngine.$glyph.value)[0].x;
 
       const normalEvent = createKeyboardEvent("keydown", "ArrowRight");
       if (select.keyDownHandler) {
         select.keyDownHandler(normalEvent);
       }
-      const afterSmall = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const afterSmall = getAllPoints(fontEngine.$glyph.value)[0].x;
       const smallNudge = afterSmall - before;
 
       fontEngine.editing.movePoints([pointId], -smallNudge, 0);
@@ -490,14 +490,14 @@ describe("Select tool", () => {
       if (select.keyDownHandler) {
         select.keyDownHandler(shiftEvent);
       }
-      const afterLarge = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const afterLarge = getAllPoints(fontEngine.$glyph.value)[0].x;
       const largeNudge = afterLarge - before;
 
       expect(largeNudge).toBeGreaterThan(smallNudge);
     });
 
     it("should nudge by largest amount with meta key", () => {
-      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const before = getAllPoints(fontEngine.$glyph.value)[0].x;
 
       const metaEvent = createKeyboardEvent("keydown", "ArrowRight", {
         metaKey: true,
@@ -505,7 +505,7 @@ describe("Select tool", () => {
       if (select.keyDownHandler) {
         select.keyDownHandler(metaEvent);
       }
-      const after = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const after = getAllPoints(fontEngine.$glyph.value)[0].x;
 
       expect(after - before).toBeGreaterThan(1);
     });
@@ -514,14 +514,14 @@ describe("Select tool", () => {
       const newSelect = new Select(mockEditor as unknown as Editor);
       newSelect.setReady();
 
-      const before = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const before = getAllPoints(fontEngine.$glyph.value)[0].x;
 
       const event = createKeyboardEvent("keydown", "ArrowRight");
       if (newSelect.keyDownHandler) {
         newSelect.keyDownHandler(event);
       }
 
-      const after = getAllPoints(fontEngine.snapshot.value)[0].x;
+      const after = getAllPoints(fontEngine.$glyph.value)[0].x;
       expect(after).toBe(before);
     });
   });

@@ -112,7 +112,7 @@ export interface TransformContext {
 }
 
 export interface ToolContext {
-  readonly snapshot: GlyphSnapshot | null;
+  readonly glyph: GlyphSnapshot | null;
   readonly selectedPoints: ReadonlySet<PointId>;
   readonly hoveredPoint: PointId | null;
   readonly hoveredSegment: SegmentIndicator | null;

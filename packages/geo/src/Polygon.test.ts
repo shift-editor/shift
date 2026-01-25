@@ -73,4 +73,57 @@ describe("Polygon", () => {
       expect(Polygon.isCounterClockwise(clockwiseSquare)).toBe(false);
     });
   });
+
+  describe("boundingRect", () => {
+    it("returns null for empty array", () => {
+      expect(Polygon.boundingRect([])).toBe(null);
+    });
+
+    it("returns correct bounds for single point", () => {
+      const rect = Polygon.boundingRect([{ x: 5, y: 10 }]);
+      expect(rect).toEqual({
+        x: 5,
+        y: 10,
+        width: 0,
+        height: 0,
+        left: 5,
+        top: 10,
+        right: 5,
+        bottom: 10,
+      });
+    });
+
+    it("returns correct bounds for square", () => {
+      const rect = Polygon.boundingRect(clockwiseSquare);
+      expect(rect).toEqual({
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        left: 0,
+        top: 0,
+        right: 10,
+        bottom: 10,
+      });
+    });
+
+    it("returns correct bounds for points with negative coordinates", () => {
+      const points = [
+        { x: -5, y: -10 },
+        { x: 15, y: 20 },
+        { x: 0, y: 5 },
+      ];
+      const rect = Polygon.boundingRect(points);
+      expect(rect).toEqual({
+        x: -5,
+        y: -10,
+        width: 20,
+        height: 30,
+        left: -5,
+        top: -10,
+        right: 15,
+        bottom: 20,
+      });
+    });
+  });
 });

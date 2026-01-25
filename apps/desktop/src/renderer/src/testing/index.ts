@@ -21,7 +21,7 @@
  *
  * const { ctx, fontEngine } = createMockToolContext();
  * tool.onMouseDown(createMouseEvent('mousedown', { clientX: 100, clientY: 100 }));
- * expect(getPointCount(fontEngine.snapshot.value)).toBe(1);
+ * expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
  * ```
  *
  * ### For Creating Test Data

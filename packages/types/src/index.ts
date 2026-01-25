@@ -22,7 +22,7 @@ export {
 
 // Font types (includes generated types)
 export type {
-  PointTypeString,
+  PointType,
   PointSnapshot,
   ContourSnapshot,
   GlyphSnapshot,

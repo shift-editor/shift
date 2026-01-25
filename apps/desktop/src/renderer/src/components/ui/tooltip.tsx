@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Tooltip as BaseTooltip } from "@base-ui-components/react/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@shift/ui";
 
 interface TooltipProviderProps {
   children: React.ReactNode;

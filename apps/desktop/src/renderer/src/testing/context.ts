@@ -22,13 +22,13 @@ import {
 } from "./engine";
 
 export function createMockCommandContext(
-  snapshot: GlyphSnapshot | null = null,
+  glyph: GlyphSnapshot | null = null,
 ): CommandContext {
   return {
     fontEngine: {
       editing: createMockEditing(),
     } as any,
-    snapshot,
+    glyph,
   };
 }
 
@@ -58,7 +58,7 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
 
   const commandHistory = new CommandHistory(
     fontEngine,
-    () => fontEngine.snapshot.value,
+    () => fontEngine.$glyph.value,
   );
 
   if (options.snapshot) {
@@ -197,8 +197,8 @@ export function createMockToolContext(options: MockToolContextOptions = {}) {
   };
 
   const ctx: ToolContext = {
-    get snapshot() {
-      return fontEngine.snapshot.value;
+    get glyph() {
+      return fontEngine.$glyph.value;
     },
     get selectedPoints() {
       return selectedPoints;

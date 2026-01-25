@@ -4,31 +4,13 @@
 
 // Re-export auto-generated types from Rust
 export type {
-  PointTypeString,
+  PointType,
   PointSnapshot,
   ContourSnapshot,
   GlyphSnapshot,
   CommandResult,
   RuleId,
   MatchedRule,
+  FontMetrics,
+  FontMetadata,
 } from "./generated";
-
-/**
- * Font metadata returned from the native API
- */
-export interface FontMetadata {
-  family: string;
-  styleName: string;
-  version: number;
-}
-
-/**
- * Font metrics used for rendering
- */
-export interface FontMetrics {
-  unitsPerEm: number;
-  ascender: number;
-  descender: number;
-  capHeight: number;
-  xHeight: number;
-}

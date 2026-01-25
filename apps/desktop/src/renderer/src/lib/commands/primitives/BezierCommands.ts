@@ -5,7 +5,7 @@
  * anchor points with control handles and converting point types.
  */
 
-import type { PointId, ContourId, PointTypeString, Point2D } from "@shift/types";
+import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
 import { asPointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
@@ -21,7 +21,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
   #beforePointId: PointId;
   #x: number;
   #y: number;
-  #pointType: PointTypeString;
+  #pointType: PointType;
   #smooth: boolean;
 
   #resultId: PointId | null = null;
@@ -30,7 +30,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
     beforePointId: PointId,
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean = false,
   ) {
     super();
@@ -190,8 +190,8 @@ export class TogglePointSmoothCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     // Find current smooth state
-    if (ctx.snapshot) {
-      for (const contour of ctx.snapshot.contours) {
+    if (ctx.glyph) {
+      for (const contour of ctx.glyph.contours) {
         const point = contour.points.find((p) => p.id === this.#pointId);
         if (point) {
           this.#_wasSmooth = point.smooth;
@@ -232,8 +232,8 @@ export class CloseContourCommand extends BaseCommand<void> {
     this.#contourId = ctx.fontEngine.editing.getActiveContourId();
 
     // Check if already closed
-    if (ctx.snapshot && this.#contourId) {
-      const contour = ctx.snapshot.contours.find(
+    if (ctx.glyph && this.#contourId) {
+      const contour = ctx.glyph.contours.find(
         (c) => c.id === this.#contourId,
       );
       this.#wasClosed = contour?.closed ?? false;

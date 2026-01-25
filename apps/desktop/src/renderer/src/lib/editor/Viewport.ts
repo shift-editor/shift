@@ -1,6 +1,6 @@
 import { clamp } from "@/lib/utils/utils";
 import type { Point2D, Rect2D } from "@shift/types";
-import { Mat } from "@/lib/primitives/Mat";
+import { Mat } from "@shift/geo";
 import {
   signal,
   computed,

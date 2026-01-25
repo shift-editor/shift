@@ -6,16 +6,11 @@
  */
 
 import type { GlyphSnapshot } from "@shift/types";
-import type { NativeFontEngine, NativeGlyphSnapshot } from "./native";
+import type { NativeGlyphSnapshot } from "./native";
+import type { CommitContext } from "./FontEngine";
 
-export interface SessionManagerContext {
-  native: NativeFontEngine;
-  emitSnapshot: (snapshot: GlyphSnapshot | null) => void;
-}
+export type SessionManagerContext = CommitContext;
 
-/**
- * Convert native snapshot format to GlyphSnapshot.
- */
 function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
   return {
     unicode: native.unicode,
@@ -36,9 +31,6 @@ function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
   };
 }
 
-/**
- * SessionManager handles edit session lifecycle.
- */
 export class SessionManager {
   #ctx: SessionManagerContext;
 
@@ -46,11 +38,6 @@ export class SessionManager {
     this.#ctx = ctx;
   }
 
-  /**
-   * Start editing a glyph by unicode codepoint.
-   * If a session is already active for a different glyph, it will be ended first.
-   * If already editing the same glyph, this is a no-op.
-   */
   startEditSession(unicode: number): void {
     if (this.isActive()) {
       const currentUnicode = this.getEditingUnicode();
@@ -62,39 +49,24 @@ export class SessionManager {
 
     this.#ctx.native.startEditSession(unicode);
 
-    // Emit the initial snapshot
-    const snapshot = this.getSnapshot();
-    this.#ctx.emitSnapshot(snapshot);
+    const glyph = this.getGlyph();
+    this.#ctx.emitGlyph(glyph);
   }
 
-  /**
-   * End the current edit session.
-   * Changes are persisted back to the font.
-   */
   endEditSession(): void {
     this.#ctx.native.endEditSession();
-    this.#ctx.emitSnapshot(null);
+    this.#ctx.emitGlyph(null);
   }
 
-  /**
-   * Check if an edit session is currently active.
-   */
   isActive(): boolean {
     return this.#ctx.native.hasEditSession();
   }
 
-  /**
-   * Get the unicode codepoint of the glyph being edited, or null if no session.
-   */
   getEditingUnicode(): number | null {
     return this.#ctx.native.getEditingUnicode();
   }
 
-  /**
-   * Get the current glyph snapshot.
-   * Returns null if no edit session is active.
-   */
-  getSnapshot(): GlyphSnapshot | null {
+  getGlyph(): GlyphSnapshot | null {
     if (!this.isActive()) {
       return null;
     }

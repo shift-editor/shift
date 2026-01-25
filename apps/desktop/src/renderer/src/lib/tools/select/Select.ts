@@ -1,16 +1,32 @@
 import { Editor } from "@/lib/editor/Editor";
 import { MovePointsCommand, NudgePointsCommand } from "@/lib/commands";
-import { UPMRect } from "@/lib/math/rect";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
 import { Tool, ToolName } from "@/types/tool";
 import type { CursorType } from "@/types/editor";
-import type { PointId } from "@shift/types";
+import type { PointId, Point2D, Rect2D } from "@shift/types";
 
 import { SelectCommands, type BoundingRectEdge } from "./commands";
 import type { SelectState } from "./states";
+
+function normalizeRect(start: Point2D, current: Point2D): Rect2D {
+  const left = Math.min(start.x, current.x);
+  const right = Math.max(start.x, current.x);
+  const top = Math.min(start.y, current.y);
+  const bottom = Math.max(start.y, current.y);
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    left,
+    top,
+    right,
+    bottom,
+  };
+}
 
 function edgeToCursor(edge: BoundingRectEdge): CursorType {
   switch (edge) {
@@ -37,7 +53,6 @@ export class Select implements Tool {
   #editor: Editor;
   #sm: StateMachine<SelectState>;
   #commands: SelectCommands;
-  #selectionRect: UPMRect;
   #renderEffect: Effect;
   #shiftModifierOn: boolean = false;
   #draggedPointIds: PointId[] = [];
@@ -46,7 +61,6 @@ export class Select implements Tool {
     this.#editor = editor;
     this.#sm = createStateMachine<SelectState>({ type: "idle" });
     this.#commands = new SelectCommands(editor);
-    this.#selectionRect = new UPMRect(0, 0, 0, 0);
 
     this.#renderEffect = effect(() => {
       if (!this.#sm.isIn("idle")) {
@@ -213,14 +227,8 @@ export class Select implements Tool {
     const pos = this.#getMouseUpm(e);
 
     this.#sm.when("selecting", (state) => {
-      const width = pos.x - state.selection.startPos.x;
-      const height = pos.y - state.selection.startPos.y;
-      this.#selectionRect.changeOrigin(
-        state.selection.startPos.x,
-        state.selection.startPos.y,
-      );
-      this.#selectionRect.resize(width, height);
-      this.#commands.selectPointsInRect(this.#selectionRect);
+      const rect = normalizeRect(state.selection.startPos, pos);
+      this.#commands.selectPointsInRect(rect);
       this.#sm.transition({
         type: "selecting",
         selection: { ...state.selection, currentPos: pos },
@@ -271,11 +279,9 @@ export class Select implements Tool {
   onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
     const ctx = this.#editor.createToolContext();
 
-    this.#sm.when("selecting", () => {
-      const { pointIds } = this.#commands.selectPointsInRect(
-        this.#selectionRect,
-      );
-      this.#selectionRect.clear();
+    this.#sm.when("selecting", (state) => {
+      const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
+      const { pointIds } = this.#commands.selectPointsInRect(rect);
       ctx.select.setMode("committed");
       this.#editor.setCursor({ type: "default" });
 
@@ -309,23 +315,14 @@ export class Select implements Tool {
 
   drawInteractive(ctx: IRenderer): void {
     const toolCtx = this.#editor.createToolContext();
-    this.#sm.when("selecting", () => {
+    this.#sm.when("selecting", (state) => {
+      const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
       ctx.setStyle(SELECTION_RECTANGLE_STYLES);
       ctx.lineWidth = toolCtx.screen.lineWidth(
         SELECTION_RECTANGLE_STYLES.lineWidth,
       );
-      ctx.fillRect(
-        this.#selectionRect.x,
-        this.#selectionRect.y,
-        this.#selectionRect.width,
-        this.#selectionRect.height,
-      );
-      ctx.strokeRect(
-        this.#selectionRect.x,
-        this.#selectionRect.y,
-        this.#selectionRect.width,
-        this.#selectionRect.height,
-      );
+      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
     });
   }
 

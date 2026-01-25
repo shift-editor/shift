@@ -29,7 +29,7 @@
  */
 
 // Types
-export type { Point2D, BBox } from "./types";
+export type { Point2D, BBox, Rect2D } from "./types";
 
 // Core vector operations
 export { Vec2 } from "./Vec2";
@@ -46,3 +46,6 @@ export type {
   CurveType,
   ClosestPointResult,
 } from "./Curve";
+
+// Matrix transformations
+export { Mat, type MatModel } from "./Mat";

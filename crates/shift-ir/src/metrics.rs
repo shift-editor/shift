@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct FontMetrics {
     pub units_per_em: f64,
     pub ascender: f64,

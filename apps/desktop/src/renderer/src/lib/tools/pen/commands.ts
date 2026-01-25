@@ -137,7 +137,7 @@ export class PenCommands {
 
   abandonContour(): void {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return;
 
     const activeContourId = ctx.edit.getActiveContourId();
@@ -169,7 +169,7 @@ export class PenCommands {
 
   splitContour(contourId: ContourId, atPointIndex: number): void {
     const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.snapshot;
+    const snapshot = ctx.glyph;
     if (!snapshot) return;
 
     const contour = snapshot.contours.find((c) => c.id === contourId);

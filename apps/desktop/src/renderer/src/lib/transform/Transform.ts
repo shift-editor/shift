@@ -19,7 +19,7 @@
  * ```
  */
 
-import { Mat, type MatModel } from "@/lib/primitives/Mat";
+import { Mat, type MatModel } from "@shift/geo";
 import type { Point2D } from "@shift/types";
 import type {
   TransformablePoint,

@@ -76,7 +76,7 @@ export class CommandHistory {
   #createContext(): CommandContext {
     return {
       fontEngine: this.#fontEngine,
-      snapshot: this.#getSnapshot(),
+      glyph: this.#getSnapshot(),
     };
   }
 

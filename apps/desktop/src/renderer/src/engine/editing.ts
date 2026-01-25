@@ -5,16 +5,15 @@
  */
 
 import type {
-  PointTypeString,
-  CommandResult,
+  PointType,
   GlyphSnapshot,
   PointId,
   ContourId,
   MatchedRule,
 } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
-import type { NativeFontEngine } from "./native";
 import { NoEditSessionError, NativeOperationError } from "./errors";
+import type { CommitContext } from "./FontEngine";
 
 interface SmartEditResult {
   success: boolean;
@@ -24,26 +23,7 @@ interface SmartEditResult {
   error: string | null;
 }
 
-export interface ManagerContext {
-  native: NativeFontEngine;
-  hasSession: () => boolean;
-  emitSnapshot: (snapshot: GlyphSnapshot | null) => void;
-}
-
-/**
- * Parse a CommandResult JSON string from Rust.
- */
-function parseCommandResult(json: string): CommandResult {
-  const raw = JSON.parse(json) as CommandResult
-  return {
-    success: raw.success,
-    snapshot: raw.snapshot ?? null,
-    error: raw.error ?? null,
-    affectedPointIds: raw.affectedPointIds ?? null,
-    canUndo: raw.canUndo ?? false,
-    canRedo: raw.canRedo ?? false,
-  };
-}
+export type ManagerContext = CommitContext;
 
 export interface PasteResult {
   success: boolean;
@@ -62,9 +42,6 @@ function parsePasteResult(json: string): PasteResult {
   };
 }
 
-/**
- * EditingManager handles all point and contour mutations.
- */
 export class EditingManager {
   #ctx: ManagerContext;
 
@@ -72,87 +49,52 @@ export class EditingManager {
     this.#ctx = ctx;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // POINT OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Add a point to the active contour.
-   * @returns The ID of the newly added point.
-   */
   addPoint(
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.addPoint(x, y, pointType, smooth);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("addPoint", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
-
-    // Return the ID of the newly added point
-    const pointId = result.affectedPointIds?.[0];
-    if (!pointId) {
-      // Fallback: get ID from the last point of the last contour
-      const lastContour =
-        result.snapshot?.contours[result.snapshot.contours.length - 1];
-      const lastPoint = lastContour?.points[lastContour.points.length - 1];
-      return asPointId(lastPoint?.id ?? "");
-    }
-
-    return asPointId(pointId);
+    return this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("addPoint", result.error ?? undefined);
+        }
+        const pointId = result.affectedPointIds?.[0];
+        if (!pointId) {
+          const lastContour = result.snapshot?.contours[result.snapshot.contours.length - 1];
+          const lastPoint = lastContour?.points[lastContour.points.length - 1];
+          return asPointId(lastPoint?.id ?? "");
+        }
+        return asPointId(pointId);
+      },
+      () => this.#ctx.native.addPoint(x, y, pointType, smooth),
+    );
   }
 
-  /**
-   * Add a point to a specific contour.
-   * @returns The ID of the newly added point.
-   */
   addPointToContour(
     contourId: ContourId,
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.addPointToContour(
-      contourId,
-      x,
-      y,
-      pointType,
-      smooth,
+    return this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("addPointToContour", result.error ?? undefined);
+        }
+        const pointId = result.affectedPointIds?.[0];
+        return asPointId(pointId ?? "");
+      },
+      () => this.#ctx.native.addPointToContour(contourId, x, y, pointType, smooth),
     );
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError(
-        "addPointToContour",
-        result.error ?? undefined,
-      );
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
-
-    const pointId = result.affectedPointIds?.[0];
-    return asPointId(pointId ?? "");
   }
 
-  /**
-   * Move multiple points by a delta.
-   * @returns The IDs of points that were actually moved.
-   */
   movePoints(pointIds: PointId[], dx: number, dy: number): PointId[] {
     this.#requireSession();
 
@@ -160,24 +102,17 @@ export class EditingManager {
       return [];
     }
 
-    const resultJson = this.#ctx.native.movePoints(pointIds, dx, dy);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("movePoints", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
-
-    return (result.affectedPointIds ?? []).map(asPointId);
+    return this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("movePoints", result.error ?? undefined);
+        }
+        return (result.affectedPointIds ?? []).map(asPointId);
+      },
+      () => this.#ctx.native.movePoints(pointIds, dx, dy),
+    );
   }
 
-  /**
-   * Move a single point to an absolute position.
-   * Calculates delta from current position and uses movePoints.
-   */
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
 
@@ -200,9 +135,6 @@ export class EditingManager {
     throw new NativeOperationError("movePointTo", `Point ${pointId} not found`);
   }
 
-  /**
-   * Remove multiple points.
-   */
   removePoints(pointIds: PointId[]): void {
     this.#requireSession();
 
@@ -210,103 +142,64 @@ export class EditingManager {
       return;
     }
 
-    const resultJson = this.#ctx.native.removePoints(pointIds);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("removePoints", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("removePoints", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.removePoints(pointIds),
+    );
   }
 
-  /**
-   * Insert a point before an existing point.
-   * Used for inserting control points in the correct position for bezier curves.
-   * @returns The ID of the newly inserted point.
-   */
   insertPointBefore(
     beforePointId: PointId,
     x: number,
     y: number,
-    pointType: PointTypeString,
+    pointType: PointType,
     smooth: boolean = false,
   ): PointId {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.insertPointBefore(
-      beforePointId,
-      x,
-      y,
-      pointType,
-      smooth,
+    return this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("insertPointBefore", result.error ?? undefined);
+        }
+        const pointId = result.affectedPointIds?.[0];
+        return asPointId(pointId ?? "");
+      },
+      () => this.#ctx.native.insertPointBefore(beforePointId, x, y, pointType, smooth),
     );
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError(
-        "insertPointBefore",
-        result.error ?? undefined,
-      );
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
-
-    const pointId = result.affectedPointIds?.[0];
-    return asPointId(pointId ?? "");
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CONTOUR OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Add an empty contour and set it as active.
-   * @returns The ID of the new contour.
-   */
   addContour(): ContourId {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.addContour();
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("addContour", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
-
-    // Return the active contour ID (which is the new one)
-    return asContourId(result.snapshot?.activeContourId ?? "");
+    return this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("addContour", result.error ?? undefined);
+        }
+        return asContourId(result.snapshot?.activeContourId ?? "");
+      },
+      () => this.#ctx.native.addContour(),
+    );
   }
 
-  /**
-   * Close the active contour.
-   */
   closeContour(): void {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.closeContour();
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("closeContour", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("closeContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.closeContour(),
+    );
   }
 
-  /**
-   * Get the currently active contour ID, or null if none.
-   */
   getActiveContourId(): ContourId | null {
     if (!this.#ctx.hasSession()) {
       return null;
@@ -316,77 +209,45 @@ export class EditingManager {
     return id ? asContourId(id) : null;
   }
 
-  /**
-   * Set the active contour by ID.
-   */
   setActiveContour(contourId: ContourId): void {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.setActiveContour(contourId);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError(
-        "setActiveContour",
-        result.error ?? undefined,
-      );
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("setActiveContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.setActiveContour(contourId),
+    );
   }
 
-  /**
-   * Reverse the points in a contour.
-   */
   reverseContour(contourId: ContourId): void {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.reverseContour(contourId);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError(
-        "reverseContour",
-        result.error ?? undefined,
-      );
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("reverseContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.reverseContour(contourId),
+    );
   }
 
-  /**
-   * Remove a contour by ID.
-   */
   removeContour(contourId: ContourId): void {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.removeContour(contourId);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError(
-        "removeContour",
-        result.error ?? undefined,
-      );
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("removeContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.removeContour(contourId),
+    );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CLIPBOARD OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Paste contours into the current edit session.
-   * @returns Result with created point and contour IDs.
-   */
   pasteContours(
     contoursJson: string,
     offsetX: number,
@@ -403,43 +264,25 @@ export class EditingManager {
 
     const snapshotJson = this.#ctx.native.getSnapshot();
     if (snapshotJson) {
-      this.#ctx.emitSnapshot(JSON.parse(snapshotJson));
+      this.#ctx.emitGlyph(JSON.parse(snapshotJson));
     }
 
     return result;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // POINT PROPERTIES
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Toggle the smooth property of a point.
-   */
   toggleSmooth(pointId: PointId): void {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.toggleSmooth(pointId);
-    const result = parseCommandResult(resultJson);
-
-    if (!result.success) {
-      throw new NativeOperationError("toggleSmooth", result.error ?? undefined);
-    }
-
-    if (result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
-    }
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("toggleSmooth", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.toggleSmooth(pointId),
+    );
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SMART EDITING (CONSTRAINT-AWARE)
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Apply edits with constraint awareness.
-   * Uses the Rust unified edit API for smart constraint handling.
-   * @returns The IDs of points that were actually affected.
-   */
   applySmartEdits(
     selectedPoints: ReadonlySet<PointId>,
     dx: number,
@@ -454,15 +297,11 @@ export class EditingManager {
     const result: SmartEditResult = JSON.parse(resultJson);
 
     if (result.success && result.snapshot) {
-      this.#ctx.emitSnapshot(result.snapshot);
+      this.#ctx.emitGlyph(result.snapshot);
     }
 
     return result.affectedPointIds?.map(asPointId) ?? [];
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // PRIVATE
-  // ═══════════════════════════════════════════════════════════
 
   #requireSession(): void {
     if (!this.#ctx.hasSession()) {

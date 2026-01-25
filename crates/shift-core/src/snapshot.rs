@@ -1,33 +1,33 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{edit_session::EditSession, Contour, Point, PointId, PointType};
+use crate::{edit_session::EditSession, Contour, Point, PointId, PointType as IrPointType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct PointSnapshot {
     pub id: String,
     pub x: f64,
     pub y: f64,
-    pub point_type: PointTypeString,
+    pub point_type: PointType,
     pub smooth: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
-pub enum PointTypeString {
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub enum PointType {
     OnCurve,
     OffCurve,
 }
 
-impl From<PointType> for PointTypeString {
-    fn from(pt: PointType) -> Self {
+impl From<IrPointType> for PointType {
+    fn from(pt: IrPointType) -> Self {
         match pt {
-            PointType::OnCurve => PointTypeString::OnCurve,
-            PointType::OffCurve => PointTypeString::OffCurve,
-            PointType::QCurve => PointTypeString::OnCurve,
+            IrPointType::OnCurve => PointType::OnCurve,
+            IrPointType::OffCurve => PointType::OffCurve,
+            IrPointType::QCurve => PointType::OnCurve,
         }
     }
 }
@@ -46,7 +46,7 @@ impl From<&Point> for PointSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct ContourSnapshot {
     pub id: String,
     pub points: Vec<PointSnapshot>,
@@ -65,7 +65,7 @@ impl From<&Contour> for ContourSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct GlyphSnapshot {
     pub unicode: u32,
     pub name: String,
@@ -90,7 +90,7 @@ impl GlyphSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src/renderer/src/types/generated/")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct CommandResult {
     pub success: bool,
     pub snapshot: Option<GlyphSnapshot>,
@@ -148,12 +148,12 @@ impl CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Contour, GlyphLayer, PointType};
+    use crate::{Contour, GlyphLayer, PointType as IrPointType};
 
     #[test]
     fn point_snapshot_from_point() {
         let mut contour = Contour::new();
-        let point_id = contour.add_point(100.0, 200.0, PointType::OnCurve, true);
+        let point_id = contour.add_point(100.0, 200.0, IrPointType::OnCurve, true);
         let point = contour.get_point(point_id).unwrap();
 
         let snapshot = PointSnapshot::from(point);
@@ -161,15 +161,15 @@ mod tests {
         assert_eq!(snapshot.x, 100.0);
         assert_eq!(snapshot.y, 200.0);
         assert!(snapshot.smooth);
-        assert!(matches!(snapshot.point_type, PointTypeString::OnCurve));
+        assert!(matches!(snapshot.point_type, PointType::OnCurve));
     }
 
     #[test]
     fn contour_snapshot_from_contour() {
         let mut contour = Contour::new();
-        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(100.0, 0.0, PointType::OffCurve, false);
-        contour.add_point(100.0, 100.0, PointType::OnCurve, true);
+        contour.add_point(0.0, 0.0, IrPointType::OnCurve, false);
+        contour.add_point(100.0, 0.0, IrPointType::OffCurve, false);
+        contour.add_point(100.0, 100.0, IrPointType::OnCurve, true);
         contour.close();
 
         let snapshot = ContourSnapshot::from(&contour);
@@ -183,7 +183,7 @@ mod tests {
         let mut session = EditSession::new("A".to_string(), 65, GlyphLayer::with_width(600.0));
         let contour_id = session.add_empty_contour();
         session
-            .add_point(50.0, 50.0, PointType::OnCurve, false)
+            .add_point(50.0, 50.0, IrPointType::OnCurve, false)
             .unwrap();
 
         let snapshot = GlyphSnapshot::from_edit_session(&session);
@@ -224,7 +224,7 @@ mod tests {
         let mut session = EditSession::new("C".to_string(), 67, GlyphLayer::with_width(550.0));
         session.add_empty_contour();
         session
-            .add_point(10.0, 20.0, PointType::OnCurve, false)
+            .add_point(10.0, 20.0, IrPointType::OnCurve, false)
             .unwrap();
 
         let snapshot = GlyphSnapshot::from_edit_session(&session);
