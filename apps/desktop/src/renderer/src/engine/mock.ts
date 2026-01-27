@@ -11,7 +11,7 @@ import type {
   JsFontMetrics,
   JsGlyphSnapshot,
 } from "@shared/bridge/FontEngineAPI";
-import type { PointType, CommandResult } from "@shift/types";
+import type { PointType, CommandResult, PointId } from "@shift/types";
 
 /**
  * Mock implementation of FontEngineAPI for testing.
@@ -429,7 +429,7 @@ export class MockFontEngine implements FontEngineAPI {
       success,
       snapshot: this.#snapshot as any, // Type coercion for mock
       error: error ?? null,
-      affectedPointIds: affectedPointIds.length > 0 ? affectedPointIds : null,
+      affectedPointIds: affectedPointIds.length > 0 ? (affectedPointIds as PointId[]) : null,
       canUndo: false,
       canRedo: false,
     };

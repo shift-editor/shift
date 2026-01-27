@@ -7,6 +7,7 @@ use crate::{edit_session::EditSession, Contour, Point, PointId, PointType as IrP
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct PointSnapshot {
+    #[ts(type = "PointId")]
     pub id: String,
     pub x: f64,
     pub y: f64,
@@ -48,6 +49,7 @@ impl From<&Point> for PointSnapshot {
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct ContourSnapshot {
+    #[ts(type = "ContourId")]
     pub id: String,
     pub points: Vec<PointSnapshot>,
     pub closed: bool,
@@ -72,7 +74,7 @@ pub struct GlyphSnapshot {
     #[ts(rename = "xAdvance")]
     pub x_advance: f64,
     pub contours: Vec<ContourSnapshot>,
-    #[ts(rename = "activeContourId")]
+    #[ts(rename = "activeContourId", type = "ContourId | null")]
     pub active_contour_id: Option<String>,
 }
 
@@ -97,7 +99,7 @@ pub struct CommandResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(rename = "affectedPointIds")]
+    #[ts(rename = "affectedPointIds", type = "Array<PointId> | null")]
     pub affected_point_ids: Option<Vec<String>>,
     #[ts(rename = "canUndo")]
     pub can_undo: bool,

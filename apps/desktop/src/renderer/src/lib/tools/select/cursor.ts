@@ -96,8 +96,8 @@ export function getCursorForState(
 
   if (state.type === "selected" && event && "point" in event) {
     const hitResult = ctx.hitTestBoundingBox(event.point);
-    const pointId = ctx.hitTest.getPointIdAt(event.point);
-    if (hitResult && !pointId) {
+    const point = ctx.hitTest.getPointAt(event.point);
+    if (hitResult && !point) {
       return boundingBoxHitResultToCursor(hitResult);
     }
   }

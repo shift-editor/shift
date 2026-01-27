@@ -89,8 +89,8 @@ export class MarqueeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     ctx: ToolContext,
   ): SelectState | null {
-    const pointId = ctx.hitTest.getPointIdAt(event.point);
-    if (pointId) return null;
+    const point = ctx.hitTest.getPointAt(event.point);
+    if (point) return null;
 
     const segmentHit = ctx.hitTest.getSegmentAt(event.point);
     if (segmentHit) return null;

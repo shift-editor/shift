@@ -3,10 +3,11 @@ import type {
   Rect2D,
   PointId,
   ContourId,
-  GlyphSnapshot,
-  PointSnapshot,
-  ContourSnapshot,
+  Glyph,
+  Contour,
+  Point,
   PointType,
+  GlyphSnapshot,
 } from "@shift/types";
 import { asContourId } from "@shift/types";
 import type { CommandHistory } from "@/lib/commands";
@@ -69,7 +70,9 @@ export interface PreviewService {
 }
 
 export interface EditService {
-  getGlyph(): GlyphSnapshot | null;
+  getGlyph(): Glyph | null;
+  getPointById(id: PointId): Point | null;
+  getContourById(id: ContourId): Contour | null;
 
   addPoint(x: number, y: number, type: PointType, smooth?: boolean): PointId;
   addPointToContour(
@@ -130,17 +133,16 @@ export interface ContourEndpointHit {
   contourId: ContourId;
   pointId: PointId;
   position: "start" | "end";
-  contour: ContourSnapshot;
+  contour: Contour;
 }
 
 export interface HitTestService {
-  getPointAt(pos: Point2D): PointSnapshot | null;
-  getPointIdAt(pos: Point2D): PointId | null;
+  getPointAt(pos: Point2D): Point | null;
   getSegmentAt(pos: Point2D): SegmentHitResult | null;
   getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
   getSelectionBoundingRect(): Rect2D | null;
-  getAllPoints(): PointSnapshot[];
-  findSegmentById(segmentId: SegmentId): Segment | null;
+  getAllPoints(): Point[];
+  getSegmentById(segmentId: SegmentId): Segment | null;
   updateHover(pos: Point2D): void;
 }
 
@@ -216,7 +218,9 @@ export function createContext(editor: Editor): ToolContext {
       clearAll: () => hover.clearHover(),
     },
     edit: {
-      getGlyph: () => fontEngine.$glyph.value,
+      getGlyph: () => editor.getGlyph(),
+      getPointById: (id) => editor.getPointById(id),
+      getContourById: (id) => editor.getContourById(id),
       addPoint: (x, y, type, smooth = false) => fontEngine.editing.addPoint(x, y, type, smooth),
       addPointToContour: (contourId, x, y, type, smooth) =>
         fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
@@ -275,12 +279,11 @@ export function createContext(editor: Editor): ToolContext {
     },
     hitTest: {
       getPointAt: (pos) => editor.getPointAt(pos),
-      getPointIdAt: (pos) => editor.getPointIdAt(pos),
       getSegmentAt: (pos) => editor.getSegmentAt(pos),
       getContourEndpointAt: (pos) => editor.getContourEndpointAt(pos),
       getSelectionBoundingRect: () => editor.getSelectionBoundingRect(),
       getAllPoints: () => editor.getAllPoints(),
-      findSegmentById: (id) => editor.findSegmentById(id),
+      getSegmentById: (id) => editor.getSegmentById(id),
       updateHover: (pos) => editor.updateHover(pos),
     },
     commands,

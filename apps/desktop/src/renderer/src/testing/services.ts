@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { PointId, ContourId, GlyphSnapshot } from "@shift/types";
+import type { PointId, ContourId, GlyphSnapshot, Point, Contour } from "@shift/types";
 import { asContourId, asPointId } from "@shift/types";
 import type {
   ToolContext,
@@ -253,6 +253,25 @@ function createMockHoverService(): HoverService & {
 function createMockEditService(
   fontEngine: FontEngine,
 ): EditService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+  const getPointById = (pointId: PointId): Point | null => {
+    const snapshot = fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    for (const contour of snapshot.contours) {
+      const point = contour.points.find((p) => p.id === pointId);
+      if (point) return point as Point;
+    }
+    return null;
+  };
+
+  const getContourById = (contourId: ContourId): Contour | null => {
+    const snapshot = fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const contour = snapshot.contours.find((c) => c.id === contourId);
+    return contour ? (contour as Contour) : null;
+  };
+
   const mocks = {
     addPoint: vi.fn((x: number, y: number, type: any, smooth = false) =>
       fontEngine.editing.addPoint(x, y, type, smooth),
@@ -283,10 +302,14 @@ function createMockEditService(
     ),
     clearActiveContour: vi.fn(() => fontEngine.editing.clearActiveContour()),
     reverseContour: vi.fn((contourId: ContourId) => fontEngine.editing.reverseContour(contourId)),
+    getPointById: vi.fn(getPointById),
+    getContourById: vi.fn(getContourById),
   };
 
   return {
     getGlyph: () => fontEngine.$glyph.value,
+    getPointById: mocks.getPointById,
+    getContourById: mocks.getContourById,
     addPoint: mocks.addPoint,
     addPointToContour: mocks.addPointToContour,
     movePoints: mocks.movePoints,
@@ -481,11 +504,6 @@ function createMockHitTestService(
     return null;
   };
 
-  const getPointIdAt = (pos: Point2D) => {
-    const point = getPointAt(pos);
-    return point ? (point.id as PointId) : null;
-  };
-
   const getSegmentAt = (pos: Point2D): SegmentHitResult | null => {
     const snapshot = fontEngine.$glyph.value;
     if (!snapshot) return null;
@@ -547,7 +565,7 @@ function createMockHitTestService(
     return result;
   };
 
-  const findSegmentById = (segmentId: SegmentId) => {
+  const getSegmentById = (segmentId: SegmentId) => {
     const snapshot = fontEngine.$glyph.value;
     if (!snapshot) return null;
 
@@ -564,23 +582,21 @@ function createMockHitTestService(
 
   const mocks = {
     getPointAt: vi.fn(getPointAt),
-    getPointIdAt: vi.fn(getPointIdAt),
     getSegmentAt: vi.fn(getSegmentAt),
     getContourEndpointAt: vi.fn(getContourEndpointAt),
     getSelectionBoundingRect: vi.fn(() => null),
     getAllPoints: vi.fn(getAllPoints),
-    findSegmentById: vi.fn(findSegmentById),
+    getSegmentById: vi.fn(getSegmentById),
     updateHover: vi.fn(),
   };
 
   return {
     getPointAt: mocks.getPointAt,
-    getPointIdAt: mocks.getPointIdAt,
     getSegmentAt: mocks.getSegmentAt,
     getContourEndpointAt: mocks.getContourEndpointAt,
     getSelectionBoundingRect: mocks.getSelectionBoundingRect,
     getAllPoints: mocks.getAllPoints,
-    findSegmentById: mocks.findSegmentById,
+    getSegmentById: mocks.getSegmentById,
     updateHover: mocks.updateHover,
     mocks,
   };

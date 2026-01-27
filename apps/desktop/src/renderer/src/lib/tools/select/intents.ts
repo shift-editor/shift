@@ -138,7 +138,7 @@ function executeSelectSegment(
   additive: boolean,
   ctx: ToolContext,
 ): PointId[] {
-  const segment = ctx.hitTest.findSegmentById(segmentId);
+  const segment = ctx.hitTest.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);
@@ -160,7 +160,7 @@ function executeToggleSegment(segmentId: SegmentId, ctx: ToolContext): PointId[]
   const wasSelected = ctx.selection.isSegmentSelected(segmentId);
   ctx.selection.toggleSegment(segmentId);
 
-  const segment = ctx.hitTest.findSegmentById(segmentId);
+  const segment = ctx.hitTest.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);

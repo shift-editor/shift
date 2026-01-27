@@ -5,7 +5,7 @@
  * Only one glyph can be edited at a time.
  */
 
-import type { GlyphSnapshot } from "@shift/types";
+import type { GlyphSnapshot, ContourId, PointId } from "@shift/types";
 import type { NativeGlyphSnapshot } from "./native";
 import type { CommitContext } from "./FontEngine";
 
@@ -17,9 +17,9 @@ function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
     name: native.name,
     xAdvance: native.xAdvance,
     contours: native.contours.map((c) => ({
-      id: c.id,
+      id: c.id as ContourId,
       points: c.points.map((p) => ({
-        id: p.id,
+        id: p.id as PointId,
         x: p.x,
         y: p.y,
         pointType: p.pointType as "onCurve" | "offCurve",
@@ -27,7 +27,7 @@ function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
       })),
       closed: c.closed,
     })),
-    activeContourId: native.activeContourId,
+    activeContourId: native.activeContourId as ContourId | null,
   };
 }
 

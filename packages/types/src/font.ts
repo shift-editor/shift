@@ -15,3 +15,6 @@ export type {
   FontMetadata,
   DecomposedTransform,
 } from "./generated";
+
+// Domain types (for Editor API)
+export type { Point, Contour, Glyph } from "./domain";

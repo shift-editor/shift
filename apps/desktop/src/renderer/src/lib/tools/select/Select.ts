@@ -79,11 +79,10 @@ export class Select extends BaseTool<SelectState> {
   private handleDoubleClick(state: SelectState, event: ToolEvent): SelectState {
     if (event.type === "doubleClick" && (state.type === "ready" || state.type === "selected")) {
       const point = this.ctx.hitTest.getPointAt(event.point);
-      const pointId = this.ctx.hitTest.getPointIdAt(event.point);
-      if (point && pointId && point.pointType === "onCurve") {
+      if (point && point.pointType === "onCurve") {
         return {
           ...state,
-          intent: { action: "toggleSmooth", pointId },
+          intent: { action: "toggleSmooth", pointId: point.id },
         };
       }
     }

@@ -13,10 +13,11 @@ import type {
   PointId,
   ContourId,
   GlyphSnapshot,
-  PointSnapshot,
-  ContourSnapshot,
+  Glyph,
+  Contour,
+  Point,
 } from "@shift/types";
-import { asContourId, asPointId } from "@shift/types";
+import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
 import { createContext, type ToolContext, type ToolName } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
@@ -315,8 +316,8 @@ export class Editor {
     this.#fontEngine.session.endEditSession();
   }
 
-  public getSnapshot(): GlyphSnapshot | null {
-    return this.#fontEngine.$glyph.value;
+  public getGlyph(): Glyph | null {
+    return this.#fontEngine.$glyph.value as Glyph | null;
   }
 
   public get commandHistory(): CommandHistory {
@@ -609,15 +610,23 @@ export class Editor {
     this.#commandHistory.execute(cmd);
   }
 
-  public findPoint(pointId: PointId): PointSnapshot | null {
+  public getPointById(pointId: PointId): Point | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
     const result = findPointInSnapshot(snapshot, pointId);
-    return result?.point ?? null;
+    return (result?.point as Point) ?? null;
   }
 
-  public getPointAt(pos: Point2D): PointSnapshot | null {
+  public getContourById(contourId: ContourId): Contour | null {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const contour = findContourInSnapshot(snapshot, contourId);
+    return (contour as Contour) ?? null;
+  }
+
+  public getPointAt(pos: Point2D): Point | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
@@ -626,16 +635,11 @@ export class Editor {
     for (const contour of snapshot.contours) {
       for (const point of contour.points) {
         if (Vec2.dist(point, pos) < hitRadius) {
-          return point;
+          return point as Point;
         }
       }
     }
     return null;
-  }
-
-  public getPointIdAt(pos: Point2D): PointId | null {
-    const point = this.getPointAt(pos);
-    return point ? asPointId(point.id) : null;
   }
 
   public getSegmentAt(pos: Point2D): SegmentHitResult | null {
@@ -657,7 +661,7 @@ export class Editor {
   public getContourEndpointAt(pos: Point2D): {
     contourId: ContourId;
     position: "start" | "end";
-    contour: ContourSnapshot;
+    contour: Contour;
     pointId: PointId;
   } | null {
     const snapshot = this.#fontEngine.$glyph.value;
@@ -673,19 +677,19 @@ export class Editor {
 
       if (Vec2.dist(firstPoint, pos) < hitRadius) {
         return {
-          contourId: asContourId(contour.id),
-          pointId: asPointId(firstPoint.id),
+          contourId: contour.id,
+          pointId: firstPoint.id,
           position: "start",
-          contour,
+          contour: contour as Contour,
         };
       }
 
       if (Vec2.dist(lastPoint, pos) < hitRadius) {
         return {
-          contourId: asContourId(contour.id),
-          pointId: asPointId(lastPoint.id),
+          contourId: contour.id,
+          pointId: lastPoint.id,
           position: "end",
-          contour,
+          contour: contour as Contour,
         };
       }
     }
@@ -693,31 +697,25 @@ export class Editor {
   }
 
   public getSelectionBoundingRect(): Rect2D | null {
-    const selectedPoints = this.#selection.selectedPointIds.peek();
-    if (selectedPoints.size <= 1) return null;
+    const selectedPointIds = this.#selection.selectedPointIds.peek();
+    if (selectedPointIds.size <= 1) return null;
 
     const mode = this.#selection.selectionMode.peek();
     if (mode !== "committed") return null;
 
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const points = Array.from(selectedPointIds)
+      .map((id) => this.getPointById(id))
+      .filter((p): p is Point => p !== null);
 
-    const points: PointSnapshot[] = [];
-    for (const contour of snapshot.contours) {
-      for (const point of contour.points) {
-        if (selectedPoints.has(asPointId(point.id))) {
-          points.push(point);
-        }
-      }
-    }
+    if (points.length === 0) return null;
 
     return Polygon.boundingRect(points);
   }
 
   public updateHover(pos: Point2D): void {
-    const pointId = this.getPointIdAt(pos);
-    if (pointId) {
-      this.#hover.setHoveredPoint(pointId);
+    const point = this.getPointAt(pos);
+    if (point) {
+      this.#hover.setHoveredPoint(point.id);
       return;
     }
 
@@ -734,18 +732,18 @@ export class Editor {
     this.#hover.clearHover();
   }
 
-  public getAllPoints(): PointSnapshot[] {
+  public getAllPoints(): Point[] {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return [];
 
-    const result: PointSnapshot[] = [];
+    const result: Point[] = [];
     for (const contour of snapshot.contours) {
-      result.push(...contour.points);
+      result.push(...(contour.points as Point[]));
     }
     return result;
   }
 
-  public findSegmentById(segmentId: SegmentId) {
+  public getSegmentById(segmentId: SegmentId) {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
@@ -761,17 +759,10 @@ export class Editor {
   }
 
   #getSelectedPointData(): Array<{ x: number; y: number }> {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return [];
-
-    const result: Array<{ x: number; y: number }> = [];
-    for (const pointId of this.#selection.selectedPointIds.peek()) {
-      const found = findPointInSnapshot(snapshot, pointId);
-      if (found) {
-        result.push({ x: found.point.x, y: found.point.y });
-      }
-    }
-    return result;
+    return Array.from(this.#selection.selectedPointIds.peek())
+      .map((id) => this.getPointById(id))
+      .filter((p): p is Point => p !== null)
+      .map((p) => ({ x: p.x, y: p.y }));
   }
 
   public requestRedraw() {

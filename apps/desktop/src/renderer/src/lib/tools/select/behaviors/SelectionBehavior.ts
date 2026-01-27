@@ -11,9 +11,10 @@ export class SelectionBehavior implements SelectBehavior {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const pointId = ctx.hitTest.getPointIdAt(event.point);
+    const point = ctx.hitTest.getPointAt(event.point);
 
-    if (pointId) {
+    if (point) {
+      const pointId = point.id;
       if (state.type === "selected" && event.shiftKey) {
         const hasSelection = ctx.selection.hasSelection();
         const isSelected = ctx.selection.isPointSelected(pointId);

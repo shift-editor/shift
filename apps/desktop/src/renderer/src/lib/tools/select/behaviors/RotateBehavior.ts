@@ -94,8 +94,8 @@ export class RotateBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     ctx: ToolContext,
   ): SelectState | null {
-    const pointId = ctx.hitTest.getPointIdAt(event.point);
-    if (pointId) return null;
+    const point = ctx.hitTest.getPointAt(event.point);
+    if (point) return null;
 
     const corner = this.hitTestRotationZone(event.point, ctx);
     const bounds = ctx.hitTest.getSelectionBoundingRect();

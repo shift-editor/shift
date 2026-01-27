@@ -6,12 +6,7 @@
  */
 
 import { vi } from "vitest";
-import type {
-  GlyphSnapshot,
-  PointSnapshot,
-  ContourSnapshot,
-  PointType,
-} from "@shift/types";
+import type { GlyphSnapshot, PointSnapshot, ContourSnapshot, PointType } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { FontEngine, MockFontEngine } from "@/engine";
 
@@ -103,21 +98,13 @@ export function createMockEditing() {
   let contourIdCounter = 0;
 
   return {
-    addPoint: vi
-      .fn()
-      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    addPointToContour: vi
-      .fn()
-      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
-    insertPointBefore: vi
-      .fn()
-      .mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
+    insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
     removePoints: vi.fn(),
-    addContour: vi
-      .fn()
-      .mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
+    addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
     closeContour: vi.fn(),
     getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
   };
@@ -185,19 +172,17 @@ export interface TestPointConfig {
  * });
  * ```
  */
-export function createTestSnapshot(
-  config: TestSnapshotConfig = {},
-): GlyphSnapshot {
+export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapshot {
   let pointIdCounter = 0;
   let contourIdCounter = 0;
 
   const contours: ContourSnapshot[] = (config.contours ?? []).map((c) => {
-    const contourId = c.id ?? `contour-${++contourIdCounter}`;
+    const contourId = asContourId(c.id ?? `contour-${++contourIdCounter}`);
     return {
       id: contourId,
       closed: c.closed ?? false,
       points: (c.points ?? []).map((p) => ({
-        id: p.id ?? `point-${++pointIdCounter}`,
+        id: asPointId(p.id ?? `point-${++pointIdCounter}`),
         x: p.x,
         y: p.y,
         pointType: p.type ?? "onCurve",
@@ -213,9 +198,11 @@ export function createTestSnapshot(
     name: String.fromCodePoint(unicode),
     xAdvance: 500,
     contours,
-    activeContourId:
-      config.activeContourId ??
-      (contours.length > 0 ? contours[contours.length - 1].id : null),
+    activeContourId: config.activeContourId
+      ? asContourId(config.activeContourId)
+      : contours.length > 0
+        ? contours[contours.length - 1].id
+        : null,
   };
 }
 
@@ -224,10 +211,7 @@ export function createTestSnapshot(
  *
  * Starts an edit session and creates all contours/points from the snapshot.
  */
-export function populateEngine(
-  engine: FontEngine,
-  snapshot: GlyphSnapshot,
-): void {
+export function populateEngine(engine: FontEngine, snapshot: GlyphSnapshot): void {
   engine.session.startEditSession(snapshot.unicode);
 
   for (const contour of snapshot.contours) {

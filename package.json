@@ -9,6 +9,7 @@
     "build": "turbo run build",
     "build:native": "pnpm --filter shift-node run build",
     "build:native:debug": "pnpm --filter shift-node run build:debug",
+    "generate:types": "cargo test --package shift-core && npx tsx scripts/patch-generated-types.ts",
     "test": "turbo run test",
     "test:native": "pnpm --filter shift-node run test",
     "typecheck": "turbo run typecheck",
@@ -20,7 +21,11 @@
     "package": "pnpm run build:native && pnpm --filter @shift/desktop package",
     "make": "pnpm run build:native && pnpm --filter @shift/desktop make"
   },
-  "keywords": ["font", "editor", "typography"],
+  "keywords": [
+    "font",
+    "editor",
+    "typography"
+  ],
   "author": {
     "name": "Kostya Farber",
     "email": "kostya.farber@gmail.com"
@@ -28,6 +33,7 @@
   "license": "MIT",
   "devDependencies": {
     "prettier": "^3.4.2",
+    "tsx": "^4.7.0",
     "turbo": "^2.7.5",
     "typescript": "^5.3.0"
   },

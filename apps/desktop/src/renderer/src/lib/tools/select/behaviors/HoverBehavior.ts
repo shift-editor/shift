@@ -4,24 +4,18 @@ import type { SelectState, SelectBehavior } from "../types";
 
 export class HoverBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
-    return (
-      (state.type === "ready" || state.type === "selected") &&
-      event.type === "pointerMove"
-    );
+    return (state.type === "ready" || state.type === "selected") && event.type === "pointerMove";
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
     if (event.type !== "pointerMove") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
     const pos = event.point;
-    const pointId = ctx.hitTest.getPointIdAt(pos);
+    const point = ctx.hitTest.getPointAt(pos);
 
-    if (pointId) {
+    if (point) {
+      const pointId = point.id;
       return {
         ...state,
         hoveredPointId: pointId,

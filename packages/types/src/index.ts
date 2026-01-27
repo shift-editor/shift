@@ -28,3 +28,6 @@ export type {
   FontMetrics,
   DecomposedTransform,
 } from "./font";
+
+// Domain types (for Editor API)
+export type { Point, Contour, Glyph } from "./font";

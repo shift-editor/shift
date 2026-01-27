@@ -79,9 +79,10 @@ export class DragBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     ctx: ToolContext,
   ): SelectState | null {
-    const pointId = ctx.hitTest.getPointIdAt(event.point);
+    const point = ctx.hitTest.getPointAt(event.point);
 
-    if (pointId) {
+    if (point) {
+      const pointId = point.id;
       const isSelected = state.type === "selected" && ctx.selection.isPointSelected(pointId);
       const draggedPointIds = isSelected ? [...ctx.selection.getSelectedPoints()] : [pointId];
 
@@ -100,7 +101,7 @@ export class DragBehavior implements SelectBehavior {
 
     const segmentHit = ctx.hitTest.getSegmentAt(event.point);
     if (segmentHit) {
-      const segment = ctx.hitTest.findSegmentById(segmentHit.segmentId);
+      const segment = ctx.hitTest.getSegmentById(segmentHit.segmentId);
       const pointIds = segment ? SegmentOps.getPointIds(segment) : [];
 
       const isSelected =

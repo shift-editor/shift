@@ -8,7 +8,19 @@
     },
     "build:native": {
       "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
-      "outputs": ["crates/shift-node/index.js", "crates/shift-node/index.d.ts", "crates/shift-node/*.node"]
+      "outputs": [
+        "crates/shift-node/index.js",
+        "crates/shift-node/index.d.ts",
+        "crates/shift-node/*.node"
+      ]
+    },
+    "generate:types": {
+      "inputs": [
+        "crates/shift-core/src/**",
+        "crates/shift-ir/src/**",
+        "scripts/patch-generated-types.ts"
+      ],
+      "outputs": ["packages/types/src/generated/*.ts"]
     },
     "dev": {
       "dependsOn": ["build:native"],
@@ -32,10 +44,5 @@
     }
   },
   "globalEnv": ["NODE_ENV"],
-  "globalPassThroughEnv": [
-    "CARGO_INCREMENTAL",
-    "RUSTFLAGS",
-    "CARGO_HOME",
-    "RUSTUP_HOME"
-  ]
+  "globalPassThroughEnv": ["CARGO_INCREMENTAL", "RUSTFLAGS", "CARGO_HOME", "RUSTUP_HOME"]
 }
