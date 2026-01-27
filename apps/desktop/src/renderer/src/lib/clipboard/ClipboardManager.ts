@@ -1,29 +1,20 @@
-import type { GlyphSnapshot, PointId } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
+import type { GlyphSnapshot } from "@shift/types";
 import type { ClipboardContent, PasteResult } from "./types";
 import { ContentResolver } from "./ContentResolver";
 import { PayloadSerializer } from "./PayloadSerializer";
 import { ImporterRegistry } from "./ImporterRegistry";
 import { SvgImporter } from "./importers/SvgImporter";
-
-export interface ClipboardManagerContext {
-  getSnapshot: () => GlyphSnapshot | null;
-  getSelectedPointIds: () => ReadonlySet<PointId>;
-  getSelectedSegmentIds: () => ReadonlySet<SegmentId>;
-  getGlyphName: () => string | undefined;
-  pasteContours: (contoursJson: string, offsetX: number, offsetY: number) => PasteResult;
-  selectPoints: (pointIds: Set<PointId>) => void;
-}
+import type { Editor } from "@/lib/editor/Editor";
 
 export class ClipboardManager {
   #resolver: ContentResolver;
   #serializer: PayloadSerializer;
   #importers: ImporterRegistry;
   #internalClipboard: ClipboardContent | null = null;
-  #ctx: ClipboardManagerContext;
+  #editor: Editor;
 
-  constructor(ctx: ClipboardManagerContext) {
-    this.#ctx = ctx;
+  constructor(editor: Editor) {
+    this.#editor = editor;
     this.#resolver = new ContentResolver();
     this.#serializer = new PayloadSerializer();
     this.#importers = new ImporterRegistry();
@@ -32,18 +23,22 @@ export class ClipboardManager {
   }
 
   async copy(): Promise<boolean> {
-    const snapshot = this.#ctx.getSnapshot();
-    const selectedPointIds = this.#ctx.getSelectedPointIds();
-    const selectedSegmentIds = this.#ctx.getSelectedSegmentIds();
+    const glyph = this.#editor.getGlyph();
+    const selectedPointIds = this.#editor.selectedPointIds.peek();
+    const selectedSegmentIds = this.#editor.selectedSegmentIds.peek();
 
-    const content = this.#resolver.resolve(snapshot, selectedPointIds, selectedSegmentIds);
+    const content = this.#resolver.resolve(
+      glyph as GlyphSnapshot | null,
+      selectedPointIds,
+      selectedSegmentIds,
+    );
 
     if (!content || content.contours.length === 0) {
       return false;
     }
 
     this.#internalClipboard = content;
-    const json = this.#serializer.serialize(content, this.#ctx.getGlyphName());
+    const json = this.#serializer.serialize(content, glyph?.name);
 
     try {
       window.electronAPI.clipboardWriteText(json);
@@ -65,10 +60,10 @@ export class ClipboardManager {
     }
 
     const contoursJson = JSON.stringify(content.contours);
-    const result = this.#ctx.pasteContours(contoursJson, 0, 0);
+    const result = this.#editor.fontEngine.editing.pasteContours(contoursJson, 0, 0);
 
     if (result.success && result.createdPointIds.length > 0) {
-      this.#ctx.selectPoints(new Set(result.createdPointIds));
+      this.#editor.selectPoints(new Set(result.createdPointIds));
     }
 
     return result;

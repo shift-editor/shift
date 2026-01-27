@@ -1,5 +1,5 @@
-import type { IGraphicContext, IRenderer } from "@/types/graphics";
-import type { HandleState, HandleType } from "./rendering/handles";
+import type { IGraphicContext } from "@/types/graphics";
+import type { HandleState } from "./rendering/handles";
 import type {
   CursorType,
   SelectionMode,
@@ -19,7 +19,7 @@ import type {
 } from "@shift/types";
 import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
-import { createContext, type ToolContext, type ToolName } from "../tools/core";
+import { createContext, type ToolName } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
@@ -27,7 +27,6 @@ import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
 import { Polygon, Vec2 } from "@shift/geo";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
-import { drawHandle } from "./rendering/handles";
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { CommandHistory, PasteCommand } from "../commands";
@@ -61,7 +60,7 @@ import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 
 export class Editor {
   private $previewMode: WritableSignal<boolean>;
-  private $hoveredBoundingBoxHandle: WritableSignal<BoundingBoxHitResult>;
+  private $handlesVisible: WritableSignal<boolean>;
 
   #selection: SelectionManager;
   #hover: HoverManager;
@@ -76,7 +75,6 @@ export class Editor {
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
   #clipboardManager: ClipboardManager;
-  #context: ToolContext | null = null;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -94,7 +92,7 @@ export class Editor {
 
     this.$previewMode = signal(false);
     this.$cursor = signal("default");
-    this.$hoveredBoundingBoxHandle = signal<BoundingBoxHitResult>(null);
+    this.$handlesVisible = signal(true);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
@@ -102,29 +100,9 @@ export class Editor {
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
 
-    this.#renderer = new GlyphRenderer({
-      viewport: this.#viewport,
-      getSnapshot: () => this.#fontEngine.$glyph.value,
-      getFontMetrics: () => this.#fontEngine.info.getMetrics(),
-      renderTool: (ctx) => this.#toolManager?.render(ctx),
-      selection: this.#selection,
-      hover: this.#hover,
-      getPreviewMode: () => this.previewMode.peek(),
-      getHandleState: (pointId) => this.getHandleState(pointId),
-      paintHandle: (ctx, x, y, handleType, state, segmentAngle) =>
-        this.paintHandle(ctx, x, y, handleType, state, segmentAngle),
-      getSelectedPointData: () => this.#getSelectedPointData(),
-      getHoveredBoundingBoxHandle: () => this.$hoveredBoundingBoxHandle.peek(),
-    });
+    this.#renderer = new GlyphRenderer(this, (ctx) => this.#toolManager?.render(ctx));
 
-    this.#clipboardManager = new ClipboardManager({
-      getSnapshot: () => this.#fontEngine.$glyph.value,
-      getSelectedPointIds: () => this.#selection.selectedPointIds.peek(),
-      getSelectedSegmentIds: () => this.#selection.selectedSegmentIds.peek(),
-      getGlyphName: () => this.#fontEngine.$glyph.value?.name,
-      pasteContours: (json, x, y) => this.#fontEngine.editing.pasteContours(json, x, y),
-      selectPoints: (ids) => this.selectPoints(ids),
-    });
+    this.#clipboardManager = new ClipboardManager(this);
 
     this.$renderState = computed<RenderState>(() => ({
       glyph: this.#fontEngine.$glyph.value,
@@ -177,16 +155,9 @@ export class Editor {
 
   public getToolManager(): ToolManager {
     if (!this.#toolManager) {
-      this.#toolManager = new ToolManager(this.getContext());
+      this.#toolManager = new ToolManager(createContext(this));
     }
     return this.#toolManager;
-  }
-
-  public getContext(): ToolContext {
-    if (!this.#context) {
-      this.#context = createContext(this);
-    }
-    return this.#context;
   }
 
   public get selectedPointIds(): Signal<ReadonlySet<PointId>> {
@@ -270,11 +241,11 @@ export class Editor {
   }
 
   public setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
-    this.$hoveredBoundingBoxHandle.set(handle);
+    this.#hover.setHoveredBoundingBoxHandle(handle);
   }
 
   public getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
-    return this.$hoveredBoundingBoxHandle.peek();
+    return this.#hover.getHoveredBoundingBoxHandle();
   }
 
   public clearHover(): void {
@@ -297,6 +268,14 @@ export class Editor {
 
   public setPreviewMode(enabled: boolean): void {
     this.$previewMode.set(enabled);
+  }
+
+  public get handlesVisible(): Signal<boolean> {
+    return this.$handlesVisible;
+  }
+
+  public setHandlesVisible(visible: boolean): void {
+    this.$handlesVisible.set(visible);
   }
 
   public setStaticContext(context: IGraphicContext) {
@@ -328,6 +307,10 @@ export class Editor {
     return this.#viewport;
   }
 
+  /**
+   * Direct access to the font engine for advanced operations.
+   * Prefer using ToolContext.edit for standard editing.
+   */
   public get fontEngine(): FontEngine {
     return this.#fontEngine;
   }
@@ -417,17 +400,6 @@ export class Editor {
     return this.getPointVisualState(pointId);
   }
 
-  public paintHandle(
-    ctx: IRenderer,
-    x: number,
-    y: number,
-    handleType: Exclude<HandleType, "last">,
-    state: HandleState,
-    segmentAngle?: number,
-  ) {
-    drawHandle(ctx, handleType, x, y, state, { segmentAngle });
-  }
-
   public getFontMetrics() {
     return this.#fontEngine.info.getMetrics();
   }
@@ -498,6 +470,10 @@ export class Editor {
     this.requestRedraw();
   }
 
+  /**
+   * Begins a preview session. Changes made after this can be
+   * committed with commitPreview() or rolled back with cancelPreview().
+   */
   public beginPreview(): void {
     if (this.#isInPreview) return;
     this.#previewSnapshot = this.#fontEngine.$glyph.value;
@@ -528,31 +504,17 @@ export class Editor {
     this.#isInPreview = false;
   }
 
-  /**
-   * Get the bounding box and center of the current selection.
-   * Returns null if no points are selected.
-   * Uses segment-aware bounds for curves (includes extrema, not just anchor points).
-   */
   public getSelectionBounds(): SelectionBounds | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
     return getSegmentAwareBounds(snapshot, this.#selection.selectedPointIds.peek());
   }
 
-  /**
-   * Get the center of the current selection's bounding box.
-   * Returns null if no points are selected.
-   */
   public getSelectionCenter(): Point2D | null {
     const bounds = this.getSelectionBounds();
     return bounds?.center ?? null;
   }
 
-  /**
-   * Rotate selected points.
-   * @param angle - Rotation in radians (positive = counter-clockwise)
-   * @param origin - Optional origin point; defaults to selection center
-   */
   public rotateSelection(angle: number, origin?: Point2D): void {
     const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
@@ -756,13 +718,6 @@ export class Editor {
       }
     }
     return null;
-  }
-
-  #getSelectedPointData(): Array<{ x: number; y: number }> {
-    return Array.from(this.#selection.selectedPointIds.peek())
-      .map((id) => this.getPointById(id))
-      .filter((p): p is Point => p !== null)
-      .map((p) => ({ x: p.x, y: p.y }));
   }
 
   public requestRedraw() {

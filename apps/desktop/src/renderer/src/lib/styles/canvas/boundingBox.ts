@@ -8,9 +8,9 @@ export interface BoundingBoxHandleStyles {
 export function createBoundingBoxHandleStyles(): BoundingBoxHandleStyles {
   return {
     handle: {
-      radius: 2.5,
-      offset: 10,
-      lineWidth: 1,
+      radius: 3,
+      offset: 15,
+      lineWidth: 3,
       strokeStyle: "#606060",
       fillStyle: "#D9D9D9",
       antiAlias: true,

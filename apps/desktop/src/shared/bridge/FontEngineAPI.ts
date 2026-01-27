@@ -26,12 +26,8 @@ export interface FontEngineAPI {
   clearActiveContour(): string;
   reverseContour(contourId: string): string;
   removeContour(contourId: string): string;
-  addPoint(
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string;
+  openContour(contourId: string): string;
+  addPoint(x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string;
   addPointToContour(
     contourId: string,
     x: number,

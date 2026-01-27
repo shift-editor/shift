@@ -6,23 +6,16 @@ import {
   SEGMENT_SELECTED_STYLE,
 } from "@/lib/styles/style";
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
-import type { GlyphSnapshot, PointId } from "@shift/types";
+import type { GlyphSnapshot, ContourSnapshot, PointSnapshot, Glyph } from "@shift/types";
 import { asPointId } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
-import {
-  drawHandleLast,
-  drawBoundingBoxHandles,
-  type HandleState,
-  type HandleType,
-} from "./handles";
-import type { ViewportManager } from "../managers";
+import { drawHandle, drawHandleLast, drawBoundingBoxHandles } from "./handles";
 import { Polygon } from "@shift/geo";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
-import type { SelectionManager, HoverManager } from "../managers";
 import { SCREEN_LINE_WIDTH } from "./constants";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { Editor } from "../Editor";
 
 export interface FontMetrics {
   ascender: number;
@@ -31,35 +24,16 @@ export interface FontMetrics {
   descender: number;
 }
 
-export interface RenderDependencies {
-  viewport: ViewportManager;
-  getSnapshot: () => GlyphSnapshot | null;
-  getFontMetrics: () => FontMetrics;
-  renderTool: (ctx: IRenderer) => void;
-  selection: SelectionManager;
-  hover: HoverManager;
-  getPreviewMode: () => boolean;
-  getHandleState: (pointId: PointId) => HandleState;
-  paintHandle: (
-    ctx: IRenderer,
-    x: number,
-    y: number,
-    handleType: Exclude<HandleType, "last">,
-    state: HandleState,
-    segmentAngle?: number,
-  ) => void;
-  getSelectedPointData: () => Array<{ x: number; y: number }>;
-  getHoveredBoundingBoxHandle: () => BoundingBoxHitResult;
-}
-
 export class GlyphRenderer {
   #staticContext: IGraphicContext | null = null;
   #interactiveContext: IGraphicContext | null = null;
   #frameHandler: FrameHandler;
-  #deps: RenderDependencies;
+  #editor: Editor;
+  #renderTool: (ctx: IRenderer) => void;
 
-  constructor(deps: RenderDependencies) {
-    this.#deps = deps;
+  constructor(editor: Editor, renderTool: (ctx: IRenderer) => void) {
+    this.#editor = editor;
+    this.#renderTool = renderTool;
     this.#frameHandler = new FrameHandler();
   }
 
@@ -94,7 +68,7 @@ export class GlyphRenderer {
   }
 
   #applyUserTransforms(ctx: IRenderer): void {
-    const viewport = this.#deps.viewport;
+    const viewport = this.#editor.viewportManager;
     const center = viewport.getCentrePoint();
     const zoom = viewport.zoom.peek();
     const { panX, panY } = viewport;
@@ -103,14 +77,14 @@ export class GlyphRenderer {
   }
 
   #applyUpmTransforms(ctx: IRenderer): void {
-    const viewport = this.#deps.viewport;
+    const viewport = this.#editor.viewportManager;
     const scale = viewport.upmScale;
     const baselineY = viewport.logicalHeight - viewport.padding - viewport.descender * scale;
     ctx.transform(scale, 0, 0, -scale, viewport.padding, baselineY);
   }
 
   #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
-    return this.#deps.viewport.screenToUpmDistance(screenPixels);
+    return this.#editor.viewportManager.screenToUpmDistance(screenPixels);
   }
 
   #drawInteractive(): void {
@@ -121,7 +95,7 @@ export class GlyphRenderer {
 
     this.#prepareCanvas(ctx);
 
-    this.#deps.renderTool(ctx);
+    this.#renderTool(ctx);
 
     ctx.restore();
   }
@@ -130,48 +104,50 @@ export class GlyphRenderer {
     if (!this.#staticContext) return;
     const ctx = this.#staticContext.getContext();
 
-    const snapshot = this.#deps.getSnapshot();
+    const glyph = this.#editor.getGlyph();
+    const previewMode = this.#editor.previewMode.peek();
+    const handlesVisible = this.#editor.handlesVisible.peek();
 
     ctx.clear();
     ctx.save();
 
     this.#prepareCanvas(ctx);
 
-    if (snapshot) {
-      const guides = this.#getGuides(snapshot);
+    if (glyph) {
+      const guides = this.#getGuides(glyph);
       ctx.setStyle(GUIDE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
 
-      if (!this.#deps.getPreviewMode()) {
+      if (!previewMode) {
         renderGuides(ctx, guides);
       }
 
       ctx.setStyle(DEFAULT_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
-      const hasClosed = renderGlyph(ctx, snapshot);
+      const hasClosed = renderGlyph(ctx, glyph as GlyphSnapshot);
 
-      if (hasClosed && this.#deps.getPreviewMode()) {
+      if (hasClosed && previewMode) {
         ctx.fillStyle = "black";
         ctx.beginPath();
-        for (const contour of snapshot.contours) {
-          buildContourPath(ctx, contour);
+        for (const contour of glyph.contours) {
+          buildContourPath(ctx, contour as ContourSnapshot);
         }
         ctx.fill();
       }
     }
 
-    if (!this.#deps.getPreviewMode() && snapshot) {
-      this.#drawSegmentHighlights(ctx, snapshot);
+    if (!previewMode && glyph) {
+      this.#drawSegmentHighlights(ctx, glyph);
     }
 
     const shouldDrawBoundingRect =
-      this.#deps.selection.selectedPointIds.peek().size > 1 &&
-      !this.#deps.getPreviewMode() &&
-      this.#deps.selection.selectionMode.peek() === "committed";
+      this.#editor.selectedPointIds.peek().size > 1 &&
+      !previewMode &&
+      this.#editor.selectionMode.peek() === "committed";
 
     let bbRect: ReturnType<typeof Polygon.boundingRect> = null;
     if (shouldDrawBoundingRect) {
-      const selectedPointData = this.#deps.getSelectedPointData();
+      const selectedPointData = this.#getSelectedPointData();
       bbRect = Polygon.boundingRect(selectedPointData);
       if (bbRect) {
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
@@ -183,11 +159,11 @@ export class GlyphRenderer {
     ctx.restore();
     ctx.save();
 
-    if (!this.#deps.getPreviewMode() && snapshot) {
-      this.#drawHandlesFromSnapshot(ctx, snapshot);
+    if (!previewMode && handlesVisible && glyph) {
+      this.#drawHandlesFromSnapshot(ctx, glyph);
     }
 
-    if (shouldDrawBoundingRect && bbRect) {
+    if (shouldDrawBoundingRect && bbRect && handlesVisible) {
       this.#drawBoundingBoxHandles(ctx, bbRect);
     }
 
@@ -198,7 +174,7 @@ export class GlyphRenderer {
     ctx: IRenderer,
     bbRect: { x: number; y: number; width: number; height: number },
   ): void {
-    const viewport = this.#deps.viewport;
+    const viewport = this.#editor.viewportManager;
 
     const topLeft = viewport.projectUpmToScreen(bbRect.x, bbRect.y + bbRect.height);
     const bottomRight = viewport.projectUpmToScreen(bbRect.x + bbRect.width, bbRect.y);
@@ -214,33 +190,40 @@ export class GlyphRenderer {
       bottom: bottomRight.y,
     };
 
-    const hoveredHandle = this.#deps.getHoveredBoundingBoxHandle();
+    const hoveredHandle = this.#editor.getHoveredBoundingBoxHandle();
     drawBoundingBoxHandles(ctx, {
       rect: screenRect,
       hoveredHandle: hoveredHandle ?? undefined,
     });
   }
 
-  #getGuides(snapshot: GlyphSnapshot): Guides {
-    const metrics = this.#deps.getFontMetrics();
+  #getGuides(glyph: Glyph): Guides {
+    const metrics = this.#editor.getFontMetrics();
     return {
       ascender: { y: metrics.ascender },
       capHeight: { y: metrics.capHeight },
       xHeight: { y: metrics.xHeight },
       baseline: { y: 0 },
       descender: { y: metrics.descender },
-      xAdvance: snapshot.xAdvance,
+      xAdvance: glyph.xAdvance,
     };
   }
 
-  #drawSegmentHighlights(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    const hoveredSegment = this.#deps.hover.hoveredSegmentId.peek();
-    const selectedSegments = this.#deps.selection.selectedSegmentIds.peek();
+  #getSelectedPointData(): Array<{ x: number; y: number }> {
+    return Array.from(this.#editor.selectedPointIds.peek())
+      .map((id) => this.#editor.getPointById(id))
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .map((p) => ({ x: p.x, y: p.y }));
+  }
+
+  #drawSegmentHighlights(ctx: IRenderer, glyph: Glyph): void {
+    const hoveredSegment = this.#editor.hoveredSegmentId.peek();
+    const selectedSegments = this.#editor.selectedSegmentIds.peek();
 
     if (!hoveredSegment && selectedSegments.size === 0) return;
 
-    for (const contour of snapshot.contours) {
-      const segments = Segment.parse(contour.points, contour.closed);
+    for (const contour of glyph.contours) {
+      const segments = Segment.parse(contour.points as PointSnapshot[], contour.closed);
 
       for (const segment of segments) {
         const segmentId = Segment.id(segment);
@@ -278,12 +261,11 @@ export class GlyphRenderer {
     ctx.stroke();
   }
 
-  #drawHandlesFromSnapshot(ctx: IRenderer, snapshot: GlyphSnapshot): void {
-    const viewport = this.#deps.viewport;
+  #drawHandlesFromSnapshot(ctx: IRenderer, glyph: Glyph): void {
+    const viewport = this.#editor.viewportManager;
 
-    // First pass: draw all handle lines (so handles appear on top)
     ctx.setStyle(DEFAULT_STYLES);
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const points = contour.points;
       const numPoints = points.length;
 
@@ -305,8 +287,7 @@ export class GlyphRenderer {
       }
     }
 
-    // Second pass: draw all handles (on top of lines)
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const points = contour.points;
       const numPoints = points.length;
 
@@ -315,10 +296,10 @@ export class GlyphRenderer {
       for (let idx = 0; idx < numPoints; idx++) {
         const point = points[idx];
         const { x, y } = viewport.projectUpmToScreen(point.x, point.y);
-        const handleState = this.#deps.getHandleState(asPointId(point.id));
+        const handleState = this.#editor.getHandleState(asPointId(point.id));
 
         if (numPoints === 1) {
-          this.#deps.paintHandle(ctx, x, y, "corner", handleState);
+          drawHandle(ctx, "corner", x, y, handleState);
           continue;
         }
 
@@ -331,9 +312,9 @@ export class GlyphRenderer {
           const segmentAngle = Math.atan2(ny - y, nx - x);
 
           if (contour.closed) {
-            this.#deps.paintHandle(ctx, x, y, "direction", handleState, segmentAngle);
+            drawHandle(ctx, "direction", x, y, handleState, { segmentAngle });
           } else {
-            this.#deps.paintHandle(ctx, x, y, "first", handleState, segmentAngle);
+            drawHandle(ctx, "first", x, y, handleState, { segmentAngle });
           }
           continue;
         }
@@ -347,12 +328,12 @@ export class GlyphRenderer {
 
         if (point.pointType === "onCurve") {
           if (point.smooth) {
-            this.#deps.paintHandle(ctx, x, y, "smooth", handleState);
+            drawHandle(ctx, "smooth", x, y, handleState);
           } else {
-            this.#deps.paintHandle(ctx, x, y, "corner", handleState);
+            drawHandle(ctx, "corner", x, y, handleState);
           }
         } else {
-          this.#deps.paintHandle(ctx, x, y, "control", handleState);
+          drawHandle(ctx, "control", x, y, handleState);
         }
       }
     }

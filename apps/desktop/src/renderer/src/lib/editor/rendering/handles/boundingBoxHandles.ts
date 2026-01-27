@@ -35,8 +35,8 @@ function drawHandles(
     const isHovered = hoveredHandle?.type === "resize" && hoveredHandle.edge === cornerEdges[i];
     const handleRadius = isHovered ? radius + 1 : radius;
 
-    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
     drawStrokedCircle(ctx, pos.x, pos.y, handleRadius);
+    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
   }
 
   const midpointEdges = ["top", "bottom", "left", "right"] as const;
@@ -47,7 +47,7 @@ function drawHandles(
     const isHovered = hoveredHandle?.type === "resize" && hoveredHandle.edge === midpointEdges[i];
     const handleRadius = isHovered ? radius + 1 : radius;
 
-    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
     drawStrokedCircle(ctx, pos.x, pos.y, handleRadius);
+    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
   }
 }

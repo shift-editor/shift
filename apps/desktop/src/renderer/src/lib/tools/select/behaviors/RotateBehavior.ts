@@ -33,9 +33,13 @@ export class RotateBehavior implements SelectBehavior {
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
     if (prev.type !== "rotating" && next.type === "rotating") {
       ctx.preview.beginPreview();
+      ctx.render.setHandlesVisible(false);
     }
-    if (prev.type === "rotating" && next.type !== "rotating" && event.type !== "dragEnd") {
-      ctx.preview.cancelPreview();
+    if (prev.type === "rotating" && next.type !== "rotating") {
+      ctx.render.setHandlesVisible(true);
+      if (event.type !== "dragEnd") {
+        ctx.preview.cancelPreview();
+      }
     }
   }
 

@@ -252,6 +252,19 @@ export class EditingManager {
     );
   }
 
+  openContour(contourId: ContourId): void {
+    this.#requireSession();
+
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("openContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.openContour(contourId),
+    );
+  }
+
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();
 

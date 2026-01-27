@@ -6,11 +6,13 @@ export const GlyphSection = () => {
   return (
     <SidebarSection title="Glyph">
       <div className="flex justify-center items-center gap-2">
-        <span className="text-ui text-muted">20</span>
-        <Glyph />
-        <span className="text-ui text-muted">20</span>
+        <Input className="text-right bg-transparent" value="20" />
+        <div>
+          <Glyph />
+        </div>
+        <Input className="text-left bg-transparent" value="20" />
       </div>
-      <Input className="text-center" value="600" />
+      <Input className="text-center bg-transparent" value="600" />
       <Input
         className="text-center bg-transparent"
         value="A"

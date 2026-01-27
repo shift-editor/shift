@@ -1,4 +1,4 @@
-export { ClipboardManager, type ClipboardManagerContext } from "./ClipboardManager";
+export { ClipboardManager } from "./ClipboardManager";
 export { ContentResolver } from "./ContentResolver";
 export { PayloadSerializer } from "./PayloadSerializer";
 export { ImporterRegistry } from "./ImporterRegistry";

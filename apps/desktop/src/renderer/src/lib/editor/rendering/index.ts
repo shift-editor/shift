@@ -1,4 +1,4 @@
-export { GlyphRenderer, type RenderDependencies, type FontMetrics } from "./GlyphRenderer";
+export { GlyphRenderer, type FontMetrics } from "./GlyphRenderer";
 export { FrameHandler } from "./FrameHandler";
 export {
   renderGlyph,

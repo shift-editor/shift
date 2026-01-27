@@ -118,6 +118,7 @@ export interface RenderService {
   requestImmediateRedraw(): void;
   cancelRedraw(): void;
   setPreviewMode(enabled: boolean): void;
+  setHandlesVisible(visible: boolean): void;
 }
 
 export interface ViewportService {
@@ -267,6 +268,7 @@ export function createContext(editor: Editor): ToolContext {
       requestImmediateRedraw: () => editor.requestImmediateRedraw(),
       cancelRedraw: () => editor.cancelRedraw(),
       setPreviewMode: (enabled) => editor.setPreviewMode(enabled),
+      setHandlesVisible: (visible) => editor.setHandlesVisible(visible),
     },
     viewport: {
       getZoom: () => viewport.zoom.value,

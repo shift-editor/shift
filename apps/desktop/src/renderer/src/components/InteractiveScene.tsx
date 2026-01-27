@@ -7,10 +7,9 @@ export const InteractiveScene = () => {
   const { interactiveCanvasRef } = useContext(CanvasContext);
   const editor = getEditor();
   const toolManager = editor.getToolManager();
-  const ctx = editor.getContext();
 
   const getScreenPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const screen = ctx.screen.getMousePosition(e.clientX, e.clientY);
+    const screen = editor.getMousePosition(e.clientX, e.clientY);
     return screen;
   };
 

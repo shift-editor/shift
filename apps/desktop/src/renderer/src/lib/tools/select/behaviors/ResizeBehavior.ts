@@ -33,9 +33,13 @@ export class ResizeBehavior implements SelectBehavior {
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
       ctx.preview.beginPreview();
+      ctx.render.setHandlesVisible(false);
     }
-    if (prev.type === "resizing" && next.type !== "resizing" && event.type !== "dragEnd") {
-      ctx.preview.cancelPreview();
+    if (prev.type === "resizing" && next.type !== "resizing") {
+      ctx.render.setHandlesVisible(true);
+      if (event.type !== "dragEnd") {
+        ctx.preview.cancelPreview();
+      }
     }
   }
 
@@ -122,11 +126,11 @@ export class ResizeBehavior implements SelectBehavior {
     const draggedPointIds = [...ctx.selection.getSelectedPoints()];
 
     const initialPositions = new Map<PointId, Point2D>();
-    const snapshot = ctx.edit.getGlyph();
-    const allPoints = snapshot?.contours.flatMap((c) => c.points) ?? [];
+    const glyph = ctx.edit.getGlyph();
+    const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
     for (const p of allPoints) {
-      if (ctx.selection.isPointSelected(p.id as PointId)) {
-        initialPositions.set(p.id as PointId, { x: p.x, y: p.y });
+      if (ctx.selection.isPointSelected(p.id)) {
+        initialPositions.set(p.id, { x: p.x, y: p.y });
       }
     }
 

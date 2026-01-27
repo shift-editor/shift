@@ -199,6 +199,18 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, []);
   }
 
+  openContour(contourId: string): string {
+    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+
+    const contour = this.#snapshot.contours.find((c) => c.id === contourId);
+    if (!contour) {
+      return this.#makeResult(false, [], `Contour ${contourId} not found`);
+    }
+
+    contour.closed = false;
+    return this.#makeResult(true, []);
+  }
+
   // ═══════════════════════════════════════════════════════════
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════

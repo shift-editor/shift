@@ -143,6 +143,14 @@ const fontEngineAPI = {
     return fontEngineInstance.removeContour(contourId);
   },
 
+  /**
+   * Open a closed contour.
+   * Returns CommandResult JSON.
+   */
+  openContour: (contourId: string): string => {
+    return fontEngineInstance.openContour(contourId);
+  },
+
   // ═══════════════════════════════════════════════════════════
   // POINT OPERATIONS
   // ═══════════════════════════════════════════════════════════

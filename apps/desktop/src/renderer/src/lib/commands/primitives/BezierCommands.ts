@@ -230,10 +230,10 @@ export class CloseContourCommand extends BaseCommand<void> {
     }
   }
 
-  undo(_ctx: CommandContext): void {
-    // TODO: Add openContour to FontEngine API to reverse this
-    // For now, closing is not easily reversible
-    console.warn("CloseContourCommand.undo: Opening closed contour not yet supported");
+  undo(ctx: CommandContext): void {
+    if (this.#contourId && !this.#wasClosed) {
+      ctx.fontEngine.editing.openContour(this.#contourId);
+    }
   }
 }
 
@@ -244,21 +244,21 @@ export class AddContourCommand extends BaseCommand<ContourId> {
   readonly name = "Add Contour";
 
   #newContourId: ContourId | null = null;
-  // Will be used when removeContour API is available
-  #_previousActiveId: ContourId | null = null;
+  #previousActiveId: ContourId | null = null;
 
   execute(ctx: CommandContext): ContourId {
-    this.#_previousActiveId = ctx.fontEngine.editing.getActiveContourId();
+    this.#previousActiveId = ctx.fontEngine.editing.getActiveContourId();
     this.#newContourId = ctx.fontEngine.editing.addContour();
     return this.#newContourId;
   }
 
-  undo(_ctx: CommandContext): void {
-    // TODO: Add removeContour to FontEngine API
-    // Will use this.#_previousActiveId to restore the active contour
-    // For now this is a placeholder
-    void this.#_previousActiveId;
-    console.warn("AddContourCommand.undo: Remove contour not yet implemented");
+  undo(ctx: CommandContext): void {
+    if (this.#newContourId) {
+      ctx.fontEngine.editing.removeContour(this.#newContourId);
+    }
+    if (this.#previousActiveId) {
+      ctx.fontEngine.editing.setActiveContour(this.#previousActiveId);
+    }
   }
 }
 

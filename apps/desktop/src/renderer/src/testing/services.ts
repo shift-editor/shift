@@ -430,9 +430,11 @@ function createMockCursorService(): CursorService & {
 
 function createMockRenderService(): RenderService & {
   _previewMode: boolean;
+  _handlesVisible: boolean;
   mocks: Record<string, ReturnType<typeof vi.fn>>;
 } {
   let _previewMode = false;
+  let _handlesVisible = true;
 
   const mocks = {
     requestRedraw: vi.fn(),
@@ -441,6 +443,9 @@ function createMockRenderService(): RenderService & {
     setPreviewMode: vi.fn((enabled: boolean) => {
       _previewMode = enabled;
     }),
+    setHandlesVisible: vi.fn((visible: boolean) => {
+      _handlesVisible = visible;
+    }),
   };
 
   return {
@@ -448,8 +453,12 @@ function createMockRenderService(): RenderService & {
     requestImmediateRedraw: mocks.requestImmediateRedraw,
     cancelRedraw: mocks.cancelRedraw,
     setPreviewMode: mocks.setPreviewMode,
+    setHandlesVisible: mocks.setHandlesVisible,
     get _previewMode() {
       return _previewMode;
+    },
+    get _handlesVisible() {
+      return _handlesVisible;
     },
     mocks,
   };

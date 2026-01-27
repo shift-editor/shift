@@ -407,6 +407,31 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn open_contour(&mut self, contour_id: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let cid = match contour_id.parse::<u128>() {
+      Ok(raw) => ContourId::from_raw(raw),
+      Err(_) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Invalid contour ID: {contour_id}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    match session.open_contour(cid) {
+      Ok(_) => {
+        let result = CommandResult::success_simple(session);
+        Ok(serde_json::to_string(&result).unwrap())
+      }
+      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+    }
+  }
+
+  #[napi]
   pub fn reverse_contour(&mut self, contour_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
 

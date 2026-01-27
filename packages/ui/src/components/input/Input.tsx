@@ -15,7 +15,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="relative flex items-center">
         {label && (
-          <span className="absolute left-2 text-muted text-[9px] font-medium pointer-events-none">
+          <span className="absolute left-2 text-muted text-[11px] font-medium pointer-events-none">
             {label}
           </span>
         )}
@@ -23,7 +23,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <BaseInput
           ref={ref}
           className={cn(
-            "w-full h-6 px-2 text-[9px] text-primary bg-input rounded",
+            "w-full h-6 px-2 text-[11px] text-primary bg-input rounded",
             "focus:outline-none focus:ring-1 focus:ring-accent",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             label && "pl-5",

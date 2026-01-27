@@ -3,14 +3,17 @@ import type { PointId } from "@shift/types";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { VisualState } from "@/types/editor";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export class HoverManager {
   private $hoveredPointId: WritableSignal<PointId | null>;
   private $hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
+  private $hoveredBoundingBoxHandle: WritableSignal<BoundingBoxHitResult>;
 
   constructor() {
     this.$hoveredPointId = signal<PointId | null>(null);
     this.$hoveredSegmentId = signal<SegmentIndicator | null>(null);
+    this.$hoveredBoundingBoxHandle = signal<BoundingBoxHitResult>(null);
   }
 
   get hoveredPointId(): Signal<PointId | null> {
@@ -19,6 +22,18 @@ export class HoverManager {
 
   get hoveredSegmentId(): Signal<SegmentIndicator | null> {
     return this.$hoveredSegmentId;
+  }
+
+  get hoveredBoundingBoxHandle(): Signal<BoundingBoxHitResult> {
+    return this.$hoveredBoundingBoxHandle;
+  }
+
+  setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
+    this.$hoveredBoundingBoxHandle.set(handle);
+  }
+
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
+    return this.$hoveredBoundingBoxHandle.peek();
   }
 
   setHoveredPoint(pointId: PointId | null): void {
@@ -38,6 +53,7 @@ export class HoverManager {
   clearHover(): void {
     this.$hoveredPointId.set(null);
     this.$hoveredSegmentId.set(null);
+    this.$hoveredBoundingBoxHandle.set(null);
   }
 
   getPointVisualState(pointId: PointId, isPointSelected: (id: PointId) => boolean): VisualState {
