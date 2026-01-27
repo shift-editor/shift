@@ -1,169 +1,124 @@
 # Main
 
-Electron main process managing application lifecycle, windows, and global shortcuts.
+Electron main process managing application lifecycle, windows, menus, and document state.
 
 ## Overview
 
-The main process is the entry point for the Shift Electron application. It handles BrowserWindow creation, app lifecycle events, global keyboard shortcuts, and coordinates with the preload script for native module access.
+The main process is the entry point for the Shift Electron application. It uses a modular manager architecture to separate concerns: app lifecycle events, window management, menu creation, and document state tracking.
 
 ## Architecture
 
 ```
-Electron App
-├── app.whenReady() → createWindow()
-├── BrowserWindow
-│   ├── webPreferences.preload → preload.js
-│   └── loadURL/loadFile → renderer
-├── globalShortcut
-│   ├── Cmd/Ctrl+Shift+R → reload
-│   └── Cmd/Ctrl+Q → quit
-└── app events
-    ├── window-all-closed → quit (non-macOS)
-    ├── activate → recreate window (macOS)
-    └── will-quit → cleanup shortcuts
+src/main/
+├── main.ts                 # Entry point, wires managers together
+└── managers/
+    ├── AppLifecycle.ts     # App events (ready, quit, activate)
+    ├── WindowManager.ts    # Window creation and IPC handlers
+    ├── DocumentState.ts    # Dirty tracking, save dialogs, autosave
+    ├── MenuManager.ts      # Menu creation and theme management
+    └── index.ts            # Re-exports
 ```
 
-### Key Design Decisions
+### Manager Responsibilities
 
-1. **Single Window**: One main BrowserWindow, maximized on creation
-2. **Global Shortcuts**: System-wide shortcuts for reload and quit
-3. **Platform Handling**: macOS-specific dock icon and window behavior
-4. **Sandbox Disabled**: Required for NAPI native module access
+| Manager | Responsibility |
+|---------|---------------|
+| AppLifecycle | App events, quit coordination, dock icon, dev shortcuts |
+| WindowManager | BrowserWindow creation, IPC handlers, title updates |
+| DocumentState | Dirty state, file path, save dialogs, autosave |
+| MenuManager | Application menu, theme switching |
 
-## Key Concepts
-
-### Window Creation
-
-BrowserWindow configured for the editor:
-
-```typescript
-mainWindow = new BrowserWindow({
-  width: 800,
-  height: 600,
-  title: "Shift",
-  webPreferences: {
-    preload: path.join(__dirname, "preload.js"),
-    sandbox: false, // Required for shift-node
-  },
-});
-mainWindow.maximize();
-```
-
-### Content Loading
-
-Development vs production loading:
-
-```typescript
-if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-  mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-} else {
-  mainWindow.loadFile("../renderer/index.html");
-}
-```
-
-### Global Shortcuts
-
-Registered after window loads:
-
-```typescript
-// Full reload (includes preload and native modules)
-globalShortcut.register("CommandOrControl+Shift+R", () => {
-  mainWindow?.reload();
-});
-
-// Force quit
-globalShortcut.register("CommandOrControl+Q", () => {
-  app.quit();
-});
-```
-
-## API Reference
-
-### App Events
-
-- `ready` - Create main window
-- `window-all-closed` - Quit on non-macOS
-- `activate` - Recreate window on macOS
-- `will-quit` - Cleanup shortcuts
-
-### Global Shortcuts
-
-- `Cmd/Ctrl+Shift+R` - Full reload
-- `Cmd/Ctrl+Q` - Force quit
-
-### Window Methods
-
-- `mainWindow.maximize()` - Maximize on creation
-- `mainWindow.reload()` - Reload window
-- `mainWindow.webContents.openDevTools()` - Open DevTools
-
-## Usage Examples
-
-### App Lifecycle
-
-```typescript
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-```
-
-### Shortcut Registration
-
-```typescript
-mainWindow.webContents.on("did-finish-load", () => {
-  globalShortcut.register(
-    process.platform === "darwin" ? "Command+Shift+R" : "Control+Shift+R",
-    () => mainWindow?.reload(),
-  );
-});
-
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
-});
-```
-
-### macOS Dock Icon
-
-```typescript
-app.whenReady().then(() => {
-  if (process.platform === "darwin") {
-    app.dock.setIcon(path.join(__dirname, "icon.png"));
-  }
-});
-```
-
-## Data Flow
+### Data Flow
 
 ```
 App Launch
     ↓
-app.whenReady()
+main.ts (wire managers)
     ↓
-createWindow()
-    ├── new BrowserWindow(config)
-    ├── mainWindow.maximize()
-    ├── loadURL or loadFile
-    └── Register shortcuts on did-finish-load
+AppLifecycle.initialize()
+    ├── app.on("ready") → MenuManager.create() + WindowManager.create()
+    ├── app.on("before-quit") → DocumentState.confirmClose()
+    └── app.on("will-quit") → cleanup shortcuts
     ↓
 User Interaction
-    ├── Global shortcuts → reload/quit
-    └── Window events → lifecycle handling
-    ↓
-app.quit()
-    └── will-quit → unregisterAll shortcuts
+    ├── Menu actions → DocumentState (save/open)
+    ├── Window close → DocumentState.confirmClose()
+    └── Cmd+Q → triggers before-quit → DocumentState.confirmClose()
 ```
+
+## Key Design Decisions
+
+1. **No Global Cmd+Q Shortcut**: Uses standard macOS app menu quit instead. The `before-quit` event intercepts all quit attempts and checks for unsaved changes.
+
+2. **Centralized Document State**: All dirty tracking and save dialogs go through `DocumentState`, ensuring consistent behavior regardless of how quit is triggered.
+
+3. **Proper Quit Flow**: The `before-quit` handler prevents quit if document is dirty and user cancels. This fixes the zombie app state issue.
+
+4. **Manager Dependencies**: Managers are instantiated with their dependencies via constructor injection, making the architecture testable.
+
+## Key Concepts
+
+### Quit Flow
+
+When user triggers quit (Cmd+Q, menu, or window close):
+
+1. `before-quit` event fires
+2. `AppLifecycle` calls `DocumentState.confirmClose()`
+3. If dirty, shows save dialog
+4. User chooses: Save, Don't Save, or Cancel
+5. Cancel prevents quit; others allow it
+
+### Window Close vs App Quit
+
+- **Window close** (red button): Handled by `WindowManager`, delegates to `DocumentState.confirmClose()`
+- **App quit** (Cmd+Q): Handled by `AppLifecycle.before-quit`, same dialog flow
+
+### Autosave
+
+`DocumentState` manages a 30-second autosave interval. Autosave only triggers if:
+- Document is dirty
+- File path exists (not untitled)
+
+## API Reference
+
+### AppLifecycle
+
+- `initialize()` - Register all app event handlers
+
+### WindowManager
+
+- `create()` - Create and configure main window
+- `getWindow()` - Get current BrowserWindow
+- `setQuitting(boolean)` - Mark app as quitting to skip close dialogs
+- `destroy()` - Clean up and destroy window
+
+### DocumentState
+
+- `isDirty()` / `setDirty(boolean)` - Dirty state
+- `getFilePath()` / `setFilePath(string)` - Current file
+- `save(saveAs?: boolean)` - Save document
+- `confirmClose()` - Show save dialog if dirty, returns whether to proceed
+- `startAutosave()` / `stopAutosave()` - Autosave management
+
+### MenuManager
+
+- `create()` - Build and set application menu
+- `getTheme()` / `setTheme(theme)` - Theme management
+
+## IPC Handlers
+
+| Channel | Handler | Description |
+|---------|---------|-------------|
+| `window:close` | WindowManager | Close main window |
+| `window:minimize` | WindowManager | Minimize window |
+| `window:maximize` | WindowManager | Toggle maximize |
+| `window:isMaximized` | WindowManager | Check maximize state |
+| `document:setDirty` | WindowManager | Update dirty state |
+| `document:setFilePath` | WindowManager | Update file path |
+| `document:saveCompleted` | WindowManager | Handle save completion |
+| `theme:get` | AppLifecycle | Get current theme |
+| `theme:set` | AppLifecycle | Set theme |
+| `dialog:openFont` | AppLifecycle | Show open dialog |
 
 ## Related Systems
 
