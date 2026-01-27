@@ -27,7 +27,7 @@ export interface HandleStyles {
 export function createHandleStyles(
   theme: ThemeTokens,
 ): Record<HandleType, HandleStyles> {
-  const { cyan, gray, green, pink } = theme.canvas;
+  const { cyan, gray, green } = theme.canvas;
   const white = theme.ui.bg.surface;
   const hoverOverlay = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 
@@ -52,7 +52,7 @@ export function createHandleStyles(
       },
       selected: {
         size: 8,
-        lineWidth: 2,
+        lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
@@ -64,7 +64,7 @@ export function createHandleStyles(
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: pink,
+        strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
       },
@@ -72,7 +72,7 @@ export function createHandleStyles(
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: pink,
+        strokeStyle: cyan,
         fillStyle: white,
         dashPattern: [],
         overlayColor: hoverOverlay(0.75),
@@ -82,7 +82,7 @@ export function createHandleStyles(
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: white,
-        fillStyle: pink,
+        fillStyle: cyan,
         dashPattern: [],
       },
     },
@@ -169,7 +169,7 @@ export function createHandleStyles(
     },
     last: {
       idle: {
-        size: 6,
+        size: 12,
         lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
@@ -177,7 +177,7 @@ export function createHandleStyles(
         dashPattern: [],
       },
       hovered: {
-        size: 6,
+        size: 12,
         lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
@@ -186,7 +186,7 @@ export function createHandleStyles(
         overlayColor: hoverOverlay(0.5),
       },
       selected: {
-        size: 7,
+        size: 24,
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: cyan,

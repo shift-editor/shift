@@ -15,10 +15,10 @@ export function createSelectionRectangleStyles(theme: ThemeTokens): DrawStyle {
 export function createBoundingRectangleStyles(theme: ThemeTokens): DrawStyle {
   return {
     lineWidth: 1,
-    strokeStyle: theme.canvas.indicator,
+    strokeStyle: theme.canvas.black,
     fillStyle: "transparent",
     antiAlias: false,
-    dashPattern: [],
+    dashPattern: [5, 5],
   };
 }
 

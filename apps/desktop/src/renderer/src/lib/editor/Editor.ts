@@ -65,7 +65,10 @@ export class Editor {
   #renderer: GlyphRenderer;
 
   #toolManager: ToolManager | null = null;
-  #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
+  #toolMetadata: Map<
+    ToolName,
+    { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }
+  >;
   private $activeTool: WritableSignal<ToolName>;
 
   #viewport: ViewportManager;
@@ -656,6 +659,7 @@ export class Editor {
     contourId: ContourId;
     position: "start" | "end";
     contour: ContourSnapshot;
+    pointId: PointId;
   } | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
@@ -671,6 +675,7 @@ export class Editor {
       if (Vec2.dist(firstPoint, pos) < hitRadius) {
         return {
           contourId: asContourId(contour.id),
+          pointId: asPointId(firstPoint.id),
           position: "start",
           contour,
         };
@@ -679,6 +684,7 @@ export class Editor {
       if (Vec2.dist(lastPoint, pos) < hitRadius) {
         return {
           contourId: asContourId(contour.id),
+          pointId: asPointId(lastPoint.id),
           position: "end",
           contour,
         };

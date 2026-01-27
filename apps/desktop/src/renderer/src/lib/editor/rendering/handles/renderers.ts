@@ -11,13 +11,7 @@ export type HandleType =
 
 export type HandleState = "idle" | "hovered" | "selected";
 
-import {
-  START_BAR_WIDTH,
-  START_TRIANGLE_SIZE,
-  START_TRIANGLE_GAP,
-  END_BAR_WIDTH,
-  END_TRIANGLE_SIZE,
-} from "./constants";
+import { START_TRIANGLE_GAP } from "./constants";
 import {
   drawFilledCircle,
   drawFilledRect,
@@ -59,17 +53,17 @@ export const drawFirstHandle: HandleDrawFn = (ctx, x, y, state, options) => {
   const angle = options?.segmentAngle ?? 0;
   const perpAngle = angle + Math.PI / 2;
 
-  drawHorizontalLine(ctx, x, y, START_BAR_WIDTH, perpAngle);
+  drawHorizontalLine(ctx, x, y, style.size, perpAngle);
 
-  const triangleX = x + Math.cos(angle) * (START_TRIANGLE_GAP + START_TRIANGLE_SIZE);
-  const triangleY = y + Math.sin(angle) * (START_TRIANGLE_GAP + START_TRIANGLE_SIZE);
-  drawTriangle(ctx, triangleX, triangleY, START_TRIANGLE_SIZE, angle);
+  const triangleX = x + Math.cos(angle) * (START_TRIANGLE_GAP + style.size);
+  const triangleY = y + Math.sin(angle) * (START_TRIANGLE_GAP + style.size);
+  drawTriangle(ctx, triangleX, triangleY, style.size, angle);
 
   if (style.overlayColor) {
     ctx.fillStyle = style.overlayColor;
     ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(ctx, x, y, START_BAR_WIDTH, perpAngle);
-    drawTriangle(ctx, triangleX, triangleY, START_TRIANGLE_SIZE, angle);
+    drawHorizontalLine(ctx, x, y, style.size, perpAngle);
+    drawTriangle(ctx, triangleX, triangleY, style.size, angle);
   }
 };
 
@@ -126,12 +120,12 @@ export const drawDirectionHandle: HandleDrawFn = (
   ctx.setStyle(style);
 
   const angle = options?.segmentAngle ?? 0;
-  drawTriangle(ctx, x, y, END_TRIANGLE_SIZE, angle);
+  drawTriangle(ctx, x, y, style.size, angle);
 
   if (style.overlayColor) {
     ctx.fillStyle = style.overlayColor;
     ctx.strokeStyle = style.overlayColor;
-    drawTriangle(ctx, x, y, END_TRIANGLE_SIZE, angle);
+    drawTriangle(ctx, x, y, style.size, angle);
   }
 };
 
@@ -144,11 +138,11 @@ export const drawLastHandle: LastHandleDrawFn = (ctx, pos, state) => {
   const angle = Math.atan2(dy, dx);
   const perpAngle = angle + Math.PI / 2;
 
-  drawHorizontalLine(ctx, pos.x0, pos.y0, END_BAR_WIDTH, perpAngle);
+  drawHorizontalLine(ctx, pos.x0, pos.y0, style.size, perpAngle);
 
   if (style.overlayColor) {
     ctx.fillStyle = style.overlayColor;
     ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(ctx, pos.x0, pos.y0, END_BAR_WIDTH, perpAngle);
+    drawHorizontalLine(ctx, pos.x0, pos.y0, style.size, perpAngle);
   }
 };

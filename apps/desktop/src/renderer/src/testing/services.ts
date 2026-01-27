@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import type { PointId, ContourId, GlyphSnapshot } from "@shift/types";
-import { asContourId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 import type {
   ToolContext,
   ScreenService,
@@ -31,7 +31,10 @@ export interface ToolMouseEvent {
   readonly button: number;
 }
 import { FontEngine, MockFontEngine } from "@/engine";
-import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
+import {
+  Segment as SegmentOps,
+  type SegmentHitResult,
+} from "@/lib/geo/Segment";
 
 export interface MockToolContext extends ToolContext {
   fontEngine: FontEngine;
@@ -55,17 +58,24 @@ export interface MockToolContext extends ToolContext {
   };
 }
 
-function createMockScreenService(): ScreenService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockScreenService(): ScreenService & {
+  mocks: Record<string, ReturnType<typeof vi.fn>>;
+} {
   const mocks = {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
     projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
-    getMousePosition: vi.fn((x?: number, y?: number) => ({ x: x ?? 0, y: y ?? 0 })),
+    getMousePosition: vi.fn((x?: number, y?: number) => ({
+      x: x ?? 0,
+      y: y ?? 0,
+    })),
   };
 
   return {
     toUpmDistance: mocks.toUpmDistance,
-    get hitRadius() { return 8; },
+    get hitRadius() {
+      return 8;
+    },
     lineWidth: mocks.lineWidth,
     projectScreenToUpm: mocks.projectScreenToUpm,
     getMousePosition: mocks.getMousePosition,
@@ -82,9 +92,14 @@ function createMockSelectionService(): SelectionService & {
   const _selectedPoints = new Set<PointId>();
   const _selectedSegments = new Set<SegmentId>();
   let _mode: SelectionMode = "committed";
-  const $selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal<ReadonlySet<PointId>>(new Set());
-  const $selectedSegments: WritableSignal<ReadonlySet<SegmentId>> = signal<ReadonlySet<SegmentId>>(new Set());
-  const $mode: WritableSignal<SelectionMode> = signal<SelectionMode>("committed");
+  const $selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal<
+    ReadonlySet<PointId>
+  >(new Set());
+  const $selectedSegments: WritableSignal<ReadonlySet<SegmentId>> = signal<
+    ReadonlySet<SegmentId>
+  >(new Set());
+  const $mode: WritableSignal<SelectionMode> =
+    signal<SelectionMode>("committed");
 
   const updateSignals = () => {
     $selectedPoints.set(new Set(_selectedPoints));
@@ -142,7 +157,9 @@ function createMockSelectionService(): SelectionService & {
       _selectedSegments.clear();
       updateSignals();
     }),
-    hasSelection: vi.fn(() => _selectedPoints.size > 0 || _selectedSegments.size > 0),
+    hasSelection: vi.fn(
+      () => _selectedPoints.size > 0 || _selectedSegments.size > 0,
+    ),
     setMode: vi.fn((mode: SelectionMode) => {
       _mode = mode;
       updateSignals();
@@ -151,7 +168,8 @@ function createMockSelectionService(): SelectionService & {
 
   return {
     getSelectedPoints: () => new Set(_selectedPoints) as ReadonlySet<PointId>,
-    getSelectedSegments: () => new Set(_selectedSegments) as ReadonlySet<SegmentId>,
+    getSelectedSegments: () =>
+      new Set(_selectedSegments) as ReadonlySet<SegmentId>,
     getMode: () => _mode,
     selectPoints: mocks.selectPoints,
     addPoint: mocks.addPoint,
@@ -168,8 +186,12 @@ function createMockSelectionService(): SelectionService & {
     setMode: mocks.setMode,
     _selectedPoints,
     _selectedSegments,
-    get _mode() { return _mode; },
-    set _mode(m: SelectionMode) { _mode = m; },
+    get _mode() {
+      return _mode;
+    },
+    set _mode(m: SelectionMode) {
+      _mode = m;
+    },
     mocks,
   };
 }
@@ -181,8 +203,11 @@ function createMockHoverService(): HoverService & {
 } {
   let _hoveredPoint: PointId | null = null;
   let _hoveredSegment: SegmentIndicator | null = null;
-  const $hoveredPoint: WritableSignal<PointId | null> = signal<PointId | null>(null);
-  const $hoveredSegment: WritableSignal<SegmentIndicator | null> = signal<SegmentIndicator | null>(null);
+  const $hoveredPoint: WritableSignal<PointId | null> = signal<PointId | null>(
+    null,
+  );
+  const $hoveredSegment: WritableSignal<SegmentIndicator | null> =
+    signal<SegmentIndicator | null>(null);
 
   const mocks = {
     setHoveredPoint: vi.fn((id: PointId | null) => {
@@ -211,19 +236,31 @@ function createMockHoverService(): HoverService & {
     setHoveredPoint: mocks.setHoveredPoint,
     setHoveredSegment: mocks.setHoveredSegment,
     clearAll: mocks.clearAll,
-    get _hoveredPoint() { return _hoveredPoint; },
-    get _hoveredSegment() { return _hoveredSegment; },
+    get _hoveredPoint() {
+      return _hoveredPoint;
+    },
+    get _hoveredSegment() {
+      return _hoveredSegment;
+    },
     mocks,
   };
 }
 
-function createMockEditService(fontEngine: FontEngine): EditService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockEditService(
+  fontEngine: FontEngine,
+): EditService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
   const mocks = {
     addPoint: vi.fn((x: number, y: number, type: any, smooth = false) =>
       fontEngine.editing.addPoint(x, y, type, smooth),
     ),
-    addPointToContour: vi.fn((contourId: ContourId, x: number, y: number, type: any, smooth: boolean) =>
-      fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
+    addPointToContour: vi.fn(
+      (
+        contourId: ContourId,
+        x: number,
+        y: number,
+        type: any,
+        smooth: boolean,
+      ) => fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
     ),
     movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) =>
       fontEngine.editing.movePoints([...ids], dx, dy),
@@ -231,8 +268,9 @@ function createMockEditService(fontEngine: FontEngine): EditService & { mocks: R
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),
     ),
-    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) =>
-      fontEngine.editing.applySmartEdits(ids, dx, dy),
+    applySmartEdits: vi.fn(
+      (ids: ReadonlySet<PointId>, dx: number, dy: number) =>
+        fontEngine.editing.applySmartEdits(ids, dx, dy),
     ),
     removePoints: vi.fn((ids: Iterable<PointId>) =>
       fontEngine.editing.removePoints([...ids]),
@@ -247,9 +285,7 @@ function createMockEditService(fontEngine: FontEngine): EditService & { mocks: R
     setActiveContour: vi.fn((contourId: ContourId) =>
       fontEngine.editing.setActiveContour(contourId),
     ),
-    clearActiveContour: vi.fn(() =>
-      fontEngine.editing.clearActiveContour(),
-    ),
+    clearActiveContour: vi.fn(() => fontEngine.editing.clearActiveContour()),
     reverseContour: vi.fn((contourId: ContourId) =>
       fontEngine.editing.reverseContour(contourId),
     ),
@@ -310,13 +346,19 @@ function createMockPreviewService(fontEngine: FontEngine): PreviewService & {
     commitPreview: mocks.commitPreview,
     isInPreview: mocks.isInPreview,
     getPreviewSnapshot: mocks.getPreviewSnapshot,
-    get _previewSnapshot() { return _previewSnapshot; },
-    get _isInPreview() { return _isInPreview; },
+    get _previewSnapshot() {
+      return _previewSnapshot;
+    },
+    get _isInPreview() {
+      return _isInPreview;
+    },
     mocks,
   };
 }
 
-function createMockTransformService(): TransformService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockTransformService(): TransformService & {
+  mocks: Record<string, ReturnType<typeof vi.fn>>;
+} {
   const mocks = {
     rotate: vi.fn(),
     scale: vi.fn(),
@@ -345,7 +387,10 @@ function createMockTransformService(): TransformService & { mocks: Record<string
   };
 }
 
-function createMockCursorService(): CursorService & { _cursor: string; mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockCursorService(): CursorService & {
+  _cursor: string;
+  mocks: Record<string, ReturnType<typeof vi.fn>>;
+} {
   let _cursor = "default";
   const $cursor: WritableSignal<string> = signal("default");
 
@@ -359,12 +404,17 @@ function createMockCursorService(): CursorService & { _cursor: string; mocks: Re
   return {
     getCursor: () => _cursor,
     set: mocks.set,
-    get _cursor() { return _cursor; },
+    get _cursor() {
+      return _cursor;
+    },
     mocks,
   };
 }
 
-function createMockRenderService(): RenderService & { _previewMode: boolean; mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockRenderService(): RenderService & {
+  _previewMode: boolean;
+  mocks: Record<string, ReturnType<typeof vi.fn>>;
+} {
   let _previewMode = false;
 
   const mocks = {
@@ -381,12 +431,16 @@ function createMockRenderService(): RenderService & { _previewMode: boolean; moc
     requestImmediateRedraw: mocks.requestImmediateRedraw,
     cancelRedraw: mocks.cancelRedraw,
     setPreviewMode: mocks.setPreviewMode,
-    get _previewMode() { return _previewMode; },
+    get _previewMode() {
+      return _previewMode;
+    },
     mocks,
   };
 }
 
-function createMockViewportService(): ViewportService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockViewportService(): ViewportService & {
+  mocks: Record<string, ReturnType<typeof vi.fn>>;
+} {
   const $zoom: WritableSignal<number> = signal(1);
   let _panX = 0;
   let _panY = 0;
@@ -413,7 +467,9 @@ function createMockViewportService(): ViewportService & { mocks: Record<string, 
   };
 }
 
-function createMockHitTestService(fontEngine: FontEngine): HitTestService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockHitTestService(
+  fontEngine: FontEngine,
+): HitTestService & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
   const hitRadius = 8;
 
   const getPointAt = (pos: Point2D) => {
@@ -463,19 +519,25 @@ function createMockHitTestService(fontEngine: FontEngine): HitTestService & { mo
       const firstPoint = contour.points[0];
       const lastPoint = contour.points[contour.points.length - 1];
 
-      const firstDist = Math.sqrt((firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2);
+      const firstDist = Math.sqrt(
+        (firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2,
+      );
       if (firstDist < hitRadius) {
         return {
           contourId: asContourId(contour.id),
+          pointId: asPointId(firstPoint.id),
           position: "start" as const,
           contour,
         };
       }
 
-      const lastDist = Math.sqrt((lastPoint.x - pos.x) ** 2 + (lastPoint.y - pos.y) ** 2);
+      const lastDist = Math.sqrt(
+        (lastPoint.x - pos.x) ** 2 + (lastPoint.y - pos.y) ** 2,
+      );
       if (lastDist < hitRadius) {
         return {
           contourId: asContourId(contour.id),
+          pointId: asPointId(lastPoint.id),
           position: "end" as const,
           contour,
         };
@@ -534,14 +596,18 @@ function createMockHitTestService(fontEngine: FontEngine): HitTestService & { mo
   };
 }
 
-function createMockCommandHistory(fontEngine: FontEngine): CommandHistory & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
+function createMockCommandHistory(
+  fontEngine: FontEngine,
+): CommandHistory & { mocks: Record<string, ReturnType<typeof vi.fn>> } {
   let _isBatching = false;
 
   const mocks = {
-    execute: vi.fn((cmd: any) => cmd.execute?.({
-      fontEngine,
-      glyph: fontEngine.$glyph.value,
-    })),
+    execute: vi.fn((cmd: any) =>
+      cmd.execute?.({
+        fontEngine,
+        glyph: fontEngine.$glyph.value,
+      }),
+    ),
     record: vi.fn(),
     beginBatch: vi.fn(() => {
       _isBatching = true;
@@ -563,12 +629,16 @@ function createMockCommandHistory(fontEngine: FontEngine): CommandHistory & { mo
     beginBatch: mocks.beginBatch,
     endBatch: mocks.endBatch,
     cancelBatch: mocks.cancelBatch,
-    get isBatching() { return _isBatching; },
+    get isBatching() {
+      return _isBatching;
+    },
     undo: mocks.undo,
     redo: mocks.redo,
     clear: mocks.clear,
     mocks,
-  } as unknown as CommandHistory & { mocks: Record<string, ReturnType<typeof vi.fn>> };
+  } as unknown as CommandHistory & {
+    mocks: Record<string, ReturnType<typeof vi.fn>>;
+  };
 }
 
 export function createMockToolContext(): MockToolContext {
@@ -650,7 +720,9 @@ export function createToolMouseEvent(
 }
 
 export interface ToolEventTarget {
-  handleEvent(event: import("@/lib/tools/core/GestureDetector").ToolEvent): void;
+  handleEvent(
+    event: import("@/lib/tools/core/GestureDetector").ToolEvent,
+  ): void;
   activate?(): void;
   deactivate?(): void;
 }
@@ -736,7 +808,10 @@ export class ToolEventSimulator {
     });
   }
 
-  keyDown(key: string, options?: { shiftKey?: boolean; altKey?: boolean; metaKey?: boolean }): void {
+  keyDown(
+    key: string,
+    options?: { shiftKey?: boolean; altKey?: boolean; metaKey?: boolean },
+  ): void {
     this.tool.handleEvent({
       type: "keyDown",
       key,

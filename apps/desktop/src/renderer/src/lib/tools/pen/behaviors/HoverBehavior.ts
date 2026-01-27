@@ -46,17 +46,32 @@ export class HoverBehavior implements PenBehavior {
     if (!snapshot) return false;
 
     const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
+    return (
+      activeContour !== undefined &&
+      !activeContour.closed &&
+      activeContour.points.length > 0
+    );
   }
 
-  private shouldCloseContour(pos: { x: number; y: number }, ctx: ToolContext): boolean {
+  private shouldCloseContour(
+    pos: { x: number; y: number },
+    ctx: ToolContext,
+  ): boolean {
     const snapshot = ctx.edit.getGlyph();
     const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot?.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+    if (
+      !activeContour ||
+      activeContour.closed ||
+      activeContour.points.length < 2
+    ) {
       return false;
     }
 

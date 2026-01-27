@@ -4,8 +4,14 @@ import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
-import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
+import {
+  HoverBehavior,
+  PlaceBehavior,
+  HandleBehavior,
+  EscapeBehavior,
+} from "./behaviors";
 import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
+import { drawHandle } from "@/lib/editor";
 
 export type { PenState };
 
@@ -167,9 +173,15 @@ export class Pen extends BaseTool<PenState> {
   private shouldCloseContour(x: number, y: number): boolean {
     const snapshot = this.ctx.edit.getGlyph();
     const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot?.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+    if (
+      !activeContour ||
+      activeContour.closed ||
+      activeContour.points.length < 2
+    ) {
       return false;
     }
 
@@ -182,9 +194,15 @@ export class Pen extends BaseTool<PenState> {
     if (!snapshot) return false;
 
     const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
+    return (
+      activeContour !== undefined &&
+      !activeContour.closed &&
+      activeContour.points.length > 0
+    );
   }
 
   private getLastOnCurvePoint(): Point2D | null {
@@ -192,9 +210,15 @@ export class Pen extends BaseTool<PenState> {
     if (!snapshot) return null;
 
     const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContour = snapshot.contours.find(
+      (c) => c.id === activeContourId,
+    );
 
-    if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
+    if (
+      !activeContour ||
+      activeContour.points.length === 0 ||
+      activeContour.closed
+    ) {
       return null;
     }
 
@@ -209,7 +233,9 @@ export class Pen extends BaseTool<PenState> {
     return null;
   }
 
-  private getMiddlePointAt(pos: Point2D): { contourId: any; pointId: any; pointIndex: number } | null {
+  private getMiddlePointAt(
+    pos: Point2D,
+  ): { contourId: any; pointId: any; pointIndex: number } | null {
     const snapshot = this.ctx.edit.getGlyph();
     if (!snapshot) return null;
 
@@ -241,7 +267,9 @@ export class Pen extends BaseTool<PenState> {
       if (!lastPoint) return;
 
       renderer.setStyle(PREVIEW_LINE_STYLE);
-      renderer.lineWidth = this.ctx.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
+      renderer.lineWidth = this.ctx.screen.lineWidth(
+        PREVIEW_LINE_STYLE.lineWidth,
+      );
       renderer.beginPath();
       renderer.moveTo(lastPoint.x, lastPoint.y);
       renderer.lineTo(this.state.mousePos.x, this.state.mousePos.y);
@@ -271,20 +299,8 @@ export class Pen extends BaseTool<PenState> {
       renderer.lineTo(mirrorPos.x, mirrorPos.y);
       renderer.stroke();
 
-      this.drawHandle(renderer, mouseX, mouseY);
-      this.drawHandle(renderer, mirrorPos.x, mirrorPos.y);
+      drawHandle(renderer, "control", mouseX, mouseY, "idle");
+      drawHandle(renderer, "control", mirrorPos.x, mirrorPos.y, "idle");
     }
-  }
-
-  private drawHandle(renderer: IRenderer, x: number, y: number): void {
-    const size = this.ctx.screen.lineWidth(4);
-    renderer.setStyle({
-      fillStyle: "#ffffff",
-      strokeStyle: "#000000",
-      lineWidth: 1,
-      dashPattern: [],
-    });
-    renderer.fillCircle(x, y, size);
-    renderer.strokeCircle(x, y, size);
   }
 }

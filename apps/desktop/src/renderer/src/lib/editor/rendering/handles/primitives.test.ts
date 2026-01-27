@@ -5,8 +5,6 @@ import {
   drawStrokedCircle,
   drawFilledRect,
   drawStrokedRect,
-  drawArrowHead,
-  drawDirectionArrow,
 } from "./primitives";
 import type { IRenderer } from "@/types/graphics";
 
@@ -75,44 +73,6 @@ describe("primitives", () => {
     it("should call strokeRect centered on the given position", () => {
       drawStrokedRect(ctx, 50, 50, 20);
       expect(ctx.strokeRect).toHaveBeenCalledWith(40, 40, 20, 20);
-    });
-  });
-
-  describe("drawArrowHead", () => {
-    it("should draw arrow head with beginPath, moveTo, lineTo, and stroke", () => {
-      drawArrowHead(ctx, 100, 100, 0, 8);
-
-      expect(ctx.beginPath).toHaveBeenCalled();
-      expect(ctx.moveTo).toHaveBeenCalled();
-      expect(ctx.lineTo).toHaveBeenCalled();
-      expect(ctx.stroke).toHaveBeenCalled();
-    });
-
-    it("should call moveTo twice for two arrow lines", () => {
-      drawArrowHead(ctx, 100, 100, Math.PI / 2, 10);
-
-      expect(ctx.moveTo).toHaveBeenCalledTimes(2);
-      expect(ctx.lineTo).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe("drawDirectionArrow", () => {
-    it("should draw upward arrow when direction is up", () => {
-      drawDirectionArrow(ctx, 50, 50, "up", 8);
-
-      expect(ctx.beginPath).toHaveBeenCalled();
-      expect(ctx.moveTo).toHaveBeenCalled();
-      expect(ctx.lineTo).toHaveBeenCalled();
-      expect(ctx.stroke).toHaveBeenCalled();
-    });
-
-    it("should draw downward arrow when direction is down", () => {
-      drawDirectionArrow(ctx, 50, 50, "down", 8);
-
-      expect(ctx.beginPath).toHaveBeenCalled();
-      expect(ctx.moveTo).toHaveBeenCalledTimes(2);
-      expect(ctx.lineTo).toHaveBeenCalledTimes(2);
-      expect(ctx.stroke).toHaveBeenCalled();
     });
   });
 });

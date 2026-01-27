@@ -19,6 +19,7 @@ export interface UIColors {
 }
 
 export interface CanvasAccentColors {
+  black: string;
   pink: string;
   indicator: string;
   purple: string;

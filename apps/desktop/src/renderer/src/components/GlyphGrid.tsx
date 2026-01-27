@@ -18,25 +18,27 @@ export const GlyphGrid = () => {
   };
 
   return (
-    <section className="h-full w-full p-5 bg-canvas">
+    <section className="h-full w-full p-5">
       <div className="grid grid-cols-6 gap-2 p-4 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13">
         {Object.values(ADOBE_LATIN_1).map((glyph) => {
           return (
-            <div key={glyph.unicode} className="flex flex-col items-center justify-center gap-4">
-              <Button
-                className="w-full h-full text-5xl text-muted p-4"
-                onClick={() => navigate(`/editor/${glyph.unicode}`)}
-                variant="ghost"
-              >
-                {glyphStr(glyph.unicode)}
-              </Button>
-              <Input
-                className="w-full text-center"
-                value={inputValues[glyph.unicode]}
-                onChange={(e) => handleInputChange(glyph.unicode, e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                onClick={(e) => e.stopPropagation()}
-              />
+            <div>
+              <div key={glyph.unicode} className="flex flex-col items-center justify-center gap-4">
+                <Button
+                  className="w-full h-full text-5xl font-light text-muted p-4"
+                  onClick={() => navigate(`/editor/${glyph.unicode}`)}
+                  variant="ghost"
+                >
+                  {glyphStr(glyph.unicode)}
+                </Button>
+                <Input
+                  className="w-full text-center bg-none"
+                  value={inputValues[glyph.unicode]}
+                  onChange={(e) => handleInputChange(glyph.unicode, e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
             </div>
           );
         })}

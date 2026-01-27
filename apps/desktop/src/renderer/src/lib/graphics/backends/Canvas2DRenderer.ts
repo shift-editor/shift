@@ -83,14 +83,21 @@ export class Canvas2DRenderer implements IRenderer {
 
   public set dashPattern(pattern: number[]) {
     this.#currentStyle.dashPattern = pattern;
-    this.#renderCtx.setLineDash(pattern);
+    this.#renderCtx.setLineDash(this.#normalizeDashPattern(pattern));
   }
 
-  // Apply current style to context before drawing
+  #normalizeDashPattern(pattern: number[]): number[] {
+    if (pattern.length === 0) return pattern;
+    const zoom = getEditor().zoom.peek();
+    return pattern.map((v) => v / zoom);
+  }
+
   #applyStrokeStyle(): void {
     this.#renderCtx.strokeStyle = this.#currentStyle.strokeStyle;
     this.#renderCtx.lineWidth = this.#currentStyle.lineWidth;
-    this.#renderCtx.setLineDash(this.#currentStyle.dashPattern);
+    this.#renderCtx.setLineDash(
+      this.#normalizeDashPattern(this.#currentStyle.dashPattern),
+    );
   }
 
   #applyFillStyle(): void {

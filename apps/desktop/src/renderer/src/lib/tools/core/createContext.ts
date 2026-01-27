@@ -125,6 +125,7 @@ export interface ViewportService {
 
 export interface ContourEndpointHit {
   contourId: ContourId;
+  pointId: PointId;
   position: "start" | "end";
   contour: ContourSnapshot;
 }

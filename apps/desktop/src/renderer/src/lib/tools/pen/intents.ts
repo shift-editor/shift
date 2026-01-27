@@ -12,8 +12,18 @@ import {
 
 export type PenIntent =
   | { action: "close" }
-  | { action: "continue"; contourId: ContourId; fromStart: boolean }
-  | { action: "splitPoint"; contourId: ContourId; pointId: PointId; pointIndex: number }
+  | {
+      action: "continue";
+      contourId: ContourId;
+      pointId: PointId;
+      fromStart: boolean;
+    }
+  | {
+      action: "splitPoint";
+      contourId: ContourId;
+      pointId: PointId;
+      pointIndex: number;
+    }
   | { action: "splitSegment"; segment: Segment; t: number }
   | { action: "placePoint"; pos: Point2D }
   | { action: "abandonContour" }
@@ -27,10 +37,15 @@ export interface PenIntentContext {
   getActiveContourId(): ContourId | null;
   hasActiveDrawingContour(): boolean;
   shouldCloseContour(pos: Point2D): boolean;
-  getMiddlePointAt?(pos: Point2D): { contourId: ContourId; pointId: PointId; pointIndex: number } | null;
+  getMiddlePointAt?(
+    pos: Point2D,
+  ): { contourId: ContourId; pointId: PointId; pointIndex: number } | null;
 }
 
-export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent {
+export function resolvePenIntent(
+  pos: Point2D,
+  ctx: PenIntentContext,
+): PenIntent {
   if (ctx.shouldCloseContour(pos)) {
     return { action: "close" };
   }
@@ -41,6 +56,7 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
       return {
         action: "continue",
         contourId: endpoint.contourId,
+        pointId: endpoint.pointId,
         fromStart: endpoint.position === "start",
       };
     }
@@ -101,7 +117,10 @@ export function resolveCursorIntent(
   return "pen";
 }
 
-export function executeIntent(intent: PenIntent, ctx: ToolContext): PointId | null {
+export function executeIntent(
+  intent: PenIntent,
+  ctx: ToolContext,
+): PointId | null {
   switch (intent.action) {
     case "close":
       ctx.commands.execute(new CloseContourCommand());
@@ -113,6 +132,8 @@ export function executeIntent(intent: PenIntent, ctx: ToolContext): PointId | nu
       if (intent.fromStart) {
         ctx.commands.execute(new ReverseContourCommand(intent.contourId));
       }
+
+      ctx.selection.selectPoints(new Set([intent.pointId]));
       return null;
 
     case "splitPoint":
@@ -125,11 +146,17 @@ export function executeIntent(intent: PenIntent, ctx: ToolContext): PointId | nu
     }
 
     case "placePoint": {
-      const cmd = new AddPointCommand(intent.pos.x, intent.pos.y, "onCurve", false);
+      const cmd = new AddPointCommand(
+        intent.pos.x,
+        intent.pos.y,
+        "onCurve",
+        false,
+      );
       return ctx.commands.execute(cmd);
     }
 
     case "abandonContour":
+      ctx.selection.clear();
       ctx.commands.execute(new AddContourCommand());
       return null;
 

@@ -56,14 +56,12 @@ describe("Canvas Styles", () => {
 
     it("should use theme pink for corner and cyan for first/last handles", () => {
       expect(styles.handles.corner.idle.strokeStyle).toBe(
-        lightTheme.canvas.pink,
+        lightTheme.canvas.cyan,
       );
       expect(styles.handles.first.idle.strokeStyle).toBe(
         lightTheme.canvas.cyan,
       );
-      expect(styles.handles.last.idle.strokeStyle).toBe(
-        lightTheme.canvas.cyan,
-      );
+      expect(styles.handles.last.idle.strokeStyle).toBe(lightTheme.canvas.cyan);
     });
 
     it("should use theme gray for control handles", () => {
