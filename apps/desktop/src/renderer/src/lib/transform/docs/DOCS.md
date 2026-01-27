@@ -37,7 +37,7 @@ Editor.createToolContext().transform
 All transforms pivot around an origin point. If not specified, uses selection center:
 
 ```typescript
-ctx.transform.rotate(Math.PI / 4);           // Around selection center
+ctx.transform.rotate(Math.PI / 4); // Around selection center
 ctx.transform.rotate(Math.PI / 4, { x: 0, y: 0 }); // Around origin
 ```
 
@@ -56,9 +56,9 @@ rotatePoints(points, angle, origin) {
 Reflection supports horizontal, vertical, or arbitrary angle:
 
 ```typescript
-ctx.transform.reflect('horizontal');        // Flip across X axis
-ctx.transform.reflect('vertical');          // Flip across Y axis
-ctx.transform.reflect({ angle: Math.PI/4 }); // Flip across 45° axis
+ctx.transform.reflect("horizontal"); // Flip across X axis
+ctx.transform.reflect("vertical"); // Flip across Y axis
+ctx.transform.reflect({ angle: Math.PI / 4 }); // Flip across 45° axis
 ```
 
 ## API Reference
@@ -101,13 +101,13 @@ ctx.transform.scale(2, 2);
 ```typescript
 ctx.transform.flipHorizontal();
 // or
-ctx.transform.reflect('horizontal');
+ctx.transform.reflect("horizontal");
 ```
 
 ### Custom Transform
 
 ```typescript
-const matrix = Mat.Compose(Mat.Rotate(Math.PI/4), Mat.Scale(1.5, 1.5));
+const matrix = Mat.Compose(Mat.Rotate(Math.PI / 4), Mat.Scale(1.5, 1.5));
 const transformed = Transform.applyMatrix(points, matrix, center);
 ```
 

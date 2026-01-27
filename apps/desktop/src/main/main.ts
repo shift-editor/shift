@@ -1,11 +1,6 @@
 import { app } from "electron";
 import started from "electron-squirrel-startup";
-import {
-  AppLifecycle,
-  DocumentState,
-  MenuManager,
-  WindowManager,
-} from "./managers";
+import { AppLifecycle, DocumentState, MenuManager, WindowManager } from "./managers";
 
 if (started) {
   app.quit();

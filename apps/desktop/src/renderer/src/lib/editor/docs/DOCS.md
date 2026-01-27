@@ -274,6 +274,7 @@ Font glyphs use the **nonzero winding rule** for fills. This determines how over
 ### Winding Conventions
 
 In font coordinate space (Y-up):
+
 - **Outer contours**: counter-clockwise winding
 - **Inner contours (holes)**: clockwise winding
 
@@ -302,11 +303,13 @@ for (const contour of snapshot.contours) {
 ### API Design
 
 `buildContourPath(ctx, contour)` is a pure path-building function:
+
 - Does **not** call `beginPath()` - caller owns path lifecycle
 - Adds contour segments to the current path via `moveTo`, `lineTo`, `cubicTo`, `closePath`
 - Returns `true` if contour is closed
 
 Higher-level functions like `renderGlyph()` handle the full lifecycle:
+
 ```typescript
 ctx.beginPath();
 // ... build all contours

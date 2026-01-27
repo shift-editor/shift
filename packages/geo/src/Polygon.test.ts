@@ -23,7 +23,12 @@ describe("Polygon", () => {
     it("returns 0 for degenerate polygons", () => {
       expect(Polygon.signedArea([])).toBe(0);
       expect(Polygon.signedArea([{ x: 0, y: 0 }])).toBe(0);
-      expect(Polygon.signedArea([{ x: 0, y: 0 }, { x: 1, y: 1 }])).toBe(0);
+      expect(
+        Polygon.signedArea([
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ]),
+      ).toBe(0);
     });
 
     it("returns positive area for clockwise polygon", () => {
@@ -47,7 +52,12 @@ describe("Polygon", () => {
     it("returns true for degenerate polygons", () => {
       expect(Polygon.isClockwise([])).toBe(true);
       expect(Polygon.isClockwise([{ x: 0, y: 0 }])).toBe(true);
-      expect(Polygon.isClockwise([{ x: 0, y: 0 }, { x: 1, y: 1 }])).toBe(true);
+      expect(
+        Polygon.isClockwise([
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ]),
+      ).toBe(true);
     });
 
     it("returns true for clockwise polygon", () => {

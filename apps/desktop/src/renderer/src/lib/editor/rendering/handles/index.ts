@@ -16,6 +16,7 @@ import {
 
 export type { HandleOptions, LastHandlePosition, HandleState, HandleType } from "./renderers";
 export * from "./constants";
+export { drawBoundingBoxHandles, type BoundingBoxHandlesOptions } from "./boundingBoxHandles";
 
 const handleDrawers: Record<Exclude<HandleType, "last">, HandleDrawFn> = {
   corner: drawCornerHandle,
@@ -36,10 +37,6 @@ export function drawHandle(
   handleDrawers[type](ctx, x, y, state, options);
 }
 
-export function drawHandleLast(
-  ctx: IRenderer,
-  pos: LastHandlePosition,
-  state: HandleState,
-): void {
+export function drawHandleLast(ctx: IRenderer, pos: LastHandlePosition, state: HandleState): void {
   drawLastHandle(ctx, pos, state);
 }

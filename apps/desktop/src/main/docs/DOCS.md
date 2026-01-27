@@ -21,12 +21,12 @@ src/main/
 
 ### Manager Responsibilities
 
-| Manager | Responsibility |
-|---------|---------------|
-| AppLifecycle | App events, quit coordination, dock icon, dev shortcuts |
-| WindowManager | BrowserWindow creation, IPC handlers, title updates |
-| DocumentState | Dirty state, file path, save dialogs, autosave |
-| MenuManager | Application menu, theme switching |
+| Manager       | Responsibility                                          |
+| ------------- | ------------------------------------------------------- |
+| AppLifecycle  | App events, quit coordination, dock icon, dev shortcuts |
+| WindowManager | BrowserWindow creation, IPC handlers, title updates     |
+| DocumentState | Dirty state, file path, save dialogs, autosave          |
+| MenuManager   | Application menu, theme switching                       |
 
 ### Data Flow
 
@@ -76,6 +76,7 @@ When user triggers quit (Cmd+Q, menu, or window close):
 ### Autosave
 
 `DocumentState` manages a 30-second autosave interval. Autosave only triggers if:
+
 - Document is dirty
 - File path exists (not untitled)
 
@@ -107,18 +108,18 @@ When user triggers quit (Cmd+Q, menu, or window close):
 
 ## IPC Handlers
 
-| Channel | Handler | Description |
-|---------|---------|-------------|
-| `window:close` | WindowManager | Close main window |
-| `window:minimize` | WindowManager | Minimize window |
-| `window:maximize` | WindowManager | Toggle maximize |
-| `window:isMaximized` | WindowManager | Check maximize state |
-| `document:setDirty` | WindowManager | Update dirty state |
-| `document:setFilePath` | WindowManager | Update file path |
+| Channel                  | Handler       | Description            |
+| ------------------------ | ------------- | ---------------------- |
+| `window:close`           | WindowManager | Close main window      |
+| `window:minimize`        | WindowManager | Minimize window        |
+| `window:maximize`        | WindowManager | Toggle maximize        |
+| `window:isMaximized`     | WindowManager | Check maximize state   |
+| `document:setDirty`      | WindowManager | Update dirty state     |
+| `document:setFilePath`   | WindowManager | Update file path       |
 | `document:saveCompleted` | WindowManager | Handle save completion |
-| `theme:get` | AppLifecycle | Get current theme |
-| `theme:set` | AppLifecycle | Set theme |
-| `dialog:openFont` | AppLifecycle | Show open dialog |
+| `theme:get`              | AppLifecycle  | Get current theme      |
+| `theme:set`              | AppLifecycle  | Set theme              |
+| `dialog:openFont`        | AppLifecycle  | Show open dialog       |
 
 ## Related Systems
 

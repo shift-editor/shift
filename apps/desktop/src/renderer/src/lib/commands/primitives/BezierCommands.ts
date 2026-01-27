@@ -92,12 +92,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
   #leadingId: PointId | null = null;
   #trailingId: PointId | null = null;
 
-  constructor(
-    anchorX: number,
-    anchorY: number,
-    leadingX: number,
-    leadingY: number,
-  ) {
+  constructor(anchorX: number, anchorY: number, leadingX: number, leadingY: number) {
     super();
     this.#anchorX = anchorX;
     this.#anchorY = anchorY;
@@ -111,12 +106,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
 
   execute(ctx: CommandContext): PointId {
     // Add anchor point (smooth = true for bezier curves)
-    this.#anchorId = ctx.fontEngine.editing.addPoint(
-      this.#anchorX,
-      this.#anchorY,
-      "onCurve",
-      true,
-    );
+    this.#anchorId = ctx.fontEngine.editing.addPoint(this.#anchorX, this.#anchorY, "onCurve", true);
 
     // Add leading control point (in drag direction)
     this.#leadingId = ctx.fontEngine.editing.addPoint(
@@ -202,9 +192,7 @@ export class TogglePointSmoothCommand extends BaseCommand<void> {
 
     // TODO: Add toggleSmooth to FontEngine API
     // For now this is a placeholder
-    console.warn(
-      "TogglePointSmoothCommand: FontEngine.toggleSmooth not yet implemented",
-    );
+    console.warn("TogglePointSmoothCommand: FontEngine.toggleSmooth not yet implemented");
   }
 
   undo(_ctx: CommandContext): void {
@@ -233,9 +221,7 @@ export class CloseContourCommand extends BaseCommand<void> {
 
     // Check if already closed
     if (ctx.glyph && this.#contourId) {
-      const contour = ctx.glyph.contours.find(
-        (c) => c.id === this.#contourId,
-      );
+      const contour = ctx.glyph.contours.find((c) => c.id === this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
@@ -247,9 +233,7 @@ export class CloseContourCommand extends BaseCommand<void> {
   undo(_ctx: CommandContext): void {
     // TODO: Add openContour to FontEngine API to reverse this
     // For now, closing is not easily reversible
-    console.warn(
-      "CloseContourCommand.undo: Opening closed contour not yet supported",
-    );
+    console.warn("CloseContourCommand.undo: Opening closed contour not yet supported");
   }
 }
 
@@ -424,10 +408,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   #splitQuadratic(ctx: CommandContext): PointId {
     const segment = this.#segment as QuadSegment;
     const curve = SegmentOps.toCurve(segment) as QuadraticCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
-      QuadraticCurve,
-      QuadraticCurve,
-    ];
+    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [QuadraticCurve, QuadraticCurve];
 
     // curveA = quadratic(anchor1, cA, mid)
     // curveB = quadratic(mid, cB, anchor2)
@@ -456,13 +437,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     this.#insertedPointIds.push(this.#splitPointId);
 
     // 2. Insert cB (offCurve) before anchor2
-    const cBId = ctx.fontEngine.editing.insertPointBefore(
-      anchor2Id,
-      cB.x,
-      cB.y,
-      "offCurve",
-      false,
-    );
+    const cBId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, cB.x, cB.y, "offCurve", false);
     this.#insertedPointIds.push(cBId);
 
     // 3. Move original control to cA position
@@ -474,10 +449,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   #splitCubic(ctx: CommandContext): PointId {
     const segment = this.#segment as CubicSegment;
     const curve = SegmentOps.toCurve(segment) as CubicCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [
-      CubicCurve,
-      CubicCurve,
-    ];
+    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [CubicCurve, CubicCurve];
 
     // curveA = cubic(anchor1, c0A, c1A, mid)
     // curveB = cubic(mid, c0B, c1B, anchor2)

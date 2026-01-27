@@ -15,11 +15,7 @@ export class DragBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
     if (state.type === "dragging") {
       return this.transitionDragging(state, event);
     }
@@ -31,12 +27,7 @@ export class DragBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(
-    prev: SelectState,
-    next: SelectState,
-    _event: ToolEvent,
-    ctx: ToolContext,
-  ): void {
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, ctx: ToolContext): void {
     if (prev.type !== "dragging" && next.type === "dragging") {
       ctx.preview.beginPreview();
     }
@@ -92,9 +83,7 @@ export class DragBehavior implements SelectBehavior {
 
     if (pointId) {
       const isSelected = state.type === "selected" && ctx.selection.isPointSelected(pointId);
-      const draggedPointIds = isSelected
-        ? [...ctx.selection.getSelectedPoints()]
-        : [pointId];
+      const draggedPointIds = isSelected ? [...ctx.selection.getSelectedPoints()] : [pointId];
 
       return {
         type: "dragging",
@@ -105,9 +94,7 @@ export class DragBehavior implements SelectBehavior {
           totalDelta: { x: 0, y: 0 },
           draggedPointIds,
         },
-        intent: isSelected
-          ? undefined
-          : { action: "selectPoint", pointId, additive: false },
+        intent: isSelected ? undefined : { action: "selectPoint", pointId, additive: false },
       };
     }
 
@@ -116,10 +103,9 @@ export class DragBehavior implements SelectBehavior {
       const segment = ctx.hitTest.findSegmentById(segmentHit.segmentId);
       const pointIds = segment ? SegmentOps.getPointIds(segment) : [];
 
-      const isSelected = state.type === "selected" && ctx.selection.isSegmentSelected(segmentHit.segmentId);
-      const draggedPointIds = isSelected
-        ? [...ctx.selection.getSelectedPoints()]
-        : pointIds;
+      const isSelected =
+        state.type === "selected" && ctx.selection.isSegmentSelected(segmentHit.segmentId);
+      const draggedPointIds = isSelected ? [...ctx.selection.getSelectedPoints()] : pointIds;
 
       return {
         type: "dragging",
@@ -132,7 +118,11 @@ export class DragBehavior implements SelectBehavior {
         },
         intent: isSelected
           ? undefined
-          : { action: "selectSegment", segmentId: segmentHit.segmentId, additive: false },
+          : {
+              action: "selectSegment",
+              segmentId: segmentHit.segmentId,
+              additive: false,
+            },
       };
     }
 

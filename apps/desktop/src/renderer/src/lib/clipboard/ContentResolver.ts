@@ -11,10 +11,7 @@ export class ContentResolver {
   ): ClipboardContent | null {
     if (!snapshot) return null;
 
-    const allPointIds = this.#expandSegmentsToPoints(
-      selectedPointIds,
-      selectedSegmentIds,
-    );
+    const allPointIds = this.#expandSegmentsToPoints(selectedPointIds, selectedSegmentIds);
 
     if (allPointIds.size === 0) return null;
 
@@ -93,10 +90,7 @@ export class ContentResolver {
     return contours;
   }
 
-  #expandPartialSelection(
-    points: PointSnapshot[],
-    selectedIndices: Set<number>,
-  ): PointSnapshot[] {
+  #expandPartialSelection(points: PointSnapshot[], selectedIndices: Set<number>): PointSnapshot[] {
     if (selectedIndices.size === 0) return [];
 
     const expanded = new Set<number>(selectedIndices);
@@ -114,11 +108,7 @@ export class ContentResolver {
     return sortedIndices.map((idx) => points[idx]);
   }
 
-  #expandContextForOnCurve(
-    points: PointSnapshot[],
-    idx: number,
-    expanded: Set<number>,
-  ): void {
+  #expandContextForOnCurve(points: PointSnapshot[], idx: number, expanded: Set<number>): void {
     const prevIdx = idx > 0 ? idx - 1 : null;
     const nextIdx = idx < points.length - 1 ? idx + 1 : null;
 
@@ -139,11 +129,7 @@ export class ContentResolver {
     }
   }
 
-  #expandContextForOffCurve(
-    points: PointSnapshot[],
-    idx: number,
-    expanded: Set<number>,
-  ): void {
+  #expandContextForOffCurve(points: PointSnapshot[], idx: number, expanded: Set<number>): void {
     const prevIdx = idx > 0 ? idx - 1 : null;
     const nextIdx = idx < points.length - 1 ? idx + 1 : null;
 

@@ -1,12 +1,8 @@
 import type { GlyphSnapshot } from "@shift/types";
 import type { CommandContext } from "@/lib/commands";
-import {
-  createMockEditing,
-} from "./engine";
+import { createMockEditing } from "./engine";
 
-export function createMockCommandContext(
-  glyph: GlyphSnapshot | null = null,
-): CommandContext {
+export function createMockCommandContext(glyph: GlyphSnapshot | null = null): CommandContext {
   return {
     fontEngine: {
       editing: createMockEditing(),

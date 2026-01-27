@@ -9,6 +9,7 @@ import {
   createSegmentSelectedStyles,
   createPreviewLineStyles,
 } from "./selection";
+import { createBoundingBoxHandleStyles, BoundingBoxHandleStyles } from "./boundingBox";
 
 export interface CanvasStyles {
   handles: Record<HandleType, HandleStyles>;
@@ -19,6 +20,7 @@ export interface CanvasStyles {
   segmentHover: DrawStyle;
   segmentSelected: DrawStyle;
   previewLine: DrawStyle;
+  boundingBoxHandles: BoundingBoxHandleStyles;
 }
 
 export function getCanvasStyles(theme: ThemeTokens): CanvasStyles {
@@ -31,6 +33,7 @@ export function getCanvasStyles(theme: ThemeTokens): CanvasStyles {
     segmentHover: createSegmentHoverStyles(theme),
     segmentSelected: createSegmentSelectedStyles(theme),
     previewLine: createPreviewLineStyles(theme),
+    boundingBoxHandles: createBoundingBoxHandleStyles(),
   };
 }
 

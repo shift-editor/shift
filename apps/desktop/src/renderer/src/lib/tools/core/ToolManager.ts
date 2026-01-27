@@ -1,6 +1,11 @@
 import type { Point2D } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
-import type { ToolContext, ToolSwitchService, TemporaryToolOptions, ToolName } from "./createContext";
+import type {
+  ToolContext,
+  ToolSwitchService,
+  TemporaryToolOptions,
+  ToolName,
+} from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
 

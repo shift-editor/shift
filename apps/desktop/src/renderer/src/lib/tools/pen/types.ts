@@ -25,7 +25,13 @@ export type PenState =
   | { type: "idle"; intent?: PenIntent }
   | { type: "ready"; mousePos: Point2D; intent?: PenIntent }
   | { type: "anchored"; anchor: AnchorData; intent?: PenIntent }
-  | { type: "dragging"; anchor: AnchorData; handles: HandleData; mousePos: Point2D; intent?: PenIntent };
+  | {
+      type: "dragging";
+      anchor: AnchorData;
+      handles: HandleData;
+      mousePos: Point2D;
+      intent?: PenIntent;
+    };
 
 export interface PenBehavior {
   canHandle(state: PenState, event: ToolEvent): boolean;

@@ -13,7 +13,7 @@ export class AppLifecycle {
   constructor(
     documentState: DocumentState,
     windowManager: WindowManager,
-    menuManager: MenuManager
+    menuManager: MenuManager,
   ) {
     this.documentState = documentState;
     this.windowManager = windowManager;
@@ -87,7 +87,7 @@ export class AppLifecycle {
           if (win?.isFocused()) {
             win.reload();
           }
-        }
+        },
       );
     });
   }

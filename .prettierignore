@@ -1,4 +1,8 @@
 node_modules
 dist
-build
-src-tauri
+out
+.turbo
+*.min.js
+*.min.css
+pnpm-lock.yaml
+packages/types/src/generated

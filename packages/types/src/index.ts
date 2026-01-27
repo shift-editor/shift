@@ -13,12 +13,7 @@ export type { Point2D, Rect2D, TransformMatrix, A, B, C, D, E, F } from "./math"
 
 // ID types
 export type { PointId, ContourId } from "./ids";
-export {
-  asPointId,
-  asContourId,
-  isValidPointId,
-  isValidContourId,
-} from "./ids";
+export { asPointId, asContourId, isValidPointId, isValidContourId } from "./ids";
 
 // Font types (includes generated types)
 export type {

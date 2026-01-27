@@ -17,6 +17,7 @@ import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { Segment } from "@/types/segments";
 import type { Editor } from "@/lib/editor/Editor";
 import { SCREEN_HIT_RADIUS } from "@/lib/editor/rendering/constants";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -51,9 +52,11 @@ export interface SelectionService {
 export interface HoverService {
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
 
   setHoveredPoint(id: PointId | null): void;
   setHoveredSegment(indicator: SegmentIndicator | null): void;
+  setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
   clearAll(): void;
 }
 
@@ -206,21 +209,20 @@ export function createContext(editor: Editor): ToolContext {
     hover: {
       getHoveredPoint: () => hover.hoveredPointId.value,
       getHoveredSegment: () => hover.hoveredSegmentId.value,
+      getHoveredBoundingBoxHandle: () => editor.getHoveredBoundingBoxHandle(),
       setHoveredPoint: (id) => hover.setHoveredPoint(id),
       setHoveredSegment: (indicator) => hover.setHoveredSegment(indicator),
+      setHoveredBoundingBoxHandle: (handle) => editor.setHoveredBoundingBoxHandle(handle),
       clearAll: () => hover.clearHover(),
     },
     edit: {
       getGlyph: () => fontEngine.$glyph.value,
-      addPoint: (x, y, type, smooth = false) =>
-        fontEngine.editing.addPoint(x, y, type, smooth),
+      addPoint: (x, y, type, smooth = false) => fontEngine.editing.addPoint(x, y, type, smooth),
       addPointToContour: (contourId, x, y, type, smooth) =>
         fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
-      movePoints: (ids, dx, dy) =>
-        fontEngine.editing.movePoints([...ids], dx, dy),
+      movePoints: (ids, dx, dy) => fontEngine.editing.movePoints([...ids], dx, dy),
       movePointTo: (id, x, y) => fontEngine.editing.movePointTo(id, x, y),
-      applySmartEdits: (ids, dx, dy) =>
-        fontEngine.editing.applySmartEdits(ids, dx, dy),
+      applySmartEdits: (ids, dx, dy) => fontEngine.editing.applySmartEdits(ids, dx, dy),
       removePoints: (ids) => fontEngine.editing.removePoints([...ids]),
       addContour: () => fontEngine.editing.addContour(),
       closeContour: () => fontEngine.editing.closeContour(),
@@ -229,11 +231,9 @@ export function createContext(editor: Editor): ToolContext {
         const id = fontEngine.editing.getActiveContourId();
         return id ? asContourId(id) : null;
       },
-      setActiveContour: (contourId) =>
-        fontEngine.editing.setActiveContour(contourId),
+      setActiveContour: (contourId) => fontEngine.editing.setActiveContour(contourId),
       clearActiveContour: () => fontEngine.editing.clearActiveContour(),
-      reverseContour: (contourId) =>
-        fontEngine.editing.reverseContour(contourId),
+      reverseContour: (contourId) => fontEngine.editing.reverseContour(contourId),
     },
     preview: {
       beginPreview: () => editor.beginPreview(),

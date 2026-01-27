@@ -104,11 +104,39 @@ type ToolEvent =
   | { type: "pointerMove"; point: Point2D }
   | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
   | { type: "doubleClick"; point: Point2D }
-  | { type: "dragStart"; point: Point2D; screenPoint: Point2D; shiftKey: boolean; altKey: boolean }
-  | { type: "drag"; point: Point2D; screenPoint: Point2D; origin: Point2D; screenOrigin: Point2D; delta: Point2D; screenDelta: Point2D; shiftKey: boolean; altKey: boolean }
-  | { type: "dragEnd"; point: Point2D; screenPoint: Point2D; origin: Point2D; screenOrigin: Point2D }
+  | {
+      type: "dragStart";
+      point: Point2D;
+      screenPoint: Point2D;
+      shiftKey: boolean;
+      altKey: boolean;
+    }
+  | {
+      type: "drag";
+      point: Point2D;
+      screenPoint: Point2D;
+      origin: Point2D;
+      screenOrigin: Point2D;
+      delta: Point2D;
+      screenDelta: Point2D;
+      shiftKey: boolean;
+      altKey: boolean;
+    }
+  | {
+      type: "dragEnd";
+      point: Point2D;
+      screenPoint: Point2D;
+      origin: Point2D;
+      screenOrigin: Point2D;
+    }
   | { type: "dragCancel" }
-  | { type: "keyDown"; key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean }
+  | {
+      type: "keyDown";
+      key: string;
+      shiftKey: boolean;
+      altKey: boolean;
+      metaKey: boolean;
+    }
   | { type: "keyUp"; key: string };
 ```
 
@@ -118,18 +146,18 @@ Services provided to tools:
 
 ```typescript
 interface ToolContext {
-  screen: ScreenService;        // Coordinate conversion, hit radius
-  selection: SelectionService;  // Point/segment selection state
-  hover: HoverService;          // Hover state management
-  edit: EditService;            // Glyph editing operations
-  preview: PreviewService;      // Preview mode for drag operations
-  transform: TransformService;  // Transform operations
-  cursor: CursorService;        // Cursor management
-  render: RenderService;        // Redraw requests
-  viewport: ViewportService;    // Pan/zoom
-  hitTest: HitTestService;      // Point/segment hit testing
-  commands: CommandHistory;     // Undo/redo
-  tools: ToolSwitchService;     // Temporary tool switching
+  screen: ScreenService; // Coordinate conversion, hit radius
+  selection: SelectionService; // Point/segment selection state
+  hover: HoverService; // Hover state management
+  edit: EditService; // Glyph editing operations
+  preview: PreviewService; // Preview mode for drag operations
+  transform: TransformService; // Transform operations
+  cursor: CursorService; // Cursor management
+  render: RenderService; // Redraw requests
+  viewport: ViewportService; // Pan/zoom
+  hitTest: HitTestService; // Point/segment hit testing
+  commands: CommandHistory; // Undo/redo
+  tools: ToolSwitchService; // Temporary tool switching
 }
 ```
 
@@ -146,6 +174,7 @@ States: idle → ready ↔ selected ↔ dragging
 ```
 
 Features:
+
 - Click to select point
 - Shift+click for multi-select
 - Click segment to select
@@ -164,6 +193,7 @@ States: idle → ready → anchored → dragging → ready
 ```
 
 Features:
+
 - Click to place anchor point
 - Drag to create bezier handles
 - Automatic handle mirroring
@@ -181,6 +211,7 @@ States: idle → ready → dragging
 ```
 
 Features:
+
 - Drag to pan canvas
 - Space bar activation (temporary tool switch)
 
@@ -193,6 +224,7 @@ States: idle → ready → dragging
 ```
 
 Features:
+
 - Drag to create rectangle
 - Auto-closes contour
 
@@ -200,29 +232,29 @@ Features:
 
 ### BaseTool Methods
 
-| Method | Description |
-| ------ | ----------- |
-| `initialState()` | Return the initial state |
-| `transition(state, event)` | Pure state transition logic |
-| `onTransition(prev, next, event)` | Side effects after state change |
-| `render(renderer)` | Draw interactive overlays |
-| `activate()` | Called when tool becomes active |
-| `deactivate()` | Called when tool becomes inactive |
-| `handleEvent(event)` | Process a ToolEvent |
-| `batch(name, fn)` | Execute commands in a batch |
-| `beginPreview()` | Start preview mode |
-| `commitPreview(label)` | Commit preview as command |
-| `cancelPreview()` | Cancel preview, restore state |
+| Method                            | Description                       |
+| --------------------------------- | --------------------------------- |
+| `initialState()`                  | Return the initial state          |
+| `transition(state, event)`        | Pure state transition logic       |
+| `onTransition(prev, next, event)` | Side effects after state change   |
+| `render(renderer)`                | Draw interactive overlays         |
+| `activate()`                      | Called when tool becomes active   |
+| `deactivate()`                    | Called when tool becomes inactive |
+| `handleEvent(event)`              | Process a ToolEvent               |
+| `batch(name, fn)`                 | Execute commands in a batch       |
+| `beginPreview()`                  | Start preview mode                |
+| `commitPreview(label)`            | Commit preview as command         |
+| `cancelPreview()`                 | Cancel preview, restore state     |
 
 ### ToolManager Methods
 
-| Method | Description |
-| ------ | ----------- |
-| `activate(tool)` | Set the primary active tool |
-| `handlePointerDown/Move/Up()` | Route pointer events to GestureDetector |
-| `handleKeyDown/Up()` | Route key events to active tool |
+| Method                            | Description                                 |
+| --------------------------------- | ------------------------------------------- |
+| `activate(tool)`                  | Set the primary active tool                 |
+| `handlePointerDown/Move/Up()`     | Route pointer events to GestureDetector     |
+| `handleKeyDown/Up()`              | Route key events to active tool             |
 | `requestTemporary(name, options)` | Switch to temporary tool (e.g., Space+Hand) |
-| `returnFromTemporary()` | Return to primary tool |
+| `returnFromTemporary()`           | Return to primary tool                      |
 
 ### Keyboard Shortcuts
 

@@ -56,13 +56,10 @@ describe("handles API", () => {
 
     const handleStates: HandleState[] = ["idle", "hovered", "selected"];
 
-    it.each(handleTypes)(
-      "should dispatch to correct renderer for %s handle",
-      (type) => {
-        drawHandle(ctx, type, 100, 100, "idle");
-        expect(ctx.setStyle).toHaveBeenCalled();
-      },
-    );
+    it.each(handleTypes)("should dispatch to correct renderer for %s handle", (type) => {
+      drawHandle(ctx, type, 100, 100, "idle");
+      expect(ctx.setStyle).toHaveBeenCalled();
+    });
 
     it.each(handleStates)("should work for %s state", (state) => {
       drawHandle(ctx, "corner", 50, 50, state);

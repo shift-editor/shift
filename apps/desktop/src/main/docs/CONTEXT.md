@@ -45,7 +45,7 @@ class DocumentState {
   getFilePath(): string | null;
   setFilePath(filePath: string | null): void;
   save(saveAs?: boolean): Promise<boolean>;
-  confirmClose(): Promise<boolean>;  // Shows dialog if dirty
+  confirmClose(): Promise<boolean>; // Shows dialog if dirty
   startAutosave(): void;
   stopAutosave(): void;
 }
@@ -82,7 +82,7 @@ Coordinates app events:
 
 ```typescript
 class AppLifecycle {
-  initialize(): void;  // Registers all event handlers
+  initialize(): void; // Registers all event handlers
 }
 ```
 
@@ -136,14 +136,14 @@ if (process.platform !== "darwin") {
 
 ## API Surface
 
-| Event/Method | Trigger | Action |
-|-------------|---------|--------|
-| `app.ready` | App initialized | Create menu and window |
-| `before-quit` | Quit requested | Check dirty, show dialog |
-| `window-all-closed` | All windows closed | Quit (non-macOS) |
-| `activate` | Dock click (macOS) | Recreate window |
-| `will-quit` | Before quit | Cleanup shortcuts |
-| `Cmd/Ctrl+Shift+R` | Global shortcut | Reload window |
+| Event/Method        | Trigger            | Action                   |
+| ------------------- | ------------------ | ------------------------ |
+| `app.ready`         | App initialized    | Create menu and window   |
+| `before-quit`       | Quit requested     | Check dirty, show dialog |
+| `window-all-closed` | All windows closed | Quit (non-macOS)         |
+| `activate`          | Dock click (macOS) | Recreate window          |
+| `will-quit`         | Before quit        | Cleanup shortcuts        |
+| `Cmd/Ctrl+Shift+R`  | Global shortcut    | Reload window            |
 
 ## Common Operations
 
@@ -160,8 +160,8 @@ if (shouldQuit) {
 ### Save document
 
 ```typescript
-await documentState.save(false);  // Save to current path
-await documentState.save(true);   // Save As...
+await documentState.save(false); // Save to current path
+await documentState.save(true); // Save As...
 ```
 
 ### Update dirty state from renderer

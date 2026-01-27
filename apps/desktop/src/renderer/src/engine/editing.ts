@@ -4,13 +4,7 @@
  * All mutations to glyph geometry go through this manager.
  */
 
-import type {
-  PointType,
-  GlyphSnapshot,
-  PointId,
-  ContourId,
-  MatchedRule,
-} from "@shift/types";
+import type { PointType, GlyphSnapshot, PointId, ContourId, MatchedRule } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { CommitContext } from "./FontEngine";
@@ -49,12 +43,7 @@ export class EditingManager {
     this.#ctx = ctx;
   }
 
-  addPoint(
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ): PointId {
+  addPoint(x: number, y: number, pointType: PointType, smooth: boolean = false): PointId {
     this.#requireSession();
 
     return this.#ctx.commit(
@@ -263,11 +252,7 @@ export class EditingManager {
     );
   }
 
-  pasteContours(
-    contoursJson: string,
-    offsetX: number,
-    offsetY: number,
-  ): PasteResult {
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();
 
     const resultJson = this.#ctx.native.pasteContours(contoursJson, offsetX, offsetY);
@@ -298,11 +283,7 @@ export class EditingManager {
     );
   }
 
-  applySmartEdits(
-    selectedPoints: ReadonlySet<PointId>,
-    dx: number,
-    dy: number,
-  ): PointId[] {
+  applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.#ctx.hasSession()) {
       return [];
     }

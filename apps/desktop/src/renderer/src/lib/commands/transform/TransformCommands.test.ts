@@ -1,16 +1,10 @@
 import { describe, it, expect } from "vitest";
-import {
-  RotatePointsCommand,
-  ScalePointsCommand,
-  ReflectPointsCommand,
-} from "./TransformCommands";
+import { RotatePointsCommand, ScalePointsCommand, ReflectPointsCommand } from "./TransformCommands";
 import { asPointId } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
 
 describe("RotatePointsCommand", () => {
-  const createSnapshotWithPoints = (
-    points: Array<{ id: string; x: number; y: number }>,
-  ) => ({
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
     contours: [
       {
         id: "contour-1",
@@ -33,11 +27,10 @@ describe("RotatePointsCommand", () => {
   it("should rotate points around origin", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 1, y: 0 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new RotatePointsCommand(
-      [asPointId("p1")],
-      Math.PI / 2,
-      { x: 0, y: 0 },
-    );
+    const cmd = new RotatePointsCommand([asPointId("p1")], Math.PI / 2, {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
 
@@ -60,30 +53,24 @@ describe("RotatePointsCommand", () => {
   it("should restore original positions on undo", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 100, y: 200 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new RotatePointsCommand(
-      [asPointId("p1")],
-      Math.PI,
-      { x: 0, y: 0 },
-    );
+    const cmd = new RotatePointsCommand([asPointId("p1")], Math.PI, {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
-      "p1",
-      100,
-      200,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should re-apply rotation on redo", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 1, y: 0 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new RotatePointsCommand(
-      [asPointId("p1")],
-      Math.PI / 2,
-      { x: 0, y: 0 },
-    );
+    const cmd = new RotatePointsCommand([asPointId("p1")], Math.PI / 2, {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
     cmd.undo(ctx);
@@ -104,9 +91,7 @@ describe("RotatePointsCommand", () => {
 });
 
 describe("ScalePointsCommand", () => {
-  const createSnapshotWithPoints = (
-    points: Array<{ id: string; x: number; y: number }>,
-  ) => ({
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
     contours: [
       {
         id: "contour-1",
@@ -129,39 +114,21 @@ describe("ScalePointsCommand", () => {
   it("should scale points from origin", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ScalePointsCommand(
-      [asPointId("p1")],
-      2,
-      2,
-      { x: 0, y: 0 },
-    );
+    const cmd = new ScalePointsCommand([asPointId("p1")], 2, 2, { x: 0, y: 0 });
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-      "p1",
-      20,
-      40,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 20, 40);
   });
 
   it("should scale non-uniformly", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ScalePointsCommand(
-      [asPointId("p1")],
-      2,
-      3,
-      { x: 0, y: 0 },
-    );
+    const cmd = new ScalePointsCommand([asPointId("p1")], 2, 3, { x: 0, y: 0 });
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-      "p1",
-      20,
-      60,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 20, 60);
   });
 
   it("should not call movePointTo with empty point array", () => {
@@ -176,21 +143,12 @@ describe("ScalePointsCommand", () => {
   it("should restore original positions on undo", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 100, y: 200 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ScalePointsCommand(
-      [asPointId("p1")],
-      2,
-      2,
-      { x: 0, y: 0 },
-    );
+    const cmd = new ScalePointsCommand([asPointId("p1")], 2, 2, { x: 0, y: 0 });
 
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
-      "p1",
-      100,
-      200,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should have the correct name", () => {
@@ -200,9 +158,7 @@ describe("ScalePointsCommand", () => {
 });
 
 describe("ReflectPointsCommand", () => {
-  const createSnapshotWithPoints = (
-    points: Array<{ id: string; x: number; y: number }>,
-  ) => ({
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
     contours: [
       {
         id: "contour-1",
@@ -225,37 +181,27 @@ describe("ReflectPointsCommand", () => {
   it("should reflect points horizontally", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ReflectPointsCommand(
-      [asPointId("p1")],
-      "horizontal",
-      { x: 0, y: 0 },
-    );
+    const cmd = new ReflectPointsCommand([asPointId("p1")], "horizontal", {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-      "p1",
-      10,
-      -20,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 10, -20);
   });
 
   it("should reflect points vertically", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ReflectPointsCommand(
-      [asPointId("p1")],
-      "vertical",
-      { x: 0, y: 0 },
-    );
+    const cmd = new ReflectPointsCommand([asPointId("p1")], "vertical", {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-      "p1",
-      -10,
-      20,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", -10, 20);
   });
 
   it("should not call movePointTo with empty point array", () => {
@@ -270,20 +216,15 @@ describe("ReflectPointsCommand", () => {
   it("should restore original positions on undo", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 100, y: 200 }]);
     const ctx = createMockCommandContext(snapshot);
-    const cmd = new ReflectPointsCommand(
-      [asPointId("p1")],
-      "horizontal",
-      { x: 0, y: 0 },
-    );
+    const cmd = new ReflectPointsCommand([asPointId("p1")], "horizontal", {
+      x: 0,
+      y: 0,
+    });
 
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
-      "p1",
-      100,
-      200,
-    );
+    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should have the correct name", () => {

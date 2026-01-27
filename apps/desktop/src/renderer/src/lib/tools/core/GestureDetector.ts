@@ -4,7 +4,13 @@ export type ToolEvent =
   | { type: "pointerMove"; point: Point2D }
   | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
   | { type: "doubleClick"; point: Point2D }
-  | { type: "dragStart"; point: Point2D; screenPoint: Point2D; shiftKey: boolean; altKey: boolean }
+  | {
+      type: "dragStart";
+      point: Point2D;
+      screenPoint: Point2D;
+      shiftKey: boolean;
+      altKey: boolean;
+    }
   | {
       type: "drag";
       point: Point2D;
@@ -16,7 +22,13 @@ export type ToolEvent =
       shiftKey: boolean;
       altKey: boolean;
     }
-  | { type: "dragEnd"; point: Point2D; screenPoint: Point2D; origin: Point2D; screenOrigin: Point2D }
+  | {
+      type: "dragEnd";
+      point: Point2D;
+      screenPoint: Point2D;
+      origin: Point2D;
+      screenOrigin: Point2D;
+    }
   | { type: "dragCancel" }
   | {
       type: "keyDown";
@@ -140,10 +152,7 @@ export class GestureDetector {
       const now = Date.now();
       const timeSinceLastClick = now - this.lastClickTime;
       const distFromLastClick = this.lastClickPoint
-        ? Math.hypot(
-            point.x - this.lastClickPoint.x,
-            point.y - this.lastClickPoint.y,
-          )
+        ? Math.hypot(point.x - this.lastClickPoint.x, point.y - this.lastClickPoint.y)
         : Infinity;
 
       if (

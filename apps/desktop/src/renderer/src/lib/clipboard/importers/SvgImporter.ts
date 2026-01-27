@@ -11,9 +11,7 @@ export class SvgImporter implements ClipboardImporter {
   canImport(text: string): boolean {
     const trimmed = text.trim();
     return (
-      trimmed.includes("<svg") ||
-      trimmed.includes("<path") ||
-      this.#looksLikePathData(trimmed)
+      trimmed.includes("<svg") || trimmed.includes("<path") || this.#looksLikePathData(trimmed)
     );
   }
 

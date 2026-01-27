@@ -4,17 +4,10 @@ import type { SelectState, SelectBehavior } from "../types";
 
 export class SelectionBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
-    return (
-      (state.type === "ready" || state.type === "selected") &&
-      event.type === "click"
-    );
+    return (state.type === "ready" || state.type === "selected") && event.type === "click";
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
@@ -24,7 +17,8 @@ export class SelectionBehavior implements SelectBehavior {
       if (state.type === "selected" && event.shiftKey) {
         const hasSelection = ctx.selection.hasSelection();
         const isSelected = ctx.selection.isPointSelected(pointId);
-        const willHaveSelection = hasSelection && !(isSelected && ctx.selection.getSelectedPoints().size === 1);
+        const willHaveSelection =
+          hasSelection && !(isSelected && ctx.selection.getSelectedPoints().size === 1);
 
         if (willHaveSelection || !isSelected) {
           return {
@@ -51,7 +45,8 @@ export class SelectionBehavior implements SelectBehavior {
     if (segmentHit) {
       if (state.type === "selected" && event.shiftKey) {
         const isSelected = ctx.selection.isSegmentSelected(segmentHit.segmentId);
-        const hasOtherSelections = ctx.selection.getSelectedPoints().size > 0 ||
+        const hasOtherSelections =
+          ctx.selection.getSelectedPoints().size > 0 ||
           ctx.selection.getSelectedSegments().size > 1 ||
           (ctx.selection.getSelectedSegments().size === 1 && !isSelected);
 
@@ -59,7 +54,10 @@ export class SelectionBehavior implements SelectBehavior {
           return {
             type: "selected",
             hoveredPointId: null,
-            intent: { action: "toggleSegment", segmentId: segmentHit.segmentId },
+            intent: {
+              action: "toggleSegment",
+              segmentId: segmentHit.segmentId,
+            },
           };
         }
         return {
@@ -72,7 +70,11 @@ export class SelectionBehavior implements SelectBehavior {
       return {
         type: "selected",
         hoveredPointId: null,
-        intent: { action: "selectSegment", segmentId: segmentHit.segmentId, additive: event.shiftKey },
+        intent: {
+          action: "selectSegment",
+          segmentId: segmentHit.segmentId,
+          additive: event.shiftKey,
+        },
       };
     }
 

@@ -22,13 +22,29 @@ export function useSelectionBounds(): SelectionData {
     const pointCount = selectedPointIds.size;
 
     if (pointCount === 0) {
-      return { x: 0, y: 0, width: 0, height: 0, hasSelection: false, bounds: null, pointCount: 0 };
+      return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        hasSelection: false,
+        bounds: null,
+        pointCount: 0,
+      };
     }
 
     const selectionBounds: SelectionBounds | null = editor.getSelectionBounds();
 
     if (!selectionBounds) {
-      return { x: 0, y: 0, width: 0, height: 0, hasSelection: false, bounds: null, pointCount };
+      return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        hasSelection: false,
+        bounds: null,
+        pointCount,
+      };
     }
 
     const bounds: Rect2D = {

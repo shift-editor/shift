@@ -2,6 +2,7 @@ import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
 import type { HitTestService } from "@/lib/tools/core/createContext";
 import type { ToolEvent } from "../core/GestureDetector";
+import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
 
 export type BoundingRectEdge =
   | "left"
@@ -33,14 +34,36 @@ export function edgeToCursor(edge: BoundingRectEdge): CursorType {
   }
 }
 
+export function boundingBoxHitResultToCursor(result: BoundingBoxHitResult): CursorType {
+  if (!result) {
+    return { type: "default" };
+  }
+
+  if (result.type === "rotate") {
+    switch (result.corner) {
+      case "top-left":
+        return { type: "rotate-tl" };
+      case "top-right":
+        return { type: "rotate-tr" };
+      case "bottom-left":
+        return { type: "rotate-bl" };
+      case "bottom-right":
+        return { type: "rotate-br" };
+    }
+  }
+
+  return edgeToCursor(result.edge);
+}
+
 export interface CursorContext {
   hitTest: HitTestService;
-  hitTestBoundingRectEdge: (pos: Point2D) => BoundingRectEdge;
+  hitTestBoundingBox: (pos: Point2D) => BoundingBoxHitResult;
 }
 
 export interface SelectCursorState {
   type: string;
   resize?: { edge: Exclude<BoundingRectEdge, null> };
+  rotate?: { corner: CornerHandle };
 }
 
 export function getCursorForState(
@@ -56,6 +79,13 @@ export function getCursorForState(
     return edgeToCursor(state.resize.edge);
   }
 
+  if (state.type === "rotating" && state.rotate) {
+    return boundingBoxHitResultToCursor({
+      type: "rotate",
+      corner: state.rotate.corner,
+    });
+  }
+
   if (event?.type === "drag") {
     return { type: "default" };
   }
@@ -65,10 +95,10 @@ export function getCursorForState(
   }
 
   if (state.type === "selected" && event && "point" in event) {
-    const edge = ctx.hitTestBoundingRectEdge(event.point);
+    const hitResult = ctx.hitTestBoundingBox(event.point);
     const pointId = ctx.hitTest.getPointIdAt(event.point);
-    if (edge && !pointId) {
-      return edgeToCursor(edge);
+    if (hitResult && !pointId) {
+      return boundingBoxHitResultToCursor(hitResult);
     }
   }
 

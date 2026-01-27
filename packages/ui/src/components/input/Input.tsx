@@ -2,8 +2,7 @@ import * as React from "react";
 import { Input as BaseInput } from "@base-ui-components/react/input";
 import { cn } from "../../lib/utils";
 
-export interface InputProps
-  extends React.ComponentProps<typeof BaseInput> {
+export interface InputProps extends React.ComponentProps<typeof BaseInput> {
   label?: string;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
@@ -20,9 +19,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             {label}
           </span>
         )}
-        {icon && iconOnLeft && (
-          <span className="absolute left-2 pointer-events-none">{icon}</span>
-        )}
+        {icon && iconOnLeft && <span className="absolute left-2 pointer-events-none">{icon}</span>}
         <BaseInput
           ref={ref}
           className={cn(

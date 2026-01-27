@@ -174,11 +174,7 @@ describe("Transform", () => {
       const points = [p("p1", 1, 0)];
       const origin = { x: 0, y: 0 };
 
-      const result = Transform.reflectPoints(
-        points,
-        { angle: Math.PI / 4 },
-        origin,
-      );
+      const result = Transform.reflectPoints(points, { angle: Math.PI / 4 }, origin);
 
       // Reflecting (1,0) across 45° line gives (0,1)
       expect(result[0].x).toBeCloseTo(0);

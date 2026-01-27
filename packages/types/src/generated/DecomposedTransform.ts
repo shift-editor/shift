@@ -4,4 +4,14 @@
  * Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
  * Composition order: translate to center → rotate → scale → skew → translate back
  */
-export type DecomposedTransform = { translateX: number, translateY: number, rotation: number, scaleX: number, scaleY: number, skewX: number, skewY: number, tCenterX: number, tCenterY: number, };
+export type DecomposedTransform = {
+  translateX: number;
+  translateY: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  skewX: number;
+  skewY: number;
+  tCenterX: number;
+  tCenterY: number;
+};

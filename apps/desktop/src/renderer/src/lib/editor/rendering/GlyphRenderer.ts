@@ -10,18 +10,19 @@ import type { GlyphSnapshot, PointId } from "@shift/types";
 import { asPointId } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
-import { drawHandleLast, type HandleState, type HandleType } from "./handles";
+import {
+  drawHandleLast,
+  drawBoundingBoxHandles,
+  type HandleState,
+  type HandleType,
+} from "./handles";
 import type { ViewportManager } from "../managers";
 import { Polygon } from "@shift/geo";
-import {
-  renderGlyph,
-  renderGuides,
-  buildContourPath,
-  type Guides,
-} from "./render";
+import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
 import type { SelectionManager, HoverManager } from "../managers";
 import { SCREEN_LINE_WIDTH } from "./constants";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export interface FontMetrics {
   ascender: number;
@@ -48,6 +49,7 @@ export interface RenderDependencies {
     segmentAngle?: number,
   ) => void;
   getSelectedPointData: () => Array<{ x: number; y: number }>;
+  getHoveredBoundingBoxHandle: () => BoundingBoxHitResult;
 }
 
 export class GlyphRenderer {
@@ -97,21 +99,13 @@ export class GlyphRenderer {
     const zoom = viewport.zoom.peek();
     const { panX, panY } = viewport;
 
-    ctx.transform(
-      zoom,
-      0,
-      0,
-      zoom,
-      panX + center.x * (1 - zoom),
-      panY + center.y * (1 - zoom),
-    );
+    ctx.transform(zoom, 0, 0, zoom, panX + center.x * (1 - zoom), panY + center.y * (1 - zoom));
   }
 
   #applyUpmTransforms(ctx: IRenderer): void {
     const viewport = this.#deps.viewport;
     const scale = viewport.upmScale;
-    const baselineY =
-      viewport.logicalHeight - viewport.padding - viewport.descender * scale;
+    const baselineY = viewport.logicalHeight - viewport.padding - viewport.descender * scale;
     ctx.transform(scale, 0, 0, -scale, viewport.padding, baselineY);
   }
 
@@ -171,13 +165,14 @@ export class GlyphRenderer {
     }
 
     const shouldDrawBoundingRect =
-      this.#deps.selection.selectedPointIds.peek().size > 0 &&
+      this.#deps.selection.selectedPointIds.peek().size > 1 &&
       !this.#deps.getPreviewMode() &&
       this.#deps.selection.selectionMode.peek() === "committed";
 
+    let bbRect: ReturnType<typeof Polygon.boundingRect> = null;
     if (shouldDrawBoundingRect) {
       const selectedPointData = this.#deps.getSelectedPointData();
-      const bbRect = Polygon.boundingRect(selectedPointData);
+      bbRect = Polygon.boundingRect(selectedPointData);
       if (bbRect) {
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
         ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
@@ -192,7 +187,38 @@ export class GlyphRenderer {
       this.#drawHandlesFromSnapshot(ctx, snapshot);
     }
 
+    if (shouldDrawBoundingRect && bbRect) {
+      this.#drawBoundingBoxHandles(ctx, bbRect);
+    }
+
     ctx.restore();
+  }
+
+  #drawBoundingBoxHandles(
+    ctx: IRenderer,
+    bbRect: { x: number; y: number; width: number; height: number },
+  ): void {
+    const viewport = this.#deps.viewport;
+
+    const topLeft = viewport.projectUpmToScreen(bbRect.x, bbRect.y + bbRect.height);
+    const bottomRight = viewport.projectUpmToScreen(bbRect.x + bbRect.width, bbRect.y);
+
+    const screenRect = {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+      left: topLeft.x,
+      top: topLeft.y,
+      right: bottomRight.x,
+      bottom: bottomRight.y,
+    };
+
+    const hoveredHandle = this.#deps.getHoveredBoundingBoxHandle();
+    drawBoundingBoxHandles(ctx, {
+      rect: screenRect,
+      hoveredHandle: hoveredHandle ?? undefined,
+    });
   }
 
   #getGuides(snapshot: GlyphSnapshot): Guides {
@@ -232,10 +258,7 @@ export class GlyphRenderer {
     }
   }
 
-  #drawSegmentCurve(
-    ctx: IRenderer,
-    segment: ReturnType<typeof Segment.parse>[number],
-  ): void {
+  #drawSegmentCurve(ctx: IRenderer, segment: ReturnType<typeof Segment.parse>[number]): void {
     const curve = Segment.toCurve(segment);
     ctx.beginPath();
     ctx.moveTo(curve.p0.x, curve.p0.y);
@@ -248,14 +271,7 @@ export class GlyphRenderer {
         ctx.quadTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
         break;
       case "cubic":
-        ctx.cubicTo(
-          curve.c0.x,
-          curve.c0.y,
-          curve.c1.x,
-          curve.c1.y,
-          curve.p1.x,
-          curve.p1.y,
-        );
+        ctx.cubicTo(curve.c0.x, curve.c0.y, curve.c1.x, curve.c1.y, curve.p1.x, curve.p1.y);
         break;
     }
 
@@ -281,13 +297,9 @@ export class GlyphRenderer {
         const nextPoint = points[(idx + 1) % numPoints];
         const prevPoint = points[idx - 1];
 
-        const anchor =
-          nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
+        const anchor = nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
 
-        const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(
-          anchor.x,
-          anchor.y,
-        );
+        const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(anchor.x, anchor.y);
 
         ctx.drawLine(anchorX, anchorY, x, y);
       }
@@ -315,40 +327,20 @@ export class GlyphRenderer {
 
         if (isFirst) {
           const nextPoint = points[1];
-          const { x: nx, y: ny } = viewport.projectUpmToScreen(
-            nextPoint.x,
-            nextPoint.y,
-          );
+          const { x: nx, y: ny } = viewport.projectUpmToScreen(nextPoint.x, nextPoint.y);
           const segmentAngle = Math.atan2(ny - y, nx - x);
 
           if (contour.closed) {
-            this.#deps.paintHandle(
-              ctx,
-              x,
-              y,
-              "direction",
-              handleState,
-              segmentAngle,
-            );
+            this.#deps.paintHandle(ctx, x, y, "direction", handleState, segmentAngle);
           } else {
-            this.#deps.paintHandle(
-              ctx,
-              x,
-              y,
-              "first",
-              handleState,
-              segmentAngle,
-            );
+            this.#deps.paintHandle(ctx, x, y, "first", handleState, segmentAngle);
           }
           continue;
         }
 
         if (isLast && !contour.closed) {
           const prevPoint = points[idx - 1];
-          const { x: px, y: py } = viewport.projectUpmToScreen(
-            prevPoint.x,
-            prevPoint.y,
-          );
+          const { x: px, y: py } = viewport.projectUpmToScreen(prevPoint.x, prevPoint.y);
           drawHandleLast(ctx, { x0: x, y0: y, x1: px, y1: py }, handleState);
           continue;
         }

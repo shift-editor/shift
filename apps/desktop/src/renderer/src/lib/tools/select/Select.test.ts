@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Select } from ".";
-import { getAllPoints, createMockToolContext, createToolMouseEvent, ToolEventSimulator, type MockToolContext } from "@/testing";
+import {
+  getAllPoints,
+  createMockToolContext,
+  createToolMouseEvent,
+  ToolEventSimulator,
+  type MockToolContext,
+} from "@/testing";
 import type { PointId } from "@shift/types";
 
 describe("Select tool", () => {
@@ -124,11 +130,7 @@ describe("Select tool", () => {
 
       sim.onMouseMove(createToolMouseEvent(150, 160));
 
-      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalledWith(
-        expect.any(Set),
-        50,
-        60,
-      );
+      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalledWith(expect.any(Set), 50, 60);
     });
   });
 
@@ -347,7 +349,7 @@ describe("Select tool", () => {
     });
 
     it("should cancel preview before executing scale command", () => {
-      sim.onMouseDown(createToolMouseEvent(100, 50));
+      sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
 
       const cancelCalls: number[] = [];
@@ -375,19 +377,19 @@ describe("Select tool", () => {
     it("should begin preview when starting resize", () => {
       ctx.mocks.preview.mocks.beginPreview.mockClear();
 
-      sim.onMouseDown(createToolMouseEvent(100, 50));
+      sim.onMouseDown(createToolMouseEvent(110, 50));
 
       expect(ctx.mocks.preview.beginPreview).toHaveBeenCalled();
     });
 
     it("should transition to resizing state when dragging from edge", () => {
-      sim.onMouseDown(createToolMouseEvent(100, 50));
+      sim.onMouseDown(createToolMouseEvent(110, 50));
 
       expect(select.getState().type).toBe("resizing");
     });
 
     it("should return to selected state after resize completes", () => {
-      sim.onMouseDown(createToolMouseEvent(100, 50));
+      sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
       sim.onMouseUp(createToolMouseEvent(50, 50));
 
@@ -395,7 +397,7 @@ describe("Select tool", () => {
     });
 
     it("should cancel preview on resize dragCancel", () => {
-      sim.onMouseDown(createToolMouseEvent(100, 50));
+      sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
       ctx.mocks.preview.mocks.cancelPreview.mockClear();
 

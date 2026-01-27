@@ -116,14 +116,10 @@ describe("SelectionManager", () => {
     });
 
     it("should remove segment from selection", () => {
-      selection.selectSegments(
-        new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
-      );
+      selection.selectSegments(new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]));
       selection.removeSegmentFromSelection(asSegmentId("p1:p2"));
       expect(selection.selectedSegmentIds.peek().size).toBe(1);
-      expect(selection.selectedSegmentIds.peek().has(asSegmentId("p1:p2"))).toBe(
-        false,
-      );
+      expect(selection.selectedSegmentIds.peek().has(asSegmentId("p1:p2"))).toBe(false);
     });
 
     it("should toggle segment selection (add)", () => {
@@ -133,9 +129,7 @@ describe("SelectionManager", () => {
     });
 
     it("should toggle segment selection (remove)", () => {
-      selection.selectSegments(
-        new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
-      );
+      selection.selectSegments(new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]));
       selection.toggleSegmentInSelection(asSegmentId("p1:p2"));
       expect(selection.selectedSegmentIds.peek().size).toBe(1);
     });
@@ -155,9 +149,7 @@ describe("SelectionManager", () => {
     });
 
     it("should clear segment selection", () => {
-      selection.selectSegments(
-        new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]),
-      );
+      selection.selectSegments(new Set([asSegmentId("p1:p2"), asSegmentId("p2:p3")]));
       selection.clearSelection();
       expect(selection.selectedSegmentIds.peek().size).toBe(0);
     });

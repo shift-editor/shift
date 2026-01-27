@@ -40,10 +40,7 @@ export class HoverManager {
     this.$hoveredSegmentId.set(null);
   }
 
-  getPointVisualState(
-    pointId: PointId,
-    isPointSelected: (id: PointId) => boolean,
-  ): VisualState {
+  getPointVisualState(pointId: PointId, isPointSelected: (id: PointId) => boolean): VisualState {
     if (isPointSelected(pointId)) {
       return "selected";
     }
@@ -53,9 +50,7 @@ export class HoverManager {
 
     const hoveredSegment = this.$hoveredSegmentId.value;
     if (hoveredSegment) {
-      const segmentPointIds = this.#getPointIdsFromSegmentId(
-        hoveredSegment.segmentId,
-      );
+      const segmentPointIds = this.#getPointIdsFromSegmentId(hoveredSegment.segmentId);
       if (segmentPointIds.has(pointId)) {
         return "hovered";
       }

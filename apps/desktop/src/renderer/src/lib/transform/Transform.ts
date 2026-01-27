@@ -21,11 +21,7 @@
 
 import { Mat, Vec2, type MatModel } from "@shift/geo";
 import type { Point2D } from "@shift/types";
-import type {
-  TransformablePoint,
-  ReflectAxis,
-  SelectionBounds,
-} from "./types";
+import type { TransformablePoint, ReflectAxis, SelectionBounds } from "./types";
 
 /**
  * Pure transformation functions for geometry manipulation.
@@ -127,9 +123,7 @@ export const Transform = {
    * @param points - Points to analyze
    * @returns Bounds object with center, extents, and dimensions
    */
-  getSelectionBounds(
-    points: readonly TransformablePoint[],
-  ): SelectionBounds | null {
+  getSelectionBounds(points: readonly TransformablePoint[]): SelectionBounds | null {
     if (points.length === 0) {
       return null;
     }
@@ -190,30 +184,21 @@ export const Transform = {
   /**
    * Rotate points by 90 degrees counter-clockwise.
    */
-  rotate90CCW(
-    points: readonly TransformablePoint[],
-    origin: Point2D,
-  ): TransformablePoint[] {
+  rotate90CCW(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
     return Transform.rotatePoints(points, Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 90 degrees clockwise.
    */
-  rotate90CW(
-    points: readonly TransformablePoint[],
-    origin: Point2D,
-  ): TransformablePoint[] {
+  rotate90CW(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
     return Transform.rotatePoints(points, -Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 180 degrees.
    */
-  rotate180(
-    points: readonly TransformablePoint[],
-    origin: Point2D,
-  ): TransformablePoint[] {
+  rotate180(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
     return Transform.rotatePoints(points, Math.PI, origin);
   },
 
@@ -231,20 +216,14 @@ export const Transform = {
   /**
    * Flip horizontally (mirror across horizontal axis through origin).
    */
-  flipHorizontal(
-    points: readonly TransformablePoint[],
-    origin: Point2D,
-  ): TransformablePoint[] {
+  flipHorizontal(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
     return Transform.reflectPoints(points, "horizontal", origin);
   },
 
   /**
    * Flip vertically (mirror across vertical axis through origin).
    */
-  flipVertical(
-    points: readonly TransformablePoint[],
-    origin: Point2D,
-  ): TransformablePoint[] {
+  flipVertical(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
     return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;

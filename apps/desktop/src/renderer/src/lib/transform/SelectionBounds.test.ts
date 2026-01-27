@@ -62,11 +62,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([
-      asPointId("p1"),
-      asPointId("ctrl"),
-      asPointId("p2"),
-    ]);
+    const selectedPoints = new Set<PointId>([asPointId("p1"), asPointId("ctrl"), asPointId("p2")]);
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();

@@ -36,6 +36,12 @@ repos:
   # TypeScript/JavaScript hooks
   - repo: local
     hooks:
+      - id: prettier
+        name: prettier
+        entry: pnpm prettier --write --ignore-unknown
+        language: system
+        types_or: [javascript, jsx, ts, tsx, css, json, markdown]
+
       - id: oxlint
         name: oxlint
         entry: pnpm lint:check

@@ -36,11 +36,7 @@ export class ClipboardManager {
     const selectedPointIds = this.#ctx.getSelectedPointIds();
     const selectedSegmentIds = this.#ctx.getSelectedSegmentIds();
 
-    const content = this.#resolver.resolve(
-      snapshot,
-      selectedPointIds,
-      selectedSegmentIds,
-    );
+    const content = this.#resolver.resolve(snapshot, selectedPointIds, selectedSegmentIds);
 
     if (!content || content.contours.length === 0) {
       return false;
@@ -99,7 +95,10 @@ export class ClipboardManager {
 
       const imported = this.#importers.tryImport(text);
       if (imported) {
-        console.log("[Clipboard] Imported via external importer, contours:", imported.contours.length);
+        console.log(
+          "[Clipboard] Imported via external importer, contours:",
+          imported.contours.length,
+        );
         return imported;
       }
 

@@ -30,12 +30,14 @@ signal.value
 Classes that use signals follow a consistent naming pattern:
 
 **Internal (private) fields use `$` prefix:**
+
 ```typescript
 private readonly $zoom: WritableSignal<number>;
 private readonly $selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
 ```
 
 **Public getters return the Signal (not the value):**
+
 ```typescript
 public get zoom(): Signal<number> {
   return this.$zoom;
@@ -43,6 +45,7 @@ public get zoom(): Signal<number> {
 ```
 
 **Usage patterns:**
+
 ```typescript
 // Reactive - component re-renders on change
 const zoom = useValue(editor.zoom);

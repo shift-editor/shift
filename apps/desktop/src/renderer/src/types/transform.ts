@@ -6,10 +6,7 @@ export interface TransformablePoint {
   readonly y: number;
 }
 
-export type ReflectAxis =
-  | "horizontal"
-  | "vertical"
-  | { angle: number };
+export type ReflectAxis = "horizontal" | "vertical" | { angle: number };
 
 export interface TransformOptions {
   origin?: Point2D;
@@ -29,12 +26,6 @@ export interface SelectionBounds {
   readonly height: number;
 }
 
-export type AlignmentType =
-  | "left"
-  | "center-h"
-  | "right"
-  | "top"
-  | "center-v"
-  | "bottom";
+export type AlignmentType = "left" | "center-h" | "right" | "top" | "center-v" | "bottom";
 
 export type DistributeType = "horizontal" | "vertical";

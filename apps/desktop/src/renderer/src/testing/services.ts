@@ -20,6 +20,7 @@ import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Point2D } from "@shift/types";
 import { signal, type WritableSignal } from "@/lib/reactive/signal";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export interface ToolMouseEvent {
   readonly screen: Point2D;
@@ -31,10 +32,7 @@ export interface ToolMouseEvent {
   readonly button: number;
 }
 import { FontEngine, MockFontEngine } from "@/engine";
-import {
-  Segment as SegmentOps,
-  type SegmentHitResult,
-} from "@/lib/geo/Segment";
+import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 
 export interface MockToolContext extends ToolContext {
   fontEngine: FontEngine;
@@ -92,14 +90,13 @@ function createMockSelectionService(): SelectionService & {
   const _selectedPoints = new Set<PointId>();
   const _selectedSegments = new Set<SegmentId>();
   let _mode: SelectionMode = "committed";
-  const $selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal<
-    ReadonlySet<PointId>
-  >(new Set());
-  const $selectedSegments: WritableSignal<ReadonlySet<SegmentId>> = signal<
-    ReadonlySet<SegmentId>
-  >(new Set());
-  const $mode: WritableSignal<SelectionMode> =
-    signal<SelectionMode>("committed");
+  const $selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal<ReadonlySet<PointId>>(
+    new Set(),
+  );
+  const $selectedSegments: WritableSignal<ReadonlySet<SegmentId>> = signal<ReadonlySet<SegmentId>>(
+    new Set(),
+  );
+  const $mode: WritableSignal<SelectionMode> = signal<SelectionMode>("committed");
 
   const updateSignals = () => {
     $selectedPoints.set(new Set(_selectedPoints));
@@ -157,9 +154,7 @@ function createMockSelectionService(): SelectionService & {
       _selectedSegments.clear();
       updateSignals();
     }),
-    hasSelection: vi.fn(
-      () => _selectedPoints.size > 0 || _selectedSegments.size > 0,
-    ),
+    hasSelection: vi.fn(() => _selectedPoints.size > 0 || _selectedSegments.size > 0),
     setMode: vi.fn((mode: SelectionMode) => {
       _mode = mode;
       updateSignals();
@@ -168,8 +163,7 @@ function createMockSelectionService(): SelectionService & {
 
   return {
     getSelectedPoints: () => new Set(_selectedPoints) as ReadonlySet<PointId>,
-    getSelectedSegments: () =>
-      new Set(_selectedSegments) as ReadonlySet<SegmentId>,
+    getSelectedSegments: () => new Set(_selectedSegments) as ReadonlySet<SegmentId>,
     getMode: () => _mode,
     selectPoints: mocks.selectPoints,
     addPoint: mocks.addPoint,
@@ -199,15 +193,16 @@ function createMockSelectionService(): SelectionService & {
 function createMockHoverService(): HoverService & {
   _hoveredPoint: PointId | null;
   _hoveredSegment: SegmentIndicator | null;
+  _hoveredBoundingBoxHandle: BoundingBoxHitResult;
   mocks: Record<string, ReturnType<typeof vi.fn>>;
 } {
   let _hoveredPoint: PointId | null = null;
   let _hoveredSegment: SegmentIndicator | null = null;
-  const $hoveredPoint: WritableSignal<PointId | null> = signal<PointId | null>(
+  let _hoveredBoundingBoxHandle: BoundingBoxHitResult = null;
+  const $hoveredPoint: WritableSignal<PointId | null> = signal<PointId | null>(null);
+  const $hoveredSegment: WritableSignal<SegmentIndicator | null> = signal<SegmentIndicator | null>(
     null,
   );
-  const $hoveredSegment: WritableSignal<SegmentIndicator | null> =
-    signal<SegmentIndicator | null>(null);
 
   const mocks = {
     setHoveredPoint: vi.fn((id: PointId | null) => {
@@ -222,9 +217,13 @@ function createMockHoverService(): HoverService & {
       $hoveredSegment.set(indicator);
       $hoveredPoint.set(_hoveredPoint);
     }),
+    setHoveredBoundingBoxHandle: vi.fn((handle: BoundingBoxHitResult) => {
+      _hoveredBoundingBoxHandle = handle;
+    }),
     clearAll: vi.fn(() => {
       _hoveredPoint = null;
       _hoveredSegment = null;
+      _hoveredBoundingBoxHandle = null;
       $hoveredPoint.set(null);
       $hoveredSegment.set(null);
     }),
@@ -233,14 +232,19 @@ function createMockHoverService(): HoverService & {
   return {
     getHoveredPoint: () => _hoveredPoint,
     getHoveredSegment: () => _hoveredSegment,
+    getHoveredBoundingBoxHandle: () => _hoveredBoundingBoxHandle,
     setHoveredPoint: mocks.setHoveredPoint,
     setHoveredSegment: mocks.setHoveredSegment,
+    setHoveredBoundingBoxHandle: mocks.setHoveredBoundingBoxHandle,
     clearAll: mocks.clearAll,
     get _hoveredPoint() {
       return _hoveredPoint;
     },
     get _hoveredSegment() {
       return _hoveredSegment;
+    },
+    get _hoveredBoundingBoxHandle() {
+      return _hoveredBoundingBoxHandle;
     },
     mocks,
   };
@@ -254,13 +258,8 @@ function createMockEditService(
       fontEngine.editing.addPoint(x, y, type, smooth),
     ),
     addPointToContour: vi.fn(
-      (
-        contourId: ContourId,
-        x: number,
-        y: number,
-        type: any,
-        smooth: boolean,
-      ) => fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
+      (contourId: ContourId, x: number, y: number, type: any, smooth: boolean) =>
+        fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
     ),
     movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) =>
       fontEngine.editing.movePoints([...ids], dx, dy),
@@ -268,13 +267,10 @@ function createMockEditService(
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),
     ),
-    applySmartEdits: vi.fn(
-      (ids: ReadonlySet<PointId>, dx: number, dy: number) =>
-        fontEngine.editing.applySmartEdits(ids, dx, dy),
+    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) =>
+      fontEngine.editing.applySmartEdits(ids, dx, dy),
     ),
-    removePoints: vi.fn((ids: Iterable<PointId>) =>
-      fontEngine.editing.removePoints([...ids]),
-    ),
+    removePoints: vi.fn((ids: Iterable<PointId>) => fontEngine.editing.removePoints([...ids])),
     addContour: vi.fn(() => fontEngine.editing.addContour()),
     closeContour: vi.fn(() => fontEngine.editing.closeContour()),
     toggleSmooth: vi.fn((id: PointId) => fontEngine.editing.toggleSmooth(id)),
@@ -286,9 +282,7 @@ function createMockEditService(
       fontEngine.editing.setActiveContour(contourId),
     ),
     clearActiveContour: vi.fn(() => fontEngine.editing.clearActiveContour()),
-    reverseContour: vi.fn((contourId: ContourId) =>
-      fontEngine.editing.reverseContour(contourId),
-    ),
+    reverseContour: vi.fn((contourId: ContourId) => fontEngine.editing.reverseContour(contourId)),
   };
 
   return {
@@ -519,9 +513,7 @@ function createMockHitTestService(
       const firstPoint = contour.points[0];
       const lastPoint = contour.points[contour.points.length - 1];
 
-      const firstDist = Math.sqrt(
-        (firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2,
-      );
+      const firstDist = Math.sqrt((firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2);
       if (firstDist < hitRadius) {
         return {
           contourId: asContourId(contour.id),
@@ -531,9 +523,7 @@ function createMockHitTestService(
         };
       }
 
-      const lastDist = Math.sqrt(
-        (lastPoint.x - pos.x) ** 2 + (lastPoint.y - pos.y) ** 2,
-      );
+      const lastDist = Math.sqrt((lastPoint.x - pos.x) ** 2 + (lastPoint.y - pos.y) ** 2);
       if (lastDist < hitRadius) {
         return {
           contourId: asContourId(contour.id),
@@ -720,9 +710,7 @@ export function createToolMouseEvent(
 }
 
 export interface ToolEventTarget {
-  handleEvent(
-    event: import("@/lib/tools/core/GestureDetector").ToolEvent,
-  ): void;
+  handleEvent(event: import("@/lib/tools/core/GestureDetector").ToolEvent): void;
   activate?(): void;
   deactivate?(): void;
 }

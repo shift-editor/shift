@@ -98,7 +98,7 @@ class ToolManager {
   handleKeyDown(event: KeyboardEvent): void;
   handleKeyUp(event: KeyboardEvent): void;
 
-  requestTemporary(name: ToolName, options?: { onActivate?, onReturn? }): void;
+  requestTemporary(name: ToolName, options?: { onActivate?; onReturn? }): void;
   returnFromTemporary(): void;
 }
 ```
@@ -110,7 +110,12 @@ type PenState =
   | { type: "idle" }
   | { type: "ready"; mousePos: Point2D }
   | { type: "anchored"; anchor: AnchorData }
-  | { type: "dragging"; anchor: AnchorData; handles: HandleData; mousePos: Point2D };
+  | {
+      type: "dragging";
+      anchor: AnchorData;
+      handles: HandleData;
+      mousePos: Point2D;
+    };
 ```
 
 ### SelectState (select/types.ts)
@@ -214,12 +219,12 @@ interface ToolContext {
 
 ## API Surface
 
-| Tool   | States                                           | Key Features                                      |
-| ------ | ------------------------------------------------ | ------------------------------------------------- |
-| Select | idle, ready, selecting, selected, dragging, resizing | Point/segment selection, drag, resize, nudge      |
-| Pen    | idle, ready, anchored, dragging                  | Bezier curves, contour close/continue/split       |
-| Hand   | idle, ready, dragging                            | Canvas panning, Space bar activation              |
-| Shape  | idle, ready, dragging                            | Rectangle creation                                |
+| Tool   | States                                               | Key Features                                 |
+| ------ | ---------------------------------------------------- | -------------------------------------------- |
+| Select | idle, ready, selecting, selected, dragging, resizing | Point/segment selection, drag, resize, nudge |
+| Pen    | idle, ready, anchored, dragging                      | Bezier curves, contour close/continue/split  |
+| Hand   | idle, ready, dragging                                | Canvas panning, Space bar activation         |
+| Shape  | idle, ready, dragging                                | Rectangle creation                           |
 
 ## Common Operations
 

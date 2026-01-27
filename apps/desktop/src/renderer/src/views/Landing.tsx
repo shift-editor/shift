@@ -27,27 +27,21 @@ export const Landing = () => {
   };
 
   return (
-      <section className="bg-canvas flex h-screen flex-col items-center justify-center gap-8">
-        <div className="flex flex-col items-center gap-2">
-          <img src={logo} alt="Shift" className="h-32 w-32" />
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-primary">
-            Shift <span className="ml-[-0.4rem]">.</span>
-          </h1>
-        </div>
-        <div className="flex gap-2 sm:flex-row">
-          <Button
-            onClick={handleLoadFont}
-            variant="ghost"
-          >
-            Load font
-          </Button>
-          <Button
-            onClick={handleNewFont}
-            variant="ghost"
-          >
-            New font
-          </Button>
-        </div>
-      </section>
+    <section className="bg-canvas flex h-screen flex-col items-center justify-center gap-8">
+      <div className="flex flex-col items-center gap-2">
+        <img src={logo} alt="Shift" className="h-32 w-32" />
+        <h1 className="font-display text-4xl font-extrabold tracking-tight text-primary">
+          Shift <span className="ml-[-0.4rem]">.</span>
+        </h1>
+      </div>
+      <div className="flex gap-2 sm:flex-row">
+        <Button onClick={handleLoadFont} variant="ghost">
+          Load font
+        </Button>
+        <Button onClick={handleNewFont} variant="ghost">
+          New font
+        </Button>
+      </div>
+    </section>
   );
 };

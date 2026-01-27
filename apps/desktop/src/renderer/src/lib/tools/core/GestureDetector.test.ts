@@ -10,7 +10,11 @@ describe("GestureDetector", () => {
 
   describe("click detection", () => {
     it("emits click when pointer up without significant movement", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
@@ -23,7 +27,11 @@ describe("GestureDetector", () => {
     });
 
     it("preserves modifier keys in click event", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: true, altKey: true });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: true, altKey: true },
+      );
       const events = detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       expect(events[0]).toMatchObject({
@@ -34,8 +42,16 @@ describe("GestureDetector", () => {
     });
 
     it("emits click even with small movement under threshold", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
-      detector.pointerMove({ x: 101, y: 101 }, { x: 101, y: 101 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
+      detector.pointerMove(
+        { x: 101, y: 101 },
+        { x: 101, y: 101 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 101, y: 101 }, { x: 101, y: 101 });
 
       expect(events).toHaveLength(1);
@@ -45,10 +61,18 @@ describe("GestureDetector", () => {
 
   describe("double click detection", () => {
     it("emits doubleClick for two rapid clicks at same location", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
@@ -59,10 +83,18 @@ describe("GestureDetector", () => {
     });
 
     it("emits click instead of doubleClick if too far apart", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
-      detector.pointerDown({ x: 110, y: 110 }, { x: 110, y: 110 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 110, y: 110 },
+        { x: 110, y: 110 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 110, y: 110 }, { x: 110, y: 110 });
 
       expect(events).toHaveLength(1);
@@ -72,12 +104,20 @@ describe("GestureDetector", () => {
     it("emits click instead of doubleClick if too slow", async () => {
       vi.useFakeTimers();
 
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       vi.advanceTimersByTime(400);
 
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
@@ -89,8 +129,16 @@ describe("GestureDetector", () => {
 
   describe("drag detection", () => {
     it("emits dragStart when movement exceeds threshold", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
-      const events = detector.pointerMove({ x: 110, y: 100 }, { x: 110, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
+      const events = detector.pointerMove(
+        { x: 110, y: 100 },
+        { x: 110, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
@@ -103,10 +151,22 @@ describe("GestureDetector", () => {
     });
 
     it("emits drag events after dragStart", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
-      detector.pointerMove({ x: 110, y: 100 }, { x: 110, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
+      detector.pointerMove(
+        { x: 110, y: 100 },
+        { x: 110, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
 
-      const events = detector.pointerMove({ x: 120, y: 110 }, { x: 120, y: 110 }, { shiftKey: true, altKey: false });
+      const events = detector.pointerMove(
+        { x: 120, y: 110 },
+        { x: 120, y: 110 },
+        { shiftKey: true, altKey: false },
+      );
 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
@@ -123,8 +183,16 @@ describe("GestureDetector", () => {
     });
 
     it("emits dragEnd on pointer up after dragging", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
-      detector.pointerMove({ x: 110, y: 100 }, { x: 110, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
+      detector.pointerMove(
+        { x: 110, y: 100 },
+        { x: 110, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 120, y: 110 }, { x: 120, y: 110 });
 
       expect(events).toHaveLength(1);
@@ -140,10 +208,18 @@ describe("GestureDetector", () => {
     it("isDragging returns true during drag", () => {
       expect(detector.isDragging).toBe(false);
 
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       expect(detector.isDragging).toBe(false);
 
-      detector.pointerMove({ x: 110, y: 100 }, { x: 110, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerMove(
+        { x: 110, y: 100 },
+        { x: 110, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       expect(detector.isDragging).toBe(true);
 
       detector.pointerUp({ x: 110, y: 100 }, { x: 110, y: 100 });
@@ -153,24 +229,44 @@ describe("GestureDetector", () => {
 
   describe("reset", () => {
     it("cancels pending drag state", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
-      detector.pointerMove({ x: 110, y: 100 }, { x: 110, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
+      detector.pointerMove(
+        { x: 110, y: 100 },
+        { x: 110, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
 
       detector.reset();
 
       expect(detector.isDragging).toBe(false);
-      const events = detector.pointerMove({ x: 120, y: 100 }, { x: 120, y: 100 }, { shiftKey: false, altKey: false });
+      const events = detector.pointerMove(
+        { x: 120, y: 100 },
+        { x: 120, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe("pointerMove");
     });
 
     it("resets double-click tracking", () => {
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       detector.reset();
 
-      detector.pointerDown({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      detector.pointerDown(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       const events = detector.pointerUp({ x: 100, y: 100 }, { x: 100, y: 100 });
 
       expect(events[0].type).toBe("click");
@@ -179,7 +275,11 @@ describe("GestureDetector", () => {
 
   describe("edge cases", () => {
     it("returns pointerMove event when no button is down", () => {
-      const events = detector.pointerMove({ x: 100, y: 100 }, { x: 100, y: 100 }, { shiftKey: false, altKey: false });
+      const events = detector.pointerMove(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        { shiftKey: false, altKey: false },
+      );
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
         type: "pointerMove",

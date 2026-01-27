@@ -53,9 +53,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   #pointIds: PointId[];
   #originalPositions: Map<PointId, Point2D>;
 
-  protected abstract transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[];
+  protected abstract transformPoints(points: readonly TransformablePoint[]): TransformablePoint[];
 
   execute(ctx): void {
     const points = getPointsFromSnapshot(ctx.snapshot, this.#pointIds);
@@ -121,17 +119,17 @@ class RotatePointsCommand extends BaseTransformCommand {
 
 ## API Surface
 
-| Function/Class           | Purpose                           |
-| ------------------------ | --------------------------------- |
-| Transform.rotatePoints   | Rotate points around origin       |
-| Transform.scalePoints    | Scale from origin                 |
-| Transform.reflectPoints  | Mirror across axis through origin |
-| Transform.applyMatrix    | Apply arbitrary affine matrix     |
-| Transform.getSelectionBounds | Compute bounding box + center |
-| RotatePointsCommand      | Undoable rotation                 |
-| ScalePointsCommand       | Undoable scaling                  |
-| ReflectPointsCommand     | Undoable reflection               |
-| TransformMatrixCommand   | Undoable matrix transform         |
+| Function/Class               | Purpose                           |
+| ---------------------------- | --------------------------------- |
+| Transform.rotatePoints       | Rotate points around origin       |
+| Transform.scalePoints        | Scale from origin                 |
+| Transform.reflectPoints      | Mirror across axis through origin |
+| Transform.applyMatrix        | Apply arbitrary affine matrix     |
+| Transform.getSelectionBounds | Compute bounding box + center     |
+| RotatePointsCommand          | Undoable rotation                 |
+| ScalePointsCommand           | Undoable scaling                  |
+| ReflectPointsCommand         | Undoable reflection               |
+| TransformMatrixCommand       | Undoable matrix transform         |
 
 ## Common Operations
 
@@ -146,7 +144,7 @@ const rotated = Transform.rotatePoints(points, Math.PI / 2, center);
 ```typescript
 ctx.transform.rotate(Math.PI / 2);
 ctx.transform.scale(2, 2);
-ctx.transform.reflect('horizontal');
+ctx.transform.reflect("horizontal");
 ```
 
 ### Direct Command

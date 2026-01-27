@@ -27,7 +27,11 @@ export type CursorType =
   | { type: "ew-resize" }
   | { type: "ns-resize" }
   | { type: "nwse-resize" }
-  | { type: "nesw-resize" };
+  | { type: "nesw-resize" }
+  | { type: "rotate-tl" }
+  | { type: "rotate-tr" }
+  | { type: "rotate-bl" }
+  | { type: "rotate-br" };
 
 export type VisualState = "idle" | "hovered" | "selected";
 

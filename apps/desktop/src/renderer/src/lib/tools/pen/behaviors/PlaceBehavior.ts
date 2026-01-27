@@ -10,11 +10,7 @@ export class PlaceBehavior implements PenBehavior {
     return state.type === "ready" && (event.type === "click" || event.type === "dragStart");
   }
 
-  transition(
-    state: PenState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): PenState | null {
+  transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
     if (state.type !== "ready") return null;
     if (event.type !== "click" && event.type !== "dragStart") return null;
 
@@ -45,12 +41,7 @@ export class PlaceBehavior implements PenBehavior {
     };
   }
 
-  onTransition(
-    prev: PenState,
-    next: PenState,
-    _event: ToolEvent,
-    ctx: ToolContext,
-  ): void {
+  onTransition(prev: PenState, next: PenState, _event: ToolEvent, ctx: ToolContext): void {
     if (prev.type === "ready" && next.type === "anchored" && next.intent?.action === "placePoint") {
       ctx.commands.beginBatch("Add Point");
     }

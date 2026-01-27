@@ -9,7 +9,7 @@ export const GlyphGrid = () => {
   const glyphStr = (unicode: string) => String.fromCharCode(parseInt(unicode, 16));
 
   const initialValues = Object.fromEntries(
-    Object.values(ADOBE_LATIN_1).map((glyph) => [glyph.unicode, glyphStr(glyph.unicode)])
+    Object.values(ADOBE_LATIN_1).map((glyph) => [glyph.unicode, glyphStr(glyph.unicode)]),
   );
   const [inputValues, setInputValues] = useState<Record<string, string>>(initialValues);
 

@@ -4,6 +4,8 @@ import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/createContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { BoundingRectEdge } from "../cursor";
+import { hitTestBoundingBox } from "../boundingBoxHitTest";
+import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
 
 export class ResizeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -16,11 +18,7 @@ export class ResizeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
     if (state.type === "resizing") {
       return this.transitionResizing(state, event, ctx);
     }
@@ -32,12 +30,7 @@ export class ResizeBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(
-    prev: SelectState,
-    next: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
       ctx.preview.beginPreview();
     }
@@ -156,37 +149,23 @@ export class ResizeBehavior implements SelectBehavior {
     const rect = ctx.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const tolerance = ctx.screen.hitRadius;
+    const hitRadius = ctx.screen.hitRadius;
+    const handleOffset = ctx.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = ctx.screen.toUpmDistance(
+      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+    );
 
-    const onLeft = Math.abs(pos.x - rect.left) < tolerance;
-    const onRight = Math.abs(pos.x - rect.right) < tolerance;
-    const onTop = Math.abs(pos.y - rect.top) < tolerance;
-    const onBottom = Math.abs(pos.y - rect.bottom) < tolerance;
+    const result = hitTestBoundingBox(pos, rect, hitRadius, handleOffset, rotationZoneOffset);
 
-    const withinX = pos.x >= rect.left - tolerance && pos.x <= rect.right + tolerance;
-    const withinY = pos.y >= rect.top - tolerance && pos.y <= rect.bottom + tolerance;
-
-    if (onLeft && onTop) return "bottom-left";
-    if (onRight && onTop) return "bottom-right";
-    if (onLeft && onBottom) return "top-left";
-    if (onRight && onBottom) return "top-right";
-
-    if (onLeft && withinY) return "left";
-    if (onRight && withinY) return "right";
-    if (onTop && withinX) return "top";
-    if (onBottom && withinX) return "bottom";
+    if (result?.type === "resize") {
+      return result.edge;
+    }
 
     return null;
   }
 
-  private getAnchorPointForEdge(
-    edge: Exclude<BoundingRectEdge, null>,
-    rect: Rect2D,
-  ): Point2D {
-    const center = Vec2.midpoint(
-      { x: rect.left, y: rect.top },
-      { x: rect.right, y: rect.bottom },
-    );
+  private getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
+    const center = Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
 
     switch (edge) {
       case "top-left":
@@ -202,9 +181,9 @@ export class ResizeBehavior implements SelectBehavior {
       case "right":
         return { x: rect.left, y: center.y };
       case "top":
-        return { x: center.x, y: rect.bottom };
-      case "bottom":
         return { x: center.x, y: rect.top };
+      case "bottom":
+        return { x: center.x, y: rect.bottom };
     }
   }
 
@@ -259,9 +238,9 @@ export class ResizeBehavior implements SelectBehavior {
     } else if (edge === "bottom-left" || edge === "bottom-right") {
       flipY = currentPos.y > anchorPoint.y;
     } else if (edge === "top") {
-      flipY = currentPos.y > anchorPoint.y;
-    } else if (edge === "bottom") {
       flipY = currentPos.y < anchorPoint.y;
+    } else if (edge === "bottom") {
+      flipY = currentPos.y > anchorPoint.y;
     }
 
     if (flipX) sx = -sx;

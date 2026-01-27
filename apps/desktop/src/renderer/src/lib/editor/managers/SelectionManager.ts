@@ -92,10 +92,7 @@ export class SelectionManager {
   }
 
   hasSelection(): boolean {
-    return (
-      this.$selectedPointIds.peek().size > 0 ||
-      this.$selectedSegmentIds.peek().size > 0
-    );
+    return this.$selectedPointIds.peek().size > 0 || this.$selectedSegmentIds.peek().size > 0;
   }
 
   setSelectionMode(mode: SelectionMode): void {

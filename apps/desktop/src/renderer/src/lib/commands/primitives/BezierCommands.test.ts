@@ -8,11 +8,7 @@ import {
 } from "./BezierCommands";
 import { asPointId } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
-import type {
-  LineSegment,
-  QuadSegment,
-  CubicSegment,
-} from "@/types/segments";
+import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
 
 // Helper to create segment points for testing
 const makeSegmentPoint = (
@@ -62,13 +58,7 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Second call is leading control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(
-      2,
-      150,
-      120,
-      "offCurve",
-      false,
-    );
+    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(2, 150, 120, "offCurve", false);
   });
 
   it("should add trailing control mirrored across anchor", () => {
@@ -190,11 +180,7 @@ describe("NudgePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(
-      pointIds,
-      1,
-      0,
-    );
+    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, 1, 0);
   });
 
   it("should move points back on undo", () => {
@@ -291,9 +277,7 @@ describe("SplitSegmentCommand", () => {
       cmd.execute(ctx);
       cmd.undo(ctx);
 
-      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith([
-        "point-1",
-      ]);
+      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(["point-1"]);
     });
   });
 
@@ -360,10 +344,7 @@ describe("SplitSegmentCommand", () => {
       cmd.undo(ctx);
 
       // Should remove inserted points
-      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith([
-        "point-1",
-        "point-2",
-      ]);
+      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(["point-1", "point-2"]);
 
       // Should restore original control position
       expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
@@ -481,8 +462,7 @@ describe("SplitSegmentCommand", () => {
       ]);
 
       // Should restore both original control positions (after the removePoints call)
-      const movePointToCalls = (ctx.fontEngine.editing.movePointTo as any).mock
-        .calls;
+      const movePointToCalls = (ctx.fontEngine.editing.movePointTo as any).mock.calls;
       const lastTwoCalls = movePointToCalls.slice(-2);
 
       // One of the last two calls should restore c1

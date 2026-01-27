@@ -75,9 +75,7 @@ describe("Pen tool", () => {
 
       expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
       const snapshot = ctx.fontEngine.$glyph.value;
-      const activeContour = snapshot?.contours.find(
-        (c) => c.id === snapshot.activeContourId,
-      );
+      const activeContour = snapshot?.contours.find((c) => c.id === snapshot.activeContourId);
       expect(activeContour?.points[0]?.x).toBe(150);
       expect(activeContour?.points[0]?.y).toBe(250);
     });
@@ -185,7 +183,9 @@ describe("Pen tool", () => {
       ctx.mocks.cursor.mocks.set.mockClear();
       sim.onMouseMove(createToolMouseEvent(202, 202));
 
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({
+        type: "pen-end",
+      });
     });
 
     it("should show pen cursor when not hovering over a point", () => {
@@ -207,10 +207,14 @@ describe("Pen tool", () => {
       sim.cancel();
 
       sim.onMouseMove(createToolMouseEvent(202, 202));
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenLastCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenLastCalledWith({
+        type: "pen-end",
+      });
 
       sim.onMouseMove(createToolMouseEvent(300, 300));
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenLastCalledWith({ type: "pen" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenLastCalledWith({
+        type: "pen",
+      });
     });
   });
 
@@ -307,7 +311,9 @@ describe("Pen tool", () => {
       ctx.mocks.cursor.mocks.set.mockClear();
       sim.onMouseMove(createToolMouseEvent(205, 205));
 
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({
+        type: "pen-end",
+      });
     });
 
     it("should not show pen-end cursor when outside zoom-aware hit radius (no active contour)", () => {
@@ -505,7 +511,9 @@ describe("Pen tool", () => {
       ctx.mocks.cursor.mocks.set.mockClear();
       sim.onMouseMove(createToolMouseEvent(302, 302));
 
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({
+        type: "pen-end",
+      });
     });
 
     it("should show pen-end cursor when hovering over middle point of non-active contour", () => {
@@ -523,7 +531,9 @@ describe("Pen tool", () => {
       ctx.mocks.cursor.mocks.set.mockClear();
       sim.onMouseMove(createToolMouseEvent(202, 202));
 
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({
+        type: "pen-end",
+      });
     });
   });
 
@@ -549,7 +559,9 @@ describe("Pen tool", () => {
       ctx.mocks.cursor.mocks.set.mockClear();
       sim.onMouseMove(createToolMouseEvent(102, 102));
 
-      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen-end" });
+      expect(ctx.mocks.cursor.mocks.set).toHaveBeenCalledWith({
+        type: "pen-end",
+      });
     });
 
     it("should show pen cursor when hovering over last point while actively drawing", () => {

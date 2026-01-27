@@ -2,7 +2,7 @@ import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 import type { ToolContext } from "../core/createContext";
-import { NudgePointsCommand, ScalePointsCommand } from "@/lib/commands";
+import { NudgePointsCommand, ScalePointsCommand, RotatePointsCommand } from "@/lib/commands";
 import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
@@ -23,7 +23,19 @@ export type SelectIntent =
   | { action: "commitPreview"; label: string }
   | { action: "cancelPreview" }
   | { action: "movePointsDelta"; delta: Point2D }
-  | { action: "scalePoints"; pointIds: PointId[]; sx: number; sy: number; anchor: Point2D }
+  | {
+      action: "scalePoints";
+      pointIds: PointId[];
+      sx: number;
+      sy: number;
+      anchor: Point2D;
+    }
+  | {
+      action: "rotatePoints";
+      pointIds: PointId[];
+      angle: number;
+      center: Point2D;
+    }
   | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
   | { action: "toggleSmooth"; pointId: PointId };
 
@@ -94,6 +106,10 @@ export function executeIntent(intent: SelectIntent, ctx: ToolContext): void {
       executeScalePoints(intent.pointIds, intent.sx, intent.sy, intent.anchor, ctx);
       break;
 
+    case "rotatePoints":
+      executeRotatePoints(intent.pointIds, intent.angle, intent.center, ctx);
+      break;
+
     case "nudge":
       executeNudge(intent.pointIds, intent.dx, intent.dy, ctx);
       break;
@@ -117,7 +133,11 @@ function executeSelectPoint(pointId: PointId, additive: boolean, ctx: ToolContex
   }
 }
 
-function executeSelectSegment(segmentId: SegmentId, additive: boolean, ctx: ToolContext): PointId[] {
+function executeSelectSegment(
+  segmentId: SegmentId,
+  additive: boolean,
+  ctx: ToolContext,
+): PointId[] {
   const segment = ctx.hitTest.findSegmentById(segmentId);
   if (!segment) return [];
 
@@ -184,6 +204,19 @@ function executeScalePoints(
   ctx.preview.cancelPreview();
   if (sx !== 1 || sy !== 1) {
     const cmd = new ScalePointsCommand(pointIds, sx, sy, anchor);
+    ctx.commands.execute(cmd);
+  }
+}
+
+function executeRotatePoints(
+  pointIds: PointId[],
+  angle: number,
+  center: Point2D,
+  ctx: ToolContext,
+): void {
+  ctx.preview.cancelPreview();
+  if (angle !== 0) {
+    const cmd = new RotatePointsCommand(pointIds, angle, center);
     ctx.commands.execute(cmd);
   }
 }

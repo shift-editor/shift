@@ -1,5 +1,6 @@
 import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
+import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { IRenderer } from "@/types/graphics";
 import type { ToolContext } from "../core/createContext";
@@ -29,13 +30,25 @@ export interface ResizeData {
   uniformScale: boolean;
 }
 
+export interface RotateData {
+  corner: CornerHandle;
+  startPos: Point2D;
+  lastPos: Point2D;
+  center: Point2D;
+  startAngle: number;
+  currentAngle: number;
+  draggedPointIds: PointId[];
+  initialPositions: Map<PointId, Point2D>;
+}
+
 export type SelectState =
   | { type: "idle"; intent?: SelectIntent }
   | { type: "ready"; hoveredPointId: PointId | null; intent?: SelectIntent }
   | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
   | { type: "selected"; hoveredPointId: PointId | null; intent?: SelectIntent }
   | { type: "dragging"; drag: DragData; intent?: SelectIntent }
-  | { type: "resizing"; resize: ResizeData; intent?: SelectIntent };
+  | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
+  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
 
 export interface SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean;

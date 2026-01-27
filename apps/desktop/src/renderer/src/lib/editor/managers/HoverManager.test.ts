@@ -101,10 +101,7 @@ describe("HoverManager", () => {
     const isPointSelected = (id: PointId) => id === asPointId("selected");
 
     it("should return selected when point is selected", () => {
-      const state = hover.getPointVisualState(
-        asPointId("selected"),
-        isPointSelected,
-      );
+      const state = hover.getPointVisualState(asPointId("selected"), isPointSelected);
       expect(state).toBe("selected");
     });
 
@@ -135,10 +132,7 @@ describe("HoverManager", () => {
 
     it("should prioritize selected over hovered", () => {
       hover.setHoveredPoint(asPointId("selected"));
-      const state = hover.getPointVisualState(
-        asPointId("selected"),
-        isPointSelected,
-      );
+      const state = hover.getPointVisualState(asPointId("selected"), isPointSelected);
       expect(state).toBe("selected");
     });
   });
@@ -147,10 +141,7 @@ describe("HoverManager", () => {
     const isSegmentSelected = (id: SegmentId) => id === asSegmentId("selected:segment");
 
     it("should return selected when segment is selected", () => {
-      const state = hover.getSegmentVisualState(
-        asSegmentId("selected:segment"),
-        isSegmentSelected,
-      );
+      const state = hover.getSegmentVisualState(asSegmentId("selected:segment"), isSegmentSelected);
       expect(state).toBe("selected");
     });
 
@@ -169,10 +160,7 @@ describe("HoverManager", () => {
     it("should prioritize selected over hovered", () => {
       const indicator = createSegmentIndicator("selected:segment");
       hover.setHoveredSegment(indicator);
-      const state = hover.getSegmentVisualState(
-        asSegmentId("selected:segment"),
-        isSegmentSelected,
-      );
+      const state = hover.getSegmentVisualState(asSegmentId("selected:segment"), isSegmentSelected);
       expect(state).toBe("selected");
     });
   });

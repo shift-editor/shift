@@ -35,9 +35,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
     this.#pointIds = [...pointIds];
   }
 
-  protected abstract transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[];
+  protected abstract transformPoints(points: readonly TransformablePoint[]): TransformablePoint[];
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
@@ -90,9 +88,7 @@ export class RotatePointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[] {
+  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     return Transform.rotatePoints(points, this.#angle, this.#origin);
   }
 }
@@ -111,9 +107,7 @@ export class ScalePointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[] {
+  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     return Transform.scalePoints(points, this.#sx, this.#sy, this.#origin);
   }
 }
@@ -130,9 +124,7 @@ export class ReflectPointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[] {
+  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     return Transform.reflectPoints(points, this.#axis, this.#origin);
   }
 }
@@ -149,9 +141,7 @@ export class TransformMatrixCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[] {
+  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     return Transform.applyMatrix(points, this.#matrix, this.#origin);
   }
 }
@@ -166,19 +156,13 @@ export class MoveSelectionToCommand extends BaseTransformCommand {
   #target: Point2D;
   #anchor: Point2D;
 
-  constructor(
-    pointIds: PointId[],
-    target: Point2D,
-    anchor: Point2D,
-  ) {
+  constructor(pointIds: PointId[], target: Point2D, anchor: Point2D) {
     super(pointIds);
     this.#target = target;
     this.#anchor = anchor;
   }
 
-  protected transformPoints(
-    points: readonly TransformablePoint[],
-  ): TransformablePoint[] {
+  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     const delta = Vec2.sub(this.#target, this.#anchor);
 
     return points.map((p) => {

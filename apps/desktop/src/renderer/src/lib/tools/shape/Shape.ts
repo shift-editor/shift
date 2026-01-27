@@ -1,11 +1,7 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { BaseTool, type ToolName, type ToolEvent } from "../core";
-import {
-  AddContourCommand,
-  CloseContourCommand,
-  AddPointCommand,
-} from "@/lib/commands";
+import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 
 type ShapeState =
@@ -109,23 +105,12 @@ export class Shape extends BaseTool<ShapeState> {
 
     this.ctx.commands.beginBatch("Draw Rectangle");
 
+    this.ctx.commands.execute(new AddPointCommand(rect.x, rect.y, "onCurve", false));
+    this.ctx.commands.execute(new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false));
     this.ctx.commands.execute(
-      new AddPointCommand(rect.x, rect.y, "onCurve", false),
+      new AddPointCommand(rect.x + rect.width, rect.y + rect.height, "onCurve", false),
     );
-    this.ctx.commands.execute(
-      new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false),
-    );
-    this.ctx.commands.execute(
-      new AddPointCommand(
-        rect.x + rect.width,
-        rect.y + rect.height,
-        "onCurve",
-        false,
-      ),
-    );
-    this.ctx.commands.execute(
-      new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false),
-    );
+    this.ctx.commands.execute(new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false));
     this.ctx.commands.execute(new CloseContourCommand());
     this.ctx.commands.execute(new AddContourCommand());
 

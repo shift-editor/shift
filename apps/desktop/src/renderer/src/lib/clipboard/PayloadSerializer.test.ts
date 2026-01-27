@@ -113,9 +113,7 @@ describe("PayloadSerializer", () => {
             closed: false,
           },
           {
-            points: [
-              { x: 100, y: 100, pointType: "onCurve", smooth: false },
-            ],
+            points: [{ x: 100, y: 100, pointType: "onCurve", smooth: false }],
             closed: true,
           },
         ],

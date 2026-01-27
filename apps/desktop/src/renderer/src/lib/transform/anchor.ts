@@ -11,7 +11,10 @@ import type { AnchorPosition } from "@/components/sidebar/TransformGrid";
  * - bl (bottom-left), bm (bottom-middle), br (bottom-right)
  */
 export function anchorToPoint(anchor: AnchorPosition, bounds: Rect2D): Point2D {
-  const center = Vec2.midpoint({ x: bounds.left, y: bounds.top }, { x: bounds.right, y: bounds.bottom });
+  const center = Vec2.midpoint(
+    { x: bounds.left, y: bounds.top },
+    { x: bounds.right, y: bounds.bottom },
+  );
 
   switch (anchor) {
     case "tl":

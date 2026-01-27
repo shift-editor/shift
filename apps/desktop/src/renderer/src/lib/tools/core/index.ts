@@ -12,10 +12,7 @@ export {
   type ShapeStyle,
   type HandleStyle,
 } from "./DrawAPI";
-export {
-  ToolManager,
-  type ToolConstructor,
-} from "./ToolManager";
+export { ToolManager, type ToolConstructor } from "./ToolManager";
 export {
   createContext,
   type ToolContext,

@@ -72,11 +72,7 @@ describe("Alignment", () => {
 
   describe("distributePoints", () => {
     it("distributes points horizontally with equal spacing", () => {
-      const points = [
-        createPoint(1, 100, 100),
-        createPoint(2, 300, 100),
-        createPoint(3, 120, 100),
-      ];
+      const points = [createPoint(1, 100, 100), createPoint(2, 300, 100), createPoint(3, 120, 100)];
       const distributed = Alignment.distributePoints(points, "horizontal");
 
       const sorted = distributed.sort((a, b) => a.x - b.x);
@@ -86,11 +82,7 @@ describe("Alignment", () => {
     });
 
     it("distributes points vertically with equal spacing", () => {
-      const points = [
-        createPoint(1, 100, 100),
-        createPoint(2, 100, 400),
-        createPoint(3, 100, 150),
-      ];
+      const points = [createPoint(1, 100, 100), createPoint(2, 100, 400), createPoint(3, 100, 150)];
       const distributed = Alignment.distributePoints(points, "vertical");
 
       const sorted = distributed.sort((a, b) => a.y - b.y);
@@ -100,15 +92,11 @@ describe("Alignment", () => {
     });
 
     it("keeps first and last points in place horizontally", () => {
-      const points = [
-        createPoint(1, 100, 100),
-        createPoint(2, 300, 100),
-        createPoint(3, 120, 100),
-      ];
+      const points = [createPoint(1, 100, 100), createPoint(2, 300, 100), createPoint(3, 120, 100)];
       const distributed = Alignment.distributePoints(points, "horizontal");
 
-      const first = distributed.find((p) => p.id === "0:1" as PointId);
-      const last = distributed.find((p) => p.id === "0:2" as PointId);
+      const first = distributed.find((p) => p.id === ("0:1" as PointId));
+      const last = distributed.find((p) => p.id === ("0:2" as PointId));
       expect(first?.x).toBe(100);
       expect(last?.x).toBe(300);
     });
@@ -136,11 +124,7 @@ describe("Alignment", () => {
     });
 
     it("preserves point IDs during distribution", () => {
-      const points = [
-        createPoint(1, 100, 100),
-        createPoint(2, 300, 100),
-        createPoint(3, 120, 100),
-      ];
+      const points = [createPoint(1, 100, 100), createPoint(2, 300, 100), createPoint(3, 120, 100)];
       const distributed = Alignment.distributePoints(points, "horizontal");
       const ids = distributed.map((p) => p.id).sort();
       expect(ids).toEqual(["0:1", "0:2", "0:3"]);

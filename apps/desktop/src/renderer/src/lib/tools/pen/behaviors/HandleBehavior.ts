@@ -10,19 +10,25 @@ const DRAG_THRESHOLD = 3;
 export class HandleBehavior implements PenBehavior {
   canHandle(state: PenState, event: ToolEvent): boolean {
     if (state.type === "anchored") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel" || event.type === "keyDown";
+      return (
+        event.type === "drag" ||
+        event.type === "dragEnd" ||
+        event.type === "dragCancel" ||
+        event.type === "keyDown"
+      );
     }
     if (state.type === "dragging") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel" || event.type === "keyDown";
+      return (
+        event.type === "drag" ||
+        event.type === "dragEnd" ||
+        event.type === "dragCancel" ||
+        event.type === "keyDown"
+      );
     }
     return false;
   }
 
-  transition(
-    state: PenState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): PenState | null {
+  transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
     if (state.type === "anchored") {
       return this.transitionAnchored(state, event, ctx);
     }
@@ -32,12 +38,7 @@ export class HandleBehavior implements PenBehavior {
     return null;
   }
 
-  onTransition(
-    prev: PenState,
-    next: PenState,
-    _event: ToolEvent,
-    ctx: ToolContext,
-  ): void {
+  onTransition(prev: PenState, next: PenState, _event: ToolEvent, ctx: ToolContext): void {
     if ((prev.type === "anchored" || prev.type === "dragging") && next.type === "ready") {
       if (ctx.commands.isBatching) {
         if (next.intent?.action === "setCursor") {
@@ -181,7 +182,12 @@ export class HandleBehavior implements PenBehavior {
     return {};
   }
 
-  private updateHandles(anchor: AnchorData, handles: HandleData, mousePos: Point2D, ctx: ToolContext): void {
+  private updateHandles(
+    anchor: AnchorData,
+    handles: HandleData,
+    mousePos: Point2D,
+    ctx: ToolContext,
+  ): void {
     const { position } = anchor;
 
     if (handles.cpOut) {

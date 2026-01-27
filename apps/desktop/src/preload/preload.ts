@@ -151,12 +151,7 @@ const fontEngineAPI = {
    * Add a point to the active contour.
    * Returns CommandResult JSON.
    */
-  addPoint: (
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string => {
+  addPoint: (x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string => {
     return fontEngineInstance.addPoint(x, y, pointType, smooth);
   },
 
@@ -171,13 +166,7 @@ const fontEngineAPI = {
     pointType: "onCurve" | "offCurve",
     smooth: boolean,
   ): string => {
-    return fontEngineInstance.addPointToContour(
-      contourId,
-      x,
-      y,
-      pointType,
-      smooth,
-    );
+    return fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth);
   },
 
   /**
@@ -207,13 +196,7 @@ const fontEngineAPI = {
     pointType: "onCurve" | "offCurve",
     smooth: boolean,
   ): string => {
-    return fontEngineInstance.insertPointBefore(
-      beforePointId,
-      x,
-      y,
-      pointType,
-      smooth,
-    );
+    return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
   },
 
   /**
@@ -264,8 +247,7 @@ contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 type ThemeName = "light" | "dark" | "system";
 
 const electronAPI = {
-  openFontDialog: (): Promise<string | null> =>
-    ipcRenderer.invoke("dialog:openFont"),
+  openFontDialog: (): Promise<string | null> => ipcRenderer.invoke("dialog:openFont"),
   onMenuOpenFont: (callback: (path: string) => void) => {
     const handler = (_event: any, path: string) => callback(path);
     ipcRenderer.on("menu:open-font", handler);
@@ -294,15 +276,13 @@ const electronAPI = {
     return () => ipcRenderer.removeListener("theme:set", handler);
   },
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke("theme:get"),
-  setTheme: (theme: ThemeName): Promise<void> =>
-    ipcRenderer.invoke("theme:set", theme),
+  setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke("theme:set", theme),
 
   // Window controls
   closeWindow: (): Promise<void> => ipcRenderer.invoke("window:close"),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke("window:minimize"),
   maximizeWindow: (): Promise<void> => ipcRenderer.invoke("window:maximize"),
-  isWindowMaximized: (): Promise<boolean> =>
-    ipcRenderer.invoke("window:isMaximized"),
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke("window:isMaximized"),
 
   // Document state
   setDocumentDirty: (dirty: boolean): Promise<void> =>

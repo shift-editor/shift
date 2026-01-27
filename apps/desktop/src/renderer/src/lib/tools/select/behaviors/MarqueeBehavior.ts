@@ -18,11 +18,7 @@ export class MarqueeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
     if (state.type === "selecting") {
       return this.transitionSelecting(state, event, ctx);
     }

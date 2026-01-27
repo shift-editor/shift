@@ -24,6 +24,7 @@ import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
 import { Polygon, Vec2 } from "@shift/geo";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 import { drawHandle } from "./rendering/handles";
 import { ViewportManager } from "./managers";
@@ -59,16 +60,14 @@ import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 
 export class Editor {
   private $previewMode: WritableSignal<boolean>;
+  private $hoveredBoundingBoxHandle: WritableSignal<BoundingBoxHitResult>;
 
   #selection: SelectionManager;
   #hover: HoverManager;
   #renderer: GlyphRenderer;
 
   #toolManager: ToolManager | null = null;
-  #toolMetadata: Map<
-    ToolName,
-    { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }
-  >;
+  #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
   private $activeTool: WritableSignal<ToolName>;
 
   #viewport: ViewportManager;
@@ -94,6 +93,7 @@ export class Editor {
 
     this.$previewMode = signal(false);
     this.$cursor = signal("default");
+    this.$hoveredBoundingBoxHandle = signal<BoundingBoxHitResult>(null);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
@@ -113,6 +113,7 @@ export class Editor {
       paintHandle: (ctx, x, y, handleType, state, segmentAngle) =>
         this.paintHandle(ctx, x, y, handleType, state, segmentAngle),
       getSelectedPointData: () => this.#getSelectedPointData(),
+      getHoveredBoundingBoxHandle: () => this.$hoveredBoundingBoxHandle.peek(),
     });
 
     this.#clipboardManager = new ClipboardManager({
@@ -120,8 +121,7 @@ export class Editor {
       getSelectedPointIds: () => this.#selection.selectedPointIds.peek(),
       getSelectedSegmentIds: () => this.#selection.selectedSegmentIds.peek(),
       getGlyphName: () => this.#fontEngine.$glyph.value?.name,
-      pasteContours: (json, x, y) =>
-        this.#fontEngine.editing.pasteContours(json, x, y),
+      pasteContours: (json, x, y) => this.#fontEngine.editing.pasteContours(json, x, y),
       selectPoints: (ids) => this.selectPoints(ids),
     });
 
@@ -268,14 +268,20 @@ export class Editor {
     this.#hover.setHoveredSegment(indicator);
   }
 
+  public setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
+    this.$hoveredBoundingBoxHandle.set(handle);
+  }
+
+  public getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
+    return this.$hoveredBoundingBoxHandle.peek();
+  }
+
   public clearHover(): void {
     this.#hover.clearHover();
   }
 
   public getPointVisualState(pointId: PointId): VisualState {
-    return this.#hover.getPointVisualState(pointId, (id) =>
-      this.#selection.isPointSelected(id),
-    );
+    return this.#hover.getPointVisualState(pointId, (id) => this.#selection.isPointSelected(id));
   }
 
   public getSegmentVisualState(segmentId: SegmentId): VisualState {
@@ -402,11 +408,7 @@ export class Editor {
     this.#viewport.zoomOut();
   }
 
-  public zoomToPoint(
-    screenX: number,
-    screenY: number,
-    zoomDelta: number,
-  ): void {
+  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
@@ -533,10 +535,7 @@ export class Editor {
   public getSelectionBounds(): SelectionBounds | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
-    return getSegmentAwareBounds(
-      snapshot,
-      this.#selection.selectedPointIds.peek(),
-    );
+    return getSegmentAwareBounds(snapshot, this.#selection.selectedPointIds.peek());
   }
 
   /**
@@ -695,7 +694,7 @@ export class Editor {
 
   public getSelectionBoundingRect(): Rect2D | null {
     const selectedPoints = this.#selection.selectedPointIds.peek();
-    if (selectedPoints.size === 0) return null;
+    if (selectedPoints.size <= 1) return null;
 
     const mode = this.#selection.selectionMode.peek();
     if (mode !== "committed") return null;

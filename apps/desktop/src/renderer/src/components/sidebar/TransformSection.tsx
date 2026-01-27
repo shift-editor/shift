@@ -60,9 +60,7 @@ export const TransformSection = () => {
   return (
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-muted">
-          Position
-        </div>
+        <div className="text-xs text-muted">Position</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             label="X"
@@ -80,9 +78,7 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-muted">
-          Rotation
-        </div>
+        <div className="text-xs text-muted">Rotation</div>
         <div className="flex gap-2 items-center">
           <SidebarInput
             label=""

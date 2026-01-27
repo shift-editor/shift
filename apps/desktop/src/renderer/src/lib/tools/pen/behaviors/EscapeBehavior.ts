@@ -7,11 +7,7 @@ export class EscapeBehavior implements PenBehavior {
     return state.type === "ready" && event.type === "keyDown" && event.key === "Escape";
   }
 
-  transition(
-    state: PenState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): PenState | null {
+  transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
     if (state.type !== "ready") return null;
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 
