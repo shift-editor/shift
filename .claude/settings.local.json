@@ -63,7 +63,11 @@
       "Bash(pnpm exec tsc:*)",
       "WebFetch(domain:tkdodo.eu)",
       "Bash(pnpm list:*)",
-      "WebFetch(domain:releases.electronjs.org)"
+      "WebFetch(domain:releases.electronjs.org)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:reactflow.dev)",
+      "Bash(npx vitest:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

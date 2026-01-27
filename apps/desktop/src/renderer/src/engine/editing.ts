@@ -222,6 +222,21 @@ export class EditingManager {
     );
   }
 
+  clearActiveContour(): void {
+    if (!this.#ctx.hasSession()) {
+      return;
+    }
+
+    this.#ctx.commit(
+      (result) => {
+        if (!result.success) {
+          throw new NativeOperationError("clearActiveContour", result.error ?? undefined);
+        }
+      },
+      () => this.#ctx.native.clearActiveContour(),
+    );
+  }
+
   reverseContour(contourId: ContourId): void {
     this.#requireSession();
 
@@ -301,6 +316,12 @@ export class EditingManager {
     }
 
     return result.affectedPointIds?.map(asPointId) ?? [];
+  }
+
+  restoreSnapshot(snapshot: GlyphSnapshot): void {
+    this.#requireSession();
+    this.#ctx.native.restoreSnapshot(JSON.stringify(snapshot));
+    this.#ctx.emitGlyph(snapshot);
   }
 
   #requireSession(): void {

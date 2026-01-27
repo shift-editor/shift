@@ -82,6 +82,10 @@ impl GlyphLayer {
         self.contours.remove(&id)
     }
 
+    pub fn clear_contours(&mut self) {
+        self.contours.clear();
+    }
+
     pub fn components(&self) -> &HashMap<ComponentId, Component> {
         &self.components
     }

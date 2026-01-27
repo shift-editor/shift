@@ -1,4 +1,4 @@
-import { HandleType } from "@/types/handle";
+import type { HandleType } from "@/lib/editor/rendering/handles";
 import { ThemeTokens } from "../theme";
 import { createHandleStyles, DrawStyle, HandleStyles } from "./handles";
 import { createGuideStyles, createDefaultStyles } from "./guides";

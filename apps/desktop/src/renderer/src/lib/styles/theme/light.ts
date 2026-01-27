@@ -22,8 +22,9 @@ export const lightTheme: ThemeTokens = {
     },
   },
   canvas: {
+    pink: "#F219D1",
     indicator: "#1886D7",
-    purple: "#8b5cf6",
+    purple: "#6B15EC",
     orange: "#f97316",
     green: "#03D211",
     indigo: "#6366f1",

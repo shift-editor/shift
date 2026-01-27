@@ -4,35 +4,38 @@
 
 - **Purpose**: State machine-based editing tools (Pen, Select, Hand, Shape)
 - **Language**: TypeScript
-- **Key Files**: `core/StateMachine.ts`, `pen/Pen.ts`, `select/Select.ts`, `hand/Hand.ts`, `shape/Shape.ts`
+- **Key Files**: `core/BaseTool.ts`, `core/ToolManager.ts`, `core/GestureDetector.ts`, `pen/Pen.ts`, `select/Select.ts`
 - **Dependencies**: lib/reactive, lib/editor, lib/commands
-- **Dependents**: views/Editor.tsx
+- **Dependents**: views/Editor.tsx, components/InteractiveScene.tsx
 
 ## File Structure
 
 ```
 src/renderer/src/lib/tools/
 ├── core/
-│   ├── StateMachine.ts      # Generic state machine
-│   ├── StateMachine.test.ts
+│   ├── BaseTool.ts           # Abstract base class for tools
+│   ├── GestureDetector.ts    # Converts pointer events to semantic events
+│   ├── ToolManager.ts        # Tool orchestration and switching
+│   ├── createContext.ts      # ToolContext factory
+│   ├── DrawAPI.ts            # Interactive drawing API
 │   └── index.ts
 ├── pen/
-│   ├── Pen.ts               # Pen tool class
-│   ├── states.ts            # PenState types
-│   ├── commands.ts          # Bezier operations
+│   ├── Pen.ts                # Pen tool class
+│   ├── intents.ts            # Pen cursor logic
 │   └── index.ts
 ├── select/
-│   ├── Select.ts            # Select tool class
-│   ├── states.ts            # SelectState types
-│   ├── commands.ts          # Selection operations
+│   ├── Select.ts             # Select tool class
+│   ├── cursor.ts             # Select cursor logic
+│   ├── types.ts              # SelectState types
+│   ├── utils.ts              # Pure utility functions
 │   └── index.ts
 ├── hand/
-│   ├── Hand.ts              # Pan tool
+│   ├── Hand.ts               # Pan tool
 │   └── index.ts
 ├── shape/
-│   ├── Shape.ts             # Rectangle tool
+│   ├── Shape.ts              # Rectangle tool
 │   └── index.ts
-├── tools.ts                 # Tool registry
+├── tools.ts                  # Tool name types
 ├── Pen.test.ts
 ├── Select.test.ts
 └── docs/
@@ -42,43 +45,75 @@ src/renderer/src/lib/tools/
 
 ## Core Abstractions
 
-### StateMachine<TState> (core/StateMachine.ts)
+### BaseTool<S, Settings> (core/BaseTool.ts)
 
 ```typescript
-interface StateMachine<TState extends { type: string }> {
-  readonly state: WritableSignal<TState>;
-  readonly currentType: TState["type"];
-  readonly current: TState;
+abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
+  abstract readonly id: ToolName;
+  state: S;
+  settings: Settings;
+  protected ctx: ToolContext;
 
-  transition(newState: TState): void;
-  isIn<T extends TState["type"]>(...types: T[]): boolean;
-  when<T extends TState["type"]>(type: T, handler: (state) => void): void;
-  match<R>(handlers: { [K in TState["type"]]?: (state) => R }): R | undefined;
+  abstract initialState(): S;
+  abstract transition(state: S, event: ToolEvent): S;
+
+  onTransition?(prev: S, next: S, event: ToolEvent): void;
+  render?(renderer: IRenderer): void;
+  activate?(): void;
+  deactivate?(): void;
+
+  handleEvent(event: ToolEvent): void;
+  handleModifier(key: string, pressed: boolean): boolean;
+
+  protected batch<T>(name: string, fn: () => T): T;
+  protected beginPreview(): void;
+  protected commitPreview(label: string): void;
+  protected cancelPreview(): void;
 }
 ```
 
-### PenState (pen/states.ts)
+### ToolEvent (core/GestureDetector.ts)
+
+```typescript
+type ToolEvent =
+  | { type: "pointerMove"; point: Point2D }
+  | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "doubleClick"; point: Point2D }
+  | { type: "dragStart"; point: Point2D; screenPoint: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "drag"; point: Point2D; screenPoint: Point2D; origin: Point2D; ... }
+  | { type: "dragEnd"; point: Point2D; screenPoint: Point2D; origin: Point2D; ... }
+  | { type: "dragCancel" }
+  | { type: "keyDown"; key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean }
+  | { type: "keyUp"; key: string };
+```
+
+### ToolManager (core/ToolManager.ts)
+
+```typescript
+class ToolManager {
+  activate(tool: BaseTool): void;
+  handlePointerDown(point: Point2D, screenPoint: Point2D, modifiers: Modifiers): void;
+  handlePointerMove(point: Point2D, screenPoint: Point2D, modifiers: Modifiers): void;
+  handlePointerUp(point: Point2D, screenPoint: Point2D): void;
+  handleKeyDown(event: KeyboardEvent): void;
+  handleKeyUp(event: KeyboardEvent): void;
+
+  requestTemporary(name: ToolName, options?: { onActivate?, onReturn? }): void;
+  returnFromTemporary(): void;
+}
+```
+
+### PenState (pen/Pen.ts)
 
 ```typescript
 type PenState =
   | { type: "idle" }
-  | { type: "ready" }
+  | { type: "ready"; mousePos: Point2D }
   | { type: "anchored"; anchor: AnchorData }
-  | {
-      type: "dragging";
-      anchor: AnchorData;
-      handles: HandleData;
-      mousePos: Point2D;
-    };
-
-interface AnchorData {
-  position: Point2D;
-  pointId: PointId;
-  contourContext: ContourContext;
-}
+  | { type: "dragging"; anchor: AnchorData; handles: HandleData; mousePos: Point2D };
 ```
 
-### SelectState (select/states.ts)
+### SelectState (select/types.ts)
 
 ```typescript
 type SelectState =
@@ -86,155 +121,168 @@ type SelectState =
   | { type: "ready"; hoveredPointId: PointId | null }
   | { type: "selecting"; selection: SelectionData }
   | { type: "selected"; hoveredPointId: PointId | null }
-  | { type: "dragging"; drag: DragData };
+  | { type: "dragging"; drag: DragData }
+  | { type: "resizing"; resize: ResizeData };
 
 interface DragData {
   anchorPointId: PointId;
   startPos: Point2D;
-  currentPos: Point2D;
+  lastPos: Point2D;
+  totalDelta: Point2D;
+  draggedPointIds: PointId[];
 }
-```
 
-### Tool Interface (types/tool.ts)
-
-```typescript
-interface Tool {
-  name: ToolName;
-  setIdle(): void;
-  setReady(): void;
-  onMouseDown(e: MouseEvent): void;
-  onMouseUp(e: MouseEvent): void;
-  onMouseMove(e: MouseEvent): void;
-  keyDownHandler?(e: KeyboardEvent): void;
-  keyUpHandler?(e: KeyboardEvent): void;
-  onDoubleClick?(e: MouseEvent): void;
-  drawInteractive?(ctx: IRenderer): void;
-  dispose?(): void;
+interface ResizeData {
+  edge: BoundingRectEdge;
+  startPos: Point2D;
+  lastPos: Point2D;
+  initialBounds: Rect2D;
+  anchorPoint: Point2D;
+  draggedPointIds: PointId[];
+  initialPositions: Map<PointId, Point2D>;
+  uniformScale: boolean;
 }
 ```
 
 ## Key Patterns
 
-### State Machine with Signals
+### Tool State Machine
 
 ```typescript
-class Select implements Tool {
-  #sm = createStateMachine<SelectState>({ type: "idle" });
+class Select extends BaseTool<SelectState> {
+  readonly id: ToolName = "select";
 
-  #renderEffect = effect(() => {
-    if (!this.#sm.isIn("idle")) {
-      this.#editor.requestRedraw();
+  initialState(): SelectState {
+    return { type: "idle" };
+  }
+
+  transition(state: SelectState, event: ToolEvent): SelectState {
+    switch (state.type) {
+      case "ready":
+        return this.transitionReady(state, event);
+      case "selected":
+        return this.transitionSelected(state, event);
+      // ... other states
     }
-  });
+    return state;
+  }
 
-  onMouseDown(e: MouseEvent): void {
-    this.#sm.when("ready", (state) => {
-      if (state.hoveredPointId) {
-        this.#sm.transition({
-          type: "selected",
-          hoveredPointId: state.hoveredPointId,
-        });
-      }
-    });
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
+    // Handle side effects after state changes
+    if (prev.type === "dragging" && next.type === "selected") {
+      this.commitPreview("Move Points");
+    }
   }
 }
 ```
 
-### Commands Separation
+### GestureDetector Event Conversion
 
 ```typescript
-// pen/commands.ts - Pure geometry operations
-export const PenCommands = {
-  placeAnchor(pos: Point2D): AnchorData { /* ... */ },
-  createHandles(anchor: AnchorData, mousePos: Point2D): HandleData { /* ... */ },
-  updateHandles(anchor: AnchorData, handles: HandleData, mousePos: Point2D): void { /* ... */ },
-};
+// InteractiveScene.tsx handles raw pointer events
+<canvas
+  onPointerDown={(e) => {
+    toolManager.handlePointerDown(upmPoint, screenPoint, {
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+    });
+  }}
+/>
 
-// Pen.ts - Uses commands
-onMouseDown(e) {
-  const anchor = PenCommands.placeAnchor(pos);
-  this.#sm.transition({ type: 'anchored', anchor });
-}
+// GestureDetector converts to semantic events
+// click (no drag), drag sequence, double-click
 ```
 
-### Tool Context Usage
+### ToolContext Dependency Injection
 
 ```typescript
-class Pen implements Tool {
-  onMouseMove(e: MouseEvent): void {
-    const ctx = this.#editor.createToolContext();
-    const upmPos = ctx.viewport.projectScreenToUpm(e.clientX, e.clientY);
-
-    this.#sm.when("dragging", (state) => {
-      PenCommands.updateHandles(state.anchor, state.handles, upmPos);
-      ctx.requestRedraw();
-    });
-  }
+interface ToolContext {
+  screen: ScreenService;
+  selection: SelectionService;
+  hover: HoverService;
+  edit: EditService;
+  preview: PreviewService;
+  transform: TransformService;
+  cursor: CursorService;
+  render: RenderService;
+  viewport: ViewportService;
+  hitTest: HitTestService;
+  commands: CommandHistory;
+  tools: ToolSwitchService;
 }
 ```
 
 ## API Surface
 
-| Tool   | States                                     | Key Methods                               |
-| ------ | ------------------------------------------ | ----------------------------------------- |
-| Select | idle, ready, selecting, selected, dragging | hitTest, selectPoint, moveSelectedPoints  |
-| Pen    | idle, ready, anchored, dragging            | placeAnchor, createHandles, updateHandles |
-| Hand   | idle, ready, dragging                      | pan viewport                              |
-| Shape  | idle, ready, dragging                      | create rectangle                          |
+| Tool   | States                                           | Key Features                                      |
+| ------ | ------------------------------------------------ | ------------------------------------------------- |
+| Select | idle, ready, selecting, selected, dragging, resizing | Point/segment selection, drag, resize, nudge      |
+| Pen    | idle, ready, anchored, dragging                  | Bezier curves, contour close/continue/split       |
+| Hand   | idle, ready, dragging                            | Canvas panning, Space bar activation              |
+| Shape  | idle, ready, dragging                            | Rectangle creation                                |
 
 ## Common Operations
 
-### Create and use state machine
+### Create a new tool
 
 ```typescript
-const sm = createStateMachine<MyState>({ type: "idle" });
-sm.transition({ type: "active", data: 123 });
-if (sm.isIn("active")) {
-  sm.when("active", (s) => console.log(s.data));
+class MyTool extends BaseTool<MyState> {
+  readonly id: ToolName = "myTool";
+
+  initialState(): MyState {
+    return { type: "idle" };
+  }
+
+  transition(state: MyState, event: ToolEvent): MyState {
+    // Pure state transition logic
+    return state;
+  }
+
+  onTransition(prev: MyState, next: MyState, event: ToolEvent): void {
+    // Side effects: cursor updates, preview commit, etc.
+  }
+
+  activate(): void {
+    this.state = { type: "ready" };
+    this.ctx.cursor.set({ type: "crosshair" });
+  }
 }
 ```
 
-### Tool event handling
+### Testing tools with ToolEventSimulator
 
 ```typescript
-onMouseDown(e: MouseEvent): void {
-  const pos = this.#editor.projectScreenToUpm(e.clientX, e.clientY);
+import { ToolEventSimulator, createMockToolContext, createToolMouseEvent } from "@/testing";
 
-  this.#sm.match({
-    ready: () => this.startAction(pos),
-    selected: () => this.beginDrag(pos),
-  });
-}
-```
+const ctx = createMockToolContext();
+const tool = new Select(ctx);
+const sim = new ToolEventSimulator(tool);
 
-### Interactive drawing
+sim.setReady();
+sim.onMouseDown(createToolMouseEvent(100, 100));
+sim.onMouseMove(createToolMouseEvent(150, 150));
+sim.onMouseUp(createToolMouseEvent(150, 150));
 
-```typescript
-drawInteractive(ctx: IRenderer): void {
-  this.#sm.when('selecting', (state) => {
-    const { start, current } = state.selection;
-    ctx.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
-  });
-}
+expect(tool.getState().type).toBe("selected");
 ```
 
 ## Constants
 
 ```typescript
-// Pen
-const DRAG_THRESHOLD = 3; // UPM units before handles created
-const CLOSE_HIT_RADIUS = 8; // Detect close click
+// GestureDetector
+const DRAG_THRESHOLD = 3; // Screen pixels before drag starts
+const DOUBLE_CLICK_TIME = 300; // ms
+const DOUBLE_CLICK_DISTANCE = 5; // pixels
 
-// Select
-const HIT_RADIUS = 4; // Point hit detection
-const DRAG_THRESHOLD = 2; // UPM units before drag
+// Nudge amounts
+const NUDGES_VALUES = { small: 1, medium: 10, large: 100 };
 ```
 
 ## Constraints and Invariants
 
-1. **State Exhaustiveness**: State machine transitions must handle all states
-2. **Idle on Deactivate**: Tools transition to 'idle' when setIdle() called
-3. **Effect Cleanup**: Tools dispose() their effects
+1. **Pure Transitions**: `transition()` returns new state, side effects in `onTransition()`
+2. **State in State Machine**: No shadow state outside state variants
+3. **Idle on Deactivate**: Tools transition to 'idle' when deactivated
 4. **UPM Coordinates**: All tool operations work in UPM space
 5. **Single Active Tool**: Only one tool receives events at a time
 6. **Keyboard Shortcuts**: V=Select, P=Pen, H=Hand, S=Shape

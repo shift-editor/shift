@@ -29,7 +29,8 @@ describe("Theme Tokens", () => {
     });
 
     it("should have all canvas accent color tokens", () => {
-      expect(lightTheme.canvas.purple).toBe("#8b5cf6");
+      expect(lightTheme.canvas.pink).toBe("#F219D1");
+      expect(lightTheme.canvas.purple).toBe("#6B15EC");
       expect(lightTheme.canvas.orange).toBe("#f97316");
       expect(lightTheme.canvas.green).toBe("#03D211");
       expect(lightTheme.canvas.indigo).toBe("#6366f1");
@@ -53,9 +54,9 @@ describe("Canvas Styles", () => {
       expect(styles.handles.last).toBeDefined();
     });
 
-    it("should use theme cyan for anchor handles", () => {
+    it("should use theme pink for corner and cyan for first/last handles", () => {
       expect(styles.handles.corner.idle.strokeStyle).toBe(
-        lightTheme.canvas.cyan,
+        lightTheme.canvas.pink,
       );
       expect(styles.handles.first.idle.strokeStyle).toBe(
         lightTheme.canvas.cyan,

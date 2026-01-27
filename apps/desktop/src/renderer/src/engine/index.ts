@@ -27,13 +27,6 @@ export {
   NativeOperationError,
 } from "./errors";
 
-// Segment parsing
-export {
-  parseSegments,
-  parseGlyphSegments,
-  getSegmentPoints,
-} from "./segments";
-
 // Mock for testing
 export { MockFontEngine, createMockNative } from "./mock";
 

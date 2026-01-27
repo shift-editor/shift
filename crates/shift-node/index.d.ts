@@ -53,8 +53,10 @@ export declare class FontEngine {
   addEmptyContour(): string
   getActiveContourId(): string | null
   setActiveContour(contourId: string): string
+  clearActiveContour(): string
   getSnapshot(): string | null
   getSnapshotData(): JSGlyphSnapshot
+  restoreSnapshot(snapshotJson: string): string
   addPoint(x: number, y: number, pointType: string, smooth: boolean): string
   addPointToContour(contourId: string, x: number, y: number, pointType: string, smooth: boolean): string
   insertPointBefore(beforePointId: string, x: number, y: number, pointType: string, smooth: boolean): string

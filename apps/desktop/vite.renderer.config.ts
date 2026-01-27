@@ -16,7 +16,16 @@ export default defineConfig(async () => {
     plugins: [
       tailwindcss(),
       react(),
-      svgr({ include: "**/*.svg" }),
+      svgr({
+        include: "**/*.svg",
+        svgrOptions: {
+          replaceAttrValues: {
+            "#000": "currentColor",
+            "#000000": "currentColor",
+            black: "currentColor",
+          },
+        },
+      }),
       tsconfigPaths(),
     ],
     resolve: {

@@ -36,15 +36,17 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       // Update viewport with actual font metrics (UPM, descender, guides)
       editor.updateMetricsFromFont();
 
-      editor.redrawGlyph();
+      editor.requestRedraw();
     };
 
     initEditor();
 
-    editor.getActiveTool().setReady();
+    const toolManager = editor.getToolManager();
+    const activeToolId = editor.activeTool.peek();
+    toolManager.activate(activeToolId);
 
     return () => {
-      editor.getActiveTool().setIdle();
+      toolManager.reset();
       editor.endEditSession();
     };
   }, [glyphId]);

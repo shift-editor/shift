@@ -34,10 +34,11 @@ import type {
   LineSegment,
   QuadSegment,
   CubicSegment,
+  SegmentPoint,
 } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
-import type { PointId } from "@shift/types";
+import type { PointId, PointSnapshot, ContourSnapshot } from "@shift/types";
 import { asPointId } from "@shift/types";
 
 export interface SegmentHitResult {
@@ -177,4 +178,123 @@ export const Segment = {
         ];
     }
   },
+
+  getPoints(segment: SegmentType): SegmentPoint[] {
+    switch (segment.type) {
+      case "line":
+        return [segment.points.anchor1, segment.points.anchor2];
+      case "quad":
+        return [
+          segment.points.anchor1,
+          segment.points.control,
+          segment.points.anchor2,
+        ];
+      case "cubic":
+        return [
+          segment.points.anchor1,
+          segment.points.control1,
+          segment.points.control2,
+          segment.points.anchor2,
+        ];
+    }
+  },
+
+  parse(points: PointSnapshot[], closed: boolean): SegmentType[] {
+    if (points.length < 2) {
+      return [];
+    }
+
+    const segments: SegmentType[] = [];
+    let index = 0;
+
+    while (index < points.length - 1) {
+      const p1 = points[index];
+      const p2 = points[index + 1];
+
+      if (p1.pointType === "onCurve" && p2.pointType === "onCurve") {
+        segments.push({
+          type: "line",
+          points: { anchor1: p1, anchor2: p2 },
+        });
+        index += 1;
+        continue;
+      }
+
+      if (p1.pointType === "onCurve" && p2.pointType === "offCurve") {
+        const p3 = points[index + 2];
+
+        if (!p3) {
+          break;
+        }
+
+        if (p3.pointType === "onCurve") {
+          segments.push({
+            type: "quad",
+            points: { anchor1: p1, control: p2, anchor2: p3 },
+          });
+          index += 2;
+          continue;
+        }
+
+        if (p3.pointType === "offCurve") {
+          const p4 = points[index + 3];
+          if (!p4) {
+            break;
+          }
+
+          segments.push({
+            type: "cubic",
+            points: { anchor1: p1, control1: p2, control2: p3, anchor2: p4 },
+          });
+          index += 3;
+          continue;
+        }
+      }
+
+      index += 1;
+    }
+
+    if (closed && points.length >= 2) {
+      const lastOnCurve = findLastOnCurve(points);
+      const firstOnCurve = findFirstOnCurve(points);
+
+      if (lastOnCurve && firstOnCurve && lastOnCurve !== firstOnCurve) {
+        segments.push({
+          type: "line",
+          points: { anchor1: lastOnCurve, anchor2: firstOnCurve },
+        });
+      }
+    }
+
+    return segments;
+  },
+
+  parseGlyph(contours: ContourSnapshot[]): Map<string, SegmentType[]> {
+    const result = new Map<string, SegmentType[]>();
+
+    for (const contour of contours) {
+      const segments = Segment.parse(contour.points, contour.closed);
+      result.set(contour.id, segments);
+    }
+
+    return result;
+  },
 } as const;
+
+function findLastOnCurve(points: PointSnapshot[]): PointSnapshot | null {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].pointType === "onCurve") {
+      return points[i];
+    }
+  }
+  return null;
+}
+
+function findFirstOnCurve(points: PointSnapshot[]): PointSnapshot | null {
+  for (const point of points) {
+    if (point.pointType === "onCurve") {
+      return point;
+    }
+  }
+  return null;
+}

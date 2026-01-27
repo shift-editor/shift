@@ -1,402 +1,200 @@
-import { Editor } from "@/lib/editor/Editor";
 import { Vec2 } from "@shift/geo";
-import { effect, type Effect } from "@/lib/reactive/signal";
-import { createStateMachine, type StateMachine } from "@/lib/tools/core";
 import { IRenderer } from "@/types/graphics";
-import { Tool, ToolName } from "@/types/tool";
-import type { PointHitResult, ContourContext, PenState } from "@/types/pen";
-import { DRAG_THRESHOLD } from "@/types/pen";
-import type { ContourSnapshot, PointSnapshot, Point2D, ContourId } from "@shift/types";
-import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
-import { parseSegments } from "@/engine/segments";
-
+import type { Point2D } from "@shift/types";
+import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { executeIntent, type PenIntent } from "./intents";
+import type { PenState, PenBehavior } from "./types";
+import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
-import { PenCommands } from "./commands";
 
-function getFirstPoint(contour: ContourSnapshot): PointSnapshot | null {
-  return contour.points.length > 0 ? contour.points[0] : null;
-}
+export type { PenState };
 
-function isNearPoint(
-  pos: { x: number; y: number },
-  point: PointSnapshot,
-  radius: number,
-): boolean {
-  return Vec2.dist(pos, point) < radius;
-}
+export class Pen extends BaseTool<PenState> {
+  readonly id: ToolName = "pen";
 
-export class Pen implements Tool {
-  public readonly name: ToolName = "pen";
+  private behaviors: PenBehavior[] = [
+    new HoverBehavior(),
+    new EscapeBehavior(),
+    new PlaceBehavior(),
+    new HandleBehavior(),
+  ];
 
-  #editor: Editor;
-  #sm: StateMachine<PenState>;
-  #commands: PenCommands;
-  #renderEffect: Effect;
-
-  constructor(editor: Editor) {
-    this.#editor = editor;
-    this.#sm = createStateMachine<PenState>({ type: "idle" });
-    this.#commands = new PenCommands(editor);
-
-    this.#renderEffect = effect(() => {
-      if (this.#sm.isIn("dragging", "ready")) {
-        editor.requestRedraw();
-      }
-    });
+  initialState(): PenState {
+    return { type: "idle" };
   }
 
-  setIdle(): void {
-    this.#sm.transition({ type: "idle" });
+  activate(): void {
+    this.state = { type: "ready", mousePos: { x: 0, y: 0 } };
+    this.ctx.cursor.set({ type: "pen" });
+    this.ctx.edit.clearActiveContour();
   }
 
-  setReady(): void {
-    this.#sm.transition({ type: "ready", mousePos: { x: 0, y: 0 } });
-    this.#editor.setCursor({ type: "pen" });
+  deactivate(): void {
+    this.state = { type: "idle" };
   }
 
-  dispose(): void {
-    this.#renderEffect.dispose();
-  }
-
-  cancel(): void {
-    const ctx = this.#editor.createToolContext();
-
-    if (this.#sm.isIn("anchored", "dragging")) {
-      if (ctx.commands.isBatching) {
-        ctx.commands.cancelBatch();
-      }
-      this.#sm.transition({ type: "ready", mousePos: { x: 0, y: 0 } });
-      return;
-    }
-
-    this.#sm.when("ready", (state) => {
-      this.#commands.abandonContour();
-      this.#sm.transition({ type: "ready", mousePos: state.mousePos });
-    });
-  }
-
-  getState(): PenState {
-    return this.#sm.current;
-  }
-
-  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (e.button !== 0) return;
-    if (!this.#sm.isIn("ready")) return;
-
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-    const ctx = this.#editor.createToolContext();
-
-    if (this.shouldCloseContour(x, y)) {
-      ctx.commands.beginBatch("Close Contour");
-      this.#commands.closeContour();
-      ctx.commands.endBatch();
-      return;
-    }
-
-    if (!this.hasActiveDrawingContour()) {
-      // First check for point hits
-      const hitResult = this.findHitPoint(x, y);
-      if (hitResult && !hitResult.contour.closed) {
-        if (hitResult.position === "start" || hitResult.position === "end") {
-          ctx.commands.beginBatch("Continue Contour");
-          try {
-            this.#commands.continueContour(
-              hitResult.contourId,
-              hitResult.position === "start",
-            );
-            ctx.commands.endBatch();
-          } catch (e) {
-            ctx.commands.cancelBatch();
-            throw e;
-          }
-          return;
-        } else if (hitResult.position === "middle") {
-          ctx.commands.beginBatch("Split Contour");
-          try {
-            this.#commands.splitContour(
-              hitResult.contourId,
-              hitResult.pointIndex,
-            );
-            ctx.commands.endBatch();
-          } catch (e) {
-            ctx.commands.cancelBatch();
-            throw e;
-          }
-          return;
-        }
-      }
-
-      // Then check for segment hits (split curve at click point)
-      const segmentHit = this.findHitSegment(x, y);
-      if (segmentHit) {
-        ctx.commands.beginBatch("Split Segment");
-        try {
-          this.#commands.splitSegment(segmentHit.segment, segmentHit.t);
-          ctx.commands.endBatch();
-        } catch (e) {
-          ctx.commands.cancelBatch();
-          throw e;
-        }
-        return;
-      }
-    }
-
-    ctx.commands.beginBatch("Add Point");
-
-    const context = this.buildContourContext();
-
-    const result = this.#commands.placeAnchor({ x, y });
-
-    this.#sm.transition({
-      type: "anchored",
-      anchor: {
-        position: { x, y },
-        pointId: result.pointId,
-        context,
-      },
-    });
-  }
-
-  onMouseUp(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const ctx = this.#editor.createToolContext();
-    if (this.#sm.isIn("anchored", "dragging")) {
-      if (ctx.commands.isBatching) {
-        ctx.commands.endBatch();
-      }
-      const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-      const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
-      this.#sm.transition({ type: "ready", mousePos });
-    }
-  }
-
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const mousePos = this.#editor.projectScreenToUpm(position.x, position.y);
-
-    this.#sm.when("ready", () => {
-      if (!this.hasActiveDrawingContour()) {
-        // Check for point hits first
-        const hitResult = this.findHitPoint(mousePos.x, mousePos.y);
-        if (hitResult && !hitResult.contour.closed) {
-          if (hitResult.position === "start" || hitResult.position === "end") {
-            this.#editor.setCursor({ type: "pen-end" });
-          } else if (hitResult.position === "middle") {
-            this.#editor.setCursor({ type: "pen-end" });
-          } else {
-            this.#editor.setCursor({ type: "pen" });
-          }
-          this.#sm.transition({ type: "ready", mousePos });
-          return;
-        }
-
-        // Check for segment hits (for split preview)
-        const segmentHit = this.findHitSegment(mousePos.x, mousePos.y);
-        if (segmentHit) {
-          // Use pen-add cursor to indicate we can add a point here
-          this.#editor.setCursor({ type: "pen-add" });
-          this.#sm.transition({ type: "ready", mousePos });
-          return;
-        }
-      }
-
-      const isOverPoint = this.isNearAnyPoint(mousePos.x, mousePos.y);
-      if (isOverPoint) {
-        this.#editor.setCursor({ type: "pen-end" });
-      } else {
-        this.#editor.setCursor({ type: "pen" });
-      }
-      this.#sm.transition({ type: "ready", mousePos });
-    });
-
-    this.#sm.when("anchored", (state) => {
-      const { anchor } = state;
-      const dist = Vec2.dist(anchor.position, mousePos);
-
-      if (dist > DRAG_THRESHOLD) {
-        const result = this.#commands.createHandles(anchor, mousePos);
-
-        this.#sm.transition({
-          type: "dragging",
-          anchor,
-          handles: result.handles,
-          mousePos,
+  handleModifier(key: string, pressed: boolean): boolean {
+    if (key === "Space") {
+      if (pressed) {
+        this.ctx.tools.requestTemporary("hand", {
+          onActivate: () => this.ctx.render.setPreviewMode(true),
+          onReturn: () => this.ctx.render.setPreviewMode(false),
         });
+      } else {
+        this.ctx.tools.returnFromTemporary();
       }
-    });
-
-    this.#sm.when("dragging", (state) => {
-      const { anchor, handles } = state;
-
-      this.#commands.updateHandles(anchor, handles, mousePos);
-
-      this.#sm.transition({
-        ...state,
-        mousePos,
-      });
-    });
-  }
-
-  private buildContourContext(): ContourContext {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
-    if (!snapshot) {
-      return {
-        previousPointType: "none",
-        previousOnCurvePosition: null,
-        isFirstPoint: true,
-      };
-    }
-
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find(
-      (c) => c.id === activeContourId,
-    );
-    if (!activeContour || activeContour.points.length === 0) {
-      return {
-        previousPointType: "none",
-        previousOnCurvePosition: null,
-        isFirstPoint: true,
-      };
-    }
-
-    const points = activeContour.points;
-    const lastPoint = points[points.length - 1];
-
-    let previousOnCurvePosition: { x: number; y: number } | null = null;
-    for (let i = points.length - 1; i >= 0; i--) {
-      if (points[i].pointType === "onCurve") {
-        previousOnCurvePosition = { x: points[i].x, y: points[i].y };
-        break;
-      }
-    }
-
-    return {
-      previousPointType:
-        lastPoint.pointType === "offCurve" ? "offCurve" : "onCurve",
-      previousOnCurvePosition,
-      isFirstPoint: false,
-    };
-  }
-
-  private shouldCloseContour(x: number, y: number): boolean {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find(
-      (c) => c.id === activeContourId,
-    );
-
-    if (
-      !activeContour ||
-      activeContour.closed ||
-      activeContour.points.length < 2
-    ) {
-      return false;
-    }
-
-    const hitRadius = ctx.screen.hitRadius;
-    const firstPoint = getFirstPoint(activeContour);
-    return firstPoint !== null && isNearPoint({ x, y }, firstPoint, hitRadius);
-  }
-
-  private isNearAnyPoint(x: number, y: number): boolean {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
-    if (!snapshot) return false;
-
-    const hitRadius = ctx.screen.hitRadius;
-    for (const contour of snapshot.contours) {
-      for (const point of contour.points) {
-        if (isNearPoint({ x, y }, point, hitRadius)) {
-          return true;
-        }
-      }
+      return true;
     }
     return false;
   }
 
-  private findHitPoint(x: number, y: number): PointHitResult | null {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
-    if (!snapshot) return null;
+  transition(state: PenState, event: ToolEvent): PenState {
+    if (state.type === "idle") {
+      return state;
+    }
 
-    const hitRadius = ctx.screen.hitRadius;
-    for (const contour of snapshot.contours) {
-      for (let i = 0; i < contour.points.length; i++) {
-        const point = contour.points[i];
-        if (isNearPoint({ x, y }, point, hitRadius)) {
-          let position: "start" | "end" | "middle";
-          if (i === 0) {
-            position = "start";
-          } else if (i === contour.points.length - 1) {
-            position = "end";
-          } else {
-            position = "middle";
-          }
-          return {
-            contourId: contour.id as ContourId,
-            pointIndex: i,
-            position,
-            contour,
-          };
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.ctx);
+        if (result !== null) {
+          return result;
         }
       }
     }
-    return null;
+
+    return state;
   }
 
-  private findHitSegment(x: number, y: number): SegmentHitResult | null {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
-    if (!snapshot) return null;
-
-    const hitRadius = ctx.screen.hitRadius;
-    const pos = { x, y };
-
-    for (const contour of snapshot.contours) {
-      const segments = parseSegments(contour.points, contour.closed);
-      const hit = SegmentOps.hitTestMultiple(segments, pos, hitRadius);
-      if (hit) {
-        return hit;
-      }
+  onTransition(prev: PenState, next: PenState, event: ToolEvent): void {
+    if (next.intent) {
+      this.executePenIntent(next.intent, prev);
     }
 
-    return null;
+    for (const behavior of this.behaviors) {
+      behavior.onTransition?.(prev, next, event, this.ctx);
+    }
+
+    if (next.type === "ready") {
+      const pos = next.mousePos;
+      this.updateCursorForPosition(pos);
+    }
+  }
+
+  private executePenIntent(intent: PenIntent, prev: PenState): void {
+    switch (intent.action) {
+      case "close":
+        this.batch("Close Contour", () => {
+          executeIntent(intent, this.ctx);
+        });
+        break;
+
+      case "continue":
+        this.batch("Continue Contour", () => {
+          executeIntent(intent, this.ctx);
+        });
+        break;
+
+      case "splitPoint":
+        this.batch("Split Contour", () => {
+          executeIntent(intent, this.ctx);
+        });
+        break;
+
+      case "splitSegment":
+        this.batch("Split Segment", () => {
+          executeIntent(intent, this.ctx);
+        });
+        break;
+
+      case "placePoint":
+        if (prev.type === "ready") {
+          this.batch("Add Point", () => {
+            const pointId = executeIntent(intent, this.ctx);
+            if (this.state.type === "anchored") {
+              (this.state as any).anchor.pointId = pointId;
+            }
+          });
+        }
+        break;
+
+      case "abandonContour":
+        this.batch("Abandon Contour", () => {
+          executeIntent(intent, this.ctx);
+        });
+        break;
+
+      case "setCursor":
+        executeIntent(intent, this.ctx);
+        break;
+
+      case "updateHover":
+        executeIntent(intent, this.ctx);
+        break;
+    }
+  }
+
+  private updateCursorForPosition(pos: Point2D): void {
+    if (this.hasActiveDrawingContour()) {
+      if (this.shouldCloseContour(pos.x, pos.y)) {
+        this.ctx.cursor.set({ type: "pen-end" });
+        return;
+      }
+      this.ctx.cursor.set({ type: "pen" });
+      return;
+    }
+
+    const endpoint = this.ctx.hitTest.getContourEndpointAt(pos);
+    if (endpoint && !endpoint.contour.closed) {
+      this.ctx.cursor.set({ type: "pen-end" });
+      return;
+    }
+
+    const middlePoint = this.getMiddlePointAt(pos);
+    if (middlePoint) {
+      this.ctx.cursor.set({ type: "pen-end" });
+      return;
+    }
+
+    const segmentHit = this.ctx.hitTest.getSegmentAt(pos);
+    if (segmentHit) {
+      this.ctx.cursor.set({ type: "pen-add" });
+      return;
+    }
+
+    this.ctx.cursor.set({ type: "pen" });
+  }
+
+  private shouldCloseContour(x: number, y: number): boolean {
+    const snapshot = this.ctx.edit.getGlyph();
+    const activeContourId = this.ctx.edit.getActiveContourId();
+    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+
+    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+      return false;
+    }
+
+    const firstPoint = activeContour.points[0];
+    return Vec2.isWithin({ x, y }, firstPoint, this.ctx.screen.hitRadius);
   }
 
   private hasActiveDrawingContour(): boolean {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
+    const snapshot = this.ctx.edit.getGlyph();
     if (!snapshot) return false;
 
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find(
-      (c) => c.id === activeContourId,
-    );
+    const activeContourId = this.ctx.edit.getActiveContourId();
+    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
 
-    return (
-      activeContour !== undefined &&
-      !activeContour.closed &&
-      activeContour.points.length > 0
-    );
+    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
   }
 
   private getLastOnCurvePoint(): Point2D | null {
-    const ctx = this.#editor.createToolContext();
-    const snapshot = ctx.glyph;
+    const snapshot = this.ctx.edit.getGlyph();
     if (!snapshot) return null;
 
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find(
-      (c) => c.id === activeContourId,
-    );
+    const activeContourId = this.ctx.edit.getActiveContourId();
+    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
 
-    if (
-      !activeContour ||
-      activeContour.points.length === 0 ||
-      activeContour.closed
-    ) {
+    if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
       return null;
     }
 
@@ -411,26 +209,50 @@ export class Pen implements Tool {
     return null;
   }
 
-  drawInteractive(ctx: IRenderer): void {
-    const toolCtx = this.#editor.createToolContext();
+  private getMiddlePointAt(pos: Point2D): { contourId: any; pointId: any; pointIndex: number } | null {
+    const snapshot = this.ctx.edit.getGlyph();
+    if (!snapshot) return null;
 
-    this.#sm.when("ready", (state) => {
+    const activeContourId = this.ctx.edit.getActiveContourId();
+    const hitRadius = this.ctx.screen.hitRadius;
+
+    for (const contour of snapshot.contours) {
+      if (contour.id === activeContourId || contour.closed) continue;
+      if (contour.points.length < 3) continue;
+
+      for (let i = 1; i < contour.points.length - 1; i++) {
+        const point = contour.points[i];
+        const dist = Vec2.dist(pos, point);
+        if (dist < hitRadius) {
+          return {
+            contourId: contour.id,
+            pointId: point.id,
+            pointIndex: i,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  render(renderer: IRenderer): void {
+    if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
       if (!lastPoint) return;
 
-      ctx.setStyle(PREVIEW_LINE_STYLE);
-      ctx.lineWidth = toolCtx.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
-      ctx.beginPath();
-      ctx.moveTo(lastPoint.x, lastPoint.y);
-      ctx.lineTo(state.mousePos.x, state.mousePos.y);
-      ctx.stroke();
-    });
+      renderer.setStyle(PREVIEW_LINE_STYLE);
+      renderer.lineWidth = this.ctx.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
+      renderer.beginPath();
+      renderer.moveTo(lastPoint.x, lastPoint.y);
+      renderer.lineTo(this.state.mousePos.x, this.state.mousePos.y);
+      renderer.stroke();
+    }
 
-    this.#sm.when("dragging", (state) => {
-      const { anchor, mousePos } = state;
+    if (this.state.type === "dragging") {
+      const { anchor, mousePos } = this.state;
 
-      ctx.setStyle(DEFAULT_STYLES);
-      ctx.lineWidth = toolCtx.screen.lineWidth(DEFAULT_STYLES.lineWidth);
+      renderer.setStyle(DEFAULT_STYLES);
+      renderer.lineWidth = this.ctx.screen.lineWidth(DEFAULT_STYLES.lineWidth);
 
       const anchorX = anchor.position.x;
       const anchorY = anchor.position.y;
@@ -439,22 +261,30 @@ export class Pen implements Tool {
 
       const mirrorPos = Vec2.mirror(mousePos, anchor.position);
 
-      ctx.beginPath();
-      ctx.moveTo(mouseX, mouseY);
-      ctx.lineTo(anchorX, anchorY);
-      ctx.stroke();
+      renderer.beginPath();
+      renderer.moveTo(mouseX, mouseY);
+      renderer.lineTo(anchorX, anchorY);
+      renderer.stroke();
 
-      ctx.beginPath();
-      ctx.moveTo(anchorX, anchorY);
-      ctx.lineTo(mirrorPos.x, mirrorPos.y);
-      ctx.stroke();
+      renderer.beginPath();
+      renderer.moveTo(anchorX, anchorY);
+      renderer.lineTo(mirrorPos.x, mirrorPos.y);
+      renderer.stroke();
 
-      this.drawHandle(ctx, mouseX, mouseY);
-      this.drawHandle(ctx, mirrorPos.x, mirrorPos.y);
-    });
+      this.drawHandle(renderer, mouseX, mouseY);
+      this.drawHandle(renderer, mirrorPos.x, mirrorPos.y);
+    }
   }
 
-  private drawHandle(ctx: IRenderer, x: number, y: number): void {
-    this.#editor.paintHandle(ctx, x, y, "control", "idle");
+  private drawHandle(renderer: IRenderer, x: number, y: number): void {
+    const size = this.ctx.screen.lineWidth(4);
+    renderer.setStyle({
+      fillStyle: "#ffffff",
+      strokeStyle: "#000000",
+      lineWidth: 1,
+      dashPattern: [],
+    });
+    renderer.fillCircle(x, y, size);
+    renderer.strokeCircle(x, y, size);
   }
 }

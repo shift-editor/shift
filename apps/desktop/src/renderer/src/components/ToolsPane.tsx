@@ -9,9 +9,9 @@ import {
   cn,
 } from "@shift/ui";
 import { useValue } from "@/lib/reactive";
-import AppState, { getEditor } from "@/store/store";
+import { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
-import { ToolName } from "@/types/tool";
+import type { ToolName } from "@/lib/tools/core";
 
 interface ToolbarIconProps {
   Icon: Svg;
@@ -32,14 +32,13 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
       <TooltipTrigger>
         <Button
           className={cn(
-            "h-7 w-7 p-1 rounded-md",
+            "w-7 h-7 rounded-md",
             activeTool === name && "bg-accent hover:bg-accent",
           )}
           icon={
             <Icon
-              width={18}
-              height={18}
-              className={activeTool === name ? "text-white" : "text-primary"}
+              className={cn("w-full h-full", activeTool === name ? "text-white" : "text-primary")}
+
             />
           }
           aria-label={tooltip}
@@ -62,17 +61,11 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
 
 export const ToolsPane: FC = () => {
   const editor = getEditor();
-  const fileName = AppState((state) => state.fileName);
-  const isDirty = AppState((state) => state.isDirty);
-
   const activeTool = useValue(editor.activeTool);
 
-  const displayName = fileName ?? "Untitled";
-  const title = isDirty ? `${displayName} — Edited` : displayName;
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
-      <h1 className="text-ui mt-0.5">{title}</h1>
       <TooltipProvider delayDuration={2000}>
         <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
           {Array.from(editor.tools.entries()).map(

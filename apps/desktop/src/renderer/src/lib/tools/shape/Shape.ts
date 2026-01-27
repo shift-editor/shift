@@ -1,128 +1,134 @@
-import { Editor } from "@/lib/editor/Editor";
+import type { Point2D, Rect2D } from "@shift/types";
+import type { IRenderer } from "@/types/graphics";
+import { BaseTool, type ToolName, type ToolEvent } from "../core";
 import {
   AddContourCommand,
   CloseContourCommand,
   AddPointCommand,
 } from "@/lib/commands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
-import { IRenderer } from "@/types/graphics";
-import type { Rect2D } from "@shift/types";
-import { Tool, ToolName } from "@/types/tool";
-import type { ShapeState } from "@/types/shape";
 
-export class Shape implements Tool {
-  public readonly name: ToolName = "shape";
-  #editor: Editor;
-  #state: ShapeState;
-  #rect: Rect2D;
+type ShapeState =
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "dragging"; startPos: Point2D; currentPos: Point2D };
 
-  constructor(editor: Editor) {
-    this.#editor = editor;
-    this.#state = { type: "idle" };
-    this.#rect = {
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      left: 0,
-      top: 0,
-      right: 0,
-      bottom: 0,
-    };
+export class Shape extends BaseTool<ShapeState> {
+  readonly id: ToolName = "shape";
+
+  initialState(): ShapeState {
+    return { type: "idle" };
   }
 
-  setIdle(): void {
-    this.#state = { type: "idle" };
+  transition(state: ShapeState, event: ToolEvent): ShapeState {
+    switch (state.type) {
+      case "idle":
+        return state;
+
+      case "ready":
+        if (event.type === "dragStart") {
+          return {
+            type: "dragging",
+            startPos: event.point,
+            currentPos: event.point,
+          };
+        }
+        return state;
+
+      case "dragging":
+        if (event.type === "drag") {
+          return {
+            ...state,
+            currentPos: event.point,
+          };
+        }
+        if (event.type === "dragEnd") {
+          return { type: "ready" };
+        }
+        if (event.type === "dragCancel") {
+          return { type: "ready" };
+        }
+        return state;
+
+      default:
+        return state;
+    }
   }
 
-  setReady(): void {
-    this.#state = { type: "ready" };
-    this.#editor.setCursor({ type: "crosshair" });
+  onTransition(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
+    if (prev.type === "dragging" && next.type === "ready") {
+      if (event.type === "dragEnd") {
+        this.commitRectangle(prev);
+      }
+    }
   }
 
-  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
-    this.#state = { type: "dragging", startPos: { x, y } };
+  activate(): void {
+    this.state = { type: "ready" };
+    this.ctx.cursor.set({ type: "crosshair" });
   }
 
-  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = { type: "ready" };
-
-    const ctx = this.#editor.createToolContext();
-
-    ctx.commands.beginBatch("Draw Rectangle");
-
-    ctx.commands.execute(
-      new AddPointCommand(this.#rect.x, this.#rect.y, "onCurve", false),
-    );
-    ctx.commands.execute(
-      new AddPointCommand(
-        this.#rect.x + this.#rect.width,
-        this.#rect.y,
-        "onCurve",
-        false,
-      ),
-    );
-    ctx.commands.execute(
-      new AddPointCommand(
-        this.#rect.x + this.#rect.width,
-        this.#rect.y + this.#rect.height,
-        "onCurve",
-        false,
-      ),
-    );
-    ctx.commands.execute(
-      new AddPointCommand(
-        this.#rect.x,
-        this.#rect.y + this.#rect.height,
-        "onCurve",
-        false,
-      ),
-    );
-    ctx.commands.execute(new CloseContourCommand());
-    ctx.commands.execute(new AddContourCommand());
-
-    ctx.commands.endBatch();
+  deactivate(): void {
+    this.state = { type: "idle" };
   }
 
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state.type !== "dragging") return;
+  render(renderer: IRenderer): void {
+    if (this.state.type !== "dragging") return;
 
-    const position = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const { x, y } = this.#editor.projectScreenToUpm(position.x, position.y);
+    const rect = this.getRect(this.state);
+    if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;
 
-    const width = x - this.#state.startPos.x;
-    const height = y - this.#state.startPos.y;
-
-    this.#rect = {
-      x: this.#state.startPos.x,
-      y: this.#state.startPos.y,
-      width,
-      height,
-      left: this.#state.startPos.x,
-      top: this.#state.startPos.y,
-      right: this.#state.startPos.x + width,
-      bottom: this.#state.startPos.y + height,
-    };
-
-    const ctx = this.#editor.createToolContext();
-    ctx.requestRedraw();
-  }
-
-  drawInteractive(ctx: IRenderer): void {
-    if (this.#state.type !== "dragging") return;
-
-    ctx.setStyle({
+    renderer.save();
+    renderer.setStyle({
       ...DEFAULT_STYLES,
       fillStyle: "transparent",
     });
+    renderer.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    renderer.restore();
+  }
 
-    ctx.strokeRect(
-      this.#rect.x,
-      this.#rect.y,
-      this.#rect.width,
-      this.#rect.height,
+  private getRect(state: { startPos: Point2D; currentPos: Point2D }): Rect2D {
+    const width = state.currentPos.x - state.startPos.x;
+    const height = state.currentPos.y - state.startPos.y;
+
+    return {
+      x: state.startPos.x,
+      y: state.startPos.y,
+      width,
+      height,
+      left: Math.min(state.startPos.x, state.currentPos.x),
+      top: Math.min(state.startPos.y, state.currentPos.y),
+      right: Math.max(state.startPos.x, state.currentPos.x),
+      bottom: Math.max(state.startPos.y, state.currentPos.y),
+    };
+  }
+
+  private commitRectangle(state: { startPos: Point2D; currentPos: Point2D }): void {
+    const rect = this.getRect(state);
+    if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
+
+    this.ctx.commands.beginBatch("Draw Rectangle");
+
+    this.ctx.commands.execute(
+      new AddPointCommand(rect.x, rect.y, "onCurve", false),
     );
+    this.ctx.commands.execute(
+      new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false),
+    );
+    this.ctx.commands.execute(
+      new AddPointCommand(
+        rect.x + rect.width,
+        rect.y + rect.height,
+        "onCurve",
+        false,
+      ),
+    );
+    this.ctx.commands.execute(
+      new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false),
+    );
+    this.ctx.commands.execute(new CloseContourCommand());
+    this.ctx.commands.execute(new AddContourCommand());
+
+    this.ctx.commands.endBatch();
   }
 }

@@ -230,6 +230,12 @@ describe("Vec2", () => {
       expect(Vec2.isPerpendicular({ x: 1, y: 0 }, { x: 0, y: 1 })).toBe(true);
       expect(Vec2.isPerpendicular({ x: 1, y: 1 }, { x: 1, y: 0 })).toBe(false);
     });
+
+    it("checks if point is within radius", () => {
+      expect(Vec2.isWithin({ x: 0, y: 0 }, { x: 3, y: 4 }, 6)).toBe(true);
+      expect(Vec2.isWithin({ x: 0, y: 0 }, { x: 3, y: 4 }, 5)).toBe(false);
+      expect(Vec2.isWithin({ x: 0, y: 0 }, { x: 3, y: 4 }, 4)).toBe(false);
+    });
   });
 
   describe("utility", () => {

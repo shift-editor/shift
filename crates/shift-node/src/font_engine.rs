@@ -207,6 +207,14 @@ impl FontEngine {
     Ok(serde_json::to_string(&result).unwrap())
   }
 
+  #[napi]
+  pub fn clear_active_contour(&mut self) -> Result<String> {
+    let session = self.get_edit_session()?;
+    session.clear_active_contour();
+    let result = CommandResult::success_simple(session);
+    Ok(serde_json::to_string(&result).unwrap())
+  }
+
   // ═══════════════════════════════════════════════════════════
   // SNAPSHOT METHODS
   // ═══════════════════════════════════════════════════════════
@@ -227,6 +235,27 @@ impl FontEngine {
       .ok_or_else(|| Error::new(Status::GenericFailure, "No edit session active"))?;
 
     Ok(JSGlyphSnapshot::from_edit_session(session))
+  }
+
+  #[napi]
+  pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<String> {
+    let session = self.get_edit_session()?;
+
+    let snapshot: GlyphSnapshot = match serde_json::from_str(&snapshot_json) {
+      Ok(s) => s,
+      Err(e) => {
+        return Ok(
+          serde_json::to_string(&CommandResult::error(format!(
+            "Failed to parse snapshot: {e}"
+          )))
+          .unwrap(),
+        )
+      }
+    };
+
+    session.restore_from_snapshot(&snapshot);
+    let result = CommandResult::success_simple(session);
+    Ok(serde_json::to_string(&result).unwrap())
   }
 
   // ═══════════════════════════════════════════════════════════

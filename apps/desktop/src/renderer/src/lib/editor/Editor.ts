@@ -1,24 +1,34 @@
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
-import type { HandleState, HandleType } from "@/types/handle";
-import type { CursorType, SelectionMode, ToolRegistryItem, VisualState, RenderState } from "@/types/editor";
-import type { Point2D, Rect2D, PointId, GlyphSnapshot, PointSnapshot } from "@shift/types";
-import { asContourId } from "@shift/types";
+import type { HandleState, HandleType } from "./rendering/handles";
+import type {
+  CursorType,
+  SelectionMode,
+  ToolRegistryItem,
+  VisualState,
+  RenderState,
+} from "@/types/editor";
+import type {
+  Point2D,
+  Rect2D,
+  PointId,
+  ContourId,
+  GlyphSnapshot,
+  PointSnapshot,
+  ContourSnapshot,
+} from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 import { findPointInSnapshot } from "../utils/snapshot";
-import { Tool, ToolContext, ToolName } from "@/types/tool";
+import { createContext, type ToolContext, type ToolName } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
+import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
+import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
+import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
+import { Polygon, Vec2 } from "@shift/geo";
 
-import { drawHandle } from "./handles";
-import { Viewport } from "./Viewport";
+import { drawHandle } from "./rendering/handles";
+import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
-import {
-  CommandHistory,
-  AddPointCommand,
-  MovePointsCommand,
-  RemovePointsCommand,
-  CloseContourCommand,
-  AddContourCommand,
-  PasteCommand,
-} from "../commands";
+import { CommandHistory, PasteCommand } from "../commands";
 import {
   RotatePointsCommand,
   ScalePointsCommand,
@@ -32,42 +42,20 @@ import {
   type AlignmentType,
   type DistributeType,
 } from "../transform";
-import { computed, effect, signal, type ComputedSignal, type Effect, type Signal, type WritableSignal } from "../reactive/signal";
+import {
+  computed,
+  effect,
+  signal,
+  type ComputedSignal,
+  type Effect,
+  type Signal,
+  type WritableSignal,
+} from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
-import { SelectionManager } from "./SelectionManager";
-import { HoverManager } from "./HoverManager";
-import { GlyphRenderer } from "./GlyphRenderer";
-
-const DEBUG = false;
-const SCREEN_HIT_RADIUS = 8;
-
-function cursorToCSS(cursor: CursorType): string {
-  switch (cursor.type) {
-    case "pen":
-      return `-webkit-image-set(url("/cursors/pen@32.svg") 1x, url("/cursors/pen@64.svg") 2x) 8 8, crosshair`;
-    case "pen-add":
-      return `-webkit-image-set(url("/cursors/pen@32-add.svg") 1x, url("/cursors/pen@64-add.svg") 2x) 8 8, crosshair`;
-    case "pen-end":
-      return `-webkit-image-set(url("/cursors/pen@32-end.svg") 1x, url("/cursors/pen@64-end.svg") 2x) 8 8, crosshair`;
-    case "ew-resize":
-      return `-webkit-image-set(url("/cursors/resize-ew@32.svg") 1x, url("/cursors/resize-ew@64.svg") 2x) 16 16, ew-resize`;
-    case "ns-resize":
-      return `-webkit-image-set(url("/cursors/resize-ns@32.svg") 1x, url("/cursors/resize-ns@64.svg") 2x) 16 16, ns-resize`;
-    case "nwse-resize":
-      return `-webkit-image-set(url("/cursors/resize-nwse@32.svg") 1x, url("/cursors/resize-nwse@64.svg") 2x) 16 16, nwse-resize`;
-    case "nesw-resize":
-      return `-webkit-image-set(url("/cursors/resize-nesw@32.svg") 1x, url("/cursors/resize-nesw@64.svg") 2x) 16 16, nesw-resize`;
-    default:
-      return cursor.type;
-  }
-}
-
-function debug(...args: unknown[]) {
-  if (DEBUG) {
-    console.log("[Editor]", ...args);
-  }
-}
-
+import { cursorToCSS } from "../styles/cursor";
+import { SelectionManager, HoverManager } from "./managers";
+import { GlyphRenderer } from "./rendering/GlyphRenderer";
+import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 
 export class Editor {
   private $previewMode: WritableSignal<boolean>;
@@ -76,20 +64,25 @@ export class Editor {
   #hover: HoverManager;
   #renderer: GlyphRenderer;
 
-  #tools: Map<ToolName, ToolRegistryItem>;
+  #toolManager: ToolManager | null = null;
+  #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
   private $activeTool: WritableSignal<ToolName>;
 
-  #viewport: Viewport;
+  #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
   #clipboardManager: ClipboardManager;
+  #context: ToolContext | null = null;
+
+  #previewSnapshot: GlyphSnapshot | null = null;
+  #isInPreview: boolean = false;
 
   $renderState: ComputedSignal<RenderState>;
   private $cursor: WritableSignal<string>;
 
   constructor() {
-    this.#viewport = new Viewport();
+    this.#viewport = new ViewportManager();
     this.#fontEngine = new FontEngine();
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
@@ -102,14 +95,14 @@ export class Editor {
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
 
-    this.#tools = new Map();
+    this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
 
     this.#renderer = new GlyphRenderer({
       viewport: this.#viewport,
       getSnapshot: () => this.#fontEngine.$glyph.value,
       getFontMetrics: () => this.#fontEngine.info.getMetrics(),
-      getActiveTool: () => this.getActiveTool(),
+      renderTool: (ctx) => this.#toolManager?.render(ctx),
       selection: this.#selection,
       hover: this.#hover,
       getPreviewMode: () => this.previewMode.peek(),
@@ -122,8 +115,7 @@ export class Editor {
     this.#clipboardManager = new ClipboardManager({
       getSnapshot: () => this.#fontEngine.$glyph.value,
       getSelectedPointIds: () => this.#selection.selectedPointIds.peek(),
-      getSelectedSegmentIds: () =>
-        this.#selection.selectedSegmentIds.peek(),
+      getSelectedSegmentIds: () => this.#selection.selectedSegmentIds.peek(),
       getGlyphName: () => this.#fontEngine.$glyph.value?.name,
       pasteContours: (json, x, y) =>
         this.#fontEngine.editing.pasteContours(json, x, y),
@@ -148,15 +140,23 @@ export class Editor {
 
   public registerTool(
     name: ToolName,
-    tool: Tool,
+    ToolClass: ToolConstructor,
     icon: React.FC<React.SVGProps<SVGSVGElement>>,
     tooltip: string,
   ): void {
-    this.#tools.set(name, { tool, icon, tooltip });
+    this.#toolMetadata.set(name, { icon, tooltip });
+    this.getToolManager().register(name, ToolClass);
   }
 
   public get tools(): ReadonlyMap<ToolName, ToolRegistryItem> {
-    return this.#tools;
+    const result = new Map<ToolName, ToolRegistryItem>();
+    for (const [name, metadata] of this.#toolMetadata) {
+      result.set(name, {
+        icon: metadata.icon,
+        tooltip: metadata.tooltip,
+      });
+    }
+    return result;
   }
 
   public get activeTool(): Signal<ToolName> {
@@ -167,33 +167,26 @@ export class Editor {
     const currentToolName = this.$activeTool.value;
     if (currentToolName === toolName) return;
 
-    const oldTool = this.#tools.get(currentToolName);
-    if (oldTool) {
-      oldTool.tool.setIdle();
-    }
-
-    const newTool = this.#tools.get(toolName);
-    if (newTool) {
-      newTool.tool.setReady();
-    }
-
+    this.getToolManager().activate(toolName);
     this.$activeTool.set(toolName);
   }
 
-  public getActiveTool(): Tool {
-    const tool = this.#tools.get(this.$activeTool.value);
-    if (!tool) {
-      throw new Error(`Tool ${this.$activeTool.value} not found`);
+  public getToolManager(): ToolManager {
+    if (!this.#toolManager) {
+      this.#toolManager = new ToolManager(this.getContext());
     }
-    return tool.tool;
+    return this.#toolManager;
+  }
+
+  public getContext(): ToolContext {
+    if (!this.#context) {
+      this.#context = createContext(this);
+    }
+    return this.#context;
   }
 
   public get selectedPointIds(): Signal<ReadonlySet<PointId>> {
     return this.#selection.selectedPointIds;
-  }
-
-  public selectPoint(pointId: PointId): void {
-    this.#selection.selectPoint(pointId);
   }
 
   public selectPoints(pointIds: Set<PointId>): void {
@@ -218,10 +211,6 @@ export class Editor {
 
   public get selectedSegmentIds(): Signal<ReadonlySet<SegmentId>> {
     return this.#selection.selectedSegmentIds;
-  }
-
-  public selectSegment(segmentId: SegmentId): void {
-    this.#selection.selectSegment(segmentId);
   }
 
   public selectSegments(segmentIds: Set<SegmentId>): void {
@@ -309,7 +298,6 @@ export class Editor {
   }
 
   public startEditSession(unicode: number): void {
-    debug("Starting edit session for unicode:", unicode);
     this.#fontEngine.session.startEditSession(unicode);
     this.#fontEngine.editing.addContour();
   }
@@ -322,145 +310,42 @@ export class Editor {
     return this.#fontEngine.$glyph.value;
   }
 
-  public createToolContext(): ToolContext {
-    const viewport = this.#viewport;
-    const fontEngine = this.#fontEngine;
-    const commands = this.#commandHistory;
-    const requestRedraw = () => this.requestRedraw();
-
-    return {
-      glyph: fontEngine.$glyph.value,
-      selectedPoints: this.selectedPointIds.peek(),
-      hoveredPoint: this.hoveredPointId.peek(),
-      hoveredSegment: this.hoveredSegmentId.peek(),
-      mousePosition: viewport.getUpmMousePosition(),
-      selectionMode: this.selectionMode.peek(),
-
-      screen: {
-        toUpmDistance: (px) => viewport.screenToUpmDistance(px),
-        get hitRadius() {
-          return viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
-        },
-        lineWidth: (px = 1) => viewport.screenToUpmDistance(px),
-      },
-
-      select: {
-        set: (ids) => this.selectPoints(ids),
-        add: (id) => this.addPointToSelection(id),
-        remove: (id) => this.removePointFromSelection(id),
-        toggle: (id) => this.togglePointSelection(id),
-        clear: () => this.clearSelection(),
-        has: () => this.hasSelection(),
-        setMode: (mode) => this.setSelectionMode(mode),
-      },
-
-      indicators: {
-        setHoveredPoint: (id) => this.setHoveredPoint(id),
-        setHoveredSegment: (indicator) => this.setHoveredSegment(indicator),
-        clearAll: () => this.clearHover(),
-      },
-
-      edit: {
-        addPoint: (x, y, type) => {
-          const cmd = new AddPointCommand(x, y, type, false);
-          return commands.execute(cmd);
-        },
-        movePoints: (ids, dx, dy) => {
-          const cmd = new MovePointsCommand([...ids], dx, dy);
-          commands.execute(cmd);
-        },
-        movePointTo: (id, x, y) => {
-          fontEngine.editing.movePointTo(id, x, y);
-        },
-        applySmartEdits: (ids, dx, dy) => {
-          return fontEngine.editing.applySmartEdits(ids, dx, dy);
-        },
-        removePoints: (ids) => {
-          const cmd = new RemovePointsCommand([...ids]);
-          commands.execute(cmd);
-        },
-        addContour: () => {
-          const cmd = new AddContourCommand();
-          return commands.execute(cmd);
-        },
-        closeContour: () => {
-          const cmd = new CloseContourCommand();
-          commands.execute(cmd);
-        },
-        toggleSmooth: (id) => {
-          fontEngine.editing.toggleSmooth(id);
-        },
-        getActiveContourId: () => {
-          const id = fontEngine.editing.getActiveContourId();
-          return id ? asContourId(id) : null;
-        },
-        setActiveContour: (contourId) => {
-          fontEngine.editing.setActiveContour(contourId);
-        },
-        reverseContour: (contourId) => {
-          fontEngine.editing.reverseContour(contourId);
-        },
-        addPointToContour: (contourId, x, y, type, smooth) => {
-          return fontEngine.editing.addPointToContour(
-            contourId,
-            x,
-            y,
-            type as any,
-            smooth,
-          );
-        },
-      },
-
-      transform: {
-        rotate: (angle, origin) => {
-          this.rotateSelection(angle, origin);
-        },
-        scale: (sx, sy, origin) => {
-          this.scaleSelection(sx, sy ?? sx, origin);
-        },
-        reflect: (axis, origin) => {
-          this.reflectSelection(axis, origin);
-        },
-        rotate90CCW: () => {
-          this.rotateSelection(Math.PI / 2);
-        },
-        rotate90CW: () => {
-          this.rotateSelection(-Math.PI / 2);
-        },
-        rotate180: () => {
-          this.rotateSelection(Math.PI);
-        },
-        flipHorizontal: () => {
-          this.reflectSelection("horizontal");
-        },
-        flipVertical: () => {
-          this.reflectSelection("vertical");
-        },
-        getSelectionBounds: () => {
-          return this.getSelectionBounds();
-        },
-        getSelectionCenter: () => {
-          return this.getSelectionCenter();
-        },
-      },
-
-      commands,
-      requestRedraw,
-    };
-  }
-
   public get commandHistory(): CommandHistory {
     return this.#commandHistory;
   }
 
+  public get viewportManager(): ViewportManager {
+    return this.#viewport;
+  }
+
+  public get fontEngine(): FontEngine {
+    return this.#fontEngine;
+  }
+
+  public get selectionManager(): SelectionManager {
+    return this.#selection;
+  }
+
+  public get hoverManager(): HoverManager {
+    return this.#hover;
+  }
+
+  public get isInPreview(): boolean {
+    return this.#isInPreview;
+  }
+
+  public get previewSnapshot(): GlyphSnapshot | null {
+    return this.#previewSnapshot;
+  }
+
   public undo() {
     this.#commandHistory.undo();
-    this.redrawGlyph();
+    this.requestRedraw();
   }
 
   public redo() {
     this.#commandHistory.redo();
-    this.redrawGlyph();
+    this.requestRedraw();
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -521,7 +406,6 @@ export class Editor {
   ): void {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
-
 
   public getHandleState(pointId: PointId): HandleState {
     return this.getPointVisualState(pointId);
@@ -608,6 +492,35 @@ export class Editor {
     this.requestRedraw();
   }
 
+  public beginPreview(): void {
+    if (this.#isInPreview) return;
+    this.#previewSnapshot = this.#fontEngine.$glyph.value;
+    this.#isInPreview = true;
+  }
+
+  public cancelPreview(): void {
+    if (!this.#isInPreview || !this.#previewSnapshot) return;
+
+    this.#fontEngine.editing.restoreSnapshot(this.#previewSnapshot);
+    this.#previewSnapshot = null;
+    this.#isInPreview = false;
+    this.requestRedraw();
+  }
+
+  public commitPreview(label: string): void {
+    if (!this.#isInPreview || !this.#previewSnapshot) return;
+
+    const before = this.#previewSnapshot;
+    const after = this.#fontEngine.$glyph.value;
+
+    if (before && after) {
+      const cmd = new SnapshotCommand(label, before, after);
+      this.#commandHistory.record(cmd);
+    }
+
+    this.#previewSnapshot = null;
+    this.#isInPreview = false;
+  }
 
   /**
    * Get the bounding box and center of the current selection.
@@ -617,7 +530,10 @@ export class Editor {
   public getSelectionBounds(): SelectionBounds | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
-    return getSegmentAwareBounds(snapshot, this.#selection.selectedPointIds.peek());
+    return getSegmentAwareBounds(
+      snapshot,
+      this.#selection.selectedPointIds.peek(),
+    );
   }
 
   /**
@@ -667,10 +583,7 @@ export class Editor {
     this.#commandHistory.execute(cmd);
   }
 
-  public moveSelectionTo(
-    target: Point2D,
-    anchor: Point2D,
-  ): void {
+  public moveSelectionTo(target: Point2D, anchor: Point2D): void {
     const pointIds = [...this.#selection.selectedPointIds.peek()];
     if (pointIds.length === 0) return;
 
@@ -702,6 +615,146 @@ export class Editor {
     return result?.point ?? null;
   }
 
+  public getPointAt(pos: Point2D): PointSnapshot | null {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
+
+    for (const contour of snapshot.contours) {
+      for (const point of contour.points) {
+        if (Vec2.dist(point, pos) < hitRadius) {
+          return point;
+        }
+      }
+    }
+    return null;
+  }
+
+  public getPointIdAt(pos: Point2D): PointId | null {
+    const point = this.getPointAt(pos);
+    return point ? asPointId(point.id) : null;
+  }
+
+  public getSegmentAt(pos: Point2D): SegmentHitResult | null {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
+
+    for (const contour of snapshot.contours) {
+      const segments = SegmentOps.parse(contour.points, contour.closed);
+      const hit = SegmentOps.hitTestMultiple(segments, pos, hitRadius);
+      if (hit) {
+        return hit;
+      }
+    }
+    return null;
+  }
+
+  public getContourEndpointAt(pos: Point2D): {
+    contourId: ContourId;
+    position: "start" | "end";
+    contour: ContourSnapshot;
+  } | null {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
+
+    for (const contour of snapshot.contours) {
+      if (contour.closed || contour.points.length === 0) continue;
+
+      const firstPoint = contour.points[0];
+      const lastPoint = contour.points[contour.points.length - 1];
+
+      if (Vec2.dist(firstPoint, pos) < hitRadius) {
+        return {
+          contourId: asContourId(contour.id),
+          position: "start",
+          contour,
+        };
+      }
+
+      if (Vec2.dist(lastPoint, pos) < hitRadius) {
+        return {
+          contourId: asContourId(contour.id),
+          position: "end",
+          contour,
+        };
+      }
+    }
+    return null;
+  }
+
+  public getSelectionBoundingRect(): Rect2D | null {
+    const selectedPoints = this.#selection.selectedPointIds.peek();
+    if (selectedPoints.size === 0) return null;
+
+    const mode = this.#selection.selectionMode.peek();
+    if (mode !== "committed") return null;
+
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const points: PointSnapshot[] = [];
+    for (const contour of snapshot.contours) {
+      for (const point of contour.points) {
+        if (selectedPoints.has(asPointId(point.id))) {
+          points.push(point);
+        }
+      }
+    }
+
+    return Polygon.boundingRect(points);
+  }
+
+  public updateHover(pos: Point2D): void {
+    const pointId = this.getPointIdAt(pos);
+    if (pointId) {
+      this.#hover.setHoveredPoint(pointId);
+      return;
+    }
+
+    const segmentHit = this.getSegmentAt(pos);
+    if (segmentHit) {
+      this.#hover.setHoveredSegment({
+        segmentId: segmentHit.segmentId,
+        closestPoint: segmentHit.point,
+        t: segmentHit.t,
+      });
+      return;
+    }
+
+    this.#hover.clearHover();
+  }
+
+  public getAllPoints(): PointSnapshot[] {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return [];
+
+    const result: PointSnapshot[] = [];
+    for (const contour of snapshot.contours) {
+      result.push(...contour.points);
+    }
+    return result;
+  }
+
+  public findSegmentById(segmentId: SegmentId) {
+    const snapshot = this.#fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    for (const contour of snapshot.contours) {
+      const segments = SegmentOps.parse(contour.points, contour.closed);
+      for (const segment of segments) {
+        if (SegmentOps.id(segment) === segmentId) {
+          return segment;
+        }
+      }
+    }
+    return null;
+  }
+
   #getSelectedPointData(): Array<{ x: number; y: number }> {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return [];
@@ -714,10 +767,6 @@ export class Editor {
       }
     }
     return result;
-  }
-
-  public redrawGlyph() {
-    this.requestRedraw();
   }
 
   public requestRedraw() {

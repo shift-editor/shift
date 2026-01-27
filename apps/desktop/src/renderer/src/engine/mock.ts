@@ -105,6 +105,11 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#snapshot;
   }
 
+  restoreSnapshot(snapshotJson: string): string {
+    this.#snapshot = JSON.parse(snapshotJson) as JsGlyphSnapshot;
+    return JSON.stringify({ success: true });
+  }
+
   // ═══════════════════════════════════════════════════════════
   // CONTOUR OPERATIONS
   // ═══════════════════════════════════════════════════════════
@@ -156,6 +161,14 @@ export class MockFontEngine implements FontEngineAPI {
     }
 
     this.#snapshot.activeContourId = contourId;
+    return this.#makeResult(true, []);
+  }
+
+  clearActiveContour(): string {
+    if (!this.#snapshot)
+      return this.#makeResult(false, [], "No active edit session");
+
+    this.#snapshot.activeContourId = null;
     return this.#makeResult(true, []);
   }
 

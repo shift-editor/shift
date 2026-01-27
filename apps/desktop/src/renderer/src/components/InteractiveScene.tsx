@@ -6,6 +6,20 @@ import { getEditor } from "@/store/store";
 export const InteractiveScene = () => {
   const { interactiveCanvasRef } = useContext(CanvasContext);
   const editor = getEditor();
+  const toolManager = editor.getToolManager();
+  const ctx = editor.getContext();
+
+  const getScreenPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const screen = ctx.screen.getMousePosition(e.clientX, e.clientY);
+    return screen;
+  };
+
+  const getModifiers = (e: React.MouseEvent<HTMLCanvasElement>) => ({
+    shiftKey: e.shiftKey,
+    altKey: e.altKey,
+    metaKey: e.metaKey,
+    ctrlKey: e.ctrlKey,
+  });
 
   return (
     <canvas
@@ -13,18 +27,13 @@ export const InteractiveScene = () => {
       ref={interactiveCanvasRef}
       className="absolute inset-0 z-20 h-full w-full"
       onMouseDown={(e) => {
-        editor.getActiveTool().onMouseDown(e);
+        toolManager.handlePointerDown(getScreenPoint(e), getModifiers(e));
       }}
       onMouseUp={(e) => {
-        editor.getActiveTool().onMouseUp(e);
+        toolManager.handlePointerUp(getScreenPoint(e));
       }}
       onMouseMove={(e) => {
-        editor.getActiveTool().onMouseMove(e);
-      }}
-      onDoubleClick={(e) => {
-        const tool = editor.getActiveTool();
-        if (!tool.onDoubleClick) return;
-        tool.onDoubleClick(e);
+        toolManager.handlePointerMove(getScreenPoint(e), getModifiers(e));
       }}
     />
   );

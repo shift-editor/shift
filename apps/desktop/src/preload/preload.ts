@@ -120,6 +120,14 @@ const fontEngineAPI = {
   },
 
   /**
+   * Clear the active contour (set to null).
+   * Returns CommandResult JSON.
+   */
+  clearActiveContour: (): string => {
+    return fontEngineInstance.clearActiveContour();
+  },
+
+  /**
    * Reverse the points in a contour.
    * Returns CommandResult JSON.
    */
@@ -239,6 +247,14 @@ const fontEngineAPI = {
    */
   pasteContours: (contoursJson: string, offsetX: number, offsetY: number): string => {
     return fontEngineInstance.pasteContours(contoursJson, offsetX, offsetY);
+  },
+
+  /**
+   * Restore a glyph snapshot.
+   * Returns CommandResult JSON.
+   */
+  restoreSnapshot: (snapshotJson: string): string => {
+    return fontEngineInstance.restoreSnapshot(snapshotJson);
   },
 } satisfies FontEngineAPI;
 

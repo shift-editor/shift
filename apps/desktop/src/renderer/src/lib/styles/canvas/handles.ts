@@ -1,4 +1,4 @@
-import { HandleType } from "@/types/handle";
+import type { HandleType } from "@/lib/editor/rendering/handles";
 import { ThemeTokens } from "../theme";
 
 export interface DrawStyle {
@@ -27,7 +27,7 @@ export interface HandleStyles {
 export function createHandleStyles(
   theme: ThemeTokens,
 ): Record<HandleType, HandleStyles> {
-  const { cyan, gray, green } = theme.canvas;
+  const { cyan, gray, green, pink } = theme.canvas;
   const white = theme.ui.bg.surface;
   const hoverOverlay = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 
@@ -64,7 +64,7 @@ export function createHandleStyles(
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: cyan,
+        strokeStyle: pink,
         fillStyle: white,
         dashPattern: [],
       },
@@ -72,7 +72,7 @@ export function createHandleStyles(
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: cyan,
+        strokeStyle: pink,
         fillStyle: white,
         dashPattern: [],
         overlayColor: hoverOverlay(0.75),
@@ -82,7 +82,7 @@ export function createHandleStyles(
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: white,
-        fillStyle: cyan,
+        fillStyle: pink,
         dashPattern: [],
       },
     },

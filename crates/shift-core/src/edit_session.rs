@@ -1,4 +1,4 @@
-use crate::{Contour, ContourId, GlyphLayer, PointId, PointType};
+use crate::{snapshot::GlyphSnapshot, Contour, ContourId, GlyphLayer, PointId, PointType};
 
 pub struct EditSession {
     layer: GlyphLayer,
@@ -310,6 +310,67 @@ impl EditSession {
             created_contour_ids,
             error: None,
         }
+    }
+
+    pub fn restore_from_snapshot(&mut self, snapshot: &GlyphSnapshot) {
+        self.layer.clear_contours();
+
+        let active_contour_id = snapshot
+            .active_contour_id
+            .as_ref()
+            .and_then(|id_str| id_str.parse::<u128>().ok().map(ContourId::from_raw));
+
+        for contour_snapshot in &snapshot.contours {
+            let contour_id = contour_snapshot
+                .id
+                .parse::<u128>()
+                .ok()
+                .map(ContourId::from_raw);
+
+            let mut contour = if let Some(id) = contour_id {
+                Contour::with_id(id)
+            } else {
+                Contour::new()
+            };
+
+            for point_snapshot in &contour_snapshot.points {
+                let point_type = match point_snapshot.point_type {
+                    crate::snapshot::PointType::OnCurve => PointType::OnCurve,
+                    crate::snapshot::PointType::OffCurve => PointType::OffCurve,
+                };
+
+                let point_id = point_snapshot
+                    .id
+                    .parse::<u128>()
+                    .ok()
+                    .map(PointId::from_raw);
+
+                if let Some(id) = point_id {
+                    contour.add_point_with_id(
+                        id,
+                        point_snapshot.x,
+                        point_snapshot.y,
+                        point_type,
+                        point_snapshot.smooth,
+                    );
+                } else {
+                    contour.add_point(
+                        point_snapshot.x,
+                        point_snapshot.y,
+                        point_type,
+                        point_snapshot.smooth,
+                    );
+                }
+            }
+
+            if contour_snapshot.closed {
+                contour.close();
+            }
+
+            self.layer.add_contour(contour);
+        }
+
+        self.active_contour_id = active_contour_id;
     }
 }
 

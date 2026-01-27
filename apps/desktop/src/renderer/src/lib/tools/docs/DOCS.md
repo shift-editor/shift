@@ -4,107 +4,132 @@ State machine-based tool implementations for the Shift font editor.
 
 ## Overview
 
-The tools library provides editing tools (Pen, Select, Hand, Shape) built on a generic state machine pattern. Each tool manages its own state, handles mouse/keyboard events, and renders interactive overlays. Tools are coordinated through a registry system with keyboard shortcuts.
+The tools library provides editing tools (Pen, Select, Hand, Shape) built on a state machine pattern using `BaseTool`. Each tool manages its own state via discriminated unions, handles semantic events from `GestureDetector`, and renders interactive overlays. Tools are coordinated by `ToolManager` with keyboard shortcuts.
 
 ## Architecture
 
 ```
-Tool Interface
-├── name: ToolName
-├── setIdle() / setReady()
-├── onMouseDown/Move/Up()
-├── keyDownHandler?() / keyUpHandler?()
-├── drawInteractive?(ctx)
-├── dispose?()
-└── cancel?()
+BaseTool<TState>
+├── id: ToolName
+├── state: TState
+├── ctx: ToolContext
+├── initialState(): TState
+├── transition(state, event): TState
+├── onTransition?(prev, next, event): void
+├── render?(renderer): void
+├── activate?() / deactivate?()
+└── handleEvent(event): void
 
-StateMachine<TState>
-├── state: WritableSignal<TState>
-├── transition(newState)
-├── isIn(...types): boolean
-├── when(type, handler)
-└── match(handlers)
+ToolManager
+├── activate(tool): void
+├── handlePointerDown/Move/Up()
+├── handleKeyDown/Up()
+├── requestTemporary(name)
+└── returnFromTemporary()
 
-Tool Registry
-└── Map<ToolName, { tool, icon, tooltip }>
+GestureDetector
+├── pointerDown/Move/Up()
+└── Converts raw events → ToolEvent
 ```
 
 ### File Organization
 
 ```
 tools/
-├── core/               # State machine infrastructure
-│   └── StateMachine.ts
-├── pen/                # Bezier curve drawing
+├── core/                    # Infrastructure
+│   ├── BaseTool.ts          # Abstract base class
+│   ├── GestureDetector.ts   # Pointer → semantic events
+│   ├── ToolManager.ts       # Tool orchestration
+│   ├── createContext.ts     # ToolContext factory
+│   └── DrawAPI.ts           # Rendering API
+├── pen/                     # Bezier curve drawing
 │   ├── Pen.ts
-│   ├── commands.ts
-│   └── states.ts
-├── select/             # Point selection and dragging
+│   └── intents.ts
+├── select/                  # Point selection and manipulation
 │   ├── Select.ts
-│   ├── commands.ts
-│   └── states.ts
-├── hand/               # Canvas panning
+│   ├── cursor.ts
+│   ├── types.ts
+│   └── utils.ts
+├── hand/                    # Canvas panning
 │   └── Hand.ts
-├── shape/              # Rectangle creation
+├── shape/                   # Rectangle creation
 │   └── Shape.ts
-└── tools.ts            # Tool registry
+└── tools.ts                 # ToolName type
 ```
 
 ### Key Design Decisions
 
-1. **State Machine Pattern**: Each tool uses discriminated union states
-2. **Separation of Concerns**: States define WHEN, commands define HOW
-3. **Reactive State**: State machine uses signals for automatic redraws
-4. **Tool Context**: Editor provides context for tool operations
+1. **State Machine Pattern**: Tools use discriminated union states with pure transitions
+2. **Side Effects in onTransition**: State changes trigger side effects after transition
+3. **GestureDetector**: Converts raw pointer events to semantic events (click, drag, doubleClick)
+4. **ToolContext Injection**: Tools receive services via context, enabling testing
+5. **State in State Machine**: All state lives in state variants, no shadow state
 
 ## Key Concepts
 
-### Tool Interface
+### BaseTool
 
-All tools implement this contract:
+Abstract base class all tools extend:
 
 ```typescript
-interface Tool {
-  name: ToolName; // 'select' | 'pen' | 'hand' | 'shape'
-  setIdle(): void;
-  setReady(): void;
-  onMouseDown(e: MouseEvent): void;
-  onMouseUp(e: MouseEvent): void;
-  onMouseMove(e: MouseEvent): void;
-  keyDownHandler?(e: KeyboardEvent): void;
-  drawInteractive?(ctx: IRenderer): void;
-  cancel?(): void; // Called on Escape key
+abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
+  abstract readonly id: ToolName;
+  state: S;
+  protected ctx: ToolContext;
+
+  abstract initialState(): S;
+  abstract transition(state: S, event: ToolEvent): S;
+
+  onTransition?(prev: S, next: S, event: ToolEvent): void;
+  render?(renderer: IRenderer): void;
+  activate?(): void;
+  deactivate?(): void;
+
+  handleEvent(event: ToolEvent): void;
+
+  // Helpers
+  protected batch<T>(name: string, fn: () => T): T;
+  protected beginPreview(): void;
+  protected commitPreview(label: string): void;
+  protected cancelPreview(): void;
 }
 ```
 
-### State Machine
+### ToolEvent
 
-Generic state management with type-safe transitions:
+Semantic events produced by GestureDetector:
 
 ```typescript
-const sm = createStateMachine<PenState>({ type: "idle" });
-
-sm.transition({ type: "ready" });
-sm.isIn("ready", "idle"); // true
-sm.when("ready", (state) => {
-  /* handle ready */
-});
+type ToolEvent =
+  | { type: "pointerMove"; point: Point2D }
+  | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "doubleClick"; point: Point2D }
+  | { type: "dragStart"; point: Point2D; screenPoint: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "drag"; point: Point2D; screenPoint: Point2D; origin: Point2D; screenOrigin: Point2D; delta: Point2D; screenDelta: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "dragEnd"; point: Point2D; screenPoint: Point2D; origin: Point2D; screenOrigin: Point2D }
+  | { type: "dragCancel" }
+  | { type: "keyDown"; key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean }
+  | { type: "keyUp"; key: string };
 ```
 
-### Tool Context
+### ToolContext
 
-Provided by editor for tool operations:
+Services provided to tools:
 
 ```typescript
 interface ToolContext {
-  snapshot: GlyphSnapshot | null;
-  selectedPoints: ReadonlySet<PointId>;
-  viewport: Viewport;
-  mousePosition: Point2D;
-  fontEngine: FontEngine;
-  commands: CommandHistory;
-  setSelectedPoints(ids: Set<PointId>): void;
-  requestRedraw(): void;
+  screen: ScreenService;        // Coordinate conversion, hit radius
+  selection: SelectionService;  // Point/segment selection state
+  hover: HoverService;          // Hover state management
+  edit: EditService;            // Glyph editing operations
+  preview: PreviewService;      // Preview mode for drag operations
+  transform: TransformService;  // Transform operations
+  cursor: CursorService;        // Cursor management
+  render: RenderService;        // Redraw requests
+  viewport: ViewportService;    // Pan/zoom
+  hitTest: HitTestService;      // Point/segment hit testing
+  commands: CommandHistory;     // Undo/redo
+  tools: ToolSwitchService;     // Temporary tool switching
 }
 ```
 
@@ -112,21 +137,23 @@ interface ToolContext {
 
 ### Select Tool
 
-Point selection and dragging:
+Point selection and manipulation:
 
 ```
-States: idle → ready ↔ selected
-              ↓         ↑
-           selecting → dragging
+States: idle → ready ↔ selected ↔ dragging
+                ↓         ↓
+             selecting  resizing
 ```
 
 Features:
-
 - Click to select point
 - Shift+click for multi-select
+- Click segment to select
 - Drag to move selected points
 - Rectangle selection
-- Arrow keys for nudging
+- Resize selection via bounding box handles
+- Arrow keys for nudging (small/medium/large)
+- Double-click to toggle smooth
 
 ### Pen Tool
 
@@ -137,13 +164,13 @@ States: idle → ready → anchored → dragging → ready
 ```
 
 Features:
-
-- Click to place anchor
-- Drag to create handles
+- Click to place anchor point
+- Drag to create bezier handles
 - Automatic handle mirroring
 - Click first point to close contour
-- Continue contour: Click start/end point of existing open contour (after Escape)
-- Split contour: Click middle point of existing open contour (after Escape)
+- Escape to abandon contour
+- Continue contour: Click endpoint of existing open contour
+- Split contour: Click middle point of existing contour
 
 ### Hand Tool
 
@@ -154,9 +181,8 @@ States: idle → ready → dragging
 ```
 
 Features:
-
 - Drag to pan canvas
-- Space bar activation
+- Space bar activation (temporary tool switch)
 
 ### Shape Tool
 
@@ -167,26 +193,36 @@ States: idle → ready → dragging
 ```
 
 Features:
-
 - Drag to create rectangle
 - Auto-closes contour
 
 ## API Reference
 
-### StateMachine<TState>
+### BaseTool Methods
 
-- `state: WritableSignal<TState>` - Current state signal
-- `current: TState` - Current state value
-- `currentType: string` - Current state type
-- `transition(newState)` - Change state
-- `isIn(...types): boolean` - Check state
-- `when(type, handler)` - Execute if in state
-- `match(handlers): R` - Pattern match states
+| Method | Description |
+| ------ | ----------- |
+| `initialState()` | Return the initial state |
+| `transition(state, event)` | Pure state transition logic |
+| `onTransition(prev, next, event)` | Side effects after state change |
+| `render(renderer)` | Draw interactive overlays |
+| `activate()` | Called when tool becomes active |
+| `deactivate()` | Called when tool becomes inactive |
+| `handleEvent(event)` | Process a ToolEvent |
+| `batch(name, fn)` | Execute commands in a batch |
+| `beginPreview()` | Start preview mode |
+| `commitPreview(label)` | Commit preview as command |
+| `cancelPreview()` | Cancel preview, restore state |
 
-### Tool Registry
+### ToolManager Methods
 
-- `createToolRegistry(editor)` - Initialize all tools
-- `tools.get(name): ToolRegistryItem` - Get tool
+| Method | Description |
+| ------ | ----------- |
+| `activate(tool)` | Set the primary active tool |
+| `handlePointerDown/Move/Up()` | Route pointer events to GestureDetector |
+| `handleKeyDown/Up()` | Route key events to active tool |
+| `requestTemporary(name, options)` | Switch to temporary tool (e.g., Space+Hand) |
+| `returnFromTemporary()` | Return to primary tool |
 
 ### Keyboard Shortcuts
 
@@ -195,115 +231,128 @@ Features:
 - `H` - Hand tool
 - `S` - Shape tool
 - `Escape` - Cancel current operation
-
-### Cancel System
-
-All tools support the Escape key for cancellation via the optional `cancel()` method.
-
-**Behavior:**
-
-- Escape cancels the current in-progress operation
-- Progressive: cancels one level at a time
-- Command batches are cancelled (not committed)
-
-**Per-tool behavior:**
-
-| Tool   | Cancel Action                            |
-| ------ | ---------------------------------------- |
-| Pen    | Cancel point placement → abandon contour |
-| Select | Cancel drag → clear selection → ready    |
-| Shape  | Cancel rectangle preview                 |
-| Hand   | Stop panning                             |
-
-**Implementation pattern:**
-
-```typescript
-cancel(): void {
-  // 1. Check for in-progress operation
-  if (this.#sm.isIn("dragging")) {
-    if (ctx.commands.isBatching) {
-      ctx.commands.cancelBatch();
-    }
-    this.#sm.transition({ type: "ready" });
-    return;
-  }
-  // 2. Tool-specific idle cleanup
-}
-```
+- `Space` (hold) - Temporary Hand tool
 
 ## Usage Examples
 
-### Using a Tool
+### Creating a Tool
 
 ```typescript
-const pen = new Pen(editor);
-pen.setReady(); // Activate
+class MyTool extends BaseTool<MyState> {
+  readonly id: ToolName = "myTool";
 
-// Events handled automatically via editor:
-canvas.onMouseDown = (e) => pen.onMouseDown(e);
-canvas.onMouseMove = (e) => pen.onMouseMove(e);
-canvas.onMouseUp = (e) => pen.onMouseUp(e);
+  initialState(): MyState {
+    return { type: "idle" };
+  }
+
+  transition(state: MyState, event: ToolEvent): MyState {
+    if (state.type === "ready" && event.type === "click") {
+      return { type: "active", point: event.point };
+    }
+    return state;
+  }
+
+  onTransition(prev: MyState, next: MyState, event: ToolEvent): void {
+    if (next.type === "active") {
+      this.ctx.cursor.set({ type: "crosshair" });
+    }
+  }
+
+  activate(): void {
+    this.state = { type: "ready" };
+    this.ctx.cursor.set({ type: "default" });
+  }
+}
 ```
 
-### State Machine Usage
+### Testing with ToolEventSimulator
 
 ```typescript
-const sm = createStateMachine<SelectState>({ type: "idle" });
+import { ToolEventSimulator, createMockToolContext, createToolMouseEvent } from "@/testing";
 
-sm.transition({ type: "ready", hoveredPointId: null });
+describe("MyTool", () => {
+  let tool: MyTool;
+  let sim: ToolEventSimulator;
+  let ctx: MockToolContext;
 
-sm.when("dragging", (state) => {
-  const { drag } = state;
-  movePoints(drag.pointIds, drag.dx, drag.dy);
-});
+  beforeEach(() => {
+    ctx = createMockToolContext();
+    tool = new MyTool(ctx);
+    sim = new ToolEventSimulator(tool);
+    sim.setReady();
+  });
 
-sm.match({
-  idle: () => (cursor = "default"),
-  ready: () => (cursor = "crosshair"),
-  dragging: () => (cursor = "grabbing"),
+  it("should activate on click", () => {
+    sim.onMouseDown(createToolMouseEvent(100, 100));
+    sim.onMouseUp(createToolMouseEvent(100, 100));
+    expect(tool.getState().type).toBe("active");
+  });
+
+  it("should handle drag", () => {
+    sim.onMouseDown(createToolMouseEvent(100, 100));
+    sim.onMouseMove(createToolMouseEvent(150, 150));
+    expect(tool.getState().type).toBe("dragging");
+  });
+
+  it("should handle keyboard", () => {
+    sim.keyDown("ArrowRight");
+    expect(ctx.mocks.edit.movePoints).toHaveBeenCalled();
+  });
 });
 ```
 
-### Tool Commands
+### Preview Pattern for Drag Operations
 
 ```typescript
-// Pen commands
-const anchor = PenCommands.placeAnchor(pos);
-const handles = PenCommands.createHandles(anchor, mousePos);
-PenCommands.updateHandles(anchor, handles, mousePos);
+onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
+  // Start preview when drag begins
+  if (prev.type === "selected" && next.type === "dragging") {
+    this.beginPreview();
+  }
 
-// Select commands
-const hit = SelectCommands.hitTest(pos);
-SelectCommands.selectPoint(pointId, additive);
-SelectCommands.moveSelectedPoints(anchorId, currentPos);
+  // Commit when drag ends with actual movement
+  if (prev.type === "dragging" && next.type === "selected") {
+    if (event.type === "dragEnd") {
+      const { totalDelta, draggedPointIds } = prev.drag;
+      if ((totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0) {
+        this.commitPreview("Move Points");
+      } else {
+        this.cancelPreview();
+      }
+    } else {
+      this.cancelPreview();
+    }
+  }
+}
 ```
 
 ## Data Flow
 
 ```
-Mouse Event
-    ↓
-Tool.onMouseMove(e)
-    ↓
-Get UPM position from editor
-    ↓
-State machine logic
-    ├── Match current state
-    ├── Execute state-specific logic
-    └── Transition to new state
-    ↓
-Commands execute mutations
-    ↓
-Request redraw
-    ↓
-drawInteractive() called
-    ↓
-Tool renders overlays
+User Interaction
+      ↓
+InteractiveScene (React)
+      ↓
+ToolManager.handlePointerDown/Move/Up()
+      ↓
+GestureDetector.pointerDown/Move/Up()
+      ↓
+ToolEvent (click | drag | doubleClick | ...)
+      ↓
+BaseTool.handleEvent(event)
+      ↓
+tool.transition(state, event) → new state
+      ↓
+tool.onTransition(prev, next, event) → side effects
+      ↓
+ctx.render.requestRedraw()
+      ↓
+tool.render(renderer) → draw overlays
 ```
 
 ## Related Systems
 
-- [editor](../editor/docs/DOCS.md) - Provides ToolContext
-- [commands](../commands/docs/DOCS.md) - Command execution
-- [reactive](../reactive/docs/DOCS.md) - State signals
+- [editor](../editor/docs/DOCS.md) - Provides ToolContext services
+- [commands](../commands/docs/DOCS.md) - Command execution and undo
+- [reactive](../reactive/docs/DOCS.md) - Signals for state
 - [graphics](../graphics/docs/DOCS.md) - Interactive rendering

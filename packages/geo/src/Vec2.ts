@@ -402,6 +402,13 @@ export const Vec2 = {
     return Math.abs(Vec2.dot(a, b)) < epsilon;
   },
 
+  /**
+   * Check if point b is within a given radius of point a.
+   */
+  isWithin(a: Point2D, b: Point2D, radius: number): boolean {
+    return Vec2.dist(a, b) < radius;
+  },
+
   // ============================================
   // Utility
   // ============================================

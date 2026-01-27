@@ -1,13 +1,16 @@
 import * as React from "react";
+import {
+  Button as BaseButton,
+  type ButtonProps as BaseButtonProps,
+} from "@base-ui-components/react/button";
 import { cn } from "../../lib/utils";
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  className?: string;
+export type ButtonProps = BaseButtonProps & {
   variant?: "default" | "ghost";
   size?: "sm" | "md" | "lg" | "icon";
   isActive?: boolean;
   icon?: React.ReactNode;
-}
+};
 
 const variantStyles = {
   default: "bg-surface border border-line-subtle hover:bg-surface-hover",
@@ -28,32 +31,29 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant = "default",
       size = "md",
       isActive,
-      disabled,
       icon,
       children,
-      style,
       ...props
     },
     ref,
   ) => {
     return (
-      <button
+      <BaseButton
         ref={ref}
         className={cn(
           "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-          "disabled:pointer-events-none disabled:opacity-50 ",
+          "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
           variantStyles[variant],
           sizeStyles[size],
           className,
         )}
-        disabled={disabled}
         data-active={isActive ? true : undefined}
         {...props}
       >
         {icon}
         {children}
-      </button>
+      </BaseButton>
     );
   },
 );

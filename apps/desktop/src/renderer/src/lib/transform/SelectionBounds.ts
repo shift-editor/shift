@@ -1,4 +1,3 @@
-import { parseSegments } from "@/engine/segments";
 import { Segment } from "@/lib/geo/Segment";
 import { Vec2 } from "@shift/geo";
 import { asPointId } from "@shift/types";
@@ -19,7 +18,7 @@ export function getSegmentAwareBounds(
   const pointsInFullSegments = new Set<PointId>();
 
   for (const contour of snapshot.contours) {
-    const segments = parseSegments(contour.points, contour.closed);
+    const segments = Segment.parse(contour.points, contour.closed);
 
     for (const segment of segments) {
       const segmentPointIds = Segment.getPointIds(segment);

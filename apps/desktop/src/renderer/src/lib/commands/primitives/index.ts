@@ -15,3 +15,4 @@ export {
   NudgePointsCommand,
   SplitSegmentCommand,
 } from "./BezierCommands";
+export { SnapshotCommand } from "./SnapshotCommand";

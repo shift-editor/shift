@@ -13,9 +13,9 @@ export const Editor = () => {
 
   useEffect(() => {
     const editor = getEditor();
+    const toolManager = editor.getToolManager();
 
     const keyDownHandler = (e: KeyboardEvent) => {
-      // Zoom in: Cmd+= OR Cmd+Shift++ (both work)
       if ((e.key === "=" || e.key === "+") && e.metaKey) {
         e.preventDefault();
         editor.zoomIn();
@@ -23,7 +23,6 @@ export const Editor = () => {
         return;
       }
 
-      // Zoom out: Cmd+-
       if (e.key === "-" && e.metaKey) {
         e.preventDefault();
         editor.zoomOut();
@@ -34,14 +33,6 @@ export const Editor = () => {
       if (e.key === "h") {
         e.preventDefault();
         editor.setActiveTool("hand");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === " " && !e.repeat) {
-        e.preventDefault();
-        editor.setActiveTool("hand");
-        editor.setPreviewMode(true);
         editor.requestRedraw();
         return;
       }
@@ -103,31 +94,11 @@ export const Editor = () => {
         return;
       }
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        const activeTool = editor.getActiveTool();
-        activeTool.cancel?.();
-        editor.requestRedraw();
-        return;
-      }
-
-      const activeTool = editor.getActiveTool();
-      if (activeTool.keyDownHandler) {
-        activeTool.keyDownHandler(e);
-      }
+      toolManager.handleKeyDown(e);
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
-      if (e.key == " ") {
-        editor.setActiveTool("select");
-        editor.setPreviewMode(false);
-        editor.requestRedraw();
-      }
-
-      const activeTool = editor.getActiveTool();
-      if (activeTool.keyUpHandler) {
-        activeTool.keyUpHandler(e);
-      }
+      toolManager.handleKeyUp(e);
     };
 
     document.addEventListener("keydown", keyDownHandler);

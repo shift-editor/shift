@@ -83,6 +83,18 @@ impl Contour {
         id
     }
 
+    pub fn add_point_with_id(
+        &mut self,
+        id: PointId,
+        x: f64,
+        y: f64,
+        point_type: PointType,
+        smooth: bool,
+    ) {
+        let point = Point::new(id, x, y, point_type, smooth);
+        self.points.push(point);
+    }
+
     pub fn push_point(&mut self, point: Point) {
         self.points.push(point);
     }

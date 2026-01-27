@@ -16,7 +16,7 @@
     "lint:check": "turbo run lint:check",
     "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\" \"packages/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "format:check": "prettier --check \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\" \"packages/**/*.{js,jsx,ts,tsx,css,md,json}\"",
-    "clean": "rm -rf apps/*/.vite apps/*/out node_modules && cargo clean",
+    "clean": "rm -rf apps/*/.vite apps/*/out apps/*/node_modules/.vite packages/*/node_modules/.vite node_modules .turbo && cargo clean",
     "package": "pnpm run build:native && pnpm --filter @shift/desktop package",
     "make": "pnpm run build:native && pnpm --filter @shift/desktop make"
   },

@@ -1,51 +1,63 @@
-import { Tool, ToolName } from "@/types/tool";
-import type { HandState } from "@/types/hand";
-import { Vec2 } from "@shift/geo";
+import type { Point2D } from "@shift/types";
+import { BaseTool, type ToolName, type ToolEvent } from "../core";
 
-import { Editor } from "@/lib/editor/Editor";
+type HandState =
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "dragging"; screenStart: Point2D; startPan: Point2D };
 
-export class Hand implements Tool {
-  public readonly name: ToolName = "hand";
+export class Hand extends BaseTool<HandState> {
+  readonly id: ToolName = "hand";
 
-  #editor: Editor;
-  #state: HandState;
-
-  constructor(editor: Editor) {
-    this.#editor = editor;
-    this.#state = { type: "idle" };
+  initialState(): HandState {
+    return { type: "idle" };
   }
 
-  setIdle(): void {
-    this.#state = { type: "idle" };
+  transition(state: HandState, event: ToolEvent): HandState {
+    switch (state.type) {
+      case "idle":
+        return state;
+
+      case "ready":
+        if (event.type === "dragStart") {
+          const startPan = this.ctx.viewport.getPan();
+          this.ctx.cursor.set({ type: "grabbing" });
+          return {
+            type: "dragging",
+            screenStart: event.screenPoint,
+            startPan,
+          };
+        }
+        return state;
+
+      case "dragging":
+        if (event.type === "drag") {
+          const screenDelta = event.screenDelta;
+          const pan = {
+            x: state.startPan.x + screenDelta.x,
+            y: state.startPan.y + screenDelta.y,
+          };
+          this.ctx.viewport.pan(pan.x, pan.y);
+          this.ctx.render.requestRedraw();
+          return state;
+        }
+        if (event.type === "dragEnd" || event.type === "dragCancel") {
+          this.ctx.cursor.set({ type: "grab" });
+          return { type: "ready" };
+        }
+        return state;
+
+      default:
+        return state;
+    }
   }
 
-  setReady(): void {
-    this.#state = { type: "ready" };
-    this.#editor.setCursor({ type: "grab" });
+  activate(): void {
+    this.state = { type: "ready" };
+    this.ctx.cursor.set({ type: "grab" });
   }
 
-  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const startPos = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const startPan = this.#editor.getPan();
-
-    this.#state = { type: "dragging", startPos, startPan };
-    this.#editor.setCursor({ type: "grabbing" });
-  }
-
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    if (this.#state.type !== "dragging") return;
-
-    const currentPos = this.#editor.getMousePosition(e.clientX, e.clientY);
-    const delta = Vec2.sub(currentPos, this.#state.startPos);
-    const pan = Vec2.add(this.#state.startPan, delta);
-
-    this.#editor.pan(pan.x, pan.y);
-    this.#editor.requestRedraw();
-  }
-
-  onMouseUp(_: React.MouseEvent<HTMLCanvasElement>): void {
-    this.#state = { type: "ready" };
-    this.#editor.setCursor({ type: "grab" });
-    this.#editor.cancelRedraw();
+  deactivate(): void {
+    this.state = { type: "idle" };
   }
 }

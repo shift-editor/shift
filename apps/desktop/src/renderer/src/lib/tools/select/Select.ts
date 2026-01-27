@@ -1,462 +1,140 @@
-import { Editor } from "@/lib/editor/Editor";
-import { MovePointsCommand, NudgePointsCommand, ScalePointsCommand } from "@/lib/commands";
-import { effect, type Effect } from "@/lib/reactive/signal";
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
-import { createStateMachine, type StateMachine } from "@/lib/tools/core";
-import { IRenderer } from "@/types/graphics";
-import { Tool, ToolName } from "@/types/tool";
-import type { CursorType } from "@/types/editor";
-import type { PointId, Point2D, Rect2D } from "@shift/types";
-import { Vec2 } from "@shift/geo";
+import type { IRenderer } from "@/types/graphics";
+import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { getCursorForState, type BoundingRectEdge } from "./cursor";
+import type { SelectState, SelectBehavior } from "./types";
+import { executeIntent } from "./intents";
+import {
+  HoverBehavior,
+  SelectionBehavior,
+  MarqueeBehavior,
+  DragBehavior,
+  ResizeBehavior,
+  NudgeBehavior,
+} from "./behaviors";
 
-import { SelectCommands, type BoundingRectEdge } from "./commands";
-import type { SelectState } from "./states";
+export type { BoundingRectEdge, SelectState };
 
-function normalizeRect(start: Point2D, current: Point2D): Rect2D {
-  const min = Vec2.min(start, current);
-  const max = Vec2.max(start, current);
-  return {
-    x: min.x,
-    y: min.y,
-    width: max.x - min.x,
-    height: max.y - min.y,
-    left: min.x,
-    top: min.y,
-    right: max.x,
-    bottom: max.y,
-  };
-}
+export class Select extends BaseTool<SelectState> {
+  readonly id: ToolName = "select";
 
-function edgeToCursor(edge: BoundingRectEdge): CursorType {
-  switch (edge) {
-    case "left":
-    case "right":
-      return { type: "ew-resize" };
-    case "top":
-    case "bottom":
-      return { type: "ns-resize" };
-    case "top-left":
-    case "bottom-right":
-      return { type: "nwse-resize" };
-    case "top-right":
-    case "bottom-left":
-      return { type: "nesw-resize" };
-    default:
-      return { type: "default" };
-  }
-}
+  private behaviors: SelectBehavior[] = [
+    new HoverBehavior(),
+    new SelectionBehavior(),
+    new NudgeBehavior(),
+    new ResizeBehavior(),
+    new DragBehavior(),
+    new MarqueeBehavior(),
+  ];
 
-export class Select implements Tool {
-  public readonly name: ToolName = "select";
-
-  #editor: Editor;
-  #sm: StateMachine<SelectState>;
-  #commands: SelectCommands;
-  #renderEffect: Effect;
-  #shiftModifierOn: boolean = false;
-  #draggedPointIds: PointId[] = [];
-  #initialResizePositions: Map<PointId, Point2D> = new Map();
-
-  constructor(editor: Editor) {
-    this.#editor = editor;
-    this.#sm = createStateMachine<SelectState>({ type: "idle" });
-    this.#commands = new SelectCommands(editor);
-
-    this.#renderEffect = effect(() => {
-      if (!this.#sm.isIn("idle")) {
-        editor.requestRedraw();
-      }
-    });
+  initialState(): SelectState {
+    return { type: "idle" };
   }
 
-  setIdle(): void {
-    this.#sm.transition({ type: "idle" });
+  activate(): void {
+    this.state = { type: "ready", hoveredPointId: null };
+    this.ctx.cursor.set({ type: "default" });
   }
 
-  setReady(): void {
-    this.#sm.transition({ type: "ready", hoveredPointId: null });
-    this.#editor.setCursor({ type: "default" });
+  deactivate(): void {
+    this.state = { type: "idle" };
   }
 
-  dispose(): void {
-    this.#renderEffect.dispose();
-  }
-
-  getState(): SelectState {
-    return this.#sm.current;
-  }
-
-  #getMouseUpm(e: React.MouseEvent<HTMLCanvasElement>): {
-    x: number;
-    y: number;
-  } {
-    const screenPos = this.#editor.getMousePosition(e.clientX, e.clientY);
-    return this.#editor.projectScreenToUpm(screenPos.x, screenPos.y);
-  }
-
-  onMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const pos = this.#getMouseUpm(e);
-    const { pointId } = this.#commands.hitTest(pos);
-    const ctx = this.#editor.createToolContext();
-
-    this.#sm.when("ready", () => {
-      if (pointId) {
-        // Point hit - select and start dragging
-        this.#commands.selectPoint(pointId, false);
-        const freshCtx = this.#editor.createToolContext();
-        this.#draggedPointIds = [...freshCtx.selectedPoints];
-        this.#editor.setCursor({ type: "move" });
-        this.#sm.transition({
-          type: "dragging",
-          drag: {
-            anchorPointId: pointId,
-            startPos: pos,
-            lastPos: pos,
-            totalDelta: { x: 0, y: 0 },
-          },
+  handleModifier(key: string, pressed: boolean): boolean {
+    if (key === "Space") {
+      if (pressed) {
+        this.ctx.tools.requestTemporary("hand", {
+          onActivate: () => this.ctx.render.setPreviewMode(true),
+          onReturn: () => this.ctx.render.setPreviewMode(false),
         });
       } else {
-        // No point hit - check for segment hit
-        const segmentHit = this.#commands.hitTestSegment(pos);
-        if (segmentHit) {
-          // Segment hit - select and start dragging
-          const pointIds = this.#commands.selectSegment(
-            segmentHit.segmentId,
-            false,
-          );
-          this.#draggedPointIds = pointIds;
-          this.#editor.setCursor({ type: "move" });
-          this.#sm.transition({
-            type: "dragging",
-            drag: {
-              anchorPointId: pointIds[0],
-              startPos: pos,
-              lastPos: pos,
-              totalDelta: { x: 0, y: 0 },
-            },
-          });
-        } else {
-          // Nothing hit - start rectangle selection
-          ctx.select.setMode("preview");
-          this.#editor.setCursor({ type: "default" });
-          this.#sm.transition({
-            type: "selecting",
-            selection: { startPos: pos, currentPos: pos },
-          });
-        }
+        this.ctx.tools.returnFromTemporary();
       }
-    });
-
-    this.#sm.when("selected", () => {
-      // Check for bounding rect edge hit first (for resizing)
-      const edge = this.#commands.hitTestBoundingRectEdge(pos);
-      const bounds = this.#commands.getSelectionBoundingRect();
-
-      if (edge && bounds && !pointId) {
-        // Edge hit - start resizing
-        const anchorPoint = this.#commands.getAnchorPointForEdge(edge, bounds);
-        const freshCtx = this.#editor.createToolContext();
-        this.#draggedPointIds = [...freshCtx.selectedPoints];
-
-        // Store initial positions for undo
-        this.#initialResizePositions.clear();
-        const allPoints = ctx.glyph?.contours.flatMap(c => c.points) ?? [];
-        for (const p of allPoints) {
-          if (freshCtx.selectedPoints.has(p.id as PointId)) {
-            this.#initialResizePositions.set(p.id as PointId, { x: p.x, y: p.y });
-          }
-        }
-
-        this.#editor.setCursor(edgeToCursor(edge));
-        this.#sm.transition({
-          type: "resizing",
-          resize: {
-            edge,
-            startPos: pos,
-            lastPos: pos,
-            initialBounds: bounds,
-            anchorPoint,
-          },
-        });
-        return;
-      }
-
-      if (pointId) {
-        // Point hit
-        const isSelected = this.#commands.isPointSelected(pointId);
-        if (this.#shiftModifierOn) {
-          this.#commands.togglePointInSelection(pointId);
-          if (this.#commands.hasSelection()) {
-            this.#sm.transition({ type: "selected", hoveredPointId: pointId });
-          } else {
-            this.#sm.transition({ type: "ready", hoveredPointId: pointId });
-          }
-        } else {
-          if (!isSelected) {
-            this.#commands.selectPoint(pointId, false);
-          }
-          const freshCtx = this.#editor.createToolContext();
-          this.#draggedPointIds = [...freshCtx.selectedPoints];
-          this.#editor.setCursor({ type: "move" });
-          this.#sm.transition({
-            type: "dragging",
-            drag: {
-              anchorPointId: pointId,
-              startPos: pos,
-              lastPos: pos,
-              totalDelta: { x: 0, y: 0 },
-            },
-          });
-        }
-      } else {
-        // No point hit - check for segment hit
-        const segmentHit = this.#commands.hitTestSegment(pos);
-        if (segmentHit) {
-          // Segment hit
-          const isSelected = this.#commands.isSegmentSelected(
-            segmentHit.segmentId,
-          );
-          if (this.#shiftModifierOn) {
-            this.#commands.toggleSegment(segmentHit.segmentId);
-            if (this.#commands.hasSelection()) {
-              this.#sm.transition({ type: "selected", hoveredPointId: null });
-            } else {
-              this.#sm.transition({ type: "ready", hoveredPointId: null });
-            }
-          } else {
-            if (!isSelected) {
-              this.#commands.selectSegment(segmentHit.segmentId, false);
-            }
-            const freshCtx = this.#editor.createToolContext();
-            this.#draggedPointIds = [...freshCtx.selectedPoints];
-            this.#editor.setCursor({ type: "move" });
-            this.#sm.transition({
-              type: "dragging",
-              drag: {
-                anchorPointId: this.#draggedPointIds[0],
-                startPos: pos,
-                lastPos: pos,
-                totalDelta: { x: 0, y: 0 },
-              },
-            });
-          }
-        } else {
-          // Nothing hit - start rectangle selection
-          this.#commands.clearSelection();
-          ctx.select.setMode("preview");
-          this.#editor.setCursor({ type: "default" });
-          this.#sm.transition({
-            type: "selecting",
-            selection: { startPos: pos, currentPos: pos },
-          });
-        }
-      }
-    });
-
-    ctx.requestRedraw();
+      return true;
+    }
+    return false;
   }
 
-  onMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const pos = this.#getMouseUpm(e);
-
-    this.#sm.when("selecting", (state) => {
-      const rect = normalizeRect(state.selection.startPos, pos);
-      this.#commands.selectPointsInRect(rect);
-      this.#sm.transition({
-        type: "selecting",
-        selection: { ...state.selection, currentPos: pos },
-      });
-    });
-
-    this.#sm.when("dragging", (state) => {
-      const delta = Vec2.sub(pos, state.drag.lastPos);
-      this.#commands.moveSelectedPointsByDelta(delta);
-      this.#sm.transition({
-        type: "dragging",
-        drag: {
-          ...state.drag,
-          lastPos: pos,
-          totalDelta: Vec2.add(state.drag.totalDelta, delta),
-        },
-      });
-    });
-
-    this.#sm.when("resizing", (state) => {
-      // Calculate scale factors based on current position
-      const { sx, sy } = this.#commands.calculateScaleFactors(
-        state.resize.edge,
-        pos,
-        state.resize.anchorPoint,
-        state.resize.initialBounds,
-        this.#shiftModifierOn,
-      );
-
-      // Reset to initial positions first, then apply new scale
-      for (const [id, initialPos] of this.#initialResizePositions) {
-        const anchor = state.resize.anchorPoint;
-        const offset = Vec2.sub(initialPos, anchor);
-        const scaled = Vec2.mul(offset, { x: sx, y: sy });
-        const newPos = Vec2.add(anchor, scaled);
-        const ctx = this.#editor.createToolContext();
-        ctx.edit.movePointTo(id, newPos.x, newPos.y);
-      }
-
-      this.#sm.transition({
-        type: "resizing",
-        resize: {
-          ...state.resize,
-          lastPos: pos,
-        },
-      });
-    });
-
-    this.#sm.when("ready", () => {
-      const { pointId } = this.#commands.hitTest(pos);
-      this.#commands.updateHover(pos);
-      this.#sm.transition({ type: "ready", hoveredPointId: pointId });
-    });
-
-    this.#sm.when("selected", () => {
-      const { pointId } = this.#commands.hitTest(pos);
-      this.#commands.updateHover(pos);
-
-      // Check for bounding rect edge hover
-      const edge = this.#commands.hitTestBoundingRectEdge(pos);
-      if (edge && !pointId) {
-        this.#editor.setCursor(edgeToCursor(edge));
-      } else {
-        this.#editor.setCursor({ type: "default" });
-      }
-
-      this.#sm.transition({ type: "selected", hoveredPointId: pointId });
-    });
-  }
-
-  onMouseUp(_e: React.MouseEvent<HTMLCanvasElement>): void {
-    const ctx = this.#editor.createToolContext();
-
-    this.#sm.when("selecting", (state) => {
-      const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-      const { pointIds } = this.#commands.selectPointsInRect(rect);
-      ctx.select.setMode("committed");
-      this.#editor.setCursor({ type: "default" });
-
-      if (pointIds.size > 0) {
-        this.#sm.transition({ type: "selected", hoveredPointId: null });
-      } else {
-        this.#sm.transition({ type: "ready", hoveredPointId: null });
-      }
-    });
-
-    this.#sm.when("dragging", (state) => {
-      const { totalDelta } = state.drag;
-
-      if (
-        (totalDelta.x !== 0 || totalDelta.y !== 0) &&
-        this.#draggedPointIds.length > 0
-      ) {
-        const cmd = new MovePointsCommand(
-          this.#draggedPointIds,
-          totalDelta.x,
-          totalDelta.y,
-        );
-        ctx.commands.record(cmd);
-      }
-
-      this.#draggedPointIds = [];
-      this.#editor.setCursor({ type: "default" });
-      this.#sm.transition({ type: "selected", hoveredPointId: null });
-    });
-
-    this.#sm.when("resizing", (state) => {
-      // Calculate final scale factors
-      const { sx, sy } = this.#commands.calculateScaleFactors(
-        state.resize.edge,
-        state.resize.lastPos,
-        state.resize.anchorPoint,
-        state.resize.initialBounds,
-        this.#shiftModifierOn,
-      );
-
-      // Restore initial positions first (undo the preview)
-      for (const [id, initialPos] of this.#initialResizePositions) {
-        ctx.edit.movePointTo(id, initialPos.x, initialPos.y);
-      }
-
-      // Create and execute the scale command if there was actual scaling
-      if (sx !== 1 || sy !== 1) {
-        const cmd = new ScalePointsCommand(
-          this.#draggedPointIds,
-          sx,
-          sy,
-          state.resize.anchorPoint,
-        );
-        ctx.commands.execute(cmd);
-      }
-
-      this.#draggedPointIds = [];
-      this.#initialResizePositions.clear();
-      this.#editor.setCursor({ type: "default" });
-      this.#sm.transition({ type: "selected", hoveredPointId: null });
-    });
-  }
-
-  drawInteractive(ctx: IRenderer): void {
-    const toolCtx = this.#editor.createToolContext();
-    this.#sm.when("selecting", (state) => {
-      const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-      ctx.setStyle(SELECTION_RECTANGLE_STYLES);
-      ctx.lineWidth = toolCtx.screen.lineWidth(
-        SELECTION_RECTANGLE_STYLES.lineWidth,
-      );
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-    });
-  }
-
-  keyDownHandler(e: KeyboardEvent): void {
-    this.#shiftModifierOn = e.shiftKey;
-
-    if (!this.#sm.isIn("selected")) return;
-
-    const modifier = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
-    const nudgeValue = this.#commands.getNudgeValue(modifier);
-    const ctx = this.#editor.createToolContext();
-    const pointIds = [...ctx.selectedPoints];
-
-    if (pointIds.length === 0) return;
-
-    let dx = 0;
-    let dy = 0;
-
-    switch (e.key) {
-      case "ArrowLeft":
-        dx = -nudgeValue;
-        break;
-      case "ArrowRight":
-        dx = nudgeValue;
-        break;
-      case "ArrowUp":
-        dy = nudgeValue;
-        break;
-      case "ArrowDown":
-        dy = -nudgeValue;
-        break;
-      default:
-        return;
+  transition(state: SelectState, event: ToolEvent): SelectState {
+    if (state.type === "idle") {
+      return state;
     }
 
-    const cmd = new NudgePointsCommand(pointIds, dx, dy);
-    ctx.commands.execute(cmd);
-    ctx.requestRedraw();
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.ctx);
+        if (result !== null) {
+          return result;
+        }
+      }
+    }
+
+    return this.handleDoubleClick(state, event);
   }
 
-  keyUpHandler(_e: KeyboardEvent): void {
-    this.#shiftModifierOn = false;
+  private handleDoubleClick(state: SelectState, event: ToolEvent): SelectState {
+    if (event.type === "doubleClick" && (state.type === "ready" || state.type === "selected")) {
+      const point = this.ctx.hitTest.getPointAt(event.point);
+      const pointId = this.ctx.hitTest.getPointIdAt(event.point);
+      if (point && pointId && point.pointType === "onCurve") {
+        return {
+          ...state,
+          intent: { action: "toggleSmooth", pointId },
+        };
+      }
+    }
+    return state;
   }
 
-  onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>): void {
-    const pos = this.#getMouseUpm(e);
-    this.#commands.toggleSmooth(pos);
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
+    if (next.intent) {
+      executeIntent(next.intent, this.ctx);
+    }
+
+    for (const behavior of this.behaviors) {
+      behavior.onTransition?.(prev, next, event, this.ctx);
+    }
+
+    this.updateCursorForState(next, event);
+  }
+
+  private updateCursorForState(state: SelectState, event: ToolEvent): void {
+    const cursor = getCursorForState(state, event, {
+      hitTest: this.ctx.hitTest,
+      hitTestBoundingRectEdge: (pos) => this.hitTestBoundingRectEdge(pos),
+    });
+    this.ctx.cursor.set(cursor);
+  }
+
+  private hitTestBoundingRectEdge(pos: { x: number; y: number }): BoundingRectEdge {
+    const rect = this.ctx.hitTest.getSelectionBoundingRect();
+    if (!rect) return null;
+
+    const tolerance = this.ctx.screen.hitRadius;
+
+    const onLeft = Math.abs(pos.x - rect.left) < tolerance;
+    const onRight = Math.abs(pos.x - rect.right) < tolerance;
+    const onTop = Math.abs(pos.y - rect.top) < tolerance;
+    const onBottom = Math.abs(pos.y - rect.bottom) < tolerance;
+
+    const withinX = pos.x >= rect.left - tolerance && pos.x <= rect.right + tolerance;
+    const withinY = pos.y >= rect.top - tolerance && pos.y <= rect.bottom + tolerance;
+
+    if (onLeft && onTop) return "bottom-left";
+    if (onRight && onTop) return "bottom-right";
+    if (onLeft && onBottom) return "top-left";
+    if (onRight && onBottom) return "top-right";
+
+    if (onLeft && withinY) return "left";
+    if (onRight && withinY) return "right";
+    if (onTop && withinX) return "top";
+    if (onBottom && withinX) return "bottom";
+
+    return null;
+  }
+
+  render(renderer: IRenderer): void {
+    for (const behavior of this.behaviors) {
+      behavior.render?.(renderer, this.state, this.ctx);
+    }
   }
 }

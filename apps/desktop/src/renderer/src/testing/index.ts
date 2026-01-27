@@ -67,11 +67,7 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export {
-  // Command context
   createMockCommandContext,
-
-  // Tool context
-  createMockToolContext,
   type MockToolContextOptions,
 } from "./context";
 
@@ -88,3 +84,16 @@ export {
   simulateClick,
   simulateDrag,
 } from "./events";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL CONTEXT UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  createMockToolContext,
+  createToolMouseEvent,
+  ToolEventSimulator,
+  type MockToolContext,
+  type ToolMouseEvent,
+  type ToolEventTarget,
+} from "./services";

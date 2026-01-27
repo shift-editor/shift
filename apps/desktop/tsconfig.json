@@ -6,7 +6,6 @@
     "src/preload/*.d.ts",
     "src/shared/**/*"
   ],
-  "exclude": ["src/**/*.test.ts"],
   "compilerOptions": {
     "useDefineForClassFields": true,
     "strict": false,

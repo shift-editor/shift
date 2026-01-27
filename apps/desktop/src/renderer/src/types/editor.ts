@@ -1,4 +1,3 @@
-import type { Tool } from "./tool";
 import type { PointId, GlyphSnapshot } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
 
@@ -33,7 +32,6 @@ export type CursorType =
 export type VisualState = "idle" | "hovered" | "selected";
 
 export interface ToolRegistryItem {
-  tool: Tool;
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
   tooltip: string;
 }
