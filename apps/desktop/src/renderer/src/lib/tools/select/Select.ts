@@ -11,6 +11,7 @@ import {
   ResizeBehavior,
   RotateBehavior,
   NudgeBehavior,
+  EscapeBehavior,
 } from "./behaviors";
 import { hitTestBoundingBox } from "./boundingBoxHitTest";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
@@ -25,6 +26,7 @@ export class Select extends BaseTool<SelectState> {
     new HoverBehavior(),
     new SelectionBehavior(),
     new NudgeBehavior(),
+    new EscapeBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
     new DragBehavior(),

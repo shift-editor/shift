@@ -159,6 +159,10 @@ export interface ToolSwitchService {
   returnFromTemporary(): void;
 }
 
+export interface ZoneService {
+  getZone(): "canvas" | "sidebar" | "toolbar" | "modal";
+}
+
 export interface ToolContext {
   readonly screen: ScreenService;
   readonly selection: SelectionService;
@@ -171,6 +175,7 @@ export interface ToolContext {
   readonly viewport: ViewportService;
   readonly hitTest: HitTestService;
   readonly commands: CommandHistory;
+  readonly zone: ZoneService;
   tools: ToolSwitchService;
 }
 
@@ -289,6 +294,9 @@ export function createContext(editor: Editor): ToolContext {
       updateHover: (pos) => editor.updateHover(pos),
     },
     commands,
+    zone: {
+      getZone: () => editor.zone,
+    },
     tools: {
       requestTemporary: () => {},
       returnFromTemporary: () => {},

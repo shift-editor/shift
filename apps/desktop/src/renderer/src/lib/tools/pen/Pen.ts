@@ -239,6 +239,8 @@ export class Pen extends BaseTool<PenState> {
   }
 
   render(renderer: IRenderer): void {
+    if (this.ctx.zone.getZone() !== "canvas") return;
+
     if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
       if (!lastPoint) return;

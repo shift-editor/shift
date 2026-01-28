@@ -677,6 +677,10 @@ export function createMockToolContext(): MockToolContext {
     returnFromTemporary: vi.fn(),
   };
 
+  const zone = {
+    getZone: vi.fn().mockReturnValue("canvas" as const),
+  };
+
   return {
     screen,
     selection,
@@ -689,6 +693,7 @@ export function createMockToolContext(): MockToolContext {
     viewport,
     hitTest,
     commands,
+    zone,
     tools,
     fontEngine,
     getSelectedPoints: () => selection._selectedPoints,

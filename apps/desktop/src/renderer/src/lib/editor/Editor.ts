@@ -54,9 +54,10 @@ import {
 } from "../reactive/signal";
 import { ClipboardManager } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { SelectionManager, HoverManager } from "./managers";
+import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import { SCREEN_HIT_RADIUS } from "./rendering/constants";
+import type { FocusZone } from "@/types/focus";
 
 export class Editor {
   private $previewMode: WritableSignal<boolean>;
@@ -65,6 +66,7 @@ export class Editor {
   #selection: SelectionManager;
   #hover: HoverManager;
   #renderer: GlyphRenderer;
+  #edgePan: EdgePanManager;
 
   #toolManager: ToolManager | null = null;
   #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
@@ -78,6 +80,7 @@ export class Editor {
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
+  #zone: FocusZone = "canvas";
 
   $renderState: ComputedSignal<RenderState>;
   private $cursor: WritableSignal<string>;
@@ -96,6 +99,7 @@ export class Editor {
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
+    this.#edgePan = new EdgePanManager(this);
 
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
@@ -325,6 +329,26 @@ export class Editor {
 
   public get hoverManager(): HoverManager {
     return this.#hover;
+  }
+
+  public get edgePanManager(): EdgePanManager {
+    return this.#edgePan;
+  }
+
+  public updateEdgePan(screenPos: Point2D, canvasBounds: Rect2D): void {
+    this.#edgePan.update(screenPos, canvasBounds);
+  }
+
+  public stopEdgePan(): void {
+    this.#edgePan.stop();
+  }
+
+  public get zone(): FocusZone {
+    return this.#zone;
+  }
+
+  public setZone(zone: FocusZone): void {
+    this.#zone = zone;
   }
 
   public get isInPreview(): boolean {

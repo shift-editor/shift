@@ -100,13 +100,6 @@ export const Editor = () => {
         return;
       }
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        editor.clearSelection();
-        editor.requestRedraw();
-        return;
-      }
-
       toolManager.handleKeyDown(e);
     };
 
@@ -123,6 +116,11 @@ export const Editor = () => {
       document.removeEventListener("keyup", keyUpHandler);
     };
   }, [glyphId, activeZone, focusLock]);
+
+  useEffect(() => {
+    const editor = getEditor();
+    editor.setZone(activeZone);
+  }, [activeZone]);
 
   useEffect(() => {
     const editor = getEditor();

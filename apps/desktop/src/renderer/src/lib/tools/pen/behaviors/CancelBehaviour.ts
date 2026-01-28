@@ -8,12 +8,10 @@ export class CancelBehaviour implements PenBehavior {
   }
 
   transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
-    console.log("cancelling");
     if (state.type !== "ready") return null;
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 
     if (this.hasActiveDrawingContour(ctx)) {
-      console.log("abanding contour");
       return {
         ...state,
         intent: { action: "abandonContour" },
