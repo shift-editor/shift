@@ -48,13 +48,11 @@ export const EditableSidebarInput = ({
       if (e.key === "Enter") {
         inputRef.current?.blur();
       } else if (e.key === "Escape") {
-        e.stopPropagation();
         setEditValue(String(value));
         setIsEditing(false);
         inputRef.current?.blur();
       } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
-        e.stopPropagation();
 
         const modifier: NudgeMagnitude = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
         const step = NUDGES_VALUES[modifier];

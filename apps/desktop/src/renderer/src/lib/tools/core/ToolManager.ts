@@ -37,6 +37,10 @@ export class ToolManager implements ToolSwitchService {
     return this.primaryTool?.id ?? null;
   }
 
+  get isDragging(): boolean {
+    return this.gesture.isDragging;
+  }
+
   register(id: ToolName, ToolClass: ToolConstructor): void {
     this.registry.set(id, ToolClass);
   }

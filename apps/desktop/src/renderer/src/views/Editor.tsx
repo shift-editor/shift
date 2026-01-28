@@ -5,17 +5,21 @@ import { useParams } from "react-router-dom";
 import { Toolbar } from "@/components/Toolbar";
 import { Sidebar } from "@/components/sidebar";
 import { getEditor } from "@/store/store";
+import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 
 import { EditorView } from "../components/EditorView";
 
 export const Editor = () => {
   const { glyphId } = useParams();
+  const { activeZone, focusLock } = useFocusZone();
 
   useEffect(() => {
     const editor = getEditor();
     const toolManager = editor.getToolManager();
 
     const keyDownHandler = (e: KeyboardEvent) => {
+      const canvasActive = activeZone === "canvas" || focusLock || toolManager.isDragging;
+
       if ((e.key === "=" || e.key === "+") && e.metaKey) {
         e.preventDefault();
         editor.zoomIn();
@@ -26,34 +30,6 @@ export const Editor = () => {
       if (e.key === "-" && e.metaKey) {
         e.preventDefault();
         editor.zoomOut();
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "h") {
-        e.preventDefault();
-        editor.setActiveTool("hand");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "p") {
-        e.preventDefault();
-        editor.setActiveTool("pen");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "s") {
-        e.preventDefault();
-        editor.setActiveTool("shape");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "v" && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        editor.setActiveTool("select");
         editor.requestRedraw();
         return;
       }
@@ -88,9 +64,46 @@ export const Editor = () => {
         return;
       }
 
+      if (!canvasActive) return;
+
+      if (e.key === "h") {
+        e.preventDefault();
+        editor.setActiveTool("hand");
+        editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "p") {
+        e.preventDefault();
+        editor.setActiveTool("pen");
+        editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "s") {
+        e.preventDefault();
+        editor.setActiveTool("shape");
+        editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "v") {
+        e.preventDefault();
+        editor.setActiveTool("select");
+        editor.requestRedraw();
+        return;
+      }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         editor.deleteSelectedPoints();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        editor.clearSelection();
+        editor.requestRedraw();
         return;
       }
 
@@ -98,6 +111,7 @@ export const Editor = () => {
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
+      if (activeZone !== "canvas" && !focusLock && !toolManager.isDragging) return;
       toolManager.handleKeyUp(e);
     };
 
@@ -108,7 +122,7 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId]);
+  }, [glyphId, activeZone, focusLock]);
 
   useEffect(() => {
     const editor = getEditor();
@@ -130,8 +144,12 @@ export const Editor = () => {
     <div className="flex h-screen w-screen flex-col bg-white">
       <Toolbar />
       <div className="flex flex-1 overflow-hidden">
-        <EditorView glyphId={glyphId ?? ""} />
-        <Sidebar />
+        <ZoneContainer zone="canvas" className="flex-1">
+          <EditorView glyphId={glyphId ?? ""} />
+        </ZoneContainer>
+        <ZoneContainer zone="sidebar">
+          <Sidebar />
+        </ZoneContainer>
       </div>
     </div>
   );

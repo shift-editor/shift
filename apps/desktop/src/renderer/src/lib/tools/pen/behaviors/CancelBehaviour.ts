@@ -2,16 +2,18 @@ import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/createContext";
 import type { PenState, PenBehavior } from "../types";
 
-export class EscapeBehavior implements PenBehavior {
+export class CancelBehaviour implements PenBehavior {
   canHandle(state: PenState, event: ToolEvent): boolean {
     return state.type === "ready" && event.type === "keyDown" && event.key === "Escape";
   }
 
   transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
+    console.log("cancelling");
     if (state.type !== "ready") return null;
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 
     if (this.hasActiveDrawingContour(ctx)) {
+      console.log("abanding contour");
       return {
         ...state,
         intent: { action: "abandonContour" },
