@@ -74,8 +74,8 @@ describe("Pen tool", () => {
       sim.onMouseDown(event);
 
       expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
-      const snapshot = ctx.fontEngine.$glyph.value;
-      const activeContour = snapshot?.contours.find((c) => c.id === snapshot.activeContourId);
+      const glyph = ctx.fontEngine.$glyph.value;
+      const activeContour = glyph?.contours.find((c) => c.id === glyph.activeContourId);
       expect(activeContour?.points[0]?.x).toBe(150);
       expect(activeContour?.points[0]?.y).toBe(250);
     });

@@ -12,3 +12,4 @@ export {
   SCREEN_HIT_RADIUS,
 } from "./rendering";
 export * from "./rendering/handles";
+export * from "./services";

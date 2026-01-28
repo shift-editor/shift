@@ -39,7 +39,7 @@ export class Select extends BaseTool<SelectState> {
 
   activate(): void {
     this.state = { type: "ready", hoveredPointId: null };
-    this.ctx.cursor.set({ type: "default" });
+    this.editor.cursor.set({ type: "default" });
   }
 
   deactivate(): void {
@@ -49,12 +49,12 @@ export class Select extends BaseTool<SelectState> {
   handleModifier(key: string, pressed: boolean): boolean {
     if (key === "Space") {
       if (pressed) {
-        this.ctx.tools.requestTemporary("hand", {
-          onActivate: () => this.ctx.render.setPreviewMode(true),
-          onReturn: () => this.ctx.render.setPreviewMode(false),
+        this.editor.tools.requestTemporary("hand", {
+          onActivate: () => this.editor.render.setPreviewMode(true),
+          onReturn: () => this.editor.render.setPreviewMode(false),
         });
       } else {
-        this.ctx.tools.returnFromTemporary();
+        this.editor.tools.returnFromTemporary();
       }
       return true;
     }
@@ -68,7 +68,7 @@ export class Select extends BaseTool<SelectState> {
 
     for (const behavior of this.behaviors) {
       if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.ctx);
+        const result = behavior.transition(state, event, this.editor);
         if (result !== null) {
           return result;
         }
@@ -80,7 +80,7 @@ export class Select extends BaseTool<SelectState> {
 
   private handleDoubleClick(state: SelectState, event: ToolEvent): SelectState {
     if (event.type === "doubleClick" && (state.type === "ready" || state.type === "selected")) {
-      const point = this.ctx.hitTest.getPointAt(event.point);
+      const point = this.editor.hitTest.getPointAt(event.point);
       if (point && point.pointType === "onCurve") {
         return {
           ...state,
@@ -93,11 +93,11 @@ export class Select extends BaseTool<SelectState> {
 
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
     if (next.intent) {
-      executeIntent(next.intent, this.ctx);
+      executeIntent(next.intent, this.editor);
     }
 
     for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.ctx);
+      behavior.onTransition?.(prev, next, event, this.editor);
     }
 
     this.updateCursorForState(next, event);
@@ -105,22 +105,22 @@ export class Select extends BaseTool<SelectState> {
 
   private updateCursorForState(state: SelectState, event: ToolEvent): void {
     const hitResult = event && "point" in event ? this.hitTestBoundingBox(event.point) : null;
-    this.ctx.hover.setHoveredBoundingBoxHandle(hitResult);
+    this.editor.hover.setHoveredBoundingBoxHandle(hitResult);
 
     const cursor = getCursorForState(state, event, {
-      hitTest: this.ctx.hitTest,
+      hitTest: this.editor.hitTest,
       hitTestBoundingBox: (pos) => this.hitTestBoundingBox(pos),
     });
-    this.ctx.cursor.set(cursor);
+    this.editor.cursor.set(cursor);
   }
 
   private hitTestBoundingBox(pos: { x: number; y: number }): BoundingBoxHitResult {
-    const rect = this.ctx.hitTest.getSelectionBoundingRect();
+    const rect = this.editor.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const hitRadius = this.ctx.screen.hitRadius;
-    const handleOffset = this.ctx.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = this.ctx.screen.toUpmDistance(
+    const hitRadius = this.editor.screen.hitRadius;
+    const handleOffset = this.editor.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = this.editor.screen.toUpmDistance(
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 
@@ -129,7 +129,7 @@ export class Select extends BaseTool<SelectState> {
 
   render(renderer: IRenderer): void {
     for (const behavior of this.behaviors) {
-      behavior.render?.(renderer, this.state, this.ctx);
+      behavior.render?.(renderer, this.state, this.editor);
     }
   }
 }

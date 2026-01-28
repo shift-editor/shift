@@ -1,5 +1,5 @@
 import type { Point2D, ContourId, PointId } from "@shift/types";
-import type { HitTestService, ToolContext } from "../core/createContext";
+import type { Editor, HitTestService } from "@/lib/editor";
 import type { Segment } from "@/types/segments";
 import {
   AddPointCommand,
@@ -42,10 +42,7 @@ export interface PenIntentContext {
   ): { contourId: ContourId; pointId: PointId; pointIndex: number } | null;
 }
 
-export function resolvePenIntent(
-  pos: Point2D,
-  ctx: PenIntentContext,
-): PenIntent {
+export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent {
   if (ctx.shouldCloseContour(pos)) {
     return { action: "close" };
   }
@@ -86,10 +83,7 @@ export function resolvePenIntent(
   return { action: "placePoint", pos };
 }
 
-export function resolveCursorIntent(
-  pos: Point2D,
-  ctx: PenIntentContext,
-): PenCursorType {
+export function resolveCursorIntent(pos: Point2D, ctx: PenIntentContext): PenCursorType {
   if (ctx.hasActiveDrawingContour()) {
     if (ctx.shouldCloseContour(pos)) {
       return "pen-end";
@@ -117,55 +111,47 @@ export function resolveCursorIntent(
   return "pen";
 }
 
-export function executeIntent(
-  intent: PenIntent,
-  ctx: ToolContext,
-): PointId | null {
+export function executeIntent(intent: PenIntent, editor: Editor): PointId | null {
   switch (intent.action) {
     case "close":
-      ctx.commands.execute(new CloseContourCommand());
-      ctx.commands.execute(new AddContourCommand());
+      editor.commands.execute(new CloseContourCommand());
+      editor.commands.execute(new AddContourCommand());
       return null;
 
     case "continue":
-      ctx.commands.execute(new SetActiveContourCommand(intent.contourId));
+      editor.commands.execute(new SetActiveContourCommand(intent.contourId));
       if (intent.fromStart) {
-        ctx.commands.execute(new ReverseContourCommand(intent.contourId));
+        editor.commands.execute(new ReverseContourCommand(intent.contourId));
       }
 
-      ctx.selection.selectPoints(new Set([intent.pointId]));
+      editor.selection.selectPoints(new Set([intent.pointId]));
       return null;
 
     case "splitPoint":
-      ctx.edit.setActiveContour(intent.contourId);
+      editor.edit.setActiveContour(intent.contourId);
       return null;
 
     case "splitSegment": {
       const cmd = new SplitSegmentCommand(intent.segment as any, intent.t);
-      return ctx.commands.execute(cmd);
+      return editor.commands.execute(cmd);
     }
 
     case "placePoint": {
-      const cmd = new AddPointCommand(
-        intent.pos.x,
-        intent.pos.y,
-        "onCurve",
-        false,
-      );
-      return ctx.commands.execute(cmd);
+      const cmd = new AddPointCommand(intent.pos.x, intent.pos.y, "onCurve", false);
+      return editor.commands.execute(cmd);
     }
 
     case "abandonContour":
-      ctx.selection.clear();
-      ctx.commands.execute(new AddContourCommand());
+      editor.selection.clear();
+      editor.commands.execute(new AddContourCommand());
       return null;
 
     case "updateHover":
-      ctx.hitTest.updateHover(intent.pos);
+      editor.hitTest.updateHover(intent.pos);
       return null;
 
     case "setCursor":
-      ctx.cursor.set({ type: intent.cursor });
+      editor.cursor.set({ type: intent.cursor });
       return null;
   }
 }

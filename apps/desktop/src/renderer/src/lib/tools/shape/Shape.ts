@@ -61,7 +61,7 @@ export class Shape extends BaseTool<ShapeState> {
 
   activate(): void {
     this.state = { type: "ready" };
-    this.ctx.cursor.set({ type: "crosshair" });
+    this.editor.cursor.set({ type: "crosshair" });
   }
 
   deactivate(): void {
@@ -103,17 +103,21 @@ export class Shape extends BaseTool<ShapeState> {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    this.ctx.commands.beginBatch("Draw Rectangle");
+    this.editor.commands.beginBatch("Draw Rectangle");
 
-    this.ctx.commands.execute(new AddPointCommand(rect.x, rect.y, "onCurve", false));
-    this.ctx.commands.execute(new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false));
-    this.ctx.commands.execute(
+    this.editor.commands.execute(new AddPointCommand(rect.x, rect.y, "onCurve", false));
+    this.editor.commands.execute(
+      new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false),
+    );
+    this.editor.commands.execute(
       new AddPointCommand(rect.x + rect.width, rect.y + rect.height, "onCurve", false),
     );
-    this.ctx.commands.execute(new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false));
-    this.ctx.commands.execute(new CloseContourCommand());
-    this.ctx.commands.execute(new AddContourCommand());
+    this.editor.commands.execute(
+      new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false),
+    );
+    this.editor.commands.execute(new CloseContourCommand());
+    this.editor.commands.execute(new AddContourCommand());
 
-    this.ctx.commands.endBatch();
+    this.editor.commands.endBatch();
   }
 }

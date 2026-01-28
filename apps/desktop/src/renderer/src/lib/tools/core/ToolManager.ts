@@ -1,28 +1,25 @@
 import type { Point2D } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
-import type {
-  ToolContext,
-  ToolSwitchService,
-  TemporaryToolOptions,
-  ToolName,
-} from "./createContext";
+import type { Editor } from "@/lib/editor";
+import type { ToolSwitchHandler, TemporaryToolOptions } from "@/lib/editor/services";
+import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
 
-export type ToolConstructor = new (ctx: ToolContext) => BaseTool<ToolState>;
+export type ToolConstructor = new (editor: Editor) => BaseTool<ToolState>;
 
-export class ToolManager implements ToolSwitchService {
+export class ToolManager implements ToolSwitchHandler {
   private registry = new Map<ToolName, ToolConstructor>();
   private primaryTool: BaseTool<ToolState> | null = null;
   private overrideTool: BaseTool<ToolState> | null = null;
   private gesture = new GestureDetector();
-  private ctx: ToolContext;
+  private editor: Editor;
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
-  constructor(ctx: ToolContext) {
-    this.ctx = ctx;
-    ctx.tools = this;
+  constructor(editor: Editor) {
+    this.editor = editor;
+    editor.tools.setHandler(this);
   }
 
   get activeTool(): BaseTool<ToolState> | null {
@@ -59,7 +56,7 @@ export class ToolManager implements ToolSwitchService {
       return;
     }
 
-    this.primaryTool = new ToolClass(this.ctx);
+    this.primaryTool = new ToolClass(this.editor);
     this.primaryTool.activate?.();
   }
 
@@ -70,7 +67,7 @@ export class ToolManager implements ToolSwitchService {
     if (!ToolClass) return;
 
     this.temporaryOptions = options ?? null;
-    this.overrideTool = new ToolClass(this.ctx);
+    this.overrideTool = new ToolClass(this.editor);
     this.overrideTool.activate?.();
     this.temporaryOptions?.onActivate?.();
   }
@@ -86,18 +83,18 @@ export class ToolManager implements ToolSwitchService {
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
-    const point = this.ctx.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
     this.gesture.pointerDown(point, screenPoint, modifiers);
   }
 
   handlePointerMove(screenPoint: Point2D, modifiers: Modifiers): void {
-    const point = this.ctx.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerMove(point, screenPoint, modifiers);
     this.dispatchEvents(events);
   }
 
   handlePointerUp(screenPoint: Point2D): void {
-    const point = this.ctx.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerUp(point, screenPoint);
     this.dispatchEvents(events);
   }

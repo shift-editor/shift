@@ -20,8 +20,8 @@ export class Hand extends BaseTool<HandState> {
 
       case "ready":
         if (event.type === "dragStart") {
-          const startPan = this.ctx.viewport.getPan();
-          this.ctx.cursor.set({ type: "grabbing" });
+          const startPan = this.editor.viewport.getPan();
+          this.editor.cursor.set({ type: "grabbing" });
           return {
             type: "dragging",
             screenStart: event.screenPoint,
@@ -37,12 +37,12 @@ export class Hand extends BaseTool<HandState> {
             x: state.startPan.x + screenDelta.x,
             y: state.startPan.y + screenDelta.y,
           };
-          this.ctx.viewport.pan(pan.x, pan.y);
-          this.ctx.render.requestRedraw();
+          this.editor.viewport.pan(pan.x, pan.y);
+          this.editor.render.requestRedraw();
           return state;
         }
         if (event.type === "dragEnd" || event.type === "dragCancel") {
-          this.ctx.cursor.set({ type: "grab" });
+          this.editor.cursor.set({ type: "grab" });
           return { type: "ready" };
         }
         return state;
@@ -54,7 +54,7 @@ export class Hand extends BaseTool<HandState> {
 
   activate(): void {
     this.state = { type: "ready" };
-    this.ctx.cursor.set({ type: "grab" });
+    this.editor.cursor.set({ type: "grab" });
   }
 
   deactivate(): void {

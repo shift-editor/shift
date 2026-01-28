@@ -1,6 +1,6 @@
 import type { Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../core/GestureDetector";
-import type { ToolContext } from "../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { IRenderer } from "@/types/graphics";
 import type { PenIntent } from "./intents";
 
@@ -35,7 +35,7 @@ export type PenState =
 
 export interface PenBehavior {
   canHandle(state: PenState, event: ToolEvent): boolean;
-  transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null;
-  onTransition?(prev: PenState, next: PenState, event: ToolEvent, ctx: ToolContext): void;
-  render?(renderer: IRenderer, state: PenState, ctx: ToolContext): void;
+  transition(state: PenState, event: ToolEvent, editor: Editor): PenState | null;
+  onTransition?(prev: PenState, next: PenState, event: ToolEvent, editor: Editor): void;
+  render?(renderer: IRenderer, state: PenState, editor: Editor): void;
 }

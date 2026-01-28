@@ -12,7 +12,7 @@ The tools library provides editing tools (Pen, Select, Hand, Shape) built on a s
 BaseTool<TState>
 ├── id: ToolName
 ├── state: TState
-├── ctx: ToolContext
+├── editor: Editor
 ├── initialState(): TState
 ├── transition(state, event): TState
 ├── onTransition?(prev, next, event): void
@@ -40,14 +40,16 @@ tools/
 │   ├── BaseTool.ts          # Abstract base class
 │   ├── GestureDetector.ts   # Pointer → semantic events
 │   ├── ToolManager.ts       # Tool orchestration
-│   ├── createContext.ts     # ToolContext factory
 │   └── DrawAPI.ts           # Rendering API
 ├── pen/                     # Bezier curve drawing
 │   ├── Pen.ts
+│   ├── behaviors/           # State-specific behavior handlers
 │   └── intents.ts
 ├── select/                  # Point selection and manipulation
 │   ├── Select.ts
+│   ├── behaviors/           # State-specific behavior handlers
 │   ├── cursor.ts
+│   ├── intents.ts
 │   ├── types.ts
 │   └── utils.ts
 ├── hand/                    # Canvas panning
@@ -62,8 +64,9 @@ tools/
 1. **State Machine Pattern**: Tools use discriminated union states with pure transitions
 2. **Side Effects in onTransition**: State changes trigger side effects after transition
 3. **GestureDetector**: Converts raw pointer events to semantic events (click, drag, doubleClick)
-4. **ToolContext Injection**: Tools receive services via context, enabling testing
-5. **State in State Machine**: All state lives in state variants, no shadow state
+4. **Editor Injection**: Tools receive the `Editor` instance, accessing services via `this.editor.serviceName`
+5. **Behavior Pattern**: Complex tools delegate to behavior classes for cleaner separation
+6. **Intent Pattern**: State transitions produce intents, executed in `onTransition` for side effects
 
 ## Key Concepts
 
@@ -75,7 +78,7 @@ Abstract base class all tools extend:
 abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
   state: S;
-  protected ctx: ToolContext;
+  protected editor: Editor;
 
   abstract initialState(): S;
   abstract transition(state: S, event: ToolEvent): S;
@@ -140,59 +143,119 @@ type ToolEvent =
   | { type: "keyUp"; key: string };
 ```
 
-### ToolContext
+### Editor Services
 
-Services provided to tools:
+Tools access services via the `Editor` instance:
 
 ```typescript
-interface ToolContext {
-  screen: ScreenService; // Coordinate conversion, hit radius
-  selection: SelectionService; // Point/segment selection state
-  hover: HoverService; // Hover state management
-  edit: EditService; // Glyph editing operations
-  preview: PreviewService; // Preview mode for drag operations
-  transform: TransformService; // Transform operations
-  cursor: CursorService; // Cursor management
-  render: RenderService; // Redraw requests
-  viewport: ViewportService; // Pan/zoom
-  hitTest: HitTestService; // Point/segment hit testing
-  commands: CommandHistory; // Undo/redo
-  tools: ToolSwitchService; // Temporary tool switching
-}
+// In a tool or behavior:
+this.editor.selection.selectPoints(ids);
+this.editor.cursor.set({ type: "crosshair" });
+this.editor.hitTest.getPointAt(pos);
 ```
+
+Available services:
+
+| Service     | Description                         |
+| ----------- | ----------------------------------- |
+| `screen`    | Coordinate conversion, hit radius   |
+| `selection` | Point/segment selection state       |
+| `hover`     | Hover state management              |
+| `edit`      | Glyph editing operations            |
+| `preview`   | Preview mode for drag operations    |
+| `transform` | Transform operations                |
+| `cursor`    | Cursor management                   |
+| `render`    | Redraw requests                     |
+| `viewport`  | Pan/zoom                            |
+| `hitTest`   | Point/segment hit testing           |
+| `commands`  | Command history (undo/redo)         |
+| `tools`     | Temporary tool switching            |
+| `zone`      | Focus zone (canvas/sidebar/toolbar) |
 
 ## Tool Implementations
 
 ### Select Tool
 
-Point selection and manipulation:
+Point selection and manipulation with resize and rotate support.
+
+#### State Machine
 
 ```
-States: idle → ready ↔ selected ↔ dragging
-                ↓         ↓
-             selecting  resizing
+                      ┌──────────────────┐
+                      │                  │
+          activate    │      idle        │
+         ──────────►  │                  │
+                      └────────┬─────────┘
+                               │ pointerMove
+                               ▼
+                      ┌──────────────────┐
+                      │                  │◄────────────────┐
+                      │      ready       │                 │
+                      │                  │─────────────────┤ dragEnd (no selection)
+                      └────────┬─────────┘                 │
+                               │                           │
+                ┌──────────────┼──────────────┐           │
+                │ dragStart    │ click        │           │
+                │ (empty)      │ (on point)   │           │
+                ▼              ▼              │           │
+       ┌────────────┐  ┌─────────────┐       │           │
+       │            │  │             │       │           │
+       │ selecting  │  │  selected   │◄──────┘           │
+       │ (marquee)  │  │             │                    │
+       └─────┬──────┘  └──────┬──────┘                    │
+             │                │                           │
+             │ dragEnd        ├─────────────────┐        │
+             │                │                 │        │
+             │                ▼                 ▼        │
+             │        ┌─────────────┐   ┌────────────┐   │
+             │        │             │   │            │   │
+             │        │  dragging   │   │  resizing  │   │
+             │        │             │   │            │   │
+             │        └──────┬──────┘   └─────┬──────┘   │
+             │               │                │          │
+             │               │ dragEnd        │ dragEnd  │
+             └───────────────┴────────────────┴──────────┘
 ```
 
-Features:
+#### States
+
+| State       | Description                             | Data                      |
+| ----------- | --------------------------------------- | ------------------------- |
+| `idle`      | Tool not active                         | -                         |
+| `ready`     | Waiting for interaction, no selection   | `hoveredPointId`          |
+| `selecting` | Drawing marquee rectangle               | `startPos`, `currentPos`  |
+| `selected`  | Points selected, can drag/resize/rotate | `hoveredPointId`          |
+| `dragging`  | Moving selected points                  | `startPos`, `totalDelta`  |
+| `resizing`  | Scaling via bounding box handles        | `edge`, `anchor`, `scale` |
+| `rotating`  | Rotating via corner zones               | `center`, `angle`         |
+
+#### Features
 
 - Click to select point
 - Shift+click for multi-select
 - Click segment to select
 - Drag to move selected points
-- Rectangle selection
-- Resize selection via bounding box handles
+- Rectangle marquee selection
+- Resize via bounding box edge/corner handles
+- Rotate via corner zones (outside handles)
 - Arrow keys for nudging (small/medium/large)
 - Double-click to toggle smooth
+- Escape to clear selection
 
 ### Pen Tool
 
-Bezier curve drawing:
+Bezier curve drawing with automatic handle creation.
 
-```
-States: idle → ready → anchored → dragging → ready
-```
+#### States
 
-Features:
+| State      | Description                            |
+| ---------- | -------------------------------------- |
+| `idle`     | Tool not active                        |
+| `ready`    | Waiting for click to place point       |
+| `anchored` | Point placed, detecting drag threshold |
+| `dragging` | Creating bezier handles by dragging    |
+
+#### Features
 
 - Click to place anchor point
 - Drag to create bezier handles
@@ -200,30 +263,38 @@ Features:
 - Click first point to close contour
 - Escape to abandon contour
 - Continue contour: Click endpoint of existing open contour
-- Split contour: Click middle point of existing contour
+- Split segment: Click on a segment to insert point
 
 ### Hand Tool
 
-Canvas panning:
+Canvas panning.
 
-```
-States: idle → ready → dragging
-```
+#### States
 
-Features:
+| State      | Description        |
+| ---------- | ------------------ |
+| `idle`     | Tool not active    |
+| `ready`    | Waiting for drag   |
+| `dragging` | Panning the canvas |
+
+#### Features
 
 - Drag to pan canvas
-- Space bar activation (temporary tool switch)
+- Space bar activation (temporary tool switch from any tool)
 
 ### Shape Tool
 
-Rectangle creation:
+Rectangle creation.
 
-```
-States: idle → ready → dragging
-```
+#### States
 
-Features:
+| State      | Description       |
+| ---------- | ----------------- |
+| `idle`     | Tool not active   |
+| `ready`    | Waiting for drag  |
+| `dragging` | Drawing rectangle |
+
+#### Features
 
 - Drag to create rectangle
 - Auto-closes contour
@@ -286,51 +357,41 @@ class MyTool extends BaseTool<MyState> {
 
   onTransition(prev: MyState, next: MyState, event: ToolEvent): void {
     if (next.type === "active") {
-      this.ctx.cursor.set({ type: "crosshair" });
+      this.editor.cursor.set({ type: "crosshair" });
     }
   }
 
   activate(): void {
     this.state = { type: "ready" };
-    this.ctx.cursor.set({ type: "default" });
+    this.editor.cursor.set({ type: "default" });
   }
 }
 ```
 
-### Testing with ToolEventSimulator
+### Behavior Pattern
+
+Complex tools delegate state-specific logic to behavior classes:
 
 ```typescript
-import { ToolEventSimulator, createMockToolContext, createToolMouseEvent } from "@/testing";
+interface MyBehavior {
+  canHandle(state: MyState, event: ToolEvent): boolean;
+  transition(state: MyState, event: ToolEvent, editor: Editor): MyState | null;
+  onTransition?(prev: MyState, next: MyState, event: ToolEvent, editor: Editor): void;
+}
 
-describe("MyTool", () => {
-  let tool: MyTool;
-  let sim: ToolEventSimulator;
-  let ctx: MockToolContext;
+class MyTool extends BaseTool<MyState> {
+  private behaviors: MyBehavior[] = [new HoverBehavior(), new DragBehavior()];
 
-  beforeEach(() => {
-    ctx = createMockToolContext();
-    tool = new MyTool(ctx);
-    sim = new ToolEventSimulator(tool);
-    sim.setReady();
-  });
-
-  it("should activate on click", () => {
-    sim.onMouseDown(createToolMouseEvent(100, 100));
-    sim.onMouseUp(createToolMouseEvent(100, 100));
-    expect(tool.getState().type).toBe("active");
-  });
-
-  it("should handle drag", () => {
-    sim.onMouseDown(createToolMouseEvent(100, 100));
-    sim.onMouseMove(createToolMouseEvent(150, 150));
-    expect(tool.getState().type).toBe("dragging");
-  });
-
-  it("should handle keyboard", () => {
-    sim.keyDown("ArrowRight");
-    expect(ctx.mocks.edit.movePoints).toHaveBeenCalled();
-  });
-});
+  transition(state: MyState, event: ToolEvent): MyState {
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.editor);
+        if (result) return result;
+      }
+    }
+    return state;
+  }
+}
 ```
 
 ### Preview Pattern for Drag Operations
@@ -339,7 +400,7 @@ describe("MyTool", () => {
 onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
   // Start preview when drag begins
   if (prev.type === "selected" && next.type === "dragging") {
-    this.beginPreview();
+    this.editor.preview.beginPreview();
   }
 
   // Commit when drag ends with actual movement
@@ -347,12 +408,12 @@ onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
     if (event.type === "dragEnd") {
       const { totalDelta, draggedPointIds } = prev.drag;
       if ((totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0) {
-        this.commitPreview("Move Points");
+        this.editor.preview.commitPreview("Move Points");
       } else {
-        this.cancelPreview();
+        this.editor.preview.cancelPreview();
       }
     } else {
-      this.cancelPreview();
+      this.editor.preview.cancelPreview();
     }
   }
 }
@@ -377,14 +438,14 @@ tool.transition(state, event) → new state
       ↓
 tool.onTransition(prev, next, event) → side effects
       ↓
-ctx.render.requestRedraw()
+editor.render.requestRedraw()
       ↓
 tool.render(renderer) → draw overlays
 ```
 
 ## Related Systems
 
-- [editor](../editor/docs/DOCS.md) - Provides ToolContext services
+- [editor](../editor/docs/DOCS.md) - Provides Editor services
 - [commands](../commands/docs/DOCS.md) - Command execution and undo
 - [reactive](../reactive/docs/DOCS.md) - Signals for state
 - [graphics](../graphics/docs/DOCS.md) - Interactive rendering

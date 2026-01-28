@@ -1,7 +1,7 @@
 import type { PointId, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import { hitTestBoundingBox } from "../boundingBoxHitTest";
@@ -18,25 +18,25 @@ export class ResizeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (state.type === "resizing") {
-      return this.transitionResizing(state, event, ctx);
+      return this.transitionResizing(state, event, editor);
     }
 
     if (state.type === "selected" && event.type === "dragStart") {
-      return this.tryStartResize(state, event, ctx);
+      return this.tryStartResize(state, event, editor);
     }
 
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
-      ctx.preview.beginPreview();
+      editor.preview.beginPreview();
     }
     if (prev.type === "resizing" && next.type !== "resizing") {
       if (event.type !== "dragEnd") {
-        ctx.preview.cancelPreview();
+        editor.preview.cancelPreview();
       }
     }
   }
@@ -44,7 +44,7 @@ export class ResizeBehavior implements SelectBehavior {
   private transitionResizing(
     state: SelectState & { type: "resizing" },
     event: ToolEvent,
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState {
     if (event.type === "drag") {
       const uniformScale = event.shiftKey;
@@ -61,7 +61,7 @@ export class ResizeBehavior implements SelectBehavior {
         const offset = Vec2.sub(initialPos, anchor);
         const scaled = Vec2.mul(offset, { x: sx, y: sy });
         const newPos = Vec2.add(anchor, scaled);
-        ctx.edit.movePointTo(id, newPos.x, newPos.y);
+        editor.edit.movePointTo(id, newPos.x, newPos.y);
       }
 
       return {
@@ -110,24 +110,24 @@ export class ResizeBehavior implements SelectBehavior {
   private tryStartResize(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState | null {
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = editor.hitTest.getPointAt(event.point);
     if (point) return null;
 
-    const edge = this.hitTestBoundingRectEdge(event.point, ctx);
-    const bounds = ctx.hitTest.getSelectionBoundingRect();
+    const edge = this.hitTestBoundingRectEdge(event.point, editor);
+    const bounds = editor.hitTest.getSelectionBoundingRect();
 
     if (!edge || !bounds) return null;
 
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const draggedPointIds = [...ctx.selection.getSelectedPoints()];
+    const draggedPointIds = [...editor.selection.getSelectedPoints()];
 
     const initialPositions = new Map<PointId, Point2D>();
-    const glyph = ctx.edit.getGlyph();
+    const glyph = editor.edit.getGlyph();
     const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
     for (const p of allPoints) {
-      if (ctx.selection.isPointSelected(p.id)) {
+      if (editor.selection.isPointSelected(p.id)) {
         initialPositions.set(p.id, { x: p.x, y: p.y });
       }
     }
@@ -147,13 +147,13 @@ export class ResizeBehavior implements SelectBehavior {
     };
   }
 
-  private hitTestBoundingRectEdge(pos: Point2D, ctx: ToolContext): BoundingRectEdge {
-    const rect = ctx.hitTest.getSelectionBoundingRect();
+  private hitTestBoundingRectEdge(pos: Point2D, editor: Editor): BoundingRectEdge {
+    const rect = editor.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const hitRadius = ctx.screen.hitRadius;
-    const handleOffset = ctx.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = ctx.screen.toUpmDistance(
+    const hitRadius = editor.screen.hitRadius;
+    const handleOffset = editor.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = editor.screen.toUpmDistance(
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 

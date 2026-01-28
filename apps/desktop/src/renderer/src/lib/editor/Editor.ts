@@ -19,7 +19,7 @@ import type {
 } from "@shift/types";
 import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
-import { createContext, type ToolName } from "../tools/core";
+import type { ToolName } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
@@ -58,6 +58,20 @@ import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 import type { FocusZone } from "@/types/focus";
+import {
+  SelectionService,
+  HoverService,
+  EditService,
+  ScreenService,
+  ViewportService,
+  PreviewService,
+  TransformService,
+  HitTestService,
+  CursorService,
+  RenderService,
+  ZoneService,
+  ToolsService,
+} from "./services";
 
 export class Editor {
   private $previewMode: WritableSignal<boolean>;
@@ -85,6 +99,19 @@ export class Editor {
   $renderState: ComputedSignal<RenderState>;
   private $cursor: WritableSignal<string>;
 
+  readonly selection: SelectionService;
+  readonly hover: HoverService;
+  readonly edit: EditService;
+  readonly screen: ScreenService;
+  readonly viewport: ViewportService;
+  readonly preview: PreviewService;
+  readonly transform: TransformService;
+  readonly hitTest: HitTestService;
+  readonly cursor: CursorService;
+  readonly render: RenderService;
+  readonly zone: ZoneService;
+  readonly tools: ToolsService;
+
   constructor() {
     this.#viewport = new ViewportManager();
     this.#fontEngine = new FontEngine();
@@ -107,6 +134,52 @@ export class Editor {
     this.#renderer = new GlyphRenderer(this, (ctx) => this.#toolManager?.render(ctx));
 
     this.#clipboardManager = new ClipboardManager(this);
+
+    this.selection = new SelectionService(this.#selection);
+    this.hover = new HoverService(this.#hover);
+    this.edit = new EditService({
+      fontEngine: this.#fontEngine,
+      getGlyph: () => this.getGlyph(),
+      getPointById: (id) => this.getPointById(id),
+      getContourById: (id) => this.getContourById(id),
+    });
+    this.screen = new ScreenService(this.#viewport);
+    this.viewport = new ViewportService(this.#viewport);
+    this.preview = new PreviewService({
+      beginPreview: () => this.beginPreview(),
+      cancelPreview: () => this.cancelPreview(),
+      commitPreview: (label) => this.commitPreview(label),
+      isInPreview: () => this.isInPreview,
+      getPreviewSnapshot: () => this.previewSnapshot,
+    });
+    this.transform = new TransformService({
+      rotateSelection: (angle, origin) => this.rotateSelection(angle, origin),
+      scaleSelection: (sx, sy, origin) => this.scaleSelection(sx, sy, origin),
+      reflectSelection: (axis, origin) => this.reflectSelection(axis, origin),
+      getSelectionBounds: () => this.getSelectionBounds(),
+      getSelectionCenter: () => this.getSelectionCenter(),
+    });
+    this.hitTest = new HitTestService({
+      getPointAt: (pos) => this.getPointAt(pos),
+      getSegmentAt: (pos) => this.getSegmentAt(pos),
+      getContourEndpointAt: (pos) => this.getContourEndpointAt(pos),
+      getSelectionBoundingRect: () => this.getSelectionBoundingRect(),
+      getAllPoints: () => this.getAllPoints(),
+      getSegmentById: (id) => this.getSegmentById(id),
+      updateHover: (pos) => this.updateHover(pos),
+    });
+    this.cursor = new CursorService(this.$cursor, (c) => this.setCursor(c));
+    this.render = new RenderService({
+      requestRedraw: () => this.requestRedraw(),
+      requestImmediateRedraw: () => this.requestImmediateRedraw(),
+      cancelRedraw: () => this.cancelRedraw(),
+      setPreviewMode: (enabled) => this.setPreviewMode(enabled),
+      setHandlesVisible: (visible) => this.setHandlesVisible(visible),
+    });
+    this.zone = new ZoneService({
+      getZone: () => this.focusZone,
+    });
+    this.tools = new ToolsService();
 
     this.$renderState = computed<RenderState>(() => ({
       glyph: this.#fontEngine.$glyph.value,
@@ -134,7 +207,7 @@ export class Editor {
     this.getToolManager().register(name, ToolClass);
   }
 
-  public get tools(): ReadonlyMap<ToolName, ToolRegistryItem> {
+  public get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem> {
     const result = new Map<ToolName, ToolRegistryItem>();
     for (const [name, metadata] of this.#toolMetadata) {
       result.set(name, {
@@ -159,7 +232,7 @@ export class Editor {
 
   public getToolManager(): ToolManager {
     if (!this.#toolManager) {
-      this.#toolManager = new ToolManager(createContext(this));
+      this.#toolManager = new ToolManager(this);
     }
     return this.#toolManager;
   }
@@ -311,6 +384,10 @@ export class Editor {
     return this.#commandHistory;
   }
 
+  public get commands(): CommandHistory {
+    return this.#commandHistory;
+  }
+
   public get viewportManager(): ViewportManager {
     return this.#viewport;
   }
@@ -343,7 +420,7 @@ export class Editor {
     this.#edgePan.stop();
   }
 
-  public get zone(): FocusZone {
+  public get focusZone(): FocusZone {
     return this.#zone;
   }
 
@@ -447,10 +524,6 @@ export class Editor {
 
   public saveFont(filePath: string): void {
     this.#fontEngine.io.saveFont(filePath);
-  }
-
-  public get cursor(): Signal<string> {
-    return this.$cursor;
   }
 
   public setCursor(cursor: CursorType): void {

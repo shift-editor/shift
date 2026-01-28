@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { PenState, PenBehavior } from "../types";
 import { resolveCursorIntent } from "../intents";
 
@@ -8,19 +8,15 @@ export class HoverBehavior implements PenBehavior {
     return state.type === "ready" && event.type === "pointerMove";
   }
 
-  transition(
-    state: PenState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): PenState | null {
+  transition(state: PenState, event: ToolEvent, editor: Editor): PenState | null {
     if (state.type !== "ready" || event.type !== "pointerMove") return null;
 
     const cursor = resolveCursorIntent(event.point, {
-      hitTest: ctx.hitTest,
-      getActiveContourId: () => ctx.edit.getActiveContourId(),
-      hasActiveDrawingContour: () => this.hasActiveDrawingContour(ctx),
-      shouldCloseContour: (p) => this.shouldCloseContour(p, ctx),
-      getMiddlePointAt: (p) => this.getMiddlePointAt(p, ctx),
+      hitTest: editor.hitTest,
+      getActiveContourId: () => editor.edit.getActiveContourId(),
+      hasActiveDrawingContour: () => this.hasActiveDrawingContour(editor),
+      shouldCloseContour: (p) => this.shouldCloseContour(p, editor),
+      getMiddlePointAt: (p) => this.getMiddlePointAt(p, editor),
     });
 
     return {
@@ -30,68 +26,48 @@ export class HoverBehavior implements PenBehavior {
     };
   }
 
-  onTransition(
-    _prev: PenState,
-    next: PenState,
-    _event: ToolEvent,
-    ctx: ToolContext,
-  ): void {
+  onTransition(_prev: PenState, next: PenState, _event: ToolEvent, editor: Editor): void {
     if (next.type === "ready" && next.intent?.action === "setCursor") {
-      ctx.hitTest.updateHover((next as any).mousePos);
+      editor.hitTest.updateHover((next as any).mousePos);
     }
   }
 
-  private hasActiveDrawingContour(ctx: ToolContext): boolean {
-    const snapshot = ctx.edit.getGlyph();
-    if (!snapshot) return false;
+  private hasActiveDrawingContour(editor: Editor): boolean {
+    const glyph = editor.edit.getGlyph();
+    if (!glyph) return false;
 
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find(
-      (c) => c.id === activeContourId,
-    );
+    const activeContourId = editor.edit.getActiveContourId();
+    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
 
-    return (
-      activeContour !== undefined &&
-      !activeContour.closed &&
-      activeContour.points.length > 0
-    );
+    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
   }
 
-  private shouldCloseContour(
-    pos: { x: number; y: number },
-    ctx: ToolContext,
-  ): boolean {
-    const snapshot = ctx.edit.getGlyph();
-    const activeContourId = ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find(
-      (c) => c.id === activeContourId,
-    );
+  private shouldCloseContour(pos: { x: number; y: number }, editor: Editor): boolean {
+    const glyph = editor.edit.getGlyph();
+    const activeContourId = editor.edit.getActiveContourId();
+    const activeContour = glyph?.contours.find((c) => c.id === activeContourId);
 
-    if (
-      !activeContour ||
-      activeContour.closed ||
-      activeContour.points.length < 2
-    ) {
+    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
       return false;
     }
 
     const firstPoint = activeContour.points[0];
     const dx = pos.x - firstPoint.x;
     const dy = pos.y - firstPoint.y;
-    return Math.sqrt(dx * dx + dy * dy) < ctx.screen.hitRadius;
+    return Math.sqrt(dx * dx + dy * dy) < editor.screen.hitRadius;
   }
 
   private getMiddlePointAt(
     pos: { x: number; y: number },
-    ctx: ToolContext,
+    editor: Editor,
   ): { contourId: any; pointId: any; pointIndex: number } | null {
-    const snapshot = ctx.edit.getGlyph();
-    if (!snapshot) return null;
+    const glyph = editor.edit.getGlyph();
+    if (!glyph) return null;
 
-    const activeContourId = ctx.edit.getActiveContourId();
-    const hitRadius = ctx.screen.hitRadius;
+    const activeContourId = editor.edit.getActiveContourId();
+    const hitRadius = editor.screen.hitRadius;
 
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       if (contour.id === activeContourId || contour.closed) continue;
       if (contour.points.length < 3) continue;
 

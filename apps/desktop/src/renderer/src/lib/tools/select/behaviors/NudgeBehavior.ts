@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
@@ -12,22 +12,14 @@ export class NudgeBehavior implements SelectBehavior {
     return arrowKeys.includes(event.key);
   }
 
-  transition(
-    state: SelectState,
-    event: ToolEvent,
-    ctx: ToolContext,
-  ): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (state.type !== "selected") return null;
     if (event.type !== "keyDown") return null;
 
-    const pointIds = [...ctx.selection.getSelectedPoints()];
+    const pointIds = [...editor.selection.getSelectedPoints()];
     if (pointIds.length === 0) return null;
 
-    const modifier: NudgeMagnitude = event.metaKey
-      ? "large"
-      : event.shiftKey
-        ? "medium"
-        : "small";
+    const modifier: NudgeMagnitude = event.metaKey ? "large" : event.shiftKey ? "medium" : "small";
     const nudgeValue = NUDGES_VALUES[modifier];
 
     let dx = 0;

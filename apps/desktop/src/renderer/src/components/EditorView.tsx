@@ -16,11 +16,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [cursor, setCursor] = useState(() => editor.cursor.peek());
+  const [cursorStyle, setCursorStyle] = useState(() => editor.cursor.get());
 
   useEffect(() => {
     const fx = effect(() => {
-      setCursor(editor.cursor.value);
+      setCursorStyle(editor.cursor.get());
     });
     return () => fx.dispose();
   }, [editor]);
@@ -80,7 +80,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     <div
       ref={containerRef}
       className="relative z-20 h-full w-full overflow-hidden"
-      style={{ cursor }}
+      style={{ cursor: cursorStyle }}
       onMouseMove={(e) => {
         const position = editor.getMousePosition(e.clientX, e.clientY);
         const { x, y } = editor.projectScreenToUpm(position.x, position.y);

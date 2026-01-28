@@ -1,7 +1,7 @@
 import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
-import type { ToolContext } from "../core/createContext";
+import type { Editor } from "@/lib/editor";
 import { NudgePointsCommand, ScalePointsCommand, RotatePointsCommand } from "@/lib/commands";
 import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
@@ -39,158 +39,154 @@ export type SelectIntent =
   | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
   | { action: "toggleSmooth"; pointId: PointId };
 
-export function executeIntent(intent: SelectIntent, ctx: ToolContext): void {
+export function executeIntent(intent: SelectIntent, editor: Editor): void {
   switch (intent.action) {
     case "selectPoint":
-      executeSelectPoint(intent.pointId, intent.additive, ctx);
+      executeSelectPoint(intent.pointId, intent.additive, editor);
       break;
 
     case "selectSegment":
-      executeSelectSegment(intent.segmentId, intent.additive, ctx);
+      executeSelectSegment(intent.segmentId, intent.additive, editor);
       break;
 
     case "togglePoint":
-      ctx.selection.togglePoint(intent.pointId);
+      editor.selection.togglePoint(intent.pointId);
       break;
 
     case "toggleSegment":
-      executeToggleSegment(intent.segmentId, ctx);
+      executeToggleSegment(intent.segmentId, editor);
       break;
 
     case "selectPointsInRect":
-      executeSelectPointsInRect(intent.rect, ctx);
+      executeSelectPointsInRect(intent.rect, editor);
       break;
 
     case "clearSelection":
-      ctx.selection.clear();
+      editor.selection.clear();
       break;
 
     case "clearAndStartMarquee":
-      ctx.selection.clear();
-      ctx.selection.setMode("preview");
+      editor.selection.clear();
+      editor.selection.setMode("preview");
       break;
 
     case "setSelectionMode":
-      ctx.selection.setMode(intent.mode);
+      editor.selection.setMode(intent.mode);
       break;
 
     case "setHoveredPoint":
-      ctx.hover.setHoveredPoint(intent.pointId);
+      editor.hover.setHoveredPoint(intent.pointId);
       break;
 
     case "setHoveredSegment":
-      ctx.hover.setHoveredSegment(intent.indicator);
+      editor.hover.setHoveredSegment(intent.indicator);
       break;
 
     case "clearHover":
-      ctx.hover.clearAll();
+      editor.hover.clearAll();
       break;
 
     case "beginPreview":
-      ctx.preview.beginPreview();
+      editor.preview.beginPreview();
       break;
 
     case "commitPreview":
-      ctx.preview.commitPreview(intent.label);
+      editor.preview.commitPreview(intent.label);
       break;
 
     case "cancelPreview":
-      ctx.preview.cancelPreview();
+      editor.preview.cancelPreview();
       break;
 
     case "movePointsDelta":
-      executeMovePointsDelta(intent.delta, ctx);
+      executeMovePointsDelta(intent.delta, editor);
       break;
 
     case "scalePoints":
-      executeScalePoints(intent.pointIds, intent.sx, intent.sy, intent.anchor, ctx);
+      executeScalePoints(intent.pointIds, intent.sx, intent.sy, intent.anchor, editor);
       break;
 
     case "rotatePoints":
-      executeRotatePoints(intent.pointIds, intent.angle, intent.center, ctx);
+      executeRotatePoints(intent.pointIds, intent.angle, intent.center, editor);
       break;
 
     case "nudge":
-      executeNudge(intent.pointIds, intent.dx, intent.dy, ctx);
+      executeNudge(intent.pointIds, intent.dx, intent.dy, editor);
       break;
 
     case "toggleSmooth":
-      ctx.edit.toggleSmooth(intent.pointId);
-      ctx.render.requestRedraw();
+      editor.edit.toggleSmooth(intent.pointId);
+      editor.render.requestRedraw();
       break;
   }
 }
 
-function executeSelectPoint(pointId: PointId, additive: boolean, ctx: ToolContext): void {
+function executeSelectPoint(pointId: PointId, additive: boolean, editor: Editor): void {
   if (additive) {
-    const current = ctx.selection.getSelectedPoints();
+    const current = editor.selection.getSelectedPoints();
     const newSelection = new Set(current);
     newSelection.add(pointId);
-    ctx.selection.selectPoints(newSelection);
+    editor.selection.selectPoints(newSelection);
   } else {
-    ctx.selection.clear();
-    ctx.selection.selectPoints(new Set([pointId]));
+    editor.selection.clear();
+    editor.selection.selectPoints(new Set([pointId]));
   }
 }
 
-function executeSelectSegment(
-  segmentId: SegmentId,
-  additive: boolean,
-  ctx: ToolContext,
-): PointId[] {
-  const segment = ctx.hitTest.getSegmentById(segmentId);
+function executeSelectSegment(segmentId: SegmentId, additive: boolean, editor: Editor): PointId[] {
+  const segment = editor.hitTest.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);
 
   if (additive) {
-    ctx.selection.addSegment(segmentId);
+    editor.selection.addSegment(segmentId);
     for (const id of pointIds) {
-      ctx.selection.addPoint(id);
+      editor.selection.addPoint(id);
     }
   } else {
-    ctx.selection.selectSegments(new Set([segmentId]));
-    ctx.selection.selectPoints(new Set(pointIds));
+    editor.selection.selectSegments(new Set([segmentId]));
+    editor.selection.selectPoints(new Set(pointIds));
   }
 
   return pointIds;
 }
 
-function executeToggleSegment(segmentId: SegmentId, ctx: ToolContext): PointId[] {
-  const wasSelected = ctx.selection.isSegmentSelected(segmentId);
-  ctx.selection.toggleSegment(segmentId);
+function executeToggleSegment(segmentId: SegmentId, editor: Editor): PointId[] {
+  const wasSelected = editor.selection.isSegmentSelected(segmentId);
+  editor.selection.toggleSegment(segmentId);
 
-  const segment = ctx.hitTest.getSegmentById(segmentId);
+  const segment = editor.hitTest.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);
 
   if (wasSelected) {
     for (const id of pointIds) {
-      ctx.selection.removePoint(id);
+      editor.selection.removePoint(id);
     }
     return [];
   } else {
     for (const id of pointIds) {
-      ctx.selection.addPoint(id);
+      editor.selection.addPoint(id);
     }
     return pointIds;
   }
 }
 
-function executeSelectPointsInRect(rect: Rect2D, ctx: ToolContext): Set<PointId> {
-  const allPoints = ctx.hitTest.getAllPoints();
+function executeSelectPointsInRect(rect: Rect2D, editor: Editor): Set<PointId> {
+  const allPoints = editor.hitTest.getAllPoints();
   const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
   const pointIds = new Set(hitPoints.map((p) => asPointId(p.id)));
-  ctx.selection.clear();
-  ctx.selection.selectPoints(pointIds);
+  editor.selection.clear();
+  editor.selection.selectPoints(pointIds);
   return pointIds;
 }
 
-function executeMovePointsDelta(delta: Point2D, ctx: ToolContext): void {
+function executeMovePointsDelta(delta: Point2D, editor: Editor): void {
   if (delta.x !== 0 || delta.y !== 0) {
-    const selectedPoints = ctx.selection.getSelectedPoints();
-    ctx.edit.applySmartEdits(selectedPoints, delta.x, delta.y);
+    const selectedPoints = editor.selection.getSelectedPoints();
+    editor.edit.applySmartEdits(selectedPoints, delta.x, delta.y);
   }
 }
 
@@ -199,12 +195,12 @@ function executeScalePoints(
   sx: number,
   sy: number,
   anchor: Point2D,
-  ctx: ToolContext,
+  editor: Editor,
 ): void {
-  ctx.preview.cancelPreview();
+  editor.preview.cancelPreview();
   if (sx !== 1 || sy !== 1) {
     const cmd = new ScalePointsCommand(pointIds, sx, sy, anchor);
-    ctx.commands.execute(cmd);
+    editor.commands.execute(cmd);
   }
 }
 
@@ -212,18 +208,18 @@ function executeRotatePoints(
   pointIds: PointId[],
   angle: number,
   center: Point2D,
-  ctx: ToolContext,
+  editor: Editor,
 ): void {
-  ctx.preview.cancelPreview();
+  editor.preview.cancelPreview();
   if (angle !== 0) {
     const cmd = new RotatePointsCommand(pointIds, angle, center);
-    ctx.commands.execute(cmd);
+    editor.commands.execute(cmd);
   }
 }
 
-function executeNudge(pointIds: PointId[], dx: number, dy: number, ctx: ToolContext): void {
+function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: Editor): void {
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
-  ctx.commands.execute(cmd);
-  ctx.render.requestRedraw();
+  editor.commands.execute(cmd);
+  editor.render.requestRedraw();
 }

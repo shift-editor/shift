@@ -16,16 +16,18 @@ src/renderer/src/lib/tools/
 │   ├── BaseTool.ts           # Abstract base class for tools
 │   ├── GestureDetector.ts    # Converts pointer events to semantic events
 │   ├── ToolManager.ts        # Tool orchestration and switching
-│   ├── createContext.ts      # ToolContext factory
 │   ├── DrawAPI.ts            # Interactive drawing API
 │   └── index.ts
 ├── pen/
 │   ├── Pen.ts                # Pen tool class
-│   ├── intents.ts            # Pen cursor logic
+│   ├── behaviors/            # State-specific behavior handlers
+│   ├── intents.ts            # Intent resolution and execution
 │   └── index.ts
 ├── select/
 │   ├── Select.ts             # Select tool class
+│   ├── behaviors/            # State-specific behavior handlers
 │   ├── cursor.ts             # Select cursor logic
+│   ├── intents.ts            # Intent resolution and execution
 │   ├── types.ts              # SelectState types
 │   ├── utils.ts              # Pure utility functions
 │   └── index.ts
@@ -36,8 +38,6 @@ src/renderer/src/lib/tools/
 │   ├── Shape.ts              # Rectangle tool
 │   └── index.ts
 ├── tools.ts                  # Tool name types
-├── Pen.test.ts
-├── Select.test.ts
 └── docs/
     ├── CONTEXT.md
     └── DOCS.md
@@ -52,7 +52,7 @@ abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
   state: S;
   settings: Settings;
-  protected ctx: ToolContext;
+  protected editor: Editor;
 
   abstract initialState(): S;
   abstract transition(state: S, event: ToolEvent): S;
@@ -122,12 +122,13 @@ type PenState =
 
 ```typescript
 type SelectState =
-  | { type: "idle" }
-  | { type: "ready"; hoveredPointId: PointId | null }
-  | { type: "selecting"; selection: SelectionData }
-  | { type: "selected"; hoveredPointId: PointId | null }
-  | { type: "dragging"; drag: DragData }
-  | { type: "resizing"; resize: ResizeData };
+  | { type: "idle"; intent?: SelectIntent }
+  | { type: "ready"; hoveredPointId: PointId | null; intent?: SelectIntent }
+  | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
+  | { type: "selected"; hoveredPointId: PointId | null; intent?: SelectIntent }
+  | { type: "dragging"; drag: DragData; intent?: SelectIntent }
+  | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
+  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
 
 interface DragData {
   anchorPointId: PointId;
@@ -151,31 +152,36 @@ interface ResizeData {
 
 ## Key Patterns
 
-### Tool State Machine
+### Behavior Pattern
+
+Complex tools delegate to behavior classes for cleaner separation:
 
 ```typescript
 class Select extends BaseTool<SelectState> {
-  readonly id: ToolName = "select";
-
-  initialState(): SelectState {
-    return { type: "idle" };
-  }
+  private behaviors: SelectBehavior[] = [
+    new HoverBehavior(),
+    new SelectionBehavior(),
+    new DragBehavior(),
+    new ResizeBehavior(),
+    new RotateBehavior(),
+  ];
 
   transition(state: SelectState, event: ToolEvent): SelectState {
-    switch (state.type) {
-      case "ready":
-        return this.transitionReady(state, event);
-      case "selected":
-        return this.transitionSelected(state, event);
-      // ... other states
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.editor);
+        if (result) return result;
+      }
     }
     return state;
   }
 
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
-    // Handle side effects after state changes
-    if (prev.type === "dragging" && next.type === "selected") {
-      this.commitPreview("Move Points");
+    if (next.intent) {
+      executeIntent(next.intent, this.editor);
+    }
+    for (const behavior of this.behaviors) {
+      behavior.onTransition?.(prev, next, event, this.editor);
     }
   }
 }
@@ -198,33 +204,27 @@ class Select extends BaseTool<SelectState> {
 // click (no drag), drag sequence, double-click
 ```
 
-### ToolContext Dependency Injection
+### Editor Service Access
+
+Tools access services through the Editor instance:
 
 ```typescript
-interface ToolContext {
-  screen: ScreenService;
-  selection: SelectionService;
-  hover: HoverService;
-  edit: EditService;
-  preview: PreviewService;
-  transform: TransformService;
-  cursor: CursorService;
-  render: RenderService;
-  viewport: ViewportService;
-  hitTest: HitTestService;
-  commands: CommandHistory;
-  tools: ToolSwitchService;
-}
+// In a tool or behavior:
+this.editor.selection.selectPoints(ids);
+this.editor.cursor.set({ type: "crosshair" });
+this.editor.hitTest.getPointAt(pos);
+this.editor.preview.beginPreview();
+this.editor.commands.execute(cmd);
 ```
 
 ## API Surface
 
-| Tool   | States                                               | Key Features                                 |
-| ------ | ---------------------------------------------------- | -------------------------------------------- |
-| Select | idle, ready, selecting, selected, dragging, resizing | Point/segment selection, drag, resize, nudge |
-| Pen    | idle, ready, anchored, dragging                      | Bezier curves, contour close/continue/split  |
-| Hand   | idle, ready, dragging                                | Canvas panning, Space bar activation         |
-| Shape  | idle, ready, dragging                                | Rectangle creation                           |
+| Tool   | States                                                         | Key Features                                         |
+| ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
+| Select | idle, ready, selecting, selected, dragging, resizing, rotating | Point/segment selection, drag, resize, rotate, nudge |
+| Pen    | idle, ready, anchored, dragging                                | Bezier curves, contour close/continue/split          |
+| Hand   | idle, ready, dragging                                          | Canvas panning, Space bar activation                 |
+| Shape  | idle, ready, dragging                                          | Rectangle creation                                   |
 
 ## Common Operations
 
@@ -249,26 +249,9 @@ class MyTool extends BaseTool<MyState> {
 
   activate(): void {
     this.state = { type: "ready" };
-    this.ctx.cursor.set({ type: "crosshair" });
+    this.editor.cursor.set({ type: "crosshair" });
   }
 }
-```
-
-### Testing tools with ToolEventSimulator
-
-```typescript
-import { ToolEventSimulator, createMockToolContext, createToolMouseEvent } from "@/testing";
-
-const ctx = createMockToolContext();
-const tool = new Select(ctx);
-const sim = new ToolEventSimulator(tool);
-
-sim.setReady();
-sim.onMouseDown(createToolMouseEvent(100, 100));
-sim.onMouseMove(createToolMouseEvent(150, 150));
-sim.onMouseUp(createToolMouseEvent(150, 150));
-
-expect(tool.getState().type).toBe("selected");
 ```
 
 ## Constants

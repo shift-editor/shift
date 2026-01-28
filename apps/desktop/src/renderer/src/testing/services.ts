@@ -1,20 +1,8 @@
 import { vi } from "vitest";
 import type { PointId, ContourId, GlyphSnapshot, Point, Contour } from "@shift/types";
 import { asContourId, asPointId } from "@shift/types";
-import type {
-  ToolContext,
-  ScreenService,
-  SelectionService,
-  HoverService,
-  EditService,
-  PreviewService,
-  TransformService,
-  CursorService,
-  RenderService,
-  ViewportService,
-  HitTestService,
-  ToolSwitchService,
-} from "@/lib/tools/core/createContext";
+import type { ToolName } from "@/lib/tools/core";
+import type { ContourEndpointHit, TemporaryToolOptions } from "@/lib/editor/services";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
@@ -34,13 +22,153 @@ export interface ToolMouseEvent {
 import { FontEngine, MockFontEngine } from "@/engine";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 
+interface ScreenService {
+  toUpmDistance(pixels: number): number;
+  readonly hitRadius: number;
+  lineWidth(pixels?: number): number;
+  projectScreenToUpm(x: number, y: number): Point2D;
+  getMousePosition(x?: number, y?: number): Point2D;
+}
+
+interface SelectionService {
+  getSelectedPoints(): ReadonlySet<PointId>;
+  getSelectedSegments(): ReadonlySet<SegmentId>;
+  getMode(): SelectionMode;
+  selectPoints(ids: Set<PointId>): void;
+  addPoint(id: PointId): void;
+  removePoint(id: PointId): void;
+  togglePoint(id: PointId): void;
+  isPointSelected(id: PointId): boolean;
+  selectSegments(ids: Set<SegmentId>): void;
+  addSegment(id: SegmentId): void;
+  removeSegment(id: SegmentId): void;
+  toggleSegment(id: SegmentId): void;
+  isSegmentSelected(id: SegmentId): boolean;
+  clear(): void;
+  hasSelection(): boolean;
+  setMode(mode: SelectionMode): void;
+}
+
+interface HoverService {
+  getHoveredPoint(): PointId | null;
+  getHoveredSegment(): SegmentIndicator | null;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
+  setHoveredPoint(id: PointId | null): void;
+  setHoveredSegment(indicator: SegmentIndicator | null): void;
+  setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
+  clearAll(): void;
+}
+
+interface EditService {
+  getGlyph(): GlyphSnapshot | null;
+  getPointById(id: PointId): Point | null;
+  getContourById(id: ContourId): Contour | null;
+  addPoint(x: number, y: number, type: any, smooth?: boolean): PointId;
+  addPointToContour(
+    contourId: ContourId,
+    x: number,
+    y: number,
+    type: any,
+    smooth: boolean,
+  ): PointId;
+  movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
+  movePointTo(id: PointId, x: number, y: number): void;
+  applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[];
+  removePoints(ids: Iterable<PointId>): void;
+  addContour(): ContourId;
+  closeContour(): void;
+  toggleSmooth(id: PointId): void;
+  getActiveContourId(): ContourId | null;
+  setActiveContour(contourId: ContourId): void;
+  clearActiveContour(): void;
+  reverseContour(contourId: ContourId): void;
+}
+
+interface PreviewService {
+  beginPreview(): void;
+  cancelPreview(): void;
+  commitPreview(label: string): void;
+  isInPreview(): boolean;
+  getPreviewSnapshot(): GlyphSnapshot | null;
+}
+
+interface TransformService {
+  rotate(angle: number, origin?: Point2D): void;
+  scale(sx: number, sy?: number, origin?: Point2D): void;
+  reflect(axis: any, origin?: Point2D): void;
+  rotate90CCW(): void;
+  rotate90CW(): void;
+  rotate180(): void;
+  flipHorizontal(): void;
+  flipVertical(): void;
+  getSelectionBounds(): any | null;
+  getSelectionCenter(): Point2D | null;
+}
+
+interface CursorService {
+  get(): string;
+  set(cursor: CursorType): void;
+}
+
+interface RenderService {
+  requestRedraw(): void;
+  requestImmediateRedraw(): void;
+  cancelRedraw(): void;
+  setPreviewMode(enabled: boolean): void;
+  setHandlesVisible(visible: boolean): void;
+}
+
+interface ViewportService {
+  getZoom(): number;
+  pan(dx: number, dy: number): void;
+  getPan(): Point2D;
+  zoomIn(): void;
+  zoomOut(): void;
+  zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void;
+}
+
+interface HitTestService {
+  getPointAt(pos: Point2D): Point | null;
+  getSegmentAt(pos: Point2D): any | null;
+  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
+  getSelectionBoundingRect(): any | null;
+  getAllPoints(): Point[];
+  getSegmentById(segmentId: SegmentId): any | null;
+  updateHover(pos: Point2D): void;
+}
+
+interface ToolSwitchService {
+  requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void;
+  returnFromTemporary(): void;
+}
+
+interface ZoneService {
+  getZone(): "canvas" | "sidebar" | "toolbar" | "modal";
+}
+
+interface ToolContext {
+  readonly screen: ScreenService;
+  readonly selection: SelectionService;
+  readonly hover: HoverService;
+  readonly edit: EditService;
+  readonly preview: PreviewService;
+  readonly transform: TransformService;
+  readonly cursor: CursorService;
+  readonly render: RenderService;
+  readonly viewport: ViewportService;
+  readonly hitTest: HitTestService;
+  readonly commands: CommandHistory;
+  readonly zone: ZoneService;
+  tools: ToolSwitchService;
+}
+
 export interface MockToolContext extends ToolContext {
   fontEngine: FontEngine;
   getSelectedPoints(): ReadonlySet<PointId>;
   getSelectedSegments(): ReadonlySet<SegmentId>;
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
-  getCursor(): string;
+  getCursorValue(): string;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -419,7 +547,7 @@ function createMockCursorService(): CursorService & {
   };
 
   return {
-    getCursor: () => _cursor,
+    get: () => _cursor,
     set: mocks.set,
     get _cursor() {
       return _cursor;
@@ -700,7 +828,7 @@ export function createMockToolContext(): MockToolContext {
     getSelectedSegments: () => selection._selectedSegments,
     getHoveredPoint: () => hover._hoveredPoint,
     getHoveredSegment: () => hover._hoveredSegment,
-    getCursor: () => cursor._cursor,
+    getCursorValue: () => cursor._cursor,
     mocks: {
       screen,
       selection,

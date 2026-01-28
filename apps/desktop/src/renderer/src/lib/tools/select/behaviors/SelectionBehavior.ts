@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 
 export class SelectionBehavior implements SelectBehavior {
@@ -7,19 +7,19 @@ export class SelectionBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "click";
   }
 
-  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = editor.hitTest.getPointAt(event.point);
 
     if (point) {
       const pointId = point.id;
       if (state.type === "selected" && event.shiftKey) {
-        const hasSelection = ctx.selection.hasSelection();
-        const isSelected = ctx.selection.isPointSelected(pointId);
+        const hasSelection = editor.selection.hasSelection();
+        const isSelected = editor.selection.isPointSelected(pointId);
         const willHaveSelection =
-          hasSelection && !(isSelected && ctx.selection.getSelectedPoints().size === 1);
+          hasSelection && !(isSelected && editor.selection.getSelectedPoints().size === 1);
 
         if (willHaveSelection || !isSelected) {
           return {
@@ -42,14 +42,14 @@ export class SelectionBehavior implements SelectBehavior {
       };
     }
 
-    const segmentHit = ctx.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.hitTest.getSegmentAt(event.point);
     if (segmentHit) {
       if (state.type === "selected" && event.shiftKey) {
-        const isSelected = ctx.selection.isSegmentSelected(segmentHit.segmentId);
+        const isSelected = editor.selection.isSegmentSelected(segmentHit.segmentId);
         const hasOtherSelections =
-          ctx.selection.getSelectedPoints().size > 0 ||
-          ctx.selection.getSelectedSegments().size > 1 ||
-          (ctx.selection.getSelectedSegments().size === 1 && !isSelected);
+          editor.selection.getSelectedPoints().size > 0 ||
+          editor.selection.getSelectedSegments().size > 1 ||
+          (editor.selection.getSelectedSegments().size === 1 && !isSelected);
 
         if (hasOtherSelections || !isSelected) {
           return {

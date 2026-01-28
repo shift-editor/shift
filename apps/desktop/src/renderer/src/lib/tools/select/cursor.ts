@@ -1,6 +1,6 @@
 import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
-import type { HitTestService } from "@/lib/tools/core/createContext";
+import type { HitTestService } from "@/lib/editor/services";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
 

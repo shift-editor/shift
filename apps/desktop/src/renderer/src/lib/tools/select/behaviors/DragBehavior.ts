@@ -1,6 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 
@@ -15,21 +15,21 @@ export class DragBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (state.type === "dragging") {
       return this.transitionDragging(state, event);
     }
 
     if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return this.tryStartDrag(state, event, ctx);
+      return this.tryStartDrag(state, event, editor);
     }
 
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, ctx: ToolContext): void {
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: Editor): void {
     if (prev.type !== "dragging" && next.type === "dragging") {
-      ctx.preview.beginPreview();
+      editor.preview.beginPreview();
     }
   }
 
@@ -77,14 +77,14 @@ export class DragBehavior implements SelectBehavior {
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState | null {
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = editor.hitTest.getPointAt(event.point);
 
     if (point) {
       const pointId = point.id;
-      const isSelected = state.type === "selected" && ctx.selection.isPointSelected(pointId);
-      const draggedPointIds = isSelected ? [...ctx.selection.getSelectedPoints()] : [pointId];
+      const isSelected = state.type === "selected" && editor.selection.isPointSelected(pointId);
+      const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : [pointId];
 
       return {
         type: "dragging",
@@ -99,14 +99,14 @@ export class DragBehavior implements SelectBehavior {
       };
     }
 
-    const segmentHit = ctx.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.hitTest.getSegmentAt(event.point);
     if (segmentHit) {
-      const segment = ctx.hitTest.getSegmentById(segmentHit.segmentId);
+      const segment = editor.hitTest.getSegmentById(segmentHit.segmentId);
       const pointIds = segment ? SegmentOps.getPointIds(segment) : [];
 
       const isSelected =
-        state.type === "selected" && ctx.selection.isSegmentSelected(segmentHit.segmentId);
-      const draggedPointIds = isSelected ? [...ctx.selection.getSelectedPoints()] : pointIds;
+        state.type === "selected" && editor.selection.isSegmentSelected(segmentHit.segmentId);
+      const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : pointIds;
 
       return {
         type: "dragging",

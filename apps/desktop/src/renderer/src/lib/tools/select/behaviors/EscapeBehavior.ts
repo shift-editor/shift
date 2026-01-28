@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 
 export class EscapeBehavior implements SelectBehavior {
@@ -9,7 +9,7 @@ export class EscapeBehavior implements SelectBehavior {
     return state.type === "selected" || state.type === "ready";
   }
 
-  transition(state: SelectState, event: ToolEvent, _ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, _editor: Editor): SelectState | null {
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 
     if (state.type === "selected") {

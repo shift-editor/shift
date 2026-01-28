@@ -1,6 +1,6 @@
 import type { PointId, Rect2D } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import type { IRenderer } from "@/types/graphics";
 import { normalizeRect, pointInRect } from "../utils";
@@ -18,24 +18,24 @@ export class MarqueeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (state.type === "selecting") {
-      return this.transitionSelecting(state, event, ctx);
+      return this.transitionSelecting(state, event, editor);
     }
 
     if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return this.tryStartMarquee(state, event, ctx);
+      return this.tryStartMarquee(state, event, editor);
     }
 
     return null;
   }
 
-  render(renderer: IRenderer, state: SelectState, ctx: ToolContext): void {
+  render(renderer: IRenderer, state: SelectState, editor: Editor): void {
     if (state.type !== "selecting") return;
 
     const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
     renderer.setStyle(SELECTION_RECTANGLE_STYLES);
-    renderer.lineWidth = ctx.screen.lineWidth(SELECTION_RECTANGLE_STYLES.lineWidth);
+    renderer.lineWidth = editor.screen.lineWidth(SELECTION_RECTANGLE_STYLES.lineWidth);
     renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
     renderer.strokeRect(rect.x, rect.y, rect.width, rect.height);
   }
@@ -43,7 +43,7 @@ export class MarqueeBehavior implements SelectBehavior {
   private transitionSelecting(
     state: SelectState & { type: "selecting" },
     event: ToolEvent,
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState {
     if (event.type === "drag") {
       const rect = normalizeRect(state.selection.startPos, event.point);
@@ -57,7 +57,7 @@ export class MarqueeBehavior implements SelectBehavior {
 
     if (event.type === "dragEnd") {
       const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-      const pointIds = this.getPointsInRect(rect, ctx);
+      const pointIds = this.getPointsInRect(rect, editor);
 
       if (pointIds.size > 0) {
         return {
@@ -87,12 +87,12 @@ export class MarqueeBehavior implements SelectBehavior {
   private tryStartMarquee(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState | null {
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = editor.hitTest.getPointAt(event.point);
     if (point) return null;
 
-    const segmentHit = ctx.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.hitTest.getSegmentAt(event.point);
     if (segmentHit) return null;
 
     if (state.type === "selected") {
@@ -110,8 +110,8 @@ export class MarqueeBehavior implements SelectBehavior {
     };
   }
 
-  private getPointsInRect(rect: Rect2D, ctx: ToolContext): Set<PointId> {
-    const allPoints = ctx.hitTest.getAllPoints();
+  private getPointsInRect(rect: Rect2D, editor: Editor): Set<PointId> {
+    const allPoints = editor.hitTest.getAllPoints();
     const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
     return new Set(hitPoints.map((p) => asPointId(p.id)));
   }

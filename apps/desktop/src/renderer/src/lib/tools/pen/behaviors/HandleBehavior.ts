@@ -1,7 +1,7 @@
 import type { Point2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
 import { AddPointCommand, InsertPointCommand } from "@/lib/commands";
 
@@ -28,21 +28,21 @@ export class HandleBehavior implements PenBehavior {
     return false;
   }
 
-  transition(state: PenState, event: ToolEvent, ctx: ToolContext): PenState | null {
+  transition(state: PenState, event: ToolEvent, editor: Editor): PenState | null {
     if (state.type === "anchored") {
-      return this.transitionAnchored(state, event, ctx);
+      return this.transitionAnchored(state, event, editor);
     }
     if (state.type === "dragging") {
-      return this.transitionDragging(state, event, ctx);
+      return this.transitionDragging(state, event, editor);
     }
     return null;
   }
 
-  onTransition(prev: PenState, next: PenState, _event: ToolEvent, ctx: ToolContext): void {
+  onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: Editor): void {
     if ((prev.type === "anchored" || prev.type === "dragging") && next.type === "ready") {
-      if (ctx.commands.isBatching) {
+      if (editor.commands.isBatching) {
         if (next.intent?.action === "setCursor") {
-          ctx.commands.endBatch();
+          editor.commands.endBatch();
         }
       }
     }
@@ -51,13 +51,13 @@ export class HandleBehavior implements PenBehavior {
   private transitionAnchored(
     state: PenState & { type: "anchored" },
     event: ToolEvent,
-    ctx: ToolContext,
+    editor: Editor,
   ): PenState | null {
     if (event.type === "drag") {
       const dist = Vec2.dist(state.anchor.position, event.point);
 
       if (dist > DRAG_THRESHOLD) {
-        const handles = this.createHandles(state.anchor, event.point, ctx);
+        const handles = this.createHandles(state.anchor, event.point, editor);
         return {
           type: "dragging",
           anchor: state.anchor,
@@ -85,8 +85,8 @@ export class HandleBehavior implements PenBehavior {
     }
 
     if (event.type === "keyDown" && event.key === "Escape") {
-      if (ctx.commands.isBatching) {
-        ctx.commands.cancelBatch();
+      if (editor.commands.isBatching) {
+        editor.commands.cancelBatch();
       }
       return {
         type: "ready",
@@ -101,10 +101,10 @@ export class HandleBehavior implements PenBehavior {
   private transitionDragging(
     state: PenState & { type: "dragging" },
     event: ToolEvent,
-    ctx: ToolContext,
+    editor: Editor,
   ): PenState | null {
     if (event.type === "drag") {
-      this.updateHandles(state.anchor, state.handles, event.point, ctx);
+      this.updateHandles(state.anchor, state.handles, event.point, editor);
       return {
         ...state,
         mousePos: event.point,
@@ -120,8 +120,8 @@ export class HandleBehavior implements PenBehavior {
     }
 
     if (event.type === "dragCancel") {
-      if (ctx.commands.isBatching) {
-        ctx.commands.cancelBatch();
+      if (editor.commands.isBatching) {
+        editor.commands.cancelBatch();
       }
       return {
         type: "ready",
@@ -131,8 +131,8 @@ export class HandleBehavior implements PenBehavior {
     }
 
     if (event.type === "keyDown" && event.key === "Escape") {
-      if (ctx.commands.isBatching) {
-        ctx.commands.cancelBatch();
+      if (editor.commands.isBatching) {
+        editor.commands.cancelBatch();
       }
       return {
         type: "ready",
@@ -144,9 +144,9 @@ export class HandleBehavior implements PenBehavior {
     return null;
   }
 
-  private createHandles(anchor: AnchorData, mousePos: Point2D, ctx: ToolContext): HandleData {
+  private createHandles(anchor: AnchorData, mousePos: Point2D, editor: Editor): HandleData {
     const { context, pointId, position } = anchor;
-    const history = ctx.commands;
+    const history = editor.commands;
 
     if (context.isFirstPoint) {
       const cmd = new AddPointCommand(mousePos.x, mousePos.y, "offCurve", false);
@@ -186,17 +186,17 @@ export class HandleBehavior implements PenBehavior {
     anchor: AnchorData,
     handles: HandleData,
     mousePos: Point2D,
-    ctx: ToolContext,
+    editor: Editor,
   ): void {
     const { position } = anchor;
 
     if (handles.cpOut) {
-      ctx.edit.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
+      editor.edit.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
     }
 
     if (handles.cpIn) {
       const mirroredPos = Vec2.mirror(mousePos, position);
-      ctx.edit.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
+      editor.edit.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
   }
 }

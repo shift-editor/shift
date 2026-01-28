@@ -1,6 +1,7 @@
 import type { IRenderer } from "@/types/graphics";
+import type { Editor } from "@/lib/editor";
 import type { ToolEvent } from "./GestureDetector";
-import type { ToolContext, ToolName } from "./createContext";
+import type { ToolName } from "./createContext";
 
 export type { ToolName };
 
@@ -12,10 +13,10 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   abstract readonly id: ToolName;
   state: S;
   settings: Settings;
-  protected ctx: ToolContext;
+  protected editor: Editor;
 
-  constructor(ctx: ToolContext) {
-    this.ctx = ctx;
+  constructor(editor: Editor) {
+    this.editor = editor;
     this.state = this.initialState();
     this.settings = this.defaultSettings();
   }
@@ -48,7 +49,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     if (next !== prev) {
       this.state = next;
       this.onTransition?.(prev, next, event);
-      this.ctx.render.requestRedraw();
+      this.editor.render.requestRedraw();
     }
   }
 
@@ -61,26 +62,26 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   }
 
   protected batch<T>(name: string, fn: () => T): T {
-    this.ctx.commands.beginBatch(name);
+    this.editor.commands.beginBatch(name);
     try {
       const result = fn();
-      this.ctx.commands.endBatch();
+      this.editor.commands.endBatch();
       return result;
     } catch (err) {
-      this.ctx.commands.cancelBatch();
+      this.editor.commands.cancelBatch();
       throw err;
     }
   }
 
   protected beginPreview(): void {
-    this.ctx.preview.beginPreview();
+    this.editor.preview.beginPreview();
   }
 
   protected commitPreview(label: string): void {
-    this.ctx.preview.commitPreview(label);
+    this.editor.preview.commitPreview(label);
   }
 
   protected cancelPreview(): void {
-    this.ctx.preview.cancelPreview();
+    this.editor.preview.cancelPreview();
   }
 }

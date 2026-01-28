@@ -1,7 +1,7 @@
 import type { PointId, Point2D } from "@shift/types";
 import { Vec2, Mat } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/createContext";
+import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import { hitTestBoundingBox } from "../boundingBoxHitTest";
@@ -18,27 +18,27 @@ export class RotateBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, ctx: ToolContext): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (state.type === "rotating") {
-      return this.transitionRotating(state, event, ctx);
+      return this.transitionRotating(state, event, editor);
     }
 
     if (state.type === "selected" && event.type === "dragStart") {
-      return this.tryStartRotate(state, event, ctx);
+      return this.tryStartRotate(state, event, editor);
     }
 
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
     if (prev.type !== "rotating" && next.type === "rotating") {
-      ctx.preview.beginPreview();
-      ctx.render.setHandlesVisible(false);
+      editor.preview.beginPreview();
+      editor.render.setHandlesVisible(false);
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
-      ctx.render.setHandlesVisible(true);
+      editor.render.setHandlesVisible(true);
       if (event.type !== "dragEnd") {
-        ctx.preview.cancelPreview();
+        editor.preview.cancelPreview();
       }
     }
   }
@@ -46,7 +46,7 @@ export class RotateBehavior implements SelectBehavior {
   private transitionRotating(
     state: SelectState & { type: "rotating" },
     event: ToolEvent,
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState {
     if (event.type === "drag") {
       const currentAngle = this.calculateAngle(event.point, state.rotate.center);
@@ -54,7 +54,7 @@ export class RotateBehavior implements SelectBehavior {
 
       for (const [id, initialPos] of state.rotate.initialPositions) {
         const rotated = this.rotatePoint(initialPos, deltaAngle, state.rotate.center);
-        ctx.edit.movePointTo(id, rotated.x, rotated.y);
+        editor.edit.movePointTo(id, rotated.x, rotated.y);
       }
 
       return {
@@ -96,13 +96,13 @@ export class RotateBehavior implements SelectBehavior {
   private tryStartRotate(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
-    ctx: ToolContext,
+    editor: Editor,
   ): SelectState | null {
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = editor.hitTest.getPointAt(event.point);
     if (point) return null;
 
-    const corner = this.hitTestRotationZone(event.point, ctx);
-    const bounds = ctx.hitTest.getSelectionBoundingRect();
+    const corner = this.hitTestRotationZone(event.point, editor);
+    const bounds = editor.hitTest.getSelectionBoundingRect();
 
     if (!corner || !bounds) return null;
 
@@ -112,13 +112,13 @@ export class RotateBehavior implements SelectBehavior {
     );
 
     const startAngle = this.calculateAngle(event.point, center);
-    const draggedPointIds = [...ctx.selection.getSelectedPoints()];
+    const draggedPointIds = [...editor.selection.getSelectedPoints()];
 
     const initialPositions = new Map<PointId, Point2D>();
-    const snapshot = ctx.edit.getGlyph();
-    const allPoints = snapshot?.contours.flatMap((c) => c.points) ?? [];
+    const glyph = editor.edit.getGlyph();
+    const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
     for (const p of allPoints) {
-      if (ctx.selection.isPointSelected(p.id as PointId)) {
+      if (editor.selection.isPointSelected(p.id as PointId)) {
         initialPositions.set(p.id as PointId, { x: p.x, y: p.y });
       }
     }
@@ -138,13 +138,13 @@ export class RotateBehavior implements SelectBehavior {
     };
   }
 
-  private hitTestRotationZone(pos: Point2D, ctx: ToolContext): CornerHandle | null {
-    const rect = ctx.hitTest.getSelectionBoundingRect();
+  private hitTestRotationZone(pos: Point2D, editor: Editor): CornerHandle | null {
+    const rect = editor.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const hitRadius = ctx.screen.hitRadius;
-    const handleOffset = ctx.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = ctx.screen.toUpmDistance(
+    const hitRadius = editor.screen.hitRadius;
+    const handleOffset = editor.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = editor.screen.toUpmDistance(
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 

@@ -26,8 +26,8 @@ export class Pen extends BaseTool<PenState> {
 
   activate(): void {
     this.state = { type: "ready", mousePos: { x: 0, y: 0 } };
-    this.ctx.cursor.set({ type: "pen" });
-    this.ctx.edit.clearActiveContour();
+    this.editor.cursor.set({ type: "pen" });
+    this.editor.edit.clearActiveContour();
   }
 
   deactivate(): void {
@@ -37,12 +37,12 @@ export class Pen extends BaseTool<PenState> {
   handleModifier(key: string, pressed: boolean): boolean {
     if (key === "Space") {
       if (pressed) {
-        this.ctx.tools.requestTemporary("hand", {
-          onActivate: () => this.ctx.render.setPreviewMode(true),
-          onReturn: () => this.ctx.render.setPreviewMode(false),
+        this.editor.tools.requestTemporary("hand", {
+          onActivate: () => this.editor.render.setPreviewMode(true),
+          onReturn: () => this.editor.render.setPreviewMode(false),
         });
       } else {
-        this.ctx.tools.returnFromTemporary();
+        this.editor.tools.returnFromTemporary();
       }
       return true;
     }
@@ -56,7 +56,7 @@ export class Pen extends BaseTool<PenState> {
 
     for (const behavior of this.behaviors) {
       if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.ctx);
+        const result = behavior.transition(state, event, this.editor);
         if (result !== null) {
           return result;
         }
@@ -72,7 +72,7 @@ export class Pen extends BaseTool<PenState> {
     }
 
     for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.ctx);
+      behavior.onTransition?.(prev, next, event, this.editor);
     }
 
     if (next.type === "ready") {
@@ -85,32 +85,32 @@ export class Pen extends BaseTool<PenState> {
     switch (intent.action) {
       case "close":
         this.batch("Close Contour", () => {
-          executeIntent(intent, this.ctx);
+          executeIntent(intent, this.editor);
         });
         break;
 
       case "continue":
         this.batch("Continue Contour", () => {
-          executeIntent(intent, this.ctx);
+          executeIntent(intent, this.editor);
         });
         break;
 
       case "splitPoint":
         this.batch("Split Contour", () => {
-          executeIntent(intent, this.ctx);
+          executeIntent(intent, this.editor);
         });
         break;
 
       case "splitSegment":
         this.batch("Split Segment", () => {
-          executeIntent(intent, this.ctx);
+          executeIntent(intent, this.editor);
         });
         break;
 
       case "placePoint":
         if (prev.type === "ready") {
           this.batch("Add Point", () => {
-            const pointId = executeIntent(intent, this.ctx);
+            const pointId = executeIntent(intent, this.editor);
             if (this.state.type === "anchored") {
               (this.state as any).anchor.pointId = pointId;
             }
@@ -120,16 +120,16 @@ export class Pen extends BaseTool<PenState> {
 
       case "abandonContour":
         this.batch("Abandon Contour", () => {
-          executeIntent(intent, this.ctx);
+          executeIntent(intent, this.editor);
         });
         break;
 
       case "setCursor":
-        executeIntent(intent, this.ctx);
+        executeIntent(intent, this.editor);
         break;
 
       case "updateHover":
-        executeIntent(intent, this.ctx);
+        executeIntent(intent, this.editor);
         break;
     }
   }
@@ -137,63 +137,63 @@ export class Pen extends BaseTool<PenState> {
   private updateCursorForPosition(pos: Point2D): void {
     if (this.hasActiveDrawingContour()) {
       if (this.shouldCloseContour(pos.x, pos.y)) {
-        this.ctx.cursor.set({ type: "pen-end" });
+        this.editor.cursor.set({ type: "pen-end" });
         return;
       }
-      this.ctx.cursor.set({ type: "pen" });
+      this.editor.cursor.set({ type: "pen" });
       return;
     }
 
-    const endpoint = this.ctx.hitTest.getContourEndpointAt(pos);
+    const endpoint = this.editor.hitTest.getContourEndpointAt(pos);
     if (endpoint && !endpoint.contour.closed) {
-      this.ctx.cursor.set({ type: "pen-end" });
+      this.editor.cursor.set({ type: "pen-end" });
       return;
     }
 
     const middlePoint = this.getMiddlePointAt(pos);
     if (middlePoint) {
-      this.ctx.cursor.set({ type: "pen-end" });
+      this.editor.cursor.set({ type: "pen-end" });
       return;
     }
 
-    const segmentHit = this.ctx.hitTest.getSegmentAt(pos);
+    const segmentHit = this.editor.hitTest.getSegmentAt(pos);
     if (segmentHit) {
-      this.ctx.cursor.set({ type: "pen-add" });
+      this.editor.cursor.set({ type: "pen-add" });
       return;
     }
 
-    this.ctx.cursor.set({ type: "pen" });
+    this.editor.cursor.set({ type: "pen" });
   }
 
   private shouldCloseContour(x: number, y: number): boolean {
-    const snapshot = this.ctx.edit.getGlyph();
-    const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot?.contours.find((c) => c.id === activeContourId);
+    const glyph = this.editor.edit.getGlyph();
+    const activeContourId = this.editor.edit.getActiveContourId();
+    const activeContour = glyph?.contours.find((c) => c.id === activeContourId);
 
     if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
       return false;
     }
 
     const firstPoint = activeContour.points[0];
-    return Vec2.isWithin({ x, y }, firstPoint, this.ctx.screen.hitRadius);
+    return Vec2.isWithin({ x, y }, firstPoint, this.editor.screen.hitRadius);
   }
 
   private hasActiveDrawingContour(): boolean {
-    const snapshot = this.ctx.edit.getGlyph();
-    if (!snapshot) return false;
+    const glyph = this.editor.edit.getGlyph();
+    if (!glyph) return false;
 
-    const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContourId = this.editor.edit.getActiveContourId();
+    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
 
     return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
   }
 
   private getLastOnCurvePoint(): Point2D | null {
-    const snapshot = this.ctx.edit.getGlyph();
-    if (!snapshot) return null;
+    const glyph = this.editor.edit.getGlyph();
+    if (!glyph) return null;
 
-    const activeContourId = this.ctx.edit.getActiveContourId();
-    const activeContour = snapshot.contours.find((c) => c.id === activeContourId);
+    const activeContourId = this.editor.edit.getActiveContourId();
+    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
 
     if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
       return null;
@@ -213,13 +213,13 @@ export class Pen extends BaseTool<PenState> {
   private getMiddlePointAt(
     pos: Point2D,
   ): { contourId: any; pointId: any; pointIndex: number } | null {
-    const snapshot = this.ctx.edit.getGlyph();
-    if (!snapshot) return null;
+    const glyph = this.editor.edit.getGlyph();
+    if (!glyph) return null;
 
-    const activeContourId = this.ctx.edit.getActiveContourId();
-    const hitRadius = this.ctx.screen.hitRadius;
+    const activeContourId = this.editor.edit.getActiveContourId();
+    const hitRadius = this.editor.screen.hitRadius;
 
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       if (contour.id === activeContourId || contour.closed) continue;
       if (contour.points.length < 3) continue;
 
@@ -239,14 +239,14 @@ export class Pen extends BaseTool<PenState> {
   }
 
   render(renderer: IRenderer): void {
-    if (this.ctx.zone.getZone() !== "canvas") return;
+    if (this.editor.zone.getZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
       if (!lastPoint) return;
 
       renderer.setStyle(PREVIEW_LINE_STYLE);
-      renderer.lineWidth = this.ctx.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
+      renderer.lineWidth = this.editor.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
       renderer.beginPath();
       renderer.moveTo(lastPoint.x, lastPoint.y);
       renderer.lineTo(this.state.mousePos.x, this.state.mousePos.y);
@@ -257,7 +257,7 @@ export class Pen extends BaseTool<PenState> {
       const { anchor, mousePos } = this.state;
 
       renderer.setStyle(DEFAULT_STYLES);
-      renderer.lineWidth = this.ctx.screen.lineWidth(DEFAULT_STYLES.lineWidth);
+      renderer.lineWidth = this.editor.screen.lineWidth(DEFAULT_STYLES.lineWidth);
 
       const anchorX = anchor.position.x;
       const anchorY = anchor.position.y;
