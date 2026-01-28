@@ -1,26 +1,38 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Input } from "@shift/ui";
+import { cn, Input } from "@shift/ui";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
 interface EditableSidebarInputProps {
   label?: string;
-  value: string | number;
+  className?: string;
+  value: number;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
   onValueChange?: (value: number) => void;
   disabled?: boolean;
+  suffix?: string;
+  defaultValue?: number;
 }
+
+const parseNumericValue = (input: string): number | null => {
+  const cleaned = input.replace(/[^0-9.\-]/g, "");
+  const parsed = parseFloat(cleaned);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
 export const EditableSidebarInput = ({
   label,
+  className,
   value,
   icon,
   iconPosition,
   onValueChange,
   disabled = false,
+  suffix,
+  defaultValue,
 }: EditableSidebarInputProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(String(value));
+  const [editValue, setEditValue] = useState<string>(String(value));
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,29 +49,38 @@ export const EditableSidebarInput = ({
 
   const handleBlur = useCallback(() => {
     setIsEditing(false);
-    const numValue = parseFloat(editValue);
-    if (!isNaN(numValue) && onValueChange) {
-      onValueChange(numValue);
-    }
-  }, [editValue, onValueChange]);
-
+    const numericValue = parseNumericValue(editValue) ?? defaultValue ?? 0;
+    onValueChange?.(numericValue);
+  }, [editValue, defaultValue, onValueChange]);
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!inputRef.current) return;
+
       if (e.key === "Enter") {
-        inputRef.current?.blur();
-      } else if (e.key === "Escape") {
+        inputRef.current.blur();
+        setEditValue(String(value));
+      }
+
+      if (e.metaKey && e.key === "a") {
+        inputRef.current.select();
+      }
+
+      if (e.key === "Escape") {
         setEditValue(String(value));
         setIsEditing(false);
-        inputRef.current?.blur();
-      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        inputRef.current.blur();
+        return;
+      }
+
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
 
         const modifier: NudgeMagnitude = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
         const step = NUDGES_VALUES[modifier];
         const direction = e.key === "ArrowUp" ? 1 : -1;
 
-        const currentValue = parseFloat(isEditing ? editValue : String(value));
-        if (isNaN(currentValue)) return;
+        const currentValue = isEditing ? parseNumericValue(editValue) : value;
+        if (currentValue === null) return;
 
         const newValue = currentValue + step * direction;
 
@@ -80,11 +101,11 @@ export const EditableSidebarInput = ({
     <Input
       ref={inputRef}
       label={label}
-      value={isEditing ? editValue : value}
+      value={isEditing ? editValue : `${value}${suffix ?? ""}`}
       icon={icon}
       iconPosition={iconPosition}
       readOnly={!isEditing}
-      className="w-full bg-[#f3f3f3]"
+      className={cn("w-full bg-[#f3f3f3]", className)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

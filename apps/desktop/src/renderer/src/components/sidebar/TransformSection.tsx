@@ -1,8 +1,7 @@
-import { useCallback } from "react";
-import { Button } from "@shift/ui";
+import { useCallback, useState } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
-import { SidebarInput } from "./SidebarInput";
+import { IconButton } from "./IconButton";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
@@ -16,6 +15,7 @@ export const TransformSection = () => {
   const editor = getEditor();
   const { x, y, hasSelection, bounds } = useSelectionBounds();
   const { anchor } = useTransformOrigin();
+  const [rotation, setRotation] = useState(0);
 
   const getOrigin = () => {
     if (!bounds) return undefined;
@@ -23,18 +23,22 @@ export const TransformSection = () => {
   };
 
   const handleRotate90 = () => {
-    editor.rotateSelection(Math.PI / 2, getOrigin());
-    editor.requestRedraw();
+    editor.transform.rotate90CW();
+  };
+
+  const handleRotate = (angle: number) => {
+    const wrapped = angle % 360;
+    const radians = (wrapped * Math.PI) / 180;
+    editor.transform.rotate(radians, getOrigin());
+    setRotation(wrapped);
   };
 
   const handleFlipH = () => {
-    editor.reflectSelection("horizontal", getOrigin());
-    editor.requestRedraw();
+    editor.reflectSelection("vertical", getOrigin());
   };
 
   const handleFlipV = () => {
-    editor.reflectSelection("vertical", getOrigin());
-    editor.requestRedraw();
+    editor.reflectSelection("horizontal", getOrigin());
   };
 
   const handleXChange = useCallback(
@@ -60,7 +64,7 @@ export const TransformSection = () => {
   return (
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-[#898989]">Position</div>
+        <div className="text-xs text-secondary">Position</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             label="X"
@@ -78,40 +82,21 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-muted">Rotation</div>
+        <div className="text-xs text-secondary">Rotation</div>
         <div className="flex gap-2 items-center">
-          <SidebarInput
-            label=""
-            value={hasSelection ? "0" : "-"}
-            icon={<RotateIcon className="w-3 h-3" />}
+          <EditableSidebarInput
+            className="max-w-32"
+            value={rotation}
+            suffix="°"
+            defaultValue={0}
+            onValueChange={handleRotate}
+            icon={<RotateIcon className="w-5 h-5" />}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 p-0.5"
-            onClick={handleRotate90}
-            disabled={!hasSelection}
-          >
-            <RotateCwIcon className="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 p-0.5"
-            onClick={handleFlipH}
-            disabled={!hasSelection}
-          >
-            <FlipHIcon className="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 p-0.5"
-            onClick={handleFlipV}
-            disabled={!hasSelection}
-          >
-            <FlipVIcon className="w-3 h-3" />
-          </Button>
+          <div className="flex w-full items-center justify-start gap-1">
+            <IconButton icon={RotateCwIcon} onClick={handleRotate90} />
+            <IconButton icon={FlipHIcon} onClick={handleFlipH} />
+            <IconButton icon={FlipVIcon} onClick={handleFlipV} />
+          </div>
         </div>
       </div>
     </SidebarSection>

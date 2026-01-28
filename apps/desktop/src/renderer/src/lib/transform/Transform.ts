@@ -108,7 +108,7 @@ export const Transform = {
     const composite = Mat.Compose(Mat.Compose(fromOrigin, matrix), toOrigin);
 
     return points.map((p) => {
-      const transformed = Mat.applyToPoint(composite, { x: p.x, y: p.y });
+      const transformed = Mat.applyToPoint(composite, p);
       return { id: p.id, x: transformed.x, y: transformed.y };
     });
   },

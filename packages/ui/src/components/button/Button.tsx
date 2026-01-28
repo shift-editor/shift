@@ -7,7 +7,7 @@ import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
   variant?: "default" | "ghost";
-  size?: "sm" | "md" | "lg" | "icon";
+  size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -22,21 +22,11 @@ const sizeStyles = {
   md: "h-9 px-4 text-sm",
   lg: "h-11 px-6 text-base",
   icon: "h-8 w-8 p-1",
+  "icon-sm": "h-6 w-6 p-0.5",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant = "default",
-      size = "md",
-      isActive,
-      icon,
-      children,
-      ...props
-    },
-    ref,
-  ) => {
+  ({ className, variant = "default", size = "md", isActive, icon, children, ...props }, ref) => {
     return (
       <BaseButton
         ref={ref}

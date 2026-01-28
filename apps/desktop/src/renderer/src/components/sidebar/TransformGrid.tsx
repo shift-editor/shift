@@ -1,13 +1,4 @@
-export type AnchorPosition =
-  | "tl"
-  | "tm"
-  | "tr"
-  | "lm"
-  | "m"
-  | "rm"
-  | "bl"
-  | "bm"
-  | "br";
+export type AnchorPosition = "tl" | "tm" | "tr" | "lm" | "m" | "rm" | "bl" | "bm" | "br";
 
 export interface TransformGridProps {
   width?: number;
@@ -20,20 +11,20 @@ const INACTIVE_COLOR = "#C2C2C2";
 const ACTIVE_COLOR = "#0C92F4";
 
 const anchorPositions: { id: AnchorPosition; cx: number; cy: number }[] = [
-  { id: "tl", cx: 3.5, cy: 3.5 },
-  { id: "tm", cx: 20.5, cy: 3.5 },
-  { id: "tr", cx: 38.5, cy: 3.5 },
-  { id: "lm", cx: 3.5, cy: 21.5 },
-  { id: "m", cx: 21.5, cy: 21.5 },
-  { id: "rm", cx: 38.5, cy: 21.5 },
-  { id: "bl", cx: 3.5, cy: 38.5 },
-  { id: "bm", cx: 20.5, cy: 38.5 },
-  { id: "br", cx: 38.5, cy: 38.5 },
+  { id: "tl", cx: 4, cy: 4 },
+  { id: "tm", cx: 31, cy: 4 },
+  { id: "tr", cx: 58, cy: 4 },
+  { id: "lm", cx: 4, cy: 27 },
+  { id: "m", cx: 32, cy: 27 },
+  { id: "rm", cx: 58, cy: 27 },
+  { id: "bl", cx: 4, cy: 48 },
+  { id: "bm", cx: 31, cy: 48 },
+  { id: "br", cx: 58, cy: 48 },
 ];
 
 export const TransformGrid = ({
-  width = 42,
-  height = 42,
+  width = 62,
+  height = 52,
   activeAnchor,
   onChange,
 }: TransformGridProps) => {
@@ -41,24 +32,17 @@ export const TransformGrid = ({
     <svg
       width={width}
       height={height}
-      viewBox="0 0 42 42"
+      viewBox="0 0 62 52"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect
-        x="3.75"
-        y="3.75"
-        width="34.5"
-        height="34.5"
-        stroke="#D6D6D6"
-        strokeWidth="1.5"
-      />
+      <rect x="4" y="4" width="54" height="44" stroke="#C2C2C2" strokeWidth="2" />
       {anchorPositions.map(({ id, cx, cy }) => (
         <circle
           key={id}
           cx={cx}
           cy={cy}
-          r="2.5"
+          r="4"
           fill={activeAnchor === id ? ACTIVE_COLOR : INACTIVE_COLOR}
           style={{ cursor: onChange ? "pointer" : "default" }}
           onClick={() => onChange?.(id)}

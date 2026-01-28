@@ -67,7 +67,8 @@
       "WebFetch(domain:dev.to)",
       "WebFetch(domain:reactflow.dev)",
       "Bash(npx vitest:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

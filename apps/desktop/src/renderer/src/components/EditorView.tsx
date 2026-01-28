@@ -5,7 +5,6 @@ import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
 
 import { InteractiveScene } from "./InteractiveScene";
-import { Metrics as MetricsComponent } from "./Metrics";
 import { StaticScene } from "./StaticScene";
 
 interface EditorViewProps {
@@ -91,7 +90,6 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>
-      <MetricsComponent />
     </div>
   );
 };
