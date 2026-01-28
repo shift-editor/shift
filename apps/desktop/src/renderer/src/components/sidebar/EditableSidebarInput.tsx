@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@shift/ui";
+import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
 interface EditableSidebarInputProps {
   label?: string;
@@ -47,12 +48,30 @@ export const EditableSidebarInput = ({
       if (e.key === "Enter") {
         inputRef.current?.blur();
       } else if (e.key === "Escape") {
+        e.stopPropagation();
         setEditValue(String(value));
         setIsEditing(false);
         inputRef.current?.blur();
+      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const modifier: NudgeMagnitude = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
+        const step = NUDGES_VALUES[modifier];
+        const direction = e.key === "ArrowUp" ? 1 : -1;
+
+        const currentValue = parseFloat(isEditing ? editValue : String(value));
+        if (isNaN(currentValue)) return;
+
+        const newValue = currentValue + step * direction;
+
+        if (isEditing) {
+          setEditValue(String(newValue));
+        }
+        onValueChange?.(newValue);
       }
     },
-    [value],
+    [value, isEditing, editValue, onValueChange],
   );
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,7 +86,7 @@ export const EditableSidebarInput = ({
       icon={icon}
       iconPosition={iconPosition}
       readOnly={!isEditing}
-      className="w-full"
+      className="w-full bg-[#f3f3f3]"
       onFocus={handleFocus}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

@@ -51,6 +51,7 @@ export function getThemeFromCss(): Partial<ThemeTokens> {
       },
     },
     canvas: {
+      white: style.getPropertyValue("--color-canvas-white").trim(),
       black: style.getPropertyValue("--color-canvas-black").trim(),
       pink: style.getPropertyValue("--color-canvas-pink").trim(),
       indicator: style.getPropertyValue("--color-canvas-indicator").trim(),

@@ -295,6 +295,10 @@ export class Editor {
     this.#fontEngine.session.endEditSession();
   }
 
+  public get glyph() {
+    return this.#fontEngine.$glyph;
+  }
+
   public getGlyph(): Glyph | null {
     return this.#fontEngine.$glyph.value as Glyph | null;
   }

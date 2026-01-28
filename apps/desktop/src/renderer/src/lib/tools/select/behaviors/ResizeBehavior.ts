@@ -33,10 +33,8 @@ export class ResizeBehavior implements SelectBehavior {
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, ctx: ToolContext): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
       ctx.preview.beginPreview();
-      ctx.render.setHandlesVisible(false);
     }
     if (prev.type === "resizing" && next.type !== "resizing") {
-      ctx.render.setHandlesVisible(true);
       if (event.type !== "dragEnd") {
         ctx.preview.cancelPreview();
       }

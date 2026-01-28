@@ -18,7 +18,7 @@ export function createBoundingRectangleStyles(theme: ThemeTokens): DrawStyle {
     strokeStyle: theme.canvas.black,
     fillStyle: "transparent",
     antiAlias: false,
-    dashPattern: [5, 5],
+    dashPattern: [12, 8],
   };
 }
 

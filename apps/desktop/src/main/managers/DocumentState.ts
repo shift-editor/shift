@@ -40,12 +40,27 @@ export class DocumentState {
     this.onTitleUpdate?.();
   }
 
+  private isWritableFormat(filePath: string | null): boolean {
+    if (!filePath) return false;
+    return filePath.endsWith(".ufo");
+  }
+
   async save(saveAs = false): Promise<boolean> {
+    if (this.filePath && !this.isWritableFormat(this.filePath) && !saveAs) {
+      return false;
+    }
+
     let savePath = this.filePath;
 
-    if (!savePath || saveAs) {
+    if (!savePath || saveAs || !this.isWritableFormat(savePath)) {
+      let defaultPath = "Untitled.ufo";
+      if (this.filePath) {
+        const baseName = path.basename(this.filePath, path.extname(this.filePath));
+        defaultPath = `${baseName}.ufo`;
+      }
+
       const result = await dialog.showSaveDialog({
-        defaultPath: this.filePath || "Untitled.ufo",
+        defaultPath,
         filters: [{ name: "UFO Files", extensions: ["ufo"] }],
       });
 
@@ -106,7 +121,7 @@ export class DocumentState {
     if (this.autosaveIntervalId) return;
 
     this.autosaveIntervalId = setInterval(() => {
-      if (this.dirty && this.filePath) {
+      if (this.dirty && this.filePath && this.isWritableFormat(this.filePath)) {
         this.save(false);
       }
     }, AUTOSAVE_INTERVAL_MS);

@@ -28,7 +28,7 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        entry: bash -c 'cargo test --workspace && npx tsx scripts/patch-generated-types.ts'
+        entry: bash -c 'cargo test --workspace && npx tsx scripts/patch-generated-types.ts && git add packages/types/src/generated/*.ts'
         language: system
         types: [rust]
         pass_filenames: false

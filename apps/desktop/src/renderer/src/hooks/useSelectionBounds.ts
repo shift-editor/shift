@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useValue } from "@/lib/reactive";
 import { getEditor } from "@/store/store";
-import type { SelectionBounds } from "@/types/transform";
 import type { Rect2D } from "@shift/types";
 
 export interface SelectionData {
@@ -17,6 +16,7 @@ export interface SelectionData {
 export function useSelectionBounds(): SelectionData {
   const editor = getEditor();
   const selectedPointIds = useValue(editor.selectedPointIds);
+  const glyph = useValue(editor.glyph);
 
   return useMemo(() => {
     const pointCount = selectedPointIds.size;
@@ -33,7 +33,7 @@ export function useSelectionBounds(): SelectionData {
       };
     }
 
-    const selectionBounds: SelectionBounds | null = editor.getSelectionBounds();
+    const selectionBounds = editor.getSelectionBounds();
 
     if (!selectionBounds) {
       return {
@@ -67,5 +67,5 @@ export function useSelectionBounds(): SelectionData {
       bounds,
       pointCount,
     };
-  }, [selectedPointIds, editor]);
+  }, [selectedPointIds, glyph]);
 }

@@ -3,7 +3,7 @@ import { Input as BaseInput } from "@base-ui-components/react/input";
 import { cn } from "../../lib/utils";
 
 export interface InputProps extends React.ComponentProps<typeof BaseInput> {
-  label?: string;
+  label?: React.ReactNode;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }

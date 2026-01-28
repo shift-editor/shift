@@ -1,4 +1,3 @@
-import type { HandleType } from "@/lib/editor/rendering/handles";
 import { ThemeTokens } from "../theme";
 
 export interface DrawStyle {
@@ -9,24 +8,31 @@ export interface DrawStyle {
   dashPattern: number[];
 }
 
-export interface HandleDimensions {
+interface BaseHandleStyle extends DrawStyle {
   size: number;
+  overlayColor?: string;
 }
 
-type HandleStyle = DrawStyle &
-  HandleDimensions & {
-    overlayColor?: string;
-  };
-
-export interface HandleStyles {
-  idle: HandleStyle;
-  hovered: HandleStyle;
-  selected: HandleStyle;
+interface FirstHandleStyle extends BaseHandleStyle {
+  barSize: number;
 }
 
-export function createHandleStyles(
-  theme: ThemeTokens,
-): Record<HandleType, HandleStyles> {
+export interface HandleStyles<T extends BaseHandleStyle = BaseHandleStyle> {
+  idle: T;
+  hovered: T;
+  selected: T;
+}
+
+export type HandleStylesMap = {
+  first: HandleStyles<FirstHandleStyle>;
+  corner: HandleStyles;
+  control: HandleStyles;
+  smooth: HandleStyles;
+  direction: HandleStyles;
+  last: HandleStyles;
+};
+
+export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
   const { cyan, gray, green } = theme.canvas;
   const white = theme.ui.bg.surface;
   const hoverOverlay = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
@@ -35,6 +41,7 @@ export function createHandleStyles(
     first: {
       idle: {
         size: 6,
+        barSize: 18,
         lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
@@ -43,6 +50,7 @@ export function createHandleStyles(
       },
       hovered: {
         size: 6,
+        barSize: 18,
         lineWidth: 1,
         antiAlias: false,
         strokeStyle: cyan,
@@ -52,10 +60,11 @@ export function createHandleStyles(
       },
       selected: {
         size: 8,
+        barSize: 20,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: cyan,
-        fillStyle: white,
+        strokeStyle: white,
+        fillStyle: cyan,
         dashPattern: [],
       },
     },
@@ -186,7 +195,7 @@ export function createHandleStyles(
         overlayColor: hoverOverlay(0.5),
       },
       selected: {
-        size: 24,
+        size: 14,
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: cyan,

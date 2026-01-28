@@ -22,6 +22,7 @@ export const lightTheme: ThemeTokens = {
     },
   },
   canvas: {
+    white: "#ffffff",
     black: "#000000",
     pink: "#F219D1",
     indicator: "#1886D7",

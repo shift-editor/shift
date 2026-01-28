@@ -1,3 +1,4 @@
+import { ThemeTokens } from "../theme";
 import type { DrawStyle } from "./handles";
 
 export interface BoundingBoxHandleStyles {
@@ -5,14 +6,16 @@ export interface BoundingBoxHandleStyles {
   rotationZoneOffset: number;
 }
 
-export function createBoundingBoxHandleStyles(): BoundingBoxHandleStyles {
+export function createBoundingBoxHandleStyles(theme: ThemeTokens): BoundingBoxHandleStyles {
+  const { black } = theme.canvas;
+
   return {
     handle: {
-      radius: 3,
+      radius: 4,
       offset: 15,
-      lineWidth: 3,
-      strokeStyle: "#606060",
-      fillStyle: "#D9D9D9",
+      lineWidth: 1,
+      strokeStyle: black,
+      fillStyle: "transparent",
       antiAlias: true,
       dashPattern: [],
     },

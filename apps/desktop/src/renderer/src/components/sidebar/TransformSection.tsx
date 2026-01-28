@@ -60,17 +60,17 @@ export const TransformSection = () => {
   return (
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-muted">Position</div>
+        <div className="text-xs text-[#898989]">Position</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             label="X"
-            value={hasSelection ? x : "-"}
+            value={x}
             onValueChange={handleXChange}
             disabled={!hasSelection}
           />
           <EditableSidebarInput
             label="Y"
-            value={hasSelection ? y : "-"}
+            value={y}
             onValueChange={handleYChange}
             disabled={!hasSelection}
           />

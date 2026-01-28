@@ -6,12 +6,15 @@ import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import AppState, { getEditor } from "@/store/store";
 import { useValue } from "@/lib/reactive";
 import { GlyphSection } from "./GlyphSection";
+import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 export const Sidebar = () => {
   const fileName = AppState((state) => state.fileName);
   const editor = getEditor();
   const zoom = useValue(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
+
+  const { hasSelection } = useSelectionBounds();
 
   return (
     <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">
@@ -23,12 +26,17 @@ export const Sidebar = () => {
       <TransformOriginProvider>
         <div className="px-3 py-3 flex flex-col gap-4">
           <GlyphSection />
-          <Separator />
-          <TransformSection />
-          <ScaleSection />
-          <Separator />
-          <AlignmentSection />
+          {hasSelection && (
+            <>
+              <Separator />
+              <TransformSection />
+              <ScaleSection />
+              <Separator />
+              <AlignmentSection />
+            </>
+          )}
         </div>
+        <Separator />
       </TransformOriginProvider>
     </aside>
   );

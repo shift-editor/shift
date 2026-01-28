@@ -1,13 +1,7 @@
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { IRenderer } from "@/types/graphics";
 
-export type HandleType =
-  | "corner"
-  | "smooth"
-  | "control"
-  | "direction"
-  | "first"
-  | "last";
+export type HandleType = "corner" | "smooth" | "control" | "direction" | "first" | "last";
 
 export type HandleState = "idle" | "hovered" | "selected";
 
@@ -53,7 +47,7 @@ export const drawFirstHandle: HandleDrawFn = (ctx, x, y, state, options) => {
   const angle = options?.segmentAngle ?? 0;
   const perpAngle = angle + Math.PI / 2;
 
-  drawHorizontalLine(ctx, x, y, style.size, perpAngle);
+  drawHorizontalLine(ctx, x, y, style.barSize, perpAngle);
 
   const triangleX = x + Math.cos(angle) * (START_TRIANGLE_GAP + style.size);
   const triangleY = y + Math.sin(angle) * (START_TRIANGLE_GAP + style.size);
@@ -62,7 +56,7 @@ export const drawFirstHandle: HandleDrawFn = (ctx, x, y, state, options) => {
   if (style.overlayColor) {
     ctx.fillStyle = style.overlayColor;
     ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(ctx, x, y, style.size, perpAngle);
+    drawHorizontalLine(ctx, x, y, style.barSize, perpAngle);
     drawTriangle(ctx, triangleX, triangleY, style.size, angle);
   }
 };
@@ -109,13 +103,7 @@ export const drawSmoothHandle: HandleDrawFn = (ctx, x, y, state) => {
   }
 };
 
-export const drawDirectionHandle: HandleDrawFn = (
-  ctx,
-  x,
-  y,
-  state,
-  options,
-) => {
+export const drawDirectionHandle: HandleDrawFn = (ctx, x, y, state, options) => {
   const style = HANDLE_STYLES.direction[state];
   ctx.setStyle(style);
 

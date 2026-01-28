@@ -1,6 +1,5 @@
-import type { HandleType } from "@/lib/editor/rendering/handles";
 import { ThemeTokens } from "../theme";
-import { createHandleStyles, DrawStyle, HandleStyles } from "./handles";
+import { createHandleStyles, DrawStyle, HandleStylesMap } from "./handles";
 import { createGuideStyles, createDefaultStyles } from "./guides";
 import {
   createSelectionRectangleStyles,
@@ -12,7 +11,7 @@ import {
 import { createBoundingBoxHandleStyles, BoundingBoxHandleStyles } from "./boundingBox";
 
 export interface CanvasStyles {
-  handles: Record<HandleType, HandleStyles>;
+  handles: HandleStylesMap;
   guides: DrawStyle;
   default: DrawStyle;
   selectionRectangle: DrawStyle;
@@ -33,8 +32,8 @@ export function getCanvasStyles(theme: ThemeTokens): CanvasStyles {
     segmentHover: createSegmentHoverStyles(theme),
     segmentSelected: createSegmentSelectedStyles(theme),
     previewLine: createPreviewLineStyles(theme),
-    boundingBoxHandles: createBoundingBoxHandleStyles(),
+    boundingBoxHandles: createBoundingBoxHandleStyles(theme),
   };
 }
 
-export type { DrawStyle, HandleStyles } from "./handles";
+export type { DrawStyle, HandleStyles, HandleStylesMap } from "./handles";
