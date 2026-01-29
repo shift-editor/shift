@@ -124,12 +124,10 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
 function executeSelectPoint(pointId: PointId, additive: boolean, editor: Editor): void {
   if (additive) {
     const current = editor.selection.getSelectedPoints();
-    const newSelection = new Set(current);
-    newSelection.add(pointId);
-    editor.selection.selectPoints(newSelection);
+    editor.selection.selectPoints([...current, pointId]);
   } else {
     editor.selection.clear();
-    editor.selection.selectPoints(new Set([pointId]));
+    editor.selection.selectPoints([pointId]);
   }
 }
 
@@ -145,8 +143,8 @@ function executeSelectSegment(segmentId: SegmentId, additive: boolean, editor: E
       editor.selection.addPoint(id);
     }
   } else {
-    editor.selection.selectSegments(new Set([segmentId]));
-    editor.selection.selectPoints(new Set(pointIds));
+    editor.selection.selectSegments([segmentId]);
+    editor.selection.selectPoints(pointIds);
   }
 
   return pointIds;
@@ -174,10 +172,10 @@ function executeToggleSegment(segmentId: SegmentId, editor: Editor): PointId[] {
   }
 }
 
-function executeSelectPointsInRect(rect: Rect2D, editor: Editor): Set<PointId> {
+function executeSelectPointsInRect(rect: Rect2D, editor: Editor): PointId[] {
   const allPoints = editor.hitTest.getAllPoints();
   const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
-  const pointIds = new Set(hitPoints.map((p) => asPointId(p.id)));
+  const pointIds = hitPoints.map((p) => asPointId(p.id));
   editor.selection.clear();
   editor.selection.selectPoints(pointIds);
   return pointIds;

@@ -66,6 +66,36 @@ describe("Select tool", () => {
 
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
     });
+
+    it("should clear selection when in ready state with selection and clicking empty (e.g. after Cmd+A)", () => {
+      const id1 = ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.edit.addPoint(200, 200, "onCurve", false);
+      ctx.selection.selectPoints([id1]);
+      ctx.mocks.selection.clear.mockClear();
+      select.handleEvent({
+        type: "click",
+        point: { x: 500, y: 500 },
+        shiftKey: false,
+        altKey: false,
+      });
+      expect(ctx.mocks.selection.clear).toHaveBeenCalled();
+    });
+  });
+
+  describe("toggle smooth", () => {
+    it("should call toggleSmooth when double-clicking on-curve point", () => {
+      const pointId = ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.mocks.edit.toggleSmooth.mockClear();
+      select.handleEvent({ type: "doubleClick", point: { x: 100, y: 100 } });
+      expect(ctx.mocks.edit.toggleSmooth).toHaveBeenCalledWith(pointId);
+    });
+
+    it("should not call toggleSmooth when double-clicking empty space", () => {
+      ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.mocks.edit.toggleSmooth.mockClear();
+      select.handleEvent({ type: "doubleClick", point: { x: 500, y: 500 } });
+      expect(ctx.mocks.edit.toggleSmooth).not.toHaveBeenCalled();
+    });
   });
 
   describe("hover state", () => {
@@ -130,7 +160,7 @@ describe("Select tool", () => {
 
       sim.onMouseMove(createToolMouseEvent(150, 160));
 
-      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalledWith(expect.any(Set), 50, 60);
+      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalledWith(expect.any(Array), 50, 60);
     });
   });
 

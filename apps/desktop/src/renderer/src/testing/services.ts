@@ -31,15 +31,17 @@ interface ScreenService {
 }
 
 interface SelectionService {
-  getSelectedPoints(): ReadonlySet<PointId>;
-  getSelectedSegments(): ReadonlySet<SegmentId>;
+  getSelectedPoints(): readonly PointId[];
+  getSelectedSegments(): readonly SegmentId[];
+  getSelectedPointsCount(): number;
+  getSelectedSegmentsCount(): number;
   getMode(): SelectionMode;
-  selectPoints(ids: Set<PointId>): void;
+  selectPoints(ids: readonly PointId[]): void;
   addPoint(id: PointId): void;
   removePoint(id: PointId): void;
   togglePoint(id: PointId): void;
   isPointSelected(id: PointId): boolean;
-  selectSegments(ids: Set<SegmentId>): void;
+  selectSegments(ids: readonly SegmentId[]): void;
   addSegment(id: SegmentId): void;
   removeSegment(id: SegmentId): void;
   toggleSegment(id: SegmentId): void;
@@ -73,7 +75,7 @@ interface EditService {
   ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
-  applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[];
+  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
   addContour(): ContourId;
   closeContour(): void;
@@ -164,8 +166,8 @@ interface ToolContext {
 
 export interface MockToolContext extends ToolContext {
   fontEngine: FontEngine;
-  getSelectedPoints(): ReadonlySet<PointId>;
-  getSelectedSegments(): ReadonlySet<SegmentId>;
+  getSelectedPoints(): readonly PointId[];
+  getSelectedSegments(): readonly SegmentId[];
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
@@ -233,7 +235,7 @@ function createMockSelectionService(): SelectionService & {
   };
 
   const mocks = {
-    selectPoints: vi.fn((ids: Set<PointId>) => {
+    selectPoints: vi.fn((ids: readonly PointId[]) => {
       _selectedPoints.clear();
       for (const id of ids) _selectedPoints.add(id);
       updateSignals();
@@ -255,7 +257,7 @@ function createMockSelectionService(): SelectionService & {
       updateSignals();
     }),
     isPointSelected: vi.fn((id: PointId) => _selectedPoints.has(id)),
-    selectSegments: vi.fn((ids: Set<SegmentId>) => {
+    selectSegments: vi.fn((ids: readonly SegmentId[]) => {
       _selectedSegments.clear();
       for (const id of ids) _selectedSegments.add(id);
       updateSignals();
@@ -290,8 +292,10 @@ function createMockSelectionService(): SelectionService & {
   };
 
   return {
-    getSelectedPoints: () => new Set(_selectedPoints) as ReadonlySet<PointId>,
-    getSelectedSegments: () => new Set(_selectedSegments) as ReadonlySet<SegmentId>,
+    getSelectedPoints: () => [..._selectedPoints] as readonly PointId[],
+    getSelectedSegments: () => [..._selectedSegments] as readonly SegmentId[],
+    getSelectedPointsCount: () => _selectedPoints.size,
+    getSelectedSegmentsCount: () => _selectedSegments.size,
     getMode: () => _mode,
     selectPoints: mocks.selectPoints,
     addPoint: mocks.addPoint,
@@ -414,8 +418,8 @@ function createMockEditService(
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),
     ),
-    applySmartEdits: vi.fn((ids: ReadonlySet<PointId>, dx: number, dy: number) =>
-      fontEngine.editing.applySmartEdits(ids, dx, dy),
+    applySmartEdits: vi.fn((ids: readonly PointId[], dx: number, dy: number) =>
+      fontEngine.editing.applySmartEdits(new Set(ids), dx, dy),
     ),
     removePoints: vi.fn((ids: Iterable<PointId>) => fontEngine.editing.removePoints([...ids])),
     addContour: vi.fn(() => fontEngine.editing.addContour()),
@@ -824,8 +828,8 @@ export function createMockToolContext(): MockToolContext {
     zone,
     tools,
     fontEngine,
-    getSelectedPoints: () => selection._selectedPoints,
-    getSelectedSegments: () => selection._selectedSegments,
+    getSelectedPoints: () => [...selection._selectedPoints] as readonly PointId[],
+    getSelectedSegments: () => [...selection._selectedSegments] as readonly SegmentId[],
     getHoveredPoint: () => hover._hoveredPoint,
     getHoveredSegment: () => hover._hoveredSegment,
     getCursorValue: () => cursor._cursor,

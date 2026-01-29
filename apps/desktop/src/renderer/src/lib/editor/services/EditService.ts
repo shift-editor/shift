@@ -56,8 +56,8 @@ export class EditService {
     this.#fontEngine.editing.movePointTo(id, x, y);
   }
 
-  applySmartEdits(ids: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
-    return this.#fontEngine.editing.applySmartEdits(ids, dx, dy);
+  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
+    return this.#fontEngine.editing.applySmartEdits(new Set(ids), dx, dy);
   }
 
   removePoints(ids: Iterable<PointId>): void {

@@ -12,6 +12,7 @@ import {
   RotateBehavior,
   NudgeBehavior,
   EscapeBehavior,
+  ToggleSmoothBehavior,
 } from "./behaviors";
 import { hitTestBoundingBox } from "./boundingBoxHitTest";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
@@ -40,6 +41,7 @@ export class Select extends BaseTool<SelectState> {
   private behaviors: SelectBehavior[] = [
     new HoverBehavior(),
     new SelectionBehavior(),
+    new ToggleSmoothBehavior(),
     new NudgeBehavior(),
     new EscapeBehavior(),
     new ResizeBehavior(),
@@ -90,19 +92,6 @@ export class Select extends BaseTool<SelectState> {
       }
     }
 
-    return this.handleDoubleClick(state, event);
-  }
-
-  private handleDoubleClick(state: SelectState, event: ToolEvent): SelectState {
-    if (event.type === "doubleClick" && (state.type === "ready" || state.type === "selected")) {
-      const point = this.editor.hitTest.getPointAt(event.point);
-      if (point && point.pointType === "onCurve") {
-        return {
-          ...state,
-          intent: { action: "toggleSmooth", pointId: point.id },
-        };
-      }
-    }
     return state;
   }
 

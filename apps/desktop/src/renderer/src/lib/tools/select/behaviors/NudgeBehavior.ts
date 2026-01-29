@@ -16,7 +16,7 @@ export class NudgeBehavior implements SelectBehavior {
     if (state.type !== "selected") return null;
     if (event.type !== "keyDown") return null;
 
-    const pointIds = [...editor.selection.getSelectedPoints()];
+    const pointIds = editor.selection.getSelectedPoints();
     if (pointIds.length === 0) return null;
 
     const modifier: NudgeMagnitude = event.metaKey ? "large" : event.shiftKey ? "medium" : "small";
@@ -44,7 +44,7 @@ export class NudgeBehavior implements SelectBehavior {
 
     return {
       ...state,
-      intent: { action: "nudge", dx, dy, pointIds },
+      intent: { action: "nudge", dx, dy, pointIds: [...pointIds] },
     };
   }
 }

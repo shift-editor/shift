@@ -6,9 +6,11 @@ import type { SelectionBounds } from "./types";
 
 export function getSegmentAwareBounds(
   snapshot: GlyphSnapshot,
-  selectedPointIds: ReadonlySet<PointId>,
+  selectedPointIds: readonly PointId[],
 ): SelectionBounds | null {
-  if (selectedPointIds.size === 0) return null;
+  if (selectedPointIds.length === 0) return null;
+
+  const selectedSet = new Set(selectedPointIds);
 
   let minX = Infinity;
   let minY = Infinity;
@@ -22,9 +24,7 @@ export function getSegmentAwareBounds(
 
     for (const segment of segments) {
       const segmentPointIds = Segment.getPointIds(segment);
-      const allSelected = segmentPointIds.every((id) =>
-        selectedPointIds.has(id),
-      );
+      const allSelected = segmentPointIds.every((id) => selectedSet.has(id));
 
       if (allSelected) {
         const segKey = segmentPointIds.join(":");
@@ -44,7 +44,7 @@ export function getSegmentAwareBounds(
 
     for (const point of contour.points) {
       const pointId = asPointId(point.id);
-      if (selectedPointIds.has(pointId) && !pointsInFullSegments.has(pointId)) {
+      if (selectedSet.has(pointId) && !pointsInFullSegments.has(pointId)) {
         minX = Math.min(minX, point.x);
         minY = Math.min(minY, point.y);
         maxX = Math.max(maxX, point.x);

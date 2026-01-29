@@ -10,20 +10,28 @@ export class SelectionService {
     this.#manager = manager;
   }
 
-  getSelectedPoints(): ReadonlySet<PointId> {
-    return this.#manager.selectedPointIds.value;
+  getSelectedPoints(): readonly PointId[] {
+    return [...this.#manager.selectedPointIds.value];
   }
 
-  getSelectedSegments(): ReadonlySet<SegmentId> {
-    return this.#manager.selectedSegmentIds.value;
+  getSelectedSegments(): readonly SegmentId[] {
+    return [...this.#manager.selectedSegmentIds.value];
+  }
+
+  getSelectedPointsCount(): number {
+    return this.#manager.selectedPointIds.value.size;
+  }
+
+  getSelectedSegmentsCount(): number {
+    return this.#manager.selectedSegmentIds.value.size;
   }
 
   getMode(): SelectionMode {
     return this.#manager.selectionMode.value;
   }
 
-  selectPoints(ids: Set<PointId>): void {
-    this.#manager.selectPoints(ids);
+  selectPoints(ids: readonly PointId[]): void {
+    this.#manager.selectPoints(new Set(ids));
   }
 
   addPoint(id: PointId): void {
@@ -42,8 +50,8 @@ export class SelectionService {
     return this.#manager.isPointSelected(id);
   }
 
-  selectSegments(ids: Set<SegmentId>): void {
-    this.#manager.selectSegments(ids);
+  selectSegments(ids: readonly SegmentId[]): void {
+    this.#manager.selectSegments(new Set(ids));
   }
 
   addSegment(id: SegmentId): void {

@@ -102,7 +102,7 @@ export const Editor = () => {
 
       if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
         const points = editor.getAllPoints();
-        editor.selection.selectPoints(new Set(points.map((point) => point.id)));
+        editor.selection.selectPoints(points.map((point) => point.id));
         e.preventDefault();
         return;
       }

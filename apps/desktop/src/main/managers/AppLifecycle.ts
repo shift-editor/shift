@@ -101,7 +101,7 @@ export class AppLifecycle {
 
     ipcMain.handle("dialog:openFont", async () => {
       const result = await dialog.showOpenDialog({
-        properties: ["openFile", "openDirectory", "treatPackageAsDirectory"],
+        properties: ["openFile"],
         filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo"] }],
       });
       if (!result.canceled && result.filePaths[0]) {

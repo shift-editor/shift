@@ -40,7 +40,7 @@ describe("ContentResolver", () => {
   const resolver = new ContentResolver();
 
   it("returns null for null snapshot", () => {
-    const result = resolver.resolve(null, new Set(), new Set());
+    const result = resolver.resolve(null, [], []);
     expect(result).toBeNull();
   });
 
@@ -53,7 +53,7 @@ describe("ContentResolver", () => {
         },
       ],
     });
-    const result = resolver.resolve(snapshot, new Set(), new Set());
+    const result = resolver.resolve(snapshot, [], []);
     expect(result).toBeNull();
   });
 
@@ -70,11 +70,7 @@ describe("ContentResolver", () => {
       ],
     });
 
-    const result = resolver.resolve(
-      snapshot,
-      new Set([asPointId("p1")]),
-      new Set(),
-    );
+    const result = resolver.resolve(snapshot, [asPointId("p1")], []);
 
     expect(result).not.toBeNull();
     expect(result!.contours).toHaveLength(1);
@@ -104,8 +100,8 @@ describe("ContentResolver", () => {
 
     const result = resolver.resolve(
       snapshot,
-      new Set([asPointId("p1"), asPointId("p2"), asPointId("p3")]),
-      new Set(),
+      [asPointId("p1"), asPointId("p2"), asPointId("p3")],
+      [],
     );
 
     expect(result).not.toBeNull();
@@ -129,11 +125,7 @@ describe("ContentResolver", () => {
       ],
     });
 
-    const result = resolver.resolve(
-      snapshot,
-      new Set([asPointId("p1"), asPointId("p2")]),
-      new Set(),
-    );
+    const result = resolver.resolve(snapshot, [asPointId("p1"), asPointId("p2")], []);
 
     expect(result).not.toBeNull();
     expect(result!.contours[0].closed).toBe(false);
@@ -153,11 +145,7 @@ describe("ContentResolver", () => {
       ],
     });
 
-    const result = resolver.resolve(
-      snapshot,
-      new Set(),
-      new Set([asSegmentId("p1:p2")]),
-    );
+    const result = resolver.resolve(snapshot, [], [asSegmentId("p1:p2")]);
 
     expect(result).not.toBeNull();
     expect(result!.contours[0].points.length).toBeGreaterThanOrEqual(2);
@@ -177,11 +165,7 @@ describe("ContentResolver", () => {
       ],
     });
 
-    const result = resolver.resolve(
-      snapshot,
-      new Set([asPointId("p1")]),
-      new Set(),
-    );
+    const result = resolver.resolve(snapshot, [asPointId("p1")], []);
 
     expect(result).not.toBeNull();
     const points = result!.contours[0].points;
@@ -203,11 +187,7 @@ describe("ContentResolver", () => {
       ],
     });
 
-    const result = resolver.resolve(
-      snapshot,
-      new Set([asPointId("p1"), asPointId("p2")]),
-      new Set(),
-    );
+    const result = resolver.resolve(snapshot, [asPointId("p1"), asPointId("p2")], []);
 
     expect(result).not.toBeNull();
     expect(result!.contours).toHaveLength(2);

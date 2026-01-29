@@ -124,7 +124,7 @@ export function executeIntent(intent: PenIntent, editor: Editor): PointId | null
         editor.commands.execute(new ReverseContourCommand(intent.contourId));
       }
 
-      editor.selection.selectPoints(new Set([intent.pointId]));
+      editor.selection.selectPoints([intent.pointId]);
       return null;
 
     case "splitPoint":

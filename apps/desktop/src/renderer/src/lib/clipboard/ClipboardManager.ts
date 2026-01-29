@@ -24,8 +24,8 @@ export class ClipboardManager {
 
   async copy(): Promise<boolean> {
     const glyph = this.#editor.getGlyph();
-    const selectedPointIds = this.#editor.selectedPointIds.peek();
-    const selectedSegmentIds = this.#editor.selectedSegmentIds.peek();
+    const selectedPointIds = [...this.#editor.selectedPointIds.peek()];
+    const selectedSegmentIds = [...this.#editor.selectedSegmentIds.peek()];
 
     const content = this.#resolver.resolve(
       glyph as GlyphSnapshot | null,
@@ -63,7 +63,7 @@ export class ClipboardManager {
     const result = this.#editor.fontEngine.editing.pasteContours(contoursJson, 0, 0);
 
     if (result.success && result.createdPointIds.length > 0) {
-      this.#editor.selectPoints(new Set(result.createdPointIds));
+      this.#editor.selectPoints(result.createdPointIds);
     }
 
     return result;

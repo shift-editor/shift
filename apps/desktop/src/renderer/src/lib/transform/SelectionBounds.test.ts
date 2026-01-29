@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getSegmentAwareBounds } from "./SelectionBounds";
-import type { GlyphSnapshot, PointId } from "@shift/types";
+import type { GlyphSnapshot } from "@shift/types";
 import { asPointId } from "@shift/types";
 
 function makePoint(id: string, x: number, y: number, type: "onCurve" | "offCurve" = "onCurve") {
@@ -20,7 +20,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const result = getSegmentAwareBounds(snapshot, new Set());
+    const result = getSegmentAwareBounds(snapshot, []);
     expect(result).toBeNull();
   });
 
@@ -36,7 +36,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([asPointId("p1"), asPointId("p2")]);
+    const selectedPoints = [asPointId("p1"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
@@ -62,7 +62,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([asPointId("p1"), asPointId("ctrl"), asPointId("p2")]);
+    const selectedPoints = [asPointId("p1"), asPointId("ctrl"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
@@ -89,12 +89,12 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([
+    const selectedPoints = [
       asPointId("p1"),
       asPointId("ctrl1"),
       asPointId("ctrl2"),
       asPointId("p2"),
-    ]);
+    ];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
@@ -120,7 +120,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([asPointId("p1"), asPointId("ctrl")]);
+    const selectedPoints = [asPointId("p1"), asPointId("ctrl")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
@@ -139,7 +139,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([asPointId("nonexistent")]);
+    const selectedPoints = [asPointId("nonexistent")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).toBeNull();
@@ -157,7 +157,7 @@ describe("getSegmentAwareBounds", () => {
       width: 500,
       activeContourId: "c1",
     };
-    const selectedPoints = new Set<PointId>([asPointId("p1"), asPointId("p2")]);
+    const selectedPoints = [asPointId("p1"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();

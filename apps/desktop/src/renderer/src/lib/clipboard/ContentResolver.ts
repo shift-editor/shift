@@ -6,12 +6,12 @@ import type { ClipboardContent, ContourContent, PointContent } from "./types";
 export class ContentResolver {
   resolve(
     snapshot: GlyphSnapshot | null,
-    selectedPointIds: ReadonlySet<PointId>,
-    selectedSegmentIds: ReadonlySet<SegmentId>,
+    selectedPointIds: readonly PointId[],
+    selectedSegmentIds: readonly SegmentId[],
   ): ClipboardContent | null {
     if (!snapshot) return null;
 
-    const allPointIds = this.#expandSegmentsToPoints(selectedPointIds, selectedSegmentIds);
+    const allPointIds = this.#expandSegmentsToPoints(new Set(selectedPointIds), selectedSegmentIds);
 
     if (allPointIds.size === 0) return null;
 
@@ -25,7 +25,7 @@ export class ContentResolver {
 
   #expandSegmentsToPoints(
     selectedPointIds: ReadonlySet<PointId>,
-    selectedSegmentIds: ReadonlySet<SegmentId>,
+    selectedSegmentIds: readonly SegmentId[],
   ): Set<PointId> {
     const result = new Set<PointId>(selectedPointIds);
 

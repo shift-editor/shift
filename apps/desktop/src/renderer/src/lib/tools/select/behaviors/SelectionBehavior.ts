@@ -19,7 +19,7 @@ export class SelectionBehavior implements SelectBehavior {
         const hasSelection = editor.selection.hasSelection();
         const isSelected = editor.selection.isPointSelected(pointId);
         const willHaveSelection =
-          hasSelection && !(isSelected && editor.selection.getSelectedPoints().size === 1);
+          hasSelection && !(isSelected && editor.selection.getSelectedPointsCount() === 1);
 
         if (willHaveSelection || !isSelected) {
           return {
@@ -47,9 +47,9 @@ export class SelectionBehavior implements SelectBehavior {
       if (state.type === "selected" && event.shiftKey) {
         const isSelected = editor.selection.isSegmentSelected(segmentHit.segmentId);
         const hasOtherSelections =
-          editor.selection.getSelectedPoints().size > 0 ||
-          editor.selection.getSelectedSegments().size > 1 ||
-          (editor.selection.getSelectedSegments().size === 1 && !isSelected);
+          editor.selection.getSelectedPointsCount() > 0 ||
+          editor.selection.getSelectedSegmentsCount() > 1 ||
+          (editor.selection.getSelectedSegmentsCount() === 1 && !isSelected);
 
         if (hasOtherSelections || !isSelected) {
           return {
@@ -82,6 +82,14 @@ export class SelectionBehavior implements SelectBehavior {
     if (state.type === "selected") {
       return {
         type: "ready",
+        hoveredPointId: null,
+        intent: { action: "clearSelection" },
+      };
+    }
+
+    if (state.type === "ready" && editor.selection.hasSelection()) {
+      return {
+        ...state,
         hoveredPointId: null,
         intent: { action: "clearSelection" },
       };

@@ -241,8 +241,8 @@ export class Editor {
     return this.#selection.selectedPointIds;
   }
 
-  public selectPoints(pointIds: Set<PointId>): void {
-    this.#selection.selectPoints(pointIds);
+  public selectPoints(pointIds: readonly PointId[]): void {
+    this.#selection.selectPoints(new Set(pointIds));
   }
 
   public addPointToSelection(pointId: PointId): void {
@@ -265,8 +265,8 @@ export class Editor {
     return this.#selection.selectedSegmentIds;
   }
 
-  public selectSegments(segmentIds: Set<SegmentId>): void {
-    this.#selection.selectSegments(segmentIds);
+  public selectSegments(segmentIds: readonly SegmentId[]): void {
+    this.#selection.selectSegments(new Set(segmentIds));
   }
 
   public addSegmentToSelection(segmentId: SegmentId): void {
@@ -567,7 +567,7 @@ export class Editor {
 
     const cmd = new PasteCommand(content, 0, 0);
     this.#commandHistory.execute(cmd);
-    this.selectPoints(new Set(cmd.createdPointIds));
+    this.selectPoints(cmd.createdPointIds);
     this.requestRedraw();
   }
 
@@ -608,7 +608,7 @@ export class Editor {
   public getSelectionBounds(): SelectionBounds | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
-    return getSegmentAwareBounds(snapshot, this.#selection.selectedPointIds.peek());
+    return getSegmentAwareBounds(snapshot, this.selection.getSelectedPoints());
   }
 
   public getSelectionCenter(): Point2D | null {
@@ -617,59 +617,59 @@ export class Editor {
   }
 
   public rotateSelection(angle: number, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
     if (!center) return;
 
-    const cmd = new RotatePointsCommand(pointIds, angle, center);
+    const cmd = new RotatePointsCommand([...pointIds], angle, center);
     this.#commandHistory.execute(cmd);
   }
 
   public scaleSelection(sx: number, sy: number, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length === 0) return;
 
     const o = origin ?? this.getSelectionCenter();
     if (!o) return;
 
-    const cmd = new ScalePointsCommand(pointIds, sx, sy, o);
+    const cmd = new ScalePointsCommand([...pointIds], sx, sy, o);
     this.#commandHistory.execute(cmd);
   }
 
   public reflectSelection(axis: ReflectAxis, origin?: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length === 0) return;
 
     const center = origin ?? this.getSelectionCenter();
     if (!center) return;
 
-    const cmd = new ReflectPointsCommand(pointIds, axis, center);
+    const cmd = new ReflectPointsCommand([...pointIds], axis, center);
     this.#commandHistory.execute(cmd);
   }
 
   public moveSelectionTo(target: Point2D, anchor: Point2D): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length === 0) return;
 
-    const cmd = new MoveSelectionToCommand(pointIds, target, anchor);
+    const cmd = new MoveSelectionToCommand([...pointIds], target, anchor);
     this.#commandHistory.execute(cmd);
   }
 
   public alignSelection(alignment: AlignmentType): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length === 0) return;
 
-    const cmd = new AlignPointsCommand(pointIds, alignment);
+    const cmd = new AlignPointsCommand([...pointIds], alignment);
     this.#commandHistory.execute(cmd);
   }
 
   public distributeSelection(type: DistributeType): void {
-    const pointIds = [...this.#selection.selectedPointIds.peek()];
+    const pointIds = this.selection.getSelectedPoints();
     if (pointIds.length < 3) return;
 
-    const cmd = new DistributePointsCommand(pointIds, type);
+    const cmd = new DistributePointsCommand([...pointIds], type);
     this.#commandHistory.execute(cmd);
   }
 
