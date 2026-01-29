@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 
 type HandState =
   | { type: "idle" }
@@ -7,6 +7,17 @@ type HandState =
   | { type: "dragging"; screenStart: Point2D; startPan: Point2D };
 
 export class Hand extends BaseTool<HandState> {
+  static stateSpec = defineStateDiagram<HandState["type"]>({
+    states: ["idle", "ready", "dragging"],
+    initial: "idle",
+    transitions: [
+      { from: "idle", to: "ready", event: "activate" },
+      { from: "ready", to: "dragging", event: "dragStart" },
+      { from: "dragging", to: "ready", event: "dragEnd" },
+      { from: "ready", to: "idle", event: "deactivate" },
+    ],
+  });
+
   readonly id: ToolName = "hand";
 
   initialState(): HandState {

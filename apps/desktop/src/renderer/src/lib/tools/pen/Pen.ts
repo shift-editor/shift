@@ -1,7 +1,7 @@
 import { Vec2 } from "@shift/geo";
 import { IRenderer } from "@/types/graphics";
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
 import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
@@ -11,6 +11,19 @@ import { drawHandle } from "@/lib/editor";
 export type { PenState };
 
 export class Pen extends BaseTool<PenState> {
+  static stateSpec = defineStateDiagram<PenState["type"]>({
+    states: ["idle", "ready", "anchored", "dragging"],
+    initial: "idle",
+    transitions: [
+      { from: "idle", to: "ready", event: "activate" },
+      { from: "ready", to: "anchored", event: "click" },
+      { from: "anchored", to: "dragging", event: "drag" },
+      { from: "dragging", to: "anchored", event: "release" },
+      { from: "anchored", to: "ready", event: "commit" },
+      { from: "ready", to: "idle", event: "deactivate" },
+    ],
+  });
+
   readonly id: ToolName = "pen";
 
   private behaviors: PenBehavior[] = [

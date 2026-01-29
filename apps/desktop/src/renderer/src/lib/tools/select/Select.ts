@@ -1,5 +1,5 @@
 import type { IRenderer } from "@/types/graphics";
-import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import { getCursorForState, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import { executeIntent } from "./intents";
@@ -20,6 +20,21 @@ import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
 export type { BoundingRectEdge, SelectState };
 
 export class Select extends BaseTool<SelectState> {
+  static stateSpec = defineStateDiagram<SelectState["type"]>({
+    states: ["idle", "ready", "selecting", "selected", "dragging", "resizing", "rotating"],
+    initial: "idle",
+    transitions: [
+      { from: "idle", to: "ready", event: "activate" },
+      { from: "ready", to: "selecting", event: "marquee" },
+      { from: "ready", to: "selected", event: "click" },
+      { from: "selecting", to: "selected", event: "release" },
+      { from: "selected", to: "dragging", event: "drag" },
+      { from: "dragging", to: "selected", event: "release" },
+      { from: "selected", to: "ready", event: "escape" },
+      { from: "ready", to: "idle", event: "deactivate" },
+    ],
+  });
+
   readonly id: ToolName = "select";
 
   private behaviors: SelectBehavior[] = [

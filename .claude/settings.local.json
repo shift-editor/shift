@@ -68,7 +68,10 @@
       "WebFetch(domain:reactflow.dev)",
       "Bash(npx vitest:*)",
       "Bash(git mv:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(npx tsx:*)",
+      "Bash(open:*)",
+      "WebFetch(domain:mermaid.js.org)"
     ]
   }
 }

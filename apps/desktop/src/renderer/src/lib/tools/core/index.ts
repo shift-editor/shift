@@ -14,3 +14,6 @@ export {
 } from "./DrawAPI";
 export { ToolManager, type ToolConstructor } from "./ToolManager";
 export { type ToolName } from "./createContext";
+export { defineStateDiagram, type StateDiagram, type StateTransition } from "./StateDiagram";
+export { stateDiagramToMermaid } from "./stateDiagramToMermaid";
+export { renderStateDiagram } from "./renderStateDiagram";

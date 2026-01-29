@@ -6,6 +6,7 @@ import { getEditor } from "@/store/store";
 
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
+import { Vec2 } from "@shift/geo";
 
 interface EditorViewProps {
   glyphId: string;
@@ -64,9 +65,8 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         editor.requestRedraw();
       } else {
         const pan = editor.getPan();
-        const dx = e.deltaX;
-        const dy = e.deltaY;
-        editor.pan(pan.x - dx, pan.y - dy);
+        const newPan = Vec2.sub(pan, { x: e.deltaX, y: e.deltaY });
+        editor.pan(newPan.x, newPan.y);
         editor.requestRedraw();
       }
     };

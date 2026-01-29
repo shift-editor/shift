@@ -1,6 +1,6 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
-import { BaseTool, type ToolName, type ToolEvent } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 
@@ -10,6 +10,17 @@ type ShapeState =
   | { type: "dragging"; startPos: Point2D; currentPos: Point2D };
 
 export class Shape extends BaseTool<ShapeState> {
+  static stateSpec = defineStateDiagram<ShapeState["type"]>({
+    states: ["idle", "ready", "dragging"],
+    initial: "idle",
+    transitions: [
+      { from: "idle", to: "ready", event: "activate" },
+      { from: "ready", to: "dragging", event: "dragStart" },
+      { from: "dragging", to: "ready", event: "dragEnd" },
+      { from: "ready", to: "idle", event: "deactivate" },
+    ],
+  });
+
   readonly id: ToolName = "shape";
 
   initialState(): ShapeState {

@@ -51,6 +51,7 @@
     "@shift/ui": "workspace:*",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "beautiful-mermaid": "^0.1.2",
     "chroma-js": "^3.1.2",
     "clsx": "^2.1.1",
     "electron-squirrel-startup": "^1.0.1",
