@@ -14,11 +14,7 @@ export const CanvasContext = createContext<CanvasContext>({
   staticCanvasRef: { current: null },
 });
 
-export const CanvasContextProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+export const CanvasContextProvider = ({ children }: { children: React.ReactNode }) => {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -44,33 +40,47 @@ export const CanvasContextProvider = ({
       editor.setInteractiveContext(interactiveContext);
       editor.setStaticContext(staticContext);
 
-      const resizeCanvas = (entries: ResizeObserverEntry[]) => {
-        const [interactiveCanvas, staticCanvas] = entries;
+      const resizeCanvases = () => {
+        interactiveContext.resizeCanvas(interactiveCanvas);
+        staticContext.resizeCanvas(staticCanvas);
+        editor.requestImmediateRedraw();
+      };
 
-        interactiveContext.resizeCanvas(
-          interactiveCanvas.target as HTMLCanvasElement,
-        );
-        staticContext.resizeCanvas(staticCanvas.target as HTMLCanvasElement);
+      const resizeCanvasObserver = (entries: ResizeObserverEntry[]) => {
+        const [interactiveEntry, staticEntry] = entries;
+
+        interactiveContext.resizeCanvas(interactiveEntry.target as HTMLCanvasElement);
+        staticContext.resizeCanvas(staticEntry.target as HTMLCanvasElement);
 
         editor.requestImmediateRedraw();
       };
 
-      const observer = new ResizeObserver(resizeCanvas);
+      const observer = new ResizeObserver(resizeCanvasObserver);
 
       observer.observe(interactiveCanvas);
       observer.observe(staticCanvas);
 
+      const unsubscribeZoom = window.electronAPI?.onUiZoomChanged(() => {
+        // Wait for browser to recalculate layout after zoom change
+        requestAnimationFrame(() => {
+          resizeCanvases();
+        });
+      });
+
       return () => {
         observer.disconnect();
+        unsubscribeZoom?.();
       };
     };
 
-    if (!interactiveCanvasRef.current || !staticCanvasRef.current) return;
+    if (!interactiveCanvasRef.current || !staticCanvasRef.current) return undefined;
 
-    setUpContexts({
+    const cleanup = setUpContexts({
       interactiveCanvas: interactiveCanvasRef.current,
       staticCanvas: staticCanvasRef.current,
     });
+
+    return cleanup;
   }, []);
 
   return (

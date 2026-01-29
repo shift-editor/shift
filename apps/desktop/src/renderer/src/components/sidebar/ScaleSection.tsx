@@ -4,20 +4,42 @@ import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import ScaleIcon from "@/assets/sidebar/scale.svg";
 import { EditableSidebarInput } from "./EditableSidebarInput";
+import { getEditor } from "@/store/store";
+import { anchorToPoint } from "@/lib/transform/anchor";
 
 export const ScaleSection = () => {
-  const { width, height } = useSelectionBounds();
+  const editor = getEditor();
+  const { bounds, width, height } = useSelectionBounds();
   const { anchor, setAnchor } = useTransformOrigin();
+  const anchorPoint = bounds ? anchorToPoint(anchor, bounds) : undefined;
 
-  const handleWidthChange = (_: number) => {};
-  const handleHeightChange = (_: number) => {};
+  const handleWidthChange = (newWidth: number) => {
+    if (!bounds) return;
+    const factor = newWidth / width;
+    editor.scaleSelection(factor, factor, anchorPoint);
+  };
+
+  const handleHeightChange = (newHeight: number) => {
+    if (!bounds) return;
+    const factor = newHeight / height;
+    editor.scaleSelection(factor, factor, anchorPoint);
+  };
+
+  const handleScaleChange = (newScale: number) => {
+    if (!bounds) return;
+    editor.scaleSelection(newScale, newScale, anchorPoint);
+  };
 
   return (
     <SidebarSection title="Scale">
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Size</div>
         <div className="flex gap-2">
-          <EditableSidebarInput label="W" value={width} onValueChange={handleWidthChange} />
+          <EditableSidebarInput
+            label={<span className="text-xs text-secondary">W</span>}
+            value={width}
+            onValueChange={handleWidthChange}
+          />
           <EditableSidebarInput label="H" value={height} onValueChange={handleHeightChange} />
         </div>
       </div>
@@ -29,8 +51,9 @@ export const ScaleSection = () => {
             className="max-w-18"
             value={1}
             suffix="x"
-            icon={<ScaleIcon className="w-3 h-3" />}
+            icon={<ScaleIcon className="w-4 h-4" />}
             iconPosition="left"
+            onValueChange={handleScaleChange}
           />
         </div>
 

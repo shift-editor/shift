@@ -37,7 +37,8 @@ export type ToolEvent =
       altKey: boolean;
       metaKey: boolean;
     }
-  | { type: "keyUp"; key: string };
+  | { type: "keyUp"; key: string }
+  | { type: "selectionChanged" };
 
 export interface Modifiers {
   shiftKey: boolean;

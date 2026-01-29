@@ -20,14 +20,14 @@ export const Editor = () => {
     const keyDownHandler = (e: KeyboardEvent) => {
       const canvasActive = activeZone === "canvas" || focusLock || toolManager.isDragging;
 
-      if ((e.key === "=" || e.key === "+") && e.metaKey) {
+      if ((e.key === "=" || e.key === "+") && e.metaKey && !e.shiftKey) {
         e.preventDefault();
         editor.zoomIn();
         editor.requestRedraw();
         return;
       }
 
-      if (e.key === "-" && e.metaKey) {
+      if (e.key === "-" && e.metaKey && !e.shiftKey) {
         e.preventDefault();
         editor.zoomOut();
         editor.requestRedraw();
@@ -101,8 +101,7 @@ export const Editor = () => {
       }
 
       if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
-        const points = editor.getAllPoints();
-        editor.selection.selectPoints(points.map((point) => point.id));
+        editor.selectAll();
         e.preventDefault();
         return;
       }

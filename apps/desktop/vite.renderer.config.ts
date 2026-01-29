@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import svgr from "vite-plugin-svgr";
 import path from "path";
 
+const packagesDir = path.resolve(__dirname, "../../packages");
+
 // https://vitejs.dev/config
 export default defineConfig(async () => {
   const [react, tailwindcss, tsconfigPaths] = await Promise.all([
@@ -29,11 +31,15 @@ export default defineConfig(async () => {
       tsconfigPaths(),
     ],
     resolve: {
-      preserveSymlinks: true,
+      alias: {
+        "@shift/ui": path.resolve(packagesDir, "ui/src/index.ts"),
+        "@shift/geo": path.resolve(packagesDir, "geo/src/index.ts"),
+        "@shift/types": path.resolve(packagesDir, "types/src/index.ts"),
+      },
     },
     optimizeDeps: {
-      include: ["@shift/ui", "@shift/geo", "@shift/types"],
-      force: true,
+      include: ["use-sync-external-store/shim", "use-sync-external-store/shim/with-selector"],
+      exclude: ["@shift/ui", "@shift/geo", "@shift/types"],
     },
   };
 });

@@ -152,4 +152,8 @@ export class ToolManager implements ToolSwitchHandler {
       this.releaseOverride();
     }
   }
+
+  notifySelectionChanged(): void {
+    this.activeTool?.handleEvent({ type: "selectionChanged" });
+  }
 }

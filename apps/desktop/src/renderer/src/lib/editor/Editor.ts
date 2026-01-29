@@ -293,6 +293,13 @@ export class Editor {
     return this.#selection.hasSelection();
   }
 
+  public selectAll(): void {
+    const points = this.getAllPoints();
+    this.#selection.selectPoints(new Set(points.map((p) => p.id)));
+    this.getToolManager().notifySelectionChanged();
+    this.requestRedraw();
+  }
+
   public get selectionMode(): Signal<SelectionMode> {
     return this.#selection.selectionMode;
   }

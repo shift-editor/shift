@@ -3,7 +3,7 @@ import { cn, Input } from "@shift/ui";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
 interface EditableSidebarInputProps {
-  label?: string;
+  label?: string | React.ReactNode;
   className?: string;
   value: number;
   icon?: React.ReactNode;
@@ -105,7 +105,7 @@ export const EditableSidebarInput = ({
       icon={icon}
       iconPosition={iconPosition}
       readOnly={!isEditing}
-      className={cn("w-full bg-[#f3f3f3]", className)}
+      className={cn("w-full bg-[#f3f3f3]", label && "pl-6", className)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

@@ -121,7 +121,7 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-[8px] text-muted uppercase tracking-wide">Distribute</div>
+        <div className="text-xs text-secondary">Distribute</div>
         <div className="flex gap-1">
           <Button
             variant="ghost"

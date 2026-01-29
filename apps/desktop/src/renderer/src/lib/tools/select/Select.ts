@@ -83,6 +83,17 @@ export class Select extends BaseTool<SelectState> {
       return state;
     }
 
+    if (event.type === "selectionChanged") {
+      const hasSelection = this.editor.hasSelection();
+      if (hasSelection && state.type === "ready") {
+        return { type: "selected", hoveredPointId: null };
+      }
+      if (!hasSelection && state.type === "selected") {
+        return { type: "ready", hoveredPointId: null };
+      }
+      return state;
+    }
+
     for (const behavior of this.behaviors) {
       if (behavior.canHandle(state, event)) {
         const result = behavior.transition(state, event, this.editor);

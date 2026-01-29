@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes } from "react-router-dom";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
+import { ZoomToast } from "@/components/ZoomToast";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";
 
 import { routes } from "./routes";
@@ -38,15 +39,17 @@ export const App = () => {
 
   return (
     <ThemeProvider defaultTheme="light">
-      <FocusZoneProvider defaultZone="canvas">
-        <HashRouter>
-          <Routes>
-            {routes.map((route) => (
-              <Route key={route.id} path={route.path} element={<route.component />} />
-            ))}
-          </Routes>
-        </HashRouter>
-      </FocusZoneProvider>
+      <ZoomToast>
+        <FocusZoneProvider defaultZone="canvas">
+          <HashRouter>
+            <Routes>
+              {routes.map((route) => (
+                <Route key={route.id} path={route.path} element={<route.component />} />
+              ))}
+            </Routes>
+          </HashRouter>
+        </FocusZoneProvider>
+      </ZoomToast>
     </ThemeProvider>
   );
 };

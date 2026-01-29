@@ -31,6 +31,7 @@ export class AppLifecycle {
       this.windowManager.create();
       this.setupDockIcon();
       this.registerDevShortcuts();
+      this.registerDevToolsListeners();
     });
 
     app.on("window-all-closed", () => {
@@ -89,6 +90,19 @@ export class AppLifecycle {
           }
         },
       );
+    });
+  }
+
+  private registerDevToolsListeners() {
+    const window = this.windowManager.getWindow();
+    if (!window) return;
+
+    window.webContents.on("devtools-opened", () => {
+      window.webContents.send("devtools-toggled");
+    });
+
+    window.webContents.on("devtools-closed", () => {
+      window.webContents.send("devtools-toggled");
     });
   }
 

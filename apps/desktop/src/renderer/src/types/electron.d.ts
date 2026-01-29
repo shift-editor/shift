@@ -17,6 +17,8 @@ export interface ElectronAPI {
   onSetTheme: (callback: (theme: ThemeName) => void) => () => void;
   getTheme: () => Promise<ThemeName>;
   setTheme: (theme: ThemeName) => Promise<void>;
+  onUiZoomChanged: (callback: (zoomPercent: number) => void) => () => void;
+  onDevToolsToggled: (callback: () => void) => () => void;
 
   closeWindow: () => Promise<void>;
   minimizeWindow: () => Promise<void>;

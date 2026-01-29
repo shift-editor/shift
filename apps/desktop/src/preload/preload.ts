@@ -286,6 +286,19 @@ const electronAPI = {
   getTheme: (): Promise<ThemeName> => ipcRenderer.invoke("theme:get"),
   setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke("theme:set", theme),
 
+  // UI Zoom
+  onUiZoomChanged: (callback: (zoomPercent: number) => void) => {
+    const handler = (_event: any, zoomPercent: number) => callback(zoomPercent);
+    ipcRenderer.on("ui:zoom-changed", handler);
+    return () => ipcRenderer.removeListener("ui:zoom-changed", handler);
+  },
+
+  // DevTools toggle
+  onDevToolsToggled: (callback: () => void) => {
+    ipcRenderer.on("devtools-toggled", callback);
+    return () => ipcRenderer.removeListener("devtools-toggled", callback);
+  },
+
   // Window controls
   closeWindow: (): Promise<void> => ipcRenderer.invoke("window:close"),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke("window:minimize"),

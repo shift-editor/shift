@@ -6,13 +6,14 @@ import {
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
-  variant?: "default" | "ghost";
+  variant?: "default" | "ghost" | "primary";
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
 
 const variantStyles = {
+  primary: "bg-accent text-white hover:bg-accent/90 rounded-md",
   default: "bg-surface border border-line-subtle hover:bg-surface-hover",
   ghost: "hover:bg-hover",
 };
