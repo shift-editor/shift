@@ -46,7 +46,7 @@ export class MenuManager {
             accelerator: "CmdOrCtrl+O",
             click: async () => {
               const result = await dialog.showOpenDialog({
-                properties: ["openFile", "openDirectory"],
+                properties: ["openFile"],
                 filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo"] }],
               });
               if (!result.canceled && result.filePaths[0]) {

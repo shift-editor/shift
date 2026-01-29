@@ -1,3 +1,5 @@
+export const isDev = process.env.NODE_ENV === "development";
+
 /**
  * Returns the remainder of a number divided by a divisor, ensuring the result is positive.
  * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Remainder
