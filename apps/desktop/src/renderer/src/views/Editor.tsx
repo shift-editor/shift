@@ -100,6 +100,13 @@ export const Editor = () => {
         return;
       }
 
+      if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
+        const points = editor.getAllPoints();
+        editor.selection.selectPoints(new Set(points.map((point) => point.id)));
+        e.preventDefault();
+        return;
+      }
+
       toolManager.handleKeyDown(e);
     };
 

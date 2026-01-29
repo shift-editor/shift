@@ -1,7 +1,6 @@
 import { Separator } from "@shift/ui";
 import { TransformSection } from "./TransformSection";
 import { ScaleSection } from "./ScaleSection";
-import { AlignmentSection } from "./AlignmentSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import AppState, { getEditor } from "@/store/store";
 import { useValue } from "@/lib/reactive";
@@ -32,7 +31,6 @@ export const Sidebar = () => {
               <TransformSection />
               <ScaleSection />
               <Separator />
-              <AlignmentSection />
             </>
           )}
         </div>
