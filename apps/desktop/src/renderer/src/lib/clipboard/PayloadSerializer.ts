@@ -1,5 +1,17 @@
 import type { Rect2D } from "@shift/types";
+import { Polygon } from "@shift/geo";
 import type { ClipboardContent, ClipboardPayload } from "./types";
+
+const EMPTY_BOUNDS: Rect2D = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  left: 0,
+  top: 0,
+  right: 0,
+  bottom: 0,
+};
 
 export class PayloadSerializer {
   serialize(content: ClipboardContent, sourceGlyph?: string): string {
@@ -8,7 +20,7 @@ export class PayloadSerializer {
       format: "shift/glyph-data",
       content,
       metadata: {
-        bounds: this.#calculateBounds(content),
+        bounds: this.calculateBounds(content),
         sourceGlyph,
         timestamp: Date.now(),
       },
@@ -27,43 +39,8 @@ export class PayloadSerializer {
     }
   }
 
-  #calculateBounds(content: ClipboardContent): Rect2D {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const contour of content.contours) {
-      for (const point of contour.points) {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-        maxX = Math.max(maxX, point.x);
-        maxY = Math.max(maxY, point.y);
-      }
-    }
-
-    if (!isFinite(minX)) {
-      return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        left: 0,
-        top: 0,
-        right: 0,
-        bottom: 0,
-      };
-    }
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-      left: minX,
-      top: minY,
-      right: maxX,
-      bottom: maxY,
-    };
+  calculateBounds(content: ClipboardContent): Rect2D {
+    const points = content.contours.flatMap((c) => c.points);
+    return Polygon.boundingRect(points) ?? EMPTY_BOUNDS;
   }
 }

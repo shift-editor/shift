@@ -26,7 +26,7 @@ export {
 } from "./primitives";
 
 // Clipboard commands
-export { PasteCommand } from "./clipboard";
+export { CutCommand, PasteCommand } from "./clipboard";
 
 // Transform commands
 export {

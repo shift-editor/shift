@@ -29,7 +29,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
-import { CommandHistory, PasteCommand } from "../commands";
+import { CommandHistory, CutCommand, PasteCommand } from "../commands";
 import {
   RotatePointsCommand,
   ScalePointsCommand,
@@ -52,7 +52,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "../reactive/signal";
-import { ClipboardManager } from "../clipboard";
+import { ClipboardService } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
@@ -90,7 +90,7 @@ export class Editor {
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
   #redrawEffect: Effect;
-  #clipboardManager: ClipboardManager;
+  #clipboardService: ClipboardService;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -133,7 +133,11 @@ export class Editor {
 
     this.#renderer = new GlyphRenderer(this, (ctx) => this.#toolManager?.render(ctx));
 
-    this.#clipboardManager = new ClipboardManager(this);
+    this.#clipboardService = new ClipboardService({
+      getGlyph: () => this.#fontEngine.$glyph.value,
+      getSelectedPointIds: () => [...this.selectedPointIds.peek()],
+      getSelectedSegmentIds: () => [...this.selectedSegmentIds.peek()],
+    });
 
     this.selection = new SelectionService(this.#selection);
     this.hover = new HoverService(this.#hover);
@@ -551,30 +555,41 @@ export class Editor {
   }
 
   public async copy(): Promise<boolean> {
-    return this.#clipboardManager.copy();
+    const content = this.#clipboardService.resolveSelection();
+    if (!content || content.contours.length === 0) return false;
+
+    const glyph = this.getGlyph();
+    return this.#clipboardService.write(content, glyph?.name);
   }
 
   public async cut(): Promise<boolean> {
-    const copied = await this.#clipboardManager.cut();
-    if (copied) {
-      this.deleteSelectedPoints();
-    }
-    return copied;
+    const content = this.#clipboardService.resolveSelection();
+    if (!content || content.contours.length === 0) return false;
+
+    const glyph = this.getGlyph();
+    const written = await this.#clipboardService.write(content, glyph?.name);
+    if (!written) return false;
+
+    const pointIds = [...this.selectedPointIds.peek()];
+    const cmd = new CutCommand(pointIds);
+    this.#commandHistory.execute(cmd);
+
+    this.clearSelection();
+    this.requestRedraw();
+    return true;
   }
 
   public async paste(): Promise<void> {
-    const content = this.#clipboardManager.getInternalClipboard();
-    if (!content) {
-      const result = await this.#clipboardManager.paste();
-      if (result?.success) {
-        this.requestRedraw();
-      }
-      return;
-    }
+    const state = await this.#clipboardService.read();
+    if (!state.content || state.content.contours.length === 0) return;
 
-    const cmd = new PasteCommand(content, 0, 0);
+    const offset = this.#clipboardService.getNextPasteOffset();
+    const cmd = new PasteCommand(state.content, { offset });
     this.#commandHistory.execute(cmd);
-    this.selectPoints(cmd.createdPointIds);
+
+    if (cmd.createdPointIds.length > 0) {
+      this.selectPoints(cmd.createdPointIds);
+    }
     this.requestRedraw();
   }
 

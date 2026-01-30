@@ -1,1 +1,1 @@
-export { PasteCommand } from "./ClipboardCommands";
+export { CutCommand, PasteCommand } from "./ClipboardCommands";

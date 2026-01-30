@@ -8,3 +8,5 @@
 - handling interactions that enter the edges of the canvas
   - drag interactions should start panning the canvas in that direction
   - if we have interactive drawing (pen) it should just go away and come back if we mouse back in
+- if you pan wtih trackpad and are actively marquees, pen etc it shhould also move the mouse
+-

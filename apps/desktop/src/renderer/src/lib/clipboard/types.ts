@@ -1,4 +1,5 @@
-import type { PointSnapshot, Rect2D } from "@shift/types";
+import type { GlyphSnapshot, PointId, PointSnapshot, Rect2D } from "@shift/types";
+import type { SegmentId } from "@/types/indicator";
 
 export type { PasteResult } from "@/engine/editing";
 
@@ -28,4 +29,20 @@ export interface ClipboardImporter {
   readonly name: string;
   canImport(text: string): boolean;
   import(text: string): ClipboardContent | null;
+}
+
+export interface ClipboardState {
+  content: ClipboardContent | null;
+  bounds: Rect2D | null;
+  timestamp: number;
+}
+
+export interface PasteOptions {
+  offset: { x: number; y: number };
+}
+
+export interface ClipboardServiceDeps {
+  getGlyph: () => GlyphSnapshot | null;
+  getSelectedPointIds: () => readonly PointId[];
+  getSelectedSegmentIds: () => readonly SegmentId[];
 }
