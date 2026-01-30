@@ -9,4 +9,16 @@
   - drag interactions should start panning the canvas in that direction
   - if we have interactive drawing (pen) it should just go away and come back if we mouse back in
 - if you pan wtih trackpad and are actively marquees, pen etc it shhould also move the mouse
--
+- detect smooth points (both in ttf/ufo)
+- how to scale sheared shapes so that maintain the same shear
+- bend curves
+- snapping behavior
+  - rectangle should snap to each other? (with gap snapping?)
+  - point snapping
+  - guide snapping
+- review viewport api
+- redesign drawing api
+- more fleshed out contour api for common operations
+  - getting onCurve points
+  - first point
+  - last point

@@ -55,10 +55,12 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const element = containerRef.current;
     if (!element) return undefined;
 
+    const toolManager = editor.getToolManager();
+
     const handleWheel = (e: WheelEvent) => {
+      const position = editor.getMousePosition(e.clientX, e.clientY);
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
-        const position = editor.getMousePosition(e.clientX, e.clientY);
         const ZOOM_SENSITIVITY = 100;
         const zoomFactor = 1 - e.deltaY / ZOOM_SENSITIVITY;
         editor.zoomToPoint(position.x, position.y, zoomFactor);
@@ -67,6 +69,13 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         const pan = editor.getPan();
         const newPan = Vec2.sub(pan, { x: e.deltaX, y: e.deltaY });
         editor.pan(newPan.x, newPan.y);
+
+        // route to tool
+        toolManager.handlePointerMove(position, {
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey,
+        });
         editor.requestRedraw();
       }
     };

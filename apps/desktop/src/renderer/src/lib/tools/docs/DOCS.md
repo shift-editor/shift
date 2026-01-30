@@ -449,3 +449,7 @@ tool.render(renderer) → draw overlays
 - [commands](../commands/docs/DOCS.md) - Command execution and undo
 - [reactive](../reactive/docs/DOCS.md) - Signals for state
 - [graphics](../graphics/docs/DOCS.md) - Interactive rendering
+
+## Plans
+
+- [DrawAPI unification](DRAW_API_UNIFICATION.md) - Screen-stable drawing for tool overlays (zoom-correct line width, handle/cursor sizes)

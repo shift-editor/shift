@@ -8,7 +8,7 @@ export interface DrawStyle {
   dashPattern: number[];
 }
 
-interface BaseHandleStyle extends DrawStyle {
+export interface BaseHandleStyle extends DrawStyle {
   size: number;
   overlayColor?: string;
 }

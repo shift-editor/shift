@@ -43,6 +43,9 @@ importers:
       '@shift/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@shift/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@types/react':
         specifier: ^19.1.8
         version: 19.1.8
@@ -210,6 +213,19 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.17
+        version: 4.0.17(@types/node@24.10.9)(jiti@2.4.2)(jsdom@26.1.0)(lightningcss@1.30.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/validation:
+    dependencies:
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
       typescript:
         specifier: ^5.3.0
         version: 5.9.3

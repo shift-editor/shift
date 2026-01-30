@@ -5,4 +5,6 @@
 - keyboard shortcuts should be disabled during tool drag ops
 - if you have a field focused on the sidebar, and you hover back to canvas, your keyboard events should stay in the sidebar (e.g clicking escape should not delete a point)
 - smooth points should only be "toggle-able" if they its between two cubics
-- ## need to add more smart edit rules
+- need to add more smart edit rules (e.g smooth point with the corner neighbour)
+- I think we end up in a situation where we write a ufo partially (beacuse of crash or exit) and it screws up loading the ufo (and loses data maybe)
+-

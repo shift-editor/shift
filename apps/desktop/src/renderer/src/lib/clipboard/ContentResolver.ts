@@ -1,5 +1,6 @@
 import type { GlyphSnapshot, PointSnapshot, PointId } from "@shift/types";
 import { asPointId } from "@shift/types";
+import { Validate } from "@shift/validation";
 import type { SegmentId } from "@/types/indicator";
 import type { ClipboardContent, ContourContent, PointContent } from "./types";
 
@@ -80,6 +81,9 @@ export class ContentResolver {
         });
       } else {
         const expandedPoints = this.#expandPartialSelection(contour.points, indices);
+        if (!Validate.hasValidAnchor(expandedPoints)) {
+          continue;
+        }
         contours.push({
           points: expandedPoints.map(this.#pointToContent),
           closed: false,

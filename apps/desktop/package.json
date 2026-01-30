@@ -48,6 +48,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "@shift/geo": "workspace:*",
     "@shift/types": "workspace:*",
+    "@shift/validation": "workspace:*",
     "@shift/ui": "workspace:*",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

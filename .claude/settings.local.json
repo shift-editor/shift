@@ -5,7 +5,16 @@
       "Bash(pnpm typecheck:*)",
       "Bash(npx tsc:*)",
       "Bash(pnpm lint:check:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(pnpm install)",
+      "WebSearch",
+      "WebFetch(domain:paperjs.org)",
+      "WebFetch(domain:konvajs.org)",
+      "WebFetch(domain:pixijs.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.steveruiz.me)",
+      "WebFetch(domain:alextardif.com)",
+      "WebFetch(domain:logantharvell.github.io)"
     ]
   }
 }
