@@ -13,6 +13,8 @@ import {
   NudgeBehavior,
   EscapeBehavior,
   ToggleSmoothBehavior,
+  UpgradeSegmentBehavior,
+  DoubleClickSelectContourBehavior,
 } from "./behaviors";
 import { hitTestBoundingBox } from "./boundingBoxHitTest";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
@@ -40,8 +42,10 @@ export class Select extends BaseTool<SelectState> {
 
   private behaviors: SelectBehavior[] = [
     new HoverBehavior(),
-    new SelectionBehavior(),
+    new DoubleClickSelectContourBehavior(),
     new ToggleSmoothBehavior(),
+    new UpgradeSegmentBehavior(),
+    new SelectionBehavior(),
     new NudgeBehavior(),
     new EscapeBehavior(),
     new ResizeBehavior(),

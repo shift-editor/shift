@@ -1,8 +1,10 @@
 import { Vec2 } from "@shift/geo";
+import type { PointId, GlyphSnapshot } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import { ContentResolver } from "@/lib/clipboard/ContentResolver";
 
 export class DragBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -84,6 +86,24 @@ export class DragBehavior implements SelectBehavior {
     if (point) {
       const pointId = point.id;
       const isSelected = state.type === "selected" && editor.selection.isPointSelected(pointId);
+
+      if (event.altKey && isSelected) {
+        const newPointIds = this.duplicateSelection(editor);
+        if (newPointIds.length > 0) {
+          return {
+            type: "dragging",
+            drag: {
+              anchorPointId: newPointIds[0],
+              startPos: event.point,
+              lastPos: event.point,
+              totalDelta: { x: 0, y: 0 },
+              draggedPointIds: newPointIds,
+            },
+            intent: { action: "selectPoints", pointIds: newPointIds },
+          };
+        }
+      }
+
       const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : [pointId];
 
       return {
@@ -106,6 +126,24 @@ export class DragBehavior implements SelectBehavior {
 
       const isSelected =
         state.type === "selected" && editor.selection.isSegmentSelected(segmentHit.segmentId);
+
+      if (event.altKey && isSelected) {
+        const newPointIds = this.duplicateSelection(editor);
+        if (newPointIds.length > 0) {
+          return {
+            type: "dragging",
+            drag: {
+              anchorPointId: newPointIds[0],
+              startPos: event.point,
+              lastPos: event.point,
+              totalDelta: { x: 0, y: 0 },
+              draggedPointIds: newPointIds,
+            },
+            intent: { action: "selectPoints", pointIds: newPointIds },
+          };
+        }
+      }
+
       const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : pointIds;
 
       return {
@@ -128,5 +166,27 @@ export class DragBehavior implements SelectBehavior {
     }
 
     return null;
+  }
+
+  private duplicateSelection(editor: Editor): PointId[] {
+    const glyph = editor.getGlyph();
+    if (!glyph) return [];
+
+    const selectedPointIds = [...editor.selection.getSelectedPoints()];
+    const selectedSegmentIds = [...editor.selection.getSelectedSegments()];
+
+    const resolver = new ContentResolver();
+    const content = resolver.resolve(
+      glyph as unknown as GlyphSnapshot,
+      selectedPointIds,
+      selectedSegmentIds,
+    );
+
+    if (!content || content.contours.length === 0) return [];
+
+    const contoursJson = JSON.stringify(content.contours);
+    const result = editor.fontEngine.editing.pasteContours(contoursJson, 0, 0);
+
+    return result.success ? result.createdPointIds : [];
   }
 }

@@ -164,7 +164,7 @@
 
 - [x] `Cmd+A` - select all points in glyph
 - [x] `Escape` - deselect all
-- [ ] Double-click on segment → select entire contour
+- [x] Double-click on segment → select entire contour
 
 ---
 
@@ -188,7 +188,7 @@
 - [x] Click on hovered segment → insert point at t parameter
 - [ ] Preview point position while hovering
 - [ ] Alt+click to split segment
-- [ ] Option+click upgrade segment
+- [x] Option+click upgrade segment
 
 **Visual Indicators**
 

@@ -277,9 +277,11 @@ export class GlyphRenderer {
 
         const { x, y } = viewport.projectUpmToScreen(point.x, point.y);
         const nextPoint = points[(idx + 1) % numPoints];
-        const prevPoint = points[idx - 1];
+        const prevPoint = points[(idx - 1 + numPoints) % numPoints];
 
         const anchor = nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
+
+        if (!anchor || anchor.pointType === "offCurve") continue;
 
         const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(anchor.x, anchor.y);
 

@@ -1,5 +1,11 @@
 {
   "permissions": {
-    "allow": ["Bash(pnpm test:*)", "Bash(pnpm typecheck:*)", "Bash(npx tsc:*)"]
+    "allow": [
+      "Bash(pnpm test:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm lint:check:*)",
+      "Bash(xargs:*)"
+    ]
   }
 }

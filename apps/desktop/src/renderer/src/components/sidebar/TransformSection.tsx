@@ -29,7 +29,6 @@ export const TransformSection = () => {
   const [rotation, setRotation] = useState(0);
 
   const canDistribute = pointCount >= 3;
-  console.log("canDistribute", canDistribute);
 
   const handleAlign = (alignment: AlignmentType) => {
     editor.alignSelection(alignment);

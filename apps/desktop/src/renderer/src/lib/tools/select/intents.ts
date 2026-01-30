@@ -1,11 +1,17 @@
-import type { PointId, Point2D, Rect2D } from "@shift/types";
+import type { PointId, Point2D, Rect2D, ContourId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 import type { Editor } from "@/lib/editor";
-import { NudgePointsCommand, ScalePointsCommand, RotatePointsCommand } from "@/lib/commands";
+import {
+  NudgePointsCommand,
+  ScalePointsCommand,
+  RotatePointsCommand,
+  UpgradeLineToCubicCommand,
+} from "@/lib/commands";
 import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
+import type { LineSegment } from "@/types/segments";
 
 export type SelectIntent =
   | { action: "selectPoint"; pointId: PointId; additive: boolean }
@@ -37,7 +43,10 @@ export type SelectIntent =
       center: Point2D;
     }
   | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
-  | { action: "toggleSmooth"; pointId: PointId };
+  | { action: "toggleSmooth"; pointId: PointId }
+  | { action: "selectPoints"; pointIds: PointId[] }
+  | { action: "upgradeLineToCubic"; segment: LineSegment }
+  | { action: "selectContour"; contourId: ContourId; additive: boolean };
 
 export function executeIntent(intent: SelectIntent, editor: Editor): void {
   switch (intent.action) {
@@ -117,6 +126,19 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
     case "toggleSmooth":
       editor.edit.toggleSmooth(intent.pointId);
       editor.render.requestRedraw();
+      break;
+
+    case "selectPoints":
+      editor.selection.clear();
+      editor.selection.selectPoints(intent.pointIds);
+      break;
+
+    case "upgradeLineToCubic":
+      executeUpgradeLineToCubic(intent.segment, editor);
+      break;
+
+    case "selectContour":
+      executeSelectContour(intent.contourId, intent.additive, editor);
       break;
   }
 }
@@ -220,4 +242,25 @@ function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: Edito
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
   editor.commands.execute(cmd);
   editor.render.requestRedraw();
+}
+
+function executeUpgradeLineToCubic(segment: LineSegment, editor: Editor): void {
+  const cmd = new UpgradeLineToCubicCommand(segment);
+  editor.commands.execute(cmd);
+  editor.render.requestRedraw();
+}
+
+function executeSelectContour(contourId: ContourId, additive: boolean, editor: Editor): void {
+  const glyph = editor.getGlyph();
+  if (!glyph) return;
+
+  const contour = glyph.contours.find((c) => c.id === contourId);
+  if (!contour) return;
+
+  const pointIds = contour.points.map((p) => asPointId(p.id));
+
+  if (!additive) {
+    editor.selection.clear();
+  }
+  editor.selection.selectPoints(pointIds);
 }

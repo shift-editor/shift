@@ -9,7 +9,7 @@ import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
 import { asPointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { Segment, QuadSegment, CubicSegment } from "@/types/segments";
+import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 
 /**
@@ -536,5 +536,67 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   /** Get the split point ID after execution */
   get splitPointId(): PointId | null {
     return this.#splitPointId;
+  }
+}
+
+/**
+ * Convert a line segment to a cubic bezier curve.
+ *
+ * Places control points at 1/3 and 2/3 along the line,
+ * creating a smooth curve that initially matches the line.
+ */
+export class UpgradeLineToCubicCommand extends BaseCommand<void> {
+  readonly name = "Upgrade Line to Cubic";
+
+  #anchor2Id: PointId;
+  #control1Pos: Point2D;
+  #control2Pos: Point2D;
+  #control1Id: PointId | null = null;
+  #control2Id: PointId | null = null;
+
+  constructor(segment: LineSegment) {
+    super();
+    const p1 = segment.points.anchor1;
+    const p2 = segment.points.anchor2;
+    this.#anchor2Id = asPointId(p2.id);
+
+    this.#control1Pos = {
+      x: p1.x + (p2.x - p1.x) / 3,
+      y: p1.y + (p2.y - p1.y) / 3,
+    };
+    this.#control2Pos = {
+      x: p1.x + ((p2.x - p1.x) * 2) / 3,
+      y: p1.y + ((p2.y - p1.y) * 2) / 3,
+    };
+  }
+
+  execute(ctx: CommandContext): void {
+    this.#control2Id = ctx.fontEngine.editing.insertPointBefore(
+      this.#anchor2Id,
+      this.#control2Pos.x,
+      this.#control2Pos.y,
+      "offCurve",
+      false,
+    );
+    this.#control1Id = ctx.fontEngine.editing.insertPointBefore(
+      this.#control2Id,
+      this.#control1Pos.x,
+      this.#control1Pos.y,
+      "offCurve",
+      false,
+    );
+  }
+
+  undo(ctx: CommandContext): void {
+    const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
+    if (toRemove.length > 0) {
+      ctx.fontEngine.editing.removePoints(toRemove);
+    }
+  }
+
+  redo(ctx: CommandContext): void {
+    this.#control1Id = null;
+    this.#control2Id = null;
+    this.execute(ctx);
   }
 }

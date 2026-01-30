@@ -14,5 +14,6 @@ export {
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
+  UpgradeLineToCubicCommand,
 } from "./BezierCommands";
 export { SnapshotCommand } from "./SnapshotCommand";

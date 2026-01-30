@@ -23,6 +23,7 @@ export {
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
+  UpgradeLineToCubicCommand,
 } from "./primitives";
 
 // Clipboard commands
