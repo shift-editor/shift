@@ -40,6 +40,9 @@ export { Alignment } from "./Alignment";
 // Anchor utilities
 export { anchorToPoint } from "./anchor";
 
+// Zoom-from-wheel (viewport zoom sensitivity)
+export { zoomMultiplierFromWheel, type ZoomFromWheelOptions } from "./zoomFromWheel";
+
 // Selection bounds utilities
 export { getSegmentAwareBounds } from "./SelectionBounds";
 
