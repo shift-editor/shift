@@ -4,6 +4,7 @@ import { CanvasContextProvider } from "@/context/CanvasContext";
 import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
 
+import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { Vec2 } from "@shift/geo";
@@ -62,8 +63,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       const screenPos = editor.screenMousePosition;
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
-        const ZOOM_SENSITIVITY = 100;
-        const zoomFactor = 1 - e.deltaY / ZOOM_SENSITIVITY;
+        const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
         editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
         editor.requestRedraw();
       } else {

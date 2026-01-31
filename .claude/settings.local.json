@@ -15,7 +15,9 @@
       "WebFetch(domain:www.steveruiz.me)",
       "WebFetch(domain:alextardif.com)",
       "WebFetch(domain:logantharvell.github.io)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm info:*)",
+      "WebFetch(domain:base-ui.com)"
     ]
   }
 }
