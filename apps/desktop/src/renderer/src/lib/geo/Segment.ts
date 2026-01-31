@@ -186,9 +186,25 @@ export const Segment = {
     const segments: SegmentType[] = [];
     let index = 0;
 
-    while (index < points.length - 1) {
-      const p1 = points[index];
-      const p2 = points[index + 1];
+    const getPoint = (i: number): PointSnapshot | undefined => {
+      if (i < points.length) {
+        return points[i];
+      }
+      if (closed) {
+        return points[i - points.length];
+      }
+      return undefined;
+    };
+
+    const limit = closed ? points.length : points.length - 1;
+
+    while (index < limit) {
+      const p1 = getPoint(index);
+      const p2 = getPoint(index + 1);
+
+      if (!p1 || !p2) {
+        break;
+      }
 
       if (p1.pointType === "onCurve" && p2.pointType === "onCurve") {
         segments.push({
@@ -200,7 +216,7 @@ export const Segment = {
       }
 
       if (p1.pointType === "onCurve" && p2.pointType === "offCurve") {
-        const p3 = points[index + 2];
+        const p3 = getPoint(index + 2);
 
         if (!p3) {
           break;
@@ -216,7 +232,7 @@ export const Segment = {
         }
 
         if (p3.pointType === "offCurve") {
-          const p4 = points[index + 3];
+          const p4 = getPoint(index + 3);
           if (!p4) {
             break;
           }
@@ -233,18 +249,6 @@ export const Segment = {
       index += 1;
     }
 
-    if (closed && points.length >= 2) {
-      const lastOnCurve = findLastOnCurve(points);
-      const firstOnCurve = findFirstOnCurve(points);
-
-      if (lastOnCurve && firstOnCurve && lastOnCurve !== firstOnCurve) {
-        segments.push({
-          type: "line",
-          points: { anchor1: lastOnCurve, anchor2: firstOnCurve },
-        });
-      }
-    }
-
     return segments;
   },
 
@@ -259,21 +263,3 @@ export const Segment = {
     return result;
   },
 } as const;
-
-function findLastOnCurve(points: PointSnapshot[]): PointSnapshot | null {
-  for (let i = points.length - 1; i >= 0; i--) {
-    if (points[i].pointType === "onCurve") {
-      return points[i];
-    }
-  }
-  return null;
-}
-
-function findFirstOnCurve(points: PointSnapshot[]): PointSnapshot | null {
-  for (const point of points) {
-    if (point.pointType === "onCurve") {
-      return point;
-    }
-  }
-  return null;
-}

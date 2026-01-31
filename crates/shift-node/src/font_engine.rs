@@ -118,10 +118,16 @@ impl FontEngine {
       Glyph::with_unicode(name, unicode)
     };
 
-    let layer_id = self.font.default_layer_id();
-    let layer = glyph
-      .remove_layer(layer_id)
-      .unwrap_or_else(|| GlyphLayer::with_width(500.0));
+    let (layer_id, layer) = glyph
+      .layers()
+      .iter()
+      .max_by_key(|(_, layer)| layer.contours().len())
+      .map(|(id, layer)| (*id, layer.clone()))
+      .map(|(id, layer)| (id, glyph.remove_layer(id).unwrap_or(layer)))
+      .unwrap_or_else(|| {
+        let id = self.font.default_layer_id();
+        (id, GlyphLayer::with_width(500.0))
+      });
 
     let edit_session = EditSession::new(glyph.name().to_string(), unicode, layer);
 
