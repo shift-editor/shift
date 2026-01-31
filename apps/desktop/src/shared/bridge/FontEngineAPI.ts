@@ -6,6 +6,23 @@ export type {
   JsFontMetaData,
 } from "shift-node";
 
+/**
+ * Lightweight point move for drag operations
+ */
+export interface PointMove {
+  id: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * Result of lightweight move operation
+ */
+export interface MoveResult {
+  success: boolean;
+  affectedIds: string[];
+}
+
 export interface FontEngineAPI {
   loadFont(path: string): void;
   saveFont(path: string): void;
@@ -48,6 +65,27 @@ export interface FontEngineAPI {
   applyEditsUnified(pointIds: string[], dx: number, dy: number): string;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
   restoreSnapshot(snapshotJson: string): string;
+
+  // ═══════════════════════════════════════════════════════════
+  // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Set point positions directly - fire-and-forget for drag operations.
+   * Does NOT return a snapshot - use getSnapshotData() when needed.
+   */
+  setPointPositions(moves: PointMove[]): boolean;
+
+  /**
+   * Move points by delta - lightweight version that returns only affected IDs.
+   * Does NOT return a snapshot - use getSnapshotData() when needed.
+   */
+  movePointsFast(pointIds: string[], dx: number, dy: number): MoveResult;
+
+  /**
+   * Restore snapshot from native object - no JSON parsing needed.
+   */
+  restoreSnapshotNative(snapshot: import("shift-node").JsGlyphSnapshot): boolean;
 }
 
 declare global {

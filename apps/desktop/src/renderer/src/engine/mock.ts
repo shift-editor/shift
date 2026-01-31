@@ -376,6 +376,55 @@ export class MockFontEngine implements FontEngineAPI {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // LIGHTWEIGHT DRAG OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  setPointPositions(moves: { id: string; x: number; y: number }[]): boolean {
+    if (!this.#snapshot) return false;
+
+    for (const move of moves) {
+      for (const contour of this.#snapshot.contours) {
+        const point = contour.points.find((p) => p.id === move.id);
+        if (point) {
+          point.x = move.x;
+          point.y = move.y;
+          break;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  movePointsFast(
+    pointIds: string[],
+    dx: number,
+    dy: number,
+  ): { success: boolean; affectedIds: string[] } {
+    if (!this.#snapshot) {
+      return { success: false, affectedIds: [] };
+    }
+
+    const affectedIds: string[] = [];
+    for (const contour of this.#snapshot.contours) {
+      for (const point of contour.points) {
+        if (pointIds.includes(point.id)) {
+          point.x += dx;
+          point.y += dy;
+          affectedIds.push(point.id);
+        }
+      }
+    }
+
+    return { success: true, affectedIds };
+  }
+
+  restoreSnapshotNative(snapshot: JsGlyphSnapshot): boolean {
+    this.#snapshot = snapshot;
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // CLIPBOARD OPERATIONS
   // ═══════════════════════════════════════════════════════════
 

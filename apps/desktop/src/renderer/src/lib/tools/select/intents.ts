@@ -204,10 +204,19 @@ function executeSelectPointsInRect(rect: Rect2D, editor: Editor): PointId[] {
 }
 
 function executeMovePointsDelta(delta: Point2D, editor: Editor): void {
-  if (delta.x !== 0 || delta.y !== 0) {
-    const selectedPoints = editor.selection.getSelectedPoints();
-    editor.edit.applySmartEdits(selectedPoints, delta.x, delta.y);
+  if (delta.x === 0 && delta.y === 0) {
+    return;
   }
+
+  const glyph = editor.getGlyph();
+  if (!glyph) {
+    return;
+  }
+
+  const selectedPoints = editor.selection.getSelectedPoints();
+
+  // Use the optimized local rules engine + lightweight NAPI sync
+  editor.edit.applySmartEditsLocal(glyph, selectedPoints, delta.x, delta.y);
 }
 
 function executeScalePoints(
