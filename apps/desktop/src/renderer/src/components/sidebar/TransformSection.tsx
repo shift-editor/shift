@@ -1,11 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { EditableSidebarInput } from "./EditableSidebarInput";
+import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
-import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
+import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
-import { anchorToPoint } from "@/lib/transform/anchor";
+import { anchorToPoint, selectionBoundsToRect } from "@/lib/transform/anchor";
 
 import RotateIcon from "@/assets/sidebar/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar/rotate-cw.svg";
@@ -24,9 +24,34 @@ import { AlignmentType, DistributeType } from "@/lib/transform/types";
 
 export const TransformSection = () => {
   const editor = getEditor();
-  const { x, y, hasSelection, bounds, pointCount } = useSelectionBounds();
   const { anchor } = useTransformOrigin();
   const [rotation, setRotation] = useState(0);
+  const [pointCount, setPointCount] = useState(0);
+
+  const xRef = useRef<EditableSidebarInputHandle>(null);
+  const yRef = useRef<EditableSidebarInputHandle>(null);
+
+  useSignalEffect(() => {
+    const pointIds = editor.selectedPointIds.value;
+    setPointCount(pointIds.size);
+  });
+
+  useSignalEffect(() => {
+    editor.glyph.value;
+    const pointIds = editor.selectedPointIds.value;
+
+    if (pointIds.size === 0) {
+      xRef.current?.setValue(0);
+      yRef.current?.setValue(0);
+      return;
+    }
+
+    const bounds = editor.getSelectionBounds();
+    if (bounds) {
+      xRef.current?.setValue(Math.round(bounds.minX));
+      yRef.current?.setValue(Math.round(bounds.minY));
+    }
+  });
 
   const canDistribute = pointCount >= 3;
 
@@ -41,8 +66,9 @@ export const TransformSection = () => {
   };
 
   const getOrigin = () => {
+    const bounds = editor.getSelectionBounds();
     if (!bounds) return undefined;
-    return anchorToPoint(anchor, bounds);
+    return anchorToPoint(anchor, selectionBoundsToRect(bounds));
   };
 
   const handleRotate90 = () => {
@@ -64,24 +90,16 @@ export const TransformSection = () => {
     editor.reflectSelection("horizontal", getOrigin());
   };
 
-  const handleXChange = useCallback(
-    (newX: number) => {
+  const handlePositionChange = useCallback(
+    (axis: "x" | "y", value: number) => {
+      const bounds = editor.getSelectionBounds();
       if (!bounds) return;
-      const anchorPoint = anchorToPoint(anchor, bounds);
-      editor.moveSelectionTo({ x: newX, y: anchorPoint.y }, anchorPoint);
+      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
+      editor.moveSelectionTo(target, anchorPoint);
       editor.requestRedraw();
     },
-    [bounds, anchor, editor],
-  );
-
-  const handleYChange = useCallback(
-    (newY: number) => {
-      if (!bounds) return;
-      const anchorPoint = anchorToPoint(anchor, bounds);
-      editor.moveSelectionTo({ x: anchorPoint.x, y: newY }, anchorPoint);
-      editor.requestRedraw();
-    },
-    [bounds, anchor, editor],
+    [anchor],
   );
 
   return (
@@ -145,16 +163,14 @@ export const TransformSection = () => {
         <div className="text-xs text-secondary">Position</div>
         <div className="flex gap-2">
           <EditableSidebarInput
+            ref={xRef}
             label="X"
-            value={x}
-            onValueChange={handleXChange}
-            disabled={!hasSelection}
+            onValueChange={(v) => handlePositionChange("x", v)}
           />
           <EditableSidebarInput
+            ref={yRef}
             label="Y"
-            value={y}
-            onValueChange={handleYChange}
-            disabled={!hasSelection}
+            onValueChange={(v) => handlePositionChange("y", v)}
           />
         </div>
       </div>

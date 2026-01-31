@@ -1,6 +1,20 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { AnchorPosition } from "@/components/sidebar/TransformGrid";
+import type { SelectionBounds } from "./types";
+
+export function selectionBoundsToRect(bounds: SelectionBounds): Rect2D {
+  return {
+    left: bounds.minX,
+    top: bounds.minY,
+    right: bounds.maxX,
+    bottom: bounds.maxY,
+    x: bounds.minX,
+    y: bounds.minY,
+    width: bounds.width,
+    height: bounds.height,
+  };
+}
 
 /**
  * Maps a 9-grid anchor position to an actual point on a bounding rectangle.

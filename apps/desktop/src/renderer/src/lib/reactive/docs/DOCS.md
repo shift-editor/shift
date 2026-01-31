@@ -48,13 +48,13 @@ public get zoom(): Signal<number> {
 
 ```typescript
 // Reactive - component re-renders on change
-const zoom = useValue(editor.zoom);
+const zoom = useSignalState(editor.zoom);
 
 // Non-reactive - reads without tracking ("unsafe" escape hatch)
 const zoom = editor.zoom.peek();
 ```
 
-**Design principle:** The `$` prefix is internal documentation indicating a signal field. Use `private` keyword (not `#`) for signal fields to avoid `#$` awkwardness. Users opt into reactivity with `useValue()`, and use `.peek()` for imperative non-reactive reads.
+**Design principle:** The `$` prefix is internal documentation indicating a signal field. Use `private` keyword (not `#`) for signal fields to avoid `#$` awkwardness. Users opt into reactivity with `useSignalState()`, and use `.peek()` for imperative non-reactive reads.
 
 ## When to Use Signals
 
@@ -120,9 +120,9 @@ class SelectionManager {
   }
 }
 
-// React component subscribes via useValue()
+// React component subscribes via useSignalState()
 function MyComponent() {
-  const selectedPoints = useValue(manager.selectedPoints);
+  const selectedPoints = useSignalState(manager.selectedPoints);
   return <div>Selected: {selectedPoints.size}</div>;
 }
 
