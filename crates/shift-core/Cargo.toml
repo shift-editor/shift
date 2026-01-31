@@ -16,3 +16,6 @@ skrifa = "0.32.0"
 ts-rs = "11.0.1"
 shift-ir = { path = "../shift-ir" }
 shift-backends = { path = "../shift-backends" }
+
+[dev-dependencies]
+tempfile = "3"
