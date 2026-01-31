@@ -171,6 +171,10 @@ export interface MockToolContext extends ToolContext {
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
+  readonly hitRadius: number;
+  readonly screenMousePosition: Point2D;
+  screenToUpmDistance(pixels: number): number;
+  hasSelection(): boolean;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -833,6 +837,14 @@ export function createMockToolContext(): MockToolContext {
     getHoveredPoint: () => hover._hoveredPoint,
     getHoveredSegment: () => hover._hoveredSegment,
     getCursorValue: () => cursor._cursor,
+    get hitRadius() {
+      return 8;
+    },
+    get screenMousePosition() {
+      return { x: 0, y: 0 };
+    },
+    screenToUpmDistance: (pixels: number) => pixels,
+    hasSelection: () => selection.hasSelection(),
     mocks: {
       screen,
       selection,

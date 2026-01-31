@@ -1,12 +1,10 @@
 import { Vec2 } from "@shift/geo";
-import { IRenderer } from "@/types/graphics";
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
 import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
-import { DEFAULT_STYLES, PREVIEW_LINE_STYLE } from "../../styles/style";
-import { drawHandle } from "@/lib/editor";
+import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 
 export type { PenState };
 
@@ -38,13 +36,14 @@ export class Pen extends BaseTool<PenState> {
   }
 
   activate(): void {
-    this.state = { type: "ready", mousePos: { x: 0, y: 0 } };
+    const pos = this.editor.screenMousePosition;
+    this.state = { type: "ready", mousePos: pos };
     this.editor.cursor.set({ type: "pen" });
     this.editor.edit.clearActiveContour();
   }
 
   deactivate(): void {
-    this.state = { type: "idle" };
+    this.state = this.initialState();
   }
 
   handleModifier(key: string, pressed: boolean): boolean {
@@ -188,7 +187,7 @@ export class Pen extends BaseTool<PenState> {
     }
 
     const firstPoint = activeContour.points[0];
-    return Vec2.isWithin({ x, y }, firstPoint, this.editor.screen.hitRadius);
+    return Vec2.isWithin({ x, y }, firstPoint, this.editor.hitRadius);
   }
 
   private hasActiveDrawingContour(): boolean {
@@ -230,7 +229,7 @@ export class Pen extends BaseTool<PenState> {
     if (!glyph) return null;
 
     const activeContourId = this.editor.edit.getActiveContourId();
-    const hitRadius = this.editor.screen.hitRadius;
+    const hitRadius = this.editor.hitRadius;
 
     for (const contour of glyph.contours) {
       if (contour.id === activeContourId || contour.closed) continue;
@@ -251,46 +250,39 @@ export class Pen extends BaseTool<PenState> {
     return null;
   }
 
-  render(renderer: IRenderer): void {
+  render(draw: DrawAPI): void {
     if (this.editor.zone.getZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
+      draw.circle(this.state.mousePos, PEN_READY_STYLE.size, {
+        strokeStyle: PEN_READY_STYLE.strokeStyle,
+        strokeWidth: PEN_READY_STYLE.lineWidth,
+        fillStyle: PEN_READY_STYLE.fillStyle,
+      });
+
       const lastPoint = this.getLastOnCurvePoint();
       if (!lastPoint) return;
 
-      renderer.setStyle(PREVIEW_LINE_STYLE);
-      renderer.lineWidth = this.editor.screen.lineWidth(PREVIEW_LINE_STYLE.lineWidth);
-      renderer.beginPath();
-      renderer.moveTo(lastPoint.x, lastPoint.y);
-      renderer.lineTo(this.state.mousePos.x, this.state.mousePos.y);
-      renderer.stroke();
+      draw.line(lastPoint, this.state.mousePos, {
+        strokeStyle: PREVIEW_LINE_STYLE.strokeStyle,
+        strokeWidth: PREVIEW_LINE_STYLE.lineWidth,
+      });
     }
 
     if (this.state.type === "dragging") {
       const { anchor, mousePos } = this.state;
-
-      renderer.setStyle(DEFAULT_STYLES);
-      renderer.lineWidth = this.editor.screen.lineWidth(DEFAULT_STYLES.lineWidth);
-
-      const anchorX = anchor.position.x;
-      const anchorY = anchor.position.y;
-      const mouseX = mousePos.x;
-      const mouseY = mousePos.y;
-
       const mirrorPos = Vec2.mirror(mousePos, anchor.position);
 
-      renderer.beginPath();
-      renderer.moveTo(mouseX, mouseY);
-      renderer.lineTo(anchorX, anchorY);
-      renderer.stroke();
+      const style = {
+        strokeStyle: DEFAULT_STYLES.strokeStyle,
+        strokeWidth: DEFAULT_STYLES.lineWidth,
+      };
 
-      renderer.beginPath();
-      renderer.moveTo(anchorX, anchorY);
-      renderer.lineTo(mirrorPos.x, mirrorPos.y);
-      renderer.stroke();
+      draw.line(mousePos, anchor.position, style);
+      draw.line(anchor.position, mirrorPos, style);
 
-      drawHandle(renderer, "control", mouseX, mouseY, "idle");
-      drawHandle(renderer, "control", mirrorPos.x, mirrorPos.y, "idle");
+      draw.handle(mousePos, "control", "idle");
+      draw.handle(mirrorPos, "control", "idle");
     }
   }
 }

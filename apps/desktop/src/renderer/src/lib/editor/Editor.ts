@@ -56,14 +56,11 @@ import { ClipboardService } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
-import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 import type { FocusZone } from "@/types/focus";
 import {
   SelectionService,
   HoverService,
   EditService,
-  ScreenService,
-  ViewportService,
   PreviewService,
   TransformService,
   HitTestService,
@@ -102,8 +99,6 @@ export class Editor {
   readonly selection: SelectionService;
   readonly hover: HoverService;
   readonly edit: EditService;
-  readonly screen: ScreenService;
-  readonly viewport: ViewportService;
   readonly preview: PreviewService;
   readonly transform: TransformService;
   readonly hitTest: HitTestService;
@@ -147,8 +142,6 @@ export class Editor {
       getPointById: (id) => this.getPointById(id),
       getContourById: (id) => this.getContourById(id),
     });
-    this.screen = new ScreenService(this.#viewport);
-    this.viewport = new ViewportService(this.#viewport);
     this.preview = new PreviewService({
       beginPreview: () => this.beginPreview(),
       cancelPreview: () => this.cancelPreview(),
@@ -484,32 +477,36 @@ export class Editor {
     this.requestRedraw();
   }
 
-  public getMousePosition(x?: number, y?: number): Point2D {
-    if (x === undefined || y === undefined) {
-      return this.#viewport.getMousePosition();
-    }
-
-    return this.#viewport.getMousePosition(x, y);
+  public get mousePosition(): Point2D {
+    return this.#viewport.mousePosition;
   }
 
-  public getUpmMousePosition(): Point2D {
-    return this.#viewport.getUpmMousePosition();
+  public get screenMousePosition(): Point2D {
+    return this.#viewport.screenMousePosition;
+  }
+
+  public updateMousePosition(clientX: number, clientY: number): void {
+    this.#viewport.updateMousePosition(clientX, clientY);
   }
 
   public projectScreenToUpm(x: number, y: number): Point2D {
     return this.#viewport.projectScreenToUpm(x, y);
   }
 
-  public setUpmMousePosition(x: number, y: number) {
-    this.#viewport.setUpmMousePosition(x, y);
+  public get hitRadius(): number {
+    return this.#viewport.hitRadius;
   }
 
-  public pan(dx: number, dy: number) {
-    this.#viewport.pan(dx, dy);
+  public screenToUpmDistance(pixels: number): number {
+    return this.#viewport.screenToUpmDistance(pixels);
   }
 
-  public getPan(): Point2D {
-    return { x: this.#viewport.panX, y: this.#viewport.panY };
+  public get pan(): Point2D {
+    return this.#viewport.pan;
+  }
+
+  public setPan(x: number, y: number): void {
+    this.#viewport.setPan(x, y);
   }
 
   public zoomIn(): void {
@@ -727,11 +724,9 @@ export class Editor {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
-    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
-
     for (const contour of snapshot.contours) {
       for (const point of contour.points) {
-        if (Vec2.dist(point, pos) < hitRadius) {
+        if (Vec2.dist(point, pos) < this.hitRadius) {
           return point as Point;
         }
       }
@@ -743,11 +738,9 @@ export class Editor {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
-    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
-
     for (const contour of snapshot.contours) {
       const segments = SegmentOps.parse(contour.points, contour.closed);
-      const hit = SegmentOps.hitTestMultiple(segments, pos, hitRadius);
+      const hit = SegmentOps.hitTestMultiple(segments, pos, this.hitRadius);
       if (hit) {
         return hit;
       }
@@ -764,15 +757,13 @@ export class Editor {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
-    const hitRadius = this.#viewport.screenToUpmDistance(SCREEN_HIT_RADIUS);
-
     for (const contour of snapshot.contours) {
       if (contour.closed || contour.points.length === 0) continue;
 
       const firstPoint = contour.points[0];
       const lastPoint = contour.points[contour.points.length - 1];
 
-      if (Vec2.dist(firstPoint, pos) < hitRadius) {
+      if (Vec2.dist(firstPoint, pos) < this.hitRadius) {
         return {
           contourId: contour.id,
           pointId: firstPoint.id,
@@ -781,7 +772,7 @@ export class Editor {
         };
       }
 
-      if (Vec2.dist(lastPoint, pos) < hitRadius) {
+      if (Vec2.dist(lastPoint, pos) < this.hitRadius) {
         return {
           contourId: contour.id,
           pointId: lastPoint.id,

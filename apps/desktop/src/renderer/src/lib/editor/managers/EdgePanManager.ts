@@ -1,4 +1,5 @@
 import type { Point2D, Rect2D } from "@shift/types";
+import { Vec2 } from "@shift/geo";
 import type { Editor } from "../Editor";
 
 interface EdgePanConfig {
@@ -15,8 +16,8 @@ export class EdgePanManager {
   private config: EdgePanConfig;
   private active = false;
   private ticking = false;
-  private velocity: Point2D = { x: 0, y: 0 };
-  private lastScreenPos: Point2D = { x: 0, y: 0 };
+  private velocity: Point2D = Vec2.zero();
+  private lastScreenPos: Point2D = Vec2.zero();
 
   constructor(
     private editor: Editor,
@@ -35,7 +36,7 @@ export class EdgePanManager {
     }
 
     this.velocity = this.calculateVelocity(screenPos, canvasBounds);
-    const shouldBeActive = this.velocity.x !== 0 || this.velocity.y !== 0;
+    const shouldBeActive = !Vec2.isZero(this.velocity);
 
     if (shouldBeActive && !this.ticking) {
       this.active = true;
@@ -52,11 +53,10 @@ export class EdgePanManager {
       return;
     }
 
-    const pan = this.editor.getPan();
-    this.editor.pan(pan.x - this.velocity.x, pan.y - this.velocity.y);
+    const newPan = Vec2.sub(this.editor.pan, this.velocity);
+    this.editor.setPan(newPan.x, newPan.y);
 
-    const screenPos = this.editor.getMousePosition(this.lastScreenPos.x, this.lastScreenPos.y);
-    this.editor.getToolManager().handlePointerMove(screenPos, {
+    this.editor.getToolManager().handlePointerMove(this.lastScreenPos, {
       shiftKey: false,
       altKey: false,
     });
@@ -67,7 +67,7 @@ export class EdgePanManager {
 
   stop(): void {
     this.active = false;
-    this.velocity = { x: 0, y: 0 };
+    this.velocity = Vec2.zero();
   }
 
   private calculateVelocity(pos: Point2D, bounds: Rect2D): Point2D {
@@ -93,6 +93,6 @@ export class EdgePanManager {
       vy = maxSpeed * (1 - bottomDist / marginSize);
     }
 
-    return { x: vx, y: vy };
+    return Vec2.create(vx, vy);
   }
 }

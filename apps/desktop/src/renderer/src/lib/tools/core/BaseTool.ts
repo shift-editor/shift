@@ -1,7 +1,7 @@
-import type { IRenderer } from "@/types/graphics";
 import type { Editor } from "@/lib/editor";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName } from "./createContext";
+import type { DrawAPI } from "./DrawAPI";
 
 export type { ToolName };
 
@@ -33,7 +33,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   }
 
   onTransition?(prev: S, next: S, event: ToolEvent): void;
-  render?(renderer: IRenderer): void;
+  render?(draw: DrawAPI): void;
 
   activate?(): void;
   deactivate?(): void;

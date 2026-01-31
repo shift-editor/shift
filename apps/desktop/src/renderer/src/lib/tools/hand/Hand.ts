@@ -31,7 +31,7 @@ export class Hand extends BaseTool<HandState> {
 
       case "ready":
         if (event.type === "dragStart") {
-          const startPan = this.editor.viewport.getPan();
+          const startPan = this.editor.pan;
           this.editor.cursor.set({ type: "grabbing" });
           return {
             type: "dragging",
@@ -44,11 +44,11 @@ export class Hand extends BaseTool<HandState> {
       case "dragging":
         if (event.type === "drag") {
           const screenDelta = event.screenDelta;
-          const pan = {
+          const newPan = {
             x: state.startPan.x + screenDelta.x,
             y: state.startPan.y + screenDelta.y,
           };
-          this.editor.viewport.pan(pan.x, pan.y);
+          this.editor.setPan(newPan.x, newPan.y);
           this.editor.render.requestRedraw();
           return state;
         }

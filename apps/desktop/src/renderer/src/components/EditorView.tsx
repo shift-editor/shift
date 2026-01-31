@@ -58,20 +58,20 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const toolManager = editor.getToolManager();
 
     const handleWheel = (e: WheelEvent) => {
-      const position = editor.getMousePosition(e.clientX, e.clientY);
+      editor.updateMousePosition(e.clientX, e.clientY);
+      const screenPos = editor.screenMousePosition;
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         const ZOOM_SENSITIVITY = 100;
         const zoomFactor = 1 - e.deltaY / ZOOM_SENSITIVITY;
-        editor.zoomToPoint(position.x, position.y, zoomFactor);
+        editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
         editor.requestRedraw();
       } else {
-        const pan = editor.getPan();
-        const newPan = Vec2.sub(pan, { x: e.deltaX, y: e.deltaY });
-        editor.pan(newPan.x, newPan.y);
+        const currentPan = editor.pan;
+        const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
+        editor.setPan(newPan.x, newPan.y);
 
-        // route to tool
-        toolManager.handlePointerMove(position, {
+        toolManager.handlePointerMove(screenPos, {
           shiftKey: e.shiftKey,
           altKey: e.altKey,
           metaKey: e.metaKey,
@@ -90,9 +90,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       className="relative z-20 h-full w-full overflow-hidden"
       style={{ cursor: cursorStyle }}
       onMouseMove={(e) => {
-        const position = editor.getMousePosition(e.clientX, e.clientY);
-        const { x, y } = editor.projectScreenToUpm(position.x, position.y);
-        editor.setUpmMousePosition(x, y);
+        editor.updateMousePosition(e.clientX, e.clientY);
       }}
     >
       <CanvasContextProvider>

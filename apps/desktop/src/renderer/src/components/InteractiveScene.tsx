@@ -9,8 +9,8 @@ export const InteractiveScene = () => {
   const toolManager = editor.getToolManager();
 
   const getScreenPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const screen = editor.getMousePosition(e.clientX, e.clientY);
-    return screen;
+    editor.updateMousePosition(e.clientX, e.clientY);
+    return editor.screenMousePosition;
   };
 
   const getModifiers = (e: React.MouseEvent<HTMLCanvasElement>) => ({

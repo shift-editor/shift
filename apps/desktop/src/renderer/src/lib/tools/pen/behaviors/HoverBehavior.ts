@@ -54,7 +54,7 @@ export class HoverBehavior implements PenBehavior {
     const firstPoint = activeContour.points[0];
     const dx = pos.x - firstPoint.x;
     const dy = pos.y - firstPoint.y;
-    return Math.sqrt(dx * dx + dy * dy) < editor.screen.hitRadius;
+    return Math.sqrt(dx * dx + dy * dy) < editor.hitRadius;
   }
 
   private getMiddlePointAt(
@@ -65,7 +65,7 @@ export class HoverBehavior implements PenBehavior {
     if (!glyph) return null;
 
     const activeContourId = editor.edit.getActiveContourId();
-    const hitRadius = editor.screen.hitRadius;
+    const hitRadius = editor.hitRadius;
 
     for (const contour of glyph.contours) {
       if (contour.id === activeContourId || contour.closed) continue;

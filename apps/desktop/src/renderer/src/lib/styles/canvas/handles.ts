@@ -15,6 +15,7 @@ export interface BaseHandleStyle extends DrawStyle {
 
 interface FirstHandleStyle extends BaseHandleStyle {
   barSize: number;
+  barStrokeStyle: string;
 }
 
 export interface HandleStyles<T extends BaseHandleStyle = BaseHandleStyle> {
@@ -46,6 +47,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
+        barStrokeStyle: cyan,
         dashPattern: [],
       },
       hovered: {
@@ -55,6 +57,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
+        barStrokeStyle: cyan,
         dashPattern: [],
         overlayColor: hoverOverlay(0.75),
       },
@@ -65,6 +68,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         antiAlias: false,
         strokeStyle: white,
         fillStyle: cyan,
+        barStrokeStyle: cyan,
         dashPattern: [],
       },
     },

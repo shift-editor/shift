@@ -1,10 +1,10 @@
 import type { Point2D } from "@shift/types";
-import type { IRenderer } from "@/types/graphics";
 import type { Editor } from "@/lib/editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/lib/editor/services";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
+import type { DrawAPI } from "./DrawAPI";
 
 export type ToolConstructor = new (editor: Editor) => BaseTool<ToolState>;
 
@@ -79,22 +79,21 @@ export class ToolManager implements ToolSwitchHandler {
     this.overrideTool = null;
     this.temporaryOptions?.onReturn?.();
     this.temporaryOptions = null;
-    this.primaryTool?.activate?.();
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
-    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     this.gesture.pointerDown(point, screenPoint, modifiers);
   }
 
   handlePointerMove(screenPoint: Point2D, modifiers: Modifiers): void {
-    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerMove(point, screenPoint, modifiers);
     this.dispatchEvents(events);
   }
 
   handlePointerUp(screenPoint: Point2D): void {
-    const point = this.editor.screen.projectScreenToUpm(screenPoint.x, screenPoint.y);
+    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerUp(point, screenPoint);
     this.dispatchEvents(events);
   }
@@ -128,8 +127,8 @@ export class ToolManager implements ToolSwitchHandler {
     this.activeTool?.handleEvent({ type: "keyUp", key: e.key });
   }
 
-  render(renderer: IRenderer): void {
-    this.activeTool?.render?.(renderer);
+  render(draw: DrawAPI): void {
+    this.activeTool?.render?.(draw);
   }
 
   private dispatchEvents(events: ToolEvent[]): void {
