@@ -10,6 +10,7 @@ import type { GlyphSnapshot, ContourSnapshot, PointSnapshot, Glyph } from "@shif
 import { asPointId } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
+import { FpsMonitor } from "./FpsMonitor";
 import { drawBoundingBoxHandles } from "./handles";
 import { Polygon } from "@shift/geo";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
@@ -31,6 +32,7 @@ export class GlyphRenderer {
   #staticDraw: DrawAPI | null = null;
   #interactiveDraw: DrawAPI | null = null;
   #frameHandler: FrameHandler;
+  #fpsMonitor: FpsMonitor;
   #editor: Editor;
   #renderTool: (draw: DrawAPI) => void;
 
@@ -38,6 +40,11 @@ export class GlyphRenderer {
     this.#editor = editor;
     this.#renderTool = renderTool;
     this.#frameHandler = new FrameHandler();
+    this.#fpsMonitor = new FpsMonitor();
+  }
+
+  get fpsMonitor(): FpsMonitor {
+    return this.#fpsMonitor;
   }
 
   #createScreenConverter() {
