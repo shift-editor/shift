@@ -53,17 +53,11 @@ export const Segment = {
   id(segment: SegmentType): SegmentId {
     switch (segment.type) {
       case "line":
-        return asSegmentId(
-          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
-        );
+        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
       case "quad":
-        return asSegmentId(
-          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
-        );
+        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
       case "cubic":
-        return asSegmentId(
-          `${segment.points.anchor1.id}:${segment.points.anchor2.id}`,
-        );
+        return asSegmentId(`${segment.points.anchor1.id}:${segment.points.anchor2.id}`);
     }
   },
 
@@ -92,11 +86,7 @@ export const Segment = {
     return Curve.bounds(curve);
   },
 
-  hitTest(
-    segment: SegmentType,
-    pos: Point2D,
-    radius: number,
-  ): SegmentHitResult | null {
+  hitTest(segment: SegmentType, pos: Point2D, radius: number): SegmentHitResult | null {
     const bounds = Segment.bounds(segment);
     const radiusVec = { x: radius, y: radius };
     const expandedMin = Vec2.sub(bounds.min, radiusVec);
@@ -127,11 +117,7 @@ export const Segment = {
     return null;
   },
 
-  hitTestMultiple(
-    segments: SegmentType[],
-    pos: Point2D,
-    radius: number,
-  ): SegmentHitResult | null {
+  hitTestMultiple(segments: SegmentType[], pos: Point2D, radius: number): SegmentHitResult | null {
     let bestHit: SegmentHitResult | null = null;
 
     for (const segment of segments) {
@@ -159,10 +145,7 @@ export const Segment = {
   getPointIds(segment: SegmentType): PointId[] {
     switch (segment.type) {
       case "line":
-        return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.anchor2.id),
-        ];
+        return [asPointId(segment.points.anchor1.id), asPointId(segment.points.anchor2.id)];
       case "quad":
         return [
           asPointId(segment.points.anchor1.id),
@@ -184,11 +167,7 @@ export const Segment = {
       case "line":
         return [segment.points.anchor1, segment.points.anchor2];
       case "quad":
-        return [
-          segment.points.anchor1,
-          segment.points.control,
-          segment.points.anchor2,
-        ];
+        return [segment.points.anchor1, segment.points.control, segment.points.anchor2];
       case "cubic":
         return [
           segment.points.anchor1,

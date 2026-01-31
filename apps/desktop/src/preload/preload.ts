@@ -316,6 +316,24 @@ const electronAPI = {
   // Clipboard
   clipboardReadText: (): string => clipboard.readText(),
   clipboardWriteText: (text: string): void => clipboard.writeText(text),
+
+  // Debug
+  onDebugReactScan: (callback: (enabled: boolean) => void) => {
+    const handler = (_event: any, enabled: boolean) => callback(enabled);
+    ipcRenderer.on("debug:react-scan", handler);
+    return () => ipcRenderer.removeListener("debug:react-scan", handler);
+  },
+  onDebugPanel: (callback: (open: boolean) => void) => {
+    const handler = (_event: any, open: boolean) => callback(open);
+    ipcRenderer.on("debug:panel", handler);
+    return () => ipcRenderer.removeListener("debug:panel", handler);
+  },
+  onDebugDumpSnapshot: (callback: () => void) => {
+    ipcRenderer.on("debug:dump-snapshot", callback);
+    return () => ipcRenderer.removeListener("debug:dump-snapshot", callback);
+  },
+  getDebugState: (): Promise<{ reactScanEnabled: boolean; debugPanelOpen: boolean }> =>
+    ipcRenderer.invoke("debug:getState"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

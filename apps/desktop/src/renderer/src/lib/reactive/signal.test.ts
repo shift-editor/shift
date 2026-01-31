@@ -1,12 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  signal,
-  computed,
-  effect,
-  batch,
-  untracked,
-  isTracking,
-} from "./signal";
+import { signal, computed, effect, batch, untracked, isTracking } from "./signal";
 
 describe("signal", () => {
   it("should store and return a value", () => {

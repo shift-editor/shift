@@ -52,22 +52,16 @@ export const EditableSidebarInput = forwardRef<
       () => ({
         setValue: (v: number) => {
           displayValueRef.current = v;
-          if (inputRef.current && !isEditing) {
-            inputRef.current.value = `${v}${suffix}`;
-          }
         },
       }),
-      [isEditing, suffix],
+      [],
     );
 
     useEffect(() => {
       if (!isEditing && value !== undefined) {
         displayValueRef.current = value;
-        if (inputRef.current) {
-          inputRef.current.value = `${value}${suffix}`;
-        }
       }
-    }, [value, isEditing, suffix]);
+    }, [value, isEditing]);
 
     const handleFocus = useCallback(() => {
       if (disabled) return;
@@ -130,8 +124,7 @@ export const EditableSidebarInput = forwardRef<
       <Input
         ref={inputRef}
         label={label}
-        defaultValue={`${displayValueRef.current}${suffix}`}
-        value={isEditing ? editValue : undefined}
+        value={isEditing ? editValue : `${displayValueRef.current}${suffix}`}
         icon={icon}
         iconPosition={iconPosition}
         readOnly={!isEditing}
@@ -139,7 +132,7 @@ export const EditableSidebarInput = forwardRef<
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        onChange={isEditing ? handleChange : undefined}
+        onChange={handleChange}
         disabled={disabled}
       />
     );

@@ -65,11 +65,7 @@ const ctx = {
 Native types are imported from the shared bridge:
 
 ```typescript
-import type {
-  FontEngineAPI,
-  JsGlyphSnapshot,
-  JsFontMetrics,
-} from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI, JsGlyphSnapshot, JsFontMetrics } from "@shared/bridge/FontEngineAPI";
 ```
 
 See [bridge docs](../../../shared/bridge/docs/DOCS.md) for type-safe bridge architecture.

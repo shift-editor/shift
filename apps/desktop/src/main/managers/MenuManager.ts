@@ -1,13 +1,22 @@
-import { Menu, dialog, nativeTheme } from "electron";
+import { Menu, dialog, nativeTheme, app } from "electron";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
 
 export type Theme = "light" | "dark" | "system";
 
+interface DebugState {
+  reactScanEnabled: boolean;
+  debugPanelOpen: boolean;
+}
+
 export class MenuManager {
   private documentState: DocumentState;
   private windowManager: WindowManager;
   private currentTheme: Theme = "light";
+  private debugState: DebugState = {
+    reactScanEnabled: false,
+    debugPanelOpen: false,
+  };
 
   constructor(documentState: DocumentState, windowManager: WindowManager) {
     this.documentState = documentState;
@@ -16,6 +25,21 @@ export class MenuManager {
 
   getTheme(): Theme {
     return this.currentTheme;
+  }
+
+  getDebugState(): DebugState {
+    return { ...this.debugState };
+  }
+
+  private setDebugState<K extends keyof DebugState>(key: K, value: DebugState[K]) {
+    this.debugState[key] = value;
+    const window = this.windowManager.getWindow();
+    const channelMap: Record<keyof DebugState, string> = {
+      reactScanEnabled: "debug:react-scan",
+      debugPanelOpen: "debug:panel",
+    };
+    window?.webContents.send(channelMap[key], value);
+    this.create();
   }
 
   private static ZOOM_LEVELS = [
@@ -198,6 +222,35 @@ export class MenuManager {
           },
         ],
       },
+      ...(!app.isPackaged
+        ? [
+            {
+              label: "Debug",
+              submenu: [
+                {
+                  label: "React Scan",
+                  type: "checkbox" as const,
+                  checked: this.debugState.reactScanEnabled,
+                  click: () =>
+                    this.setDebugState("reactScanEnabled", !this.debugState.reactScanEnabled),
+                },
+                {
+                  label: "Debug Panel",
+                  type: "checkbox" as const,
+                  checked: this.debugState.debugPanelOpen,
+                  click: () =>
+                    this.setDebugState("debugPanelOpen", !this.debugState.debugPanelOpen),
+                },
+                { type: "separator" as const },
+                {
+                  label: "Dump Glyph Snapshot",
+                  accelerator: "CmdOrCtrl+Shift+D",
+                  click: () => window?.webContents.send("debug:dump-snapshot"),
+                },
+              ],
+            },
+          ]
+        : []),
     ];
 
     const menu = Menu.buildFromTemplate(template);

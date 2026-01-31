@@ -48,6 +48,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
 
     if (next !== prev) {
       this.state = next;
+      this.editor.setActiveToolState(next);
       this.onTransition?.(prev, next, event);
       this.editor.render.requestRedraw();
     }

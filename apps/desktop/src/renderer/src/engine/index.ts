@@ -21,11 +21,7 @@ export { InfoManager, type FontMetadata, type FontMetrics } from "./info";
 export { IOManager } from "./io";
 
 // Errors
-export {
-  FontEngineError,
-  NoEditSessionError,
-  NativeOperationError,
-} from "./errors";
+export { FontEngineError, NoEditSessionError, NativeOperationError } from "./errors";
 
 // Mock for testing
 export { MockFontEngine, createMockNative } from "./mock";

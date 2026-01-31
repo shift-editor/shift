@@ -88,11 +88,7 @@ describe("Curve", () => {
 
   describe("QuadraticCurve", () => {
     // Quadratic with control point above the line
-    const quad = Curve.quadratic(
-      { x: 0, y: 0 },
-      { x: 5, y: 10 },
-      { x: 10, y: 0 },
-    );
+    const quad = Curve.quadratic({ x: 0, y: 0 }, { x: 5, y: 10 }, { x: 10, y: 0 });
 
     it("creates a quadratic segment", () => {
       expect(quad.type).toBe("quadratic");
@@ -164,12 +160,7 @@ describe("Curve", () => {
 
   describe("CubicCurve", () => {
     // S-curve
-    const cubic = Curve.cubic(
-      { x: 0, y: 0 },
-      { x: 0, y: 10 },
-      { x: 10, y: -10 },
-      { x: 10, y: 0 },
-    );
+    const cubic = Curve.cubic({ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: -10 }, { x: 10, y: 0 });
 
     it("creates a cubic segment", () => {
       expect(cubic.type).toBe("cubic");
@@ -249,23 +240,14 @@ describe("Curve", () => {
     });
 
     it("identifies quadratic segments", () => {
-      const quad = Curve.quadratic(
-        { x: 0, y: 0 },
-        { x: 1, y: 1 },
-        { x: 2, y: 0 },
-      );
+      const quad = Curve.quadratic({ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 });
       expect(Curve.isLine(quad)).toBe(false);
       expect(Curve.isCubic(quad)).toBe(false);
       expect(Curve.isQuadratic(quad)).toBe(true);
     });
 
     it("identifies cubic segments", () => {
-      const cubic = Curve.cubic(
-        { x: 0, y: 0 },
-        { x: 1, y: 1 },
-        { x: 2, y: 1 },
-        { x: 3, y: 0 },
-      );
+      const cubic = Curve.cubic({ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 0 });
       expect(Curve.isLine(cubic)).toBe(false);
       expect(Curve.isCubic(cubic)).toBe(true);
       expect(Curve.isQuadratic(cubic)).toBe(false);
@@ -275,17 +257,8 @@ describe("Curve", () => {
   describe("startPoint and endPoint", () => {
     it("returns endpoints for all segment types", () => {
       const line = Curve.line({ x: 0, y: 0 }, { x: 10, y: 10 });
-      const quad = Curve.quadratic(
-        { x: 0, y: 0 },
-        { x: 5, y: 5 },
-        { x: 10, y: 0 },
-      );
-      const cubic = Curve.cubic(
-        { x: 0, y: 0 },
-        { x: 3, y: 3 },
-        { x: 7, y: 3 },
-        { x: 10, y: 0 },
-      );
+      const quad = Curve.quadratic({ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 0 });
+      const cubic = Curve.cubic({ x: 0, y: 0 }, { x: 3, y: 3 }, { x: 7, y: 3 }, { x: 10, y: 0 });
 
       expect(Curve.startPoint(line)).toEqual({ x: 0, y: 0 });
       expect(Curve.endPoint(line)).toEqual({ x: 10, y: 10 });

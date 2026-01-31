@@ -128,11 +128,7 @@ class MovePointToCommand extends BaseCommand {
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.movePointTo(
-      this.#pointId,
-      this.#originalX!,
-      this.#originalY!,
-    );
+    ctx.fontEngine.editing.movePointTo(this.#pointId, this.#originalX!, this.#originalY!);
   }
 }
 ```

@@ -95,9 +95,7 @@ export class Canvas2DRenderer implements IRenderer {
   #applyStrokeStyle(): void {
     this.#renderCtx.strokeStyle = this.#currentStyle.strokeStyle;
     this.#renderCtx.lineWidth = this.#currentStyle.lineWidth;
-    this.#renderCtx.setLineDash(
-      this.#normalizeDashPattern(this.#currentStyle.dashPattern),
-    );
+    this.#renderCtx.setLineDash(this.#normalizeDashPattern(this.#currentStyle.dashPattern));
   }
 
   #applyFillStyle(): void {
@@ -150,9 +148,7 @@ export class Canvas2DRenderer implements IRenderer {
   }
 
   createPath(): IPath {
-    throw new Error(
-      "createPath is not supported - use immediate mode rendering",
-    );
+    throw new Error("createPath is not supported - use immediate mode rendering");
   }
 
   beginPath(): void {
@@ -171,14 +167,7 @@ export class Canvas2DRenderer implements IRenderer {
     this.#path.quadraticCurveTo(cpx, cpy, x, y);
   }
 
-  cubicTo(
-    cpx1: number,
-    cpy1: number,
-    cpx2: number,
-    cpy2: number,
-    x: number,
-    y: number,
-  ): void {
+  cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void {
     this.#path.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, x, y);
   }
 
@@ -219,14 +208,7 @@ export class Canvas2DRenderer implements IRenderer {
     this.#renderCtx.rotate(angle);
   }
 
-  transform(
-    a: number,
-    b: number,
-    c: number,
-    d: number,
-    e: number,
-    f: number,
-  ): void {
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): void {
     // Canvas 2D transform uses the same matrix format
     this.#renderCtx.transform(a, b, c, d, e, f);
   }

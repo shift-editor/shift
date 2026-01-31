@@ -36,7 +36,7 @@ export class Pen extends BaseTool<PenState> {
   }
 
   activate(): void {
-    const pos = this.editor.screenMousePosition;
+    const pos = this.editor.getScreenMousePosition();
     this.state = { type: "ready", mousePos: pos };
     this.editor.cursor.set({ type: "pen" });
     this.editor.edit.clearActiveContour();

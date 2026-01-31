@@ -58,10 +58,7 @@ export class Select extends BaseTool<SelectState> {
   }
 
   activate(): void {
-    const hasSelection = this.editor.hasSelection();
-    this.state = hasSelection
-      ? { type: "selected", hoveredPointId: null }
-      : { type: "ready", hoveredPointId: null };
+    this.state = { type: "ready", hoveredPointId: null };
     this.editor.cursor.set({ type: "default" });
   }
 
