@@ -1,6 +1,5 @@
 import type { Point2D, Rect2D } from "@shift/types";
-import type { IRenderer } from "@/types/graphics";
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 
@@ -79,19 +78,20 @@ export class Shape extends BaseTool<ShapeState> {
     this.state = { type: "idle" };
   }
 
-  render(renderer: IRenderer): void {
+  render(draw: DrawAPI): void {
     if (this.state.type !== "dragging") return;
 
     const rect = this.getRect(this.state);
     if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;
 
-    renderer.save();
-    renderer.setStyle({
-      ...DEFAULT_STYLES,
-      fillStyle: "transparent",
-    });
-    renderer.strokeRect(rect.x, rect.y, rect.width, rect.height);
-    renderer.restore();
+    draw.rect(
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      {
+        strokeStyle: DEFAULT_STYLES.strokeStyle,
+        strokeWidth: DEFAULT_STYLES.lineWidth,
+      },
+    );
   }
 
   private getRect(state: { startPos: Point2D; currentPos: Point2D }): Rect2D {

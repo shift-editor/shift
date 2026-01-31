@@ -1,5 +1,4 @@
-import type { IRenderer } from "@/types/graphics";
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { getCursorForState, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import { executeIntent } from "./intents";
@@ -59,7 +58,10 @@ export class Select extends BaseTool<SelectState> {
   }
 
   activate(): void {
-    this.state = { type: "ready", hoveredPointId: null };
+    const hasSelection = this.editor.hasSelection();
+    this.state = hasSelection
+      ? { type: "selected", hoveredPointId: null }
+      : { type: "ready", hoveredPointId: null };
     this.editor.cursor.set({ type: "default" });
   }
 
@@ -137,18 +139,18 @@ export class Select extends BaseTool<SelectState> {
     const rect = this.editor.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const hitRadius = this.editor.screen.hitRadius;
-    const handleOffset = this.editor.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = this.editor.screen.toUpmDistance(
+    const hitRadius = this.editor.hitRadius;
+    const handleOffset = this.editor.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = this.editor.screenToUpmDistance(
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 
     return hitTestBoundingBox(pos, rect, hitRadius, handleOffset, rotationZoneOffset);
   }
 
-  render(renderer: IRenderer): void {
+  render(draw: DrawAPI): void {
     for (const behavior of this.behaviors) {
-      behavior.render?.(renderer, this.state, this.editor);
+      behavior.render?.(draw, this.state, this.editor);
     }
   }
 }

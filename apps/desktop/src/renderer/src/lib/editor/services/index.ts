@@ -1,8 +1,6 @@
 export { SelectionService } from "./SelectionService";
 export { HoverService } from "./HoverService";
 export { EditService, type EditServiceDeps } from "./EditService";
-export { ScreenService } from "./ScreenService";
-export { ViewportService } from "./ViewportService";
 export { PreviewService, type PreviewServiceDeps } from "./PreviewService";
 export { TransformService, type TransformServiceDeps } from "./TransformService";
 export { HitTestService, type HitTestServiceDeps, type ContourEndpointHit } from "./HitTestService";

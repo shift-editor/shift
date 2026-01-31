@@ -332,26 +332,22 @@ describe("Pen tool", () => {
   });
 
   describe("zoom-adjusted preview line", () => {
-    it("should call screen.lineWidth when rendering preview line", () => {
+    it("should call draw.line when rendering preview line", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      ctx.mocks.screen.mocks.lineWidth.mockClear();
-
-      const mockRenderer = {
-        setStyle: vi.fn(),
-        beginPath: vi.fn(),
-        moveTo: vi.fn(),
-        lineTo: vi.fn(),
-        stroke: vi.fn(),
-        set lineWidth(_: number) {},
+      const mockDrawAPI = {
+        line: vi.fn(),
+        handle: vi.fn(),
+        circle: vi.fn(),
+        renderer: {},
       };
 
-      pen.render?.(mockRenderer as any);
+      pen.render?.(mockDrawAPI as any);
 
-      expect(ctx.mocks.screen.mocks.lineWidth).toHaveBeenCalled();
+      expect(mockDrawAPI.line).toHaveBeenCalled();
     });
   });
 

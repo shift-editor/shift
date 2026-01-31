@@ -67,7 +67,7 @@ export class PlaceBehavior implements PenBehavior {
     }
 
     const firstPoint = activeContour.points[0];
-    return Vec2.isWithin(pos, firstPoint, editor.screen.hitRadius);
+    return Vec2.isWithin(pos, firstPoint, editor.hitRadius);
   }
 
   private getMiddlePointAt(
@@ -78,7 +78,7 @@ export class PlaceBehavior implements PenBehavior {
     if (!glyph) return null;
 
     const activeContourId = editor.edit.getActiveContourId();
-    const hitRadius = editor.screen.hitRadius;
+    const hitRadius = editor.hitRadius;
 
     for (const contour of glyph.contours) {
       if (contour.id === activeContourId || contour.closed) continue;

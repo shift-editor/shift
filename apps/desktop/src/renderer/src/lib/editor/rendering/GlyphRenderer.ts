@@ -10,12 +10,13 @@ import type { GlyphSnapshot, ContourSnapshot, PointSnapshot, Glyph } from "@shif
 import { asPointId } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
-import { drawHandle, drawHandleLast, drawBoundingBoxHandles } from "./handles";
+import { drawBoundingBoxHandles } from "./handles";
 import { Polygon } from "@shift/geo";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
 import { SCREEN_LINE_WIDTH } from "./constants";
 import type { Editor } from "../Editor";
+import { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
 export interface FontMetrics {
   ascender: number;
@@ -27,22 +28,31 @@ export interface FontMetrics {
 export class GlyphRenderer {
   #staticContext: IGraphicContext | null = null;
   #interactiveContext: IGraphicContext | null = null;
+  #staticDraw: DrawAPI | null = null;
+  #interactiveDraw: DrawAPI | null = null;
   #frameHandler: FrameHandler;
   #editor: Editor;
-  #renderTool: (ctx: IRenderer) => void;
+  #renderTool: (draw: DrawAPI) => void;
 
-  constructor(editor: Editor, renderTool: (ctx: IRenderer) => void) {
+  constructor(editor: Editor, renderTool: (draw: DrawAPI) => void) {
     this.#editor = editor;
     this.#renderTool = renderTool;
     this.#frameHandler = new FrameHandler();
   }
 
+  #createScreenConverter() {
+    const viewport = this.#editor.viewportManager;
+    return { toUpmDistance: (px: number) => viewport.screenToUpmDistance(px) };
+  }
+
   setStaticContext(context: IGraphicContext): void {
     this.#staticContext = context;
+    this.#staticDraw = new DrawAPI(context.getContext(), this.#createScreenConverter());
   }
 
   setInteractiveContext(context: IGraphicContext): void {
     this.#interactiveContext = context;
+    this.#interactiveDraw = new DrawAPI(context.getContext(), this.#createScreenConverter());
   }
 
   requestRedraw(): void {
@@ -69,7 +79,7 @@ export class GlyphRenderer {
 
   #applyUserTransforms(ctx: IRenderer): void {
     const viewport = this.#editor.viewportManager;
-    const center = viewport.getCentrePoint();
+    const center = viewport.centre;
     const zoom = viewport.zoom.peek();
     const { panX, panY } = viewport;
 
@@ -88,21 +98,22 @@ export class GlyphRenderer {
   }
 
   #drawInteractive(): void {
-    if (!this.#interactiveContext) return;
+    if (!this.#interactiveContext || !this.#interactiveDraw) return;
     const ctx = this.#interactiveContext.getContext();
     ctx.clear();
     ctx.save();
 
     this.#prepareCanvas(ctx);
 
-    this.#renderTool(ctx);
+    this.#renderTool(this.#interactiveDraw);
 
     ctx.restore();
   }
 
   #drawStatic(): void {
-    if (!this.#staticContext) return;
+    if (!this.#staticContext || !this.#staticDraw) return;
     const ctx = this.#staticContext.getContext();
+    const draw = this.#staticDraw;
 
     const glyph = this.#editor.getGlyph();
     const previewMode = this.#editor.previewMode.peek();
@@ -156,12 +167,12 @@ export class GlyphRenderer {
       }
     }
 
+    if (!previewMode && handlesVisible && glyph) {
+      this.#drawHandlesFromSnapshot(draw, glyph);
+    }
+
     ctx.restore();
     ctx.save();
-
-    if (!previewMode && handlesVisible && glyph) {
-      this.#drawHandlesFromSnapshot(ctx, glyph);
-    }
 
     if (shouldDrawBoundingRect && bbRect && handlesVisible) {
       this.#drawBoundingBoxHandles(ctx, bbRect);
@@ -261,10 +272,9 @@ export class GlyphRenderer {
     ctx.stroke();
   }
 
-  #drawHandlesFromSnapshot(ctx: IRenderer, glyph: Glyph): void {
-    const viewport = this.#editor.viewportManager;
+  #drawHandlesFromSnapshot(draw: DrawAPI, glyph: Glyph): void {
+    draw.setStyle(DEFAULT_STYLES);
 
-    ctx.setStyle(DEFAULT_STYLES);
     for (const contour of glyph.contours) {
       const points = contour.points;
       const numPoints = points.length;
@@ -275,7 +285,6 @@ export class GlyphRenderer {
         const point = points[idx];
         if (point.pointType !== "offCurve") continue;
 
-        const { x, y } = viewport.projectUpmToScreen(point.x, point.y);
         const nextPoint = points[(idx + 1) % numPoints];
         const prevPoint = points[(idx - 1 + numPoints) % numPoints];
 
@@ -283,9 +292,14 @@ export class GlyphRenderer {
 
         if (!anchor || anchor.pointType === "offCurve") continue;
 
-        const { x: anchorX, y: anchorY } = viewport.projectUpmToScreen(anchor.x, anchor.y);
-
-        ctx.drawLine(anchorX, anchorY, x, y);
+        draw.line(
+          { x: anchor.x, y: anchor.y },
+          { x: point.x, y: point.y },
+          {
+            strokeStyle: DEFAULT_STYLES.strokeStyle,
+            strokeWidth: DEFAULT_STYLES.lineWidth,
+          },
+        );
       }
     }
 
@@ -297,11 +311,11 @@ export class GlyphRenderer {
 
       for (let idx = 0; idx < numPoints; idx++) {
         const point = points[idx];
-        const { x, y } = viewport.projectUpmToScreen(point.x, point.y);
+        const pos = { x: point.x, y: point.y };
         const handleState = this.#editor.getHandleState(asPointId(point.id));
 
         if (numPoints === 1) {
-          drawHandle(ctx, "corner", x, y, handleState);
+          draw.handle(pos, "corner", handleState);
           continue;
         }
 
@@ -310,32 +324,30 @@ export class GlyphRenderer {
 
         if (isFirst) {
           const nextPoint = points[1];
-          const { x: nx, y: ny } = viewport.projectUpmToScreen(nextPoint.x, nextPoint.y);
-          const segmentAngle = Math.atan2(ny - y, nx - x);
+          const segmentAngle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x);
 
           if (contour.closed) {
-            drawHandle(ctx, "direction", x, y, handleState, { segmentAngle });
+            draw.handleDirection(pos, segmentAngle, handleState);
           } else {
-            drawHandle(ctx, "first", x, y, handleState, { segmentAngle });
+            draw.handleFirst(pos, segmentAngle, handleState);
           }
           continue;
         }
 
         if (isLast && !contour.closed) {
           const prevPoint = points[idx - 1];
-          const { x: px, y: py } = viewport.projectUpmToScreen(prevPoint.x, prevPoint.y);
-          drawHandleLast(ctx, { x0: x, y0: y, x1: px, y1: py }, handleState);
+          draw.handleLast({ anchor: pos, prev: { x: prevPoint.x, y: prevPoint.y } }, handleState);
           continue;
         }
 
         if (point.pointType === "onCurve") {
           if (point.smooth) {
-            drawHandle(ctx, "smooth", x, y, handleState);
+            draw.handle(pos, "smooth", handleState);
           } else {
-            drawHandle(ctx, "corner", x, y, handleState);
+            draw.handle(pos, "corner", handleState);
           }
         } else {
-          drawHandle(ctx, "control", x, y, handleState);
+          draw.handle(pos, "control", handleState);
         }
       }
     }

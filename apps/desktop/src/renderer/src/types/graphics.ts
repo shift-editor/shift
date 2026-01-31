@@ -48,14 +48,7 @@ export interface IRenderer {
   lineTo(x: number, y: number): void;
   quadTo(cpx: number, cpy: number, x: number, y: number): void;
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
-  cubicTo(
-    cpx1: number,
-    cpy1: number,
-    cpx2: number,
-    cpy2: number,
-    x: number,
-    y: number,
-  ): void;
+  cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void;
   arcTo(
     x: number,
     y: number,
@@ -82,14 +75,7 @@ export interface IRenderer {
    * @param e - The x-axis translation
    * @param f - The y-axis translation
    */
-  transform(
-    a: number,
-    b: number,
-    c: number,
-    d: number,
-    e: number,
-    f: number,
-  ): void;
+  transform(a: number, b: number, c: number, d: number, e: number, f: number): void;
 }
 
 export interface IGraphicContext {
@@ -102,3 +88,22 @@ export interface IGraphicContext {
 
 export type CanvasRef = React.RefObject<HTMLCanvasElement | null>;
 export type GraphicsContextRef = React.RefObject<IGraphicContext | null>;
+
+export interface ScreenConverter {
+  toUpmDistance(pixels: number): number;
+}
+
+export type HandleType = "corner" | "smooth" | "control" | "direction" | "first" | "last";
+export type HandleState = "idle" | "hovered" | "selected";
+
+export interface StrokeStyle {
+  strokeStyle?: string;
+  strokeWidth?: number;
+  dashPattern?: number[];
+}
+
+export interface FillStyle {
+  fillStyle?: string;
+}
+
+export interface ShapeStyle extends StrokeStyle, FillStyle {}

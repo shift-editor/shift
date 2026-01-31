@@ -151,9 +151,9 @@ export class ResizeBehavior implements SelectBehavior {
     const rect = editor.hitTest.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const hitRadius = editor.screen.hitRadius;
-    const handleOffset = editor.screen.toUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = editor.screen.toUpmDistance(
+    const hitRadius = editor.hitRadius;
+    const handleOffset = editor.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = editor.screenToUpmDistance(
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 

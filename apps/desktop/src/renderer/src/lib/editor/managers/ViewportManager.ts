@@ -8,9 +8,11 @@ import {
   type Signal,
   type ComputedSignal,
 } from "@/lib/reactive/signal";
+import { SCREEN_HIT_RADIUS } from "../rendering/constants";
 
 const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 32;
+const PADDING = 300;
 
 export class ViewportManager {
   private readonly $zoom: WritableSignal<number>;
@@ -18,16 +20,12 @@ export class ViewportManager {
   private readonly $panY: WritableSignal<number>;
   private readonly $upm: WritableSignal<number>;
   private readonly $descender: WritableSignal<number>;
-  private readonly $padding: WritableSignal<number>;
 
   #canvasRect: Rect2D;
   #dpr: number;
 
   #mouseX: number;
   #mouseY: number;
-
-  #upmX: number;
-  #upmY: number;
 
   private readonly $upmToScreenMatrix: ComputedSignal<Mat>;
   private readonly $screenToUpmMatrix: ComputedSignal<Mat>;
@@ -38,15 +36,11 @@ export class ViewportManager {
     this.$panY = signal(0);
     this.$upm = signal(1000);
     this.$descender = signal(-200);
-    this.$padding = signal(300);
 
     this.#dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
     this.#mouseX = 0;
     this.#mouseY = 0;
-
-    this.#upmX = 0;
-    this.#upmY = 0;
 
     this.#canvasRect = {
       x: 0,
@@ -61,16 +55,13 @@ export class ViewportManager {
 
     this.$upmToScreenMatrix = computed(() => {
       const scale = this.upmScale;
-      const baselineY = this.logicalHeight - this.$padding.value - this.$descender.value * scale;
-      const center = this.getCentrePoint();
+      const baselineY = this.logicalHeight - PADDING - this.$descender.value * scale;
       const zoom = this.$zoom.value;
 
-      const upmTransform = Mat.Identity()
-        .translate(this.$padding.value, baselineY)
-        .scale(scale, -scale);
+      const upmTransform = Mat.Identity().translate(PADDING, baselineY).scale(scale, -scale);
 
-      const panX = this.$panX.value + center.x * (1 - zoom);
-      const panY = this.$panY.value + center.y * (1 - zoom);
+      const panX = this.$panX.value + this.centre.x * (1 - zoom);
+      const panY = this.$panY.value + this.centre.y * (1 - zoom);
       const viewTransform = Mat.Identity().translate(panX, panY).scale(zoom, zoom);
 
       return Mat.Compose(viewTransform, upmTransform);
@@ -81,11 +72,6 @@ export class ViewportManager {
     });
   }
 
-  // **
-  // Set the logical dimensions of the viewport
-  // @param width - The width of the viewport
-  // @param height - The height of the viewport
-  // **
   setRect(rect: Rect2D) {
     this.#canvasRect = rect;
     this.$upmToScreenMatrix.invalidate();
@@ -109,51 +95,29 @@ export class ViewportManager {
   }
 
   get padding(): number {
-    return this.$padding.value;
+    return PADDING;
   }
 
   get upmScale(): number {
-    const availableHeight = this.logicalHeight - 2 * this.$padding.value;
+    const availableHeight = this.logicalHeight - 2 * PADDING;
     if (availableHeight <= 0 || this.$upm.value <= 0) return 1;
     return availableHeight / this.$upm.value;
   }
 
-  // **
-  // Get the device width of the viewport,
-  // scaled to the device pixel ratio
-  // @returns The device width of the viewport
-  // **
   get deviceWidth(): number {
     return this.#canvasRect.width * this.#dpr;
   }
 
-  // **
-  // Get the device height of the viewport,
-  // scaled to the device pixel ratio
-  // @returns The device height of the viewport
-  // **
   get deviceHeight(): number {
     return this.#canvasRect.height * this.#dpr;
   }
 
-  // **
-  // Get the logical width of the viewport
-  // @returns The logical width of the viewport
-  // **
   get logicalWidth(): number {
     return this.#canvasRect.width;
   }
 
-  // **
-  // Get the logical height of the viewport
-  // @returns The logical height of the viewport
-  // **
   get logicalHeight(): number {
     return this.#canvasRect.height;
-  }
-
-  get scale(): number {
-    return this.$zoom.value;
   }
 
   get dpr(): number {
@@ -164,67 +128,12 @@ export class ViewportManager {
     return this.$zoom;
   }
 
-  // **
-  // Get the mouse position of the viewport
-  // @returns The mouse position of the viewport
-  // **
-  #calculateMousePosition(clientX: number, clientY: number): Point2D {
-    const mouseX = clientX - this.#canvasRect.left;
-    const mouseY = clientY - this.#canvasRect.top;
-
-    this.#mouseX = Math.floor(mouseX);
-    this.#mouseY = Math.floor(mouseY);
-
-    return {
-      x: this.#mouseX,
-      y: this.#mouseY,
-    };
-  }
-
-  public getMousePosition(x?: number, y?: number): Point2D {
-    if (x === undefined || y === undefined) {
-      return this.#calculateMousePosition(this.#mouseX, this.#mouseY);
-    }
-
-    return this.#calculateMousePosition(x, y);
-  }
-
-  public setMousePosition(x: number, y: number): void {
-    this.#mouseX = x;
-    this.#mouseY = y;
-  }
-
-  #projectScreenToUpmRaw(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
-  }
-
-  public projectScreenToUpm(x: number, y: number) {
-    const result = this.#projectScreenToUpmRaw(x, y);
-    return {
-      x: Math.floor(result.x),
-      y: Math.floor(result.y),
-    };
-  }
-
-  public projectUpmToScreen(x: number, y: number) {
-    return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
-  }
-
-  // **
-  // Get the upm mouse position of the viewport
-  // @returns The upm mouse position of the viewport
-  // **
-  getUpmMousePosition(): Point2D {
-    return { x: this.#upmX, y: this.#upmY };
-  }
-
-  setUpmMousePosition(x: number, y: number): void {
-    this.#upmX = x;
-    this.#upmY = y;
-  }
-
-  public getCentrePoint(): Point2D {
+  get centre(): Point2D {
     return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
+  }
+
+  get pan(): Point2D {
+    return { x: this.$panX.value, y: this.$panY.value };
   }
 
   get panX(): number {
@@ -235,18 +144,43 @@ export class ViewportManager {
     return this.$panY.value;
   }
 
-  pan(x: number, y: number): void {
+  get hitRadius(): number {
+    return this.screenToUpmDistance(SCREEN_HIT_RADIUS);
+  }
+
+  get mousePosition(): Point2D {
+    return this.projectScreenToUpm(this.#mouseX, this.#mouseY);
+  }
+
+  get screenMousePosition(): Point2D {
+    return { x: this.#mouseX, y: this.#mouseY };
+  }
+
+  updateMousePosition(clientX: number, clientY: number): void {
+    this.#mouseX = Math.floor(clientX - this.#canvasRect.left);
+    this.#mouseY = Math.floor(clientY - this.#canvasRect.top);
+  }
+
+  public projectScreenToUpm(x: number, y: number): Point2D {
+    return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
+  }
+
+  public projectUpmToScreen(x: number, y: number): Point2D {
+    return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
+  }
+
+  setPan(x: number, y: number): void {
     this.$panX.value = x;
     this.$panY.value = y;
   }
 
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
-    const before = this.#projectScreenToUpmRaw(screenX, screenY);
+    const before = this.projectScreenToUpm(screenX, screenY);
 
     const newZoom = clamp(this.$zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
     this.$zoom.value = newZoom;
 
-    const after = this.#projectScreenToUpmRaw(screenX, screenY);
+    const after = this.projectScreenToUpm(screenX, screenY);
 
     const scale = this.upmScale;
     const deltaX = (before.x - after.x) * scale * newZoom;
@@ -257,28 +191,14 @@ export class ViewportManager {
   }
 
   zoomIn(): void {
-    const center = this.getCentrePoint();
-    this.zoomToPoint(center.x, center.y, 1.25);
+    this.zoomToPoint(this.centre.x, this.centre.y, 1.25);
   }
 
   zoomOut(): void {
-    const center = this.getCentrePoint();
-    this.zoomToPoint(center.x, center.y, 0.8);
-  }
-
-  public getUpmToScreenMatrix(): Mat {
-    return this.$upmToScreenMatrix.value.clone();
-  }
-
-  public getScreenToUpmMatrix(): Mat {
-    return this.$screenToUpmMatrix.value.clone();
+    this.zoomToPoint(this.centre.x, this.centre.y, 0.8);
   }
 
   public screenToUpmDistance(screenDistance: number): number {
     return screenDistance / (this.upmScale * this.$zoom.value);
-  }
-
-  public get effectiveScale(): number {
-    return this.upmScale * this.$zoom.value;
   }
 }

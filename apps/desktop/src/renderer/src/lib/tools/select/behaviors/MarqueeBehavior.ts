@@ -2,7 +2,7 @@ import type { PointId, Rect2D } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor";
 import type { SelectState, SelectBehavior } from "../types";
-import type { IRenderer } from "@/types/graphics";
+import type { DrawAPI } from "../../core/DrawAPI";
 import { normalizeRect, pointInRect } from "../utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { asPointId } from "@shift/types";
@@ -30,14 +30,19 @@ export class MarqueeBehavior implements SelectBehavior {
     return null;
   }
 
-  render(renderer: IRenderer, state: SelectState, editor: Editor): void {
+  render(draw: DrawAPI, state: SelectState, _editor: Editor): void {
     if (state.type !== "selecting") return;
 
     const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-    renderer.setStyle(SELECTION_RECTANGLE_STYLES);
-    renderer.lineWidth = editor.screen.lineWidth(SELECTION_RECTANGLE_STYLES.lineWidth);
-    renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
-    renderer.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    draw.rect(
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      {
+        fillStyle: SELECTION_RECTANGLE_STYLES.fillStyle,
+        strokeStyle: SELECTION_RECTANGLE_STYLES.strokeStyle,
+        strokeWidth: SELECTION_RECTANGLE_STYLES.lineWidth,
+      },
+    );
   }
 
   private transitionSelecting(

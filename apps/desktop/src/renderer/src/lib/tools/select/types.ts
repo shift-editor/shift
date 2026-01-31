@@ -2,7 +2,7 @@ import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
-import type { IRenderer } from "@/types/graphics";
+import type { DrawAPI } from "../core/DrawAPI";
 import type { Editor } from "@/lib/editor";
 import type { SelectIntent } from "./intents";
 
@@ -54,5 +54,5 @@ export interface SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean;
   transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null;
   onTransition?(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void;
-  render?(renderer: IRenderer, state: SelectState, editor: Editor): void;
+  render?(draw: DrawAPI, state: SelectState, editor: Editor): void;
 }
