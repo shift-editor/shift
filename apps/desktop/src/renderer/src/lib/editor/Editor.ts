@@ -556,6 +556,18 @@ export class Editor {
     return this.#viewport.zoom;
   }
 
+  public get fps(): Signal<number> {
+    return this.#renderer.fpsMonitor.fps;
+  }
+
+  public startFpsMonitor(): void {
+    this.#renderer.fpsMonitor.start();
+  }
+
+  public stopFpsMonitor(): void {
+    this.#renderer.fpsMonitor.stop();
+  }
+
   public deleteSelectedPoints(): void {
     const selectedIds = this.#selection.selectedPointIds.peek();
     if (selectedIds.size > 0) {
