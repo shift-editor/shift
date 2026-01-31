@@ -3,10 +3,13 @@
     <img width=150 src="https://github.com/user-attachments/assets/521e2732-341d-441d-bb6d-bf7bcdccf764" />
     <h1 align="center"><b>Shift</b></h1>
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
-  <img width="3420" height="2144" alt="image" src="https://github.com/user-attachments/assets/869c7aaa-49b1-48c4-81bf-e0fc3294be65" />
+    <img width="1822" height="1185" alt="image" src="https://github.com/user-attachments/assets/2a3063c9-add8-438a-819b-fe235e7dfbb2" />
 
   </p>
 </div>
+
+
+
 
 ## Why Shift?
 
