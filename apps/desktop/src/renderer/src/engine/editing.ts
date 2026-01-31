@@ -366,7 +366,10 @@ export class EditingManager {
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
-    this.#ctx.native.restoreSnapshot(JSON.stringify(snapshot));
+    // Use the native object API to avoid JSON serialization overhead.
+    // The GlyphSnapshot type matches the expected native format (camelCase).
+    // We cast since the types are structurally compatible.
+    this.#ctx.native.restoreSnapshotNative(snapshot as import("shift-node").JsGlyphSnapshot);
     this.#ctx.emitGlyph(snapshot);
   }
 
