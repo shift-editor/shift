@@ -7,7 +7,7 @@ use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
   pattern::MatchedRule,
-  snapshot::{CommandResult, GlyphSnapshot},
+  snapshot::{CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType},
   ContourId, Font, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
 };
 
@@ -631,6 +631,119 @@ impl FontEngine {
 
     Ok(serde_json::to_string(&response).unwrap())
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Set point positions directly - fire-and-forget for drag operations.
+  /// Returns true on success, false on failure.
+  /// Does NOT return a snapshot - use get_snapshot_data() when needed.
+  #[napi]
+  pub fn set_point_positions(&mut self, moves: Vec<JSPointMove>) -> Result<bool> {
+    let session = match self.current_edit_session.as_mut() {
+      Some(s) => s,
+      None => return Ok(false),
+    };
+
+    for m in moves {
+      if let Ok(raw) = m.id.parse::<u128>() {
+        let point_id = PointId::from_raw(raw);
+        session.set_point_position(point_id, m.x, m.y);
+      }
+    }
+
+    Ok(true)
+  }
+
+  /// Move points by delta - lightweight version that returns only affected IDs.
+  /// Does NOT return a snapshot - use get_snapshot_data() when needed.
+  #[napi]
+  pub fn move_points_fast(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<JSMoveResult> {
+    let session = match self.current_edit_session.as_mut() {
+      Some(s) => s,
+      None => {
+        return Ok(JSMoveResult {
+          success: false,
+          affected_ids: vec![],
+        })
+      }
+    };
+
+    let ids: Vec<PointId> = point_ids
+      .iter()
+      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
+      .collect();
+
+    let affected = session.move_points(&ids, dx, dy);
+
+    Ok(JSMoveResult {
+      success: true,
+      affected_ids: affected.iter().map(|id| id.to_string()).collect(),
+    })
+  }
+
+  /// Restore snapshot from native object - no JSON parsing needed.
+  #[napi]
+  pub fn restore_snapshot_native(&mut self, snapshot: JSGlyphSnapshot) -> Result<bool> {
+    let session = match self.current_edit_session.as_mut() {
+      Some(s) => s,
+      None => return Ok(false),
+    };
+
+    // Convert JS snapshot to internal GlyphSnapshot
+    let glyph_snapshot = GlyphSnapshot {
+      unicode: snapshot.unicode,
+      name: snapshot.name,
+      x_advance: snapshot.x_advance,
+      contours: snapshot
+        .contours
+        .into_iter()
+        .map(|c| ContourSnapshot {
+          id: c.id,
+          points: c
+            .points
+            .into_iter()
+            .map(|p| PointSnapshot {
+              id: p.id,
+              x: p.x,
+              y: p.y,
+              point_type: if p.point_type == "offCurve" {
+                SnapshotPointType::OffCurve
+              } else {
+                SnapshotPointType::OnCurve
+              },
+              smooth: p.smooth,
+            })
+            .collect(),
+          closed: c.closed,
+        })
+        .collect(),
+      active_contour_id: snapshot.active_contour_id,
+    };
+
+    session.restore_from_snapshot(&glyph_snapshot);
+    Ok(true)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIGHTWEIGHT NATIVE TYPES FOR DRAG OPERATIONS
+// ═══════════════════════════════════════════════════════════
+
+/// Input type for set_point_positions - a single point move
+#[napi(object)]
+pub struct JSPointMove {
+  pub id: String,
+  pub x: f64,
+  pub y: f64,
+}
+
+/// Result type for move_points_fast - success flag and affected IDs
+#[napi(object)]
+pub struct JSMoveResult {
+  pub success: bool,
+  pub affected_ids: Vec<String>,
 }
 
 #[derive(serde::Serialize)]

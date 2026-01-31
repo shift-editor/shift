@@ -239,6 +239,19 @@ impl EditSession {
         moved_points
     }
 
+    /// Set absolute position for a single point
+    pub fn set_point_position(&mut self, point_id: PointId, x: f64, y: f64) -> bool {
+        if let Some(contour_id) = self.find_point_contour(point_id) {
+            if let Some(contour) = self.layer.contour_mut(contour_id) {
+                if let Some(point) = contour.get_point_mut(point_id) {
+                    point.set_position(x, y);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> Vec<PointId> {
         let mut removed_points = Vec::new();
 
