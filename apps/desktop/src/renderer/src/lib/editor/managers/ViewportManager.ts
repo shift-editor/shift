@@ -27,6 +27,7 @@ export class ViewportManager {
   #mouseX: number;
   #mouseY: number;
 
+  private readonly $screenMousePosition: WritableSignal<Point2D>;
   private readonly $upmToScreenMatrix: ComputedSignal<Mat>;
   private readonly $screenToUpmMatrix: ComputedSignal<Mat>;
 
@@ -41,6 +42,7 @@ export class ViewportManager {
 
     this.#mouseX = 0;
     this.#mouseY = 0;
+    this.$screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
 
     this.#canvasRect = {
       x: 0,
@@ -152,13 +154,18 @@ export class ViewportManager {
     return this.projectScreenToUpm(this.#mouseX, this.#mouseY);
   }
 
-  get screenMousePosition(): Point2D {
-    return { x: this.#mouseX, y: this.#mouseY };
+  get screenMousePosition(): Signal<Point2D> {
+    return this.$screenMousePosition;
+  }
+
+  getScreenMousePosition(): Point2D {
+    return this.$screenMousePosition.peek();
   }
 
   updateMousePosition(clientX: number, clientY: number): void {
     this.#mouseX = Math.floor(clientX - this.#canvasRect.left);
     this.#mouseY = Math.floor(clientY - this.#canvasRect.top);
+    this.$screenMousePosition.set({ x: this.#mouseX, y: this.#mouseY });
   }
 
   public projectScreenToUpm(x: number, y: number): Point2D {

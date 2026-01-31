@@ -39,13 +39,7 @@ export { Curve } from "./Curve";
 
 // Polygon operations
 export { Polygon } from "./Polygon";
-export type {
-  LineCurve,
-  QuadraticCurve,
-  CubicCurve,
-  CurveType,
-  ClosestPointResult,
-} from "./Curve";
+export type { LineCurve, QuadraticCurve, CubicCurve, CurveType, ClosestPointResult } from "./Curve";
 
 // Matrix transformations
 export { Mat, type MatModel } from "./Mat";

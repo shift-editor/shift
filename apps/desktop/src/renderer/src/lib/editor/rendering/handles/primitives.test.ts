@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import {
-  drawFilledCircle,
-  drawStrokedCircle,
-  drawFilledRect,
-  drawStrokedRect,
-} from "./primitives";
+import { drawFilledCircle, drawStrokedCircle, drawFilledRect, drawStrokedRect } from "./primitives";
 import type { IRenderer } from "@/types/graphics";
 
 function createMockRenderer(): IRenderer {

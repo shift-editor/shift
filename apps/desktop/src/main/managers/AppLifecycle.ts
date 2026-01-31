@@ -113,6 +113,8 @@ export class AppLifecycle {
       this.menuManager.setTheme(theme);
     });
 
+    ipcMain.handle("debug:getState", () => this.menuManager.getDebugState());
+
     ipcMain.handle("dialog:openFont", async () => {
       const result = await dialog.showOpenDialog({
         properties: ["openFile"],

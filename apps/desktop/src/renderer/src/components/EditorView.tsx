@@ -7,6 +7,7 @@ import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
+import { DebugPanel } from "./debug/DebugPanel";
 import { Vec2 } from "@shift/geo";
 
 interface EditorViewProps {
@@ -60,7 +61,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     const handleWheel = (e: WheelEvent) => {
       editor.updateMousePosition(e.clientX, e.clientY);
-      const screenPos = editor.screenMousePosition;
+      const screenPos = editor.getScreenMousePosition();
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
@@ -97,6 +98,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>
+      <DebugPanel />
     </div>
   );
 };

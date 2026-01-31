@@ -31,6 +31,12 @@ export interface ElectronAPI {
 
   clipboardReadText: () => string;
   clipboardWriteText: (text: string) => void;
+
+  // Debug
+  onDebugReactScan: (callback: (enabled: boolean) => void) => () => void;
+  onDebugPanel: (callback: (open: boolean) => void) => () => void;
+  onDebugDumpSnapshot: (callback: () => void) => () => void;
+  getDebugState: () => Promise<{ reactScanEnabled: boolean; debugPanelOpen: boolean }>;
 }
 
 declare global {

@@ -66,10 +66,7 @@ export {
 // CONTEXT UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
 
-export {
-  createMockCommandContext,
-  type MockToolContextOptions,
-} from "./context";
+export { createMockCommandContext, type MockToolContextOptions } from "./context";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EVENT UTILITIES

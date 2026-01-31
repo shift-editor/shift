@@ -347,10 +347,7 @@ describe("onDirty callback", () => {
   });
 
   it("should allow setting onDirty callback after construction", () => {
-    const historyNoCallback = new CommandHistory(
-      fontEngine,
-      () => fontEngine.$glyph.value,
-    );
+    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     let lateDirtyCalled = 0;
     historyNoCallback.setOnDirty(() => {
       lateDirtyCalled++;
@@ -361,10 +358,7 @@ describe("onDirty callback", () => {
   });
 
   it("should not throw if onDirty is not set", () => {
-    const historyNoCallback = new CommandHistory(
-      fontEngine,
-      () => fontEngine.$glyph.value,
-    );
+    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     expect(() => {
       historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
     }).not.toThrow();

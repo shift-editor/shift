@@ -298,10 +298,7 @@ function quadraticTangentAt(curve: QuadraticCurve, t: number): Point2D {
   };
 }
 
-function quadraticClosestPoint(
-  curve: QuadraticCurve,
-  point: Point2D,
-): ClosestPointResult {
+function quadraticClosestPoint(curve: QuadraticCurve, point: Point2D): ClosestPointResult {
   let bestT = 0;
   let bestDist = Infinity;
 
@@ -352,24 +349,14 @@ function quadraticBounds(curve: QuadraticCurve): {
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
 }
 
-function quadraticSplitAt(
-  curve: QuadraticCurve,
-  t: number,
-): [QuadraticCurve, QuadraticCurve] {
+function quadraticSplitAt(curve: QuadraticCurve, t: number): [QuadraticCurve, QuadraticCurve] {
   const p01 = Vec2.lerp(curve.p0, curve.c, t);
   const p12 = Vec2.lerp(curve.c, curve.p1, t);
   const p012 = Vec2.lerp(p01, p12, t);
-  return [
-    Curve.quadratic(curve.p0, p01, p012),
-    Curve.quadratic(p012, p12, curve.p1),
-  ];
+  return [Curve.quadratic(curve.p0, p01, p012), Curve.quadratic(p012, p12, curve.p1)];
 }
 
-function newtonRaphsonQuadratic(
-  curve: QuadraticCurve,
-  point: Point2D,
-  initialT: number,
-): number {
+function newtonRaphsonQuadratic(curve: QuadraticCurve, point: Point2D, initialT: number): number {
   let t = initialT;
 
   for (let i = 0; i < NEWTON_MAX_ITERATIONS; i++) {
@@ -407,16 +394,8 @@ function cubicPointAt(curve: CubicCurve, t: number): Point2D {
   const t3 = t2 * t;
 
   return {
-    x:
-      mt3 * curve.p0.x +
-      3 * mt2 * t * curve.c0.x +
-      3 * mt * t2 * curve.c1.x +
-      t3 * curve.p1.x,
-    y:
-      mt3 * curve.p0.y +
-      3 * mt2 * t * curve.c0.y +
-      3 * mt * t2 * curve.c1.y +
-      t3 * curve.p1.y,
+    x: mt3 * curve.p0.x + 3 * mt2 * t * curve.c0.x + 3 * mt * t2 * curve.c1.x + t3 * curve.p1.x,
+    y: mt3 * curve.p0.y + 3 * mt2 * t * curve.c0.y + 3 * mt * t2 * curve.c1.y + t3 * curve.p1.y,
   };
 }
 
@@ -449,10 +428,7 @@ function cubicSecondDerivativeAt(curve: CubicCurve, t: number): Point2D {
   };
 }
 
-function cubicClosestPoint(
-  curve: CubicCurve,
-  point: Point2D,
-): ClosestPointResult {
+function cubicClosestPoint(curve: CubicCurve, point: Point2D): ClosestPointResult {
   let bestT = 0;
   let bestDist = Infinity;
 
@@ -471,11 +447,7 @@ function cubicClosestPoint(
   return { t: bestT, point: closest, distance: Vec2.dist(point, closest) };
 }
 
-function newtonRaphsonCubic(
-  curve: CubicCurve,
-  point: Point2D,
-  initialT: number,
-): number {
+function newtonRaphsonCubic(curve: CubicCurve, point: Point2D, initialT: number): number {
   let t = initialT;
 
   for (let i = 0; i < NEWTON_MAX_ITERATIONS; i++) {
@@ -504,18 +476,8 @@ function cubicBounds(curve: CubicCurve): { min: Point2D; max: Point2D } {
   let minY = Math.min(curve.p0.y, curve.p1.y);
   let maxY = Math.max(curve.p0.y, curve.p1.y);
 
-  const extremaX = findCubicExtrema(
-    curve.p0.x,
-    curve.c0.x,
-    curve.c1.x,
-    curve.p1.x,
-  );
-  const extremaY = findCubicExtrema(
-    curve.p0.y,
-    curve.c0.y,
-    curve.c1.y,
-    curve.p1.y,
-  );
+  const extremaX = findCubicExtrema(curve.p0.x, curve.c0.x, curve.c1.x, curve.p1.x);
+  const extremaY = findCubicExtrema(curve.p0.y, curve.c0.y, curve.c1.y, curve.p1.y);
 
   for (const t of extremaX) {
     if (t > 0 && t < 1) {
@@ -536,12 +498,7 @@ function cubicBounds(curve: CubicCurve): { min: Point2D; max: Point2D } {
   return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
 }
 
-function findCubicExtrema(
-  p0: number,
-  c0: number,
-  c1: number,
-  p1: number,
-): number[] {
+function findCubicExtrema(p0: number, c0: number, c1: number, p1: number): number[] {
   const a = -3 * p0 + 9 * c0 - 9 * c1 + 3 * p1;
   const b = 6 * p0 - 12 * c0 + 6 * c1;
   const c = -3 * p0 + 3 * c0;
@@ -574,20 +531,14 @@ function cubicSplitAt(curve: CubicCurve, t: number): [CubicCurve, CubicCurve] {
 
   const p0123 = Vec2.lerp(p012, p123, t);
 
-  return [
-    Curve.cubic(curve.p0, p01, p012, p0123),
-    Curve.cubic(p0123, p123, p23, curve.p1),
-  ];
+  return [Curve.cubic(curve.p0, p01, p012, p0123), Curve.cubic(p0123, p123, p23, curve.p1)];
 }
 
 // ============================================
 // Line Implementation
 // ============================================
 
-function lineClosestPoint(
-  curve: LineCurve,
-  point: Point2D,
-): ClosestPointResult {
+function lineClosestPoint(curve: LineCurve, point: Point2D): ClosestPointResult {
   const v = Vec2.sub(curve.p1, curve.p0);
   const w = Vec2.sub(point, curve.p0);
 
@@ -610,10 +561,7 @@ function lineClosestPoint(
 // Utility
 // ============================================
 
-function curveLength(
-  curve: QuadraticCurve | CubicCurve,
-  subdivisions: number,
-): number {
+function curveLength(curve: QuadraticCurve | CubicCurve, subdivisions: number): number {
   let length = 0;
   let prevPoint = Curve.pointAt(curve, 0);
 

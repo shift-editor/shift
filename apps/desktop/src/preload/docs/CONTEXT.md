@@ -35,8 +35,7 @@ const fontEngineAPI = {
   getGlyphCount: () => fontEngineInstance.getGlyphCount(),
 
   // Session Management
-  startEditSession: (unicode: number) =>
-    fontEngineInstance.startEditSession(unicode),
+  startEditSession: (unicode: number) => fontEngineInstance.startEditSession(unicode),
   endEditSession: () => fontEngineInstance.endEditSession(),
   hasEditSession: () => fontEngineInstance.hasEditSession(),
   getEditingUnicode: () => fontEngineInstance.getEditingUnicode(),
@@ -52,26 +51,17 @@ const fontEngineAPI = {
   closeContour: () => fontEngineInstance.closeContour(),
 
   // Point Operations
-  addPoint: (x, y, pointType, smooth) =>
-    fontEngineInstance.addPoint(x, y, pointType, smooth),
+  addPoint: (x, y, pointType, smooth) => fontEngineInstance.addPoint(x, y, pointType, smooth),
   addPointToContour: (contourId, x, y, pointType, smooth) =>
     fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth),
-  movePoints: (pointIds, dx, dy) =>
-    fontEngineInstance.movePoints(pointIds, dx, dy),
+  movePoints: (pointIds, dx, dy) => fontEngineInstance.movePoints(pointIds, dx, dy),
   removePoints: (pointIds) => fontEngineInstance.removePoints(pointIds),
   insertPointBefore: (beforePointId, x, y, pointType, smooth) =>
-    fontEngineInstance.insertPointBefore(
-      beforePointId,
-      x,
-      y,
-      pointType,
-      smooth,
-    ),
+    fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth),
   toggleSmooth: (pointId) => fontEngineInstance.toggleSmooth(pointId),
 
   // Unified Edit
-  applyEditsUnified: (pointIds, dx, dy) =>
-    fontEngineInstance.applyEditsUnified(pointIds, dx, dy),
+  applyEditsUnified: (pointIds, dx, dy) => fontEngineInstance.applyEditsUnified(pointIds, dx, dy),
 };
 
 contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
@@ -133,9 +123,7 @@ contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 window.shiftFont.loadFont("/path/to/font.ufo");
 window.shiftFont.startEditSession(65);
 
-const result = JSON.parse(
-  window.shiftFont.addPoint(100, 200, "onCurve", false),
-);
+const result = JSON.parse(window.shiftFont.addPoint(100, 200, "onCurve", false));
 ```
 
 ### Check availability

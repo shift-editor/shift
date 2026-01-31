@@ -287,7 +287,7 @@ describe("ViewportManager", () => {
   describe("mouse position", () => {
     it("should update and get screen mouse position", () => {
       viewport.updateMousePosition(150, 250);
-      const pos = viewport.screenMousePosition;
+      const pos = viewport.getScreenMousePosition();
       expect(pos.x).toBe(150);
       expect(pos.y).toBe(250);
     });

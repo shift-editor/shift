@@ -55,31 +55,21 @@ describe("Canvas Styles", () => {
     });
 
     it("should use theme pink for corner and cyan for first/last handles", () => {
-      expect(styles.handles.corner.idle.strokeStyle).toBe(
-        lightTheme.canvas.cyan,
-      );
-      expect(styles.handles.first.idle.strokeStyle).toBe(
-        lightTheme.canvas.cyan,
-      );
+      expect(styles.handles.corner.idle.strokeStyle).toBe(lightTheme.canvas.cyan);
+      expect(styles.handles.first.idle.strokeStyle).toBe(lightTheme.canvas.cyan);
       expect(styles.handles.last.idle.strokeStyle).toBe(lightTheme.canvas.cyan);
     });
 
     it("should use theme gray for control handles", () => {
-      expect(styles.handles.control.idle.strokeStyle).toBe(
-        lightTheme.canvas.gray,
-      );
+      expect(styles.handles.control.idle.strokeStyle).toBe(lightTheme.canvas.gray);
     });
 
     it("should use theme green for smooth handles", () => {
-      expect(styles.handles.smooth.idle.strokeStyle).toBe(
-        lightTheme.canvas.green,
-      );
+      expect(styles.handles.smooth.idle.strokeStyle).toBe(lightTheme.canvas.green);
     });
 
     it("should use theme cyan for direction handles", () => {
-      expect(styles.handles.direction.idle.strokeStyle).toBe(
-        lightTheme.canvas.cyan,
-      );
+      expect(styles.handles.direction.idle.strokeStyle).toBe(lightTheme.canvas.cyan);
     });
 
     it("should create guide styles with indigo", () => {
@@ -87,9 +77,7 @@ describe("Canvas Styles", () => {
     });
 
     it("should create selection rectangle styles with blue", () => {
-      expect(styles.selectionRectangle.strokeStyle).toBe(
-        lightTheme.canvas.blue,
-      );
+      expect(styles.selectionRectangle.strokeStyle).toBe(lightTheme.canvas.blue);
     });
 
     it("should create segment hover styles with indicator color", () => {
@@ -97,14 +85,7 @@ describe("Canvas Styles", () => {
     });
 
     it("should have idle, hovered, and selected states for handles", () => {
-      const handleTypes = [
-        "first",
-        "corner",
-        "control",
-        "smooth",
-        "direction",
-        "last",
-      ] as const;
+      const handleTypes = ["first", "corner", "control", "smooth", "direction", "last"] as const;
 
       for (const type of handleTypes) {
         expect(styles.handles[type].idle).toBeDefined();

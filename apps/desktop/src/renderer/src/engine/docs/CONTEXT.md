@@ -183,14 +183,7 @@ const affectedIds = engine.editing.applySmartEdits(selectedPoints, dx, dy);
 const segments = parseSegments(contour.points, contour.closed);
 for (const seg of segments) {
   if (seg.type === "cubic") {
-    ctx.bezierCurveTo(
-      seg.cp1.x,
-      seg.cp1.y,
-      seg.cp2.x,
-      seg.cp2.y,
-      seg.end.x,
-      seg.end.y,
-    );
+    ctx.bezierCurveTo(seg.cp1.x, seg.cp1.y, seg.cp2.x, seg.cp2.y, seg.end.x, seg.end.y);
   }
 }
 ```

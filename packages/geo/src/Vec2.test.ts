@@ -211,9 +211,7 @@ describe("Vec2", () => {
     it("checks equality", () => {
       expect(Vec2.equals({ x: 1, y: 2 }, { x: 1, y: 2 })).toBe(true);
       expect(Vec2.equals({ x: 1, y: 2 }, { x: 1.0001, y: 2 })).toBe(false);
-      expect(Vec2.equals({ x: 1, y: 2 }, { x: 1.0001, y: 2 }, 0.001)).toBe(
-        true,
-      );
+      expect(Vec2.equals({ x: 1, y: 2 }, { x: 1.0001, y: 2 }, 0.001)).toBe(true);
     });
 
     it("checks if zero", () => {

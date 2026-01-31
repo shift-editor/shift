@@ -1,9 +1,4 @@
-import type {
-  TransformablePoint,
-  SelectionBounds,
-  AlignmentType,
-  DistributeType,
-} from "./types";
+import type { TransformablePoint, SelectionBounds, AlignmentType, DistributeType } from "./types";
 
 export const Alignment = {
   alignPoints(
@@ -35,14 +30,11 @@ export const Alignment = {
   ): TransformablePoint[] {
     if (points.length < 3) return [...points];
 
-    const sorted = [...points].sort((a, b) =>
-      type === "horizontal" ? a.x - b.x : a.y - b.y,
-    );
+    const sorted = [...points].sort((a, b) => (type === "horizontal" ? a.x - b.x : a.y - b.y));
 
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
-    const totalSpan =
-      type === "horizontal" ? last.x - first.x : last.y - first.y;
+    const totalSpan = type === "horizontal" ? last.x - first.x : last.y - first.y;
     const spacing = totalSpan / (sorted.length - 1);
 
     return sorted.map((p, i) => {

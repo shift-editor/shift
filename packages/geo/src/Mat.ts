@@ -30,14 +30,7 @@ export class Mat implements MatModel {
   e = 0.0;
   f = 0.0;
 
-  constructor(
-    a: number,
-    b: number,
-    c: number,
-    d: number,
-    e: number,
-    f: number,
-  ) {
+  constructor(a: number, b: number, c: number, d: number, e: number, f: number) {
     this.a = a;
     this.b = b;
     this.c = c;
@@ -189,8 +182,7 @@ export class Mat implements MatModel {
 
     const skewX =
       Math.abs(scaleY) > Number.EPSILON
-        ? (Math.atan((m.a * m.c + m.b * m.d) / (scaleX * scaleY)) * 180) /
-          Math.PI
+        ? (Math.atan((m.a * m.c + m.b * m.d) / (scaleX * scaleY)) * 180) / Math.PI
         : 0;
 
     return {

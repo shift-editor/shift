@@ -92,11 +92,7 @@ export function createKeyboardEvent(
  * tool.onMouseUp(up);
  * ```
  */
-export function simulateClick(
-  x: number,
-  y: number,
-  options?: { shiftKey?: boolean },
-) {
+export function simulateClick(x: number, y: number, options?: { shiftKey?: boolean }) {
   const down = createMouseEvent("mousedown", {
     clientX: x,
     clientY: y,

@@ -33,8 +33,7 @@ export const routes: Route[] = [
     path: "/info",
     icon: InfoSvg,
     component: FontInfo,
-    description:
-      "Display and edit font information, such as family name, weight, style, etc.",
+    description: "Display and edit font information, such as family name, weight, style, etc.",
   },
   {
     id: "editor",

@@ -19,10 +19,7 @@ export interface Guides {
   descender: { y: number };
 }
 
-export function buildContourPath(
-  ctx: IRenderer,
-  contour: ContourSnapshot,
-): boolean {
+export function buildContourPath(ctx: IRenderer, contour: ContourSnapshot): boolean {
   if (contour.points.length < 2) return false;
   const segments = Segment.parse(contour.points, contour.closed);
   if (segments.length === 0) return false;

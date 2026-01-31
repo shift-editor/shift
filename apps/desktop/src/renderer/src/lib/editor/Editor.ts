@@ -19,7 +19,7 @@ import type {
 } from "@shift/types";
 import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
-import type { ToolName } from "../tools/core";
+import type { ToolName, ToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
@@ -82,6 +82,7 @@ export class Editor {
   #toolManager: ToolManager | null = null;
   #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
   private $activeTool: WritableSignal<ToolName>;
+  private $activeToolState: WritableSignal<ToolState>;
 
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
@@ -125,6 +126,7 @@ export class Editor {
 
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
+    this.$activeToolState = signal<ToolState>({ type: "idle" });
 
     this.#renderer = new GlyphRenderer(this, (ctx) => this.#toolManager?.render(ctx));
 
@@ -217,6 +219,14 @@ export class Editor {
 
   public get activeTool(): Signal<ToolName> {
     return this.$activeTool;
+  }
+
+  public get activeToolState(): Signal<ToolState> {
+    return this.$activeToolState;
+  }
+
+  public setActiveToolState(state: ToolState): void {
+    this.$activeToolState.set(state);
   }
 
   public setActiveTool(toolName: ToolName): void {
@@ -469,8 +479,12 @@ export class Editor {
     return this.#viewport.mousePosition;
   }
 
-  public get screenMousePosition(): Point2D {
+  public get screenMousePosition(): Signal<Point2D> {
     return this.#viewport.screenMousePosition;
+  }
+
+  public getScreenMousePosition(): Point2D {
+    return this.#viewport.screenMousePosition.peek();
   }
 
   public updateMousePosition(clientX: number, clientY: number): void {

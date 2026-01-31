@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { ThemeTokens, lightTheme, applyThemeToCss } from "@/lib/styles/theme";
 
 export type ThemeName = "light" | "dark" | "system";
@@ -24,9 +18,7 @@ const themes: Record<Exclude<ThemeName, "system">, ThemeTokens> = {
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window !== "undefined" && window.matchMedia) {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   return "light";
 }
@@ -43,14 +35,9 @@ interface ThemeProviderProps {
   defaultTheme?: ThemeName;
 }
 
-export function ThemeProvider({
-  children,
-  defaultTheme = "light",
-}: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProviderProps) {
   const [themeName, setThemeName] = useState<ThemeName>(defaultTheme);
-  const [theme, setTheme] = useState<ThemeTokens>(() =>
-    resolveTheme(defaultTheme),
-  );
+  const [theme, setTheme] = useState<ThemeTokens>(() => resolveTheme(defaultTheme));
 
   useEffect(() => {
     const resolved = resolveTheme(themeName);

@@ -16,9 +16,7 @@ export const NavigationPane = () => {
               return (
                 <Button
                   key={route.id}
-                  icon={
-                    <Icon width={20} height={20} className="text-primary" />
-                  }
+                  icon={<Icon width={20} height={20} className="text-primary" />}
                   aria-label={route.description}
                   variant="ghost"
                   size="icon"

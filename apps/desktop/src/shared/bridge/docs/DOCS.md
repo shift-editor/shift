@@ -130,12 +130,7 @@ The `turbo.json` configuration ensures native builds happen before dev:
 {
   "tasks": {
     "build:native": {
-      "inputs": [
-        "crates/*/src/**",
-        "crates/*/Cargo.toml",
-        "Cargo.toml",
-        "Cargo.lock"
-      ],
+      "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
       "outputs": [
         "crates/shift-node/index.js",
         "crates/shift-node/index.d.ts",

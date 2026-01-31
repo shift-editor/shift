@@ -7,7 +7,7 @@ import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Point2D } from "@shift/types";
-import { signal, type WritableSignal } from "@/lib/reactive/signal";
+import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export interface ToolMouseEvent {
@@ -172,9 +172,11 @@ export interface MockToolContext extends ToolContext {
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
   readonly hitRadius: number;
-  readonly screenMousePosition: Point2D;
+  readonly screenMousePosition: Signal<Point2D>;
+  getScreenMousePosition(): Point2D;
   screenToUpmDistance(pixels: number): number;
   hasSelection(): boolean;
+  setActiveToolState(state: unknown): void;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -817,6 +819,8 @@ export function createMockToolContext(): MockToolContext {
     getZone: vi.fn().mockReturnValue("canvas" as const),
   };
 
+  const $screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
+
   return {
     screen,
     selection,
@@ -841,10 +845,12 @@ export function createMockToolContext(): MockToolContext {
       return 8;
     },
     get screenMousePosition() {
-      return { x: 0, y: 0 };
+      return $screenMousePosition;
     },
+    getScreenMousePosition: () => $screenMousePosition.peek(),
     screenToUpmDistance: (pixels: number) => pixels,
     hasSelection: () => selection.hasSelection(),
+    setActiveToolState: vi.fn(),
     mocks: {
       screen,
       selection,

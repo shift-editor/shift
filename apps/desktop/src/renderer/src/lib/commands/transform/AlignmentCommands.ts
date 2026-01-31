@@ -3,11 +3,7 @@ import { findPointsInSnapshot } from "@/lib/utils/snapshot";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import { Transform } from "../../transform/Transform";
-import type {
-  TransformablePoint,
-  AlignmentType,
-  DistributeType,
-} from "@/types/transform";
+import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
 
 function getPointsFromSnapshot(
   snapshot: GlyphSnapshot | null,

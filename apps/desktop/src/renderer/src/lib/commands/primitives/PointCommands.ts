@@ -23,12 +23,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
   // Stored for undo
   #resultId: PointId | null = null;
 
-  constructor(
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ) {
+  constructor(x: number, y: number, pointType: PointType, smooth: boolean = false) {
     super();
     this.#x = x;
     this.#y = y;
@@ -130,11 +125,7 @@ export class MovePointToCommand extends BaseCommand<void> {
 
   undo(ctx: CommandContext): void {
     if (this.#originalX !== null && this.#originalY !== null) {
-      ctx.fontEngine.editing.movePointTo(
-        this.#pointId,
-        this.#originalX,
-        this.#originalY,
-      );
+      ctx.fontEngine.editing.movePointTo(this.#pointId, this.#originalX, this.#originalY);
     }
   }
 

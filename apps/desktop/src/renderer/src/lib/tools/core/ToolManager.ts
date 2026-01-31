@@ -58,6 +58,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.primaryTool = new ToolClass(this.editor);
     this.primaryTool.activate?.();
+    this.editor.setActiveToolState(this.primaryTool.getState());
   }
 
   requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -69,6 +70,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.temporaryOptions = options ?? null;
     this.overrideTool = new ToolClass(this.editor);
     this.overrideTool.activate?.();
+    this.editor.setActiveToolState(this.overrideTool.getState());
     this.temporaryOptions?.onActivate?.();
   }
 
@@ -143,6 +145,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.temporaryOptions?.onReturn?.();
     this.temporaryOptions = null;
     this.primaryTool?.activate?.();
+    this.editor.setActiveToolState(this.primaryTool.getState());
   }
 
   reset(): void {

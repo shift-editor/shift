@@ -95,6 +95,7 @@ target/
 npm/
 
 .settings.local.json
+**/settings.local.json
 
 .turbo
 *.settings.local.json*

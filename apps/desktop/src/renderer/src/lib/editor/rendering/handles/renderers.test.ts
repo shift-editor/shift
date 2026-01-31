@@ -84,15 +84,12 @@ describe("renderers", () => {
       expect(ctx.strokeRect).toHaveBeenCalled();
     });
 
-    it.each<HandleState>(["idle", "hovered", "selected"])(
-      "should work for state %s",
-      (state) => {
-        drawCornerHandle(ctx, 100, 100, state);
-        expect(ctx.setStyle).toHaveBeenCalled();
-        expect(ctx.fillRect).toHaveBeenCalled();
-        expect(ctx.strokeRect).toHaveBeenCalled();
-      },
-    );
+    it.each<HandleState>(["idle", "hovered", "selected"])("should work for state %s", (state) => {
+      drawCornerHandle(ctx, 100, 100, state);
+      expect(ctx.setStyle).toHaveBeenCalled();
+      expect(ctx.fillRect).toHaveBeenCalled();
+      expect(ctx.strokeRect).toHaveBeenCalled();
+    });
   });
 
   describe("drawControlHandle", () => {
@@ -104,13 +101,10 @@ describe("renderers", () => {
       expect(ctx.fillCircle).toHaveBeenCalled();
     });
 
-    it.each<HandleState>(["idle", "hovered", "selected"])(
-      "should work for state %s",
-      (state) => {
-        drawControlHandle(ctx, 50, 50, state);
-        expect(ctx.setStyle).toHaveBeenCalled();
-      },
-    );
+    it.each<HandleState>(["idle", "hovered", "selected"])("should work for state %s", (state) => {
+      drawControlHandle(ctx, 50, 50, state);
+      expect(ctx.setStyle).toHaveBeenCalled();
+    });
   });
 
   describe("drawSmoothHandle", () => {
@@ -160,12 +154,9 @@ describe("renderers", () => {
       expect(ctx.restore).toHaveBeenCalled();
     });
 
-    it.each<HandleState>(["idle", "hovered", "selected"])(
-      "should work for state %s",
-      (state) => {
-        drawLastHandle(ctx, { x0: 0, y0: 0, x1: 100, y1: 100 }, state);
-        expect(ctx.setStyle).toHaveBeenCalled();
-      },
-    );
+    it.each<HandleState>(["idle", "hovered", "selected"])("should work for state %s", (state) => {
+      drawLastHandle(ctx, { x0: 0, y0: 0, x1: 100, y1: 100 }, state);
+      expect(ctx.setStyle).toHaveBeenCalled();
+    });
   });
 });

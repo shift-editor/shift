@@ -34,38 +34,18 @@ export function drawTriangle(
   ctx.restore();
 }
 
-export function drawFilledCircle(
-  ctx: IRenderer,
-  x: number,
-  y: number,
-  r: number,
-): void {
+export function drawFilledCircle(ctx: IRenderer, x: number, y: number, r: number): void {
   ctx.fillCircle(x, y, r);
 }
 
-export function drawStrokedCircle(
-  ctx: IRenderer,
-  x: number,
-  y: number,
-  r: number,
-): void {
+export function drawStrokedCircle(ctx: IRenderer, x: number, y: number, r: number): void {
   ctx.strokeCircle(x, y, r);
 }
 
-export function drawFilledRect(
-  ctx: IRenderer,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawFilledRect(ctx: IRenderer, x: number, y: number, size: number): void {
   ctx.fillRect(x - size / 2, y - size / 2, size, size);
 }
 
-export function drawStrokedRect(
-  ctx: IRenderer,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawStrokedRect(ctx: IRenderer, x: number, y: number, size: number): void {
   ctx.strokeRect(x - size / 2, y - size / 2, size, size);
 }

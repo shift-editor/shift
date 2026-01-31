@@ -6,11 +6,7 @@ interface TrafficLightButtonProps {
   isHovered: boolean;
 }
 
-const TrafficLightButton = ({
-  color,
-  onClick,
-  isHovered,
-}: TrafficLightButtonProps) => {
+const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonProps) => {
   const colors = {
     close: {
       bg: "#FF5F57",
@@ -31,12 +27,7 @@ const TrafficLightButton = ({
       hoverBg: "#FEBC2E",
       icon: (
         <svg width="8" height="2" viewBox="0 0 8 2" fill="none">
-          <path
-            d="M0.5 1H7.5"
-            stroke="#995700"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
+          <path d="M0.5 1H7.5" stroke="#995700" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       ),
     },
@@ -66,10 +57,7 @@ const TrafficLightButton = ({
       style={{ backgroundColor: bg }}
       aria-label={color}
     >
-      <span
-        className="transition-opacity duration-150"
-        style={{ opacity: isHovered ? 1 : 0 }}
-      >
+      <span className="transition-opacity duration-150" style={{ opacity: isHovered ? 1 : 0 }}>
         {icon}
       </span>
     </button>
@@ -97,21 +85,9 @@ export const Titlebar = () => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <TrafficLightButton
-        color="close"
-        onClick={handleClose}
-        isHovered={isHovered}
-      />
-      <TrafficLightButton
-        color="minimize"
-        onClick={handleMinimize}
-        isHovered={isHovered}
-      />
-      <TrafficLightButton
-        color="maximize"
-        onClick={handleMaximize}
-        isHovered={isHovered}
-      />
+      <TrafficLightButton color="close" onClick={handleClose} isHovered={isHovered} />
+      <TrafficLightButton color="minimize" onClick={handleMinimize} isHovered={isHovered} />
+      <TrafficLightButton color="maximize" onClick={handleMaximize} isHovered={isHovered} />
     </div>
   );
 };

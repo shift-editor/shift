@@ -7,15 +7,8 @@ interface TooltipProviderProps {
   delayDuration?: number;
 }
 
-function TooltipProvider({
-  children,
-  delayDuration = 0,
-}: TooltipProviderProps) {
-  return (
-    <BaseTooltip.Provider delay={delayDuration}>
-      {children}
-    </BaseTooltip.Provider>
-  );
+function TooltipProvider({ children, delayDuration = 0 }: TooltipProviderProps) {
+  return <BaseTooltip.Provider delay={delayDuration}>{children}</BaseTooltip.Provider>;
 }
 
 interface TooltipProps {
@@ -39,9 +32,7 @@ interface TooltipTriggerProps {
 }
 
 function TooltipTrigger({ children }: TooltipTriggerProps) {
-  return (
-    <BaseTooltip.Trigger render={<span />}>{children}</BaseTooltip.Trigger>
-  );
+  return <BaseTooltip.Trigger render={<span />}>{children}</BaseTooltip.Trigger>;
 }
 
 interface TooltipContentProps {

@@ -2,12 +2,7 @@
  * Snapshot utility functions for querying and manipulating GlyphSnapshot data.
  */
 
-import type {
-  PointSnapshot,
-  ContourSnapshot,
-  GlyphSnapshot,
-  PointId,
-} from "@shift/types";
+import type { PointSnapshot, ContourSnapshot, GlyphSnapshot, PointId } from "@shift/types";
 
 /**
  * Creates an empty glyph snapshot for initialization

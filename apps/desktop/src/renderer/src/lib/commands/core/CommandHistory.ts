@@ -11,12 +11,7 @@
  * during a batch are grouped into a single undo step.
  */
 
-import {
-  signal,
-  computed,
-  type WritableSignal,
-  type ComputedSignal,
-} from "@/lib/reactive/signal";
+import { signal, computed, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
 import type { FontEngine } from "@/engine/FontEngine";

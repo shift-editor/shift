@@ -17,10 +17,5 @@ export function normalizeRect(start: Point2D, current: Point2D): Rect2D {
 }
 
 export function pointInRect(p: Point2D, rect: Rect2D): boolean {
-  return (
-    p.x >= rect.left &&
-    p.x <= rect.right &&
-    p.y >= rect.top &&
-    p.y <= rect.bottom
-  );
+  return p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
 }
