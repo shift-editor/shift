@@ -1,19 +1,25 @@
+import { useState } from "react";
 import { Separator } from "@shift/ui";
 import { TransformSection } from "./TransformSection";
 import { ScaleSection } from "./ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
-import { useValue } from "@/lib/reactive";
+import { useSignalState } from "@/lib/reactive";
+import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./GlyphSection";
-import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 export const Sidebar = () => {
   const editor = getEditor();
   const { family } = editor.getFontMetadata();
-  const zoom = useValue(editor.zoom);
+  const zoom = useSignalState(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
 
-  const { hasSelection } = useSelectionBounds();
+  const [hasSelection, setHasSelection] = useState(false);
+
+  useSignalEffect(() => {
+    const pointIds = editor.selectedPointIds.value;
+    setHasSelection(pointIds.size > 0);
+  });
 
   return (
     <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">

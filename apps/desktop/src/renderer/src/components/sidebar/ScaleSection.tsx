@@ -1,34 +1,51 @@
+import { useCallback, useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
-import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import ScaleIcon from "@/assets/sidebar/scale.svg";
-import { EditableSidebarInput } from "./EditableSidebarInput";
+import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
-import { anchorToPoint } from "@/lib/transform/anchor";
+import { anchorToPoint, selectionBoundsToRect } from "@/lib/transform/anchor";
+import ScaleIcon from "@/assets/sidebar/scale.svg";
 
 export const ScaleSection = () => {
   const editor = getEditor();
-  const { bounds, width, height } = useSelectionBounds();
   const { anchor, setAnchor } = useTransformOrigin();
-  const anchorPoint = bounds ? anchorToPoint(anchor, bounds) : undefined;
 
-  const handleWidthChange = (newWidth: number) => {
-    if (!bounds) return;
-    const factor = newWidth / width;
-    editor.scaleSelection(factor, factor, anchorPoint);
-  };
+  const widthRef = useRef<EditableSidebarInputHandle>(null);
+  const heightRef = useRef<EditableSidebarInputHandle>(null);
 
-  const handleHeightChange = (newHeight: number) => {
-    if (!bounds) return;
-    const factor = newHeight / height;
-    editor.scaleSelection(factor, factor, anchorPoint);
-  };
+  useSignalEffect(() => {
+    editor.glyph.value;
+    editor.selectedPointIds.value;
 
-  const handleScaleChange = (newScale: number) => {
-    if (!bounds) return;
-    editor.scaleSelection(newScale, newScale, anchorPoint);
-  };
+    const bounds = editor.getSelectionBounds();
+    widthRef.current?.setValue(bounds ? Math.round(bounds.width) : 0);
+    heightRef.current?.setValue(bounds ? Math.round(bounds.height) : 0);
+  });
+
+  const handleSizeChange = useCallback(
+    (dimension: "width" | "height", value: number) => {
+      const bounds = editor.getSelectionBounds();
+      if (!bounds) return;
+      const current = bounds[dimension];
+      if (current === 0) return;
+      const factor = value / current;
+      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      editor.scaleSelection(factor, factor, anchorPoint);
+    },
+    [anchor],
+  );
+
+  const handleScaleChange = useCallback(
+    (scale: number) => {
+      const bounds = editor.getSelectionBounds();
+      if (!bounds) return;
+      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      editor.scaleSelection(scale, scale, anchorPoint);
+    },
+    [anchor],
+  );
 
   return (
     <SidebarSection title="Scale">
@@ -36,11 +53,15 @@ export const ScaleSection = () => {
         <div className="text-xs text-secondary">Size</div>
         <div className="flex gap-2">
           <EditableSidebarInput
+            ref={widthRef}
             label={<span className="text-xs text-secondary">W</span>}
-            value={width}
-            onValueChange={handleWidthChange}
+            onValueChange={(v) => handleSizeChange("width", v)}
           />
-          <EditableSidebarInput label="H" value={height} onValueChange={handleHeightChange} />
+          <EditableSidebarInput
+            ref={heightRef}
+            label="H"
+            onValueChange={(v) => handleSizeChange("height", v)}
+          />
         </div>
       </div>
 

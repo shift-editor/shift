@@ -1,7 +1,7 @@
 import { FC } from "react";
 
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
-import { useValue } from "@/lib/reactive";
+import { useSignalState } from "@/lib/reactive";
 import { getEditor } from "@/store/store";
 import { Svg } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
@@ -44,7 +44,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 
 export const ToolsPane: FC = () => {
   const editor = getEditor();
-  const activeTool = useValue(editor.activeTool);
+  const activeTool = useSignalState(editor.activeTool);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
