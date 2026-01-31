@@ -6,8 +6,10 @@
 
 import type { PointType, GlyphSnapshot, PointId, ContourId, MatchedRule } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
+import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { CommitContext } from "./FontEngine";
+import type { PointMove } from "@/shared/bridge/FontEngineAPI";
 
 interface SmartEditResult {
   success: boolean;
@@ -310,6 +312,56 @@ export class EditingManager {
     }
 
     return result.affectedPointIds?.map(asPointId) ?? [];
+  }
+
+  /**
+   * Apply smart edits using local TS rules engine.
+   * This is the optimized version that avoids NAPI serialization overhead:
+   * 1. Compute all moves locally using @shift/rules
+   * 2. Apply moves to local glyph copy (immediate UI update)
+   * 3. Sync positions to Rust (fire-and-forget)
+   *
+   * @param glyph - Current glyph snapshot
+   * @param selectedPoints - Set of selected point IDs
+   * @param dx - Delta X
+   * @param dy - Delta Y
+   * @returns Updated glyph snapshot and affected point IDs
+   */
+  applySmartEditsLocal(
+    glyph: GlyphSnapshot,
+    selectedPoints: ReadonlySet<PointId>,
+    dx: number,
+    dy: number
+  ): { glyph: GlyphSnapshot; affectedPointIds: PointId[] } {
+    if (!this.#ctx.hasSession()) {
+      return { glyph, affectedPointIds: [] };
+    }
+
+    // 1. Compute all moves locally using TS rules engine
+    const { moves, matchedRules } = applyRules(glyph, selectedPoints, dx, dy);
+
+    if (moves.length === 0) {
+      return { glyph, affectedPointIds: [] };
+    }
+
+    // 2. Apply moves to local glyph copy (creates new snapshot)
+    const updatedGlyph = applyMovesToGlyph(glyph, moves);
+
+    // 3. Emit updated glyph for immediate UI update
+    this.#ctx.emitGlyph(updatedGlyph);
+
+    // 4. Sync positions to Rust (fire-and-forget)
+    const nativeMoves: PointMove[] = moves.map((m) => ({
+      id: m.id,
+      x: m.x,
+      y: m.y,
+    }));
+    this.#ctx.native.setPointPositions(nativeMoves);
+
+    // 5. Return affected point IDs
+    const affectedPointIds = moves.map((m) => m.id);
+
+    return { glyph: updatedGlyph, affectedPointIds };
   }
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {

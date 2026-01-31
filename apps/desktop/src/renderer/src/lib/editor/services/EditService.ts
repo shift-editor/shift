@@ -1,4 +1,4 @@
-import type { PointId, ContourId, Glyph, Contour, Point, PointType } from "@shift/types";
+import type { PointId, ContourId, Glyph, GlyphSnapshot, Contour, Point, PointType } from "@shift/types";
 import { asContourId } from "@shift/types";
 import type { FontEngine } from "@/engine";
 
@@ -58,6 +58,19 @@ export class EditService {
 
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
     return this.#fontEngine.editing.applySmartEdits(new Set(ids), dx, dy);
+  }
+
+  /**
+   * Apply smart edits using local TS rules engine (optimized for drag).
+   * Avoids NAPI serialization overhead by computing rules locally.
+   */
+  applySmartEditsLocal(
+    glyph: GlyphSnapshot,
+    ids: ReadonlySet<PointId>,
+    dx: number,
+    dy: number
+  ): { glyph: GlyphSnapshot; affectedPointIds: PointId[] } {
+    return this.#fontEngine.editing.applySmartEditsLocal(glyph, ids, dx, dy);
   }
 
   removePoints(ids: Iterable<PointId>): void {
