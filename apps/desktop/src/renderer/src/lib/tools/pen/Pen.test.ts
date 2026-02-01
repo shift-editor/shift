@@ -320,7 +320,7 @@ describe("Pen tool", () => {
   });
 
   describe("zoom-adjusted preview line", () => {
-    it("should call draw.line when rendering preview line", () => {
+    it("should call draw.line when rendering preview line below handles", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
 
@@ -333,7 +333,7 @@ describe("Pen tool", () => {
         renderer: {},
       };
 
-      pen.render?.(mockDrawAPI as any);
+      pen.renderBelowHandles?.(mockDrawAPI as any);
 
       expect(mockDrawAPI.line).toHaveBeenCalled();
     });

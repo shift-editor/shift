@@ -1,5 +1,6 @@
 export interface RenderServiceDeps {
   requestRedraw: () => void;
+  requestStaticRedraw: () => void;
   requestImmediateRedraw: () => void;
   cancelRedraw: () => void;
   setPreviewMode: (enabled: boolean) => void;
@@ -15,6 +16,10 @@ export class RenderService {
 
   requestRedraw(): void {
     this.#deps.requestRedraw();
+  }
+
+  requestStaticRedraw(): void {
+    this.#deps.requestStaticRedraw();
   }
 
   requestImmediateRedraw(): void {

@@ -37,6 +37,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
 
   onTransition?(prev: S, next: S, event: ToolEvent): void;
   render?(draw: DrawAPI): void;
+  renderBelowHandles?(draw: DrawAPI): void;
 
   activate?(): void;
   deactivate?(): void;

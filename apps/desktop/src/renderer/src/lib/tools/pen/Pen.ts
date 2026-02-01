@@ -213,16 +213,10 @@ export class Pen extends BaseTool<PenState> {
     return this.editor.hitTest.getMiddlePointAt(pos);
   }
 
-  render(draw: DrawAPI): void {
+  renderBelowHandles(draw: DrawAPI): void {
     if (this.editor.zone.getZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
-      draw.circle(this.state.mousePos, PEN_READY_STYLE.size, {
-        strokeStyle: PEN_READY_STYLE.strokeStyle,
-        strokeWidth: PEN_READY_STYLE.lineWidth,
-        fillStyle: PEN_READY_STYLE.fillStyle,
-      });
-
       const lastPoint = this.getLastOnCurvePoint();
       if (!lastPoint) return;
 
@@ -243,6 +237,23 @@ export class Pen extends BaseTool<PenState> {
 
       draw.line(mousePos, anchor.position, style);
       draw.line(anchor.position, mirrorPos, style);
+    }
+  }
+
+  render(draw: DrawAPI): void {
+    if (this.editor.zone.getZone() !== "canvas") return;
+
+    if (this.state.type === "ready") {
+      draw.circle(this.state.mousePos, PEN_READY_STYLE.size, {
+        strokeStyle: PEN_READY_STYLE.strokeStyle,
+        strokeWidth: PEN_READY_STYLE.lineWidth,
+        fillStyle: PEN_READY_STYLE.fillStyle,
+      });
+    }
+
+    if (this.state.type === "dragging") {
+      const { anchor, mousePos } = this.state;
+      const mirrorPos = Vec2.mirror(mousePos, anchor.position);
 
       draw.handle(mousePos, "control", "idle");
       draw.handle(mirrorPos, "control", "idle");

@@ -140,7 +140,11 @@ export class Editor {
     this.$activeTool = signal<ToolName>("select");
     this.$activeToolState = signal<ToolState>({ type: "idle" });
 
-    this.#renderer = new GlyphRenderer(this, (ctx) => this.#toolManager?.render(ctx));
+    this.#renderer = new GlyphRenderer(
+      this,
+      (draw) => this.#toolManager?.render(draw),
+      (draw) => this.#toolManager?.renderBelowHandles(draw),
+    );
 
     this.#clipboardService = new ClipboardService({
       getGlyph: () => this.#fontEngine.$glyph.value,
@@ -185,6 +189,7 @@ export class Editor {
     this.cursor = new CursorService(this.$cursor, (c) => this.setCursor(c));
     this.render = new RenderService({
       requestRedraw: () => this.requestRedraw(),
+      requestStaticRedraw: () => this.requestStaticRedraw(),
       requestImmediateRedraw: () => this.requestImmediateRedraw(),
       cancelRedraw: () => this.cancelRedraw(),
       setPreviewMode: (enabled) => this.setPreviewMode(enabled),
@@ -999,6 +1004,10 @@ export class Editor {
 
   public requestRedraw() {
     this.#renderer.requestRedraw();
+  }
+
+  public requestStaticRedraw() {
+    this.#renderer.requestStaticRedraw();
   }
 
   public requestImmediateRedraw() {

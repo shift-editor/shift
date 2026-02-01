@@ -63,6 +63,9 @@ export class ToolManager implements ToolSwitchHandler {
     this.primaryTool = new ToolClass(this.editor);
     this.primaryTool.activate?.();
     this.editor.setActiveToolState(this.primaryTool.getState());
+    if (this.primaryTool.renderBelowHandles) {
+      this.editor.render.requestStaticRedraw();
+    }
   }
 
   requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -128,6 +131,10 @@ export class ToolManager implements ToolSwitchHandler {
     if (!this.gesture.isDragging) {
       this.editor.updateHover(point);
     }
+
+    if (this.activeTool?.renderBelowHandles) {
+      this.editor.render.requestStaticRedraw();
+    }
   }
 
   handlePointerUp(screenPoint: Point2D): void {
@@ -167,6 +174,10 @@ export class ToolManager implements ToolSwitchHandler {
 
   render(draw: DrawAPI): void {
     this.activeTool?.render?.(draw);
+  }
+
+  renderBelowHandles(draw: DrawAPI): void {
+    this.activeTool?.renderBelowHandles?.(draw);
   }
 
   private dispatchEvents(events: ToolEvent[]): void {

@@ -31,10 +31,16 @@ export class GlyphRenderer {
   #fpsMonitor: FpsMonitor;
   #editor: Editor;
   #renderTool: (draw: DrawAPI) => void;
+  #renderToolBelowHandles: ((draw: DrawAPI) => void) | null;
 
-  constructor(editor: Editor, renderTool: (draw: DrawAPI) => void) {
+  constructor(
+    editor: Editor,
+    renderTool: (draw: DrawAPI) => void,
+    renderToolBelowHandles?: (draw: DrawAPI) => void,
+  ) {
     this.#editor = editor;
     this.#renderTool = renderTool;
+    this.#renderToolBelowHandles = renderToolBelowHandles ?? null;
     this.#staticFrameHandler = new FrameHandler();
     this.#overlayFrameHandler = new FrameHandler();
     this.#interactiveFrameHandler = new FrameHandler();
@@ -193,6 +199,10 @@ export class GlyphRenderer {
 
     if (!previewMode && glyph) {
       this.#drawSegmentHighlights(ctx, glyph);
+    }
+
+    if (!previewMode) {
+      this.#renderToolBelowHandles?.(draw);
     }
 
     if (!previewMode && handlesVisible && glyph) {

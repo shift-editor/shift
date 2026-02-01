@@ -116,6 +116,7 @@ interface CursorService {
 
 interface RenderService {
   requestRedraw(): void;
+  requestStaticRedraw(): void;
   requestImmediateRedraw(): void;
   cancelRedraw(): void;
   setPreviewMode(enabled: boolean): void;
@@ -592,6 +593,7 @@ function createMockRenderService(): RenderService & {
 
   const mocks = {
     requestRedraw: vi.fn(),
+    requestStaticRedraw: vi.fn(),
     requestImmediateRedraw: vi.fn(),
     cancelRedraw: vi.fn(),
     setPreviewMode: vi.fn((enabled: boolean) => {
@@ -604,6 +606,7 @@ function createMockRenderService(): RenderService & {
 
   return {
     requestRedraw: mocks.requestRedraw,
+    requestStaticRedraw: mocks.requestStaticRedraw,
     requestImmediateRedraw: mocks.requestImmediateRedraw,
     cancelRedraw: mocks.cancelRedraw,
     setPreviewMode: mocks.setPreviewMode,
