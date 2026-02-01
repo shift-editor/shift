@@ -4,7 +4,7 @@ import type { ToolContext, ActiveToolState } from "@/lib/tools/core";
 import type { ToolEvent } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
-import type { ContourEndpointHit } from "@/types/hitResult";
+import type { ContourEndpointHit, HitResult } from "@/types/hitResult";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
@@ -136,6 +136,7 @@ interface ViewportService {
 }
 
 interface HitTestService {
+  getNodeAt(pos: Point2D): HitResult;
   getPointAt(pos: Point2D): Point | null;
   getSegmentAt(pos: Point2D): any | null;
   getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
@@ -766,7 +767,31 @@ function createMockHitTestService(
     return null;
   };
 
+  const getNodeAt = (pos: Point2D): HitResult => {
+    const endpoint = getContourEndpointAt(pos);
+    if (endpoint) return endpoint;
+
+    const middle = getMiddlePointAt(pos);
+    if (middle) return middle;
+
+    const point = getPointAt(pos);
+    if (point) return { type: "point", point, pointId: point.id };
+
+    const segmentHit = getSegmentAt(pos);
+    if (segmentHit)
+      return {
+        type: "segment",
+        segment: segmentHit.segment,
+        segmentId: segmentHit.segmentId,
+        t: segmentHit.t,
+        closestPoint: segmentHit.point,
+      };
+
+    return null;
+  };
+
   const mocks = {
+    getNodeAt: vi.fn(getNodeAt),
     getPointAt: vi.fn(getPointAt),
     getSegmentAt: vi.fn(getSegmentAt),
     getContourEndpointAt: vi.fn(getContourEndpointAt),
@@ -778,6 +803,7 @@ function createMockHitTestService(
   };
 
   return {
+    getNodeAt: mocks.getNodeAt,
     getPointAt: mocks.getPointAt,
     getSegmentAt: mocks.getSegmentAt,
     getContourEndpointAt: mocks.getContourEndpointAt,
@@ -945,6 +971,7 @@ export function createMockToolContext(): MockToolContext {
     setHandlesVisible: (visible: boolean) => render.setHandlesVisible(visible),
     setMarqueePreviewRect: (_rect: Rect2D | null) => {},
     isPointInMarqueePreview: (_pointId: PointId) => false,
+    getNodeAt: (pos: Point2D) => hitTest.getNodeAt(pos),
     getPointAt: (pos: Point2D) => hitTest.getPointAt(pos),
     getSegmentAt: (pos: Point2D) => hitTest.getSegmentAt(pos),
     getContourEndpointAt: (pos: Point2D) => hitTest.getContourEndpointAt(pos),

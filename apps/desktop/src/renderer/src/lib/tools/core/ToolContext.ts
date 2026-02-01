@@ -12,6 +12,7 @@ import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { FontEngine } from "@/engine";
 import type { Segment } from "@/types/segments";
+import type { HitResult } from "@/types/hitResult";
 
 export interface ToolContext {
   readonly activeToolState: Signal<ActiveToolState>;
@@ -26,6 +27,7 @@ export interface ToolContext {
   beginPreview(): void;
   commitPreview(label: string): void;
   cancelPreview(): void;
+  getNodeAt(pos: Point2D): HitResult;
   getPointAt(pos: Point2D): Point | null;
   getSegmentAt(pos: Point2D): SegmentHitResult | null;
   getSegmentById(segmentId: SegmentId): Segment | null;

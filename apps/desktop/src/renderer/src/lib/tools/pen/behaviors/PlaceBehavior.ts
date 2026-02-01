@@ -15,12 +15,10 @@ export class PlaceBehavior implements PenBehavior {
     if (event.type !== "click" && event.type !== "dragStart") return null;
 
     const intent = resolvePenIntent(event.point, {
-      getContourEndpointAt: (pos) => editor.getContourEndpointAt(pos),
-      getSegmentAt: (pos) => editor.getSegmentAt(pos),
+      getNodeAt: (pos) => editor.getNodeAt(pos),
       getActiveContourId: () => editor.getActiveContourId(),
       hasActiveDrawingContour: () => this.hasActiveDrawingContour(editor),
       shouldCloseContour: (p) => this.shouldCloseContour(p, editor),
-      getMiddlePointAt: (p) => this.getMiddlePointAt(p, editor),
     });
 
     if (intent.action === "placePoint" && event.type === "dragStart") {
@@ -64,10 +62,6 @@ export class PlaceBehavior implements PenBehavior {
     if (!firstPoint) return false;
 
     return Vec2.isWithin(pos, firstPoint, editor.hitRadius);
-  }
-
-  private getMiddlePointAt(pos: Point2D, editor: ToolContext) {
-    return editor.getMiddlePointAt(pos);
   }
 
   private buildContourContext(editor: ToolContext): ContourContext {

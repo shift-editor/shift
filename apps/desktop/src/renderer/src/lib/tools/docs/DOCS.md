@@ -187,6 +187,10 @@ Available services:
 | `tools`     | Temporary tool switching            |
 | `zone`      | Focus zone (canvas/sidebar/toolbar) |
 
+### Hit testing
+
+Use **getNodeAt(pos)** to answer "what's under this position?" with consistent priority: contour endpoint → middle point → point → segment. It returns a `HitResult`; use type guards (`isPointHit`, `isSegmentHit`, `isContourEndpointHit`, `isMiddlePointHit`) and read `hit.point`, `hit.segment`, `hit.segmentId`, `hit.pointId` from the result. For point-like hits (point, contour endpoint, middle point) use **getPointIdFromHit(hit)** to get `pointId`. Do not call **getSegmentById** when you already have a segment from a hit (e.g. `isSegmentHit(hit)` → use `hit.segment`). Use **getSegmentById(segmentId)** only when you have a segment id from elsewhere (e.g. from an intent payload), not from a position hit.
+
 ## Tool Implementations
 
 ### Select Tool

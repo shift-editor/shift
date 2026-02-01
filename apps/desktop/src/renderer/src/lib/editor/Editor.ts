@@ -953,11 +953,6 @@ export class Editor implements ToolContext {
   }
 
   public getNodeAt(pos: Point2D): HitResult {
-    const point = this.getPointAt(pos);
-    if (point) {
-      return { type: "point", point, pointId: point.id };
-    }
-
     const endpoint = this.getContourEndpointAt(pos);
     if (endpoint) {
       return {
@@ -971,6 +966,11 @@ export class Editor implements ToolContext {
 
     const middle = this.getMiddlePointAt(pos);
     if (middle) return middle;
+
+    const point = this.getPointAt(pos);
+    if (point) {
+      return { type: "point", point, pointId: point.id };
+    }
 
     const segmentHit = this.getSegmentAt(pos);
     if (segmentHit) {

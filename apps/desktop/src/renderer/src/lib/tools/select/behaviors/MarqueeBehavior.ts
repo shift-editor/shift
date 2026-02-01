@@ -101,11 +101,8 @@ export class MarqueeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
   ): SelectState | null {
-    const point = editor.getPointAt(event.point);
-    if (point) return null;
-
-    const segmentHit = editor.getSegmentAt(event.point);
-    if (segmentHit) return null;
+    const hit = editor.getNodeAt(event.point);
+    if (hit !== null) return null;
 
     if (state.type === "selected") {
       return {

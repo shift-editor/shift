@@ -5,6 +5,7 @@ import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { ContentResolver } from "@/lib/clipboard/ContentResolver";
+import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
 
 export class DragBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -80,10 +81,10 @@ export class DragBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
   ): SelectState | null {
-    const point = editor.getPointAt(event.point);
+    const hit = editor.getNodeAt(event.point);
+    const pointId = getPointIdFromHit(hit);
 
-    if (point) {
-      const pointId = point.id;
+    if (pointId !== null) {
       const isSelected = state.type === "selected" && editor.isPointSelected(pointId);
 
       if (event.altKey && isSelected) {
@@ -118,13 +119,9 @@ export class DragBehavior implements SelectBehavior {
       };
     }
 
-    const segmentHit = editor.getSegmentAt(event.point);
-    if (segmentHit) {
-      const segment = editor.getSegmentById(segmentHit.segmentId);
-      const pointIds = segment ? SegmentOps.getPointIds(segment) : [];
-
-      const isSelected =
-        state.type === "selected" && editor.isSegmentSelected(segmentHit.segmentId);
+    if (isSegmentHit(hit)) {
+      const pointIds = SegmentOps.getPointIds(hit.segment);
+      const isSelected = state.type === "selected" && editor.isSegmentSelected(hit.segmentId);
 
       if (event.altKey && isSelected) {
         const newPointIds = this.duplicateSelection(editor);
@@ -158,7 +155,7 @@ export class DragBehavior implements SelectBehavior {
           ? undefined
           : {
               action: "selectSegment",
-              segmentId: segmentHit.segmentId,
+              segmentId: hit.segmentId,
               additive: false,
             },
       };

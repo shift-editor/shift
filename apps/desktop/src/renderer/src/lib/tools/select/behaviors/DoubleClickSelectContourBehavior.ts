@@ -3,6 +3,7 @@ import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { ContourId, PointSnapshot } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import { isSegmentHit } from "@/types/hitResult";
 
 export class DoubleClickSelectContourBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -12,13 +13,10 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
   transition(_state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (event.type !== "doubleClick") return null;
 
-    const point = editor.getPointAt(event.point);
-    if (point) return null;
+    const hit = editor.getNodeAt(event.point);
+    if (!isSegmentHit(hit)) return null;
 
-    const segmentHit = editor.getSegmentAt(event.point);
-    if (!segmentHit) return null;
-
-    const contourId = this.findContourForSegment(segmentHit.segmentId, editor);
+    const contourId = this.findContourForSegment(hit.segmentId, editor);
     if (!contourId) return null;
 
     return {

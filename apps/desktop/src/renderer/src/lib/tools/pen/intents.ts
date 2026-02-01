@@ -1,6 +1,8 @@
 import type { Point2D, ContourId, PointId } from "@shift/types";
 import type { ToolContext } from "@/lib/tools/core";
 import type { Segment } from "@/types/segments";
+import type { HitResult } from "@/types/hitResult";
+import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
 import {
   AddPointCommand,
   CloseContourCommand,
@@ -30,18 +32,10 @@ export type PenIntent =
   | { action: "updateHover"; pos: Point2D };
 
 export interface PenIntentContext {
-  getContourEndpointAt(
-    pos: Point2D,
-  ): { contourId: ContourId; pointId: PointId; position: "start" | "end"; contour: unknown } | null;
-  getSegmentAt(
-    pos: Point2D,
-  ): { segment: Segment; segmentId: string; t: number; point: Point2D } | null;
+  getNodeAt(pos: Point2D): HitResult;
   getActiveContourId(): ContourId | null;
   hasActiveDrawingContour(): boolean;
   shouldCloseContour(pos: Point2D): boolean;
-  getMiddlePointAt?(
-    pos: Point2D,
-  ): { contourId: ContourId; pointId: PointId; pointIndex: number } | null;
 }
 
 export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent {
@@ -50,34 +44,31 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
   }
 
   if (!ctx.hasActiveDrawingContour()) {
-    const endpoint = ctx.getContourEndpointAt(pos);
-    if (endpoint && !(endpoint.contour as { closed?: boolean }).closed) {
+    const hit = ctx.getNodeAt(pos);
+
+    if (isContourEndpointHit(hit) && !hit.contour.closed) {
       return {
         action: "continue",
-        contourId: endpoint.contourId,
-        pointId: endpoint.pointId,
-        fromStart: endpoint.position === "start",
+        contourId: hit.contourId,
+        pointId: hit.pointId,
+        fromStart: hit.position === "start",
       };
     }
 
-    if (ctx.getMiddlePointAt) {
-      const middlePoint = ctx.getMiddlePointAt(pos);
-      if (middlePoint) {
-        return {
-          action: "splitPoint",
-          contourId: middlePoint.contourId,
-          pointId: middlePoint.pointId,
-          pointIndex: middlePoint.pointIndex,
-        };
-      }
+    if (isMiddlePointHit(hit)) {
+      return {
+        action: "splitPoint",
+        contourId: hit.contourId,
+        pointId: hit.pointId,
+        pointIndex: hit.pointIndex,
+      };
     }
 
-    const segmentHit = ctx.getSegmentAt(pos);
-    if (segmentHit) {
+    if (isSegmentHit(hit)) {
       return {
         action: "splitSegment",
-        segment: segmentHit.segment,
-        t: segmentHit.t,
+        segment: hit.segment,
+        t: hit.t,
       };
     }
   }

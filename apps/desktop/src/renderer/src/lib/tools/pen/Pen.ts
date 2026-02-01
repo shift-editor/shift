@@ -6,6 +6,7 @@ import type { PenState, PenBehavior } from "./types";
 import { PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 import type { CursorType } from "@/types/editor";
+import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
 
 export type { PenState };
 
@@ -43,20 +44,10 @@ export class Pen extends BaseTool<PenState> {
       return { type: "pen" };
     }
 
-    const endpoint = this.editor.getContourEndpointAt(pos);
-    if (endpoint && !endpoint.contour.closed) {
-      return { type: "pen-end" };
-    }
-
-    const middlePoint = this.getMiddlePointAt(pos);
-    if (middlePoint) {
-      return { type: "pen-end" };
-    }
-
-    const segmentHit = this.editor.getSegmentAt(pos);
-    if (segmentHit) {
-      return { type: "pen-add" };
-    }
+    const hit = this.editor.getNodeAt(pos);
+    if (isContourEndpointHit(hit) && !hit.contour.closed) return { type: "pen-end" };
+    if (isMiddlePointHit(hit)) return { type: "pen-end" };
+    if (isSegmentHit(hit)) return { type: "pen-add" };
 
     return { type: "pen" };
   }
@@ -198,10 +189,6 @@ export class Pen extends BaseTool<PenState> {
     if (!lastOnCurve) return null;
 
     return { x: lastOnCurve.x, y: lastOnCurve.y };
-  }
-
-  private getMiddlePointAt(pos: Point2D) {
-    return this.editor.getMiddlePointAt(pos);
   }
 
   renderBelowHandles(draw: DrawAPI): void {

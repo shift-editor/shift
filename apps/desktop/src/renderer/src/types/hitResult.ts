@@ -48,3 +48,9 @@ export function isContourEndpointHit(hit: HitResult): hit is ContourEndpointHit 
 export function isMiddlePointHit(hit: HitResult): hit is MiddlePointHit {
   return hit !== null && hit.type === "middlePoint";
 }
+
+export function getPointIdFromHit(hit: HitResult): PointId | null {
+  if (hit === null) return null;
+  if (isPointHit(hit) || isContourEndpointHit(hit) || isMiddlePointHit(hit)) return hit.pointId;
+  return null;
+}
