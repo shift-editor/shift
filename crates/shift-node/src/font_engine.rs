@@ -1,13 +1,11 @@
-use std::collections::HashSet;
-
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{
-  edit_ops::apply_edits,
   edit_session::EditSession,
   font_loader::FontLoader,
-  pattern::MatchedRule,
-  snapshot::{CommandResult, GlyphSnapshot},
+  snapshot::{
+    CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType,
+  },
   ContourId, Font, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
 };
 
@@ -226,14 +224,6 @@ impl FontEngine {
   // ═══════════════════════════════════════════════════════════
 
   #[napi]
-  pub fn get_snapshot(&self) -> Option<String> {
-    self.current_edit_session.as_ref().map(|session| {
-      let snapshot = GlyphSnapshot::from_edit_session(session);
-      serde_json::to_string(&snapshot).unwrap_or_else(|_| "null".to_string())
-    })
-  }
-
-  #[napi]
   pub fn get_snapshot_data(&self) -> Result<JSGlyphSnapshot> {
     let session = self
       .current_edit_session
@@ -241,27 +231,6 @@ impl FontEngine {
       .ok_or_else(|| Error::new(Status::GenericFailure, "No edit session active"))?;
 
     Ok(JSGlyphSnapshot::from_edit_session(session))
-  }
-
-  #[napi]
-  pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<String> {
-    let session = self.get_edit_session()?;
-
-    let snapshot: GlyphSnapshot = match serde_json::from_str(&snapshot_json) {
-      Ok(s) => s,
-      Err(e) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Failed to parse snapshot: {e}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
-
-    session.restore_from_snapshot(&snapshot);
-    let result = CommandResult::success_simple(session);
-    Ok(serde_json::to_string(&result).unwrap())
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -598,55 +567,82 @@ impl FontEngine {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // UNIFIED EDIT OPERATION
+  // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
   // ═══════════════════════════════════════════════════════════
 
+  /// Set point positions directly - fire-and-forget for drag operations.
+  /// Returns true on success, false on failure.
+  /// Does NOT return a snapshot - use get_snapshot_data() when needed.
   #[napi]
-  pub fn apply_edits_unified(
-    &mut self,
-    point_ids: Vec<String>,
-    dx: f64,
-    dy: f64,
-  ) -> Result<String> {
-    let session = self.get_edit_session()?;
-
-    let selected_ids: HashSet<PointId> = point_ids
-      .iter()
-      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
-      .collect();
-
-    if selected_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(
-        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
-      );
-    }
-
-    let result = apply_edits(session, &selected_ids, dx, dy);
-
-    let response = EditResultJson {
-      success: true,
-      snapshot: Some(result.snapshot),
-      affected_point_ids: result
-        .affected_point_ids
-        .iter()
-        .map(|id| id.to_string())
-        .collect(),
-      matched_rules: result.matched_rules,
-      error: None,
+  pub fn set_point_positions(&mut self, moves: Vec<JSPointMove>) -> Result<bool> {
+    let session = match self.current_edit_session.as_mut() {
+      Some(s) => s,
+      None => return Ok(false),
     };
 
-    Ok(serde_json::to_string(&response).unwrap())
+    for m in moves {
+      if let Ok(raw) = m.id.parse::<u128>() {
+        let point_id = PointId::from_raw(raw);
+        session.set_point_position(point_id, m.x, m.y);
+      }
+    }
+
+    Ok(true)
+  }
+
+  #[napi]
+  pub fn restore_snapshot_native(&mut self, snapshot: JSGlyphSnapshot) -> Result<bool> {
+    let session = match self.current_edit_session.as_mut() {
+      Some(s) => s,
+      None => return Ok(false),
+    };
+
+    // Convert JS snapshot to internal GlyphSnapshot
+    let glyph_snapshot = GlyphSnapshot {
+      unicode: snapshot.unicode,
+      name: snapshot.name,
+      x_advance: snapshot.x_advance,
+      contours: snapshot
+        .contours
+        .into_iter()
+        .map(|c| ContourSnapshot {
+          id: c.id,
+          points: c
+            .points
+            .into_iter()
+            .map(|p| PointSnapshot {
+              id: p.id,
+              x: p.x,
+              y: p.y,
+              point_type: if p.point_type == "offCurve" {
+                SnapshotPointType::OffCurve
+              } else {
+                SnapshotPointType::OnCurve
+              },
+              smooth: p.smooth,
+            })
+            .collect(),
+          closed: c.closed,
+        })
+        .collect(),
+      active_contour_id: snapshot.active_contour_id,
+    };
+
+    session.restore_from_snapshot(&glyph_snapshot);
+    Ok(true)
   }
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EditResultJson {
-  success: bool,
-  snapshot: Option<GlyphSnapshot>,
-  affected_point_ids: Vec<String>,
-  matched_rules: Vec<MatchedRule>,
-  error: Option<String>,
+// ═══════════════════════════════════════════════════════════
+// LIGHTWEIGHT NATIVE TYPES FOR DRAG OPERATIONS
+// ═══════════════════════════════════════════════════════════
+
+/// Input type for set_point_positions - a single point move
+#[napi(object)]
+pub struct JSPointMove {
+  pub id: String,
+  pub x: f64,
+  pub y: f64,
 }
 
 #[derive(serde::Serialize)]

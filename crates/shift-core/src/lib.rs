@@ -1,9 +1,7 @@
 pub mod binary;
 pub mod constants;
-pub mod edit_ops;
 pub mod edit_session;
 pub mod font_loader;
-pub mod pattern;
 pub mod snapshot;
 pub mod vec2;
 

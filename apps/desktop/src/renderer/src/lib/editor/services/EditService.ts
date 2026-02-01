@@ -60,6 +60,10 @@ export class EditService {
     return this.#fontEngine.editing.applySmartEdits(new Set(ids), dx, dy);
   }
 
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
+    this.#fontEngine.editing.setPointPositions(moves);
+  }
+
   removePoints(ids: Iterable<PointId>): void {
     this.#fontEngine.editing.removePoints([...ids]);
   }

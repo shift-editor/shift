@@ -39,6 +39,7 @@ import { IOManager } from "./io";
 export interface CommitContext {
   native: NativeFontEngine;
   hasSession: () => boolean;
+  getGlyph: () => GlyphSnapshot | null;
   commit: <T>(extract: (result: CommandResult) => T, operation: () => string) => T;
   emitGlyph: (glyph: GlyphSnapshot | null) => void;
 }
@@ -70,6 +71,7 @@ export class FontEngine {
     const ctx: CommitContext = {
       native: this.#native,
       hasSession: () => this.session.isActive(),
+      getGlyph: () => this.#$glyph.value,
       commit: <T>(extract: (result: CommandResult) => T, operation: () => string): T => {
         const resultJson = operation();
         const result = this.#parseCommandResult(resultJson);

@@ -5,19 +5,43 @@
  * the Rust backend or Electron context.
  */
 
+import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
 import type {
-  FontEngineAPI,
-  JsFontMetaData,
-  JsFontMetrics,
-  JsGlyphSnapshot,
-} from "@shared/bridge/FontEngineAPI";
-import type { PointType, CommandResult, PointId } from "@shift/types";
+  PointType,
+  CommandResult,
+  PointId,
+  GlyphSnapshot,
+  FontMetadata,
+  FontMetrics,
+} from "@shift/types";
+
+interface MockPoint {
+  id: string;
+  x: number;
+  y: number;
+  pointType: PointType;
+  smooth: boolean;
+}
+
+interface MockContour {
+  id: string;
+  points: MockPoint[];
+  closed: boolean;
+}
+
+interface MockSnapshot {
+  unicode: number;
+  name: string;
+  xAdvance: number;
+  contours: MockContour[];
+  activeContourId: string | null;
+}
 
 /**
  * Mock implementation of FontEngineAPI for testing.
  */
 export class MockFontEngine implements FontEngineAPI {
-  #snapshot: JsGlyphSnapshot | null = null;
+  #snapshot: MockSnapshot | null = null;
   #nextId = 1;
 
   #generateId(): string {
@@ -40,22 +64,36 @@ export class MockFontEngine implements FontEngineAPI {
   // FONT INFO
   // ═══════════════════════════════════════════════════════════
 
-  getMetadata(): JsFontMetaData {
+  getMetadata(): FontMetadata {
     return {
-      family: "Mock Font",
+      familyName: "Mock Font",
       styleName: "Regular",
       versionMajor: 1,
       versionMinor: 0,
+      copyright: null,
+      trademark: null,
+      designer: null,
+      designerUrl: null,
+      manufacturer: null,
+      manufacturerUrl: null,
+      license: null,
+      licenseUrl: null,
+      description: null,
+      note: null,
     };
   }
 
-  getMetrics(): JsFontMetrics {
+  getMetrics(): FontMetrics {
     return {
       unitsPerEm: 1000,
       ascender: 800,
       descender: -200,
       capHeight: 700,
       xHeight: 500,
+      lineGap: 0,
+      italicAngle: 0,
+      underlinePosition: -100,
+      underlineThickness: 50,
     };
   }
 
@@ -93,21 +131,16 @@ export class MockFontEngine implements FontEngineAPI {
   // SNAPSHOT METHODS
   // ═══════════════════════════════════════════════════════════
 
-  getSnapshot(): string | null {
-    if (!this.#snapshot) return null;
-    return JSON.stringify(this.#snapshot);
-  }
-
-  getSnapshotData(): JsGlyphSnapshot {
+  getSnapshotData(): GlyphSnapshot {
     if (!this.#snapshot) {
       throw new Error("No active edit session");
     }
-    return this.#snapshot;
+    return this.#snapshot as unknown as GlyphSnapshot;
   }
 
-  restoreSnapshot(snapshotJson: string): string {
-    this.#snapshot = JSON.parse(snapshotJson) as JsGlyphSnapshot;
-    return JSON.stringify({ success: true });
+  restoreSnapshot(snapshot: GlyphSnapshot): boolean {
+    this.#snapshot = snapshot as unknown as MockSnapshot;
+    return true;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -231,13 +264,7 @@ export class MockFontEngine implements FontEngineAPI {
     }
 
     const pointId = this.#generateId();
-    activeContour.points.push({
-      id: pointId,
-      x,
-      y,
-      pointType,
-      smooth,
-    });
+    activeContour.points.push({ id: pointId, x, y, pointType, smooth });
 
     return this.#makeResult(true, [pointId]);
   }
@@ -257,13 +284,7 @@ export class MockFontEngine implements FontEngineAPI {
     }
 
     const pointId = this.#generateId();
-    contour.points.push({
-      id: pointId,
-      x,
-      y,
-      pointType,
-      smooth,
-    });
+    contour.points.push({ id: pointId, x, y, pointType, smooth });
 
     return this.#makeResult(true, [pointId]);
   }
@@ -305,20 +326,11 @@ export class MockFontEngine implements FontEngineAPI {
   ): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
-    // Find the contour and index of the reference point
     for (const contour of this.#snapshot.contours) {
       const index = contour.points.findIndex((p) => p.id === beforePointId);
       if (index !== -1) {
         const newPointId = this.#generateId();
-        const newPoint = {
-          id: newPointId,
-          x,
-          y,
-          pointType,
-          smooth,
-        };
-        // Insert at the found index (before the reference point)
-        contour.points.splice(index, 0, newPoint);
+        contour.points.splice(index, 0, { id: newPointId, x, y, pointType, smooth });
         return this.#makeResult(true, [newPointId]);
       }
     }
@@ -341,38 +353,24 @@ export class MockFontEngine implements FontEngineAPI {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // UNIFIED EDIT OPERATION
+  // LIGHTWEIGHT DRAG OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  applyEditsUnified(pointIds: string[], dx: number, dy: number): string {
-    if (!this.#snapshot) {
-      return JSON.stringify({
-        success: false,
-        snapshot: null,
-        affectedPointIds: [],
-        matchedRules: [],
-        error: "No active edit session",
-      });
-    }
+  setPointPositions(moves: PointMove[]): boolean {
+    if (!this.#snapshot) return false;
 
-    const moved: string[] = [];
-    for (const contour of this.#snapshot.contours) {
-      for (const point of contour.points) {
-        if (pointIds.includes(point.id)) {
-          point.x += dx;
-          point.y += dy;
-          moved.push(point.id);
+    for (const move of moves) {
+      for (const contour of this.#snapshot.contours) {
+        const point = contour.points.find((p) => p.id === move.id);
+        if (point) {
+          point.x = move.x;
+          point.y = move.y;
+          break;
         }
       }
     }
 
-    return JSON.stringify({
-      success: true,
-      snapshot: this.#snapshot,
-      affectedPointIds: moved,
-      matchedRules: [],
-      error: null,
-    });
+    return true;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -396,7 +394,7 @@ export class MockFontEngine implements FontEngineAPI {
 
       for (const pasteContour of contours) {
         const contourId = this.#generateId();
-        const newContour = {
+        const newContour: MockContour = {
           id: contourId,
           closed: pasteContour.closed ?? false,
           points: pasteContour.points.map((p: any) => {
@@ -439,7 +437,7 @@ export class MockFontEngine implements FontEngineAPI {
   #makeResult(success: boolean, affectedPointIds: string[], error?: string): string {
     const result: CommandResult = {
       success,
-      snapshot: this.#snapshot as any, // Type coercion for mock
+      snapshot: this.#snapshot as unknown as GlyphSnapshot,
       error: error ?? null,
       affectedPointIds: affectedPointIds.length > 0 ? (affectedPointIds as PointId[]) : null,
       canUndo: false,

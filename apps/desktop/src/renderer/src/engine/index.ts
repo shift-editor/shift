@@ -35,10 +35,5 @@ export type {
   NativeGlyphSnapshot,
   NativeContourSnapshot,
   NativePointSnapshot,
-  JsGlyphSnapshot,
-  JsContourSnapshot,
-  JsPointSnapshot,
-  JsFontMetrics,
-  JsFontMetaData,
 } from "./native";
 export { getNative, hasNative } from "./native";

@@ -451,11 +451,23 @@ export class Editor {
   }
 
   public undo() {
+    // If in preview mode, cancel the preview first to restore the pre-drag state.
+    // This ensures the undo stack stays consistent with the actual state.
+    if (this.#isInPreview) {
+      this.cancelPreview();
+      return;
+    }
     this.#commandHistory.undo();
     this.requestRedraw();
   }
 
   public redo() {
+    // If in preview mode, cancel the preview first.
+    // Redo during drag doesn't make semantic sense, so just cancel.
+    if (this.#isInPreview) {
+      this.cancelPreview();
+      return;
+    }
     this.#commandHistory.redo();
     this.requestRedraw();
   }

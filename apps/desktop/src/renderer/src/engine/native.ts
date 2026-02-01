@@ -1,27 +1,19 @@
+import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
 import type {
-  FontEngineAPI,
-  JsGlyphSnapshot,
-  JsContourSnapshot,
-  JsPointSnapshot,
-  JsFontMetrics,
-  JsFontMetaData,
-} from "@shared/bridge/FontEngineAPI";
+  GlyphSnapshot,
+  ContourSnapshot,
+  PointSnapshot,
+  FontMetrics,
+  FontMetadata,
+} from "@shift/types";
 
-export type {
-  FontEngineAPI,
-  JsGlyphSnapshot,
-  JsContourSnapshot,
-  JsPointSnapshot,
-  JsFontMetrics,
-  JsFontMetaData,
-};
-
+export type { FontEngineAPI };
 export type NativeFontEngine = FontEngineAPI;
-export type NativeGlyphSnapshot = JsGlyphSnapshot;
-export type NativeContourSnapshot = JsContourSnapshot;
-export type NativePointSnapshot = JsPointSnapshot;
-export type NativeFontMetrics = JsFontMetrics;
-export type NativeFontMetadata = JsFontMetaData;
+export type NativeGlyphSnapshot = GlyphSnapshot;
+export type NativeContourSnapshot = ContourSnapshot;
+export type NativePointSnapshot = PointSnapshot;
+export type NativeFontMetrics = FontMetrics;
+export type NativeFontMetadata = FontMetadata;
 
 let cached: FontEngineAPI | null = null;
 

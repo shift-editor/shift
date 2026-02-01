@@ -4,18 +4,12 @@
  * All mutations to glyph geometry go through this manager.
  */
 
-import type { PointType, GlyphSnapshot, PointId, ContourId, MatchedRule } from "@shift/types";
+import type { PointType, GlyphSnapshot, PointId, ContourId } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
+import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { CommitContext } from "./FontEngine";
-
-interface SmartEditResult {
-  success: boolean;
-  snapshot: GlyphSnapshot | null;
-  affectedPointIds: string[];
-  matchedRules: MatchedRule[];
-  error: string | null;
-}
+import type { PointMove } from "@shared/bridge/FontEngineAPI";
 
 export type ManagerContext = CommitContext;
 
@@ -105,18 +99,15 @@ export class EditingManager {
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
 
-    const snapshotJson = this.#ctx.native.getSnapshot();
-    if (!snapshotJson) {
-      throw new NativeOperationError("movePointTo", "No snapshot available");
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) {
+      throw new NativeOperationError("movePointTo", "No glyph available");
     }
 
-    const snapshot = JSON.parse(snapshotJson) as GlyphSnapshot;
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const point = contour.points.find((p) => p.id === pointId);
       if (point) {
-        const dx = x - point.x;
-        const dy = y - point.y;
-        this.movePoints([pointId], dx, dy);
+        this.movePoints([pointId], x - point.x, y - point.y);
         return;
       }
     }
@@ -275,10 +266,8 @@ export class EditingManager {
       throw new NativeOperationError("pasteContours", result.error ?? undefined);
     }
 
-    const snapshotJson = this.#ctx.native.getSnapshot();
-    if (snapshotJson) {
-      this.#ctx.emitGlyph(JSON.parse(snapshotJson));
-    }
+    const glyph = this.#ctx.native.getSnapshotData() as GlyphSnapshot;
+    this.#ctx.emitGlyph(glyph);
 
     return result;
   }
@@ -297,24 +286,48 @@ export class EditingManager {
   }
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
-    if (!this.#ctx.hasSession()) {
-      return [];
-    }
+    if (!this.#ctx.hasSession()) return [];
 
-    const pointIds = [...selectedPoints];
-    const resultJson = this.#ctx.native.applyEditsUnified(pointIds, dx, dy);
-    const result: SmartEditResult = JSON.parse(resultJson);
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) return [];
 
-    if (result.success && result.snapshot) {
-      this.#ctx.emitGlyph(result.snapshot);
-    }
+    const { moves } = applyRules(glyph, selectedPoints, dx, dy);
+    if (moves.length === 0) return [];
 
-    return result.affectedPointIds?.map(asPointId) ?? [];
+    const updatedGlyph = applyMovesToGlyph(glyph, moves);
+    this.#ctx.emitGlyph(updatedGlyph);
+
+    const nativeMoves: PointMove[] = moves.map((m) => ({
+      id: m.id,
+      x: m.x,
+      y: m.y,
+    }));
+    this.#ctx.native.setPointPositions(nativeMoves);
+
+    return moves.map((m) => m.id);
+  }
+
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
+    if (!this.#ctx.hasSession()) return;
+    if (moves.length === 0) return;
+
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) return;
+
+    const updatedGlyph = applyMovesToGlyph(glyph, moves);
+    this.#ctx.emitGlyph(updatedGlyph);
+
+    const nativeMoves: PointMove[] = moves.map((m) => ({
+      id: m.id,
+      x: m.x,
+      y: m.y,
+    }));
+    this.#ctx.native.setPointPositions(nativeMoves);
   }
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
-    this.#ctx.native.restoreSnapshot(JSON.stringify(snapshot));
+    this.#ctx.native.restoreSnapshot(snapshot);
     this.#ctx.emitGlyph(snapshot);
   }
 
