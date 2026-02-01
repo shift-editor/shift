@@ -210,10 +210,10 @@ Tools access services through the Editor instance:
 
 ```typescript
 // In a tool or behavior:
-this.editor.selection.selectPoints(ids);
-this.editor.cursor.set({ type: "crosshair" });
-this.editor.hitTest.getPointAt(pos);
-this.editor.preview.beginPreview();
+this.editor.selectPoints(ids);
+this.editor.setCursor({ type: "crosshair" });
+this.editor.getPointAt(pos);
+this.editor.beginPreview();
 this.editor.commands.execute(cmd);
 ```
 
@@ -249,7 +249,7 @@ class MyTool extends BaseTool<MyState> {
 
   activate(): void {
     this.state = { type: "ready" };
-    this.editor.cursor.set({ type: "crosshair" });
+    this.editor.setCursor({ type: "crosshair" });
   }
 }
 ```

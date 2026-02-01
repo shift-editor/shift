@@ -56,7 +56,7 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
       break;
 
     case "togglePoint":
-      editor.selection.togglePoint(intent.pointId);
+      editor.togglePointSelection(intent.pointId);
       break;
 
     case "toggleSegment":
@@ -68,28 +68,28 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
       break;
 
     case "clearSelection":
-      editor.selection.clear();
+      editor.clearSelection();
       break;
 
     case "clearAndStartMarquee":
-      editor.selection.clear();
-      editor.selection.setMode("preview");
+      editor.clearSelection();
+      editor.setSelectionMode("preview");
       break;
 
     case "setSelectionMode":
-      editor.selection.setMode(intent.mode);
+      editor.setSelectionMode(intent.mode);
       break;
 
     case "beginPreview":
-      editor.preview.beginPreview();
+      editor.beginPreview();
       break;
 
     case "commitPreview":
-      editor.preview.commitPreview(intent.label);
+      editor.commitPreview(intent.label);
       break;
 
     case "cancelPreview":
-      editor.preview.cancelPreview();
+      editor.cancelPreview();
       break;
 
     case "movePointsDelta":
@@ -109,13 +109,13 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
       break;
 
     case "toggleSmooth":
-      editor.edit.toggleSmooth(intent.pointId);
-      editor.render.requestRedraw();
+      editor.toggleSmooth(intent.pointId);
+      editor.requestRedraw();
       break;
 
     case "selectPoints":
-      editor.selection.clear();
-      editor.selection.selectPoints(intent.pointIds);
+      editor.clearSelection();
+      editor.selectPoints(intent.pointIds);
       break;
 
     case "upgradeLineToCubic":
@@ -130,68 +130,68 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
 
 function executeSelectPoint(pointId: PointId, additive: boolean, editor: Editor): void {
   if (additive) {
-    const current = editor.selection.getSelectedPoints();
-    editor.selection.selectPoints([...current, pointId]);
+    const current = editor.getSelectedPoints();
+    editor.selectPoints([...current, pointId]);
   } else {
-    editor.selection.clear();
-    editor.selection.selectPoints([pointId]);
+    editor.clearSelection();
+    editor.selectPoints([pointId]);
   }
 }
 
 function executeSelectSegment(segmentId: SegmentId, additive: boolean, editor: Editor): PointId[] {
-  const segment = editor.hitTest.getSegmentById(segmentId);
+  const segment = editor.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);
 
   if (additive) {
-    editor.selection.addSegment(segmentId);
+    editor.addSegmentToSelection(segmentId);
     for (const id of pointIds) {
-      editor.selection.addPoint(id);
+      editor.addPointToSelection(id);
     }
   } else {
-    editor.selection.selectSegments([segmentId]);
-    editor.selection.selectPoints(pointIds);
+    editor.selectSegments([segmentId]);
+    editor.selectPoints(pointIds);
   }
 
   return pointIds;
 }
 
 function executeToggleSegment(segmentId: SegmentId, editor: Editor): PointId[] {
-  const wasSelected = editor.selection.isSegmentSelected(segmentId);
-  editor.selection.toggleSegment(segmentId);
+  const wasSelected = editor.isSegmentSelected(segmentId);
+  editor.toggleSegmentInSelection(segmentId);
 
-  const segment = editor.hitTest.getSegmentById(segmentId);
+  const segment = editor.getSegmentById(segmentId);
   if (!segment) return [];
 
   const pointIds = SegmentOps.getPointIds(segment);
 
   if (wasSelected) {
     for (const id of pointIds) {
-      editor.selection.removePoint(id);
+      editor.removePointFromSelection(id);
     }
     return [];
   } else {
     for (const id of pointIds) {
-      editor.selection.addPoint(id);
+      editor.addPointToSelection(id);
     }
     return pointIds;
   }
 }
 
 function executeSelectPointsInRect(rect: Rect2D, editor: Editor): PointId[] {
-  const allPoints = editor.hitTest.getAllPoints();
+  const allPoints = editor.getAllPoints();
   const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
   const pointIds = hitPoints.map((p) => asPointId(p.id));
-  editor.selection.clear();
-  editor.selection.selectPoints(pointIds);
+  editor.clearSelection();
+  editor.selectPoints(pointIds);
   return pointIds;
 }
 
 function executeMovePointsDelta(delta: Point2D, editor: Editor): void {
   if (delta.x === 0 && delta.y === 0) return;
-  const selectedPoints = editor.selection.getSelectedPoints();
-  editor.edit.applySmartEdits(selectedPoints, delta.x, delta.y);
+  const selectedPoints = editor.getSelectedPoints();
+  editor.applySmartEdits(selectedPoints, delta.x, delta.y);
 }
 
 function executeScalePoints(
@@ -201,7 +201,7 @@ function executeScalePoints(
   anchor: Point2D,
   editor: Editor,
 ): void {
-  editor.preview.cancelPreview();
+  editor.cancelPreview();
   if (sx !== 1 || sy !== 1) {
     const cmd = new ScalePointsCommand(pointIds, sx, sy, anchor);
     editor.commands.execute(cmd);
@@ -214,7 +214,7 @@ function executeRotatePoints(
   center: Point2D,
   editor: Editor,
 ): void {
-  editor.preview.cancelPreview();
+  editor.cancelPreview();
   if (angle !== 0) {
     const cmd = new RotatePointsCommand(pointIds, angle, center);
     editor.commands.execute(cmd);
@@ -225,13 +225,13 @@ function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: Edito
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
   editor.commands.execute(cmd);
-  editor.render.requestRedraw();
+  editor.requestRedraw();
 }
 
 function executeUpgradeLineToCubic(segment: LineSegment, editor: Editor): void {
   const cmd = new UpgradeLineToCubicCommand(segment);
   editor.commands.execute(cmd);
-  editor.render.requestRedraw();
+  editor.requestRedraw();
 }
 
 function executeSelectContour(contourId: ContourId, additive: boolean, editor: Editor): void {
@@ -244,7 +244,7 @@ function executeSelectContour(contourId: ContourId, additive: boolean, editor: E
   const pointIds = contour.points.map((p) => asPointId(p.id));
 
   if (!additive) {
-    editor.selection.clear();
+    editor.clearSelection();
   }
-  editor.selection.selectPoints(pointIds);
+  editor.selectPoints(pointIds);
 }

@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/types";
 import type { Editor } from "@/lib/editor";
-import type { ToolSwitchHandler, TemporaryToolOptions } from "@/lib/editor/services";
+import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
@@ -23,7 +23,6 @@ export class ToolManager implements ToolSwitchHandler {
 
   constructor(editor: Editor) {
     this.editor = editor;
-    editor.tools.setHandler(this);
   }
 
   get activeTool(): BaseTool<ToolState> | null {
@@ -64,7 +63,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.primaryTool.activate?.();
     this.editor.setActiveToolState(this.primaryTool.getState());
     if (this.primaryTool.renderBelowHandles) {
-      this.editor.render.requestStaticRedraw();
+      this.editor.requestStaticRedraw();
     }
   }
 
@@ -133,7 +132,7 @@ export class ToolManager implements ToolSwitchHandler {
     }
 
     if (this.activeTool?.renderBelowHandles) {
-      this.editor.render.requestStaticRedraw();
+      this.editor.requestStaticRedraw();
     }
   }
 

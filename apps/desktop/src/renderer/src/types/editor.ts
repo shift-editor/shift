@@ -19,6 +19,7 @@ export interface StaticRenderState {
   selectedSegmentIds: ReadonlySet<SegmentId>;
   selectionMode: SelectionMode;
   previewMode: boolean;
+  handlesVisible: boolean;
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;
 }
@@ -60,4 +61,14 @@ export type VisualState = "idle" | "hovered" | "selected";
 export interface ToolRegistryItem {
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
   tooltip: string;
+}
+
+export interface TemporaryToolOptions {
+  onActivate?: () => void;
+  onReturn?: () => void;
+}
+
+export interface ToolSwitchHandler {
+  requestTemporary: (toolId: string, options?: TemporaryToolOptions) => void;
+  returnFromTemporary: () => void;
 }

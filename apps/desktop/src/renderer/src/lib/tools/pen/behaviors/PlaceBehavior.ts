@@ -15,8 +15,9 @@ export class PlaceBehavior implements PenBehavior {
     if (event.type !== "click" && event.type !== "dragStart") return null;
 
     const intent = resolvePenIntent(event.point, {
-      hitTest: editor.hitTest,
-      getActiveContourId: () => editor.edit.getActiveContourId(),
+      getContourEndpointAt: (pos) => editor.getContourEndpointAt(pos),
+      getSegmentAt: (pos) => editor.getSegmentAt(pos),
+      getActiveContourId: () => editor.getActiveContourId(),
       hasActiveDrawingContour: () => this.hasActiveDrawingContour(editor),
       shouldCloseContour: (p) => this.shouldCloseContour(p, editor),
       getMiddlePointAt: (p) => this.getMiddlePointAt(p, editor),
@@ -48,13 +49,13 @@ export class PlaceBehavior implements PenBehavior {
   }
 
   private hasActiveDrawingContour(editor: Editor): boolean {
-    const contour = editor.edit.getActiveContour();
+    const contour = editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
   private shouldCloseContour(pos: Point2D, editor: Editor): boolean {
-    const contour = editor.edit.getActiveContour();
+    const contour = editor.getActiveContour();
     if (!contour || contour.closed || contour.points.length < 2) {
       return false;
     }
@@ -66,11 +67,11 @@ export class PlaceBehavior implements PenBehavior {
   }
 
   private getMiddlePointAt(pos: Point2D, editor: Editor) {
-    return editor.hitTest.getMiddlePointAt(pos);
+    return editor.getMiddlePointAt(pos);
   }
 
   private buildContourContext(editor: Editor): ContourContext {
-    const contour = editor.edit.getActiveContour();
+    const contour = editor.getActiveContour();
     if (!contour || Contours.isEmpty(contour)) {
       return {
         previousPointType: "none",

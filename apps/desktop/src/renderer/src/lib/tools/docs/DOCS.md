@@ -149,9 +149,9 @@ Tools access services via the `Editor` instance:
 
 ```typescript
 // In a tool or behavior:
-this.editor.selection.selectPoints(ids);
-this.editor.cursor.set({ type: "crosshair" });
-this.editor.hitTest.getPointAt(pos);
+this.editor.selectPoints(ids);
+this.editor.setCursor({ type: "crosshair" });
+this.editor.getPointAt(pos);
 ```
 
 Available services:
@@ -357,13 +357,13 @@ class MyTool extends BaseTool<MyState> {
 
   onTransition(prev: MyState, next: MyState, event: ToolEvent): void {
     if (next.type === "active") {
-      this.editor.cursor.set({ type: "crosshair" });
+      this.editor.setCursor({ type: "crosshair" });
     }
   }
 
   activate(): void {
     this.state = { type: "ready" };
-    this.editor.cursor.set({ type: "default" });
+    this.editor.setCursor({ type: "default" });
   }
 }
 ```
@@ -400,7 +400,7 @@ class MyTool extends BaseTool<MyState> {
 onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
   // Start preview when drag begins
   if (prev.type === "selected" && next.type === "dragging") {
-    this.editor.preview.beginPreview();
+    this.editor.beginPreview();
   }
 
   // Commit when drag ends with actual movement
@@ -408,12 +408,12 @@ onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
     if (event.type === "dragEnd") {
       const { totalDelta, draggedPointIds } = prev.drag;
       if ((totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0) {
-        this.editor.preview.commitPreview("Move Points");
+        this.editor.commitPreview("Move Points");
       } else {
-        this.editor.preview.cancelPreview();
+        this.editor.cancelPreview();
       }
     } else {
-      this.editor.preview.cancelPreview();
+      this.editor.cancelPreview();
     }
   }
 }
@@ -438,7 +438,7 @@ tool.transition(state, event) → new state
       ↓
 tool.onTransition(prev, next, event) → side effects
       ↓
-editor.render.requestRedraw()
+editor.requestRedraw()
       ↓
 tool.render(renderer) → draw overlays
 ```

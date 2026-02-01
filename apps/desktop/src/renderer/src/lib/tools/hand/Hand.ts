@@ -62,7 +62,7 @@ export class Hand extends BaseTool<HandState> {
             y: state.startPan.y + screenDelta.y,
           };
           this.editor.setPan(newPan.x, newPan.y);
-          this.editor.render.requestRedraw();
+          this.editor.requestRedraw();
           return state;
         }
         if (event.type === "dragEnd" || event.type === "dragCancel") {

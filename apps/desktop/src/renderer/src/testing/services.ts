@@ -2,7 +2,8 @@ import { vi } from "vitest";
 import type { PointId, ContourId, GlyphSnapshot, Point, Contour } from "@shift/types";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
-import type { ContourEndpointHit, TemporaryToolOptions } from "@/lib/editor/services";
+import type { ContourEndpointHit } from "@/types/hitResult";
+import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
@@ -182,6 +183,48 @@ export interface MockToolContext extends ToolContext {
   screenToUpmDistance(pixels: number): number;
   hasSelection(): boolean;
   setActiveToolState(state: unknown): void;
+  selectPoints(ids: readonly PointId[]): void;
+  clearSelection(): void;
+  setSelectionMode(mode: SelectionMode): void;
+  getSelectionMode(): SelectionMode;
+  addPointToSelection(id: PointId): void;
+  removePointFromSelection(id: PointId): void;
+  togglePointSelection(id: PointId): void;
+  isPointSelected(id: PointId): boolean;
+  selectSegments(ids: readonly SegmentId[]): void;
+  addSegmentToSelection(id: SegmentId): void;
+  removeSegmentFromSelection(id: SegmentId): void;
+  toggleSegmentInSelection(id: SegmentId): void;
+  isSegmentSelected(id: SegmentId): boolean;
+  getGlyph(): GlyphSnapshot | null;
+  addPoint(x: number, y: number, type: any, smooth?: boolean): PointId;
+  movePointTo(id: PointId, x: number, y: number): void;
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
+  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
+  toggleSmooth(id: PointId): void;
+  getActiveContourId(): ContourId | null;
+  getActiveContour(): Contour | null;
+  setActiveContour(id: ContourId): void;
+  clearActiveContour(): void;
+  beginPreview(): void;
+  cancelPreview(): void;
+  commitPreview(label: string): void;
+  requestRedraw(): void;
+  requestStaticRedraw(): void;
+  setPreviewMode(enabled: boolean): void;
+  setHandlesVisible(visible: boolean): void;
+  getPointAt(pos: Point2D): Point | null;
+  getSegmentAt(pos: Point2D): any;
+  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
+  getSelectionBoundingRect(): any;
+  getAllPoints(): Point[];
+  getSegmentById(id: SegmentId): any;
+  updateHover(pos: Point2D): void;
+  getMiddlePointAt(pos: Point2D): any;
+  getFocusZone(): "canvas" | "sidebar" | "toolbar" | "modal";
+  clearHover(): void;
+  requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
+  returnFromTemporaryTool(): void;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -700,6 +743,7 @@ function createMockHitTestService(
       const firstDist = Math.sqrt((firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2);
       if (firstDist < hitRadius) {
         return {
+          type: "contourEndpoint" as const,
           contourId: asContourId(contour.id),
           pointId: asPointId(firstPoint.id),
           position: "start" as const,
@@ -710,6 +754,7 @@ function createMockHitTestService(
       const lastDist = Math.sqrt((lastPoint.x - pos.x) ** 2 + (lastPoint.y - pos.y) ** 2);
       if (lastDist < hitRadius) {
         return {
+          type: "contourEndpoint" as const,
           contourId: asContourId(contour.id),
           pointId: asPointId(lastPoint.id),
           position: "end" as const,
@@ -884,11 +929,11 @@ export function createMockToolContext(): MockToolContext {
     zone,
     tools,
     fontEngine,
-    getSelectedPoints: () => [...selection._selectedPoints] as readonly PointId[],
-    getSelectedSegments: () => [...selection._selectedSegments] as readonly SegmentId[],
-    getHoveredPoint: () => hover._hoveredPoint,
-    getHoveredSegment: () => hover._hoveredSegment,
-    getCursorValue: () => cursor._cursor,
+    getSelectedPoints: () => selection.getSelectedPoints(),
+    getSelectedSegments: () => selection.getSelectedSegments(),
+    getHoveredPoint: () => hover.getHoveredPoint(),
+    getHoveredSegment: () => hover.getHoveredSegment(),
+    getCursorValue: () => cursor.get(),
     get hitRadius() {
       return 8;
     },
@@ -904,6 +949,52 @@ export function createMockToolContext(): MockToolContext {
     setActiveToolState: (state: unknown) => {
       $activeToolState.value = state as { type: string };
     },
+    selectPoints: (ids: readonly PointId[]) => selection.selectPoints(ids),
+    clearSelection: () => selection.clear(),
+    setSelectionMode: (mode: SelectionMode) => selection.setMode(mode),
+    getSelectionMode: () => selection.getMode(),
+    addPointToSelection: (id: PointId) => selection.addPoint(id),
+    removePointFromSelection: (id: PointId) => selection.removePoint(id),
+    togglePointSelection: (id: PointId) => selection.togglePoint(id),
+    isPointSelected: (id: PointId) => selection.isPointSelected(id),
+    selectSegments: (ids: readonly SegmentId[]) => selection.selectSegments(ids),
+    addSegmentToSelection: (id: SegmentId) => selection.addSegment(id),
+    removeSegmentFromSelection: (id: SegmentId) => selection.removeSegment(id),
+    toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
+    isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
+    getGlyph: () => edit.getGlyph(),
+    addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
+      edit.addPoint(x, y, type, smooth),
+    movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
+    setPointPositions: (moves: Array<{ id: PointId; x: number; y: number }>) =>
+      edit.setPointPositions(moves),
+    applySmartEdits: (ids: readonly PointId[], dx: number, dy: number) =>
+      edit.applySmartEdits(ids, dx, dy),
+    toggleSmooth: (id: PointId) => edit.toggleSmooth(id),
+    getActiveContourId: () => edit.getActiveContourId(),
+    getActiveContour: () => edit.getActiveContour(),
+    setActiveContour: (id: ContourId) => edit.setActiveContour(id),
+    clearActiveContour: () => edit.clearActiveContour(),
+    beginPreview: () => preview.beginPreview(),
+    cancelPreview: () => preview.cancelPreview(),
+    commitPreview: (label: string) => preview.commitPreview(label),
+    requestRedraw: () => render.requestRedraw(),
+    requestStaticRedraw: () => render.requestStaticRedraw(),
+    setPreviewMode: (enabled: boolean) => render.setPreviewMode(enabled),
+    setHandlesVisible: (visible: boolean) => render.setHandlesVisible(visible),
+    getPointAt: (pos: Point2D) => hitTest.getPointAt(pos),
+    getSegmentAt: (pos: Point2D) => hitTest.getSegmentAt(pos),
+    getContourEndpointAt: (pos: Point2D) => hitTest.getContourEndpointAt(pos),
+    getSelectionBoundingRect: () => hitTest.getSelectionBoundingRect(),
+    getAllPoints: () => hitTest.getAllPoints(),
+    getSegmentById: (id: SegmentId) => hitTest.getSegmentById(id),
+    updateHover: (pos: Point2D) => hitTest.updateHover(pos),
+    getMiddlePointAt: (pos: Point2D) => hitTest.getMiddlePointAt(pos),
+    getFocusZone: () => zone.getZone(),
+    clearHover: () => hover.clearAll(),
+    requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
+      tools.requestTemporary(toolId, options),
+    returnFromTemporaryTool: () => tools.returnFromTemporary(),
     mocks: {
       screen,
       selection,

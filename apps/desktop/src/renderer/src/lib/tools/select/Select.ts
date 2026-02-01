@@ -89,12 +89,12 @@ export class Select extends BaseTool<SelectState> {
   handleModifier(key: string, pressed: boolean): boolean {
     if (key === "Space") {
       if (pressed) {
-        this.editor.tools.requestTemporary("hand", {
-          onActivate: () => this.editor.render.setPreviewMode(true),
-          onReturn: () => this.editor.render.setPreviewMode(false),
+        this.editor.requestTemporaryTool("hand", {
+          onActivate: () => this.editor.setPreviewMode(true),
+          onReturn: () => this.editor.setPreviewMode(false),
         });
       } else {
-        this.editor.tools.returnFromTemporary();
+        this.editor.returnFromTemporaryTool();
       }
       return true;
     }

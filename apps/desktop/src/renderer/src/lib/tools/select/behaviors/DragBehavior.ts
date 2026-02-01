@@ -31,8 +31,8 @@ export class DragBehavior implements SelectBehavior {
 
   onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: Editor): void {
     if (prev.type !== "dragging" && next.type === "dragging") {
-      editor.preview.beginPreview();
-      editor.hover.clearAll();
+      editor.beginPreview();
+      editor.clearHover();
     }
   }
 
@@ -80,11 +80,11 @@ export class DragBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: Editor,
   ): SelectState | null {
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
 
     if (point) {
       const pointId = point.id;
-      const isSelected = state.type === "selected" && editor.selection.isPointSelected(pointId);
+      const isSelected = state.type === "selected" && editor.isPointSelected(pointId);
 
       if (event.altKey && isSelected) {
         const newPointIds = this.duplicateSelection(editor);
@@ -103,7 +103,7 @@ export class DragBehavior implements SelectBehavior {
         }
       }
 
-      const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : [pointId];
+      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [pointId];
 
       return {
         type: "dragging",
@@ -118,13 +118,13 @@ export class DragBehavior implements SelectBehavior {
       };
     }
 
-    const segmentHit = editor.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.getSegmentAt(event.point);
     if (segmentHit) {
-      const segment = editor.hitTest.getSegmentById(segmentHit.segmentId);
+      const segment = editor.getSegmentById(segmentHit.segmentId);
       const pointIds = segment ? SegmentOps.getPointIds(segment) : [];
 
       const isSelected =
-        state.type === "selected" && editor.selection.isSegmentSelected(segmentHit.segmentId);
+        state.type === "selected" && editor.isSegmentSelected(segmentHit.segmentId);
 
       if (event.altKey && isSelected) {
         const newPointIds = this.duplicateSelection(editor);
@@ -143,7 +143,7 @@ export class DragBehavior implements SelectBehavior {
         }
       }
 
-      const draggedPointIds = isSelected ? [...editor.selection.getSelectedPoints()] : pointIds;
+      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : pointIds;
 
       return {
         type: "dragging",
@@ -171,8 +171,8 @@ export class DragBehavior implements SelectBehavior {
     const glyph = editor.getGlyph();
     if (!glyph) return [];
 
-    const selectedPointIds = [...editor.selection.getSelectedPoints()];
-    const selectedSegmentIds = [...editor.selection.getSelectedSegments()];
+    const selectedPointIds = [...editor.getSelectedPoints()];
+    const selectedSegmentIds = [...editor.getSelectedSegments()];
 
     const resolver = new ContentResolver();
     const content = resolver.resolve(

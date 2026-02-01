@@ -1,5 +1,5 @@
 import type { Point2D, ContourId, PointId } from "@shift/types";
-import type { Editor, HitTestService } from "@/lib/editor";
+import type { Editor } from "@/lib/editor";
 import type { Segment } from "@/types/segments";
 import {
   AddPointCommand,
@@ -30,7 +30,12 @@ export type PenIntent =
   | { action: "updateHover"; pos: Point2D };
 
 export interface PenIntentContext {
-  hitTest: HitTestService;
+  getContourEndpointAt(
+    pos: Point2D,
+  ): { contourId: ContourId; pointId: PointId; position: "start" | "end"; contour: unknown } | null;
+  getSegmentAt(
+    pos: Point2D,
+  ): { segment: Segment; segmentId: string; t: number; point: Point2D } | null;
   getActiveContourId(): ContourId | null;
   hasActiveDrawingContour(): boolean;
   shouldCloseContour(pos: Point2D): boolean;
@@ -45,8 +50,8 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
   }
 
   if (!ctx.hasActiveDrawingContour()) {
-    const endpoint = ctx.hitTest.getContourEndpointAt(pos);
-    if (endpoint && !endpoint.contour.closed) {
+    const endpoint = ctx.getContourEndpointAt(pos);
+    if (endpoint && !(endpoint.contour as { closed?: boolean }).closed) {
       return {
         action: "continue",
         contourId: endpoint.contourId,
@@ -67,7 +72,7 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
       }
     }
 
-    const segmentHit = ctx.hitTest.getSegmentAt(pos);
+    const segmentHit = ctx.getSegmentAt(pos);
     if (segmentHit) {
       return {
         action: "splitSegment",
@@ -93,11 +98,11 @@ export function executeIntent(intent: PenIntent, editor: Editor): PointId | null
         editor.commands.execute(new ReverseContourCommand(intent.contourId));
       }
 
-      editor.selection.selectPoints([intent.pointId]);
+      editor.selectPoints([intent.pointId]);
       return null;
 
     case "splitPoint":
-      editor.edit.setActiveContour(intent.contourId);
+      editor.setActiveContour(intent.contourId);
       return null;
 
     case "splitSegment": {
@@ -111,12 +116,12 @@ export function executeIntent(intent: PenIntent, editor: Editor): PointId | null
     }
 
     case "abandonContour":
-      editor.selection.clear();
+      editor.clearSelection();
       editor.commands.execute(new AddContourCommand());
       return null;
 
     case "updateHover":
-      editor.hitTest.updateHover(intent.pos);
+      editor.updateHover(intent.pos);
       return null;
   }
 }

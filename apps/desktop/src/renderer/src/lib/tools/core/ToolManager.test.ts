@@ -4,7 +4,6 @@ import { createMockToolContext, type MockToolContext } from "@/testing";
 import { Hand } from "../hand/Hand";
 import { Select } from "../select/Select";
 import { Pen } from "../pen/Pen";
-import type { ToolSwitchHandler, TemporaryToolOptions } from "@/lib/editor/services";
 import type { ToolName } from "./createContext";
 
 function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
@@ -21,43 +20,23 @@ function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {})
   } as KeyboardEvent;
 }
 
-interface MockEditor extends MockToolContext {
-  tools: {
-    requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void;
-    returnFromTemporary(): void;
-    setHandler(handler: ToolSwitchHandler): void;
-  };
-}
-
-function createMockEditor(): MockEditor {
-  const ctx = createMockToolContext();
-  let handler: ToolSwitchHandler | null = null;
-
-  const tools = {
-    setHandler: (h: ToolSwitchHandler) => {
-      handler = h;
-    },
-    requestTemporary: (toolId: ToolName, options?: TemporaryToolOptions) => {
-      handler?.requestTemporary(toolId, options);
-    },
-    returnFromTemporary: () => {
-      handler?.returnFromTemporary();
-    },
-  };
-
-  return {
-    ...ctx,
-    tools,
-  };
-}
-
 describe("ToolManager", () => {
   let toolManager: ToolManager;
-  let editor: MockEditor;
+  let editor: MockToolContext & {
+    requestTemporaryTool(
+      toolId: ToolName,
+      options?: { onActivate?: () => void; onReturn?: () => void },
+    ): void;
+    returnFromTemporaryTool(): void;
+  };
 
   beforeEach(() => {
-    editor = createMockEditor();
+    const ctx = createMockToolContext();
+    editor = ctx as typeof editor;
     toolManager = new ToolManager(editor as any);
+    editor.requestTemporaryTool = (toolId, options) =>
+      toolManager.requestTemporary(toolId, options);
+    editor.returnFromTemporaryTool = () => toolManager.returnFromTemporary();
     toolManager.register("hand", Hand);
     toolManager.register("select", Select);
     toolManager.register("pen", Pen);
@@ -66,22 +45,22 @@ describe("ToolManager", () => {
   describe("space key for hand tool", () => {
     it("should enable preview mode when space is pressed via tool handleModifier", () => {
       toolManager.activate("pen");
-      editor.mocks.render.mocks.setPreviewMode.mockClear();
+      editor.mocks.render.setPreviewMode.mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
 
-      expect(editor.mocks.render.mocks.setPreviewMode).toHaveBeenCalledWith(true);
+      expect(editor.mocks.render.setPreviewMode).toHaveBeenCalledWith(true);
       expect(toolManager.activeToolId).toBe("hand");
     });
 
     it("should disable preview mode when space is released", () => {
       toolManager.activate("pen");
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
-      editor.mocks.render.mocks.setPreviewMode.mockClear();
+      editor.mocks.render.setPreviewMode.mockClear();
 
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { code: "Space" }));
 
-      expect(editor.mocks.render.mocks.setPreviewMode).toHaveBeenCalledWith(false);
+      expect(editor.mocks.render.setPreviewMode).toHaveBeenCalledWith(false);
       expect(toolManager.activeToolId).toBe("pen");
     });
 
@@ -99,7 +78,7 @@ describe("ToolManager", () => {
   describe("meta key behavior (zoom support)", () => {
     it("should NOT switch to select tool when meta key is pressed", () => {
       toolManager.activate("pen");
-      editor.mocks.cursor.mocks.set.mockClear();
+      editor.mocks.cursor.set.mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
 
@@ -168,7 +147,7 @@ describe("ToolManager", () => {
     it("should expose requestTemporary method", () => {
       toolManager.activate("pen");
 
-      editor.tools.requestTemporary("hand");
+      editor.requestTemporaryTool("hand");
 
       expect(toolManager.activeToolId).toBe("hand");
       expect(toolManager.primaryToolId).toBe("pen");
@@ -176,9 +155,9 @@ describe("ToolManager", () => {
 
     it("should expose returnFromTemporary method", () => {
       toolManager.activate("pen");
-      editor.tools.requestTemporary("hand");
+      editor.requestTemporaryTool("hand");
 
-      editor.tools.returnFromTemporary();
+      editor.returnFromTemporaryTool();
 
       expect(toolManager.activeToolId).toBe("pen");
     });
@@ -188,7 +167,7 @@ describe("ToolManager", () => {
       const onActivate = { fn: () => {} };
       const spy = vi.spyOn(onActivate, "fn");
 
-      editor.tools.requestTemporary("hand", { onActivate: onActivate.fn });
+      editor.requestTemporaryTool("hand", { onActivate: onActivate.fn });
 
       expect(spy).toHaveBeenCalled();
     });
@@ -198,8 +177,8 @@ describe("ToolManager", () => {
       const onReturn = { fn: () => {} };
       const spy = vi.spyOn(onReturn, "fn");
 
-      editor.tools.requestTemporary("hand", { onReturn: onReturn.fn });
-      editor.tools.returnFromTemporary();
+      editor.requestTemporaryTool("hand", { onReturn: onReturn.fn });
+      editor.returnFromTemporaryTool();
 
       expect(spy).toHaveBeenCalled();
     });

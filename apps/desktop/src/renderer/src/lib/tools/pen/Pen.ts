@@ -51,7 +51,7 @@ export class Pen extends BaseTool<PenState> {
         return { type: "pen" };
       }
 
-      const endpoint = this.editor.hitTest.getContourEndpointAt(pos);
+      const endpoint = this.editor.getContourEndpointAt(pos);
       if (endpoint && !endpoint.contour.closed) {
         return { type: "pen-end" };
       }
@@ -61,7 +61,7 @@ export class Pen extends BaseTool<PenState> {
         return { type: "pen-end" };
       }
 
-      const segmentHit = this.editor.hitTest.getSegmentAt(pos);
+      const segmentHit = this.editor.getSegmentAt(pos);
       if (segmentHit) {
         return { type: "pen-add" };
       }
@@ -77,7 +77,7 @@ export class Pen extends BaseTool<PenState> {
   activate(): void {
     const pos = this.editor.getScreenMousePosition();
     this.state = { type: "ready", mousePos: pos };
-    this.editor.edit.clearActiveContour();
+    this.editor.clearActiveContour();
   }
 
   deactivate(): void {
@@ -87,12 +87,12 @@ export class Pen extends BaseTool<PenState> {
   handleModifier(key: string, pressed: boolean): boolean {
     if (key === "Space") {
       if (pressed) {
-        this.editor.tools.requestTemporary("hand", {
-          onActivate: () => this.editor.render.setPreviewMode(true),
-          onReturn: () => this.editor.render.setPreviewMode(false),
+        this.editor.requestTemporaryTool("hand", {
+          onActivate: () => this.editor.setPreviewMode(true),
+          onReturn: () => this.editor.setPreviewMode(false),
         });
       } else {
-        this.editor.tools.returnFromTemporary();
+        this.editor.returnFromTemporaryTool();
       }
       return true;
     }
@@ -180,7 +180,7 @@ export class Pen extends BaseTool<PenState> {
   }
 
   private shouldCloseContour(x: number, y: number): boolean {
-    const contour = this.editor.edit.getActiveContour();
+    const contour = this.editor.getActiveContour();
     if (!contour || contour.closed || contour.points.length < 2) {
       return false;
     }
@@ -192,13 +192,13 @@ export class Pen extends BaseTool<PenState> {
   }
 
   private hasActiveDrawingContour(): boolean {
-    const contour = this.editor.edit.getActiveContour();
+    const contour = this.editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
   private getLastOnCurvePoint(): Point2D | null {
-    const contour = this.editor.edit.getActiveContour();
+    const contour = this.editor.getActiveContour();
     if (!contour || Contours.isEmpty(contour) || contour.closed) {
       return null;
     }
@@ -210,11 +210,11 @@ export class Pen extends BaseTool<PenState> {
   }
 
   private getMiddlePointAt(pos: Point2D) {
-    return this.editor.hitTest.getMiddlePointAt(pos);
+    return this.editor.getMiddlePointAt(pos);
   }
 
   renderBelowHandles(draw: DrawAPI): void {
-    if (this.editor.zone.getZone() !== "canvas") return;
+    if (this.editor.getFocusZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
@@ -241,7 +241,7 @@ export class Pen extends BaseTool<PenState> {
   }
 
   render(draw: DrawAPI): void {
-    if (this.editor.zone.getZone() !== "canvas") return;
+    if (this.editor.getFocusZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
       draw.circle(this.state.mousePos, PEN_READY_STYLE.size, {

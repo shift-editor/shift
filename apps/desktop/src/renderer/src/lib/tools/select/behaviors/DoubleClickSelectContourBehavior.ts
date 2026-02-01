@@ -12,10 +12,10 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
   transition(_state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (event.type !== "doubleClick") return null;
 
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
     if (point) return null;
 
-    const segmentHit = editor.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.getSegmentAt(event.point);
     if (!segmentHit) return null;
 
     const contourId = this.findContourForSegment(segmentHit.segmentId, editor);

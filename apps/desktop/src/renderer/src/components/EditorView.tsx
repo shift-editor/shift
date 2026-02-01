@@ -19,11 +19,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [cursorStyle, setCursorStyle] = useState(() => editor.cursor.get());
+  const [cursorStyle, setCursorStyle] = useState(() => editor.getCursor());
 
   useEffect(() => {
     const fx = effect(() => {
-      setCursorStyle(editor.cursor.get());
+      setCursorStyle(editor.getCursor());
     });
     return () => fx.dispose();
   }, [editor]);

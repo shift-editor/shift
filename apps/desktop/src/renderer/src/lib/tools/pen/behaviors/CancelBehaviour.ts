@@ -23,7 +23,7 @@ export class EscapeBehavior implements PenBehavior {
   }
 
   private hasActiveDrawingContour(editor: Editor): boolean {
-    const contour = editor.edit.getActiveContour();
+    const contour = editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }

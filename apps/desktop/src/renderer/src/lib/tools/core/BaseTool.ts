@@ -78,14 +78,14 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   }
 
   protected beginPreview(): void {
-    this.editor.preview.beginPreview();
+    this.editor.beginPreview();
   }
 
   protected commitPreview(label: string): void {
-    this.editor.preview.commitPreview(label);
+    this.editor.commitPreview(label);
   }
 
   protected cancelPreview(): void {
-    this.editor.preview.cancelPreview();
+    this.editor.cancelPreview();
   }
 }

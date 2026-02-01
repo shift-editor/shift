@@ -32,14 +32,14 @@ export class RotateBehavior implements SelectBehavior {
 
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
     if (prev.type !== "rotating" && next.type === "rotating") {
-      editor.preview.beginPreview();
-      editor.render.setHandlesVisible(false);
-      editor.hover.clearAll();
+      editor.beginPreview();
+      editor.setHandlesVisible(false);
+      editor.clearHover();
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
-      editor.render.setHandlesVisible(true);
+      editor.setHandlesVisible(true);
       if (event.type !== "dragEnd") {
-        editor.preview.cancelPreview();
+        editor.cancelPreview();
       }
     }
   }
@@ -58,7 +58,7 @@ export class RotateBehavior implements SelectBehavior {
         const rotated = this.rotatePoint(initialPos, deltaAngle, state.rotate.center);
         moves.push({ id, x: rotated.x, y: rotated.y });
       }
-      editor.edit.setPointPositions(moves);
+      editor.setPointPositions(moves);
 
       return {
         type: "rotating",
@@ -99,11 +99,11 @@ export class RotateBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: Editor,
   ): SelectState | null {
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
     if (point) return null;
 
     const corner = this.hitTestRotationZone(event.point, editor);
-    const bounds = editor.hitTest.getSelectionBoundingRect();
+    const bounds = editor.getSelectionBoundingRect();
 
     if (!corner || !bounds) return null;
 
@@ -113,13 +113,13 @@ export class RotateBehavior implements SelectBehavior {
     );
 
     const startAngle = this.calculateAngle(event.point, center);
-    const draggedPointIds = [...editor.selection.getSelectedPoints()];
+    const draggedPointIds = [...editor.getSelectedPoints()];
 
     const initialPositions = new Map<PointId, Point2D>();
-    const glyph = editor.edit.getGlyph();
+    const glyph = editor.getGlyph();
     const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
     for (const p of allPoints) {
-      if (editor.selection.isPointSelected(p.id as PointId)) {
+      if (editor.isPointSelected(p.id as PointId)) {
         initialPositions.set(p.id as PointId, { x: p.x, y: p.y });
       }
     }
@@ -140,7 +140,7 @@ export class RotateBehavior implements SelectBehavior {
   }
 
   private hitTestRotationZone(pos: Point2D, editor: Editor): CornerHandle | null {
-    const rect = editor.hitTest.getSelectionBoundingRect();
+    const rect = editor.getSelectionBoundingRect();
     if (!rect) return null;
 
     const hitRadius = editor.hitRadius;

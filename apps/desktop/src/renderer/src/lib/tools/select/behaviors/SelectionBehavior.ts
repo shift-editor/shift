@@ -11,15 +11,15 @@ export class SelectionBehavior implements SelectBehavior {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
 
     if (point) {
       const pointId = point.id;
       if (state.type === "selected" && event.shiftKey) {
-        const hasSelection = editor.selection.hasSelection();
-        const isSelected = editor.selection.isPointSelected(pointId);
+        const hasSelection = editor.hasSelection();
+        const isSelected = editor.isPointSelected(pointId);
         const willHaveSelection =
-          hasSelection && !(isSelected && editor.selection.getSelectedPointsCount() === 1);
+          hasSelection && !(isSelected && editor.getSelectedPointsCount() === 1);
 
         if (willHaveSelection || !isSelected) {
           return {
@@ -39,14 +39,14 @@ export class SelectionBehavior implements SelectBehavior {
       };
     }
 
-    const segmentHit = editor.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.getSegmentAt(event.point);
     if (segmentHit) {
       if (state.type === "selected" && event.shiftKey) {
-        const isSelected = editor.selection.isSegmentSelected(segmentHit.segmentId);
+        const isSelected = editor.isSegmentSelected(segmentHit.segmentId);
         const hasOtherSelections =
-          editor.selection.getSelectedPointsCount() > 0 ||
-          editor.selection.getSelectedSegmentsCount() > 1 ||
-          (editor.selection.getSelectedSegmentsCount() === 1 && !isSelected);
+          editor.getSelectedPointsCount() > 0 ||
+          editor.getSelectedSegmentsCount() > 1 ||
+          (editor.getSelectedSegmentsCount() === 1 && !isSelected);
 
         if (hasOtherSelections || !isSelected) {
           return {
@@ -80,7 +80,7 @@ export class SelectionBehavior implements SelectBehavior {
       };
     }
 
-    if (state.type === "ready" && editor.selection.hasSelection()) {
+    if (state.type === "ready" && editor.hasSelection()) {
       return {
         ...state,
         intent: { action: "clearSelection" },

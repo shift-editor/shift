@@ -72,13 +72,13 @@ export const TransformSection = () => {
   };
 
   const handleRotate90 = () => {
-    editor.transform.rotate90CW();
+    editor.rotate90CW();
   };
 
   const handleRotate = (angle: number) => {
     const wrapped = angle % 360;
     const radians = (wrapped * Math.PI) / 180;
-    editor.transform.rotate(radians, getOrigin());
+    editor.rotateSelection(radians, getOrigin());
     setRotation(wrapped);
   };
 

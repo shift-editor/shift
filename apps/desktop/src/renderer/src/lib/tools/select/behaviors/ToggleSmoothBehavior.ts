@@ -11,7 +11,7 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     if (event.type !== "doubleClick") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const hit = editor.hitTest.getPointAt(event.point);
+    const hit = editor.getPointAt(event.point);
     if (hit && hit.pointType === "onCurve") {
       return {
         ...state,

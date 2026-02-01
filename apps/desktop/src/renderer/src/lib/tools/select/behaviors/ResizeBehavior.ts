@@ -32,12 +32,12 @@ export class ResizeBehavior implements SelectBehavior {
 
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
-      editor.preview.beginPreview();
-      editor.hover.clearAll();
+      editor.beginPreview();
+      editor.clearHover();
     }
     if (prev.type === "resizing" && next.type !== "resizing") {
       if (event.type !== "dragEnd") {
-        editor.preview.cancelPreview();
+        editor.cancelPreview();
       }
     }
   }
@@ -65,7 +65,7 @@ export class ResizeBehavior implements SelectBehavior {
         const newPos = Vec2.add(anchor, scaled);
         moves.push({ id, x: newPos.x, y: newPos.y });
       }
-      editor.edit.setPointPositions(moves);
+      editor.setPointPositions(moves);
 
       return {
         type: "resizing",
@@ -113,22 +113,22 @@ export class ResizeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: Editor,
   ): SelectState | null {
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
     if (point) return null;
 
     const edge = this.hitTestBoundingRectEdge(event.point, editor);
-    const bounds = editor.hitTest.getSelectionBoundingRect();
+    const bounds = editor.getSelectionBoundingRect();
 
     if (!edge || !bounds) return null;
 
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const draggedPointIds = [...editor.selection.getSelectedPoints()];
+    const draggedPointIds = [...editor.getSelectedPoints()];
 
     const initialPositions = new Map<PointId, Point2D>();
-    const glyph = editor.edit.getGlyph();
+    const glyph = editor.getGlyph();
     const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
     for (const p of allPoints) {
-      if (editor.selection.isPointSelected(p.id)) {
+      if (editor.isPointSelected(p.id)) {
         initialPositions.set(p.id, { x: p.x, y: p.y });
       }
     }
@@ -149,7 +149,7 @@ export class ResizeBehavior implements SelectBehavior {
   }
 
   private hitTestBoundingRectEdge(pos: Point2D, editor: Editor): BoundingRectEdge {
-    const rect = editor.hitTest.getSelectionBoundingRect();
+    const rect = editor.getSelectionBoundingRect();
     if (!rect) return null;
 
     const hitRadius = editor.hitRadius;

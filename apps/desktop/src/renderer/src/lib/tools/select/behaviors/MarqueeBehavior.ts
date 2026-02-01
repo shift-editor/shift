@@ -91,10 +91,10 @@ export class MarqueeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: Editor,
   ): SelectState | null {
-    const point = editor.hitTest.getPointAt(event.point);
+    const point = editor.getPointAt(event.point);
     if (point) return null;
 
-    const segmentHit = editor.hitTest.getSegmentAt(event.point);
+    const segmentHit = editor.getSegmentAt(event.point);
     if (segmentHit) return null;
 
     if (state.type === "selected") {
@@ -113,7 +113,7 @@ export class MarqueeBehavior implements SelectBehavior {
   }
 
   private getPointsInRect(rect: Rect2D, editor: Editor): Set<PointId> {
-    const allPoints = editor.hitTest.getAllPoints();
+    const allPoints = editor.getAllPoints();
     const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
     return new Set(hitPoints.map((p) => asPointId(p.id)));
   }

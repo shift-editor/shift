@@ -183,12 +183,12 @@ export class HandleBehavior implements PenBehavior {
     const { position } = anchor;
 
     if (handles.cpOut) {
-      editor.edit.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
+      editor.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
     }
 
     if (handles.cpIn) {
       const mirroredPos = Vec2.mirror(mousePos, position);
-      editor.edit.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
+      editor.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
   }
 }

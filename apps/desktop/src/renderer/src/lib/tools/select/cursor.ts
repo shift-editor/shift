@@ -1,8 +1,8 @@
 import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
-import type { HitTestService } from "@/lib/editor/services";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
+import type { Point } from "@shift/types";
 
 export type BoundingRectEdge =
   | "left"
@@ -56,7 +56,7 @@ export function boundingBoxHitResultToCursor(result: BoundingBoxHitResult): Curs
 }
 
 export interface CursorContext {
-  hitTest: HitTestService;
+  getPointAt: (pos: Point2D) => Point | null;
   hitTestBoundingBox: (pos: Point2D) => BoundingBoxHitResult;
 }
 
@@ -96,7 +96,7 @@ export function getCursorForState(
 
   if (state.type === "selected" && event && "point" in event) {
     const hitResult = ctx.hitTestBoundingBox(event.point);
-    const point = ctx.hitTest.getPointAt(event.point);
+    const point = ctx.getPointAt(event.point);
     if (hitResult && !point) {
       return boundingBoxHitResultToCursor(hitResult);
     }
