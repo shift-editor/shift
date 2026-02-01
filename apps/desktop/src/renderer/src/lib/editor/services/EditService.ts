@@ -85,6 +85,12 @@ export class EditService {
     return id ? asContourId(id) : null;
   }
 
+  getActiveContour(): Contour | null {
+    const activeContourId = this.getActiveContourId();
+    if (!activeContourId) return null;
+    return this.#getContourById(activeContourId);
+  }
+
   setActiveContour(contourId: ContourId): void {
     this.#fontEngine.editing.setActiveContour(contourId);
   }

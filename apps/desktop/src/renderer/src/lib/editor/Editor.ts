@@ -24,6 +24,7 @@ import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
 import type { ToolName, ToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
+import type { HitResult } from "@/types/hitResult";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
@@ -177,6 +178,9 @@ export class Editor {
       getAllPoints: () => this.getAllPoints(),
       getSegmentById: (id) => this.getSegmentById(id),
       updateHover: (pos) => this.updateHover(pos),
+      getGlyph: () => this.getGlyph(),
+      getActiveContourId: () => this.edit.getActiveContourId(),
+      getHitRadius: () => this.hitRadius,
     });
     this.cursor = new CursorService(this.$cursor, (c) => this.setCursor(c));
     this.render = new RenderService({
@@ -833,6 +837,40 @@ export class Editor {
         return hit;
       }
     }
+    return null;
+  }
+
+  public getNodeAt(pos: Point2D): HitResult {
+    const point = this.getPointAt(pos);
+    if (point) {
+      return { type: "point", point, pointId: point.id };
+    }
+
+    const endpoint = this.getContourEndpointAt(pos);
+    if (endpoint) {
+      return {
+        type: "contourEndpoint",
+        contourId: endpoint.contourId,
+        pointId: endpoint.pointId,
+        position: endpoint.position,
+        contour: endpoint.contour,
+      };
+    }
+
+    const middle = this.hitTest.getMiddlePointAt(pos);
+    if (middle) return middle;
+
+    const segmentHit = this.getSegmentAt(pos);
+    if (segmentHit) {
+      return {
+        type: "segment",
+        segment: segmentHit.segment,
+        segmentId: segmentHit.segmentId,
+        t: segmentHit.t,
+        closestPoint: segmentHit.point,
+      };
+    }
+
     return null;
   }
 

@@ -3,7 +3,6 @@ import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } fro
 import type { SelectState, SelectBehavior } from "./types";
 import { executeIntent } from "./intents";
 import {
-  HoverBehavior,
   SelectionBehavior,
   MarqueeBehavior,
   DragBehavior,
@@ -41,7 +40,6 @@ export class Select extends BaseTool<SelectState> {
   readonly $cursor: ComputedSignal<CursorType>;
 
   private behaviors: SelectBehavior[] = [
-    new HoverBehavior(),
     new DoubleClickSelectContourBehavior(),
     new ToggleSmoothBehavior(),
     new UpgradeSegmentBehavior(),

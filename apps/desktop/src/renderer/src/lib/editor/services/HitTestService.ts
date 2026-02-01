@@ -1,7 +1,9 @@
-import type { Point2D, Rect2D, Point, ContourId, PointId, Contour } from "@shift/types";
+import type { Point2D, Rect2D, Point, ContourId, PointId, Contour, Glyph } from "@shift/types";
 import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { Segment } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
+import type { MiddlePointHit } from "@/types/hitResult";
+import { Vec2, Contours } from "@shift/geo";
 
 export interface ContourEndpointHit {
   contourId: ContourId;
@@ -18,6 +20,9 @@ export interface HitTestServiceDeps {
   getAllPoints: () => Point[];
   getSegmentById: (segmentId: SegmentId) => Segment | null;
   updateHover: (pos: Point2D) => void;
+  getGlyph: () => Glyph | null;
+  getActiveContourId: () => ContourId | null;
+  getHitRadius: () => number;
 }
 
 export class HitTestService {
@@ -53,5 +58,31 @@ export class HitTestService {
 
   updateHover(pos: Point2D): void {
     this.#deps.updateHover(pos);
+  }
+
+  getMiddlePointAt(pos: Point2D): MiddlePointHit | null {
+    const glyph = this.#deps.getGlyph();
+    if (!glyph) return null;
+
+    const activeContourId = this.#deps.getActiveContourId();
+    const hitRadius = this.#deps.getHitRadius();
+
+    for (const contour of glyph.contours) {
+      if (contour.id === activeContourId || contour.closed) continue;
+      if (!Contours.hasInteriorPoints(contour)) continue;
+
+      for (let i = 1; i < contour.points.length - 1; i++) {
+        const point = contour.points[i];
+        if (Vec2.dist(pos, point) < hitRadius) {
+          return {
+            type: "middlePoint",
+            contourId: contour.id as ContourId,
+            pointId: point.id as PointId,
+            pointIndex: i,
+          };
+        }
+      }
+    }
+    return null;
   }
 }

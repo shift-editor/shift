@@ -65,6 +65,7 @@ interface EditService {
   getGlyph(): GlyphSnapshot | null;
   getPointById(id: PointId): Point | null;
   getContourById(id: ContourId): Contour | null;
+  getActiveContour(): Contour | null;
   addPoint(x: number, y: number, type: any, smooth?: boolean): PointId;
   addPointToContour(
     contourId: ContourId,
@@ -138,6 +139,7 @@ interface HitTestService {
   getAllPoints(): Point[];
   getSegmentById(segmentId: SegmentId): any | null;
   updateHover(pos: Point2D): void;
+  getMiddlePointAt(pos: Point2D): any | null;
 }
 
 interface ToolSwitchService {
@@ -412,6 +414,12 @@ function createMockEditService(
     return contour ? (contour as Contour) : null;
   };
 
+  const getActiveContour = (): Contour | null => {
+    const activeContourId = fontEngine.editing.getActiveContourId();
+    if (!activeContourId) return null;
+    return getContourById(asContourId(activeContourId));
+  };
+
   const mocks = {
     addPoint: vi.fn((x: number, y: number, type: any, smooth = false) =>
       fontEngine.editing.addPoint(x, y, type, smooth),
@@ -447,12 +455,14 @@ function createMockEditService(
     reverseContour: vi.fn((contourId: ContourId) => fontEngine.editing.reverseContour(contourId)),
     getPointById: vi.fn(getPointById),
     getContourById: vi.fn(getContourById),
+    getActiveContour: vi.fn(getActiveContour),
   };
 
   return {
     getGlyph: () => fontEngine.$glyph.value,
     getPointById: mocks.getPointById,
     getContourById: mocks.getContourById,
+    getActiveContour: mocks.getActiveContour,
     addPoint: mocks.addPoint,
     addPointToContour: mocks.addPointToContour,
     movePoints: mocks.movePoints,
@@ -733,6 +743,32 @@ function createMockHitTestService(
     return null;
   };
 
+  const getMiddlePointAt = (pos: Point2D) => {
+    const snapshot = fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    const activeContourId = fontEngine.editing.getActiveContourId();
+
+    for (const contour of snapshot.contours) {
+      if (contour.id === activeContourId || contour.closed) continue;
+      if (contour.points.length < 3) continue;
+
+      for (let i = 1; i < contour.points.length - 1; i++) {
+        const point = contour.points[i];
+        const dist = Math.sqrt((point.x - pos.x) ** 2 + (point.y - pos.y) ** 2);
+        if (dist < hitRadius) {
+          return {
+            type: "middlePoint" as const,
+            contourId: asContourId(contour.id),
+            pointId: asPointId(point.id),
+            pointIndex: i,
+          };
+        }
+      }
+    }
+    return null;
+  };
+
   const mocks = {
     getPointAt: vi.fn(getPointAt),
     getSegmentAt: vi.fn(getSegmentAt),
@@ -741,6 +777,7 @@ function createMockHitTestService(
     getAllPoints: vi.fn(getAllPoints),
     getSegmentById: vi.fn(getSegmentById),
     updateHover: vi.fn(),
+    getMiddlePointAt: vi.fn(getMiddlePointAt),
   };
 
   return {
@@ -751,6 +788,7 @@ function createMockHitTestService(
     getAllPoints: mocks.getAllPoints,
     getSegmentById: mocks.getSegmentById,
     updateHover: mocks.updateHover,
+    getMiddlePointAt: mocks.getMiddlePointAt,
     mocks,
   };
 }

@@ -1,3 +1,4 @@
+import { Contours } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor";
 import type { PenState, PenBehavior } from "../types";
@@ -22,12 +23,8 @@ export class EscapeBehavior implements PenBehavior {
   }
 
   private hasActiveDrawingContour(editor: Editor): boolean {
-    const glyph = editor.edit.getGlyph();
-    if (!glyph) return false;
-
-    const activeContourId = editor.edit.getActiveContourId();
-    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
-
-    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
+    const contour = editor.edit.getActiveContour();
+    if (!contour) return false;
+    return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 }

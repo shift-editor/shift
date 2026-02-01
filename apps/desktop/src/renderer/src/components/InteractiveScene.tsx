@@ -61,7 +61,7 @@ export const InteractiveScene = () => {
     <canvas
       id="interactive-canvas"
       ref={interactiveCanvasRef}
-      className="absolute inset-0 z-20 h-full w-full"
+      className="absolute inset-0 h-full w-full"
       onMouseDown={(e) => {
         toolManager.handlePointerDown(getScreenPoint(e), getModifiers(e));
       }}

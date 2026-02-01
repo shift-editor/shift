@@ -9,7 +9,7 @@ export const OverlayScene = () => {
     <canvas
       id="overlay-canvas"
       ref={overlayCanvasRef}
-      className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+      className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
 };

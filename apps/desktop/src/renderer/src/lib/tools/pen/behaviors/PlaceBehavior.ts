@@ -1,5 +1,5 @@
-import type { Point2D, ContourId, PointId } from "@shift/types";
-import { Vec2 } from "@shift/geo";
+import type { Point2D, PointId } from "@shift/types";
+import { Vec2, Contours } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor";
 import type { PenState, PenBehavior, ContourContext } from "../types";
@@ -48,60 +48,30 @@ export class PlaceBehavior implements PenBehavior {
   }
 
   private hasActiveDrawingContour(editor: Editor): boolean {
-    const glyph = editor.edit.getGlyph();
-    if (!glyph) return false;
-
-    const activeContourId = editor.edit.getActiveContourId();
-    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
-
-    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
+    const contour = editor.edit.getActiveContour();
+    if (!contour) return false;
+    return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
   private shouldCloseContour(pos: Point2D, editor: Editor): boolean {
-    const glyph = editor.edit.getGlyph();
-    const activeContourId = editor.edit.getActiveContourId();
-    const activeContour = glyph?.contours.find((c) => c.id === activeContourId);
-
-    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+    const contour = editor.edit.getActiveContour();
+    if (!contour || contour.closed || contour.points.length < 2) {
       return false;
     }
 
-    const firstPoint = activeContour.points[0];
+    const firstPoint = Contours.firstPoint(contour);
+    if (!firstPoint) return false;
+
     return Vec2.isWithin(pos, firstPoint, editor.hitRadius);
   }
 
-  private getMiddlePointAt(
-    pos: Point2D,
-    editor: Editor,
-  ): { contourId: ContourId; pointId: PointId; pointIndex: number } | null {
-    const glyph = editor.edit.getGlyph();
-    if (!glyph) return null;
-
-    const activeContourId = editor.edit.getActiveContourId();
-    const hitRadius = editor.hitRadius;
-
-    for (const contour of glyph.contours) {
-      if (contour.id === activeContourId || contour.closed) continue;
-      if (contour.points.length < 3) continue;
-
-      for (let i = 1; i < contour.points.length - 1; i++) {
-        const point = contour.points[i];
-        const dist = Vec2.dist(pos, point);
-        if (dist < hitRadius) {
-          return {
-            contourId: contour.id as ContourId,
-            pointId: point.id as PointId,
-            pointIndex: i,
-          };
-        }
-      }
-    }
-    return null;
+  private getMiddlePointAt(pos: Point2D, editor: Editor) {
+    return editor.hitTest.getMiddlePointAt(pos);
   }
 
   private buildContourContext(editor: Editor): ContourContext {
-    const glyph = editor.edit.getGlyph();
-    if (!glyph) {
+    const contour = editor.edit.getActiveContour();
+    if (!contour || Contours.isEmpty(contour)) {
       return {
         previousPointType: "none",
         previousOnCurvePosition: null,
@@ -109,9 +79,8 @@ export class PlaceBehavior implements PenBehavior {
       };
     }
 
-    const activeContourId = editor.edit.getActiveContourId();
-    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
-    if (!activeContour || activeContour.points.length === 0) {
+    const lastPoint = Contours.lastPoint(contour);
+    if (!lastPoint) {
       return {
         previousPointType: "none",
         previousOnCurvePosition: null,
@@ -119,16 +88,10 @@ export class PlaceBehavior implements PenBehavior {
       };
     }
 
-    const points = activeContour.points;
-    const lastPoint = points[points.length - 1];
-
-    let previousOnCurvePosition: Point2D | null = null;
-    for (let i = points.length - 1; i >= 0; i--) {
-      if (points[i].pointType === "onCurve") {
-        previousOnCurvePosition = { x: points[i].x, y: points[i].y };
-        break;
-      }
-    }
+    const lastOnCurve = Contours.lastOnCurvePoint(contour);
+    const previousOnCurvePosition: Point2D | null = lastOnCurve
+      ? { x: lastOnCurve.x, y: lastOnCurve.y }
+      : null;
 
     return {
       previousPointType: lastPoint.pointType === "offCurve" ? "offCurve" : "onCurve",

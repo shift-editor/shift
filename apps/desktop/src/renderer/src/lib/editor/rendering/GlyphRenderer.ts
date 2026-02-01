@@ -135,20 +135,7 @@ export class GlyphRenderer {
   #drawOverlay(): void {
     if (!this.#overlayContext) return;
     const ctx = this.#overlayContext.getContext();
-
-    const glyph = this.#editor.getGlyph();
-    const previewMode = this.#editor.previewMode.peek();
-
     ctx.clear();
-
-    if (previewMode || !glyph) return;
-
-    ctx.save();
-    this.#prepareCanvas(ctx);
-
-    this.#drawSegmentHighlights(ctx, glyph);
-
-    ctx.restore();
   }
 
   #drawStatic(): void {
@@ -202,6 +189,10 @@ export class GlyphRenderer {
         ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
         ctx.strokeRect(bbRect.x, bbRect.y, bbRect.width, bbRect.height);
       }
+    }
+
+    if (!previewMode && glyph) {
+      this.#drawSegmentHighlights(ctx, glyph);
     }
 
     if (!previewMode && handlesVisible && glyph) {

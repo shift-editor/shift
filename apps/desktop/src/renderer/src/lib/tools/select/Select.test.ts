@@ -98,24 +98,6 @@ describe("Select tool", () => {
     });
   });
 
-  describe("hover state", () => {
-    beforeEach(() => {
-      ctx.edit.addPoint(100, 100, "onCurve", false);
-    });
-
-    it("should call updateHover when mouse is over point", () => {
-      sim.onMouseMove(createToolMouseEvent(100, 100));
-      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
-    });
-
-    it("should call updateHover when mouse leaves point", () => {
-      sim.onMouseMove(createToolMouseEvent(100, 100));
-      ctx.mocks.hitTest.mocks.updateHover.mockClear();
-      sim.onMouseMove(createToolMouseEvent(500, 500));
-      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
-    });
-  });
-
   describe("moving points", () => {
     beforeEach(() => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
@@ -315,18 +297,6 @@ describe("Select tool", () => {
     it("should select segment when clicking on it", () => {
       sim.onMouseDown(createToolMouseEvent(150, 150));
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
-    });
-
-    it("should call updateHover when mouse is over segment", () => {
-      sim.onMouseMove(createToolMouseEvent(150, 150));
-      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
-    });
-
-    it("should call updateHover when mouse leaves segment", () => {
-      sim.onMouseMove(createToolMouseEvent(150, 150));
-      ctx.mocks.hitTest.mocks.updateHover.mockClear();
-      sim.onMouseMove(createToolMouseEvent(500, 500));
-      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
     });
 
     it("should prefer point hit over segment hit", () => {

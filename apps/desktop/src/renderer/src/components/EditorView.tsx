@@ -96,8 +96,8 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       }}
     >
       <CanvasContextProvider>
-        <OverlayScene />
         <StaticScene />
+        <OverlayScene />
         <InteractiveScene />
       </CanvasContextProvider>
       <DebugPanel />

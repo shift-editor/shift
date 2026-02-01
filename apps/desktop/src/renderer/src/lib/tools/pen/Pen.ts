@@ -1,9 +1,9 @@
-import { Vec2 } from "@shift/geo";
+import { Vec2, Contours } from "@shift/geo";
 import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
-import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
+import { PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 import { computed, type ComputedSignal } from "@/lib/reactive/signal";
 import type { CursorType } from "@/types/editor";
@@ -29,7 +29,6 @@ export class Pen extends BaseTool<PenState> {
   readonly $cursor: ComputedSignal<CursorType>;
 
   private behaviors: PenBehavior[] = [
-    new HoverBehavior(),
     new EscapeBehavior(),
     new PlaceBehavior(),
     new HandleBehavior(),
@@ -105,6 +104,10 @@ export class Pen extends BaseTool<PenState> {
       return state;
     }
 
+    if (state.type === "ready" && event.type === "pointerMove") {
+      return { type: "ready", mousePos: event.point };
+    }
+
     for (const behavior of this.behaviors) {
       if (behavior.canHandle(state, event)) {
         const result = behavior.transition(state, event, this.editor);
@@ -177,76 +180,37 @@ export class Pen extends BaseTool<PenState> {
   }
 
   private shouldCloseContour(x: number, y: number): boolean {
-    const glyph = this.editor.edit.getGlyph();
-    const activeContourId = this.editor.edit.getActiveContourId();
-    const activeContour = glyph?.contours.find((c) => c.id === activeContourId);
-
-    if (!activeContour || activeContour.closed || activeContour.points.length < 2) {
+    const contour = this.editor.edit.getActiveContour();
+    if (!contour || contour.closed || contour.points.length < 2) {
       return false;
     }
 
-    const firstPoint = activeContour.points[0];
+    const firstPoint = Contours.firstPoint(contour);
+    if (!firstPoint) return false;
+
     return Vec2.isWithin({ x, y }, firstPoint, this.editor.hitRadius);
   }
 
   private hasActiveDrawingContour(): boolean {
-    const glyph = this.editor.edit.getGlyph();
-    if (!glyph) return false;
-
-    const activeContourId = this.editor.edit.getActiveContourId();
-    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
-
-    return activeContour !== undefined && !activeContour.closed && activeContour.points.length > 0;
+    const contour = this.editor.edit.getActiveContour();
+    if (!contour) return false;
+    return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
   private getLastOnCurvePoint(): Point2D | null {
-    const glyph = this.editor.edit.getGlyph();
-    if (!glyph) return null;
-
-    const activeContourId = this.editor.edit.getActiveContourId();
-    const activeContour = glyph.contours.find((c) => c.id === activeContourId);
-
-    if (!activeContour || activeContour.points.length === 0 || activeContour.closed) {
+    const contour = this.editor.edit.getActiveContour();
+    if (!contour || Contours.isEmpty(contour) || contour.closed) {
       return null;
     }
 
-    for (let i = activeContour.points.length - 1; i >= 0; i--) {
-      if (activeContour.points[i].pointType === "onCurve") {
-        return {
-          x: activeContour.points[i].x,
-          y: activeContour.points[i].y,
-        };
-      }
-    }
-    return null;
+    const lastOnCurve = Contours.lastOnCurvePoint(contour);
+    if (!lastOnCurve) return null;
+
+    return { x: lastOnCurve.x, y: lastOnCurve.y };
   }
 
-  private getMiddlePointAt(
-    pos: Point2D,
-  ): { contourId: any; pointId: any; pointIndex: number } | null {
-    const glyph = this.editor.edit.getGlyph();
-    if (!glyph) return null;
-
-    const activeContourId = this.editor.edit.getActiveContourId();
-    const hitRadius = this.editor.hitRadius;
-
-    for (const contour of glyph.contours) {
-      if (contour.id === activeContourId || contour.closed) continue;
-      if (contour.points.length < 3) continue;
-
-      for (let i = 1; i < contour.points.length - 1; i++) {
-        const point = contour.points[i];
-        const dist = Vec2.dist(pos, point);
-        if (dist < hitRadius) {
-          return {
-            contourId: contour.id,
-            pointId: point.id,
-            pointIndex: i,
-          };
-        }
-      }
-    }
-    return null;
+  private getMiddlePointAt(pos: Point2D) {
+    return this.editor.hitTest.getMiddlePointAt(pos);
   }
 
   render(draw: DrawAPI): void {
