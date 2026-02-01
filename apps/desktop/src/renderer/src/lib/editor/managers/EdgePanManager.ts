@@ -56,10 +56,9 @@ export class EdgePanManager {
     const newPan = Vec2.sub(this.editor.pan, this.velocity);
     this.editor.setPan(newPan.x, newPan.y);
 
-    this.editor.getToolManager().handlePointerMove(this.lastScreenPos, {
-      shiftKey: false,
-      altKey: false,
-    });
+    this.editor
+      .getToolManager()
+      .handlePointerMove(this.lastScreenPos, { shiftKey: false, altKey: false }, { force: true });
 
     this.editor.requestRedraw();
     requestAnimationFrame(() => this.tick());

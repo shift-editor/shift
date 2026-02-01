@@ -26,6 +26,8 @@ export class ViewportManager {
 
   #mouseX: number;
   #mouseY: number;
+  #pendingClientX: number;
+  #pendingClientY: number;
 
   private readonly $screenMousePosition: WritableSignal<Point2D>;
   private readonly $upmToScreenMatrix: ComputedSignal<Mat>;
@@ -42,6 +44,8 @@ export class ViewportManager {
 
     this.#mouseX = 0;
     this.#mouseY = 0;
+    this.#pendingClientX = 0;
+    this.#pendingClientY = 0;
     this.$screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
 
     this.#canvasRect = {
@@ -163,8 +167,13 @@ export class ViewportManager {
   }
 
   updateMousePosition(clientX: number, clientY: number): void {
-    this.#mouseX = Math.floor(clientX - this.#canvasRect.left);
-    this.#mouseY = Math.floor(clientY - this.#canvasRect.top);
+    this.#pendingClientX = clientX;
+    this.#pendingClientY = clientY;
+  }
+
+  flushMousePosition(): void {
+    this.#mouseX = Math.floor(this.#pendingClientX - this.#canvasRect.left);
+    this.#mouseY = Math.floor(this.#pendingClientY - this.#canvasRect.top);
     this.$screenMousePosition.set({ x: this.#mouseX, y: this.#mouseY });
   }
 

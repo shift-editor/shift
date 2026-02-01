@@ -172,11 +172,12 @@ describe("Select tool", () => {
       expect(select.getState().type).toBe("ready");
     });
 
-    it("should select points within rectangle while dragging", () => {
+    it("should select points within rectangle on drag end", () => {
       sim.onMouseDown(createToolMouseEvent(50, 50));
+      sim.onMouseMove(createToolMouseEvent(120, 120));
       ctx.mocks.selection.mocks.selectPoints.mockClear();
 
-      sim.onMouseMove(createToolMouseEvent(120, 120));
+      sim.onMouseUp(createToolMouseEvent(120, 120));
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
     });
   });

@@ -287,6 +287,7 @@ describe("ViewportManager", () => {
   describe("mouse position", () => {
     it("should update and get screen mouse position", () => {
       viewport.updateMousePosition(150, 250);
+      viewport.flushMousePosition();
       const pos = viewport.getScreenMousePosition();
       expect(pos.x).toBe(150);
       expect(pos.y).toBe(250);
@@ -294,6 +295,7 @@ describe("ViewportManager", () => {
 
     it("should compute UPM mouse position from screen position", () => {
       viewport.updateMousePosition(500, 400);
+      viewport.flushMousePosition();
       const upmPos = viewport.mousePosition;
       expect(typeof upmPos.x).toBe("number");
       expect(typeof upmPos.y).toBe("number");

@@ -2,7 +2,7 @@ import type { ToolContext } from "./ToolContext";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
 import type { DrawAPI } from "./DrawAPI";
-import { computed, type ComputedSignal } from "../../reactive/signal";
+import { batch, computed, type ComputedSignal } from "../../reactive/signal";
 import type { CursorType } from "@/types/editor";
 
 export type { ToolName, ToolState };
@@ -52,9 +52,11 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     const next = this.transition(this.state, event);
 
     if (next !== prev) {
-      this.state = next;
-      this.editor.setActiveToolState(next);
-      this.onTransition?.(prev, next, event);
+      batch(() => {
+        this.state = next;
+        this.editor.setActiveToolState(next);
+        this.onTransition?.(prev, next, event);
+      });
     }
   }
 

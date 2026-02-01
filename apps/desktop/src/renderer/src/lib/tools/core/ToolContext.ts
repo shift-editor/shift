@@ -17,6 +17,8 @@ export interface ToolContext {
   readonly activeToolState: Signal<ActiveToolState>;
   setActiveToolState(state: ActiveToolState): void;
   getScreenMousePosition(): Point2D;
+  /** Called by ToolManager on pointer frame flush; not part of the tool API. */
+  flushMousePosition?(): void;
   projectScreenToUpm(x: number, y: number): Point2D;
   requestStaticRedraw(): void;
   updateHover(pos: Point2D): void;
@@ -63,6 +65,8 @@ export interface ToolContext {
   returnFromTemporaryTool(): void;
   readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
   setPreviewMode(enabled: boolean): void;
+  setMarqueePreviewRect(rect: Rect2D | null): void;
+  isPointInMarqueePreview(pointId: PointId): boolean;
   getFocusZone(): FocusZone;
   getActiveContour(): Contour | null;
   getActiveContourId(): ContourId | null;

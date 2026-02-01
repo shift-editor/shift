@@ -9,7 +9,7 @@ import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { Point2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
@@ -901,6 +901,7 @@ export function createMockToolContext(): MockToolContext {
       return $activeToolState;
     },
     getScreenMousePosition: () => $screenMousePosition.peek(),
+    flushMousePosition: () => {},
     projectScreenToUpm: (x: number, y: number) => screen.projectScreenToUpm(x, y),
     screenToUpmDistance: (pixels: number) => pixels,
     getSelectedPointsCount: () => selection.getSelectedPointsCount(),
@@ -942,6 +943,8 @@ export function createMockToolContext(): MockToolContext {
     requestStaticRedraw: () => render.requestStaticRedraw(),
     setPreviewMode: (enabled: boolean) => render.setPreviewMode(enabled),
     setHandlesVisible: (visible: boolean) => render.setHandlesVisible(visible),
+    setMarqueePreviewRect: (_rect: Rect2D | null) => {},
+    isPointInMarqueePreview: (_pointId: PointId) => false,
     getPointAt: (pos: Point2D) => hitTest.getPointAt(pos),
     getSegmentAt: (pos: Point2D) => hitTest.getSegmentAt(pos),
     getContourEndpointAt: (pos: Point2D) => hitTest.getContourEndpointAt(pos),

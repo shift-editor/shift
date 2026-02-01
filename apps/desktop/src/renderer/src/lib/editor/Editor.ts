@@ -21,7 +21,7 @@ import type {
   Point,
   PointType,
 } from "@shift/types";
-import { asContourId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
 import type { ToolName, ActiveToolState } from "../tools/core";
@@ -62,6 +62,7 @@ import { ClipboardService } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
 import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
+import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import type { FocusZone } from "@/types/focus";
@@ -97,6 +98,7 @@ export class Editor implements ToolContext {
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
   #zone: FocusZone = "canvas";
+  #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
   $renderState: ComputedSignal<RenderState>;
   $staticState: ComputedSignal<StaticRenderState>;
@@ -123,6 +125,7 @@ export class Editor implements ToolContext {
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
     this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
+    this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
 
     this.#renderer = new GlyphRenderer(
       this,
@@ -393,7 +396,13 @@ export class Editor implements ToolContext {
   }
 
   public getPointVisualState(pointId: PointId): VisualState {
-    return this.#hover.getPointVisualState(pointId, (id) => this.#selection.isPointSelected(id));
+    const isSelected = (id: PointId) =>
+      this.#selection.isPointSelected(id) || this.isPointInMarqueePreview(id);
+    return this.#hover.getPointVisualState(pointId, isSelected);
+  }
+
+  public isPointInMarqueePreview(pointId: PointId): boolean {
+    return this.#marqueePreviewPointIds.peek()?.has(pointId) ?? false;
   }
 
   public getSegmentVisualState(segmentId: SegmentId): VisualState {
@@ -408,6 +417,17 @@ export class Editor implements ToolContext {
 
   public setPreviewMode(enabled: boolean): void {
     this.$previewMode.set(enabled);
+  }
+
+  public setMarqueePreviewRect(rect: Rect2D | null): void {
+    if (rect === null) {
+      this.#marqueePreviewPointIds.set(null);
+    } else {
+      const points = this.getAllPoints();
+      const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => asPointId(p.id)));
+      this.#marqueePreviewPointIds.set(ids);
+    }
+    this.requestStaticRedraw();
   }
 
   public get handlesVisible(): Signal<boolean> {
@@ -558,6 +578,10 @@ export class Editor implements ToolContext {
 
   public updateMousePosition(clientX: number, clientY: number): void {
     this.#viewport.updateMousePosition(clientX, clientY);
+  }
+
+  public flushMousePosition(): void {
+    this.#viewport.flushMousePosition();
   }
 
   public projectScreenToUpm(x: number, y: number): Point2D {

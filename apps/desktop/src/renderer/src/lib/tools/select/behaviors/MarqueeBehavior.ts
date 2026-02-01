@@ -45,18 +45,28 @@ export class MarqueeBehavior implements SelectBehavior {
     );
   }
 
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: ToolContext): void {
+    if (next.type === "selecting") {
+      const rect = normalizeRect(next.selection.startPos, next.selection.currentPos);
+      editor.setMarqueePreviewRect(rect);
+    } else if (prev.type === "selecting") {
+      editor.setMarqueePreviewRect(null);
+    }
+    if (prev.type === "selecting" && (next.type === "selected" || next.type === "ready")) {
+      editor.setSelectionMode("committed");
+    }
+  }
+
   private transitionSelecting(
     state: SelectState & { type: "selecting" },
     event: ToolEvent,
     editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
-      const rect = normalizeRect(state.selection.startPos, event.point);
-
+      // No intent on drag; commit on dragEnd to avoid per-frame selection cost.
       return {
         type: "selecting",
         selection: { ...state.selection, currentPos: event.point },
-        intent: { action: "selectPointsInRect", rect },
       };
     }
 
@@ -67,12 +77,12 @@ export class MarqueeBehavior implements SelectBehavior {
       if (pointIds.size > 0) {
         return {
           type: "selected",
-          intent: { action: "setSelectionMode", mode: "committed" },
+          intent: { action: "selectPointsInRect", rect },
         };
       }
       return {
         type: "ready",
-        intent: { action: "setSelectionMode", mode: "committed" },
+        intent: { action: "selectPointsInRect", rect },
       };
     }
 

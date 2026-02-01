@@ -1,9 +1,9 @@
 import { useRef, useEffect } from "react";
 import { useDebugSafe } from "@/context/DebugContext";
-import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
+import { effect } from "@/lib/reactive";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
@@ -37,13 +37,17 @@ export function DebugPanel() {
   const screenRef = useRef<HTMLTableCellElement>(null);
   const worldRef = useRef<HTMLTableCellElement>(null);
 
-  useSignalEffect(() => {
-    const screen = editor.screenMousePosition.value;
-    const upm = editor.projectScreenToUpm(screen.x, screen.y);
-    if (upmRef.current) upmRef.current.textContent = formatCoords(upm.x, upm.y);
-    if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
-    if (worldRef.current) worldRef.current.textContent = formatCoords(upm.x, upm.y);
-  });
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const fx = effect(() => {
+      const screen = editor.screenMousePosition.value;
+      const upm = editor.projectScreenToUpm(screen.x, screen.y);
+      if (upmRef.current) upmRef.current.textContent = formatCoords(upm.x, upm.y);
+      if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
+      if (worldRef.current) worldRef.current.textContent = formatCoords(upm.x, upm.y);
+    });
+    return () => fx.dispose();
+  }, [isOpen, editor]);
 
   if (!isOpen) {
     return null;

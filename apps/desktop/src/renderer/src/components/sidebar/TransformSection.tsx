@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
@@ -22,6 +22,72 @@ import DistributeVerticalIcon from "@/assets/sidebar/distribute-v.svg";
 
 import { AlignmentType, DistributeType } from "@/lib/transform/types";
 
+const AlignButtonsRow = React.memo(function AlignButtonsRow({
+  onAlign,
+  canDistribute,
+}: {
+  onAlign: (a: AlignmentType) => void;
+  canDistribute: boolean;
+}) {
+  return (
+    <div className="flex gap-4">
+      <div className="flex gap-1">
+        <IconButton
+          icon={AlignLeftIcon}
+          onClick={() => onAlign("left")}
+          disabled={!canDistribute}
+        />
+        <IconButton
+          icon={AlignCenterHIcon}
+          onClick={() => onAlign("center-h")}
+          disabled={!canDistribute}
+        />
+        <IconButton
+          icon={AlignRightIcon}
+          onClick={() => onAlign("right")}
+          disabled={!canDistribute}
+        />
+      </div>
+      <div className="flex gap-1">
+        <IconButton icon={AlignTopIcon} onClick={() => onAlign("top")} disabled={!canDistribute} />
+        <IconButton
+          icon={AlignCenterVIcon}
+          onClick={() => onAlign("center-v")}
+          disabled={!canDistribute}
+        />
+        <IconButton
+          icon={AlignBottomIcon}
+          onClick={() => onAlign("bottom")}
+          disabled={!canDistribute}
+        />
+      </div>
+    </div>
+  );
+});
+
+const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
+  onDistribute,
+  canDistribute,
+}: {
+  onDistribute: (t: DistributeType) => void;
+  canDistribute: boolean;
+}) {
+  return (
+    <div className="flex gap-1">
+      <IconButton
+        icon={DistributeHorizontalIcon}
+        onClick={() => onDistribute("horizontal")}
+        disabled={!canDistribute}
+      />
+      <IconButton
+        icon={DistributeVerticalIcon}
+        onClick={() => onDistribute("vertical")}
+        disabled={!canDistribute}
+      />
+    </div>
+  );
+});
+
 export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
@@ -33,7 +99,8 @@ export const TransformSection = () => {
 
   useSignalEffect(() => {
     const pointIds = editor.selectedPointIds.value;
-    setPointCount(pointIds.size);
+    const n = pointIds.size;
+    setPointCount((prev) => (prev === n ? prev : n));
   });
 
   useSignalEffect(() => {
@@ -55,15 +122,21 @@ export const TransformSection = () => {
 
   const canDistribute = pointCount >= 3;
 
-  const handleAlign = (alignment: AlignmentType) => {
-    editor.alignSelection(alignment);
-    editor.requestRedraw();
-  };
+  const handleAlign = useCallback(
+    (alignment: AlignmentType) => {
+      editor.alignSelection(alignment);
+      editor.requestRedraw();
+    },
+    [editor],
+  );
 
-  const handleDistribute = (type: DistributeType) => {
-    editor.distributeSelection(type);
-    editor.requestRedraw();
-  };
+  const handleDistribute = useCallback(
+    (type: DistributeType) => {
+      editor.distributeSelection(type);
+      editor.requestRedraw();
+    },
+    [editor],
+  );
 
   const getOrigin = () => {
     const bounds = editor.getSelectionBounds();
@@ -106,58 +179,12 @@ export const TransformSection = () => {
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Align</div>
-        <div className="flex gap-4">
-          <div className="flex gap-1">
-            <IconButton
-              icon={AlignLeftIcon}
-              onClick={() => handleAlign("left")}
-              disabled={!canDistribute}
-            />
-            <IconButton
-              icon={AlignCenterHIcon}
-              onClick={() => handleAlign("center-h")}
-              disabled={!canDistribute}
-            />
-            <IconButton
-              icon={AlignRightIcon}
-              onClick={() => handleAlign("right")}
-              disabled={!canDistribute}
-            />
-          </div>
-          <div className="flex gap-1">
-            <IconButton
-              icon={AlignTopIcon}
-              onClick={() => handleAlign("top")}
-              disabled={!canDistribute}
-            />
-            <IconButton
-              icon={AlignCenterVIcon}
-              onClick={() => handleAlign("center-v")}
-              disabled={!canDistribute}
-            />
-            <IconButton
-              icon={AlignBottomIcon}
-              onClick={() => handleAlign("bottom")}
-              disabled={!canDistribute}
-            />
-          </div>
-        </div>
+        <AlignButtonsRow onAlign={handleAlign} canDistribute={canDistribute} />
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Distribute</div>
-        <div className="flex gap-1">
-          <IconButton
-            icon={DistributeHorizontalIcon}
-            onClick={() => handleDistribute("horizontal")}
-            disabled={!canDistribute}
-          />
-          <IconButton
-            icon={DistributeVerticalIcon}
-            onClick={() => handleDistribute("vertical")}
-            disabled={!canDistribute}
-          />
-        </div>
+        <DistributeButtonsRow onDistribute={handleDistribute} canDistribute={canDistribute} />
       </div>
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Position</div>

@@ -18,7 +18,8 @@ export const Sidebar = () => {
 
   useSignalEffect(() => {
     const pointIds = editor.selectedPointIds.value;
-    setHasSelection(pointIds.size > 0);
+    const next = pointIds.size > 0;
+    setHasSelection((prev) => (prev === next ? prev : next));
   });
 
   return (

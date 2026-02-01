@@ -8,10 +8,20 @@ export const InteractiveScene = () => {
   const editor = getEditor();
   const toolManager = editor.getToolManager();
 
-  const getScreenPoint = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    editor.updateMousePosition(e.clientX, e.clientY);
-    return editor.getScreenMousePosition();
-  };
+  const getScreenPoint = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      editor.updateMousePosition(e.clientX, e.clientY);
+      const bounds = interactiveCanvasRef.current?.getBoundingClientRect();
+      if (bounds) {
+        return {
+          x: e.clientX - bounds.left,
+          y: e.clientY - bounds.top,
+        };
+      }
+      return editor.getScreenMousePosition();
+    },
+    [editor],
+  );
 
   const getModifiers = (e: React.MouseEvent<HTMLCanvasElement>) => ({
     shiftKey: e.shiftKey,

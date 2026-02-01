@@ -72,6 +72,14 @@ tools/
 4. **Editor Injection**: Tools receive the `Editor` instance, accessing services via `this.editor.serviceName`
 5. **Behavior Pattern**: Complex tools delegate to behavior classes for cleaner separation
 6. **Intent Pattern**: State transitions produce intents, executed in `onTransition` for side effects
+7. **High-frequency intents**: For drag-like gestures that run every frame (e.g. marquee rect), avoid emitting intents that update selection or other global signals on every event; commit once on dragEnd (or throttle) to keep the hot path cheap.
+
+### Performance
+
+- **Pointer → rAF**: Pointer handlers store input and request one rAF; projection, hit-test, and tool events run in the rAF callback so the synchronous handler stays minimal. Mouse position and other high-fan-out signals update at most once per frame.
+- **Intent commit on end**: For drag-like gestures (e.g. marquee selection), emit intents that update global state (e.g. selection) only on gesture end (e.g. dragEnd), not on every drag event. Use local/transition state for visual feedback during the gesture.
+- **Signal → React boundary**: Effects that subscribe to signals and call React `setState` should only update when the displayed value actually changes (e.g. compare to previous or use a guarded setState) to avoid unnecessary re-renders.
+- **Stable state references and cheap cursor**: Return the same state object reference when the logical state has not changed so `setActiveToolState` and `onTransition` are not invoked unnecessarily. Keep `getCursor` and other code on the cursor path cheap and minimal in signal reads.
 
 ## Key Concepts
 

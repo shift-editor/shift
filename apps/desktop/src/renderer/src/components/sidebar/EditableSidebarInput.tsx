@@ -44,6 +44,7 @@ export const EditableSidebarInput = forwardRef<
   ) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
+    const [displayValue, setDisplayValue] = useState(value ?? defaultValue);
     const inputRef = useRef<HTMLInputElement>(null);
     const displayValueRef = useRef(value ?? defaultValue);
 
@@ -52,6 +53,7 @@ export const EditableSidebarInput = forwardRef<
       () => ({
         setValue: (v: number) => {
           displayValueRef.current = v;
+          setDisplayValue(v);
         },
       }),
       [],
@@ -60,18 +62,21 @@ export const EditableSidebarInput = forwardRef<
     useEffect(() => {
       if (!isEditing && value !== undefined) {
         displayValueRef.current = value;
+        setDisplayValue(value);
       }
     }, [value, isEditing]);
 
     const handleFocus = useCallback(() => {
       if (disabled) return;
       setIsEditing(true);
-      setEditValue(String(displayValueRef.current));
-    }, [disabled]);
+      setEditValue(String(displayValue));
+    }, [disabled, displayValue]);
 
     const handleBlur = useCallback(() => {
       setIsEditing(false);
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
+      displayValueRef.current = numericValue;
+      setDisplayValue(numericValue);
       onValueChange?.(numericValue);
     }, [editValue, defaultValue, onValueChange]);
 
@@ -89,7 +94,7 @@ export const EditableSidebarInput = forwardRef<
         }
 
         if (e.key === "Escape") {
-          setEditValue(String(displayValueRef.current));
+          setEditValue(String(displayValue));
           setIsEditing(false);
           inputRef.current.blur();
           return;
@@ -102,7 +107,7 @@ export const EditableSidebarInput = forwardRef<
           const step = NUDGES_VALUES[modifier];
           const direction = e.key === "ArrowUp" ? 1 : -1;
 
-          const currentValue = isEditing ? parseNumericValue(editValue) : displayValueRef.current;
+          const currentValue = isEditing ? parseNumericValue(editValue) : displayValue;
           if (currentValue === null) return;
 
           const newValue = currentValue + step * direction;
@@ -113,7 +118,7 @@ export const EditableSidebarInput = forwardRef<
           onValueChange?.(newValue);
         }
       },
-      [isEditing, editValue, onValueChange],
+      [isEditing, editValue, displayValue, onValueChange],
     );
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,7 +129,7 @@ export const EditableSidebarInput = forwardRef<
       <Input
         ref={inputRef}
         label={label}
-        value={isEditing ? editValue : `${displayValueRef.current}${suffix}`}
+        value={isEditing ? editValue : `${displayValue}${suffix}`}
         icon={icon}
         iconPosition={iconPosition}
         readOnly={!isEditing}

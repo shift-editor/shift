@@ -73,11 +73,15 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
         editor.setPan(newPan.x, newPan.y);
 
-        toolManager.handlePointerMove(screenPos, {
-          shiftKey: e.shiftKey,
-          altKey: e.altKey,
-          metaKey: e.metaKey,
-        });
+        toolManager.handlePointerMove(
+          screenPos,
+          {
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            metaKey: e.metaKey,
+          },
+          { force: true },
+        );
         editor.requestRedraw();
       }
     };

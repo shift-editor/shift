@@ -98,8 +98,14 @@ export class ToolManager implements ToolSwitchHandler {
     this.gesture.pointerDown(point, screenPoint, modifiers);
   }
 
-  handlePointerMove(screenPoint: Point2D, modifiers: Modifiers): void {
+  handlePointerMove(
+    screenPoint: Point2D,
+    modifiers: Modifiers,
+    options?: { force?: boolean },
+  ): void {
+    const force = options?.force ?? false;
     if (
+      !force &&
       this.lastScreenPoint &&
       screenPoint.x === this.lastScreenPoint.x &&
       screenPoint.y === this.lastScreenPoint.y
@@ -117,6 +123,8 @@ export class ToolManager implements ToolSwitchHandler {
 
   private flushPointerMove(): void {
     this.frameId = null;
+
+    this.editor.flushMousePosition?.();
 
     if (!this.pendingPointerMove) return;
 
