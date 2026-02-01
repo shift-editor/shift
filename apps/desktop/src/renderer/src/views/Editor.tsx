@@ -66,32 +66,13 @@ export const Editor = () => {
 
       if (!canvasActive) return;
 
-      if (e.key === "h") {
-        e.preventDefault();
-        editor.setActiveTool("hand");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "p") {
-        e.preventDefault();
-        editor.setActiveTool("pen");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "s") {
-        e.preventDefault();
-        editor.setActiveTool("shape");
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "v") {
-        e.preventDefault();
-        editor.setActiveTool("select");
-        editor.requestRedraw();
-        return;
+      for (const { toolId, shortcut } of editor.getToolShortcuts()) {
+        if (e.key === shortcut) {
+          e.preventDefault();
+          editor.setActiveTool(toolId);
+          editor.requestRedraw();
+          return;
+        }
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {

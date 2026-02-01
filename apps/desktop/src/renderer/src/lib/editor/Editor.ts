@@ -24,9 +24,9 @@ import type {
 import { asContourId } from "@shift/types";
 import { findContourInSnapshot } from "../utils/snapshot";
 import { findPointInSnapshot } from "../utils/snapshot";
-import type { ToolName, ToolState } from "../tools/core";
+import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { HitResult, MiddlePointHit } from "@/types/hitResult";
+import type { HitResult, MiddlePointHit, ContourEndpointHit } from "@/types/hitResult";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
@@ -66,8 +66,9 @@ import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import type { FocusZone } from "@/types/focus";
 import type { TemporaryToolOptions } from "@/types/editor";
+import type { ToolContext } from "../tools/core/ToolContext";
 
-export class Editor {
+export class Editor implements ToolContext {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
 
@@ -77,9 +78,12 @@ export class Editor {
   #edgePan: EdgePanManager;
 
   #toolManager: ToolManager | null = null;
-  #toolMetadata: Map<ToolName, { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string }>;
+  #toolMetadata: Map<
+    ToolName,
+    { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string; shortcut?: string }
+  >;
   private $activeTool: WritableSignal<ToolName>;
-  private $activeToolState: WritableSignal<ToolState>;
+  private $activeToolState: WritableSignal<ActiveToolState>;
 
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
@@ -118,7 +122,7 @@ export class Editor {
 
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
-    this.$activeToolState = signal<ToolState>({ type: "idle" });
+    this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
 
     this.#renderer = new GlyphRenderer(
       this,
@@ -188,14 +192,16 @@ export class Editor {
     });
   }
 
-  public registerTool(
-    name: ToolName,
-    ToolClass: ToolConstructor,
-    icon: React.FC<React.SVGProps<SVGSVGElement>>,
-    tooltip: string,
-  ): void {
-    this.#toolMetadata.set(name, { icon, tooltip });
-    this.getToolManager().register(name, ToolClass);
+  public registerTool(descriptor: {
+    id: ToolName;
+    ToolClass: ToolConstructor;
+    icon: React.FC<React.SVGProps<SVGSVGElement>>;
+    tooltip: string;
+    shortcut?: string;
+  }): void {
+    const { id, ToolClass, icon, tooltip, shortcut } = descriptor;
+    this.#toolMetadata.set(id, { icon, tooltip, shortcut });
+    this.getToolManager().register(id, ToolClass);
   }
 
   public get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem> {
@@ -204,20 +210,31 @@ export class Editor {
       result.set(name, {
         icon: metadata.icon,
         tooltip: metadata.tooltip,
+        shortcut: metadata.shortcut,
       });
     }
     return result;
+  }
+
+  public getToolShortcuts(): Array<{ toolId: ToolName; shortcut: string }> {
+    const out: Array<{ toolId: ToolName; shortcut: string }> = [];
+    for (const [toolId, metadata] of this.#toolMetadata) {
+      if (metadata.shortcut != null) {
+        out.push({ toolId, shortcut: metadata.shortcut });
+      }
+    }
+    return out;
   }
 
   public get activeTool(): Signal<ToolName> {
     return this.$activeTool;
   }
 
-  public get activeToolState(): Signal<ToolState> {
+  public get activeToolState(): Signal<ActiveToolState> {
     return this.$activeToolState;
   }
 
-  public setActiveToolState(state: ToolState): void {
+  public setActiveToolState(state: ActiveToolState): void {
     this.$activeToolState.set(state);
   }
 
@@ -945,12 +962,7 @@ export class Editor {
     return null;
   }
 
-  public getContourEndpointAt(pos: Point2D): {
-    contourId: ContourId;
-    position: "start" | "end";
-    contour: Contour;
-    pointId: PointId;
-  } | null {
+  public getContourEndpointAt(pos: Point2D): ContourEndpointHit | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
 
@@ -962,8 +974,9 @@ export class Editor {
 
       if (Vec2.dist(firstPoint, pos) < this.hitRadius) {
         return {
-          contourId: contour.id,
-          pointId: firstPoint.id,
+          type: "contourEndpoint",
+          contourId: contour.id as ContourId,
+          pointId: firstPoint.id as PointId,
           position: "start",
           contour: contour as Contour,
         };
@@ -971,8 +984,9 @@ export class Editor {
 
       if (Vec2.dist(lastPoint, pos) < this.hitRadius) {
         return {
-          contourId: contour.id,
-          pointId: lastPoint.id,
+          type: "contourEndpoint",
+          contourId: contour.id as ContourId,
+          pointId: lastPoint.id as PointId,
           position: "end",
           contour: contour as Contour,
         };

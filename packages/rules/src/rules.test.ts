@@ -12,7 +12,7 @@ function createPoint(
   x: number,
   y: number,
   type: "onCurve" | "offCurve",
-  smooth: boolean = false
+  smooth: boolean = false,
 ): PointSnapshot {
   return {
     id: id as PointId,
@@ -24,7 +24,11 @@ function createPoint(
 }
 
 // Helper to create test contour
-function createContour(id: string, points: PointSnapshot[], closed: boolean = false): ContourSnapshot {
+function createContour(
+  id: string,
+  points: PointSnapshot[],
+  closed: boolean = false,
+): ContourSnapshot {
   return {
     id: id as ContourId,
     points,

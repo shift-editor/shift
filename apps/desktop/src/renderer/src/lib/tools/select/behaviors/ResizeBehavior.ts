@@ -1,7 +1,7 @@
 import type { PointId, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import { hitTestBoundingBox } from "../boundingBoxHitTest";
@@ -18,7 +18,7 @@ export class ResizeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type === "resizing") {
       return this.transitionResizing(state, event, editor);
     }
@@ -30,7 +30,7 @@ export class ResizeBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: ToolContext): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.beginPreview();
       editor.clearHover();
@@ -45,7 +45,7 @@ export class ResizeBehavior implements SelectBehavior {
   private transitionResizing(
     state: SelectState & { type: "resizing" },
     event: ToolEvent,
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
       const uniformScale = event.shiftKey;
@@ -111,7 +111,7 @@ export class ResizeBehavior implements SelectBehavior {
   private tryStartResize(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
@@ -148,7 +148,7 @@ export class ResizeBehavior implements SelectBehavior {
     };
   }
 
-  private hitTestBoundingRectEdge(pos: Point2D, editor: Editor): BoundingRectEdge {
+  private hitTestBoundingRectEdge(pos: Point2D, editor: ToolContext): BoundingRectEdge {
     const rect = editor.getSelectionBoundingRect();
     if (!rect) return null;
 

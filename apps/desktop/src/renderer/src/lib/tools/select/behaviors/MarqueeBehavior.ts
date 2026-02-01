@@ -1,6 +1,6 @@
 import type { PointId, Rect2D } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { DrawAPI } from "../../core/DrawAPI";
 import { normalizeRect, pointInRect } from "../utils";
@@ -18,7 +18,7 @@ export class MarqueeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type === "selecting") {
       return this.transitionSelecting(state, event, editor);
     }
@@ -30,7 +30,7 @@ export class MarqueeBehavior implements SelectBehavior {
     return null;
   }
 
-  render(draw: DrawAPI, state: SelectState, _editor: Editor): void {
+  render(draw: DrawAPI, state: SelectState, _editor: ToolContext): void {
     if (state.type !== "selecting") return;
 
     const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
@@ -48,7 +48,7 @@ export class MarqueeBehavior implements SelectBehavior {
   private transitionSelecting(
     state: SelectState & { type: "selecting" },
     event: ToolEvent,
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
       const rect = normalizeRect(state.selection.startPos, event.point);
@@ -89,7 +89,7 @@ export class MarqueeBehavior implements SelectBehavior {
   private tryStartMarquee(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
@@ -112,7 +112,7 @@ export class MarqueeBehavior implements SelectBehavior {
     };
   }
 
-  private getPointsInRect(rect: Rect2D, editor: Editor): Set<PointId> {
+  private getPointsInRect(rect: Rect2D, editor: ToolContext): Set<PointId> {
     const allPoints = editor.getAllPoints();
     const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
     return new Set(hitPoints.map((p) => asPointId(p.id)));

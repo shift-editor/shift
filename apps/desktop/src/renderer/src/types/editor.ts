@@ -61,6 +61,7 @@ export type VisualState = "idle" | "hovered" | "selected";
 export interface ToolRegistryItem {
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
   tooltip: string;
+  shortcut?: string;
 }
 
 export interface TemporaryToolOptions {

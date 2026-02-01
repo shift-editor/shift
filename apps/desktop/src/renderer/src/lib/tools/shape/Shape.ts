@@ -1,15 +1,8 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
-import { DEFAULT_STYLES } from "@/lib/styles/style";
-import { computed, type ComputedSignal } from "@/lib/reactive/signal";
-import type { CursorType } from "@/types/editor";
-import type { Editor } from "@/lib/editor";
-
-type ShapeState =
-  | { type: "idle" }
-  | { type: "ready" }
-  | { type: "dragging"; startPos: Point2D; currentPos: Point2D };
+import type { ShapeState, ShapeBehavior } from "./types";
+import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 
 export class Shape extends BaseTool<ShapeState> {
   static stateSpec = defineStateDiagram<ShapeState["type"]>({
@@ -24,53 +17,24 @@ export class Shape extends BaseTool<ShapeState> {
   });
 
   readonly id: ToolName = "shape";
-  readonly $cursor: ComputedSignal<CursorType>;
 
-  constructor(editor: Editor) {
-    super(editor);
-
-    this.$cursor = computed<CursorType>(() => {
-      return { type: "default" };
-    });
-  }
+  private behaviors: ShapeBehavior[] = [ShapeReadyBehavior, ShapeDraggingBehavior];
 
   initialState(): ShapeState {
     return { type: "idle" };
   }
 
   transition(state: ShapeState, event: ToolEvent): ShapeState {
-    switch (state.type) {
-      case "idle":
-        return state;
+    if (state.type === "idle") return state;
 
-      case "ready":
-        if (event.type === "dragStart") {
-          return {
-            type: "dragging",
-            startPos: event.point,
-            currentPos: event.point,
-          };
-        }
-        return state;
-
-      case "dragging":
-        if (event.type === "drag") {
-          return {
-            ...state,
-            currentPos: event.point,
-          };
-        }
-        if (event.type === "dragEnd") {
-          return { type: "ready" };
-        }
-        if (event.type === "dragCancel") {
-          return { type: "ready" };
-        }
-        return state;
-
-      default:
-        return state;
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.editor);
+        if (result !== null) return result;
+      }
     }
+
+    return state;
   }
 
   onTransition(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
@@ -90,19 +54,9 @@ export class Shape extends BaseTool<ShapeState> {
   }
 
   render(draw: DrawAPI): void {
-    if (this.state.type !== "dragging") return;
-
-    const rect = this.getRect(this.state);
-    if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;
-
-    draw.rect(
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      {
-        strokeStyle: DEFAULT_STYLES.strokeStyle,
-        strokeWidth: DEFAULT_STYLES.lineWidth,
-      },
-    );
+    for (const behavior of this.behaviors) {
+      behavior.render?.(draw, this.state, this.editor);
+    }
   }
 
   private getRect(state: { startPos: Point2D; currentPos: Point2D }): Rect2D {

@@ -1,7 +1,7 @@
 import type { Point2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
 import { AddPointCommand, InsertPointCommand } from "@/lib/commands";
 
@@ -28,7 +28,7 @@ export class HandleBehavior implements PenBehavior {
     return false;
   }
 
-  transition(state: PenState, event: ToolEvent, editor: Editor): PenState | null {
+  transition(state: PenState, event: ToolEvent, editor: ToolContext): PenState | null {
     if (state.type === "anchored") {
       return this.transitionAnchored(state, event, editor);
     }
@@ -38,7 +38,7 @@ export class HandleBehavior implements PenBehavior {
     return null;
   }
 
-  onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: Editor): void {
+  onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: ToolContext): void {
     if ((prev.type === "anchored" || prev.type === "dragging") && next.type === "ready") {
       if (editor.commands.isBatching) {
         editor.commands.endBatch();
@@ -49,7 +49,7 @@ export class HandleBehavior implements PenBehavior {
   private transitionAnchored(
     state: PenState & { type: "anchored" },
     event: ToolEvent,
-    editor: Editor,
+    editor: ToolContext,
   ): PenState | null {
     if (event.type === "drag") {
       const dist = Vec2.dist(state.anchor.position, event.point);
@@ -96,7 +96,7 @@ export class HandleBehavior implements PenBehavior {
   private transitionDragging(
     state: PenState & { type: "dragging" },
     event: ToolEvent,
-    editor: Editor,
+    editor: ToolContext,
   ): PenState | null {
     if (event.type === "drag") {
       this.updateHandles(state.anchor, state.handles, event.point, editor);
@@ -136,7 +136,7 @@ export class HandleBehavior implements PenBehavior {
     return null;
   }
 
-  private createHandles(anchor: AnchorData, mousePos: Point2D, editor: Editor): HandleData {
+  private createHandles(anchor: AnchorData, mousePos: Point2D, editor: ToolContext): HandleData {
     const { context, pointId, position } = anchor;
     const history = editor.commands;
 
@@ -178,7 +178,7 @@ export class HandleBehavior implements PenBehavior {
     anchor: AnchorData,
     handles: HandleData,
     mousePos: Point2D,
-    editor: Editor,
+    editor: ToolContext,
   ): void {
     const { position } = anchor;
 

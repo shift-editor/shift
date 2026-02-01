@@ -3,7 +3,7 @@ import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { DrawAPI } from "../core/DrawAPI";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../core/ToolContext";
 import type { SelectIntent } from "./intents";
 
 export interface SelectionData {
@@ -52,7 +52,7 @@ export type SelectState =
 
 export interface SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean;
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null;
-  onTransition?(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void;
-  render?(draw: DrawAPI, state: SelectState, editor: Editor): void;
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null;
+  onTransition?(prev: SelectState, next: SelectState, event: ToolEvent, editor: ToolContext): void;
+  render?(draw: DrawAPI, state: SelectState, editor: ToolContext): void;
 }

@@ -1,7 +1,7 @@
 import { Vec2 } from "@shift/geo";
 import type { PointId, GlyphSnapshot } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { ContentResolver } from "@/lib/clipboard/ContentResolver";
@@ -17,7 +17,7 @@ export class DragBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type === "dragging") {
       return this.transitionDragging(state, event);
     }
@@ -29,7 +29,7 @@ export class DragBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: Editor): void {
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: ToolContext): void {
     if (prev.type !== "dragging" && next.type === "dragging") {
       editor.beginPreview();
       editor.clearHover();
@@ -78,7 +78,7 @@ export class DragBehavior implements SelectBehavior {
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState | null {
     const point = editor.getPointAt(event.point);
 
@@ -167,7 +167,7 @@ export class DragBehavior implements SelectBehavior {
     return null;
   }
 
-  private duplicateSelection(editor: Editor): PointId[] {
+  private duplicateSelection(editor: ToolContext): PointId[] {
     const glyph = editor.getGlyph();
     if (!glyph) return [];
 

@@ -1,5 +1,7 @@
 import { vi } from "vitest";
-import type { PointId, ContourId, GlyphSnapshot, Point, Contour } from "@shift/types";
+import type { PointId, ContourId, GlyphSnapshot, Point, Contour, Glyph } from "@shift/types";
+import type { ToolContext, ActiveToolState } from "@/lib/tools/core";
+import type { ToolEvent } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
 import type { ContourEndpointHit } from "@/types/hitResult";
@@ -149,82 +151,29 @@ interface ToolSwitchService {
   returnFromTemporary(): void;
 }
 
-interface ZoneService {
-  getZone(): "canvas" | "sidebar" | "toolbar" | "modal";
-}
-
-interface ToolContext {
-  readonly screen: ScreenService;
-  readonly selection: SelectionService;
-  readonly hover: HoverService;
-  readonly edit: EditService;
-  readonly preview: PreviewService;
-  readonly transform: TransformService;
-  readonly cursor: CursorService;
-  readonly render: RenderService;
-  readonly viewport: ViewportService;
-  readonly hitTest: HitTestService;
-  readonly commands: CommandHistory;
-  readonly zone: ZoneService;
-  tools: ToolSwitchService;
-}
-
 export interface MockToolContext extends ToolContext {
   fontEngine: FontEngine;
-  getSelectedPoints(): readonly PointId[];
-  getSelectedSegments(): readonly SegmentId[];
+  readonly screen: ReturnType<typeof createMockScreenService>;
+  readonly selection: ReturnType<typeof createMockSelectionService>;
+  readonly hover: ReturnType<typeof createMockHoverService> & {
+    setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
+  };
+  readonly edit: ReturnType<typeof createMockEditService>;
+  readonly preview: ReturnType<typeof createMockPreviewService>;
+  readonly transform: ReturnType<typeof createMockTransformService>;
+  readonly cursor: ReturnType<typeof createMockCursorService>;
+  readonly render: ReturnType<typeof createMockRenderService>;
+  readonly viewport: ReturnType<typeof createMockViewportService>;
+  readonly hitTest: ReturnType<typeof createMockHitTestService>;
+  readonly zone: { getZone(): "canvas" | "sidebar" | "toolbar" | "modal" };
+  tools: ToolSwitchService;
+  getSelectionMode(): SelectionMode;
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
-  readonly hitRadius: number;
   readonly screenMousePosition: Signal<Point2D>;
-  readonly activeToolState: Signal<{ type: string }>;
-  getScreenMousePosition(): Point2D;
-  screenToUpmDistance(pixels: number): number;
-  hasSelection(): boolean;
-  setActiveToolState(state: unknown): void;
-  selectPoints(ids: readonly PointId[]): void;
-  clearSelection(): void;
-  setSelectionMode(mode: SelectionMode): void;
-  getSelectionMode(): SelectionMode;
-  addPointToSelection(id: PointId): void;
-  removePointFromSelection(id: PointId): void;
-  togglePointSelection(id: PointId): void;
-  isPointSelected(id: PointId): boolean;
-  selectSegments(ids: readonly SegmentId[]): void;
-  addSegmentToSelection(id: SegmentId): void;
-  removeSegmentFromSelection(id: SegmentId): void;
-  toggleSegmentInSelection(id: SegmentId): void;
-  isSegmentSelected(id: SegmentId): boolean;
-  getGlyph(): GlyphSnapshot | null;
-  addPoint(x: number, y: number, type: any, smooth?: boolean): PointId;
-  movePointTo(id: PointId, x: number, y: number): void;
-  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
-  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
-  toggleSmooth(id: PointId): void;
-  getActiveContourId(): ContourId | null;
-  getActiveContour(): Contour | null;
-  setActiveContour(id: ContourId): void;
-  clearActiveContour(): void;
-  beginPreview(): void;
-  cancelPreview(): void;
-  commitPreview(label: string): void;
-  requestRedraw(): void;
-  requestStaticRedraw(): void;
-  setPreviewMode(enabled: boolean): void;
-  setHandlesVisible(visible: boolean): void;
-  getPointAt(pos: Point2D): Point | null;
-  getSegmentAt(pos: Point2D): any;
-  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
-  getSelectionBoundingRect(): any;
   getAllPoints(): Point[];
-  getSegmentById(id: SegmentId): any;
-  updateHover(pos: Point2D): void;
-  getMiddlePointAt(pos: Point2D): any;
-  getFocusZone(): "canvas" | "sidebar" | "toolbar" | "modal";
-  clearHover(): void;
-  requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
-  returnFromTemporaryTool(): void;
+  addPoint(x: number, y: number, type: unknown, smooth?: boolean): PointId;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -894,6 +843,14 @@ export function createMockToolContext(): MockToolContext {
   const screen = createMockScreenService();
   const selection = createMockSelectionService();
   const hover = createMockHoverService();
+  const $hoveredBoundingBoxHandle = signal<BoundingBoxHitResult>(null as BoundingBoxHitResult);
+  const hoverProxy = {
+    ...hover,
+    setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult) {
+      hover.setHoveredBoundingBoxHandle(handle);
+      $hoveredBoundingBoxHandle.set(handle);
+    },
+  };
   const edit = createMockEditService(fontEngine);
   const preview = createMockPreviewService(fontEngine);
   const transform = createMockTransformService();
@@ -912,12 +869,12 @@ export function createMockToolContext(): MockToolContext {
   };
 
   const $screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
-  const $activeToolState = signal<{ type: string }>({ type: "idle" });
+  const $activeToolState = signal<ActiveToolState>({ type: "idle" });
 
   return {
     screen,
     selection,
-    hover,
+    hover: hoverProxy,
     edit,
     preview,
     transform,
@@ -929,8 +886,8 @@ export function createMockToolContext(): MockToolContext {
     zone,
     tools,
     fontEngine,
-    getSelectedPoints: () => selection.getSelectedPoints(),
-    getSelectedSegments: () => selection.getSelectedSegments(),
+    getSelectedPoints: () => [...selection.getSelectedPoints()],
+    getSelectedSegments: () => [...selection.getSelectedSegments()],
     getHoveredPoint: () => hover.getHoveredPoint(),
     getHoveredSegment: () => hover.getHoveredSegment(),
     getCursorValue: () => cursor.get(),
@@ -944,10 +901,13 @@ export function createMockToolContext(): MockToolContext {
       return $activeToolState;
     },
     getScreenMousePosition: () => $screenMousePosition.peek(),
+    projectScreenToUpm: (x: number, y: number) => screen.projectScreenToUpm(x, y),
     screenToUpmDistance: (pixels: number) => pixels,
+    getSelectedPointsCount: () => selection.getSelectedPointsCount(),
+    getSelectedSegmentsCount: () => selection.getSelectedSegmentsCount(),
     hasSelection: () => selection.hasSelection(),
-    setActiveToolState: (state: unknown) => {
-      $activeToolState.value = state as { type: string };
+    setActiveToolState: (state: ActiveToolState) => {
+      $activeToolState.value = state;
     },
     selectPoints: (ids: readonly PointId[]) => selection.selectPoints(ids),
     clearSelection: () => selection.clear(),
@@ -962,7 +922,7 @@ export function createMockToolContext(): MockToolContext {
     removeSegmentFromSelection: (id: SegmentId) => selection.removeSegment(id),
     toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
-    getGlyph: () => edit.getGlyph(),
+    getGlyph: () => edit.getGlyph() as Glyph | null,
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
@@ -991,14 +951,21 @@ export function createMockToolContext(): MockToolContext {
     updateHover: (pos: Point2D) => hitTest.updateHover(pos),
     getMiddlePointAt: (pos: Point2D) => hitTest.getMiddlePointAt(pos),
     getFocusZone: () => zone.getZone(),
-    clearHover: () => hover.clearAll(),
+    get pan() {
+      return viewport.getPan();
+    },
+    setPan: (x: number, y: number) => viewport.pan(x, y),
+    get hoveredBoundingBoxHandle() {
+      return $hoveredBoundingBoxHandle;
+    },
+    clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
     returnFromTemporaryTool: () => tools.returnFromTemporary(),
     mocks: {
       screen,
       selection,
-      hover,
+      hover: hoverProxy,
       edit,
       preview,
       transform,
@@ -1034,7 +1001,7 @@ export function createToolMouseEvent(
 }
 
 export interface ToolEventTarget {
-  handleEvent(event: import("@/lib/tools/core/GestureDetector").ToolEvent): void;
+  handleEvent(event: ToolEvent): void;
   activate?(): void;
   deactivate?(): void;
 }
@@ -1108,6 +1075,15 @@ export class ToolEventSimulator {
     this.mouseDown = false;
     this.downPoint = null;
     this.downScreenPoint = null;
+  }
+
+  click(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): void {
+    this.tool.handleEvent({
+      type: "click",
+      point: { x, y },
+      shiftKey: options?.shiftKey ?? false,
+      altKey: options?.altKey ?? false,
+    });
   }
 
   cancel(): void {

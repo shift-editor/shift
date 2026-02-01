@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
@@ -12,7 +12,7 @@ export class NudgeBehavior implements SelectBehavior {
     return arrowKeys.includes(event.key);
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type !== "selected") return null;
     if (event.type !== "keyDown") return null;
 

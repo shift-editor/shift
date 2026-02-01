@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { ContourId, PointSnapshot } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
@@ -9,7 +9,7 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
   }
 
-  transition(_state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(_state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (event.type !== "doubleClick") return null;
 
     const point = editor.getPointAt(event.point);
@@ -29,7 +29,7 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
 
   onTransition(): void {}
 
-  private findContourForSegment(segmentId: string, editor: Editor): ContourId | null {
+  private findContourForSegment(segmentId: string, editor: ToolContext): ContourId | null {
     const glyph = editor.getGlyph();
     if (!glyph) return null;
 

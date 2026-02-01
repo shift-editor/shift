@@ -1,6 +1,6 @@
 import { Contours } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior } from "../types";
 
 export class EscapeBehavior implements PenBehavior {
@@ -8,7 +8,7 @@ export class EscapeBehavior implements PenBehavior {
     return state.type === "ready" && event.type === "keyDown" && event.key === "Escape";
   }
 
-  transition(state: PenState, event: ToolEvent, editor: Editor): PenState | null {
+  transition(state: PenState, event: ToolEvent, editor: ToolContext): PenState | null {
     if (state.type !== "ready") return null;
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 
@@ -22,7 +22,7 @@ export class EscapeBehavior implements PenBehavior {
     return null;
   }
 
-  private hasActiveDrawingContour(editor: Editor): boolean {
+  private hasActiveDrawingContour(editor: ToolContext): boolean {
     const contour = editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);

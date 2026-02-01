@@ -1,13 +1,7 @@
-import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
-import { computed, type ComputedSignal } from "@/lib/reactive/signal";
 import type { CursorType } from "@/types/editor";
-import type { Editor } from "@/lib/editor";
-
-type HandState =
-  | { type: "idle" }
-  | { type: "ready" }
-  | { type: "dragging"; screenStart: Point2D; startPan: Point2D };
+import type { HandState, HandBehavior } from "./types";
+import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
 
 export class Hand extends BaseTool<HandState> {
   static stateSpec = defineStateDiagram<HandState["type"]>({
@@ -22,16 +16,12 @@ export class Hand extends BaseTool<HandState> {
   });
 
   readonly id: ToolName = "hand";
-  readonly $cursor: ComputedSignal<CursorType>;
 
-  constructor(editor: Editor) {
-    super(editor);
+  private behaviors: HandBehavior[] = [HandReadyBehavior, HandDraggingBehavior];
 
-    this.$cursor = computed<CursorType>(() => {
-      const state = this.editor.activeToolState.value as HandState;
-      if (state.type === "dragging") return { type: "grabbing" };
-      return { type: "grab" };
-    });
+  getCursor(state: HandState): CursorType {
+    if (state.type === "dragging") return { type: "grabbing" };
+    return { type: "grab" };
   }
 
   initialState(): HandState {
@@ -39,40 +29,16 @@ export class Hand extends BaseTool<HandState> {
   }
 
   transition(state: HandState, event: ToolEvent): HandState {
-    switch (state.type) {
-      case "idle":
-        return state;
+    if (state.type === "idle") return state;
 
-      case "ready":
-        if (event.type === "dragStart") {
-          const startPan = this.editor.pan;
-          return {
-            type: "dragging",
-            screenStart: event.screenPoint,
-            startPan,
-          };
-        }
-        return state;
-
-      case "dragging":
-        if (event.type === "drag") {
-          const screenDelta = event.screenDelta;
-          const newPan = {
-            x: state.startPan.x + screenDelta.x,
-            y: state.startPan.y + screenDelta.y,
-          };
-          this.editor.setPan(newPan.x, newPan.y);
-          this.editor.requestRedraw();
-          return state;
-        }
-        if (event.type === "dragEnd" || event.type === "dragCancel") {
-          return { type: "ready" };
-        }
-        return state;
-
-      default:
-        return state;
+    for (const behavior of this.behaviors) {
+      if (behavior.canHandle(state, event)) {
+        const result = behavior.transition(state, event, this.editor);
+        if (result !== null) return result;
+      }
     }
+
+    return state;
   }
 
   activate(): void {

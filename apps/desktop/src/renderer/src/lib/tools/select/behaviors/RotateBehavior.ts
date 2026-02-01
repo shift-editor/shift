@@ -1,7 +1,7 @@
 import type { PointId, Point2D } from "@shift/types";
 import { Vec2, Mat } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import { hitTestBoundingBox } from "../boundingBoxHitTest";
@@ -18,7 +18,7 @@ export class RotateBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type === "rotating") {
       return this.transitionRotating(state, event, editor);
     }
@@ -30,7 +30,7 @@ export class RotateBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: ToolContext): void {
     if (prev.type !== "rotating" && next.type === "rotating") {
       editor.beginPreview();
       editor.setHandlesVisible(false);
@@ -47,7 +47,7 @@ export class RotateBehavior implements SelectBehavior {
   private transitionRotating(
     state: SelectState & { type: "rotating" },
     event: ToolEvent,
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
       const currentAngle = this.calculateAngle(event.point, state.rotate.center);
@@ -97,7 +97,7 @@ export class RotateBehavior implements SelectBehavior {
   private tryStartRotate(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: Editor,
+    editor: ToolContext,
   ): SelectState | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
@@ -139,7 +139,7 @@ export class RotateBehavior implements SelectBehavior {
     };
   }
 
-  private hitTestRotationZone(pos: Point2D, editor: Editor): CornerHandle | null {
+  private hitTestRotationZone(pos: Point2D, editor: ToolContext): CornerHandle | null {
     const rect = editor.getSelectionBoundingRect();
     if (!rect) return null;
 

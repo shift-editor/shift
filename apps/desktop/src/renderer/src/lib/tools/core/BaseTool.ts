@@ -1,27 +1,28 @@
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "./ToolContext";
 import type { ToolEvent } from "./GestureDetector";
-import type { ToolName } from "./createContext";
+import type { ToolName, ToolState } from "./createContext";
 import type { DrawAPI } from "./DrawAPI";
-import type { ComputedSignal } from "../../reactive/signal";
+import { computed, type ComputedSignal } from "../../reactive/signal";
 import type { CursorType } from "@/types/editor";
 
-export type { ToolName };
-
-export interface ToolState {
-  type: string;
-}
+export type { ToolName, ToolState };
 
 export abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
-  abstract readonly $cursor: ComputedSignal<CursorType>;
+  readonly $cursor: ComputedSignal<CursorType>;
   state: S;
   settings: Settings;
-  protected editor: Editor;
+  protected editor: ToolContext;
 
-  constructor(editor: Editor) {
+  constructor(editor: ToolContext) {
     this.editor = editor;
     this.state = this.initialState();
     this.settings = this.defaultSettings();
+    this.$cursor = computed(() => this.getCursor(this.editor.activeToolState.value as S));
+  }
+
+  getCursor(_state: S): CursorType {
+    return { type: "default" };
   }
 
   get name(): ToolName {

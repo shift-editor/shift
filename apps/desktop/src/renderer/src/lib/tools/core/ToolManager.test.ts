@@ -183,4 +183,42 @@ describe("ToolManager", () => {
       expect(spy).toHaveBeenCalled();
     });
   });
+
+  describe("pipeline (pointer → gesture → tool)", () => {
+    const modifiers = { shiftKey: false, altKey: false };
+
+    it("tap (down then up at same point) drives tool with click and leaves activeToolState defined", () => {
+      toolManager.activate("select");
+
+      toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+      toolManager.handlePointerUp({ x: 100, y: 100 });
+
+      expect(toolManager.activeToolId).toBe("select");
+      const lastState = (editor.activeToolState as { value: unknown }).value;
+      expect(lastState).toBeDefined();
+      expect(typeof (lastState as { type?: string })?.type).toBe("string");
+    });
+
+    it("drag (down, move, up) drives tool with dragStart, drag, dragEnd and does not emit click", () => {
+      const originalRAF = globalThis.requestAnimationFrame;
+      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
+        cb();
+        return 0;
+      });
+      try {
+        toolManager.activate("hand");
+        toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+        toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
+        toolManager.handlePointerUp({ x: 120, y: 100 });
+
+        expect(toolManager.isDragging).toBe(false);
+        const lastState = (editor.activeToolState as { value: unknown }).value as {
+          type?: string;
+        };
+        expect(lastState?.type).toBe("ready");
+      } finally {
+        vi.stubGlobal("requestAnimationFrame", originalRAF);
+      }
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 
 export class ToggleSmoothBehavior implements SelectBehavior {
@@ -7,7 +7,7 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (event.type !== "doubleClick") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 

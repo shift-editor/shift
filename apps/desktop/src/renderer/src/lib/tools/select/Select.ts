@@ -14,9 +14,7 @@ import {
   UpgradeSegmentBehavior,
   DoubleClickSelectContourBehavior,
 } from "./behaviors";
-import { computed, type ComputedSignal } from "@/lib/reactive/signal";
 import type { CursorType } from "@/types/editor";
-import type { Editor } from "@/lib/editor";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -37,7 +35,6 @@ export class Select extends BaseTool<SelectState> {
   });
 
   readonly id: ToolName = "select";
-  readonly $cursor: ComputedSignal<CursorType>;
 
   private behaviors: SelectBehavior[] = [
     new DoubleClickSelectContourBehavior(),
@@ -52,26 +49,20 @@ export class Select extends BaseTool<SelectState> {
     new MarqueeBehavior(),
   ];
 
-  constructor(editor: Editor) {
-    super(editor);
+  getCursor(state: SelectState): CursorType {
+    if (state.type === "dragging") return { type: "move" };
+    if (state.type === "resizing") return edgeToCursor(state.resize.edge);
+    if (state.type === "rotating") {
+      return boundingBoxHitResultToCursor({
+        type: "rotate",
+        corner: state.rotate.corner,
+      });
+    }
 
-    this.$cursor = computed<CursorType>(() => {
-      const state = this.editor.activeToolState.value as SelectState;
+    const bbHandle = this.editor.hoveredBoundingBoxHandle.value;
+    if (bbHandle) return boundingBoxHitResultToCursor(bbHandle);
 
-      if (state.type === "dragging") return { type: "move" };
-      if (state.type === "resizing") return edgeToCursor(state.resize.edge);
-      if (state.type === "rotating") {
-        return boundingBoxHitResultToCursor({
-          type: "rotate",
-          corner: state.rotate.corner,
-        });
-      }
-
-      const bbHandle = this.editor.hoveredBoundingBoxHandle.value;
-      if (bbHandle) return boundingBoxHitResultToCursor(bbHandle);
-
-      return { type: "default" };
-    });
+    return { type: "default" };
   }
 
   initialState(): SelectState {

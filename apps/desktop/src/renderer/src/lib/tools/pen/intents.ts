@@ -1,5 +1,5 @@
 import type { Point2D, ContourId, PointId } from "@shift/types";
-import type { Editor } from "@/lib/editor";
+import type { ToolContext } from "@/lib/tools/core";
 import type { Segment } from "@/types/segments";
 import {
   AddPointCommand,
@@ -85,7 +85,7 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
   return { action: "placePoint", pos };
 }
 
-export function executeIntent(intent: PenIntent, editor: Editor): PointId | null {
+export function executeIntent(intent: PenIntent, editor: ToolContext): PointId | null {
   switch (intent.action) {
     case "close":
       editor.commands.execute(new CloseContourCommand());

@@ -72,12 +72,7 @@ describe("Select tool", () => {
       ctx.edit.addPoint(200, 200, "onCurve", false);
       ctx.selection.selectPoints([id1]);
       ctx.mocks.selection.clear.mockClear();
-      select.handleEvent({
-        type: "click",
-        point: { x: 500, y: 500 },
-        shiftKey: false,
-        altKey: false,
-      });
+      sim.click(500, 500);
       expect(ctx.mocks.selection.clear).toHaveBeenCalled();
     });
   });

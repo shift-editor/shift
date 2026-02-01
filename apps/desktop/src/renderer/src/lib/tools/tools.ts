@@ -10,8 +10,32 @@ import { Select } from "./select";
 import { Shape } from "./shape";
 
 export function registerBuiltInTools(editor: Editor): void {
-  editor.registerTool("select", Select, SelectIcon, "Select Tool (V)");
-  editor.registerTool("pen", Pen, PenIcon, "Pen Tool (P)");
-  editor.registerTool("hand", Hand, HandIcon, "Hand Tool (H)");
-  editor.registerTool("shape", Shape, ShapeIcon, "Shape Tool (S)");
+  editor.registerTool({
+    id: "select",
+    ToolClass: Select,
+    icon: SelectIcon,
+    tooltip: "Select Tool (V)",
+    shortcut: "v",
+  });
+  editor.registerTool({
+    id: "pen",
+    ToolClass: Pen,
+    icon: PenIcon,
+    tooltip: "Pen Tool (P)",
+    shortcut: "p",
+  });
+  editor.registerTool({
+    id: "hand",
+    ToolClass: Hand,
+    icon: HandIcon,
+    tooltip: "Hand Tool (H)",
+    shortcut: "h",
+  });
+  editor.registerTool({
+    id: "shape",
+    ToolClass: Shape,
+    icon: ShapeIcon,
+    tooltip: "Shape Tool (S)",
+    shortcut: "s",
+  });
 }
