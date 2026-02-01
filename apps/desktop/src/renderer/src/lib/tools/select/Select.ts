@@ -3,7 +3,6 @@ import { getCursorForState, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import { executeIntent } from "./intents";
 import {
-  HoverBehavior,
   SelectionBehavior,
   MarqueeBehavior,
   DragBehavior,
@@ -39,8 +38,9 @@ export class Select extends BaseTool<SelectState> {
 
   readonly id: ToolName = "select";
 
+  // Note: Hover state is managed automatically by the Editor.
+  // Tools only need to determine cursors based on hit testing.
   private behaviors: SelectBehavior[] = [
-    new HoverBehavior(),
     new DoubleClickSelectContourBehavior(),
     new ToggleSmoothBehavior(),
     new UpgradeSegmentBehavior(),

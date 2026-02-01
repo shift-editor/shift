@@ -3,7 +3,7 @@ import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
-import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
+import { MouseTrackBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 
 export type { PenState };
@@ -25,7 +25,7 @@ export class Pen extends BaseTool<PenState> {
   readonly id: ToolName = "pen";
 
   private behaviors: PenBehavior[] = [
-    new HoverBehavior(),
+    new MouseTrackBehavior(),
     new EscapeBehavior(),
     new PlaceBehavior(),
     new HandleBehavior(),
@@ -137,10 +137,6 @@ export class Pen extends BaseTool<PenState> {
         break;
 
       case "setCursor":
-        executeIntent(intent, this.editor);
-        break;
-
-      case "updateHover":
         executeIntent(intent, this.editor);
         break;
     }

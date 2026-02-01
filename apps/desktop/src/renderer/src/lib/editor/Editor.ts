@@ -28,6 +28,13 @@ import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
 import { Polygon, Vec2 } from "@shift/geo";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type {
+  HitResult,
+  HitTestOptions,
+  PointHit,
+  SegmentHit,
+  ContourEndpointHit,
+} from "@/types/hitResult";
 
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
@@ -171,6 +178,7 @@ export class Editor {
       getAllPoints: () => this.getAllPoints(),
       getSegmentById: (id) => this.getSegmentById(id),
       updateHover: (pos) => this.updateHover(pos),
+      getNodeAt: (pos, options) => this.getNodeAt(pos, options),
     });
     this.cursor = new CursorService(this.$cursor, (c) => this.setCursor(c));
     this.render = new RenderService({
@@ -858,20 +866,88 @@ export class Editor {
     return Polygon.boundingRect(points);
   }
 
+  /**
+   * Returns the topmost element at the given position.
+   *
+   * Priority order (first match wins):
+   * 1. Point - smallest target, highest priority
+   * 2. ContourEndpoint - for pen tool joining (only on open contours)
+   * 3. Segment - larger hit area
+   *
+   * Note: Bounding box handles are not included as they are tool-specific.
+   * Use hitTestBoundingBox separately if needed.
+   */
+  public getNodeAt(pos: Point2D, options: HitTestOptions = {}): HitResult {
+    const { points = true, segments = true, contourEndpoints = true } = options;
+
+    // 1. Points have highest priority (smallest targets)
+    if (points) {
+      const point = this.getPointAt(pos);
+      if (point) {
+        return {
+          type: "point",
+          point,
+          pointId: point.id,
+        } satisfies PointHit;
+      }
+    }
+
+    // 2. Contour endpoints (for pen tool continuation)
+    if (contourEndpoints) {
+      const endpoint = this.getContourEndpointAt(pos);
+      if (endpoint) {
+        return {
+          type: "contourEndpoint",
+          contourId: endpoint.contourId,
+          pointId: endpoint.pointId,
+          position: endpoint.position,
+          contour: endpoint.contour,
+        } satisfies ContourEndpointHit;
+      }
+    }
+
+    // 3. Segments have lowest priority (largest targets)
+    if (segments) {
+      const segmentHit = this.getSegmentAt(pos);
+      if (segmentHit) {
+        return {
+          type: "segment",
+          segment: segmentHit.segment,
+          segmentId: segmentHit.segmentId,
+          t: segmentHit.t,
+          closestPoint: segmentHit.point,
+          distance: segmentHit.distance,
+        } satisfies SegmentHit;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Updates hover state based on the element at the given position.
+   * This is called automatically by the ToolManager on pointer move.
+   */
   public updateHover(pos: Point2D): void {
-    const point = this.getPointAt(pos);
-    if (point) {
-      this.#hover.setHoveredPoint(point.id);
+    const hit = this.getNodeAt(pos);
+
+    if (hit?.type === "point") {
+      this.#hover.setHoveredPoint(hit.pointId);
       return;
     }
 
-    const segmentHit = this.getSegmentAt(pos);
-    if (segmentHit) {
+    if (hit?.type === "segment") {
       this.#hover.setHoveredSegment({
-        segmentId: segmentHit.segmentId,
-        closestPoint: segmentHit.point,
-        t: segmentHit.t,
+        segmentId: hit.segmentId,
+        closestPoint: hit.closestPoint,
+        t: hit.t,
       });
+      return;
+    }
+
+    // ContourEndpoint is a special case of point - set it as hovered point
+    if (hit?.type === "contourEndpoint") {
+      this.#hover.setHoveredPoint(hit.pointId);
       return;
     }
 

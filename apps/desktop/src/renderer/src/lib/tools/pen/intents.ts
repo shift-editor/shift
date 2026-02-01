@@ -27,7 +27,6 @@ export type PenIntent =
   | { action: "splitSegment"; segment: Segment; t: number }
   | { action: "placePoint"; pos: Point2D }
   | { action: "abandonContour" }
-  | { action: "updateHover"; pos: Point2D }
   | { action: "setCursor"; cursor: PenCursorType };
 
 export type PenCursorType = "pen" | "pen-add" | "pen-end";
@@ -144,10 +143,6 @@ export function executeIntent(intent: PenIntent, editor: Editor): PointId | null
     case "abandonContour":
       editor.selection.clear();
       editor.commands.execute(new AddContourCommand());
-      return null;
-
-    case "updateHover":
-      editor.hitTest.updateHover(intent.pos);
       return null;
 
     case "setCursor":

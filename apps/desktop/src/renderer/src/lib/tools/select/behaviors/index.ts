@@ -1,4 +1,3 @@
-export { HoverBehavior } from "./HoverBehavior";
 export { SelectionBehavior } from "./SelectionBehavior";
 export { MarqueeBehavior } from "./MarqueeBehavior";
 export { DragBehavior } from "./DragBehavior";

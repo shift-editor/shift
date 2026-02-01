@@ -2,7 +2,12 @@ import type { Point2D, Rect2D, Point, ContourId, PointId, Contour } from "@shift
 import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { Segment } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
+import type { HitResult, HitTestOptions } from "@/types/hitResult";
 
+/**
+ * Internal contour endpoint hit result (without the `type` discriminator).
+ * This is the return type of the internal getContourEndpointAt method.
+ */
 export interface ContourEndpointHit {
   contourId: ContourId;
   pointId: PointId;
@@ -18,6 +23,7 @@ export interface HitTestServiceDeps {
   getAllPoints: () => Point[];
   getSegmentById: (segmentId: SegmentId) => Segment | null;
   updateHover: (pos: Point2D) => void;
+  getNodeAt: (pos: Point2D, options?: HitTestOptions) => HitResult;
 }
 
 export class HitTestService {
@@ -53,5 +59,13 @@ export class HitTestService {
 
   updateHover(pos: Point2D): void {
     this.#deps.updateHover(pos);
+  }
+
+  /**
+   * Returns the topmost element at the given position as a unified HitResult.
+   * This is the recommended API for hit testing.
+   */
+  getNodeAt(pos: Point2D, options?: HitTestOptions): HitResult {
+    return this.#deps.getNodeAt(pos, options);
   }
 }
