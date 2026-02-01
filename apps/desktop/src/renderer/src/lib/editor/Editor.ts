@@ -8,6 +8,7 @@ import type {
   RenderState,
   StaticRenderState,
   OverlayRenderState,
+  InteractiveRenderState,
 } from "@/types/editor";
 import type {
   Point2D,
@@ -56,6 +57,8 @@ import {
 } from "../reactive/signal";
 import { ClipboardService } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
+import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
+import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import type { FocusZone } from "@/types/focus";
@@ -91,6 +94,8 @@ export class Editor {
   #fontEngine: FontEngine;
   #staticEffect: Effect;
   #overlayEffect: Effect;
+  #interactiveEffect: Effect;
+  #cursorEffect: Effect;
   #clipboardService: ClipboardService;
 
   #previewSnapshot: GlyphSnapshot | null = null;
@@ -100,6 +105,7 @@ export class Editor {
   $renderState: ComputedSignal<RenderState>;
   $staticState: ComputedSignal<StaticRenderState>;
   $overlayState: ComputedSignal<OverlayRenderState>;
+  $interactiveState: ComputedSignal<InteractiveRenderState>;
   private $cursor: WritableSignal<string>;
 
   readonly selection: SelectionService;
@@ -201,22 +207,42 @@ export class Editor {
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       selectionMode: this.#selection.selectionMode.value,
       previewMode: this.$previewMode.value,
+      hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
+      glyph: this.#fontEngine.$glyph.value,
+      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+    }));
+
+    this.$interactiveState = computed<InteractiveRenderState>(() => ({
+      activeToolState: this.$activeToolState.value,
     }));
 
     this.#staticEffect = effect(() => {
       this.$staticState.value;
       this.#renderer.requestStaticRedraw();
-      this.#renderer.requestInteractiveRedraw();
     });
 
     this.#overlayEffect = effect(() => {
       this.$overlayState.value;
       this.#renderer.requestOverlayRedraw();
+    });
+
+    this.#interactiveEffect = effect(() => {
+      this.$interactiveState.value;
+      this.#renderer.requestInteractiveRedraw();
+    });
+
+    this.#cursorEffect = effect(() => {
+      // Depend on active tool signals to re-run when tool changes
+      this.$activeTool.value;
+      this.$activeToolState.value;
+      const cursor = this.#toolManager?.activeTool?.$cursor.value ?? { type: "default" };
+      this.setCursor(cursor);
     });
   }
 
@@ -345,6 +371,10 @@ export class Editor {
 
   public get hoveredSegmentId(): Signal<SegmentIndicator | null> {
     return this.#hover.hoveredSegmentId;
+  }
+
+  public get hoveredBoundingBoxHandle(): Signal<BoundingBoxHitResult> {
+    return this.#hover.hoveredBoundingBoxHandle;
   }
 
   public setHoveredPoint(pointId: PointId | null): void {
@@ -859,6 +889,31 @@ export class Editor {
   }
 
   public updateHover(pos: Point2D): void {
+    if (this.#selection.selectedPointIds.peek().size > 1) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) {
+        const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+        const rotationZoneOffset = this.screenToUpmDistance(
+          BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+        );
+        const bbHit = hitTestBoundingBox(
+          pos,
+          rect,
+          this.hitRadius,
+          handleOffset,
+          rotationZoneOffset,
+        );
+        this.#hover.setHoveredBoundingBoxHandle(bbHit);
+        if (bbHit) {
+          this.#hover.setHoveredPoint(null);
+          this.#hover.setHoveredSegment(null);
+          return;
+        }
+      }
+    } else {
+      this.#hover.setHoveredBoundingBoxHandle(null);
+    }
+
     const point = this.getPointAt(pos);
     if (point) {
       this.#hover.setHoveredPoint(point.id);
@@ -919,6 +974,8 @@ export class Editor {
   public destroy() {
     this.#staticEffect.dispose();
     this.#overlayEffect.dispose();
+    this.#interactiveEffect.dispose();
+    this.#cursorEffect.dispose();
     this.#renderer.destroy();
   }
 }

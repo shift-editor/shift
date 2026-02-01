@@ -128,21 +128,18 @@ describe("ToolManager", () => {
   });
 
   describe("tool activation", () => {
-    it("should update cursor when activating tool normally", () => {
-      editor.mocks.cursor.mocks.set.mockClear();
-
+    it("should provide cursor signal when activating tool normally", () => {
       toolManager.activate("pen");
 
-      expect(editor.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "pen" });
+      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "pen" });
     });
 
-    it("should update cursor when activating hand tool via space", () => {
+    it("should provide cursor signal when activating hand tool via space", () => {
       toolManager.activate("pen");
-      editor.mocks.cursor.mocks.set.mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
 
-      expect(editor.mocks.cursor.mocks.set).toHaveBeenCalledWith({ type: "grab" });
+      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "grab" });
     });
   });
 

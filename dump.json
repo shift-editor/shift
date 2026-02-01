@@ -1,0 +1,201 @@
+{
+  "unicode": 63,
+  "name": "?",
+  "xAdvance": 500,
+  "contours": [
+    {
+      "id": "108",
+      "points": [],
+      "closed": false
+    },
+    {
+      "id": "109",
+      "points": [
+        {
+          "id": "110",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "111",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "112",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "113",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "114",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "115",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "116",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "117",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "118",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "119",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "120",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "121",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "122",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "123",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "124",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "125",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "126",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "127",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "128",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "129",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "130",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "131",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "132",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "133",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "134",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        },
+        {
+          "id": "135",
+          "x": 327.9618479456524,
+          "y": 693.1964386792774,
+          "pointType": "onCurve",
+          "smooth": false
+        }
+      ],
+      "closed": false
+    }
+  ],
+  "activeContourId": "109"
+}

@@ -41,9 +41,7 @@ export class HandleBehavior implements PenBehavior {
   onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: Editor): void {
     if ((prev.type === "anchored" || prev.type === "dragging") && next.type === "ready") {
       if (editor.commands.isBatching) {
-        if (next.intent?.action === "setCursor") {
-          editor.commands.endBatch();
-        }
+        editor.commands.endBatch();
       }
     }
   }
@@ -72,7 +70,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: event.point,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 
@@ -80,7 +77,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: state.anchor.position,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 
@@ -91,7 +87,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: state.anchor.position,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 
@@ -115,7 +110,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: event.point,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 
@@ -126,7 +120,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: state.anchor.position,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 
@@ -137,7 +130,6 @@ export class HandleBehavior implements PenBehavior {
       return {
         type: "ready",
         mousePos: state.anchor.position,
-        intent: { action: "setCursor", cursor: "pen" },
       };
     }
 

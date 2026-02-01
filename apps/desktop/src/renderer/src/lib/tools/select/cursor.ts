@@ -103,4 +103,6 @@ export function getCursorForState(
   }
 
   if (state.type === "ready") return { type: "default" };
+
+  return { type: "default" };
 }

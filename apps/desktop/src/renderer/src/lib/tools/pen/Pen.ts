@@ -5,6 +5,9 @@ import { executeIntent, type PenIntent } from "./intents";
 import type { PenState, PenBehavior } from "./types";
 import { HoverBehavior, PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
+import { computed, type ComputedSignal } from "@/lib/reactive/signal";
+import type { CursorType } from "@/types/editor";
+import type { Editor } from "@/lib/editor";
 
 export type { PenState };
 
@@ -23,6 +26,7 @@ export class Pen extends BaseTool<PenState> {
   });
 
   readonly id: ToolName = "pen";
+  readonly $cursor: ComputedSignal<CursorType>;
 
   private behaviors: PenBehavior[] = [
     new HoverBehavior(),
@@ -31,6 +35,42 @@ export class Pen extends BaseTool<PenState> {
     new HandleBehavior(),
   ];
 
+  constructor(editor: Editor) {
+    super(editor);
+
+    this.$cursor = computed<CursorType>(() => {
+      const state = this.editor.activeToolState.value as PenState;
+
+      if (state.type !== "ready") return { type: "pen" };
+
+      const pos = state.mousePos;
+
+      if (this.hasActiveDrawingContour()) {
+        if (this.shouldCloseContour(pos.x, pos.y)) {
+          return { type: "pen-end" };
+        }
+        return { type: "pen" };
+      }
+
+      const endpoint = this.editor.hitTest.getContourEndpointAt(pos);
+      if (endpoint && !endpoint.contour.closed) {
+        return { type: "pen-end" };
+      }
+
+      const middlePoint = this.getMiddlePointAt(pos);
+      if (middlePoint) {
+        return { type: "pen-end" };
+      }
+
+      const segmentHit = this.editor.hitTest.getSegmentAt(pos);
+      if (segmentHit) {
+        return { type: "pen-add" };
+      }
+
+      return { type: "pen" };
+    });
+  }
+
   initialState(): PenState {
     return { type: "idle" };
   }
@@ -38,7 +78,6 @@ export class Pen extends BaseTool<PenState> {
   activate(): void {
     const pos = this.editor.getScreenMousePosition();
     this.state = { type: "ready", mousePos: pos };
-    this.editor.cursor.set({ type: "pen" });
     this.editor.edit.clearActiveContour();
   }
 
@@ -86,11 +125,6 @@ export class Pen extends BaseTool<PenState> {
     for (const behavior of this.behaviors) {
       behavior.onTransition?.(prev, next, event, this.editor);
     }
-
-    if (next.type === "ready") {
-      const pos = next.mousePos;
-      this.updateCursorForPosition(pos);
-    }
   }
 
   private executePenIntent(intent: PenIntent, prev: PenState): void {
@@ -136,45 +170,10 @@ export class Pen extends BaseTool<PenState> {
         });
         break;
 
-      case "setCursor":
-        executeIntent(intent, this.editor);
-        break;
-
       case "updateHover":
         executeIntent(intent, this.editor);
         break;
     }
-  }
-
-  private updateCursorForPosition(pos: Point2D): void {
-    if (this.hasActiveDrawingContour()) {
-      if (this.shouldCloseContour(pos.x, pos.y)) {
-        this.editor.cursor.set({ type: "pen-end" });
-        return;
-      }
-      this.editor.cursor.set({ type: "pen" });
-      return;
-    }
-
-    const endpoint = this.editor.hitTest.getContourEndpointAt(pos);
-    if (endpoint && !endpoint.contour.closed) {
-      this.editor.cursor.set({ type: "pen-end" });
-      return;
-    }
-
-    const middlePoint = this.getMiddlePointAt(pos);
-    if (middlePoint) {
-      this.editor.cursor.set({ type: "pen-end" });
-      return;
-    }
-
-    const segmentHit = this.editor.hitTest.getSegmentAt(pos);
-    if (segmentHit) {
-      this.editor.cursor.set({ type: "pen-add" });
-      return;
-    }
-
-    this.editor.cursor.set({ type: "pen" });
   }
 
   private shouldCloseContour(x: number, y: number): boolean {

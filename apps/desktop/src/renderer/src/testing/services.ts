@@ -174,6 +174,7 @@ export interface MockToolContext extends ToolContext {
   getCursorValue(): string;
   readonly hitRadius: number;
   readonly screenMousePosition: Signal<Point2D>;
+  readonly activeToolState: Signal<{ type: string }>;
   getScreenMousePosition(): Point2D;
   screenToUpmDistance(pixels: number): number;
   hasSelection(): boolean;
@@ -825,6 +826,7 @@ export function createMockToolContext(): MockToolContext {
   };
 
   const $screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
+  const $activeToolState = signal<{ type: string }>({ type: "idle" });
 
   return {
     screen,
@@ -852,10 +854,15 @@ export function createMockToolContext(): MockToolContext {
     get screenMousePosition() {
       return $screenMousePosition;
     },
+    get activeToolState() {
+      return $activeToolState;
+    },
     getScreenMousePosition: () => $screenMousePosition.peek(),
     screenToUpmDistance: (pixels: number) => pixels,
     hasSelection: () => selection.hasSelection(),
-    setActiveToolState: vi.fn(),
+    setActiveToolState: (state: unknown) => {
+      $activeToolState.value = state as { type: string };
+    },
     mocks: {
       screen,
       selection,

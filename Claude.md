@@ -2,6 +2,32 @@
 
 ## General Guidelines
 
+- Prefer switch statements over long if-else chains when branching on the same value.
+
+```typescript
+// Prefer
+switch (canvas) {
+  case interactiveCanvas:
+    interactiveContext.resizeCanvas(canvas);
+    break;
+  case overlayCanvas:
+    overlayContext.resizeCanvas(canvas);
+    break;
+  case staticCanvas:
+    staticContext.resizeCanvas(canvas);
+    break;
+}
+
+// Avoid long if-else
+if (canvas === interactiveCanvas) {
+  interactiveContext.resizeCanvas(canvas);
+} else if (canvas === overlayCanvas) {
+  overlayContext.resizeCanvas(canvas);
+} else if (canvas === staticCanvas) {
+  staticContext.resizeCanvas(canvas);
+}
+```
+
 - Avoid adding comments unless absolutely neccessary.
 - ALWAYS add tests to verify behaviour after completing a feature
 - ALWAYS keep documentation up to date
@@ -141,6 +167,23 @@ Tool-specific command wrappers stay in their tool directories.
 - **Domain types** (e.g. `Point`, `Contour`, `Glyph`) live in `packages/types/src/domain.ts`. They MUST derive from generated types (e.g. `Readonly<PointSnapshot>`, `Omit` + composition). See `domain.ts`: same field names, no re-declaration of structure.
 - **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
 - Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).
+
+### Signal Patterns
+
+- The Editor class should expose signals via getters, not as raw public properties
+- Writable signals should be private (`#` prefix) and exposed via read-only getters
+- When effects need to track tool or state changes, explicitly depend on the relevant signals
+
+```typescript
+// GOOD: Expose via getter
+private $activeTool: WritableSignal<ToolName>;
+public get activeTool(): Signal<ToolName> {
+  return this.$activeTool;
+}
+
+// BAD: Expose raw writable signal
+public $activeTool: WritableSignal<ToolName>;
+```
 
 ### File Size Guidelines
 

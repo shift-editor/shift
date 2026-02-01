@@ -27,10 +27,7 @@ export type PenIntent =
   | { action: "splitSegment"; segment: Segment; t: number }
   | { action: "placePoint"; pos: Point2D }
   | { action: "abandonContour" }
-  | { action: "updateHover"; pos: Point2D }
-  | { action: "setCursor"; cursor: PenCursorType };
-
-export type PenCursorType = "pen" | "pen-add" | "pen-end";
+  | { action: "updateHover"; pos: Point2D };
 
 export interface PenIntentContext {
   hitTest: HitTestService;
@@ -83,34 +80,6 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
   return { action: "placePoint", pos };
 }
 
-export function resolveCursorIntent(pos: Point2D, ctx: PenIntentContext): PenCursorType {
-  if (ctx.hasActiveDrawingContour()) {
-    if (ctx.shouldCloseContour(pos)) {
-      return "pen-end";
-    }
-    return "pen";
-  }
-
-  const endpoint = ctx.hitTest.getContourEndpointAt(pos);
-  if (endpoint && !endpoint.contour.closed) {
-    return "pen-end";
-  }
-
-  if (ctx.getMiddlePointAt) {
-    const middlePoint = ctx.getMiddlePointAt(pos);
-    if (middlePoint) {
-      return "pen-end";
-    }
-  }
-
-  const segmentHit = ctx.hitTest.getSegmentAt(pos);
-  if (segmentHit) {
-    return "pen-add";
-  }
-
-  return "pen";
-}
-
 export function executeIntent(intent: PenIntent, editor: Editor): PointId | null {
   switch (intent.action) {
     case "close":
@@ -148,10 +117,6 @@ export function executeIntent(intent: PenIntent, editor: Editor): PointId | null
 
     case "updateHover":
       editor.hitTest.updateHover(intent.pos);
-      return null;
-
-    case "setCursor":
-      editor.cursor.set({ type: intent.cursor });
       return null;
   }
 }

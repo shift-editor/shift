@@ -1,5 +1,5 @@
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
-import { getCursorForState, type BoundingRectEdge } from "./cursor";
+import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import { executeIntent } from "./intents";
 import {
@@ -15,9 +15,9 @@ import {
   UpgradeSegmentBehavior,
   DoubleClickSelectContourBehavior,
 } from "./behaviors";
-import { hitTestBoundingBox } from "./boundingBoxHitTest";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
-import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
+import { computed, type ComputedSignal } from "@/lib/reactive/signal";
+import type { CursorType } from "@/types/editor";
+import type { Editor } from "@/lib/editor";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -38,6 +38,7 @@ export class Select extends BaseTool<SelectState> {
   });
 
   readonly id: ToolName = "select";
+  readonly $cursor: ComputedSignal<CursorType>;
 
   private behaviors: SelectBehavior[] = [
     new HoverBehavior(),
@@ -53,13 +54,34 @@ export class Select extends BaseTool<SelectState> {
     new MarqueeBehavior(),
   ];
 
+  constructor(editor: Editor) {
+    super(editor);
+
+    this.$cursor = computed<CursorType>(() => {
+      const state = this.editor.activeToolState.value as SelectState;
+
+      if (state.type === "dragging") return { type: "move" };
+      if (state.type === "resizing") return edgeToCursor(state.resize.edge);
+      if (state.type === "rotating") {
+        return boundingBoxHitResultToCursor({
+          type: "rotate",
+          corner: state.rotate.corner,
+        });
+      }
+
+      const bbHandle = this.editor.hoveredBoundingBoxHandle.value;
+      if (bbHandle) return boundingBoxHitResultToCursor(bbHandle);
+
+      return { type: "default" };
+    });
+  }
+
   initialState(): SelectState {
     return { type: "idle" };
   }
 
   activate(): void {
-    this.state = { type: "ready", hoveredPointId: null };
-    this.editor.cursor.set({ type: "default" });
+    this.state = { type: "ready" };
   }
 
   deactivate(): void {
@@ -89,10 +111,10 @@ export class Select extends BaseTool<SelectState> {
     if (event.type === "selectionChanged") {
       const hasSelection = this.editor.hasSelection();
       if (hasSelection && state.type === "ready") {
-        return { type: "selected", hoveredPointId: null };
+        return { type: "selected" };
       }
       if (!hasSelection && state.type === "selected") {
-        return { type: "ready", hoveredPointId: null };
+        return { type: "ready" };
       }
       return state;
     }
@@ -117,32 +139,6 @@ export class Select extends BaseTool<SelectState> {
     for (const behavior of this.behaviors) {
       behavior.onTransition?.(prev, next, event, this.editor);
     }
-
-    this.updateCursorForState(next, event);
-  }
-
-  private updateCursorForState(state: SelectState, event: ToolEvent): void {
-    const hitResult = event && "point" in event ? this.hitTestBoundingBox(event.point) : null;
-    this.editor.hover.setHoveredBoundingBoxHandle(hitResult);
-
-    const cursor = getCursorForState(state, event, {
-      hitTest: this.editor.hitTest,
-      hitTestBoundingBox: (pos) => this.hitTestBoundingBox(pos),
-    });
-    this.editor.cursor.set(cursor);
-  }
-
-  private hitTestBoundingBox(pos: { x: number; y: number }): BoundingBoxHitResult {
-    const rect = this.editor.hitTest.getSelectionBoundingRect();
-    if (!rect) return null;
-
-    const hitRadius = this.editor.hitRadius;
-    const handleOffset = this.editor.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = this.editor.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
-    );
-
-    return hitTestBoundingBox(pos, rect, hitRadius, handleOffset, rotationZoneOffset);
   }
 
   render(draw: DrawAPI): void {

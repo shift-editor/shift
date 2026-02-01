@@ -33,6 +33,7 @@ export class ResizeBehavior implements SelectBehavior {
   onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: Editor): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.preview.beginPreview();
+      editor.hover.clearAll();
     }
     if (prev.type === "resizing" && next.type !== "resizing") {
       if (event.type !== "dragEnd") {
@@ -87,7 +88,6 @@ export class ResizeBehavior implements SelectBehavior {
 
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: {
           action: "scalePoints",
           pointIds: state.resize.draggedPointIds,
@@ -101,7 +101,6 @@ export class ResizeBehavior implements SelectBehavior {
     if (event.type === "dragCancel") {
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: { action: "cancelPreview" },
       };
     }

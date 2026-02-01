@@ -24,20 +24,17 @@ export class SelectionBehavior implements SelectBehavior {
         if (willHaveSelection || !isSelected) {
           return {
             type: "selected",
-            hoveredPointId: pointId,
             intent: { action: "togglePoint", pointId },
           };
         }
         return {
           type: "ready",
-          hoveredPointId: pointId,
           intent: { action: "togglePoint", pointId },
         };
       }
 
       return {
         type: "selected",
-        hoveredPointId: pointId,
         intent: { action: "selectPoint", pointId, additive: event.shiftKey },
       };
     }
@@ -54,7 +51,6 @@ export class SelectionBehavior implements SelectBehavior {
         if (hasOtherSelections || !isSelected) {
           return {
             type: "selected",
-            hoveredPointId: null,
             intent: {
               action: "toggleSegment",
               segmentId: segmentHit.segmentId,
@@ -63,14 +59,12 @@ export class SelectionBehavior implements SelectBehavior {
         }
         return {
           type: "ready",
-          hoveredPointId: null,
           intent: { action: "toggleSegment", segmentId: segmentHit.segmentId },
         };
       }
 
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: {
           action: "selectSegment",
           segmentId: segmentHit.segmentId,
@@ -82,7 +76,6 @@ export class SelectionBehavior implements SelectBehavior {
     if (state.type === "selected") {
       return {
         type: "ready",
-        hoveredPointId: null,
         intent: { action: "clearSelection" },
       };
     }
@@ -90,7 +83,6 @@ export class SelectionBehavior implements SelectBehavior {
     if (state.type === "ready" && editor.selection.hasSelection()) {
       return {
         ...state,
-        hoveredPointId: null,
         intent: { action: "clearSelection" },
       };
     }

@@ -23,7 +23,6 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
 
     return {
       type: "selected",
-      hoveredPointId: null,
       intent: { action: "selectContour", contourId, additive: false },
     };
   }

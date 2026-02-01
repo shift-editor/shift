@@ -2,6 +2,9 @@ import type { Point2D, Rect2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
+import { computed, type ComputedSignal } from "@/lib/reactive/signal";
+import type { CursorType } from "@/types/editor";
+import type { Editor } from "@/lib/editor";
 
 type ShapeState =
   | { type: "idle" }
@@ -21,6 +24,15 @@ export class Shape extends BaseTool<ShapeState> {
   });
 
   readonly id: ToolName = "shape";
+  readonly $cursor: ComputedSignal<CursorType>;
+
+  constructor(editor: Editor) {
+    super(editor);
+
+    this.$cursor = computed<CursorType>(() => {
+      return { type: "default" };
+    });
+  }
 
   initialState(): ShapeState {
     return { type: "idle" };
@@ -71,7 +83,6 @@ export class Shape extends BaseTool<ShapeState> {
 
   activate(): void {
     this.state = { type: "ready" };
-    this.editor.cursor.set({ type: "crosshair" });
   }
 
   deactivate(): void {

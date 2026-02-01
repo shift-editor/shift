@@ -19,11 +19,19 @@ export interface StaticRenderState {
   selectedSegmentIds: ReadonlySet<SegmentId>;
   selectionMode: SelectionMode;
   previewMode: boolean;
+  hoveredPointId: PointId | null;
+  hoveredSegmentId: SegmentIndicator | null;
 }
 
 export interface OverlayRenderState {
+  glyph: GlyphSnapshot | null;
+  selectedSegmentIds: ReadonlySet<SegmentId>;
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;
+}
+
+export interface InteractiveRenderState {
+  activeToolState: { type: string };
 }
 
 export type CursorType =

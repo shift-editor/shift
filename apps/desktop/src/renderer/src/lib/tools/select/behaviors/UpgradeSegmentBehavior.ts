@@ -24,7 +24,6 @@ export class UpgradeSegmentBehavior implements SelectBehavior {
 
     return {
       type: state.type === "selected" ? "selected" : "ready",
-      hoveredPointId: state.type === "selected" ? state.hoveredPointId : null,
       intent: { action: "upgradeLineToCubic", segment },
     };
   }

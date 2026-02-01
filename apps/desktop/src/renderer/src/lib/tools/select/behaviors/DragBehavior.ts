@@ -32,6 +32,7 @@ export class DragBehavior implements SelectBehavior {
   onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: Editor): void {
     if (prev.type !== "dragging" && next.type === "dragging") {
       editor.preview.beginPreview();
+      editor.hover.clearAll();
     }
   }
 
@@ -58,7 +59,6 @@ export class DragBehavior implements SelectBehavior {
 
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: hasMoved
           ? { action: "commitPreview", label: "Move Points" }
           : { action: "cancelPreview" },
@@ -68,7 +68,6 @@ export class DragBehavior implements SelectBehavior {
     if (event.type === "dragCancel") {
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: { action: "cancelPreview" },
       };
     }

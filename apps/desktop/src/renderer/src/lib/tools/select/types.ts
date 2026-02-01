@@ -43,9 +43,9 @@ export interface RotateData {
 
 export type SelectState =
   | { type: "idle"; intent?: SelectIntent }
-  | { type: "ready"; hoveredPointId: PointId | null; intent?: SelectIntent }
+  | { type: "ready"; intent?: SelectIntent }
   | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
-  | { type: "selected"; hoveredPointId: PointId | null; intent?: SelectIntent }
+  | { type: "selected"; intent?: SelectIntent }
   | { type: "dragging"; drag: DragData; intent?: SelectIntent }
   | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
   | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };

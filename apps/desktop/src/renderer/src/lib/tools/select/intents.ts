@@ -1,5 +1,5 @@
 import type { PointId, Point2D, Rect2D, ContourId } from "@shift/types";
-import type { SegmentId, SegmentIndicator } from "@/types/indicator";
+import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 import type { Editor } from "@/lib/editor";
 import {
@@ -22,9 +22,6 @@ export type SelectIntent =
   | { action: "clearSelection" }
   | { action: "clearAndStartMarquee" }
   | { action: "setSelectionMode"; mode: SelectionMode }
-  | { action: "setHoveredPoint"; pointId: PointId }
-  | { action: "setHoveredSegment"; indicator: SegmentIndicator }
-  | { action: "clearHover" }
   | { action: "beginPreview" }
   | { action: "commitPreview"; label: string }
   | { action: "cancelPreview" }
@@ -81,18 +78,6 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
 
     case "setSelectionMode":
       editor.selection.setMode(intent.mode);
-      break;
-
-    case "setHoveredPoint":
-      editor.hover.setHoveredPoint(intent.pointId);
-      break;
-
-    case "setHoveredSegment":
-      editor.hover.setHoveredSegment(intent.indicator);
-      break;
-
-    case "clearHover":
-      editor.hover.clearAll();
       break;
 
     case "beginPreview":

@@ -103,17 +103,16 @@ describe("Select tool", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
     });
 
-    it("should set hovered point when mouse is over point", () => {
+    it("should call updateHover when mouse is over point", () => {
       sim.onMouseMove(createToolMouseEvent(100, 100));
-      expect(ctx.mocks.hover.setHoveredPoint).toHaveBeenCalled();
+      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
     });
 
-    it("should clear hovered point when mouse leaves point", () => {
+    it("should call updateHover when mouse leaves point", () => {
       sim.onMouseMove(createToolMouseEvent(100, 100));
-      ctx.mocks.hover.mocks.setHoveredPoint.mockClear();
-      ctx.mocks.hover.mocks.clearAll.mockClear();
+      ctx.mocks.hitTest.mocks.updateHover.mockClear();
       sim.onMouseMove(createToolMouseEvent(500, 500));
-      expect(ctx.mocks.hover.clearAll).toHaveBeenCalled();
+      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
     });
   });
 
@@ -283,27 +282,27 @@ describe("Select tool", () => {
     });
   });
 
-  describe("redraw requests", () => {
-    it("should request redraw on mouse down", () => {
+  describe("state transitions", () => {
+    it("should transition state on mouse down", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      expect(ctx.mocks.render.requestRedraw).toHaveBeenCalled();
+      expect(select.getState().type).not.toBe("ready");
     });
 
-    it("should request redraw on mouse move during selecting", () => {
+    it("should update state on mouse move during selecting", () => {
       sim.onMouseDown(createToolMouseEvent(50, 50));
-      ctx.mocks.render.mocks.requestRedraw.mockClear();
+      const stateBefore = select.getState();
       sim.onMouseMove(createToolMouseEvent(100, 100));
-      expect(ctx.mocks.render.requestRedraw).toHaveBeenCalled();
+      expect(select.getState()).not.toBe(stateBefore);
     });
 
-    it("should request redraw on nudge", () => {
+    it("should execute nudge command", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
-      ctx.mocks.render.mocks.requestRedraw.mockClear();
+      ctx.mocks.commands.mocks.execute.mockClear();
 
       sim.keyDown("ArrowRight");
-      expect(ctx.mocks.render.requestRedraw).toHaveBeenCalled();
+      expect(ctx.mocks.commands.execute).toHaveBeenCalled();
     });
   });
 
@@ -318,16 +317,16 @@ describe("Select tool", () => {
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
     });
 
-    it("should set hovered segment when mouse is over segment", () => {
+    it("should call updateHover when mouse is over segment", () => {
       sim.onMouseMove(createToolMouseEvent(150, 150));
-      expect(ctx.mocks.hover.setHoveredSegment).toHaveBeenCalled();
+      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
     });
 
-    it("should clear hover when mouse leaves segment", () => {
+    it("should call updateHover when mouse leaves segment", () => {
       sim.onMouseMove(createToolMouseEvent(150, 150));
-      ctx.mocks.hover.mocks.clearAll.mockClear();
+      ctx.mocks.hitTest.mocks.updateHover.mockClear();
       sim.onMouseMove(createToolMouseEvent(500, 500));
-      expect(ctx.mocks.hover.clearAll).toHaveBeenCalled();
+      expect(ctx.mocks.hitTest.updateHover).toHaveBeenCalled();
     });
 
     it("should prefer point hit over segment hit", () => {

@@ -7,42 +7,11 @@ export class HoverBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "pointerMove";
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
+  transition(_state: SelectState, event: ToolEvent, editor: Editor): SelectState | null {
     if (event.type !== "pointerMove") return null;
-    if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const pos = event.point;
-    const point = editor.hitTest.getPointAt(pos);
+    editor.hitTest.updateHover(event.point);
 
-    if (point) {
-      const pointId = point.id;
-      return {
-        ...state,
-        hoveredPointId: pointId,
-        intent: { action: "setHoveredPoint", pointId },
-      };
-    }
-
-    const segmentHit = editor.hitTest.getSegmentAt(pos);
-    if (segmentHit) {
-      return {
-        ...state,
-        hoveredPointId: null,
-        intent: {
-          action: "setHoveredSegment",
-          indicator: {
-            segmentId: segmentHit.segmentId,
-            closestPoint: segmentHit.point,
-            t: segmentHit.t,
-          },
-        },
-      };
-    }
-
-    return {
-      ...state,
-      hoveredPointId: null,
-      intent: { action: "clearHover" },
-    };
+    return null;
   }
 }

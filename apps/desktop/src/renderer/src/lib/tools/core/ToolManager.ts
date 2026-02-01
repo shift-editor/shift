@@ -5,7 +5,6 @@ import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
-import { throttle } from "throttle-debounce";
 
 export type ToolConstructor = new (editor: Editor) => BaseTool<ToolState>;
 
@@ -18,9 +17,9 @@ export class ToolManager implements ToolSwitchHandler {
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
-  private throttledUpdateHover = throttle(16, (pos: Point2D) => {
-    this.editor.updateHover(pos);
-  });
+  private pendingPointerMove: { screenPoint: Point2D; modifiers: Modifiers } | null = null;
+  private frameId: number | null = null;
+  private lastScreenPoint: Point2D | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -86,6 +85,10 @@ export class ToolManager implements ToolSwitchHandler {
     this.overrideTool = null;
     this.temporaryOptions?.onReturn?.();
     this.temporaryOptions = null;
+
+    if (this.primaryTool) {
+      this.editor.setActiveToolState(this.primaryTool.getState());
+    }
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
@@ -94,12 +97,36 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerMove(screenPoint: Point2D, modifiers: Modifiers): void {
+    if (
+      this.lastScreenPoint &&
+      screenPoint.x === this.lastScreenPoint.x &&
+      screenPoint.y === this.lastScreenPoint.y
+    ) {
+      return;
+    }
+    this.lastScreenPoint = screenPoint;
+
+    this.pendingPointerMove = { screenPoint, modifiers };
+
+    if (!this.frameId) {
+      this.frameId = requestAnimationFrame(() => this.flushPointerMove());
+    }
+  }
+
+  private flushPointerMove(): void {
+    this.frameId = null;
+
+    if (!this.pendingPointerMove) return;
+
+    const { screenPoint, modifiers } = this.pendingPointerMove;
+    this.pendingPointerMove = null;
+
     const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerMove(point, screenPoint, modifiers);
     this.dispatchEvents(events);
 
     if (!this.gesture.isDragging) {
-      this.throttledUpdateHover(point);
+      this.editor.updateHover(point);
     }
   }
 
@@ -166,5 +193,14 @@ export class ToolManager implements ToolSwitchHandler {
 
   notifySelectionChanged(): void {
     this.activeTool?.handleEvent({ type: "selectionChanged" });
+  }
+
+  destroy(): void {
+    if (this.frameId) {
+      cancelAnimationFrame(this.frameId);
+      this.frameId = null;
+    }
+    this.pendingPointerMove = null;
+    this.lastScreenPoint = null;
   }
 }

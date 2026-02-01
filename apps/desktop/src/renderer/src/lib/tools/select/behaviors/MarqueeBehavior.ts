@@ -67,13 +67,11 @@ export class MarqueeBehavior implements SelectBehavior {
       if (pointIds.size > 0) {
         return {
           type: "selected",
-          hoveredPointId: null,
           intent: { action: "setSelectionMode", mode: "committed" },
         };
       }
       return {
         type: "ready",
-        hoveredPointId: null,
         intent: { action: "setSelectionMode", mode: "committed" },
       };
     }
@@ -81,7 +79,6 @@ export class MarqueeBehavior implements SelectBehavior {
     if (event.type === "dragCancel") {
       return {
         type: "ready",
-        hoveredPointId: null,
         intent: { action: "clearSelection" },
       };
     }

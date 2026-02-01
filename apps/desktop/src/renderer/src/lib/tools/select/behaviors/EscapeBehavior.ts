@@ -15,7 +15,6 @@ export class EscapeBehavior implements SelectBehavior {
     if (state.type === "selected") {
       return {
         type: "ready",
-        hoveredPointId: null,
         intent: { action: "clearSelection" },
       };
     }

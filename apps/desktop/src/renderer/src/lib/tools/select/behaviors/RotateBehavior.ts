@@ -34,6 +34,7 @@ export class RotateBehavior implements SelectBehavior {
     if (prev.type !== "rotating" && next.type === "rotating") {
       editor.preview.beginPreview();
       editor.render.setHandlesVisible(false);
+      editor.hover.clearAll();
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
       editor.render.setHandlesVisible(true);
@@ -74,7 +75,6 @@ export class RotateBehavior implements SelectBehavior {
 
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: {
           action: "rotatePoints",
           pointIds: state.rotate.draggedPointIds,
@@ -87,7 +87,6 @@ export class RotateBehavior implements SelectBehavior {
     if (event.type === "dragCancel") {
       return {
         type: "selected",
-        hoveredPointId: null,
         intent: { action: "cancelPreview" },
       };
     }
