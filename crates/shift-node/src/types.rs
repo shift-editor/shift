@@ -24,7 +24,7 @@ impl From<&FontMetrics> for JSFontMetrics {
 
 #[napi(object)]
 pub struct JSFontMetaData {
-  pub family: Option<String>,
+  pub family_name: Option<String>,
   pub style_name: Option<String>,
   pub version_major: Option<i32>,
   pub version_minor: Option<i32>,
@@ -33,7 +33,7 @@ pub struct JSFontMetaData {
 impl From<&FontMetadata> for JSFontMetaData {
   fn from(metadata: &FontMetadata) -> Self {
     Self {
-      family: metadata.family_name.clone(),
+      family_name: metadata.family_name.clone(),
       style_name: metadata.style_name.clone(),
       version_major: metadata.version_major,
       version_minor: metadata.version_minor,

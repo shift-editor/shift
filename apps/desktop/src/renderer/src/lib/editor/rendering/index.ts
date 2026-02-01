@@ -1,4 +1,5 @@
-export { GlyphRenderer, type FontMetrics } from "./GlyphRenderer";
+export { GlyphRenderer } from "./GlyphRenderer";
+export type { FontMetrics } from "@shift/types";
 export { FrameHandler } from "./FrameHandler";
 export {
   renderGlyph,

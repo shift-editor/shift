@@ -5,6 +5,7 @@ import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import { BaseTool, type ToolState } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
+import { throttle } from "throttle-debounce";
 
 export type ToolConstructor = new (editor: Editor) => BaseTool<ToolState>;
 
@@ -16,6 +17,10 @@ export class ToolManager implements ToolSwitchHandler {
   private editor: Editor;
 
   private temporaryOptions: TemporaryToolOptions | null = null;
+
+  private throttledUpdateHover = throttle(16, (pos: Point2D) => {
+    this.editor.updateHover(pos);
+  });
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -92,6 +97,10 @@ export class ToolManager implements ToolSwitchHandler {
     const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerMove(point, screenPoint, modifiers);
     this.dispatchEvents(events);
+
+    if (!this.gesture.isDragging) {
+      this.throttledUpdateHover(point);
+    }
   }
 
   handlePointerUp(screenPoint: Point2D): void {

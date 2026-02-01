@@ -28,10 +28,19 @@ export class IOManager {
   }
 
   /**
-   * Save the current font to a file path.
+   * Save the current font to a file path (sync - blocks UI).
+   * @deprecated Use saveFontAsync for better UI responsiveness.
    */
   saveFont(path: string): void {
     this.#ctx.native.saveFont(path);
+  }
+
+  /**
+   * Save the current font to a file path asynchronously.
+   * This runs the file write on a background thread, keeping the UI responsive.
+   */
+  async saveFontAsync(path: string): Promise<void> {
+    return this.#ctx.native.saveFontAsync(path);
   }
 
   /**

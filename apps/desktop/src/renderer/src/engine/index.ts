@@ -17,7 +17,8 @@ export { FontEngine, createFontEngine } from "./FontEngine";
 // Managers
 export { EditingManager } from "./editing";
 export { SessionManager } from "./session";
-export { InfoManager, type FontMetadata, type FontMetrics } from "./info";
+export { InfoManager } from "./info";
+export type { FontMetadata, FontMetrics } from "@shift/types";
 export { IOManager } from "./io";
 
 // Errors

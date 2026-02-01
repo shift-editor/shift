@@ -10,7 +10,7 @@ import { GlyphSection } from "./GlyphSection";
 
 export const Sidebar = () => {
   const editor = getEditor();
-  const { family } = editor.getFontMetadata();
+  const { familyName } = editor.getFontMetadata();
   const zoom = useSignalState(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
 
@@ -24,7 +24,9 @@ export const Sidebar = () => {
   return (
     <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">
       <div className="px-3 py-2 flex items-center justify-between">
-        <span className="text-ui font-medium text-primary truncate">{family ?? "Untitled"}</span>
+        <span className="text-ui font-medium text-primary truncate">
+          {familyName ?? "Untitled"}
+        </span>
         <span className="text-ui font-medium text-muted">{zoomPercent}%</span>
       </div>
       <Separator />

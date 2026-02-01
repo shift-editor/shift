@@ -60,6 +60,10 @@ export class MockFontEngine implements FontEngineAPI {
     // No-op in mock
   }
 
+  async saveFontAsync(_path: string): Promise<void> {
+    // No-op in mock
+  }
+
   // ═══════════════════════════════════════════════════════════
   // FONT INFO
   // ═══════════════════════════════════════════════════════════

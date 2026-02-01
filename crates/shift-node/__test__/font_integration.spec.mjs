@@ -34,7 +34,7 @@ describe("FontEngine Integration - UFO Loading", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     const metadata = engine.getMetadata();
-    expect(metadata.family).toBe("MutatorMathTest");
+    expect(metadata.familyName).toBe("MutatorMathTest");
     expect(metadata.styleName).toBe("LightCondensed");
   });
 
@@ -66,7 +66,6 @@ describe("FontEngine Integration - Edit Session", () => {
 
     engine.startEditSession(65);
     expect(engine.hasEditSession()).toBe(true);
-
 
     const snapshot = engine.getSnapshotData();
     expect(snapshot).toBeTruthy();
@@ -358,7 +357,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine2.loadFont(outputPath);
     const reloadedMetadata = engine2.getMetadata();
 
-    expect(reloadedMetadata.family).toBe(originalMetadata.family);
+    expect(reloadedMetadata.familyName).toBe(originalMetadata.familyName);
     expect(reloadedMetadata.styleName).toBe(originalMetadata.styleName);
   });
 

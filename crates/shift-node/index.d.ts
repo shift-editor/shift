@@ -5,91 +5,80 @@
 
 /** Input type for set_point_positions - a single point move */
 export interface JsPointMove {
-  id: string;
-  x: number;
-  y: number;
+  id: string
+  x: number
+  y: number
 }
 export interface JsPointSnapshot {
-  id: string;
-  x: number;
-  y: number;
-  pointType: string;
-  smooth: boolean;
+  id: string
+  x: number
+  y: number
+  pointType: string
+  smooth: boolean
 }
 export interface JsContourSnapshot {
-  id: string;
-  points: Array<JsPointSnapshot>;
-  closed: boolean;
+  id: string
+  points: Array<JsPointSnapshot>
+  closed: boolean
 }
 export interface JsGlyphSnapshot {
-  unicode: number;
-  name: string;
-  xAdvance: number;
-  contours: Array<JsContourSnapshot>;
-  activeContourId?: string;
+  unicode: number
+  name: string
+  xAdvance: number
+  contours: Array<JsContourSnapshot>
+  activeContourId?: string
 }
 export interface JsFontMetrics {
-  unitsPerEm: number;
-  ascender: number;
-  descender: number;
-  capHeight?: number;
-  xHeight?: number;
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  capHeight?: number
+  xHeight?: number
 }
 export interface JsFontMetaData {
-  family?: string;
-  styleName?: string;
-  versionMajor?: number;
-  versionMinor?: number;
+  familyName?: string
+  styleName?: string
+  versionMajor?: number
+  versionMinor?: number
 }
 export const enum PointTypeJS {
   OnCurve = 0,
-  OffCurve = 1,
+  OffCurve = 1
 }
 export declare class FontEngine {
-  constructor();
-  loadFont(path: string): void;
-  saveFont(path: string): void;
-  getMetadata(): JSFontMetaData;
-  getMetrics(): JSFontMetrics;
-  getGlyphCount(): number;
-  startEditSession(unicode: number): void;
-  endEditSession(): void;
-  hasEditSession(): boolean;
-  getEditingUnicode(): number | null;
-  addEmptyContour(): string;
-  getActiveContourId(): string | null;
-  setActiveContour(contourId: string): string;
-  clearActiveContour(): string;
-  getSnapshotData(): JSGlyphSnapshot;
-  addPoint(x: number, y: number, pointType: string, smooth: boolean): string;
-  addPointToContour(
-    contourId: string,
-    x: number,
-    y: number,
-    pointType: string,
-    smooth: boolean,
-  ): string;
-  insertPointBefore(
-    beforePointId: string,
-    x: number,
-    y: number,
-    pointType: string,
-    smooth: boolean,
-  ): string;
-  addContour(): string;
-  closeContour(): string;
-  openContour(contourId: string): string;
-  reverseContour(contourId: string): string;
-  movePoints(pointIds: Array<string>, dx: number, dy: number): string;
-  removePoints(pointIds: Array<string>): string;
-  toggleSmooth(pointId: string): string;
-  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
-  removeContour(contourId: string): string;
+  constructor()
+  loadFont(path: string): void
+  saveFont(path: string): void
+  saveFontAsync(path: string): Promise<void>
+  getMetadata(): JSFontMetaData
+  getMetrics(): JSFontMetrics
+  getGlyphCount(): number
+  startEditSession(unicode: number): void
+  endEditSession(): void
+  hasEditSession(): boolean
+  getEditingUnicode(): number | null
+  addEmptyContour(): string
+  getActiveContourId(): string | null
+  setActiveContour(contourId: string): string
+  clearActiveContour(): string
+  getSnapshotData(): JSGlyphSnapshot
+  addPoint(x: number, y: number, pointType: string, smooth: boolean): string
+  addPointToContour(contourId: string, x: number, y: number, pointType: string, smooth: boolean): string
+  insertPointBefore(beforePointId: string, x: number, y: number, pointType: string, smooth: boolean): string
+  addContour(): string
+  closeContour(): string
+  openContour(contourId: string): string
+  reverseContour(contourId: string): string
+  movePoints(pointIds: Array<string>, dx: number, dy: number): string
+  removePoints(pointIds: Array<string>): string
+  toggleSmooth(pointId: string): string
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
+  removeContour(contourId: string): string
   /**
    * Set point positions directly - fire-and-forget for drag operations.
    * Returns true on success, false on failure.
    * Does NOT return a snapshot - use get_snapshot_data() when needed.
    */
-  setPointPositions(moves: Array<JSPointMove>): boolean;
-  restoreSnapshotNative(snapshot: JSGlyphSnapshot): boolean;
+  setPointPositions(moves: Array<JSPointMove>): boolean
+  restoreSnapshotNative(snapshot: JSGlyphSnapshot): boolean
 }

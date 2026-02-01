@@ -23,7 +23,7 @@ export const App = () => {
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
         const editor = getEditor();
-        editor.saveFont(savePath);
+        await editor.saveFontAsync(savePath);
         setFilePath(savePath);
         clearDirty();
         await window.electronAPI?.saveCompleted(savePath);

@@ -13,6 +13,19 @@ export interface RenderState {
   previewMode: boolean;
 }
 
+export interface StaticRenderState {
+  glyph: GlyphSnapshot | null;
+  selectedPointIds: ReadonlySet<PointId>;
+  selectedSegmentIds: ReadonlySet<SegmentId>;
+  selectionMode: SelectionMode;
+  previewMode: boolean;
+}
+
+export interface OverlayRenderState {
+  hoveredPointId: PointId | null;
+  hoveredSegmentId: SegmentIndicator | null;
+}
+
 export type CursorType =
   | { type: "default" }
   | { type: "pointer" }

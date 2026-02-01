@@ -102,5 +102,5 @@ export function getCursorForState(
     }
   }
 
-  return { type: "default" };
+  if (state.type === "ready") return { type: "default" };
 }

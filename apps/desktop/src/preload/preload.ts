@@ -22,6 +22,10 @@ const fontEngineAPI = {
     return fontEngineInstance.saveFont(path);
   },
 
+  saveFontAsync: (path: string): Promise<void> => {
+    return fontEngineInstance.saveFontAsync(path);
+  },
+
   // ═══════════════════════════════════════════════════════════
   // FONT INFO
   // ═══════════════════════════════════════════════════════════

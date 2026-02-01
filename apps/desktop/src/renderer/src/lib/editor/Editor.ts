@@ -6,6 +6,8 @@ import type {
   ToolRegistryItem,
   VisualState,
   RenderState,
+  StaticRenderState,
+  OverlayRenderState,
 } from "@/types/editor";
 import type {
   Point2D,
@@ -87,7 +89,8 @@ export class Editor {
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
-  #redrawEffect: Effect;
+  #staticEffect: Effect;
+  #overlayEffect: Effect;
   #clipboardService: ClipboardService;
 
   #previewSnapshot: GlyphSnapshot | null = null;
@@ -95,6 +98,8 @@ export class Editor {
   #zone: FocusZone = "canvas";
 
   $renderState: ComputedSignal<RenderState>;
+  $staticState: ComputedSignal<StaticRenderState>;
+  $overlayState: ComputedSignal<OverlayRenderState>;
   private $cursor: WritableSignal<string>;
 
   readonly selection: SelectionService;
@@ -190,9 +195,28 @@ export class Editor {
       previewMode: this.$previewMode.value,
     }));
 
-    this.#redrawEffect = effect(() => {
-      this.$renderState.value;
-      this.requestRedraw();
+    this.$staticState = computed<StaticRenderState>(() => ({
+      glyph: this.#fontEngine.$glyph.value,
+      selectedPointIds: this.#selection.selectedPointIds.value,
+      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
+      selectionMode: this.#selection.selectionMode.value,
+      previewMode: this.$previewMode.value,
+    }));
+
+    this.$overlayState = computed<OverlayRenderState>(() => ({
+      hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+    }));
+
+    this.#staticEffect = effect(() => {
+      this.$staticState.value;
+      this.#renderer.requestStaticRedraw();
+      this.#renderer.requestInteractiveRedraw();
+    });
+
+    this.#overlayEffect = effect(() => {
+      this.$overlayState.value;
+      this.#renderer.requestOverlayRedraw();
     });
   }
 
@@ -371,6 +395,10 @@ export class Editor {
 
   public setStaticContext(context: IGraphicContext) {
     this.#renderer.setStaticContext(context);
+  }
+
+  public setOverlayContext(context: IGraphicContext) {
+    this.#renderer.setOverlayContext(context);
   }
 
   public setInteractiveContext(context: IGraphicContext) {
@@ -558,6 +586,10 @@ export class Editor {
 
   public saveFont(filePath: string): void {
     this.#fontEngine.io.saveFont(filePath);
+  }
+
+  public async saveFontAsync(filePath: string): Promise<void> {
+    return this.#fontEngine.io.saveFontAsync(filePath);
   }
 
   public setCursor(cursor: CursorType): void {
@@ -885,7 +917,8 @@ export class Editor {
   }
 
   public destroy() {
-    this.#redrawEffect.dispose();
+    this.#staticEffect.dispose();
+    this.#overlayEffect.dispose();
     this.#renderer.destroy();
   }
 }

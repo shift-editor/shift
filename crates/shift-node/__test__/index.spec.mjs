@@ -19,7 +19,7 @@ describe("FontEngine", () => {
     const metadata = engine.getMetadata();
     const metrics = engine.getMetrics();
 
-    expect(metadata.family).toBe("Untitled Font");
+    expect(metadata.familyName).toBe("Untitled Font");
     expect(metadata.styleName).toBe("Regular");
     expect(metadata.versionMajor).toBe(1);
     expect(metadata.versionMinor).toBe(0);

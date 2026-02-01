@@ -9,6 +9,7 @@ export interface PointMove {
 export interface FontEngineAPI {
   loadFont(path: string): void;
   saveFont(path: string): void;
+  saveFontAsync(path: string): Promise<void>;
   getMetadata(): FontMetadata;
   getMetrics(): FontMetrics;
   getGlyphCount(): number;

@@ -107,6 +107,7 @@ Hooks run on each commit:
 - NEVER define types (interfaces, type aliases, enums) directly in classes or service files
 - Types should be imported from dedicated type files
 - Re-export types from their domain's index.ts for public API
+- NEVER re-declare types that exist in `@shift/types` (generated from Rust). Import from `@shift/types`; for derived views (e.g. readonly, nested) use the domain pattern in `packages/types/src/domain.ts`
 
 ### Tool Structure
 
@@ -134,11 +135,12 @@ Commands follow this hierarchy:
 
 Tool-specific command wrappers stay in their tool directories.
 
-### Generated Types
+### Generated and domain types
 
-- Rust-generated types live ONLY in `@shift/types/generated`
-- Run `cargo test --package shift-core` to regenerate
-- Desktop app imports from `@shift/types`, never maintains its own copy
+- **Generated types** (from Rust via ts-rs) live ONLY in `packages/types/src/generated/`. Run `cargo test --package shift-core` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
+- **Domain types** (e.g. `Point`, `Contour`, `Glyph`) live in `packages/types/src/domain.ts`. They MUST derive from generated types (e.g. `Readonly<PointSnapshot>`, `Omit` + composition). See `domain.ts`: same field names, no re-declaration of structure.
+- **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
+- Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).
 
 ### File Size Guidelines
 

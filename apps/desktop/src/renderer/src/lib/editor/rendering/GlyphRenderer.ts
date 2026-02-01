@@ -19,19 +19,15 @@ import { SCREEN_LINE_WIDTH } from "./constants";
 import type { Editor } from "../Editor";
 import { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
-export interface FontMetrics {
-  ascender: number;
-  capHeight: number;
-  xHeight: number;
-  descender: number;
-}
-
 export class GlyphRenderer {
   #staticContext: IGraphicContext | null = null;
+  #overlayContext: IGraphicContext | null = null;
   #interactiveContext: IGraphicContext | null = null;
   #staticDraw: DrawAPI | null = null;
   #interactiveDraw: DrawAPI | null = null;
-  #frameHandler: FrameHandler;
+  #staticFrameHandler: FrameHandler;
+  #overlayFrameHandler: FrameHandler;
+  #interactiveFrameHandler: FrameHandler;
   #fpsMonitor: FpsMonitor;
   #editor: Editor;
   #renderTool: (draw: DrawAPI) => void;
@@ -39,7 +35,9 @@ export class GlyphRenderer {
   constructor(editor: Editor, renderTool: (draw: DrawAPI) => void) {
     this.#editor = editor;
     this.#renderTool = renderTool;
-    this.#frameHandler = new FrameHandler();
+    this.#staticFrameHandler = new FrameHandler();
+    this.#overlayFrameHandler = new FrameHandler();
+    this.#interactiveFrameHandler = new FrameHandler();
     this.#fpsMonitor = new FpsMonitor();
   }
 
@@ -57,26 +55,43 @@ export class GlyphRenderer {
     this.#staticDraw = new DrawAPI(context.getContext(), this.#createScreenConverter());
   }
 
+  setOverlayContext(context: IGraphicContext): void {
+    this.#overlayContext = context;
+  }
+
   setInteractiveContext(context: IGraphicContext): void {
     this.#interactiveContext = context;
     this.#interactiveDraw = new DrawAPI(context.getContext(), this.#createScreenConverter());
   }
 
+  requestStaticRedraw(): void {
+    this.#staticFrameHandler.requestUpdate(() => this.#drawStatic());
+  }
+
+  requestOverlayRedraw(): void {
+    this.#overlayFrameHandler.requestUpdate(() => this.#drawOverlay());
+  }
+
+  requestInteractiveRedraw(): void {
+    this.#interactiveFrameHandler.requestUpdate(() => this.#drawInteractive());
+  }
+
   requestRedraw(): void {
-    this.#frameHandler.requestUpdate(() => this.#draw());
+    this.requestStaticRedraw();
+    this.requestOverlayRedraw();
+    this.requestInteractiveRedraw();
   }
 
   requestImmediateRedraw(): void {
-    this.#draw();
+    this.#drawStatic();
+    this.#drawOverlay();
+    this.#drawInteractive();
   }
 
   cancelRedraw(): void {
-    this.#frameHandler.cancelUpdate();
-  }
-
-  #draw(): void {
-    this.#drawInteractive();
-    this.#drawStatic();
+    this.#staticFrameHandler.cancelUpdate();
+    this.#overlayFrameHandler.cancelUpdate();
+    this.#interactiveFrameHandler.cancelUpdate();
   }
 
   #prepareCanvas(ctx: IRenderer): void {
@@ -117,6 +132,25 @@ export class GlyphRenderer {
     ctx.restore();
   }
 
+  #drawOverlay(): void {
+    if (!this.#overlayContext) return;
+    const ctx = this.#overlayContext.getContext();
+
+    const glyph = this.#editor.getGlyph();
+    const previewMode = this.#editor.previewMode.peek();
+
+    ctx.clear();
+
+    if (previewMode || !glyph) return;
+
+    ctx.save();
+    this.#prepareCanvas(ctx);
+
+    this.#drawSegmentHighlights(ctx, glyph);
+
+    ctx.restore();
+  }
+
   #drawStatic(): void {
     if (!this.#staticContext || !this.#staticDraw) return;
     const ctx = this.#staticContext.getContext();
@@ -152,10 +186,6 @@ export class GlyphRenderer {
         }
         ctx.fill();
       }
-    }
-
-    if (!previewMode && glyph) {
-      this.#drawSegmentHighlights(ctx, glyph);
     }
 
     const shouldDrawBoundingRect =
@@ -219,8 +249,8 @@ export class GlyphRenderer {
     const metrics = this.#editor.getFontMetrics();
     return {
       ascender: { y: metrics.ascender },
-      capHeight: { y: metrics.capHeight },
-      xHeight: { y: metrics.xHeight },
+      capHeight: { y: metrics.capHeight ?? 0 },
+      xHeight: { y: metrics.xHeight ?? 0 },
       baseline: { y: 0 },
       descender: { y: metrics.descender },
       xAdvance: glyph.xAdvance,
@@ -362,6 +392,7 @@ export class GlyphRenderer {
 
   destroy(): void {
     this.#staticContext?.destroy();
+    this.#overlayContext?.destroy();
     this.#interactiveContext?.destroy();
   }
 }

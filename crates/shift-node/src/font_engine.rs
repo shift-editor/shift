@@ -1,3 +1,4 @@
+use napi::bindgen_prelude::*;
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{
@@ -6,10 +7,31 @@ use shift_core::{
   snapshot::{
     CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType,
   },
-  ContourId, Font, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
+  ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
+  UfoWriter,
 };
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
+
+pub struct SaveFontTask {
+  font: Font,
+  path: String,
+}
+
+impl Task for SaveFontTask {
+  type Output = ();
+  type JsValue = ();
+
+  fn compute(&mut self) -> Result<Self::Output> {
+    UfoWriter::new()
+      .save(&self.font, &self.path)
+      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))
+  }
+
+  fn resolve(&mut self, _env: Env, _output: Self::Output) -> Result<Self::JsValue> {
+    Ok(())
+  }
+}
 
 #[napi]
 pub struct FontEngine {
@@ -49,30 +71,54 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn save_font(&self, path: String) -> Result<()> {
-    if let (Some(session), Some(glyph), Some(layer_id)) = (
+  pub fn save_font(&mut self, path: String) -> Result<()> {
+    let backup = self.apply_edits_for_save();
+
+    let result = self
+      .font_loader
+      .write_font(&self.font, &path)
+      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")));
+
+    self.restore_from_backup(backup);
+
+    result
+  }
+
+  #[napi(ts_return_type = "Promise<void>")]
+  pub fn save_font_async(&mut self, path: String) -> AsyncTask<SaveFontTask> {
+    let backup = self.apply_edits_for_save();
+    let font = self.font.clone();
+    self.restore_from_backup(backup);
+
+    AsyncTask::new(SaveFontTask { font, path })
+  }
+
+  fn apply_edits_for_save(&mut self) -> Option<(String, Glyph)> {
+    let (session, glyph, layer_id) = match (
       &self.current_edit_session,
       &self.editing_glyph,
       &self.editing_layer_id,
     ) {
-      let mut glyph_copy = glyph.clone();
-      let layer = session.layer().clone();
-      glyph_copy.set_layer(*layer_id, layer);
+      (Some(s), Some(g), Some(l)) => (s, g, l),
+      _ => return None,
+    };
 
-      let mut font_with_edits = self.font.clone();
-      font_with_edits.put_glyph(glyph_copy);
+    let glyph_name = glyph.name().to_string();
+    let original = self.font.take_glyph(&glyph_name);
 
-      self
-        .font_loader
-        .write_font(&font_with_edits, &path)
-        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
-    } else {
-      self
-        .font_loader
-        .write_font(&self.font, &path)
-        .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    let mut glyph_copy = glyph.clone();
+    let layer = session.layer().clone();
+    glyph_copy.set_layer(*layer_id, layer);
+    self.font.put_glyph(glyph_copy);
+
+    let backup_glyph = original.unwrap_or_else(|| Glyph::new(glyph_name.clone()));
+    Some((glyph_name, backup_glyph))
+  }
+
+  fn restore_from_backup(&mut self, backup: Option<(String, Glyph)>) {
+    if let Some((_, original_glyph)) = backup {
+      self.font.put_glyph(original_glyph);
     }
-    Ok(())
   }
 
   #[napi]
