@@ -7,6 +7,7 @@ import {
   ScalePointsCommand,
   RotatePointsCommand,
   UpgradeLineToCubicCommand,
+  ScaleHandlesCommand,
 } from "@/lib/commands";
 import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
@@ -43,6 +44,7 @@ export type SelectIntent =
       center: Point2D;
     }
   | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
+  | { action: "scaleHandles"; pointIds: PointId[]; scaleDelta: number }
   | { action: "toggleSmooth"; pointId: PointId }
   | { action: "selectPoints"; pointIds: PointId[] }
   | { action: "upgradeLineToCubic"; segment: LineSegment }
@@ -121,6 +123,10 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
 
     case "nudge":
       executeNudge(intent.pointIds, intent.dx, intent.dy, editor);
+      break;
+
+    case "scaleHandles":
+      executeScaleHandles(intent.pointIds, intent.scaleDelta, editor);
       break;
 
     case "toggleSmooth":
@@ -239,6 +245,16 @@ function executeRotatePoints(
 function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: Editor): void {
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
+  editor.commands.execute(cmd);
+  editor.render.requestRedraw();
+}
+
+function executeScaleHandles(pointIds: PointId[], scaleDelta: number, editor: Editor): void {
+  if (pointIds.length === 0) return;
+  const glyph = editor.getGlyph();
+  if (!glyph) return;
+
+  const cmd = new ScaleHandlesCommand(glyph, pointIds, scaleDelta);
   editor.commands.execute(cmd);
   editor.render.requestRedraw();
 }
