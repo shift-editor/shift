@@ -103,6 +103,7 @@ export function createMockEditing() {
     insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
+    setPointPositions: vi.fn(),
     removePoints: vi.fn(),
     addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
     closeContour: vi.fn(),

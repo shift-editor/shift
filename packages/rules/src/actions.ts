@@ -3,7 +3,7 @@
  */
 
 import { Vec2 } from "@shift/geo";
-import type { PointId, PointSnapshot, ContourSnapshot, GlyphSnapshot } from "@shift/types";
+import type { PointId, ContourSnapshot, GlyphSnapshot } from "@shift/types";
 import type { MatchedRule, PointMove, RulesResult } from "./types";
 import { matchRule, findPointContour, getPoint } from "./matcher";
 
@@ -18,9 +18,9 @@ const EPSILON = 1e-10;
 function maintainTangency(
   contours: readonly ContourSnapshot[],
   anchorId: PointId,
-  movedHandleId: PointId,
+  _movedHandleId: PointId,
   oppositeHandleId: PointId,
-  newMovedPos: { x: number; y: number }
+  newMovedPos: { x: number; y: number },
 ): PointMove | null {
   const anchor = getPoint(contours, anchorId);
   const opposite = getPoint(contours, oppositeHandleId);
@@ -61,7 +61,7 @@ function applyRule(
   rule: MatchedRule,
   selectedMoves: Map<PointId, PointMove>,
   dx: number,
-  dy: number
+  dy: number,
 ): PointMove[] {
   const moves: PointMove[] = [];
 
@@ -102,7 +102,7 @@ function applyRule(
             anchorId,
             rule.pointId,
             oppositeHandleId,
-            newMovedPos
+            newMovedPos,
           );
 
           if (tangencyMove) {
@@ -132,7 +132,7 @@ function applyRule(
             anchorId,
             rule.pointId,
             oppositeHandleId,
-            newMovedPos
+            newMovedPos,
           );
 
           if (tangencyMove) {
@@ -160,7 +160,7 @@ export function applyRules(
   glyph: GlyphSnapshot,
   selectedIds: ReadonlySet<PointId>,
   dx: number,
-  dy: number
+  dy: number,
 ): RulesResult {
   const contours = glyph.contours;
   const matchedRules: MatchedRule[] = [];

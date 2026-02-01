@@ -75,6 +75,7 @@ interface EditService {
   ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
   addContour(): ContourId;
@@ -424,6 +425,9 @@ function createMockEditService(
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),
     ),
+    setPointPositions: vi.fn((moves: Array<{ id: PointId; x: number; y: number }>) =>
+      fontEngine.editing.setPointPositions(moves),
+    ),
     applySmartEdits: vi.fn((ids: readonly PointId[], dx: number, dy: number) =>
       fontEngine.editing.applySmartEdits(new Set(ids), dx, dy),
     ),
@@ -452,6 +456,7 @@ function createMockEditService(
     addPointToContour: mocks.addPointToContour,
     movePoints: mocks.movePoints,
     movePointTo: mocks.movePointTo,
+    setPointPositions: mocks.setPointPositions,
     applySmartEdits: mocks.applySmartEdits,
     removePoints: mocks.removePoints,
     addContour: mocks.addContour,

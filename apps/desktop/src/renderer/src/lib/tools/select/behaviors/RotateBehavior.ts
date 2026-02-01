@@ -52,10 +52,12 @@ export class RotateBehavior implements SelectBehavior {
       const currentAngle = this.calculateAngle(event.point, state.rotate.center);
       const deltaAngle = currentAngle - state.rotate.startAngle;
 
+      const moves: Array<{ id: PointId; x: number; y: number }> = [];
       for (const [id, initialPos] of state.rotate.initialPositions) {
         const rotated = this.rotatePoint(initialPos, deltaAngle, state.rotate.center);
-        editor.edit.movePointTo(id, rotated.x, rotated.y);
+        moves.push({ id, x: rotated.x, y: rotated.y });
       }
+      editor.edit.setPointPositions(moves);
 
       return {
         type: "rotating",

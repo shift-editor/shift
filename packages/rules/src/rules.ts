@@ -2,7 +2,7 @@
  * Rule Definitions - Pattern templates for point editing constraints
  */
 
-import type { Rule, RuleId } from "./types";
+import type { Rule } from "./types";
 import { expandPattern } from "./parser";
 
 /**

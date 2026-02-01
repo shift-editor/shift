@@ -3,7 +3,7 @@
  */
 
 import type { PointId, PointSnapshot, ContourSnapshot } from "@shift/types";
-import type { MatchedRule, Rule, RuleId } from "./types";
+import type { MatchedRule, RuleId } from "./types";
 import { TOKEN_NO_POINT, TOKEN_CORNER, TOKEN_HANDLE, TOKEN_SMOOTH, TOKEN_SELECTED } from "./parser";
 import { getRuleTable } from "./rules";
 
@@ -15,7 +15,7 @@ const WINDOW_SIZES = [3, 5] as const;
 function getPointToken(
   point: PointSnapshot | undefined,
   selectedIds: ReadonlySet<PointId>,
-  isCentral: boolean
+  isCentral: boolean,
 ): string {
   if (!point) {
     return TOKEN_NO_POINT;
@@ -42,7 +42,7 @@ function buildPattern(
   points: readonly PointSnapshot[],
   centerIndex: number,
   selectedIds: ReadonlySet<PointId>,
-  windowSize: number
+  windowSize: number,
 ): string {
   const halfWindow = Math.floor(windowSize / 2);
   let pattern = "";
@@ -70,7 +70,7 @@ function findPointIndex(contour: ContourSnapshot, pointId: PointId): number {
 function computeAffectedPoints(
   points: readonly PointSnapshot[],
   pointIndex: number,
-  ruleId: RuleId
+  ruleId: RuleId,
 ): PointId[] {
   const affected: PointId[] = [];
 
@@ -126,7 +126,7 @@ function computeAffectedPoints(
 export function matchRule(
   contour: ContourSnapshot,
   pointId: PointId,
-  selectedIds: ReadonlySet<PointId>
+  selectedIds: ReadonlySet<PointId>,
 ): MatchedRule | null {
   const pointIndex = findPointIndex(contour, pointId);
   if (pointIndex === -1) {
@@ -162,7 +162,7 @@ export function matchRule(
  */
 export function findPointContour(
   contours: readonly ContourSnapshot[],
-  pointId: PointId
+  pointId: PointId,
 ): ContourSnapshot | null {
   for (const contour of contours) {
     if (contour.points.some((p) => p.id === pointId)) {
@@ -177,7 +177,7 @@ export function findPointContour(
  */
 export function getPoint(
   contours: readonly ContourSnapshot[],
-  pointId: PointId
+  pointId: PointId,
 ): PointSnapshot | null {
   for (const contour of contours) {
     const point = contour.points.find((p) => p.id === pointId);

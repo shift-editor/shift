@@ -4,20 +4,12 @@
  * All mutations to glyph geometry go through this manager.
  */
 
-import type { PointType, GlyphSnapshot, PointId, ContourId, MatchedRule } from "@shift/types";
+import type { PointType, GlyphSnapshot, PointId, ContourId } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { CommitContext } from "./FontEngine";
-import type { PointMove } from "@/shared/bridge/FontEngineAPI";
-
-interface SmartEditResult {
-  success: boolean;
-  snapshot: GlyphSnapshot | null;
-  affectedPointIds: string[];
-  matchedRules: MatchedRule[];
-  error: string | null;
-}
+import type { PointMove } from "@shared/bridge/FontEngineAPI";
 
 export type ManagerContext = CommitContext;
 
@@ -107,18 +99,15 @@ export class EditingManager {
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
 
-    const snapshotJson = this.#ctx.native.getSnapshot();
-    if (!snapshotJson) {
-      throw new NativeOperationError("movePointTo", "No snapshot available");
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) {
+      throw new NativeOperationError("movePointTo", "No glyph available");
     }
 
-    const snapshot = JSON.parse(snapshotJson) as GlyphSnapshot;
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const point = contour.points.find((p) => p.id === pointId);
       if (point) {
-        const dx = x - point.x;
-        const dy = y - point.y;
-        this.movePoints([pointId], dx, dy);
+        this.movePoints([pointId], x - point.x, y - point.y);
         return;
       }
     }
@@ -277,10 +266,8 @@ export class EditingManager {
       throw new NativeOperationError("pasteContours", result.error ?? undefined);
     }
 
-    const snapshotJson = this.#ctx.native.getSnapshot();
-    if (snapshotJson) {
-      this.#ctx.emitGlyph(JSON.parse(snapshotJson));
-    }
+    const glyph = this.#ctx.native.getSnapshotData() as GlyphSnapshot;
+    this.#ctx.emitGlyph(glyph);
 
     return result;
   }
@@ -299,58 +286,17 @@ export class EditingManager {
   }
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
-    if (!this.#ctx.hasSession()) {
-      return [];
-    }
+    if (!this.#ctx.hasSession()) return [];
 
-    const pointIds = [...selectedPoints];
-    const resultJson = this.#ctx.native.applyEditsUnified(pointIds, dx, dy);
-    const result: SmartEditResult = JSON.parse(resultJson);
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) return [];
 
-    if (result.success && result.snapshot) {
-      this.#ctx.emitGlyph(result.snapshot);
-    }
+    const { moves } = applyRules(glyph, selectedPoints, dx, dy);
+    if (moves.length === 0) return [];
 
-    return result.affectedPointIds?.map(asPointId) ?? [];
-  }
-
-  /**
-   * Apply smart edits using local TS rules engine.
-   * This is the optimized version that avoids NAPI serialization overhead:
-   * 1. Compute all moves locally using @shift/rules
-   * 2. Apply moves to local glyph copy (immediate UI update)
-   * 3. Sync positions to Rust (fire-and-forget)
-   *
-   * @param glyph - Current glyph snapshot
-   * @param selectedPoints - Set of selected point IDs
-   * @param dx - Delta X
-   * @param dy - Delta Y
-   * @returns Updated glyph snapshot and affected point IDs
-   */
-  applySmartEditsLocal(
-    glyph: GlyphSnapshot,
-    selectedPoints: ReadonlySet<PointId>,
-    dx: number,
-    dy: number
-  ): { glyph: GlyphSnapshot; affectedPointIds: PointId[] } {
-    if (!this.#ctx.hasSession()) {
-      return { glyph, affectedPointIds: [] };
-    }
-
-    // 1. Compute all moves locally using TS rules engine
-    const { moves, matchedRules } = applyRules(glyph, selectedPoints, dx, dy);
-
-    if (moves.length === 0) {
-      return { glyph, affectedPointIds: [] };
-    }
-
-    // 2. Apply moves to local glyph copy (creates new snapshot)
     const updatedGlyph = applyMovesToGlyph(glyph, moves);
-
-    // 3. Emit updated glyph for immediate UI update
     this.#ctx.emitGlyph(updatedGlyph);
 
-    // 4. Sync positions to Rust (fire-and-forget)
     const nativeMoves: PointMove[] = moves.map((m) => ({
       id: m.id,
       x: m.x,
@@ -358,18 +304,30 @@ export class EditingManager {
     }));
     this.#ctx.native.setPointPositions(nativeMoves);
 
-    // 5. Return affected point IDs
-    const affectedPointIds = moves.map((m) => m.id);
+    return moves.map((m) => m.id);
+  }
 
-    return { glyph: updatedGlyph, affectedPointIds };
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
+    if (!this.#ctx.hasSession()) return;
+    if (moves.length === 0) return;
+
+    const glyph = this.#ctx.getGlyph();
+    if (!glyph) return;
+
+    const updatedGlyph = applyMovesToGlyph(glyph, moves);
+    this.#ctx.emitGlyph(updatedGlyph);
+
+    const nativeMoves: PointMove[] = moves.map((m) => ({
+      id: m.id,
+      x: m.x,
+      y: m.y,
+    }));
+    this.#ctx.native.setPointPositions(nativeMoves);
   }
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
-    // Use the native object API to avoid JSON serialization overhead.
-    // The GlyphSnapshot type matches the expected native format (camelCase).
-    // We cast since the types are structurally compatible.
-    this.#ctx.native.restoreSnapshotNative(snapshot as import("shift-node").JsGlyphSnapshot);
+    this.#ctx.native.restoreSnapshot(snapshot);
     this.#ctx.emitGlyph(snapshot);
   }
 

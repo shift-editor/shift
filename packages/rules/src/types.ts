@@ -1,4 +1,4 @@
-import type { PointId, ContourId, PointSnapshot, ContourSnapshot, GlyphSnapshot } from "@shift/types";
+import type { PointId } from "@shift/types";
 
 /**
  * Rule identifiers matching the Rust implementation

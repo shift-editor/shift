@@ -62,18 +62,6 @@ const fontEngineAPI = {
   // SNAPSHOT METHODS
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * Get the current glyph snapshot as a JSON string.
-   * Returns null if no edit session is active.
-   */
-  getSnapshot: (): string | null => {
-    return fontEngineInstance.getSnapshot() ?? null;
-  },
-
-  /**
-   * Get the current glyph snapshot as a native object (more efficient).
-   * Throws if no edit session is active.
-   */
   getSnapshotData: () => {
     return fontEngineInstance.getSnapshotData();
   },
@@ -216,36 +204,23 @@ const fontEngineAPI = {
   },
 
   // ═══════════════════════════════════════════════════════════
-  // UNIFIED EDIT OPERATION
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Apply edits to selected points with automatic rule matching and application.
-   * Combines: move points → match rules → apply rules (handle movement, tangency).
-   * Returns JSON with { success, snapshot, affectedPointIds, matchedRules, error }.
-   */
-  applyEditsUnified: (pointIds: string[], dx: number, dy: number): string => {
-    return fontEngineInstance.applyEditsUnified(pointIds, dx, dy);
-  },
-
-  // ═══════════════════════════════════════════════════════════
   // CLIPBOARD OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
-  /**
-   * Paste contours into the current edit session.
-   * Returns PasteResult JSON with { success, createdPointIds, createdContourIds, error }.
-   */
   pasteContours: (contoursJson: string, offsetX: number, offsetY: number): string => {
     return fontEngineInstance.pasteContours(contoursJson, offsetX, offsetY);
   },
 
-  /**
-   * Restore a glyph snapshot.
-   * Returns CommandResult JSON.
-   */
-  restoreSnapshot: (snapshotJson: string): string => {
-    return fontEngineInstance.restoreSnapshot(snapshotJson);
+  // ═══════════════════════════════════════════════════════════
+  // LIGHTWEIGHT DRAG OPERATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  setPointPositions: (moves: Array<{ id: string; x: number; y: number }>): boolean => {
+    return fontEngineInstance.setPointPositions(moves);
+  },
+
+  restoreSnapshot: (snapshot: any): boolean => {
+    return fontEngineInstance.restoreSnapshotNative(snapshot);
   },
 } satisfies FontEngineAPI;
 
