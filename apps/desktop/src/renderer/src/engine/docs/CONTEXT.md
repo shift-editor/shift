@@ -129,19 +129,23 @@ export function hasNative(): boolean {
 
 ## API Surface
 
-| Class          | Method                            | Return       |
-| -------------- | --------------------------------- | ------------ |
-| FontEngine     | constructor()                     | FontEngine   |
-| EditingManager | addPoint(x, y, type, smooth)      | PointId      |
-| EditingManager | addContour()                      | ContourId    |
-| EditingManager | movePoints(ids, dx, dy)           | void         |
-| EditingManager | removePoints(ids)                 | void         |
-| EditingManager | applySmartEdits(selected, dx, dy) | PointId[]    |
-| SessionManager | startEditSession(unicode)         | void         |
-| SessionManager | endEditSession()                  | void         |
-| SessionManager | isActive()                        | boolean      |
-| InfoManager    | getMetadata()                     | FontMetadata |
-| InfoManager    | getMetrics()                      | FontMetrics  |
+| Class          | Method                            | Return                                   |
+| -------------- | --------------------------------- | ---------------------------------------- |
+| FontEngine     | constructor()                     | FontEngine                               |
+| EditingManager | addPoint(x, y, type, smooth)      | PointId                                  |
+| EditingManager | addContour()                      | ContourId                                |
+| EditingManager | movePoints(ids, dx, dy)           | void                                     |
+| EditingManager | removePoints(ids)                 | void                                     |
+| EditingManager | applySmartEdits(selected, dx, dy) | PointId[]                                |
+| SessionManager | startEditSession(unicode)         | void                                     |
+| SessionManager | endEditSession()                  | void                                     |
+| SessionManager | isActive()                        | boolean                                  |
+| InfoManager    | getMetadata()                     | FontMetadata                             |
+| InfoManager    | getMetrics()                      | FontMetrics                              |
+| InfoManager    | getGlyphUnicodes()                | number[]                                 |
+| InfoManager    | getGlyphSvgPath(unicode)          | string \| null                           |
+| InfoManager    | getGlyphAdvance(unicode)          | number \| null                           |
+| InfoManager    | getGlyphBbox(unicode)             | [number, number, number, number] \| null |
 
 ## Common Operations
 

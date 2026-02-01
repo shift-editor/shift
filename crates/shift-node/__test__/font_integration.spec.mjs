@@ -53,6 +53,39 @@ describe("FontEngine Integration - UFO Loading", () => {
     expect(metrics.capHeight).toBe(700);
     expect(metrics.xHeight).toBe(500);
   });
+
+  it("returns glyph unicodes from loaded font", () => {
+    if (!existsSync(MUTATORSANS_UFO)) {
+      return;
+    }
+
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_UFO);
+
+    const unicodes = engine.getGlyphUnicodes();
+    expect(Array.isArray(unicodes)).toBe(true);
+    expect(unicodes.length).toBeGreaterThan(0);
+    expect(unicodes).toContain(65);
+    expect(unicodes).toContain(66);
+  });
+
+  it("returns SVG path for glyph by unicode", () => {
+    if (!existsSync(MUTATORSANS_UFO)) {
+      return;
+    }
+
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_UFO);
+
+    const pathA = engine.getGlyphSvgPath(65);
+    expect(pathA).toBeTruthy();
+    expect(typeof pathA).toBe("string");
+    expect(pathA.length).toBeGreaterThan(0);
+    expect(pathA).toMatch(/^M\s/);
+
+    const pathMissing = engine.getGlyphSvgPath(0xffff);
+    expect(pathMissing).toBeNull();
+  });
 });
 
 describe("FontEngine Integration - Edit Session", () => {

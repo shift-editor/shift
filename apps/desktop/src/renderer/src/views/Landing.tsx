@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";
+import { glyphOutlineStore } from "@/store/GlyphOutlineStore";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 
@@ -21,6 +22,7 @@ export const Landing = () => {
   const handleNewFont = () => {
     const editor = getEditor();
     editor.startEditSession(65);
+    glyphOutlineStore.onFontUnloaded();
     setFilePath(null);
     clearDirty();
     navigate("/home");

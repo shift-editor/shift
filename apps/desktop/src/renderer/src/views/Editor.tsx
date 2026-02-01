@@ -9,8 +9,13 @@ import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 
 import { EditorView } from "../components/EditorView";
 
-export const Editor = () => {
-  const { glyphId } = useParams();
+interface EditorProps {
+  glyphId?: string;
+}
+
+export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
+  const { glyphId: glyphIdParam } = useParams();
+  const glyphId = glyphIdProp ?? glyphIdParam;
   const { activeZone, focusLock } = useFocusZone();
 
   useEffect(() => {

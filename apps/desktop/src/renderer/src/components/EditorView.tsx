@@ -3,6 +3,7 @@ import { FC, useEffect, useRef, useState } from "react";
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
+import { glyphOutlineStore } from "@/store/GlyphOutlineStore";
 
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
@@ -50,6 +51,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     return () => {
       toolManager.reset();
+      glyphOutlineStore.invalidateGlyph(unicode);
       editor.endEditSession();
     };
   }, [glyphId]);

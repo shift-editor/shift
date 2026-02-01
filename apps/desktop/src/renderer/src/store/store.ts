@@ -76,11 +76,10 @@ const storeDev = persist((set): AppState => createStore(set), {
     removeItem: (name) => sessionStorage.removeItem(name),
   },
   onRehydrateStorage: () => {
-    console.log("onRehydrateStorage");
-
-    return async (state) => {
-      console.log("reloading loading font", state.filePath);
-      state.editor.loadFont(state.filePath);
+    return (state) => {
+      if (state?.filePath && typeof state.filePath === "string") {
+        state.editor.loadFont(state.filePath);
+      }
     };
   },
 });

@@ -32,4 +32,20 @@ export class InfoManager {
   getGlyphCount(): number {
     return this.#ctx.native.getGlyphCount();
   }
+
+  getGlyphUnicodes(): number[] {
+    return this.#ctx.native.getGlyphUnicodes();
+  }
+
+  getGlyphSvgPath(unicode: number): string | null {
+    return this.#ctx.native.getGlyphSvgPath(unicode);
+  }
+
+  getGlyphAdvance(unicode: number): number | null {
+    return this.#ctx.native.getGlyphAdvance(unicode);
+  }
+
+  getGlyphBbox(unicode: number): [number, number, number, number] | null {
+    return this.#ctx.native.getGlyphBbox(unicode);
+  }
 }

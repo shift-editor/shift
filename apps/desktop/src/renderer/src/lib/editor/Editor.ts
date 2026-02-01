@@ -35,6 +35,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
+import { glyphOutlineStore } from "@/store/GlyphOutlineStore";
 import { CommandHistory, CutCommand, PasteCommand } from "../commands";
 import {
   RotatePointsCommand,
@@ -633,6 +634,9 @@ export class Editor implements ToolContext {
       this.#fontEngine.session.endEditSession();
     }
     this.#fontEngine.io.loadFont(filePath);
+    const unicodes = this.#fontEngine.info.getGlyphUnicodes();
+    const metrics = this.#fontEngine.info.getMetrics();
+    glyphOutlineStore.onFontLoaded(unicodes, metrics);
     this.#commandHistory.clear();
     this.startEditSession(65);
   }

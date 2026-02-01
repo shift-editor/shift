@@ -109,6 +109,10 @@ const segments = parseSegments(contour.points, contour.closed);
 - `getMetadata(): FontMetadata`
 - `getMetrics(): FontMetrics`
 - `getGlyphCount(): number`
+- `getGlyphUnicodes(): number[]`
+- `getGlyphSvgPath(unicode): string | null`
+- `getGlyphAdvance(unicode): number | null`
+- `getGlyphBbox(unicode): [number, number, number, number] | null`
 
 ### Errors
 

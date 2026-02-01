@@ -42,6 +42,22 @@ const fontEngineAPI = {
     return fontEngineInstance.getGlyphCount();
   },
 
+  getGlyphUnicodes: (): number[] => {
+    return fontEngineInstance.getGlyphUnicodes();
+  },
+
+  getGlyphSvgPath: (unicode: number): string | null => {
+    return fontEngineInstance.getGlyphSvgPath(unicode) ?? null;
+  },
+
+  getGlyphAdvance: (unicode: number): number | null => {
+    return fontEngineInstance.getGlyphAdvance(unicode) ?? null;
+  },
+
+  getGlyphBbox: (unicode: number): [number, number, number, number] | null => {
+    return fontEngineInstance.getGlyphBbox(unicode) ?? null;
+  },
+
   // ═══════════════════════════════════════════════════════════
   // EDIT SESSION
   // ═══════════════════════════════════════════════════════════

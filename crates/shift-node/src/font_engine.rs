@@ -7,11 +7,121 @@ use shift_core::{
   snapshot::{
     CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType,
   },
-  ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, PointId, PointType,
+  ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, Point, PointId, PointType,
   UfoWriter,
 };
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
+
+fn layer_to_svg_path(layer: &GlyphLayer) -> String {
+  let mut parts: Vec<String> = Vec::new();
+  for contour in layer.contours_iter() {
+    let d = contour_to_svg_d(contour.points(), contour.is_closed());
+    if !d.is_empty() {
+      parts.push(d);
+    }
+  }
+  parts.join(" ")
+}
+
+fn layer_bbox(layer: &GlyphLayer) -> Option<(f64, f64, f64, f64)> {
+  let mut min_x = f64::MAX;
+  let mut min_y = f64::MAX;
+  let mut max_x = f64::MIN;
+  let mut max_y = f64::MIN;
+  let mut any = false;
+  for contour in layer.contours_iter() {
+    for p in contour.points() {
+      let x = p.x();
+      let y = p.y();
+      min_x = min_x.min(x);
+      min_y = min_y.min(y);
+      max_x = max_x.max(x);
+      max_y = max_y.max(y);
+      any = true;
+    }
+  }
+  if any {
+    Some((min_x, min_y, max_x, max_y))
+  } else {
+    None
+  }
+}
+
+fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
+  if points.len() < 2 {
+    return String::new();
+  }
+  let limit = if closed {
+    points.len()
+  } else {
+    points.len().saturating_sub(1)
+  };
+  let mut out = Vec::new();
+  let mut i = 0usize;
+
+  let get = |idx: usize| -> Option<&Point> {
+    if idx < points.len() {
+      Some(&points[idx])
+    } else if closed && !points.is_empty() {
+      Some(&points[idx % points.len()])
+    } else {
+      None
+    }
+  };
+
+  while i < limit {
+    let (p1, p2) = match (get(i), get(i + 1)) {
+      (Some(a), Some(b)) => (a, b),
+      _ => break,
+    };
+
+    if p1.is_on_curve() && p2.is_on_curve() {
+      if out.is_empty() {
+        out.push(format!("M {} {}", p1.x(), p1.y()));
+      }
+      out.push(format!("L {} {}", p2.x(), p2.y()));
+      i += 1;
+      continue;
+    }
+
+    if p1.is_on_curve() && !p2.is_on_curve() {
+      if let Some(p3) = get(i + 2) {
+        if p3.is_on_curve() {
+          if out.is_empty() {
+            out.push(format!("M {} {}", p1.x(), p1.y()));
+          }
+          out.push(format!("Q {} {} {} {}", p2.x(), p2.y(), p3.x(), p3.y()));
+          i += 2;
+          continue;
+        }
+        if let Some(p4) = get(i + 3) {
+          if out.is_empty() {
+            out.push(format!("M {} {}", p1.x(), p1.y()));
+          }
+          out.push(format!(
+            "C {} {} {} {} {} {}",
+            p2.x(),
+            p2.y(),
+            p3.x(),
+            p3.y(),
+            p4.x(),
+            p4.y()
+          ));
+          i += 3;
+          continue;
+        }
+      }
+    }
+
+    i += 1;
+  }
+
+  if closed && !out.is_empty() {
+    out.push("Z".to_string());
+  }
+  out.join(" ")
+}
 
 pub struct SaveFontTask {
   font: Font,
@@ -134,6 +244,44 @@ impl FontEngine {
   #[napi]
   pub fn get_glyph_count(&self) -> u32 {
     self.font.glyph_count() as u32
+  }
+
+  #[napi]
+  pub fn get_glyph_unicodes(&self) -> Vec<u32> {
+    let mut unicodes: Vec<u32> = self
+      .font
+      .glyphs()
+      .values()
+      .flat_map(|g| g.unicodes().iter().copied())
+      .collect();
+    unicodes.sort_unstable();
+    unicodes.dedup();
+    unicodes
+  }
+
+  #[napi]
+  pub fn get_glyph_svg_path(&self, unicode: u32) -> Option<String> {
+    let glyph = self.font.glyph_by_unicode(unicode)?;
+    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    let path = layer_to_svg_path(layer);
+    if path.is_empty() {
+      return None;
+    }
+    Some(path)
+  }
+
+  #[napi]
+  pub fn get_glyph_advance(&self, unicode: u32) -> Option<f64> {
+    let glyph = self.font.glyph_by_unicode(unicode)?;
+    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    Some(layer.width())
+  }
+
+  #[napi]
+  pub fn get_glyph_bbox(&self, unicode: u32) -> Option<Vec<f64>> {
+    let glyph = self.font.glyph_by_unicode(unicode)?;
+    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    layer_bbox(layer).map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 
   #[napi]
@@ -805,5 +953,46 @@ mod tests {
 
     let active = engine.get_active_contour_id().unwrap();
     assert_eq!(active, Some(contour_id));
+  }
+
+  #[test]
+  fn test_get_glyph_svg_path_after_load() {
+    let ufo_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    if !ufo_path.exists() {
+      return;
+    }
+    let path_str = ufo_path.to_str().unwrap();
+    let mut engine = FontEngine::new();
+    engine.load_font(path_str.to_string()).unwrap();
+    let path = engine.get_glyph_svg_path(65);
+    assert!(
+      path.is_some(),
+      "get_glyph_svg_path(65) should return Some for MutatorSans A"
+    );
+    let path = path.unwrap();
+    assert!(!path.is_empty());
+    assert!(path.starts_with("M "));
+  }
+
+  #[test]
+  fn test_get_glyph_bbox_after_load() {
+    let ufo_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    if !ufo_path.exists() {
+      return;
+    }
+    let path_str = ufo_path.to_str().unwrap();
+    let mut engine = FontEngine::new();
+    engine.load_font(path_str.to_string()).unwrap();
+    let bbox = engine.get_glyph_bbox(65);
+    assert!(
+      bbox.is_some(),
+      "get_glyph_bbox(65) should return Some for MutatorSans A"
+    );
+    let b = bbox.unwrap();
+    assert_eq!(b.len(), 4);
+    assert!(b[0] < b[2], "min_x < max_x");
+    assert!(b[1] < b[3], "min_y < max_y");
   }
 }

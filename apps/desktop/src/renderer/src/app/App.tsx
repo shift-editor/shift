@@ -8,7 +8,7 @@ import { DebugProvider } from "@/context/DebugContext";
 import { ZoomToast } from "@/components/ZoomToast";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";
 
-import { routes } from "./routes";
+import { RouteDispatcher } from "./RouteDispatcher";
 
 export const App = () => {
   useEffect(() => {
@@ -45,9 +45,7 @@ export const App = () => {
           <FocusZoneProvider defaultZone="canvas">
             <HashRouter>
               <Routes>
-                {routes.map((route) => (
-                  <Route key={route.id} path={route.path} element={<route.component />} />
-                ))}
+                <Route path="*" element={<RouteDispatcher />} />
               </Routes>
             </HashRouter>
           </FocusZoneProvider>

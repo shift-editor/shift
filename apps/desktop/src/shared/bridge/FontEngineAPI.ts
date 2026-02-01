@@ -13,6 +13,10 @@ export interface FontEngineAPI {
   getMetadata(): FontMetadata;
   getMetrics(): FontMetrics;
   getGlyphCount(): number;
+  getGlyphUnicodes(): number[];
+  getGlyphSvgPath(unicode: number): string | null;
+  getGlyphAdvance(unicode: number): number | null;
+  getGlyphBbox(unicode: number): [number, number, number, number] | null;
   startEditSession(unicode: number): void;
   endEditSession(): void;
   hasEditSession(): boolean;

@@ -105,6 +105,22 @@ export class MockFontEngine implements FontEngineAPI {
     return 256;
   }
 
+  getGlyphUnicodes(): number[] {
+    return Array.from({ length: 256 }, (_, i) => i);
+  }
+
+  getGlyphSvgPath(_unicode: number): string | null {
+    return null;
+  }
+
+  getGlyphAdvance(_unicode: number): number | null {
+    return 500;
+  }
+
+  getGlyphBbox(_unicode: number): [number, number, number, number] | null {
+    return null;
+  }
+
   // ═══════════════════════════════════════════════════════════
   // EDIT SESSION
   // ═══════════════════════════════════════════════════════════

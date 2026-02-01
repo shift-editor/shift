@@ -37,14 +37,14 @@ The main NAPI-exported class managing font state:
 
 ```typescript
 class FontEngine {
-  loadFont(path: string): void
-  startEditSession(unicode: number): void
-  endEditSession(): void
-  getSnapshot(): string | null        // JSON
-  getSnapshotData(): NativeGlyphSnapshot  // Native object
-  addPoint(x, y, pointType, smooth): string
-  movePoints(pointIds, dx, dy): string
-  applyEditsUnified(pointIds, dx, dy): string
+  loadFont(path: string): void;
+  startEditSession(unicode: number): void;
+  endEditSession(): void;
+  getSnapshot(): string | null; // JSON
+  getSnapshotData(): NativeGlyphSnapshot; // Native object
+  addPoint(x, y, pointType, smooth): string;
+  movePoints(pointIds, dx, dy): string;
+  applyEditsUnified(pointIds, dx, dy): string;
 }
 ```
 
@@ -52,10 +52,10 @@ class FontEngine {
 
 Two approaches for different use cases:
 
-| Method | Return Type | Use Case |
-|--------|-------------|----------|
-| `getSnapshot()` | JSON string | Full serialization needed |
-| `getSnapshotData()` | Native object | Efficient frequent reads |
+| Method              | Return Type   | Use Case                  |
+| ------------------- | ------------- | ------------------------- |
+| `getSnapshot()`     | JSON string   | Full serialization needed |
+| `getSnapshotData()` | Native object | Efficient frequent reads  |
 
 ### CommandResult Format
 
@@ -75,26 +75,35 @@ All mutations return JSON with consistent structure:
 ## API Reference
 
 ### Font Loading
+
 - `loadFont(path: string)` - Load font from filesystem
 
 ### Session Management
+
 - `startEditSession(unicode: number)` - Begin editing glyph
 - `endEditSession()` - Save and close session
 - `hasEditSession(): boolean` - Check session state
 - `getEditingUnicode(): number | null` - Current glyph
 
 ### Font Info
+
 - `getMetadata(): FontMetadata` - Family, style, version
 - `getMetrics(): FontMetrics` - UPM, ascender, descender, etc.
 - `getGlyphCount(): number` - Total glyphs
+- `getGlyphUnicodes(): number[]` - Sorted unique unicodes
+- `getGlyphSvgPath(unicode: number): string | null` - SVG path d for glyph
+- `getGlyphAdvance(unicode: number): number | null` - Glyph advance width
+- `getGlyphBbox(unicode: number): [number, number, number, number] | null` - [minX, minY, maxX, maxY] for glyph outline
 
 ### Contour Operations
+
 - `addEmptyContour(): string` - Create contour, set active
 - `addContour(): string` - Create contour
 - `getActiveContourId(): string | null` - Current active
 - `closeContour(): string` - Close active contour
 
 ### Point Operations
+
 - `addPoint(x, y, pointType, smooth): string`
 - `addPointToContour(contourId, x, y, pointType, smooth): string`
 - `insertPointBefore(beforePointId, x, y, pointType, smooth): string`
@@ -103,29 +112,30 @@ All mutations return JSON with consistent structure:
 - `toggleSmooth(pointId): string`
 
 ### Unified Edit
+
 - `applyEditsUnified(pointIds, dx, dy): string` - Move + rule matching + application
 
 ## Usage Examples
 
 ### Basic Editing Flow
+
 ```typescript
 const engine = new FontEngine();
-engine.loadFont('/path/to/font.ufo');
+engine.loadFont("/path/to/font.ufo");
 engine.startEditSession(65); // 'A'
 
-const result = JSON.parse(engine.addPoint(100, 200, 'onCurve', false));
+const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
 if (result.success) {
-  console.log('Added point:', result.affectedPointIds[0]);
+  console.log("Added point:", result.affectedPointIds[0]);
 }
 
 engine.endEditSession();
 ```
 
 ### Moving Points with Rules
+
 ```typescript
-const result = JSON.parse(
-  engine.applyEditsUnified(['point-id-1', 'point-id-2'], 50, 0)
-);
+const result = JSON.parse(engine.applyEditsUnified(["point-id-1", "point-id-2"], 50, 0));
 
 // Result includes:
 // - snapshot: updated glyph state

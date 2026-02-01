@@ -1,4 +1,5 @@
 import { GlyphGrid } from "@/components/GlyphGrid";
+import { Sidebar } from "@/components/sidebar";
 import { Toolbar } from "@/components/Toolbar";
 
 export const Home = () => {
@@ -9,6 +10,7 @@ export const Home = () => {
         <div className="flex-6">
           <GlyphGrid />
         </div>
+        <Sidebar />
       </section>
     </main>
   );
