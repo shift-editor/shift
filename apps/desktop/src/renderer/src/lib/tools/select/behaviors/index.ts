@@ -5,7 +5,6 @@ export { DragBehavior } from "./DragBehavior";
 export { ResizeBehavior } from "./ResizeBehavior";
 export { RotateBehavior } from "./RotateBehavior";
 export { NudgeBehavior } from "./NudgeBehavior";
-export { ScaleHandlesBehavior } from "./ScaleHandlesBehavior";
 export { EscapeBehavior } from "./EscapeBehavior";
 export { ToggleSmoothBehavior } from "./ToggleSmoothBehavior";
 export { UpgradeSegmentBehavior } from "./UpgradeSegmentBehavior";

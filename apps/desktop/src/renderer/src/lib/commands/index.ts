@@ -24,7 +24,6 @@ export {
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
-  ScaleHandlesCommand,
 } from "./primitives";
 
 // Clipboard commands

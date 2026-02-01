@@ -16,5 +16,4 @@ export {
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
-export { ScaleHandlesCommand } from "./ScaleHandlesCommand";
 export { SnapshotCommand } from "./SnapshotCommand";
