@@ -1,10 +1,19 @@
 import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
+import type { SegmentId } from "@/types/indicator";
+import type { Segment } from "@/types/segments";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { DrawAPI } from "../core/DrawAPI";
 import type { Editor } from "@/lib/editor";
 import type { SelectIntent } from "./intents";
+
+/**
+ * Segment bend modes:
+ * - "bend": Adjusts control points using Inkscape-style algorithm based on t parameter
+ * - "scale": Scaling edit mode that better preserves curve shape
+ */
+export type SegmentBendMode = "bend" | "scale";
 
 export interface SelectionData {
   startPos: Point2D;
@@ -41,6 +50,20 @@ export interface RotateData {
   initialPositions: Map<PointId, Point2D>;
 }
 
+export interface BendData {
+  segmentId: SegmentId;
+  segment: Segment;
+  t: number;
+  startPos: Point2D;
+  lastPos: Point2D;
+  totalDelta: Point2D;
+  mode: SegmentBendMode;
+  /** Control point IDs affected by bending (for lines upgraded to cubic, these are the new control points) */
+  controlPointIds: PointId[];
+  /** Original positions of control points for preview/undo */
+  initialPositions: Map<PointId, Point2D>;
+}
+
 export type SelectState =
   | { type: "idle"; intent?: SelectIntent }
   | { type: "ready"; hoveredPointId: PointId | null; intent?: SelectIntent }
@@ -48,7 +71,8 @@ export type SelectState =
   | { type: "selected"; hoveredPointId: PointId | null; intent?: SelectIntent }
   | { type: "dragging"; drag: DragData; intent?: SelectIntent }
   | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
-  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
+  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent }
+  | { type: "bending"; bend: BendData; intent?: SelectIntent };
 
 export interface SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean;

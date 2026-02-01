@@ -11,7 +11,9 @@ import {
 import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
-import type { LineSegment } from "@/types/segments";
+import type { LineSegment, Segment } from "@/types/segments";
+import type { SegmentBendMode } from "./types";
+import { calculateBendOffsets, calculateQuadBendOffset } from "./behaviors/SegmentBendBehavior";
 
 export type SelectIntent =
   | { action: "selectPoint"; pointId: PointId; additive: boolean }
@@ -43,6 +45,15 @@ export type SelectIntent =
       center: Point2D;
     }
   | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
+  | {
+      action: "bendSegment";
+      segment: Segment;
+      t: number;
+      delta: Point2D;
+      mode: SegmentBendMode;
+      controlPointIds: PointId[];
+      initialPositions: Map<PointId, Point2D>;
+    }
   | { action: "toggleSmooth"; pointId: PointId }
   | { action: "selectPoints"; pointIds: PointId[] }
   | { action: "upgradeLineToCubic"; segment: LineSegment }
@@ -121,6 +132,18 @@ export function executeIntent(intent: SelectIntent, editor: Editor): void {
 
     case "nudge":
       executeNudge(intent.pointIds, intent.dx, intent.dy, editor);
+      break;
+
+    case "bendSegment":
+      executeBendSegment(
+        intent.segment,
+        intent.t,
+        intent.delta,
+        intent.mode,
+        intent.controlPointIds,
+        intent.initialPositions,
+        editor,
+      );
       break;
 
     case "toggleSmooth":
@@ -240,6 +263,46 @@ function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: Edito
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
   editor.commands.execute(cmd);
+  editor.render.requestRedraw();
+}
+
+function executeBendSegment(
+  segment: Segment,
+  t: number,
+  delta: Point2D,
+  mode: SegmentBendMode,
+  controlPointIds: PointId[],
+  initialPositions: Map<PointId, Point2D>,
+  editor: Editor,
+): void {
+  if (delta.x === 0 && delta.y === 0) return;
+  if (controlPointIds.length === 0) return;
+
+  if (segment.type === "cubic") {
+    // Calculate offsets for both control points
+    const { offset1, offset2 } = calculateBendOffsets(t, delta, mode);
+
+    const c1Id = controlPointIds[0];
+    const c2Id = controlPointIds[1];
+    const c1Initial = initialPositions.get(c1Id);
+    const c2Initial = initialPositions.get(c2Id);
+
+    if (c1Initial && c2Initial) {
+      // Move control points to their new positions (initial + offset)
+      editor.edit.movePointTo(c1Id, c1Initial.x + offset1.x, c1Initial.y + offset1.y);
+      editor.edit.movePointTo(c2Id, c2Initial.x + offset2.x, c2Initial.y + offset2.y);
+    }
+  } else if (segment.type === "quad") {
+    // Calculate offset for the single control point
+    const offset = calculateQuadBendOffset(t, delta);
+    const cId = controlPointIds[0];
+    const cInitial = initialPositions.get(cId);
+
+    if (cInitial) {
+      editor.edit.movePointTo(cId, cInitial.x + offset.x, cInitial.y + offset.y);
+    }
+  }
+
   editor.render.requestRedraw();
 }
 

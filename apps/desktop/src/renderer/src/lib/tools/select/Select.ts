@@ -10,6 +10,7 @@ import {
   ResizeBehavior,
   RotateBehavior,
   NudgeBehavior,
+  SegmentBendBehavior,
   EscapeBehavior,
   ToggleSmoothBehavior,
   UpgradeSegmentBehavior,
@@ -23,7 +24,7 @@ export type { BoundingRectEdge, SelectState };
 
 export class Select extends BaseTool<SelectState> {
   static stateSpec = defineStateDiagram<SelectState["type"]>({
-    states: ["idle", "ready", "selecting", "selected", "dragging", "resizing", "rotating"],
+    states: ["idle", "ready", "selecting", "selected", "dragging", "resizing", "rotating", "bending"],
     initial: "idle",
     transitions: [
       { from: "idle", to: "ready", event: "activate" },
@@ -31,7 +32,10 @@ export class Select extends BaseTool<SelectState> {
       { from: "ready", to: "selected", event: "click" },
       { from: "selecting", to: "selected", event: "release" },
       { from: "selected", to: "dragging", event: "drag" },
+      { from: "selected", to: "bending", event: "bendStart" },
+      { from: "ready", to: "bending", event: "bendStart" },
       { from: "dragging", to: "selected", event: "release" },
+      { from: "bending", to: "selected", event: "release" },
       { from: "selected", to: "ready", event: "escape" },
       { from: "ready", to: "idle", event: "deactivate" },
     ],
@@ -49,6 +53,7 @@ export class Select extends BaseTool<SelectState> {
     new EscapeBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
+    new SegmentBendBehavior(), // Must be before DragBehavior to intercept Alt+drag
     new DragBehavior(),
     new MarqueeBehavior(),
   ];
