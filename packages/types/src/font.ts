@@ -13,8 +13,7 @@ export type {
   MatchedRule,
   FontMetrics,
   FontMetadata,
-  DecomposedTransform,
 } from "./generated";
 
 // Domain types (for Editor API)
-export type { Point, Contour, Glyph } from "./domain";
+export type { Point, Contour, Glyph, DecomposedTransform } from "./domain";

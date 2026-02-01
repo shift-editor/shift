@@ -20,19 +20,7 @@
  * ```
  */
 
-type Point = {
-  readonly id: string;
-  readonly x: number;
-  readonly y: number;
-  readonly pointType: "onCurve" | "offCurve";
-  readonly smooth: boolean;
-};
-
-type Contour = {
-  readonly id: string;
-  readonly points: readonly Point[];
-  readonly closed: boolean;
-};
+import type { Point, Contour, PointId } from "@shift/types";
 
 export const Contours = {
   /**
@@ -92,7 +80,7 @@ export const Contours = {
   /**
    * Find a point by its ID within a contour
    */
-  findPointById(contour: Contour, id: string): Point | null {
+  findPointById(contour: Contour, id: PointId): Point | null {
     return contour.points.find((p) => p.id === id) ?? null;
   },
 
@@ -100,7 +88,7 @@ export const Contours = {
    * Find the index of a point by its ID within a contour
    * Returns -1 if not found
    */
-  findPointIndex(contour: Contour, id: string): number {
+  findPointIndex(contour: Contour, id: PointId): number {
     return contour.points.findIndex((p) => p.id === id);
   },
 
