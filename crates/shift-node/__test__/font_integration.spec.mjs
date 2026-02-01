@@ -67,9 +67,9 @@ describe("FontEngine Integration - Edit Session", () => {
     engine.startEditSession(65);
     expect(engine.hasEditSession()).toBe(true);
 
+
     const snapshot = engine.getSnapshotData();
     expect(snapshot).toBeTruthy();
-
     expect(snapshot.name).toBe("A");
     expect(snapshot.unicode).toBe(65);
     expect(snapshot.contours.length).toBeGreaterThan(0);
