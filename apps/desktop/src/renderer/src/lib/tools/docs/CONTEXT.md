@@ -206,7 +206,7 @@ class Select extends BaseTool<SelectState> {
 
 ### Editor Service Access
 
-Tools access services through the Editor instance:
+Tools access services through the Editor instance (ToolContext):
 
 ```typescript
 // In a tool or behavior:
@@ -216,6 +216,8 @@ this.editor.getPointAt(pos);
 this.editor.beginPreview();
 this.editor.commands.execute(cmd);
 ```
+
+For cursor and hover feedback, ToolContext exposes reactive signals: `hoveredBoundingBoxHandle`, `hoveredPointId`, `hoveredSegmentId`, and `currentModifiers`. Read these inside `getCursor(state)` so the cursor updates when hover or modifier keys change. ToolManager updates `currentModifiers` on pointer and key events; implementers may provide optional `setCurrentModifiers(modifiers)`.
 
 ## API Surface
 

@@ -50,8 +50,24 @@ export class RotateBehavior implements SelectBehavior {
     editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
-      const currentAngle = this.calculateAngle(event.point, state.rotate.center);
-      const deltaAngle = currentAngle - state.rotate.startAngle;
+      const rawAngle = this.calculateAngle(event.point, state.rotate.center);
+      const rawDelta = rawAngle - state.rotate.startAngle;
+
+      let deltaAngle: number;
+      let snappedAngle: number | undefined;
+
+      if (event.shiftKey) {
+        const snapResult = editor.snapRotationDelta({
+          delta: rawDelta,
+          previousSnappedAngle: state.rotate.snappedAngle ?? null,
+        });
+        deltaAngle = snapResult.snappedDelta;
+        snappedAngle = snapResult.snappedAngle;
+      } else {
+        deltaAngle = rawDelta;
+      }
+
+      const currentAngle = state.rotate.startAngle + deltaAngle;
 
       const moves: Array<{ id: PointId; x: number; y: number }> = [];
       for (const [id, initialPos] of state.rotate.initialPositions) {
@@ -66,6 +82,7 @@ export class RotateBehavior implements SelectBehavior {
           ...state.rotate,
           lastPos: event.point,
           currentAngle,
+          snappedAngle,
         },
       };
     }

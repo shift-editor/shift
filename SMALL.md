@@ -22,3 +22,5 @@
   - getting onCurve points
   - first point
   - last point
+- we should be able to directly iterate all points of a glyph (instead of going countours -> points)
+- surface a way to change length of control handles

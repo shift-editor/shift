@@ -94,6 +94,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
+    this.editor.setCurrentModifiers?.(modifiers);
     const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     this.gesture.pointerDown(point, screenPoint, modifiers);
   }
@@ -131,6 +132,8 @@ export class ToolManager implements ToolSwitchHandler {
     const { screenPoint, modifiers } = this.pendingPointerMove;
     this.pendingPointerMove = null;
 
+    this.editor.setCurrentModifiers?.(modifiers);
+
     const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
     const events = this.gesture.pointerMove(point, screenPoint, modifiers);
     this.dispatchEvents(events);
@@ -151,6 +154,12 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyDown(e: KeyboardEvent): void {
+    this.editor.setCurrentModifiers?.({
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    });
+
     if (this.primaryTool?.handleModifier(e.code, true)) {
       e.preventDefault();
       return;
@@ -172,6 +181,12 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyUp(e: KeyboardEvent): void {
+    this.editor.setCurrentModifiers?.({
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    });
+
     if (this.primaryTool?.handleModifier(e.code, false)) {
       return;
     }

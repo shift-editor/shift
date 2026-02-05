@@ -322,20 +322,35 @@ Rectangle creation.
 
 ### BaseTool Methods
 
-| Method                            | Description                                                                               |
-| --------------------------------- | ----------------------------------------------------------------------------------------- |
-| `getCursor(state)`                | Return cursor for state (default: `{ type: "default" }`); override for state-based cursor |
-| `initialState()`                  | Return the initial state                                                                  |
-| `transition(state, event)`        | Pure state transition logic                                                               |
-| `onTransition(prev, next, event)` | Side effects after state change                                                           |
-| `render(renderer)`                | Draw interactive overlays                                                                 |
-| `activate()`                      | Called when tool becomes active                                                           |
-| `deactivate()`                    | Called when tool becomes inactive                                                         |
-| `handleEvent(event)`              | Process a ToolEvent                                                                       |
-| `batch(name, fn)`                 | Execute commands in a batch                                                               |
-| `beginPreview()`                  | Start preview mode                                                                        |
-| `commitPreview(label)`            | Commit preview as command                                                                 |
-| `cancelPreview()`                 | Cancel preview, restore state                                                             |
+| Method                            | Description                                                                                                                                                                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getCursor(state)`                | Return cursor for state (default: `{ type: "default" }`); override for state-based cursor. May read `editor.hoveredPointId`, `editor.hoveredSegmentId`, `editor.hoveredBoundingBoxHandle`, and `editor.currentModifiers` for reactive cursor updates. |
+| `initialState()`                  | Return the initial state                                                                                                                                                                                                                              |
+| `transition(state, event)`        | Pure state transition logic                                                                                                                                                                                                                           |
+| `onTransition(prev, next, event)` | Side effects after state change                                                                                                                                                                                                                       |
+| `render(renderer)`                | Draw interactive overlays                                                                                                                                                                                                                             |
+| `activate()`                      | Called when tool becomes active                                                                                                                                                                                                                       |
+| `deactivate()`                    | Called when tool becomes inactive                                                                                                                                                                                                                     |
+| `handleEvent(event)`              | Process a ToolEvent                                                                                                                                                                                                                                   |
+| `batch(name, fn)`                 | Execute commands in a batch                                                                                                                                                                                                                           |
+| `beginPreview()`                  | Start preview mode                                                                                                                                                                                                                                    |
+| `commitPreview(label)`            | Commit preview as command                                                                                                                                                                                                                             |
+| `cancelPreview()`                 | Cancel preview, restore state                                                                                                                                                                                                                         |
+
+### ToolContext (cursor and hover)
+
+Tools receive `this.editor` (ToolContext). For cursor and hover feedback, the context exposes:
+
+| Member                     | Description                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| `hoveredBoundingBoxHandle` | `Signal<BoundingBoxHitResult>` – handle under cursor when selection has bounding box   |
+| `hoveredPointId`           | `Signal<PointId \| null>` – point under cursor                                         |
+| `hoveredSegmentId`         | `Signal<SegmentIndicator \| null>` – segment under cursor                              |
+| `isHoveringNode`           | `Signal<boolean>` – true when over a point or segment (outline node)                   |
+| `currentModifiers`         | `Signal<Modifiers>` – current shift/alt/meta state (updated on pointer and key events) |
+| `setCurrentModifiers?`     | Optional; used by ToolManager to update modifier state (implementers only)             |
+
+Reading these signals inside `getCursor(state)` makes the cursor computed re-run when hover or modifiers change.
 
 ### ToolManager Methods
 

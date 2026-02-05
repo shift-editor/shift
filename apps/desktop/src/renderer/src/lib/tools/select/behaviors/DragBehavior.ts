@@ -20,7 +20,7 @@ export class DragBehavior implements SelectBehavior {
 
   transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
     if (state.type === "dragging") {
-      return this.transitionDragging(state, event);
+      return this.transitionDragging(state, event, editor);
     }
 
     if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
@@ -35,20 +35,39 @@ export class DragBehavior implements SelectBehavior {
       editor.beginPreview();
       editor.clearHover();
     }
+    if (next.type === "dragging") {
+      editor.setActiveSnapIndicator(next.drag.snapIndicator ?? null);
+      return;
+    }
+    if (prev.type === "dragging") {
+      prev.drag.snapSession?.end();
+      editor.setActiveSnapIndicator(null);
+    }
   }
 
   private transitionDragging(
     state: SelectState & { type: "dragging" },
     event: ToolEvent,
+    _editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
-      const delta = Vec2.sub(event.point, state.drag.lastPos);
+      let newLastPos = event.point;
+      let snapIndicator = undefined;
+
+      if (state.drag.snapSession) {
+        const result = state.drag.snapSession.snap(event.point, event.shiftKey);
+        newLastPos = result.snappedPoint;
+        snapIndicator = result.indicator;
+      }
+
+      const delta = Vec2.sub(newLastPos, state.drag.lastPos);
       return {
         type: "dragging",
         drag: {
           ...state.drag,
-          lastPos: event.point,
+          lastPos: { x: newLastPos.x, y: newLastPos.y },
           totalDelta: Vec2.add(state.drag.totalDelta, delta),
+          snapIndicator,
         },
         intent: { action: "movePointsDelta", delta },
       };
@@ -89,15 +108,23 @@ export class DragBehavior implements SelectBehavior {
 
       if (event.altKey && isSelected) {
         const newPointIds = this.duplicateSelection(editor);
-        if (newPointIds.length > 0) {
+        const firstPointId = newPointIds[0];
+        if (firstPointId) {
+          const snapSession = this.createSnapSession(
+            editor,
+            firstPointId,
+            event.point,
+            newPointIds,
+          );
           return {
             type: "dragging",
             drag: {
-              anchorPointId: newPointIds[0],
+              anchorPointId: firstPointId,
               startPos: event.point,
               lastPos: event.point,
               totalDelta: { x: 0, y: 0 },
               draggedPointIds: newPointIds,
+              snapSession,
             },
             intent: { action: "selectPoints", pointIds: newPointIds },
           };
@@ -105,6 +132,7 @@ export class DragBehavior implements SelectBehavior {
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [pointId];
+      const snapSession = this.createSnapSession(editor, pointId, event.point, draggedPointIds);
 
       return {
         type: "dragging",
@@ -114,6 +142,7 @@ export class DragBehavior implements SelectBehavior {
           lastPos: event.point,
           totalDelta: { x: 0, y: 0 },
           draggedPointIds,
+          snapSession,
         },
         intent: isSelected ? undefined : { action: "selectPoint", pointId, additive: false },
       };
@@ -125,15 +154,23 @@ export class DragBehavior implements SelectBehavior {
 
       if (event.altKey && isSelected) {
         const newPointIds = this.duplicateSelection(editor);
-        if (newPointIds.length > 0) {
+        const firstPointId = newPointIds[0];
+        if (firstPointId) {
+          const snapSession = this.createSnapSession(
+            editor,
+            firstPointId,
+            event.point,
+            newPointIds,
+          );
           return {
             type: "dragging",
             drag: {
-              anchorPointId: newPointIds[0],
+              anchorPointId: firstPointId,
               startPos: event.point,
               lastPos: event.point,
               totalDelta: { x: 0, y: 0 },
               draggedPointIds: newPointIds,
+              snapSession,
             },
             intent: { action: "selectPoints", pointIds: newPointIds },
           };
@@ -141,15 +178,24 @@ export class DragBehavior implements SelectBehavior {
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : pointIds;
+      const anchorPointId = draggedPointIds[0];
+      if (!anchorPointId) return null;
+      const snapSession = this.createSnapSession(
+        editor,
+        anchorPointId,
+        event.point,
+        draggedPointIds,
+      );
 
       return {
         type: "dragging",
         drag: {
-          anchorPointId: draggedPointIds[0],
+          anchorPointId,
           startPos: event.point,
           lastPos: event.point,
           totalDelta: { x: 0, y: 0 },
           draggedPointIds,
+          snapSession,
         },
         intent: isSelected
           ? undefined
@@ -162,6 +208,22 @@ export class DragBehavior implements SelectBehavior {
     }
 
     return null;
+  }
+
+  private createSnapSession(
+    editor: ToolContext,
+    anchorPointId: PointId,
+    dragStart: { x: number; y: number },
+    excludedPointIds: PointId[],
+  ) {
+    const prefs = editor.getSnapPreferences();
+    if (!prefs.enabled) return null;
+
+    return editor.createSnapSession({
+      anchorPointId,
+      dragStart,
+      excludedPointIds,
+    });
   }
 
   private duplicateSelection(editor: ToolContext): PointId[] {

@@ -1,6 +1,6 @@
 import type { Point2D, PointId, ContourId, Point, Contour, Glyph, Rect2D } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
-import type { SelectionMode } from "@/types/editor";
+import type { SegmentId, SegmentIndicator } from "@/types/indicator";
+import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { FocusZone } from "@/types/focus";
@@ -13,10 +13,22 @@ import type { SegmentHitResult } from "@/lib/geo/Segment";
 import type { FontEngine } from "@/engine";
 import type { Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
+import type { Modifiers } from "./GestureDetector";
+import type {
+  SnapIndicator,
+  SnapPointArgs,
+  SnapPointResult,
+  SnapRotationDeltaArgs,
+  SnapRotationDeltaResult,
+  SnapSessionConfig,
+  SnapSession,
+} from "@/lib/editor/managers/SnapManager";
 
 export interface ToolContext {
   readonly activeToolState: Signal<ActiveToolState>;
+  getActiveToolState(): ActiveToolState;
   setActiveToolState(state: ActiveToolState): void;
+  getMousePosition(): Point2D;
   getScreenMousePosition(): Point2D;
   /** Called by ToolManager on pointer frame flush; not part of the tool API. */
   flushMousePosition?(): void;
@@ -66,6 +78,25 @@ export interface ToolContext {
   requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
   returnFromTemporaryTool(): void;
   readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
+  readonly hoveredPointId: Signal<PointId | null>;
+  readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
+  /** True when the pointer is over a point or segment (outline node). */
+  readonly isHoveringNode: Signal<boolean>;
+  getIsHoveringNode(): boolean;
+  readonly currentModifiers: Signal<Modifiers>;
+  getCurrentModifiers(): Modifiers;
+  setCurrentModifiers?(modifiers: Modifiers): void;
+  getSnapPreferences(): SnapPreferences;
+  setSnapPreferences(next: Partial<SnapPreferences>): void;
+  resolveSnapReference(pointId: PointId, dragStart: Point2D): Point2D;
+  createSnapSession(config: SnapSessionConfig): SnapSession;
+  snapPoint(
+    args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
+  ): SnapPointResult;
+  snapRotationDelta(args: SnapRotationDeltaArgs): SnapRotationDeltaResult;
+  setActiveSnapIndicator(indicator: SnapIndicator | null): void;
+  getActiveSnapIndicator(): SnapIndicator | null;
   setPreviewMode(enabled: boolean): void;
   setMarqueePreviewRect(rect: Rect2D | null): void;
   isPointInMarqueePreview(pointId: PointId): boolean;

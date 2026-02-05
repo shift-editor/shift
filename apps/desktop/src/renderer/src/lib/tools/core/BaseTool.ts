@@ -18,7 +18,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     this.editor = editor;
     this.state = this.initialState();
     this.settings = this.defaultSettings();
-    this.$cursor = computed(() => this.getCursor(this.editor.activeToolState.value as S));
+    this.$cursor = computed(() => this.getCursor(this.editor.getActiveToolState() as S));
   }
 
   getCursor(_state: S): CursorType {

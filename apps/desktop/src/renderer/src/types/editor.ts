@@ -1,5 +1,6 @@
 import type { PointId, GlyphSnapshot } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
+import type { SnapIndicator } from "@/lib/editor/managers/SnapManager";
 
 export type SelectionMode = "preview" | "committed";
 
@@ -29,6 +30,7 @@ export interface OverlayRenderState {
   selectedSegmentIds: ReadonlySet<SegmentId>;
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;
+  snapIndicator: SnapIndicator | null;
 }
 
 export interface InteractiveRenderState {
@@ -67,6 +69,15 @@ export interface ToolRegistryItem {
 export interface TemporaryToolOptions {
   onActivate?: () => void;
   onReturn?: () => void;
+}
+
+export interface SnapPreferences {
+  enabled: boolean;
+  angle: boolean;
+  axis: boolean;
+  pointToPoint: boolean;
+  angleIncrementDeg: number;
+  pointRadiusPx: number;
 }
 
 export interface ToolSwitchHandler {

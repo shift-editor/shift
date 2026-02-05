@@ -2,6 +2,7 @@ import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "./rendering/handles";
 import type {
   CursorType,
+  SnapPreferences,
   SelectionMode,
   ToolRegistryItem,
   VisualState,
@@ -69,6 +70,17 @@ import { GlyphRenderer } from "./rendering/GlyphRenderer";
 import type { FocusZone } from "@/types/focus";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
+import type { Modifiers } from "../tools/core/GestureDetector";
+import type {
+  SnapIndicator,
+  SnapPointArgs,
+  SnapPointResult,
+  SnapRotationDeltaArgs,
+  SnapRotationDeltaResult,
+  SnapSessionConfig,
+  SnapSession,
+} from "./managers/SnapManager";
+import { SnapManager } from "./managers/SnapManager";
 
 export class Editor implements ToolContext {
   private $previewMode: WritableSignal<boolean>;
@@ -78,6 +90,7 @@ export class Editor implements ToolContext {
   #hover: HoverManager;
   #renderer: GlyphRenderer;
   #edgePan: EdgePanManager;
+  #snapManager: SnapManager;
 
   #toolManager: ToolManager | null = null;
   #toolMetadata: Map<
@@ -106,6 +119,10 @@ export class Editor implements ToolContext {
   $overlayState: ComputedSignal<OverlayRenderState>;
   $interactiveState: ComputedSignal<InteractiveRenderState>;
   private $cursor: WritableSignal<string>;
+  #currentModifiers: WritableSignal<Modifiers>;
+  #isHoveringNode: ComputedSignal<boolean>;
+  #snapPreferences: WritableSignal<SnapPreferences>;
+  #activeSnapIndicator: WritableSignal<SnapIndicator | null>;
 
   constructor() {
     this.#viewport = new ViewportManager();
@@ -118,10 +135,29 @@ export class Editor implements ToolContext {
     this.$previewMode = signal(false);
     this.$cursor = signal("default");
     this.$handlesVisible = signal(true);
+    this.#currentModifiers = signal<Modifiers>({
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
+    });
+    this.#snapPreferences = signal<SnapPreferences>({
+      enabled: true,
+      angle: true,
+      axis: true,
+      pointToPoint: true,
+      angleIncrementDeg: 45,
+      pointRadiusPx: 8,
+    });
+    this.#activeSnapIndicator = signal<SnapIndicator | null>(null);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
     this.#edgePan = new EdgePanManager(this);
+    this.#snapManager = new SnapManager();
+    this.#isHoveringNode = computed(
+      () =>
+        this.#hover.hoveredPointId.value !== null || this.#hover.hoveredSegmentId.value !== null,
+    );
 
     this.#toolMetadata = new Map();
     this.$activeTool = signal<ToolName>("select");
@@ -166,6 +202,7 @@ export class Editor implements ToolContext {
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+      snapIndicator: this.#activeSnapIndicator.value,
     }));
 
     this.$interactiveState = computed<InteractiveRenderState>(() => ({
@@ -234,8 +271,16 @@ export class Editor implements ToolContext {
     return this.$activeTool;
   }
 
+  public getActiveTool(): ToolName {
+    return this.$activeTool.value;
+  }
+
   public get activeToolState(): Signal<ActiveToolState> {
     return this.$activeToolState;
+  }
+
+  public getActiveToolState(): ActiveToolState {
+    return this.$activeToolState.value;
   }
 
   public setActiveToolState(state: ActiveToolState): void {
@@ -386,6 +431,75 @@ export class Editor implements ToolContext {
 
   public clearHover(): void {
     this.#hover.clearHover();
+  }
+
+  public get isHoveringNode(): Signal<boolean> {
+    return this.#isHoveringNode;
+  }
+
+  public getIsHoveringNode(): boolean {
+    return this.#isHoveringNode.value;
+  }
+
+  public get currentModifiers(): Signal<Modifiers> {
+    return this.#currentModifiers;
+  }
+
+  public getCurrentModifiers(): Modifiers {
+    return this.#currentModifiers.value;
+  }
+
+  public setCurrentModifiers(modifiers: Modifiers): void {
+    this.#currentModifiers.set(modifiers);
+  }
+
+  public getSnapPreferences(): SnapPreferences {
+    return this.#snapPreferences.value;
+  }
+
+  public setSnapPreferences(next: Partial<SnapPreferences>): void {
+    this.#snapPreferences.set({
+      ...this.#snapPreferences.value,
+      ...next,
+    });
+  }
+
+  public resolveSnapReference(pointId: PointId, dragStart: Point2D): Point2D {
+    return this.#snapManager.resolveSnapReference(this.getGlyph(), pointId, dragStart);
+  }
+
+  public createSnapSession(config: SnapSessionConfig): SnapSession {
+    return this.#snapManager.createSession(
+      config,
+      () => this.getGlyph(),
+      () => this.#snapPreferences.value,
+      (px) => this.screenToUpmDistance(px),
+    );
+  }
+
+  public snapPoint(
+    args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
+  ): SnapPointResult {
+    const preferences = this.#snapPreferences.value;
+    return this.#snapManager.snapPoint({
+      ...args,
+      snapshot: this.getGlyph(),
+      preferences,
+      pointToPointRadius: this.screenToUpmDistance(preferences.pointRadiusPx),
+      increment: (preferences.angleIncrementDeg * Math.PI) / 180,
+    });
+  }
+
+  public snapRotationDelta(args: SnapRotationDeltaArgs): SnapRotationDeltaResult {
+    return this.#snapManager.snapRotationDelta(args);
+  }
+
+  public setActiveSnapIndicator(indicator: SnapIndicator | null): void {
+    this.#activeSnapIndicator.set(indicator);
+  }
+
+  public getActiveSnapIndicator(): SnapIndicator | null {
+    return this.#activeSnapIndicator.value;
   }
 
   public getHoveredPoint(): PointId | null {
@@ -571,6 +685,10 @@ export class Editor implements ToolContext {
 
   public get screenMousePosition(): Signal<Point2D> {
     return this.#viewport.screenMousePosition;
+  }
+
+  public getMousePosition(): Point2D {
+    return this.#viewport.mousePosition;
   }
 
   public getScreenMousePosition(): Point2D {

@@ -24,8 +24,8 @@ export function DebugPanel() {
   }, [isOpen, editor]);
 
   const toolStateRef = useSignalText(() => {
-    const name = editor.activeTool.value;
-    const state = editor.activeToolState.value;
+    const name = editor.getActiveTool();
+    const state = editor.getActiveToolState();
     return `${name}.${state.type}`;
   });
 

@@ -5,6 +5,7 @@ import { Hand } from "../hand/Hand";
 import { Select } from "../select/Select";
 import { Pen } from "../pen/Pen";
 import type { ToolName } from "./createContext";
+import type { Modifiers } from "./GestureDetector";
 
 function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return {
@@ -263,6 +264,62 @@ describe("ToolManager", () => {
       } finally {
         vi.stubGlobal("requestAnimationFrame", originalRAF);
       }
+    });
+  });
+
+  describe("currentModifiers", () => {
+    it("updates currentModifiers on handlePointerDown", () => {
+      toolManager.activate("select");
+      const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: true };
+
+      toolManager.handlePointerDown({ x: 0, y: 0 }, mods);
+
+      expect(editor.getCurrentModifiers()).toEqual(mods);
+    });
+
+    it("updates currentModifiers on flushPointerMove", () => {
+      const originalRAF = globalThis.requestAnimationFrame;
+      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
+        cb();
+        return 0;
+      });
+      try {
+        toolManager.activate("select");
+        const mods: Modifiers = { shiftKey: true, altKey: true };
+
+        toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
+
+        expect(editor.getCurrentModifiers()).toEqual(mods);
+      } finally {
+        vi.stubGlobal("requestAnimationFrame", originalRAF);
+      }
+    });
+
+    it("updates currentModifiers on handleKeyDown", () => {
+      toolManager.activate("select");
+
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: false }),
+      );
+
+      expect(editor.getCurrentModifiers()).toEqual({
+        shiftKey: false,
+        altKey: true,
+        metaKey: false,
+      });
+    });
+
+    it("updates currentModifiers on handleKeyUp", () => {
+      toolManager.activate("select");
+      toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Alt", altKey: true }));
+
+      toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Alt", altKey: false }));
+
+      expect(editor.getCurrentModifiers()).toEqual({
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+      });
     });
   });
 });

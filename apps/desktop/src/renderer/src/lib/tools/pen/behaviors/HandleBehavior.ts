@@ -44,6 +44,14 @@ export class HandleBehavior implements PenBehavior {
         editor.commands.endBatch();
       }
     }
+    if (next.type === "dragging") {
+      editor.setActiveSnapIndicator(next.snapIndicator ?? null);
+      return;
+    }
+    if (prev.type === "dragging") {
+      prev.snapSession?.end();
+      editor.setActiveSnapIndicator(null);
+    }
   }
 
   private transitionAnchored(
@@ -55,12 +63,25 @@ export class HandleBehavior implements PenBehavior {
       const dist = Vec2.dist(state.anchor.position, event.point);
 
       if (dist > DRAG_THRESHOLD) {
-        const handles = this.createHandles(state.anchor, event.point, editor);
+        const snapSession = this.createSnapSession(editor, state.anchor);
+        let snappedPos: Point2D = event.point;
+        let snapIndicator = undefined;
+
+        if (snapSession && event.shiftKey) {
+          const result = snapSession.snap(event.point, event.shiftKey);
+          snappedPos = result.snappedPoint;
+          snapIndicator = result.indicator;
+        }
+
+        const handles = this.createHandles(state.anchor, snappedPos, editor);
         return {
           type: "dragging",
+          snapSession,
           anchor: state.anchor,
           handles,
           mousePos: event.point,
+          snappedPos: event.shiftKey ? snappedPos : undefined,
+          snapIndicator,
         };
       }
       return state;
@@ -99,10 +120,21 @@ export class HandleBehavior implements PenBehavior {
     editor: ToolContext,
   ): PenState | null {
     if (event.type === "drag") {
-      this.updateHandles(state.anchor, state.handles, event.point, editor);
+      let snappedPos: Point2D = event.point;
+      let snapIndicator = undefined;
+
+      if (state.snapSession && event.shiftKey) {
+        const result = state.snapSession.snap(event.point, event.shiftKey);
+        snappedPos = result.snappedPoint;
+        snapIndicator = result.indicator;
+      }
+
+      this.updateHandles(state.anchor, state.handles, snappedPos, editor);
       return {
         ...state,
         mousePos: event.point,
+        snappedPos: event.shiftKey ? snappedPos : undefined,
+        snapIndicator,
       };
     }
 
@@ -136,12 +168,12 @@ export class HandleBehavior implements PenBehavior {
     return null;
   }
 
-  private createHandles(anchor: AnchorData, mousePos: Point2D, editor: ToolContext): HandleData {
+  private createHandles(anchor: AnchorData, snappedPos: Point2D, editor: ToolContext): HandleData {
     const { context, pointId, position } = anchor;
     const history = editor.commands;
 
     if (context.isFirstPoint) {
-      const cmd = new AddPointCommand(mousePos.x, mousePos.y, "offCurve", false);
+      const cmd = new AddPointCommand(snappedPos.x, snappedPos.y, "offCurve", false);
       const cpOutId = history.execute(cmd);
       return { cpOut: cpOutId };
     }
@@ -153,7 +185,7 @@ export class HandleBehavior implements PenBehavior {
         history.execute(cmd);
       }
 
-      const cpInPos = Vec2.mirror(mousePos, position);
+      const cpInPos = Vec2.mirror(snappedPos, position);
       const cmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, "offCurve", false);
       const cpInId = history.execute(cmd);
 
@@ -161,11 +193,11 @@ export class HandleBehavior implements PenBehavior {
     }
 
     if (context.previousPointType === "offCurve") {
-      const cpInPos = Vec2.mirror(mousePos, position);
+      const cpInPos = Vec2.mirror(snappedPos, position);
       const insertCmd = new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, "offCurve", false);
       const cpInId = history.execute(insertCmd);
 
-      const addCmd = new AddPointCommand(mousePos.x, mousePos.y, "offCurve", false);
+      const addCmd = new AddPointCommand(snappedPos.x, snappedPos.y, "offCurve", false);
       const cpOutId = history.execute(addCmd);
 
       return { cpIn: cpInId, cpOut: cpOutId };
@@ -177,18 +209,27 @@ export class HandleBehavior implements PenBehavior {
   private updateHandles(
     anchor: AnchorData,
     handles: HandleData,
-    mousePos: Point2D,
+    snappedPos: Point2D,
     editor: ToolContext,
   ): void {
-    const { position } = anchor;
-
     if (handles.cpOut) {
-      editor.movePointTo(handles.cpOut, mousePos.x, mousePos.y);
+      editor.movePointTo(handles.cpOut, snappedPos.x, snappedPos.y);
     }
 
     if (handles.cpIn) {
-      const mirroredPos = Vec2.mirror(mousePos, position);
+      const mirroredPos = Vec2.mirror(snappedPos, anchor.position);
       editor.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
+  }
+
+  private createSnapSession(editor: ToolContext, anchor: AnchorData) {
+    const prefs = editor.getSnapPreferences();
+    if (!prefs.enabled || !prefs.angle) return null;
+
+    return editor.createSnapSession({
+      anchorPointId: anchor.pointId,
+      dragStart: anchor.position,
+      excludedPointIds: [],
+    });
   }
 }

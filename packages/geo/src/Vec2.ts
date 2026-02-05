@@ -485,4 +485,132 @@ export const Vec2 = {
   fromArray(arr: [number, number]): Point2D {
     return { x: arr[0], y: arr[1] };
   },
+
+  // ============================================
+  // Snapping
+  // ============================================
+
+  /**
+   * Constrain a delta vector to the dominant axis (horizontal or vertical).
+   * Returns a vector with only the x or y component, whichever has larger absolute value.
+   */
+  constrainToAxis(delta: Point2D): Point2D {
+    if (Math.abs(delta.x) >= Math.abs(delta.y)) {
+      return { x: delta.x, y: 0 };
+    }
+    return { x: 0, y: delta.y };
+  },
+
+  /**
+   * Snap an angle to the nearest increment.
+   * @param angle - The angle in radians
+   * @param increment - The snap increment in radians (default: π/4 = 45°)
+   */
+  snapAngle(angle: number, increment: number = Math.PI / 4): number {
+    return Math.round(angle / increment) * increment;
+  },
+
+  /**
+   * Snap a vector to the nearest angle increment while preserving its length.
+   * @param v - The vector to snap
+   * @param increment - The angle snap increment in radians (default: π/4 = 45°)
+   */
+  snapToAngle(v: Point2D, increment: number = Math.PI / 4): Point2D {
+    const len = Vec2.len(v);
+    if (len < EPSILON) return { x: 0, y: 0 };
+    const angle = Vec2.angle(v);
+    const snappedAngle = Math.round(angle / increment) * increment;
+    return { x: len * Math.cos(snappedAngle), y: len * Math.sin(snappedAngle) };
+  },
+
+  /**
+   * Snap an angle with hysteresis - sticks to previous snap until threshold exceeded.
+   * @param angle - The angle in radians
+   * @param previousSnapped - The previously snapped angle (null if none)
+   * @param increment - The snap increment in radians (default: π/4 = 45°)
+   * @param hysteresisFactor - Fraction of increment needed to break free (default: 0.4 = 40%)
+   */
+  snapAngleWithHysteresis(
+    angle: number,
+    previousSnapped: number | null,
+    increment: number = Math.PI / 4,
+    hysteresisFactor: number = 0.4,
+  ): number {
+    if (previousSnapped !== null) {
+      const threshold = increment * hysteresisFactor;
+      if (Math.abs(angle - previousSnapped) <= threshold) {
+        return previousSnapped;
+      }
+    }
+    return Math.round(angle / increment) * increment;
+  },
+
+  /**
+   * Snap a vector to angle increments with hysteresis.
+   * Returns both the snapped position and the snapped angle (for tracking).
+   * @param v - The vector to snap
+   * @param previousSnapped - The previously snapped angle (null if none)
+   * @param increment - The angle snap increment in radians (default: π/4 = 45°)
+   * @param hysteresisFactor - Fraction of increment needed to break free (default: 0.4 = 40%)
+   */
+  snapToAngleWithHysteresis(
+    v: Point2D,
+    previousSnapped: number | null,
+    increment: number = Math.PI / 4,
+    hysteresisFactor: number = 0.4,
+  ): { position: Point2D; snappedAngle: number } {
+    const len = Vec2.len(v);
+    if (len < EPSILON) return { position: { x: 0, y: 0 }, snappedAngle: 0 };
+
+    const rawAngle = Vec2.angle(v);
+    const snappedAngle = Vec2.snapAngleWithHysteresis(
+      rawAngle,
+      previousSnapped,
+      increment,
+      hysteresisFactor,
+    );
+
+    return {
+      position: { x: len * Math.cos(snappedAngle), y: len * Math.sin(snappedAngle) },
+      snappedAngle,
+    };
+  },
+
+  /**
+   * Constrain a delta to an axis with hysteresis - sticks to previous axis until threshold exceeded.
+   * @param delta - The delta vector to constrain
+   * @param previousAxis - The previously constrained axis (null if none)
+   * @param threshold - Ratio (0-1) of dominance needed to switch axes (default: 0.7 = 70%)
+   */
+  constrainToAxisWithHysteresis(
+    delta: Point2D,
+    previousAxis: "x" | "y" | null,
+    threshold: number = 0.7,
+  ): { delta: Point2D; axis: "x" | "y" } {
+    const absX = Math.abs(delta.x);
+    const absY = Math.abs(delta.y);
+
+    let axis: "x" | "y";
+
+    if (previousAxis === null) {
+      axis = absX >= absY ? "x" : "y";
+    } else {
+      const total = absX + absY + EPSILON;
+      const xRatio = absX / total;
+      const yRatio = absY / total;
+
+      if (previousAxis === "x" && yRatio > threshold) {
+        axis = "y";
+      } else if (previousAxis === "y" && xRatio > threshold) {
+        axis = "x";
+      } else {
+        axis = previousAxis;
+      }
+    }
+
+    return {
+      delta: axis === "x" ? { x: delta.x, y: 0 } : { x: 0, y: delta.y },
+      axis,
+    };
+  },
 } as const;

@@ -19,6 +19,13 @@ export const BOUNDING_RECTANGLE_STYLES: DrawStyle = defaultCanvasStyles.bounding
 export const SEGMENT_HOVER_STYLE: DrawStyle = defaultCanvasStyles.segmentHover;
 export const SEGMENT_SELECTED_STYLE: DrawStyle = defaultCanvasStyles.segmentSelected;
 export const PREVIEW_LINE_STYLE: DrawStyle = defaultCanvasStyles.previewLine;
+export const SNAP_INDICATOR_STYLE: DrawStyle = {
+  strokeStyle: "#ff3b30",
+  fillStyle: "transparent",
+  lineWidth: 1,
+  dashPattern: [],
+};
+export const SNAP_INDICATOR_CROSS_SIZE_PX = 2;
 export const BOUNDING_BOX_HANDLE_STYLES: BoundingBoxHandleStyles =
   defaultCanvasStyles.boundingBoxHandles;
 export const PEN_READY_STYLE: BaseHandleStyle = defaultCanvasStyles.penReady;

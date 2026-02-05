@@ -1,17 +1,24 @@
 import { vi } from "vitest";
 import type { PointId, ContourId, GlyphSnapshot, Point, Contour, Glyph } from "@shift/types";
 import type { ToolContext, ActiveToolState } from "@/lib/tools/core";
-import type { ToolEvent } from "@/lib/tools/core/GestureDetector";
+import type { ToolEvent, Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
 import type { ContourEndpointHit, HitResult } from "@/types/hitResult";
-import type { TemporaryToolOptions } from "@/types/editor";
+import type { TemporaryToolOptions, SnapPreferences } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Point2D, Rect2D } from "@shift/types";
-import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
+import { signal, computed, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type {
+  SnapPointArgs,
+  SnapRotationDeltaArgs,
+  SnapIndicator,
+  SnapSessionConfig,
+  SnapSession,
+} from "@/lib/editor/managers/SnapManager";
 
 export interface ToolMouseEvent {
   readonly screen: Point2D;
@@ -24,6 +31,7 @@ export interface ToolMouseEvent {
 }
 import { FontEngine, MockFontEngine } from "@/engine";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
+import { Vec2 } from "@shift/geo";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -58,6 +66,8 @@ interface HoverService {
   getHoveredPoint(): PointId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
+  readonly hoveredPointId: Signal<PointId | null>;
+  readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
   setHoveredPoint(id: PointId | null): void;
   setHoveredSegment(indicator: SegmentIndicator | null): void;
   setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
@@ -381,6 +391,12 @@ function createMockHoverService(): HoverService & {
     },
     get _hoveredBoundingBoxHandle() {
       return _hoveredBoundingBoxHandle;
+    },
+    get hoveredPointId() {
+      return $hoveredPoint;
+    },
+    get hoveredSegmentId() {
+      return $hoveredSegment;
     },
     mocks,
   };
@@ -896,6 +912,23 @@ export function createMockToolContext(): MockToolContext {
 
   const $screenMousePosition = signal<Point2D>({ x: 0, y: 0 });
   const $activeToolState = signal<ActiveToolState>({ type: "idle" });
+  const $currentModifiers = signal<Modifiers>({
+    shiftKey: false,
+    altKey: false,
+    metaKey: false,
+  });
+  const $isHoveringNode = computed(
+    () => hover.hoveredPointId.value !== null || hover.hoveredSegmentId.value !== null,
+  );
+  const $snapPreferences = signal<SnapPreferences>({
+    enabled: true,
+    angle: true,
+    axis: false,
+    pointToPoint: false,
+    angleIncrementDeg: 45,
+    pointRadiusPx: 8,
+  });
+  const $activeSnapIndicator = signal<SnapIndicator | null>(null);
 
   return {
     screen,
@@ -926,6 +959,8 @@ export function createMockToolContext(): MockToolContext {
     get activeToolState() {
       return $activeToolState;
     },
+    getMousePosition: () =>
+      screen.projectScreenToUpm($screenMousePosition.peek().x, $screenMousePosition.peek().y),
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
     projectScreenToUpm: (x: number, y: number) => screen.projectScreenToUpm(x, y),
@@ -933,6 +968,7 @@ export function createMockToolContext(): MockToolContext {
     getSelectedPointsCount: () => selection.getSelectedPointsCount(),
     getSelectedSegmentsCount: () => selection.getSelectedSegmentsCount(),
     hasSelection: () => selection.hasSelection(),
+    getActiveToolState: () => $activeToolState.value,
     setActiveToolState: (state: ActiveToolState) => {
       $activeToolState.value = state;
     },
@@ -988,6 +1024,81 @@ export function createMockToolContext(): MockToolContext {
     get hoveredBoundingBoxHandle() {
       return $hoveredBoundingBoxHandle;
     },
+    getHoveredBoundingBoxHandle: () => $hoveredBoundingBoxHandle.peek(),
+    get hoveredPointId() {
+      return hover.hoveredPointId;
+    },
+    get hoveredSegmentId() {
+      return hover.hoveredSegmentId;
+    },
+    get isHoveringNode() {
+      return $isHoveringNode;
+    },
+    getIsHoveringNode: () => $isHoveringNode.value,
+    get currentModifiers() {
+      return $currentModifiers;
+    },
+    getCurrentModifiers: () => $currentModifiers.value,
+    setCurrentModifiers: (modifiers: Modifiers) => $currentModifiers.set(modifiers),
+    getSnapPreferences: () => $snapPreferences.value,
+    setSnapPreferences: (next: Partial<SnapPreferences>) =>
+      $snapPreferences.set({ ...$snapPreferences.value, ...next }),
+    resolveSnapReference: (_pointId: PointId, dragStart: Point2D) => dragStart,
+    createSnapSession: (config: SnapSessionConfig): SnapSession => {
+      let previousSnappedAngle: number | null = null;
+      return {
+        snap: (point: Point2D, shiftKey: boolean) => {
+          if (!shiftKey) {
+            return { snappedPoint: point };
+          }
+          const delta = Vec2.sub(point, config.dragStart);
+          const snapped = Vec2.snapToAngleWithHysteresis(delta, previousSnappedAngle, Math.PI / 4);
+          previousSnappedAngle = snapped.snappedAngle;
+          const snappedPoint = Vec2.add(config.dragStart, snapped.position);
+          return {
+            snappedPoint,
+            indicator: {
+              lines: [{ from: config.dragStart, to: snappedPoint }],
+            },
+          };
+        },
+        end: () => {
+          previousSnappedAngle = null;
+        },
+      };
+    },
+    snapPoint: (
+      args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
+    ) => {
+      if (!args.shiftKey) {
+        return { snappedPoint: args.point };
+      }
+      const delta = Vec2.sub(args.point, args.reference);
+      const snapped = Vec2.snapToAngleWithHysteresis(delta, null, Math.PI / 4);
+      const snappedPoint = Vec2.add(args.reference, snapped.position);
+      return {
+        snappedPoint,
+        indicator: {
+          lines: [
+            {
+              from: args.reference,
+              to: snappedPoint,
+            },
+          ],
+        },
+      };
+    },
+    snapRotationDelta: (args: SnapRotationDeltaArgs) => {
+      const snappedDelta = Vec2.snapAngleWithHysteresis(
+        args.delta,
+        args.previousSnappedAngle,
+        args.increment ?? Math.PI / 12,
+      );
+      return { snappedDelta, snappedAngle: snappedDelta };
+    },
+    setActiveSnapIndicator: (indicator: SnapIndicator | null) =>
+      $activeSnapIndicator.set(indicator),
+    getActiveSnapIndicator: () => $activeSnapIndicator.value,
     clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),

@@ -120,4 +120,25 @@ export const Contours = {
   pointCount(contour: Contour): number {
     return contour.points.length;
   },
+
+  /**
+   * Get a point by index, optionally wrapping for closed contours.
+   */
+  at(contour: Contour, index: number, wrap = contour.closed): Point | null {
+    const { points } = contour;
+    if (index >= 0 && index < points.length) return points[index];
+    if (!wrap || points.length === 0) return null;
+    const wrapped = ((index % points.length) + points.length) % points.length;
+    return points[wrapped];
+  },
+
+  /**
+   * Get neighbors around an index.
+   */
+  neighbors(contour: Contour, index: number): { prev: Point | null; next: Point | null } {
+    return {
+      prev: Contours.at(contour, index - 1),
+      next: Contours.at(contour, index + 1),
+    };
+  },
 } as const;

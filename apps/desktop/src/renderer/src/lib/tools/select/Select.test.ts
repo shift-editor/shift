@@ -21,6 +21,24 @@ describe("Select tool", () => {
     sim.setReady();
   });
 
+  describe("cursor", () => {
+    it("returns copy cursor when Option held and hovering a point", () => {
+      const pointId = ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.hover.setHoveredPoint(pointId);
+      ctx.setCurrentModifiers({ shiftKey: false, altKey: true, metaKey: false });
+
+      expect(select.$cursor.value).toEqual({ type: "copy" });
+    });
+
+    it("returns default when Option not held over point", () => {
+      const pointId = ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.hover.setHoveredPoint(pointId);
+      ctx.setCurrentModifiers({ shiftKey: false, altKey: false, metaKey: false });
+
+      expect(select.$cursor.value).toEqual({ type: "default" });
+    });
+  });
+
   describe("state management", () => {
     it("should have correct name", () => {
       expect(select.name).toBe("select");

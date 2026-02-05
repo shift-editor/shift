@@ -2,6 +2,8 @@ import {
   BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
+  SNAP_INDICATOR_CROSS_SIZE_PX,
+  SNAP_INDICATOR_STYLE,
   SEGMENT_HOVER_STYLE,
   SEGMENT_SELECTED_STYLE,
 } from "@/lib/styles/style";
@@ -142,6 +144,50 @@ export class GlyphRenderer {
     if (!this.#overlayContext) return;
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
+    const indicator = this.#editor.getActiveSnapIndicator();
+    if (!indicator) return;
+
+    ctx.save();
+    this.#prepareCanvas(ctx);
+
+    ctx.strokeStyle = SNAP_INDICATOR_STYLE.strokeStyle;
+    ctx.lineWidth = this.#lineWidthUpm(SNAP_INDICATOR_STYLE.lineWidth);
+    for (const line of indicator.lines) {
+      ctx.drawLine(line.from.x, line.from.y, line.to.x, line.to.y);
+    }
+
+    const half = this.#editor.screenToUpmDistance(SNAP_INDICATOR_CROSS_SIZE_PX);
+    const markers = indicator.markers ?? this.#collectLineEndpoints(indicator.lines);
+    for (const marker of markers) {
+      this.#drawX(ctx, marker.x, marker.y, half);
+    }
+
+    ctx.restore();
+  }
+
+  #collectLineEndpoints(
+    lines: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }>,
+  ): Array<{
+    x: number;
+    y: number;
+  }> {
+    const markers: Array<{ x: number; y: number }> = [];
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const endpoints = [line.from, line.to];
+      for (const endpoint of endpoints) {
+        const key = `${endpoint.x}:${endpoint.y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        markers.push(endpoint);
+      }
+    }
+    return markers;
+  }
+
+  #drawX(ctx: IRenderer, x: number, y: number, half: number): void {
+    ctx.drawLine(x - half, y - half, x + half, y + half);
+    ctx.drawLine(x - half, y + half, x + half, y - half);
   }
 
   #drawStatic(): void {

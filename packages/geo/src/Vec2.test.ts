@@ -264,4 +264,175 @@ describe("Vec2", () => {
       expect(Vec2.round({ x: 1.4, y: 2.6 })).toEqual({ x: 1, y: 3 });
     });
   });
+
+  describe("snapping utilities", () => {
+    describe("constrainToAxis", () => {
+      it("constrains to horizontal when x is dominant", () => {
+        expect(Vec2.constrainToAxis({ x: 10, y: 3 })).toEqual({ x: 10, y: 0 });
+      });
+
+      it("constrains to vertical when y is dominant", () => {
+        expect(Vec2.constrainToAxis({ x: 3, y: 10 })).toEqual({ x: 0, y: 10 });
+      });
+
+      it("constrains to horizontal when equal", () => {
+        expect(Vec2.constrainToAxis({ x: 5, y: 5 })).toEqual({ x: 5, y: 0 });
+      });
+
+      it("handles negative values", () => {
+        expect(Vec2.constrainToAxis({ x: -10, y: 3 })).toEqual({ x: -10, y: 0 });
+        expect(Vec2.constrainToAxis({ x: 3, y: -10 })).toEqual({ x: 0, y: -10 });
+      });
+    });
+
+    describe("snapAngle", () => {
+      it("snaps to nearest 45 degrees by default", () => {
+        expect(Vec2.snapAngle(Math.PI / 16)).toBeCloseTo(0);
+        expect(Vec2.snapAngle(Math.PI / 3)).toBeCloseTo(Math.PI / 4);
+        expect(Vec2.snapAngle(Math.PI / 2)).toBeCloseTo(Math.PI / 2);
+      });
+
+      it("snaps to 15 degrees when specified", () => {
+        const inc = Math.PI / 12;
+        expect(Vec2.snapAngle(Math.PI / 10, inc)).toBeCloseTo(inc);
+        expect(Vec2.snapAngle(Math.PI / 48, inc)).toBeCloseTo(0);
+      });
+
+      it("handles negative angles", () => {
+        expect(Vec2.snapAngle(-Math.PI / 16)).toBeCloseTo(0);
+        expect(Vec2.snapAngle(-Math.PI / 3)).toBeCloseTo(-Math.PI / 4);
+      });
+    });
+
+    describe("snapToAngle", () => {
+      it("snaps vector to 45-degree increments preserving length", () => {
+        const v = { x: 10, y: 3 };
+        const snapped = Vec2.snapToAngle(v);
+        expect(Vec2.angle(snapped)).toBeCloseTo(0);
+        expect(Vec2.len(snapped)).toBeCloseTo(Vec2.len(v));
+      });
+
+      it("handles zero vector", () => {
+        expect(Vec2.snapToAngle({ x: 0, y: 0 })).toEqual({ x: 0, y: 0 });
+      });
+
+      it("snaps to custom angle increments", () => {
+        const v = { x: 10, y: 2 };
+        const snapped = Vec2.snapToAngle(v, Math.PI / 12);
+        const snappedAngle = Vec2.angle(snapped);
+        expect(snappedAngle).toBeCloseTo(Math.PI / 12);
+        expect(Vec2.len(snapped)).toBeCloseTo(Vec2.len(v));
+      });
+
+      it("snaps vector pointing in negative direction", () => {
+        const v = { x: -10, y: 3 };
+        const snapped = Vec2.snapToAngle(v);
+        expect(Vec2.angle(snapped)).toBeCloseTo(Math.PI);
+        expect(Vec2.len(snapped)).toBeCloseTo(Vec2.len(v));
+      });
+    });
+
+    describe("snapAngleWithHysteresis", () => {
+      it("snaps to nearest increment when no previous snap", () => {
+        expect(Vec2.snapAngleWithHysteresis(Math.PI / 16, null)).toBeCloseTo(0);
+        expect(Vec2.snapAngleWithHysteresis(Math.PI / 3, null)).toBeCloseTo(Math.PI / 4);
+      });
+
+      it("sticks to previous snap within threshold", () => {
+        const previousSnapped = 0;
+        const smallOffset = (Math.PI / 4) * 0.3;
+        expect(Vec2.snapAngleWithHysteresis(smallOffset, previousSnapped)).toBeCloseTo(0);
+      });
+
+      it("breaks free when exceeding threshold", () => {
+        const previousSnapped = 0;
+        const largeOffset = (Math.PI / 4) * 0.5;
+        expect(Vec2.snapAngleWithHysteresis(largeOffset, previousSnapped)).toBeCloseTo(Math.PI / 4);
+      });
+
+      it("respects custom hysteresis factor", () => {
+        const previousSnapped = 0;
+        const offset = (Math.PI / 4) * 0.3;
+        expect(Vec2.snapAngleWithHysteresis(offset, previousSnapped, Math.PI / 4, 0.5)).toBeCloseTo(
+          0,
+        );
+        expect(Vec2.snapAngleWithHysteresis(offset, previousSnapped, Math.PI / 4, 0.2)).toBeCloseTo(
+          0,
+        );
+        const largerOffset = (Math.PI / 4) * 0.6;
+        expect(
+          Vec2.snapAngleWithHysteresis(largerOffset, previousSnapped, Math.PI / 4, 0.5),
+        ).toBeCloseTo(Math.PI / 4);
+      });
+    });
+
+    describe("snapToAngleWithHysteresis", () => {
+      it("returns snapped position and angle", () => {
+        const v = { x: 10, y: 3 };
+        const result = Vec2.snapToAngleWithHysteresis(v, null);
+        expect(result.snappedAngle).toBeCloseTo(0);
+        expect(Vec2.len(result.position)).toBeCloseTo(Vec2.len(v));
+      });
+
+      it("handles zero vector", () => {
+        const result = Vec2.snapToAngleWithHysteresis({ x: 0, y: 0 }, null);
+        expect(result.position).toEqual({ x: 0, y: 0 });
+        expect(result.snappedAngle).toBe(0);
+      });
+
+      it("sticks to previous angle within threshold", () => {
+        const previousAngle = 0;
+        const v = Vec2.fromAngle((Math.PI / 4) * 0.3);
+        const scaled = Vec2.scale(v, 10);
+        const result = Vec2.snapToAngleWithHysteresis(scaled, previousAngle);
+        expect(result.snappedAngle).toBeCloseTo(0);
+      });
+
+      it("breaks free from previous angle when exceeding threshold", () => {
+        const previousAngle = 0;
+        const v = Vec2.fromAngle((Math.PI / 4) * 0.5);
+        const scaled = Vec2.scale(v, 10);
+        const result = Vec2.snapToAngleWithHysteresis(scaled, previousAngle);
+        expect(result.snappedAngle).toBeCloseTo(Math.PI / 4);
+      });
+    });
+
+    describe("constrainToAxisWithHysteresis", () => {
+      it("picks dominant axis when no previous axis", () => {
+        const result1 = Vec2.constrainToAxisWithHysteresis({ x: 10, y: 3 }, null);
+        expect(result1.axis).toBe("x");
+        expect(result1.delta).toEqual({ x: 10, y: 0 });
+
+        const result2 = Vec2.constrainToAxisWithHysteresis({ x: 3, y: 10 }, null);
+        expect(result2.axis).toBe("y");
+        expect(result2.delta).toEqual({ x: 0, y: 10 });
+      });
+
+      it("sticks to previous axis within threshold", () => {
+        const result = Vec2.constrainToAxisWithHysteresis({ x: 5, y: 6 }, "x");
+        expect(result.axis).toBe("x");
+        expect(result.delta).toEqual({ x: 5, y: 0 });
+      });
+
+      it("switches axis when strongly dominant in other direction", () => {
+        const result = Vec2.constrainToAxisWithHysteresis({ x: 2, y: 10 }, "x");
+        expect(result.axis).toBe("y");
+        expect(result.delta).toEqual({ x: 0, y: 10 });
+      });
+
+      it("respects custom threshold", () => {
+        const result1 = Vec2.constrainToAxisWithHysteresis({ x: 3, y: 7 }, "x", 0.5);
+        expect(result1.axis).toBe("y");
+
+        const result2 = Vec2.constrainToAxisWithHysteresis({ x: 3, y: 7 }, "x", 0.8);
+        expect(result2.axis).toBe("x");
+      });
+
+      it("handles negative values", () => {
+        const result = Vec2.constrainToAxisWithHysteresis({ x: -10, y: 3 }, null);
+        expect(result.axis).toBe("x");
+        expect(result.delta).toEqual({ x: -10, y: 0 });
+      });
+    });
+  });
 });

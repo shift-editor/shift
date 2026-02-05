@@ -57,7 +57,7 @@ export class Pen extends BaseTool<PenState> {
   }
 
   activate(): void {
-    const pos = this.editor.getScreenMousePosition();
+    const pos = this.editor.getMousePosition();
     this.state = { type: "ready", mousePos: pos };
     this.editor.clearActiveContour();
   }
@@ -205,15 +205,16 @@ export class Pen extends BaseTool<PenState> {
     }
 
     if (this.state.type === "dragging") {
-      const { anchor, mousePos } = this.state;
-      const mirrorPos = Vec2.mirror(mousePos, anchor.position);
+      const { anchor, mousePos, snappedPos } = this.state;
+      const effectivePos = snappedPos ?? mousePos;
+      const mirrorPos = Vec2.mirror(effectivePos, anchor.position);
 
       const style = {
         strokeStyle: DEFAULT_STYLES.strokeStyle,
         strokeWidth: DEFAULT_STYLES.lineWidth,
       };
 
-      draw.line(mousePos, anchor.position, style);
+      draw.line(effectivePos, anchor.position, style);
       draw.line(anchor.position, mirrorPos, style);
     }
   }
@@ -230,10 +231,11 @@ export class Pen extends BaseTool<PenState> {
     }
 
     if (this.state.type === "dragging") {
-      const { anchor, mousePos } = this.state;
-      const mirrorPos = Vec2.mirror(mousePos, anchor.position);
+      const { anchor, mousePos, snappedPos } = this.state;
+      const effectivePos = snappedPos ?? mousePos;
+      const mirrorPos = Vec2.mirror(effectivePos, anchor.position);
 
-      draw.handle(mousePos, "control", "idle");
+      draw.handle(effectivePos, "control", "idle");
       draw.handle(mirrorPos, "control", "idle");
     }
   }
