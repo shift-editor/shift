@@ -393,7 +393,6 @@ export class Editor implements ToolContext {
     const points = this.getAllPoints();
     this.#selection.selectPoints(new Set(points.map((p) => p.id)));
     this.getToolManager().notifySelectionChanged();
-    this.requestRedraw();
   }
 
   public get selectionMode(): Signal<SelectionMode> {
@@ -635,7 +634,6 @@ export class Editor implements ToolContext {
       return;
     }
     this.#commandHistory.undo();
-    this.requestRedraw();
   }
 
   public redo() {
@@ -646,7 +644,6 @@ export class Editor implements ToolContext {
       return;
     }
     this.#commandHistory.redo();
-    this.requestRedraw();
   }
 
   public setViewportRect(rect: Rect2D) {
@@ -781,7 +778,6 @@ export class Editor implements ToolContext {
     if (selectedIds.size > 0) {
       this.#fontEngine.editing.removePoints([...selectedIds]);
       this.clearSelection();
-      this.requestRedraw();
     }
   }
 
@@ -806,7 +802,6 @@ export class Editor implements ToolContext {
     this.#commandHistory.execute(cmd);
 
     this.clearSelection();
-    this.requestRedraw();
     return true;
   }
 
@@ -821,7 +816,6 @@ export class Editor implements ToolContext {
     if (cmd.createdPointIds.length > 0) {
       this.selectPoints(cmd.createdPointIds);
     }
-    this.requestRedraw();
   }
 
   /**
@@ -840,7 +834,6 @@ export class Editor implements ToolContext {
     this.#fontEngine.editing.restoreSnapshot(this.#previewSnapshot);
     this.#previewSnapshot = null;
     this.#isInPreview = false;
-    this.requestRedraw();
   }
 
   public commitPreview(label: string): void {

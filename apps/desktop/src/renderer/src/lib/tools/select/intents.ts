@@ -109,7 +109,6 @@ export function executeIntent(intent: SelectIntent, editor: ToolContext): void {
 
     case "toggleSmooth":
       editor.toggleSmooth(intent.pointId);
-      editor.requestRedraw();
       break;
 
     case "selectPoints":
@@ -228,13 +227,11 @@ function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: ToolC
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
   editor.commands.execute(cmd);
-  editor.requestRedraw();
 }
 
 function executeUpgradeLineToCubic(segment: LineSegment, editor: ToolContext): void {
   const cmd = new UpgradeLineToCubicCommand(segment);
   editor.commands.execute(cmd);
-  editor.requestRedraw();
 }
 
 function executeSelectContour(contourId: ContourId, additive: boolean, editor: ToolContext): void {
