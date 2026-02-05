@@ -75,6 +75,7 @@ export interface ToolContext {
   requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
   returnFromTemporaryTool(): void;
   readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
+  hitTestBoundingBoxAt(pos: Point2D): BoundingBoxHitResult;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   readonly hoveredPointId: Signal<PointId | null>;
   readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
@@ -88,6 +89,7 @@ export interface ToolContext {
   setSnapPreferences(next: Partial<SnapPreferences>): void;
   createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession;
   createRotateSnapSession(): RotateSnapSession;
+  duplicateSelection(): PointId[];
   setSnapIndicator(indicator: SnapIndicator | null): void;
   setPreviewMode(enabled: boolean): void;
   setMarqueePreviewRect(rect: Rect2D | null): void;

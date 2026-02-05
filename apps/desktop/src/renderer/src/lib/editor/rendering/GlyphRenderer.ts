@@ -14,7 +14,7 @@ import { asPointId } from "@shift/types";
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
 import { drawBoundingBoxHandles } from "./handles";
-import { Polygon } from "@shift/geo";
+import { Polygon, Vec2 } from "@shift/geo";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
 import { SCREEN_LINE_WIDTH } from "./constants";
@@ -408,7 +408,7 @@ export class GlyphRenderer {
 
         if (isFirst) {
           const nextPoint = points[1];
-          const segmentAngle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x);
+          const segmentAngle = Vec2.angleTo(point, nextPoint);
 
           if (contour.closed) {
             draw.handleDirection(pos, segmentAngle, handleState);

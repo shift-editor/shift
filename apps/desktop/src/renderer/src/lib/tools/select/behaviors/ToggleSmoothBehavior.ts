@@ -16,8 +16,7 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     const pointId = getPointIdFromHit(hit);
     if (pointId === null) return null;
 
-    const glyph = editor.getGlyph();
-    const point = glyph?.contours.flatMap((c) => c.points).find((p) => p.id === pointId);
+    const point = editor.getAllPoints().find((p) => p.id === pointId);
     if (!point || point.pointType !== "onCurve") return null;
 
     return {

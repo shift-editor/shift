@@ -4,8 +4,7 @@ import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { BoundingRectEdge } from "../cursor";
-import { hitTestBoundingBox } from "../boundingBoxHitTest";
-import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
+import { cacheSelectedPositions } from "../utils";
 
 export class ResizeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -116,22 +115,15 @@ export class ResizeBehavior implements SelectBehavior {
     const point = editor.getPointAt(event.point);
     if (point) return null;
 
-    const edge = this.hitTestBoundingRectEdge(event.point, editor);
+    const bbHit = editor.hitTestBoundingBoxAt(event.point);
+    const edge: BoundingRectEdge = bbHit?.type === "resize" ? bbHit.edge : null;
     const bounds = editor.getSelectionBoundingRect();
 
     if (!edge || !bounds) return null;
 
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
     const draggedPointIds = [...editor.getSelectedPoints()];
-
-    const initialPositions = new Map<PointId, Point2D>();
-    const glyph = editor.getGlyph();
-    const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
-    for (const p of allPoints) {
-      if (editor.isPointSelected(p.id)) {
-        initialPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
+    const initialPositions = cacheSelectedPositions(editor);
 
     return {
       type: "resizing",
@@ -146,25 +138,6 @@ export class ResizeBehavior implements SelectBehavior {
         uniformScale: false,
       },
     };
-  }
-
-  private hitTestBoundingRectEdge(pos: Point2D, editor: ToolContext): BoundingRectEdge {
-    const rect = editor.getSelectionBoundingRect();
-    if (!rect) return null;
-
-    const hitRadius = editor.hitRadius;
-    const handleOffset = editor.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = editor.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
-    );
-
-    const result = hitTestBoundingBox(pos, rect, hitRadius, handleOffset, rotationZoneOffset);
-
-    if (result?.type === "resize") {
-      return result.edge;
-    }
-
-    return null;
   }
 
   private getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {

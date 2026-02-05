@@ -10,7 +10,7 @@ export interface SelectionData {
   currentPos: Point2D;
 }
 
-export interface DragData {
+export interface TranslateData {
   anchorPointId: PointId;
   startPos: Point2D;
   lastPos: Point2D;
@@ -46,7 +46,7 @@ export type SelectState =
   | { type: "ready"; intent?: SelectIntent }
   | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
   | { type: "selected"; intent?: SelectIntent }
-  | { type: "dragging"; drag: DragData; intent?: SelectIntent }
+  | { type: "translating"; translate: TranslateData; intent?: SelectIntent }
   | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
   | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
 

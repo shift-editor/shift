@@ -228,7 +228,7 @@ Point selection and manipulation with resize and rotate support.
              │                ▼                 ▼        │
              │        ┌─────────────┐   ┌────────────┐   │
              │        │             │   │            │   │
-             │        │  dragging   │   │  resizing  │   │
+             │        │ translating │   │  resizing  │   │
              │        │             │   │            │   │
              │        └──────┬──────┘   └─────┬──────┘   │
              │               │                │          │
@@ -238,15 +238,15 @@ Point selection and manipulation with resize and rotate support.
 
 #### States
 
-| State       | Description                             | Data                      |
-| ----------- | --------------------------------------- | ------------------------- |
-| `idle`      | Tool not active                         | -                         |
-| `ready`     | Waiting for interaction, no selection   | `hoveredPointId`          |
-| `selecting` | Drawing marquee rectangle               | `startPos`, `currentPos`  |
-| `selected`  | Points selected, can drag/resize/rotate | `hoveredPointId`          |
-| `dragging`  | Moving selected points                  | `startPos`, `totalDelta`  |
-| `resizing`  | Scaling via bounding box handles        | `edge`, `anchor`, `scale` |
-| `rotating`  | Rotating via corner zones               | `center`, `angle`         |
+| State         | Description                                  | Data                      |
+| ------------- | -------------------------------------------- | ------------------------- |
+| `idle`        | Tool not active                              | -                         |
+| `ready`       | Waiting for interaction, no selection        | -                         |
+| `selecting`   | Drawing marquee rectangle                    | `startPos`, `currentPos`  |
+| `selected`    | Points selected, can translate/resize/rotate | -                         |
+| `translating` | Moving selected points                       | `startPos`, `totalDelta`  |
+| `resizing`    | Scaling via bounding box handles             | `edge`, `anchor`, `scale` |
+| `rotating`    | Rotating via corner zones                    | `center`, `angle`         |
 
 #### Features
 
@@ -421,7 +421,7 @@ import { createBehavior, type Behavior } from "../core";
 type MyBehavior = Behavior<MyState, ToolEvent>;
 
 class MyTool extends BaseTool<MyState> {
-  private behaviors: MyBehavior[] = [HoverBehavior, DragBehavior];
+  private behaviors: MyBehavior[] = [HoverBehavior, TranslateBehavior];
 
   transition(state: MyState, event: ToolEvent): MyState {
     if (state.type === "idle") return state;
@@ -453,14 +453,14 @@ class MyTool extends BaseTool<MyState> {
 ```typescript
 onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
   // Start preview when drag begins
-  if (prev.type === "selected" && next.type === "dragging") {
+  if (prev.type === "selected" && next.type === "translating") {
     this.editor.beginPreview();
   }
 
-  // Commit when drag ends with actual movement
-  if (prev.type === "dragging" && next.type === "selected") {
+  // Commit when translate ends with actual movement
+  if (prev.type === "translating" && next.type === "selected") {
     if (event.type === "dragEnd") {
-      const { totalDelta, draggedPointIds } = prev.drag;
+      const { totalDelta, draggedPointIds } = prev.translate;
       if ((totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0) {
         this.editor.commitPreview("Move Points");
       } else {

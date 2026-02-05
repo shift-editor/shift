@@ -25,8 +25,6 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
     };
   }
 
-  onTransition(): void {}
-
   private findContourForSegment(segmentId: string, editor: ToolContext): ContourId | null {
     const glyph = editor.getGlyph();
     if (!glyph) return null;

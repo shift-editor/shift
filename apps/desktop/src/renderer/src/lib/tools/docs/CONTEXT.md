@@ -123,14 +123,14 @@ type PenState =
 ```typescript
 type SelectState =
   | { type: "idle"; intent?: SelectIntent }
-  | { type: "ready"; hoveredPointId: PointId | null; intent?: SelectIntent }
+  | { type: "ready"; intent?: SelectIntent }
   | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
-  | { type: "selected"; hoveredPointId: PointId | null; intent?: SelectIntent }
-  | { type: "dragging"; drag: DragData; intent?: SelectIntent }
+  | { type: "selected"; intent?: SelectIntent }
+  | { type: "translating"; translate: TranslateData; intent?: SelectIntent }
   | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
   | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
 
-interface DragData {
+interface TranslateData {
   anchorPointId: PointId;
   startPos: Point2D;
   lastPos: Point2D;
@@ -159,9 +159,8 @@ Complex tools delegate to behavior classes for cleaner separation:
 ```typescript
 class Select extends BaseTool<SelectState> {
   private behaviors: SelectBehavior[] = [
-    new HoverBehavior(),
     new SelectionBehavior(),
-    new DragBehavior(),
+    new TranslateBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
   ];
@@ -221,12 +220,12 @@ For cursor and hover feedback, ToolContext exposes reactive signals: `hoveredBou
 
 ## API Surface
 
-| Tool   | States                                                         | Key Features                                         |
-| ------ | -------------------------------------------------------------- | ---------------------------------------------------- |
-| Select | idle, ready, selecting, selected, dragging, resizing, rotating | Point/segment selection, drag, resize, rotate, nudge |
-| Pen    | idle, ready, anchored, dragging                                | Bezier curves, contour close/continue/split          |
-| Hand   | idle, ready, dragging                                          | Canvas panning, Space bar activation                 |
-| Shape  | idle, ready, dragging                                          | Rectangle creation                                   |
+| Tool   | States                                                            | Key Features                                              |
+| ------ | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| Select | idle, ready, selecting, selected, translating, resizing, rotating | Point/segment selection, translate, resize, rotate, nudge |
+| Pen    | idle, ready, anchored, dragging                                   | Bezier curves, contour close/continue/split               |
+| Hand   | idle, ready, dragging                                             | Canvas panning, Space bar activation                      |
+| Shape  | idle, ready, dragging                                             | Rectangle creation                                        |
 
 ## Common Operations
 

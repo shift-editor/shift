@@ -60,7 +60,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "../reactive/signal";
-import { ClipboardService } from "../clipboard";
+import { ClipboardService, ContentResolver } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
 import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
@@ -425,6 +425,18 @@ export class Editor implements ToolContext {
 
   public setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
     this.#hover.setHoveredBoundingBoxHandle(handle);
+  }
+
+  public hitTestBoundingBoxAt(pos: Point2D): BoundingBoxHitResult {
+    const rect = this.getSelectionBoundingRect();
+    if (!rect) return null;
+
+    const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const rotationZoneOffset = this.screenToUpmDistance(
+      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+    );
+
+    return hitTestBoundingBox(pos, rect, this.hitRadius, handleOffset, rotationZoneOffset);
   }
 
   public getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
@@ -1135,25 +1147,12 @@ export class Editor implements ToolContext {
 
   public updateHover(pos: Point2D): void {
     if (this.#selection.selectedPointIds.peek().size > 1) {
-      const rect = this.getSelectionBoundingRect();
-      if (rect) {
-        const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-        const rotationZoneOffset = this.screenToUpmDistance(
-          BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
-        );
-        const bbHit = hitTestBoundingBox(
-          pos,
-          rect,
-          this.hitRadius,
-          handleOffset,
-          rotationZoneOffset,
-        );
-        this.#hover.setHoveredBoundingBoxHandle(bbHit);
-        if (bbHit) {
-          this.#hover.setHoveredPoint(null);
-          this.#hover.setHoveredSegment(null);
-          return;
-        }
+      const bbHit = this.hitTestBoundingBoxAt(pos);
+      this.#hover.setHoveredBoundingBoxHandle(bbHit);
+      if (bbHit) {
+        this.#hover.setHoveredPoint(null);
+        this.#hover.setHoveredSegment(null);
+        return;
       }
     } else {
       this.#hover.setHoveredBoundingBoxHandle(null);
@@ -1187,6 +1186,22 @@ export class Editor implements ToolContext {
       result.push(...(contour.points as Point[]));
     }
     return result;
+  }
+
+  public duplicateSelection(): PointId[] {
+    const glyph = this.#fontEngine.$glyph.value;
+    if (!glyph) return [];
+
+    const selectedPointIds = [...this.#selection.selectedPointIds.peek()];
+    const selectedSegmentIds = [...this.#selection.selectedSegmentIds.peek()];
+
+    const resolver = new ContentResolver();
+    const content = resolver.resolve(glyph as GlyphSnapshot, selectedPointIds, selectedSegmentIds);
+    if (!content || content.contours.length === 0) return [];
+
+    const contoursJson = JSON.stringify(content.contours);
+    const result = this.#fontEngine.editing.pasteContours(contoursJson, 0, 0);
+    return result.success ? result.createdPointIds : [];
   }
 
   public getSegmentById(segmentId: SegmentId) {

@@ -1,12 +1,11 @@
-import type { PointId, Point2D } from "@shift/types";
-import { Vec2, Mat } from "@shift/geo";
+import type { PointId } from "@shift/types";
+import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
-import { hitTestBoundingBox } from "../boundingBoxHitTest";
-import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
+import { cacheSelectedPositions } from "../utils";
 
 export class RotateBehavior implements SelectBehavior {
   #snap: RotateSnapSession | null = null;
@@ -40,8 +39,7 @@ export class RotateBehavior implements SelectBehavior {
       editor.clearHover();
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
-      if (this.#snap) this.#snap.clear();
-      this.#snap = null;
+      this.clearSnap();
       editor.setHandlesVisible(true);
       if (event.type !== "dragEnd") {
         editor.cancelPreview();
@@ -55,7 +53,7 @@ export class RotateBehavior implements SelectBehavior {
     editor: ToolContext,
   ): SelectState {
     if (event.type === "drag") {
-      const rawAngle = this.calculateAngle(event.point, state.rotate.center);
+      const rawAngle = Vec2.angleTo(state.rotate.center, event.point);
       const rawDelta = rawAngle - state.rotate.startAngle;
 
       let deltaAngle = rawDelta;
@@ -71,7 +69,7 @@ export class RotateBehavior implements SelectBehavior {
 
       const moves: Array<{ id: PointId; x: number; y: number }> = [];
       for (const [id, initialPos] of state.rotate.initialPositions) {
-        const rotated = this.rotatePoint(initialPos, deltaAngle, state.rotate.center);
+        const rotated = Vec2.rotateAround(initialPos, state.rotate.center, deltaAngle);
         moves.push({ id, x: rotated.x, y: rotated.y });
       }
       editor.setPointPositions(moves);
@@ -119,7 +117,8 @@ export class RotateBehavior implements SelectBehavior {
     const point = editor.getPointAt(event.point);
     if (point) return null;
 
-    const corner = this.hitTestRotationZone(event.point, editor);
+    const bbHit = editor.hitTestBoundingBoxAt(event.point);
+    const corner: CornerHandle | null = bbHit?.type === "rotate" ? bbHit.corner : null;
     const bounds = editor.getSelectionBoundingRect();
 
     if (!corner || !bounds) return null;
@@ -129,18 +128,10 @@ export class RotateBehavior implements SelectBehavior {
       { x: bounds.right, y: bounds.bottom },
     );
 
-    const startAngle = this.calculateAngle(event.point, center);
+    const startAngle = Vec2.angleTo(center, event.point);
     const draggedPointIds = [...editor.getSelectedPoints()];
-    this.#snap = editor.createRotateSnapSession();
-
-    const initialPositions = new Map<PointId, Point2D>();
-    const glyph = editor.getGlyph();
-    const allPoints = glyph?.contours.flatMap((c) => c.points) ?? [];
-    for (const p of allPoints) {
-      if (editor.isPointSelected(p.id as PointId)) {
-        initialPositions.set(p.id as PointId, { x: p.x, y: p.y });
-      }
-    }
+    this.startSnap(editor);
+    const initialPositions = cacheSelectedPositions(editor);
 
     return {
       type: "rotating",
@@ -157,34 +148,13 @@ export class RotateBehavior implements SelectBehavior {
     };
   }
 
-  private hitTestRotationZone(pos: Point2D, editor: ToolContext): CornerHandle | null {
-    const rect = editor.getSelectionBoundingRect();
-    if (!rect) return null;
-
-    const hitRadius = editor.hitRadius;
-    const handleOffset = editor.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
-    const rotationZoneOffset = editor.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
-    );
-
-    const result = hitTestBoundingBox(pos, rect, hitRadius, handleOffset, rotationZoneOffset);
-
-    if (result?.type === "rotate") {
-      return result.corner;
-    }
-
-    return null;
+  private startSnap(editor: ToolContext): void {
+    this.clearSnap();
+    this.#snap = editor.createRotateSnapSession();
   }
 
-  private calculateAngle(point: Point2D, center: Point2D): number {
-    return Math.atan2(point.y - center.y, point.x - center.x);
-  }
-
-  private rotatePoint(point: Point2D, angle: number, center: Point2D): Point2D {
-    const toOrigin = Mat.Translate(-center.x, -center.y);
-    const rotate = Mat.Rotate(angle);
-    const fromOrigin = Mat.Translate(center.x, center.y);
-    const composite = Mat.Compose(Mat.Compose(fromOrigin, rotate), toOrigin);
-    return Mat.applyToPoint(composite, point);
+  private clearSnap(): void {
+    if (this.#snap) this.#snap.clear();
+    this.#snap = null;
   }
 }

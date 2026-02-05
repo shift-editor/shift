@@ -1069,6 +1069,7 @@ export function createMockToolContext(): MockToolContext {
     get hoveredBoundingBoxHandle() {
       return $hoveredBoundingBoxHandle;
     },
+    hitTestBoundingBoxAt: vi.fn(() => null),
     getHoveredBoundingBoxHandle: () => $hoveredBoundingBoxHandle.peek(),
     get hoveredPointId() {
       return hover.hoveredPointId;
@@ -1090,6 +1091,7 @@ export function createMockToolContext(): MockToolContext {
       $snapPreferences.set({ ...$snapPreferences.value, ...next }),
     createDragSnapSession,
     createRotateSnapSession,
+    duplicateSelection: vi.fn(() => []),
     setSnapIndicator: vi.fn(),
     clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>

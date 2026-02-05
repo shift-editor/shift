@@ -359,6 +359,11 @@ describe("Select tool", () => {
         width: 100,
         height: 100,
       });
+
+      (ctx.hitTestBoundingBoxAt as ReturnType<typeof import("vitest").vi.fn>).mockReturnValue({
+        type: "resize",
+        edge: "right",
+      });
     });
 
     it("should cancel preview before executing scale command", () => {

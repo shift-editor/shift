@@ -23,6 +23,4 @@ export class UpgradeSegmentBehavior implements SelectBehavior {
       intent: { action: "upgradeLineToCubic", segment: hit.segment },
     };
   }
-
-  onTransition(): void {}
 }

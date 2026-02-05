@@ -5,7 +5,7 @@ import { executeIntent } from "./intents";
 import {
   SelectionBehavior,
   MarqueeBehavior,
-  DragBehavior,
+  TranslateBehavior,
   ResizeBehavior,
   RotateBehavior,
   NudgeBehavior,
@@ -20,15 +20,15 @@ export type { BoundingRectEdge, SelectState };
 
 export class Select extends BaseTool<SelectState> {
   static stateSpec = defineStateDiagram<SelectState["type"]>({
-    states: ["idle", "ready", "selecting", "selected", "dragging", "resizing", "rotating"],
+    states: ["idle", "ready", "selecting", "selected", "translating", "resizing", "rotating"],
     initial: "idle",
     transitions: [
       { from: "idle", to: "ready", event: "activate" },
       { from: "ready", to: "selecting", event: "marquee" },
       { from: "ready", to: "selected", event: "click" },
       { from: "selecting", to: "selected", event: "release" },
-      { from: "selected", to: "dragging", event: "drag" },
-      { from: "dragging", to: "selected", event: "release" },
+      { from: "selected", to: "translating", event: "drag" },
+      { from: "translating", to: "selected", event: "release" },
       { from: "selected", to: "ready", event: "escape" },
       { from: "ready", to: "idle", event: "deactivate" },
     ],
@@ -45,12 +45,12 @@ export class Select extends BaseTool<SelectState> {
     new EscapeBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
-    new DragBehavior(),
+    new TranslateBehavior(),
     new MarqueeBehavior(),
   ];
 
   getCursor(state: SelectState): CursorType {
-    if (state.type === "dragging") return { type: "move" };
+    if (state.type === "translating") return { type: "move" };
     if (state.type === "resizing") return edgeToCursor(state.resize.edge);
     if (state.type === "rotating") {
       return boundingBoxHitResultToCursor({

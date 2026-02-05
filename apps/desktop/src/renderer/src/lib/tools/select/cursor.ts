@@ -1,8 +1,5 @@
 import type { CursorType } from "@/types/editor";
-import type { Point2D } from "@shift/types";
-import type { ToolEvent } from "../core/GestureDetector";
-import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
-import type { Point } from "@shift/types";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export type BoundingRectEdge =
   | "left"
@@ -53,56 +50,4 @@ export function boundingBoxHitResultToCursor(result: BoundingBoxHitResult): Curs
   }
 
   return edgeToCursor(result.edge);
-}
-
-export interface CursorContext {
-  getPointAt: (pos: Point2D) => Point | null;
-  hitTestBoundingBox: (pos: Point2D) => BoundingBoxHitResult;
-}
-
-export interface SelectCursorState {
-  type: string;
-  resize?: { edge: Exclude<BoundingRectEdge, null> };
-  rotate?: { corner: CornerHandle };
-}
-
-export function getCursorForState(
-  state: SelectCursorState,
-  event: ToolEvent | null,
-  ctx: CursorContext,
-): CursorType {
-  if (state.type === "dragging") {
-    return { type: "move" };
-  }
-
-  if (state.type === "resizing" && state.resize) {
-    return edgeToCursor(state.resize.edge);
-  }
-
-  if (state.type === "rotating" && state.rotate) {
-    return boundingBoxHitResultToCursor({
-      type: "rotate",
-      corner: state.rotate.corner,
-    });
-  }
-
-  if (event?.type === "drag") {
-    return { type: "default" };
-  }
-
-  if (event?.type === "dragEnd") {
-    return { type: "default" };
-  }
-
-  if (state.type === "selected" && event && "point" in event) {
-    const hitResult = ctx.hitTestBoundingBox(event.point);
-    const point = ctx.getPointAt(event.point);
-    if (hitResult && !point) {
-      return boundingBoxHitResultToCursor(hitResult);
-    }
-  }
-
-  if (state.type === "ready") return { type: "default" };
-
-  return { type: "default" };
 }

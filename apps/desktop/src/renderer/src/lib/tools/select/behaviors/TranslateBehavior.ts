@@ -1,18 +1,17 @@
 import { Vec2 } from "@shift/geo";
-import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import type { Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
-import { ContentResolver } from "@/lib/clipboard/ContentResolver";
 import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
-export class DragBehavior implements SelectBehavior {
+export class TranslateBehavior implements SelectBehavior {
   #snap: DragSnapSession | null = null;
 
   canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (state.type === "dragging") {
+    if (state.type === "translating") {
       return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
     }
     if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
@@ -22,8 +21,8 @@ export class DragBehavior implements SelectBehavior {
   }
 
   transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
-    if (state.type === "dragging") {
-      return this.transitionDragging(state, event, editor);
+    if (state.type === "translating") {
+      return this.transitionTranslating(state, event, editor);
     }
 
     if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
@@ -34,19 +33,19 @@ export class DragBehavior implements SelectBehavior {
   }
 
   onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: ToolContext): void {
-    if (prev.type !== "dragging" && next.type === "dragging") {
+    if (prev.type !== "translating" && next.type === "translating") {
       editor.beginPreview();
       editor.clearHover();
     }
 
-    if (prev.type === "dragging" && next.type !== "dragging") {
+    if (prev.type === "translating" && next.type !== "translating") {
       this.clearSnap();
       editor.setSnapIndicator(null);
     }
   }
 
-  private transitionDragging(
-    state: SelectState & { type: "dragging" },
+  private transitionTranslating(
+    state: SelectState & { type: "translating" },
     event: ToolEvent,
     _editor: ToolContext,
   ): SelectState {
@@ -59,20 +58,20 @@ export class DragBehavior implements SelectBehavior {
         _editor.setSnapIndicator(result.indicator);
       }
 
-      const delta = Vec2.sub(newLastPos, state.drag.lastPos);
+      const delta = Vec2.sub(newLastPos, state.translate.lastPos);
       return {
-        type: "dragging",
-        drag: {
-          ...state.drag,
+        type: "translating",
+        translate: {
+          ...state.translate,
           lastPos: { x: newLastPos.x, y: newLastPos.y },
-          totalDelta: Vec2.add(state.drag.totalDelta, delta),
+          totalDelta: Vec2.add(state.translate.totalDelta, delta),
         },
         intent: { action: "movePointsDelta", delta },
       };
     }
 
     if (event.type === "dragEnd") {
-      const { totalDelta, draggedPointIds } = state.drag;
+      const { totalDelta, draggedPointIds } = state.translate;
       const hasMoved = (totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0;
 
       return {
@@ -105,30 +104,16 @@ export class DragBehavior implements SelectBehavior {
       const isSelected = state.type === "selected" && editor.isPointSelected(pointId);
 
       if (event.altKey && isSelected) {
-        const newPointIds = this.duplicateSelection(editor);
-        const firstPointId = newPointIds[0];
-        if (firstPointId) {
-          const anchorPos = this.startSnap(editor, firstPointId, event.point, newPointIds);
-          return {
-            type: "dragging",
-            drag: {
-              anchorPointId: firstPointId,
-              startPos: event.point,
-              lastPos: anchorPos,
-              totalDelta: { x: 0, y: 0 },
-              draggedPointIds: newPointIds,
-            },
-            intent: { action: "selectPoints", pointIds: newPointIds },
-          };
-        }
+        const result = this.startDuplicateDrag(editor, event.point);
+        if (result) return result;
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [pointId];
       const anchorPos = this.startSnap(editor, pointId, event.point, draggedPointIds);
 
       return {
-        type: "dragging",
-        drag: {
+        type: "translating",
+        translate: {
           anchorPointId: pointId,
           startPos: event.point,
           lastPos: anchorPos,
@@ -144,22 +129,8 @@ export class DragBehavior implements SelectBehavior {
       const isSelected = state.type === "selected" && editor.isSegmentSelected(hit.segmentId);
 
       if (event.altKey && isSelected) {
-        const newPointIds = this.duplicateSelection(editor);
-        const firstPointId = newPointIds[0];
-        if (firstPointId) {
-          const anchorPos = this.startSnap(editor, firstPointId, event.point, newPointIds);
-          return {
-            type: "dragging",
-            drag: {
-              anchorPointId: firstPointId,
-              startPos: event.point,
-              lastPos: anchorPos,
-              totalDelta: { x: 0, y: 0 },
-              draggedPointIds: newPointIds,
-            },
-            intent: { action: "selectPoints", pointIds: newPointIds },
-          };
-        }
+        const result = this.startDuplicateDrag(editor, event.point);
+        if (result) return result;
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : pointIds;
@@ -169,8 +140,8 @@ export class DragBehavior implements SelectBehavior {
       const anchorPos = this.startSnap(editor, anchorPointId, event.point, draggedPointIds);
 
       return {
-        type: "dragging",
-        drag: {
+        type: "translating",
+        translate: {
           anchorPointId,
           startPos: event.point,
           lastPos: anchorPos,
@@ -188,6 +159,25 @@ export class DragBehavior implements SelectBehavior {
     }
 
     return null;
+  }
+
+  private startDuplicateDrag(editor: ToolContext, startPos: Point2D): SelectState | null {
+    const newPointIds = editor.duplicateSelection();
+    const firstPointId = newPointIds[0];
+    if (!firstPointId) return null;
+
+    const anchorPos = this.startSnap(editor, firstPointId, startPos, newPointIds);
+    return {
+      type: "translating",
+      translate: {
+        anchorPointId: firstPointId,
+        startPos,
+        lastPos: anchorPos,
+        totalDelta: { x: 0, y: 0 },
+        draggedPointIds: newPointIds,
+      },
+      intent: { action: "selectPoints", pointIds: newPointIds },
+    };
   }
 
   private startSnap(
@@ -210,27 +200,5 @@ export class DragBehavior implements SelectBehavior {
   private clearSnap(): void {
     if (this.#snap) this.#snap.clear();
     this.#snap = null;
-  }
-
-  private duplicateSelection(editor: ToolContext): PointId[] {
-    const glyph = editor.getGlyph();
-    if (!glyph) return [];
-
-    const selectedPointIds = [...editor.getSelectedPoints()];
-    const selectedSegmentIds = [...editor.getSelectedSegments()];
-
-    const resolver = new ContentResolver();
-    const content = resolver.resolve(
-      glyph as unknown as GlyphSnapshot,
-      selectedPointIds,
-      selectedSegmentIds,
-    );
-
-    if (!content || content.contours.length === 0) return [];
-
-    const contoursJson = JSON.stringify(content.contours);
-    const result = editor.fontEngine.editing.pasteContours(contoursJson, 0, 0);
-
-    return result.success ? result.createdPointIds : [];
   }
 }
