@@ -1,5 +1,6 @@
 import type { Point2D, PointId } from "@shift/types";
-import { Vec2, Contours } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
+import { Contours } from "@shift/font";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior, ContourContext } from "../types";

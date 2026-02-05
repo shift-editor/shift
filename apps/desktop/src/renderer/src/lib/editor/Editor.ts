@@ -22,16 +22,15 @@ import type {
   Point,
   PointType,
 } from "@shift/types";
-import { asContourId, asPointId } from "@shift/types";
-import { findContourInSnapshot } from "../utils/snapshot";
-import { findPointInSnapshot } from "../utils/snapshot";
+import { asContourId } from "@shift/types";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit } from "@/types/hitResult";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
-import { Polygon, Vec2, Contours } from "@shift/geo";
+import { Polygon, Vec2 } from "@shift/geo";
+import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 import { ViewportManager } from "./managers";
@@ -527,7 +526,7 @@ export class Editor implements ToolContext {
       this.#marqueePreviewPointIds.set(null);
     } else {
       const points = this.getAllPoints();
-      const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => asPointId(p.id)));
+      const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => p.id));
       this.#marqueePreviewPointIds.set(ids);
     }
     this.requestStaticRedraw();
@@ -950,19 +949,17 @@ export class Editor implements ToolContext {
   }
 
   public getPointById(pointId: PointId): Point | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    const result = findPointInSnapshot(snapshot, pointId);
-    return (result?.point as Point) ?? null;
+    return Glyphs.findPoint(glyph, pointId)?.point ?? null;
   }
 
   public getContourById(contourId: ContourId): Contour | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    const contour = findContourInSnapshot(snapshot, contourId);
-    return (contour as Contour) ?? null;
+    return Glyphs.findContour(glyph, contourId) ?? null;
   }
 
   public getActiveContourId(): ContourId | null {
@@ -1035,24 +1032,17 @@ export class Editor implements ToolContext {
   }
 
   public getPointAt(pos: Point2D): Point | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    for (const contour of snapshot.contours) {
-      for (const point of contour.points) {
-        if (Vec2.dist(point, pos) < this.hitRadius) {
-          return point as Point;
-        }
-      }
-    }
-    return null;
+    return Glyphs.getPointAt(glyph, pos, this.hitRadius);
   }
 
   public getSegmentAt(pos: Point2D): SegmentHitResult | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const segments = SegmentOps.parse(contour.points, contour.closed);
       const hit = SegmentOps.hitTestMultiple(segments, pos, this.hitRadius);
       if (hit) {
@@ -1097,10 +1087,10 @@ export class Editor implements ToolContext {
   }
 
   public getContourEndpointAt(pos: Point2D): ContourEndpointHit | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       if (contour.closed || contour.points.length === 0) continue;
 
       const firstPoint = contour.points[0];
@@ -1109,20 +1099,20 @@ export class Editor implements ToolContext {
       if (Vec2.dist(firstPoint, pos) < this.hitRadius) {
         return {
           type: "contourEndpoint",
-          contourId: contour.id as ContourId,
-          pointId: firstPoint.id as PointId,
+          contourId: contour.id,
+          pointId: firstPoint.id,
           position: "start",
-          contour: contour as Contour,
+          contour,
         };
       }
 
       if (Vec2.dist(lastPoint, pos) < this.hitRadius) {
         return {
           type: "contourEndpoint",
-          contourId: contour.id as ContourId,
-          pointId: lastPoint.id as PointId,
+          contourId: contour.id,
+          pointId: lastPoint.id,
           position: "end",
-          contour: contour as Contour,
+          contour,
         };
       }
     }
@@ -1178,14 +1168,10 @@ export class Editor implements ToolContext {
   }
 
   public getAllPoints(): Point[] {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return [];
+    const glyph = this.getGlyph();
+    if (!glyph) return [];
 
-    const result: Point[] = [];
-    for (const contour of snapshot.contours) {
-      result.push(...(contour.points as Point[]));
-    }
-    return result;
+    return Glyphs.getAllPoints(glyph);
   }
 
   public duplicateSelection(): PointId[] {
@@ -1205,10 +1191,10 @@ export class Editor implements ToolContext {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
+    const glyph = this.getGlyph();
+    if (!glyph) return null;
 
-    for (const contour of snapshot.contours) {
+    for (const contour of glyph.contours) {
       const segments = SegmentOps.parse(contour.points, contour.closed);
       for (const segment of segments) {
         if (SegmentOps.id(segment) === segmentId) {
@@ -1235,8 +1221,8 @@ export class Editor implements ToolContext {
         if (Vec2.dist(pos, point) < hitRadius) {
           return {
             type: "middlePoint",
-            contourId: contour.id as ContourId,
-            pointId: point.id as PointId,
+            contourId: contour.id,
+            pointId: point.id,
             pointIndex: i,
           };
         }

@@ -1,4 +1,4 @@
-import { Contours } from "@shift/geo";
+import { Contours } from "@shift/font";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior } from "../types";

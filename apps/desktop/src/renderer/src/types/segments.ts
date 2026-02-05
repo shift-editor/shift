@@ -1,3 +1,5 @@
+import type { PointId } from "@shift/types";
+
 export type SegmentType = "line" | "quad" | "cubic";
 
 /**
@@ -5,7 +7,7 @@ export type SegmentType = "line" | "quad" | "cubic";
  * Compatible with PointSnapshot from Rust.
  */
 export interface SegmentPoint {
-  id: string;
+  id: PointId;
   x: number;
   y: number;
   pointType: "onCurve" | "offCurve";

@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@shift/font": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/rules": "workspace:*",
     "@shift/types": "workspace:*",

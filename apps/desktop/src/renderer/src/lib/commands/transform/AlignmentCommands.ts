@@ -11,7 +11,7 @@ function getPointsFromSnapshot(
 ): TransformablePoint[] {
   if (!snapshot) return [];
   return findPointsInSnapshot(snapshot, pointIds).map((p) => ({
-    id: p.id as PointId,
+    id: p.id,
     x: p.x,
     y: p.y,
   }));

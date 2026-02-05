@@ -5,7 +5,6 @@ import type { SelectState, SelectBehavior } from "../types";
 import type { DrawAPI } from "../../core/DrawAPI";
 import { normalizeRect, pointInRect } from "../utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
-import { asPointId } from "@shift/types";
 
 export class MarqueeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -122,6 +121,6 @@ export class MarqueeBehavior implements SelectBehavior {
   private getPointsInRect(rect: Rect2D, editor: ToolContext): Set<PointId> {
     const allPoints = editor.getAllPoints();
     const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
-    return new Set(hitPoints.map((p) => asPointId(p.id)));
+    return new Set(hitPoints.map((p) => p.id));
   }
 }

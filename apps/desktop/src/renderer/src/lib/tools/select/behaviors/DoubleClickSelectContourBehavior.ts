@@ -1,7 +1,7 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { SelectState, SelectBehavior } from "../types";
-import type { ContourId, PointSnapshot } from "@shift/types";
+import type { ContourId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { isSegmentHit } from "@/types/hitResult";
 
@@ -30,7 +30,7 @@ export class DoubleClickSelectContourBehavior implements SelectBehavior {
     if (!glyph) return null;
 
     for (const contour of glyph.contours) {
-      const segments = SegmentOps.parse([...contour.points] as PointSnapshot[], contour.closed);
+      const segments = SegmentOps.parse(contour.points, contour.closed);
       for (const seg of segments) {
         if (SegmentOps.id(seg) === segmentId) {
           return contour.id;

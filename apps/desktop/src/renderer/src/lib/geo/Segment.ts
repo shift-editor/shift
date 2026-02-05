@@ -38,8 +38,7 @@ import type {
 } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
-import type { PointId, PointSnapshot, ContourSnapshot } from "@shift/types";
-import { asPointId } from "@shift/types";
+import type { PointId, Point, Contour } from "@shift/types";
 
 export interface SegmentHitResult {
   segment: SegmentType;
@@ -145,19 +144,15 @@ export const Segment = {
   getPointIds(segment: SegmentType): PointId[] {
     switch (segment.type) {
       case "line":
-        return [asPointId(segment.points.anchor1.id), asPointId(segment.points.anchor2.id)];
+        return [segment.points.anchor1.id, segment.points.anchor2.id];
       case "quad":
-        return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.control.id),
-          asPointId(segment.points.anchor2.id),
-        ];
+        return [segment.points.anchor1.id, segment.points.control.id, segment.points.anchor2.id];
       case "cubic":
         return [
-          asPointId(segment.points.anchor1.id),
-          asPointId(segment.points.control1.id),
-          asPointId(segment.points.control2.id),
-          asPointId(segment.points.anchor2.id),
+          segment.points.anchor1.id,
+          segment.points.control1.id,
+          segment.points.control2.id,
+          segment.points.anchor2.id,
         ];
     }
   },
@@ -178,7 +173,7 @@ export const Segment = {
     }
   },
 
-  parse(points: PointSnapshot[], closed: boolean): SegmentType[] {
+  parse(points: readonly Point[], closed: boolean): SegmentType[] {
     if (points.length < 2) {
       return [];
     }
@@ -186,7 +181,7 @@ export const Segment = {
     const segments: SegmentType[] = [];
     let index = 0;
 
-    const getPoint = (i: number): PointSnapshot | undefined => {
+    const getPoint = (i: number): Point | undefined => {
       if (i < points.length) {
         return points[i];
       }
@@ -252,7 +247,7 @@ export const Segment = {
     return segments;
   },
 
-  parseGlyph(contours: ContourSnapshot[]): Map<string, SegmentType[]> {
+  parseGlyph(contours: readonly Contour[]): Map<string, SegmentType[]> {
     const result = new Map<string, SegmentType[]>();
 
     for (const contour of contours) {

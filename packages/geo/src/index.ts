@@ -41,8 +41,5 @@ export { Curve } from "./Curve";
 export { Polygon } from "./Polygon";
 export type { LineCurve, QuadraticCurve, CubicCurve, CurveType, ClosestPointResult } from "./Curve";
 
-// Contour queries
-export { Contours } from "./Contour";
-
 // Matrix transformations
 export { Mat, type MatModel } from "./Mat";

@@ -8,7 +8,6 @@ import {
   RotatePointsCommand,
   UpgradeLineToCubicCommand,
 } from "@/lib/commands";
-import { asPointId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
 import type { LineSegment } from "@/types/segments";
@@ -186,7 +185,7 @@ function executeToggleSegment(segmentId: SegmentId, editor: ToolContext): PointI
 function executeSelectPointsInRect(rect: Rect2D, editor: ToolContext): PointId[] {
   const allPoints = editor.getAllPoints();
   const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
-  const pointIds = hitPoints.map((p) => asPointId(p.id));
+  const pointIds = hitPoints.map((p) => p.id);
   editor.clearSelection();
   editor.selectPoints(pointIds);
   return pointIds;
@@ -245,7 +244,7 @@ function executeSelectContour(contourId: ContourId, additive: boolean, editor: T
   const contour = glyph.contours.find((c) => c.id === contourId);
   if (!contour) return;
 
-  const pointIds = contour.points.map((p) => asPointId(p.id));
+  const pointIds = contour.points.map((p) => p.id);
 
   if (!additive) {
     editor.clearSelection();

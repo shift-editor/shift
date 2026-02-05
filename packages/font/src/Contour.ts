@@ -12,7 +12,7 @@
  *
  * @example
  * ```ts
- * import { Contours } from '@shift/geo';
+ * import { Contours } from '@shift/font';
  *
  * const first = Contours.firstPoint(contour);
  * const last = Contours.lastOnCurvePoint(contour);

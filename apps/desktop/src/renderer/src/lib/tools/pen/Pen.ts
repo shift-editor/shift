@@ -1,4 +1,5 @@
-import { Vec2, Contours } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
+import { Contours } from "@shift/font";
 import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { executeIntent, type PenIntent } from "./intents";
