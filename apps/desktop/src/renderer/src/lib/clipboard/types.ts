@@ -1,4 +1,4 @@
-import type { GlyphSnapshot, PointId, PointSnapshot, Rect2D } from "@shift/types";
+import type { Glyph, PointId, PointSnapshot, Rect2D } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 
 export type { PasteResult } from "@/engine/editing";
@@ -42,7 +42,7 @@ export interface PasteOptions {
 }
 
 export interface ClipboardServiceDeps {
-  getGlyph: () => GlyphSnapshot | null;
+  getGlyph: () => Glyph | null;
   getSelectedPointIds: () => readonly PointId[];
   getSelectedSegmentIds: () => readonly SegmentId[];
 }

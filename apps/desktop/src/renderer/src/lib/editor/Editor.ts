@@ -172,7 +172,7 @@ export class Editor implements ToolContext {
     );
 
     this.#clipboardService = new ClipboardService({
-      getGlyph: () => this.#fontEngine.$glyph.value,
+      getGlyph: () => this.getGlyph(),
       getSelectedPointIds: () => [...this.selectedPointIds.peek()],
       getSelectedSegmentIds: () => [...this.selectedSegmentIds.peek()],
     });
@@ -1175,14 +1175,14 @@ export class Editor implements ToolContext {
   }
 
   public duplicateSelection(): PointId[] {
-    const glyph = this.#fontEngine.$glyph.value;
+    const glyph = this.getGlyph();
     if (!glyph) return [];
 
     const selectedPointIds = [...this.#selection.selectedPointIds.peek()];
     const selectedSegmentIds = [...this.#selection.selectedSegmentIds.peek()];
 
     const resolver = new ContentResolver();
-    const content = resolver.resolve(glyph as GlyphSnapshot, selectedPointIds, selectedSegmentIds);
+    const content = resolver.resolve(glyph, selectedPointIds, selectedSegmentIds);
     if (!content || content.contours.length === 0) return [];
 
     const contoursJson = JSON.stringify(content.contours);

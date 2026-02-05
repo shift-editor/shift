@@ -10,7 +10,6 @@ import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentHitResult } from "@/lib/geo/Segment";
-import type { FontEngine } from "@/engine";
 import type { Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
 import type { Modifiers } from "./GestureDetector";
@@ -100,5 +99,4 @@ export interface ToolContext {
   clearActiveContour(): void;
   setActiveContour(id: ContourId): void;
   requestRedraw(): void;
-  readonly fontEngine?: FontEngine;
 }

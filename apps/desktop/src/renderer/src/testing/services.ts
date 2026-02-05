@@ -160,7 +160,7 @@ interface ToolSwitchService {
 }
 
 export interface MockToolContext extends ToolContext {
-  fontEngine: FontEngine;
+  readonly fontEngine: FontEngine;
   readonly screen: ReturnType<typeof createMockScreenService>;
   readonly selection: ReturnType<typeof createMockSelectionService>;
   readonly hover: ReturnType<typeof createMockHoverService> & {
@@ -976,6 +976,7 @@ export function createMockToolContext(): MockToolContext {
   }
 
   return {
+    fontEngine,
     screen,
     selection,
     hover: hoverProxy,
@@ -989,7 +990,6 @@ export function createMockToolContext(): MockToolContext {
     commands,
     zone,
     tools,
-    fontEngine,
     getSelectedPoints: () => [...selection.getSelectedPoints()],
     getSelectedSegments: () => [...selection.getSelectedSegments()],
     getHoveredPoint: () => hover.getHoveredPoint(),

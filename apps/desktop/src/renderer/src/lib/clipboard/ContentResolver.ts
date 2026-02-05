@@ -1,23 +1,22 @@
-import type { GlyphSnapshot, PointSnapshot, PointId } from "@shift/types";
-import { asPointId } from "@shift/types";
+import type { Glyph, Point, PointId } from "@shift/types";
 import { Validate } from "@shift/validation";
 import type { SegmentId } from "@/types/indicator";
 import type { ClipboardContent, ContourContent, PointContent } from "./types";
 
 export class ContentResolver {
   resolve(
-    snapshot: GlyphSnapshot | null,
+    glyph: Glyph | null,
     selectedPointIds: readonly PointId[],
     selectedSegmentIds: readonly SegmentId[],
   ): ClipboardContent | null {
-    if (!snapshot) return null;
+    if (!glyph) return null;
 
     const allPointIds = this.#expandSegmentsToPoints(new Set(selectedPointIds), selectedSegmentIds);
 
     if (allPointIds.size === 0) return null;
 
-    const contourGroups = this.#groupPointsByContour(snapshot, allPointIds);
-    const contours = this.#buildContourContents(snapshot, contourGroups);
+    const contourGroups = this.#groupPointsByContour(glyph, allPointIds);
+    const contours = this.#buildContourContents(glyph, contourGroups);
 
     if (contours.length === 0) return null;
 
@@ -32,26 +31,26 @@ export class ContentResolver {
 
     for (const segmentId of selectedSegmentIds) {
       const [id1, id2] = segmentId.split(":");
-      result.add(asPointId(id1));
-      result.add(asPointId(id2));
+      result.add(id1 as PointId);
+      result.add(id2 as PointId);
     }
 
     return result;
   }
 
   #groupPointsByContour(
-    snapshot: GlyphSnapshot,
+    glyph: Glyph,
     pointIds: Set<PointId>,
   ): Map<string, { indices: Set<number>; contourIdx: number }> {
     const groups = new Map<string, { indices: Set<number>; contourIdx: number }>();
 
-    for (let contourIdx = 0; contourIdx < snapshot.contours.length; contourIdx++) {
-      const contour = snapshot.contours[contourIdx];
+    for (let contourIdx = 0; contourIdx < glyph.contours.length; contourIdx++) {
+      const contour = glyph.contours[contourIdx];
       const indices = new Set<number>();
 
       for (let pointIdx = 0; pointIdx < contour.points.length; pointIdx++) {
         const point = contour.points[pointIdx];
-        if (pointIds.has(asPointId(point.id))) {
+        if (pointIds.has(point.id)) {
           indices.add(pointIdx);
         }
       }
@@ -65,13 +64,13 @@ export class ContentResolver {
   }
 
   #buildContourContents(
-    snapshot: GlyphSnapshot,
+    glyph: Glyph,
     groups: Map<string, { indices: Set<number>; contourIdx: number }>,
   ): ContourContent[] {
     const contours: ContourContent[] = [];
 
     for (const [, { indices, contourIdx }] of groups) {
-      const contour = snapshot.contours[contourIdx];
+      const contour = glyph.contours[contourIdx];
       const isFullContour = indices.size === contour.points.length;
 
       if (isFullContour) {
@@ -94,7 +93,10 @@ export class ContentResolver {
     return contours;
   }
 
-  #expandPartialSelection(points: PointSnapshot[], selectedIndices: Set<number>): PointSnapshot[] {
+  #expandPartialSelection(
+    points: readonly Point[],
+    selectedIndices: Set<number>,
+  ): readonly Point[] {
     if (selectedIndices.size === 0) return [];
 
     const expanded = new Set<number>(selectedIndices);
@@ -112,7 +114,7 @@ export class ContentResolver {
     return sortedIndices.map((idx) => points[idx]);
   }
 
-  #expandContextForOnCurve(points: PointSnapshot[], idx: number, expanded: Set<number>): void {
+  #expandContextForOnCurve(points: readonly Point[], idx: number, expanded: Set<number>): void {
     const prevIdx = idx > 0 ? idx - 1 : null;
     const nextIdx = idx < points.length - 1 ? idx + 1 : null;
 
@@ -133,7 +135,7 @@ export class ContentResolver {
     }
   }
 
-  #expandContextForOffCurve(points: PointSnapshot[], idx: number, expanded: Set<number>): void {
+  #expandContextForOffCurve(points: readonly Point[], idx: number, expanded: Set<number>): void {
     const prevIdx = idx > 0 ? idx - 1 : null;
     const nextIdx = idx < points.length - 1 ? idx + 1 : null;
 
@@ -145,7 +147,7 @@ export class ContentResolver {
     }
   }
 
-  #pointToContent = (point: PointSnapshot): PointContent => ({
+  #pointToContent = (point: Point): PointContent => ({
     x: point.x,
     y: point.y,
     pointType: point.pointType,
