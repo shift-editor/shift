@@ -5,8 +5,6 @@ import type { ToolEvent } from "../core/GestureDetector";
 import type { DrawAPI } from "../core/DrawAPI";
 import type { ToolContext } from "../core/ToolContext";
 import type { SelectIntent } from "./intents";
-import type { SnapIndicator, SnapSession } from "@/lib/editor/managers/SnapManager";
-
 export interface SelectionData {
   startPos: Point2D;
   currentPos: Point2D;
@@ -18,8 +16,6 @@ export interface DragData {
   lastPos: Point2D;
   totalDelta: Point2D;
   draggedPointIds: PointId[];
-  snapSession: SnapSession | null;
-  snapIndicator?: SnapIndicator;
 }
 
 export interface ResizeData {

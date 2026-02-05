@@ -72,15 +72,12 @@ import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
+  DragSnapSession,
+  DragSnapSessionConfig,
+  RotateSnapSession,
   SnapIndicator,
-  SnapPointArgs,
-  SnapPointResult,
-  SnapRotationDeltaArgs,
-  SnapRotationDeltaResult,
-  SnapSessionConfig,
-  SnapSession,
-} from "./managers/SnapManager";
-import { SnapManager } from "./managers/SnapManager";
+} from "./snapping/types";
+import { EditorSnapManager } from "./managers/EditorSnapManager";
 
 export class Editor implements ToolContext {
   private $previewMode: WritableSignal<boolean>;
@@ -90,7 +87,7 @@ export class Editor implements ToolContext {
   #hover: HoverManager;
   #renderer: GlyphRenderer;
   #edgePan: EdgePanManager;
-  #snapManager: SnapManager;
+  #snapManager: EditorSnapManager;
 
   #toolManager: ToolManager | null = null;
   #toolMetadata: Map<
@@ -122,7 +119,7 @@ export class Editor implements ToolContext {
   #currentModifiers: WritableSignal<Modifiers>;
   #isHoveringNode: ComputedSignal<boolean>;
   #snapPreferences: WritableSignal<SnapPreferences>;
-  #activeSnapIndicator: WritableSignal<SnapIndicator | null>;
+  #snapIndicator: WritableSignal<SnapIndicator | null>;
 
   constructor() {
     this.#viewport = new ViewportManager();
@@ -143,17 +140,22 @@ export class Editor implements ToolContext {
     this.#snapPreferences = signal<SnapPreferences>({
       enabled: true,
       angle: true,
-      axis: true,
+      metrics: true,
       pointToPoint: true,
       angleIncrementDeg: 45,
       pointRadiusPx: 8,
     });
-    this.#activeSnapIndicator = signal<SnapIndicator | null>(null);
+    this.#snapIndicator = signal<SnapIndicator | null>(null);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
     this.#edgePan = new EdgePanManager(this);
-    this.#snapManager = new SnapManager();
+    this.#snapManager = new EditorSnapManager({
+      getGlyph: () => this.getGlyph(),
+      getMetrics: () => this.getFontMetrics(),
+      getPreferences: () => this.#snapPreferences.value,
+      screenToUpmDistance: (px) => this.screenToUpmDistance(px),
+    });
     this.#isHoveringNode = computed(
       () =>
         this.#hover.hoveredPointId.value !== null || this.#hover.hoveredSegmentId.value !== null,
@@ -202,7 +204,7 @@ export class Editor implements ToolContext {
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
-      snapIndicator: this.#activeSnapIndicator.value,
+      snapIndicator: this.#snapIndicator.value,
     }));
 
     this.$interactiveState = computed<InteractiveRenderState>(() => ({
@@ -464,42 +466,16 @@ export class Editor implements ToolContext {
     });
   }
 
-  public resolveSnapReference(pointId: PointId, dragStart: Point2D): Point2D {
-    return this.#snapManager.resolveSnapReference(this.getGlyph(), pointId, dragStart);
+  public createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession {
+    return this.#snapManager.createDragSession(config);
   }
 
-  public createSnapSession(config: SnapSessionConfig): SnapSession {
-    return this.#snapManager.createSession(
-      config,
-      () => this.getGlyph(),
-      () => this.#snapPreferences.value,
-      (px) => this.screenToUpmDistance(px),
-    );
+  public createRotateSnapSession(): RotateSnapSession {
+    return this.#snapManager.createRotateSession();
   }
 
-  public snapPoint(
-    args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
-  ): SnapPointResult {
-    const preferences = this.#snapPreferences.value;
-    return this.#snapManager.snapPoint({
-      ...args,
-      snapshot: this.getGlyph(),
-      preferences,
-      pointToPointRadius: this.screenToUpmDistance(preferences.pointRadiusPx),
-      increment: (preferences.angleIncrementDeg * Math.PI) / 180,
-    });
-  }
-
-  public snapRotationDelta(args: SnapRotationDeltaArgs): SnapRotationDeltaResult {
-    return this.#snapManager.snapRotationDelta(args);
-  }
-
-  public setActiveSnapIndicator(indicator: SnapIndicator | null): void {
-    this.#activeSnapIndicator.set(indicator);
-  }
-
-  public getActiveSnapIndicator(): SnapIndicator | null {
-    return this.#activeSnapIndicator.value;
+  public setSnapIndicator(indicator: SnapIndicator | null): void {
+    this.#snapIndicator.set(indicator);
   }
 
   public getHoveredPoint(): PointId | null {

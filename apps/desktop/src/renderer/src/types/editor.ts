@@ -1,6 +1,6 @@
 import type { PointId, GlyphSnapshot } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
-import type { SnapIndicator } from "@/lib/editor/managers/SnapManager";
+import type { SnapIndicator } from "@/lib/editor/snapping/types";
 
 export type SelectionMode = "preview" | "committed";
 
@@ -74,7 +74,7 @@ export interface TemporaryToolOptions {
 export interface SnapPreferences {
   enabled: boolean;
   angle: boolean;
-  axis: boolean;
+  metrics: boolean;
   pointToPoint: boolean;
   angleIncrementDeg: number;
   pointRadiusPx: number;

@@ -26,7 +26,7 @@ export class SelectionManager {
     return this.$selectionMode;
   }
 
-  selectPoints(pointIds: Set<PointId>): void {
+  selectPoints(pointIds: ReadonlySet<PointId>): void {
     this.$selectedPointIds.set(new Set(pointIds));
   }
 
@@ -56,7 +56,7 @@ export class SelectionManager {
     return this.$selectedPointIds.peek().has(pointId);
   }
 
-  selectSegments(segmentIds: Set<SegmentId>): void {
+  selectSegments(segmentIds: ReadonlySet<SegmentId>): void {
     this.$selectedSegmentIds.set(new Set(segmentIds));
   }
 

@@ -15,14 +15,11 @@ import type { Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
 import type { Modifiers } from "./GestureDetector";
 import type {
+  DragSnapSessionConfig,
+  DragSnapSession,
+  RotateSnapSession,
   SnapIndicator,
-  SnapPointArgs,
-  SnapPointResult,
-  SnapRotationDeltaArgs,
-  SnapRotationDeltaResult,
-  SnapSessionConfig,
-  SnapSession,
-} from "@/lib/editor/managers/SnapManager";
+} from "@/lib/editor/snapping/types";
 
 export interface ToolContext {
   readonly activeToolState: Signal<ActiveToolState>;
@@ -89,14 +86,9 @@ export interface ToolContext {
   setCurrentModifiers?(modifiers: Modifiers): void;
   getSnapPreferences(): SnapPreferences;
   setSnapPreferences(next: Partial<SnapPreferences>): void;
-  resolveSnapReference(pointId: PointId, dragStart: Point2D): Point2D;
-  createSnapSession(config: SnapSessionConfig): SnapSession;
-  snapPoint(
-    args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
-  ): SnapPointResult;
-  snapRotationDelta(args: SnapRotationDeltaArgs): SnapRotationDeltaResult;
-  setActiveSnapIndicator(indicator: SnapIndicator | null): void;
-  getActiveSnapIndicator(): SnapIndicator | null;
+  createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession;
+  createRotateSnapSession(): RotateSnapSession;
+  setSnapIndicator(indicator: SnapIndicator | null): void;
   setPreviewMode(enabled: boolean): void;
   setMarqueePreviewRect(rect: Rect2D | null): void;
   isPointInMarqueePreview(pointId: PointId): boolean;

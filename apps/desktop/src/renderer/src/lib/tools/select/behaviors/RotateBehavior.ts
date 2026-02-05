@@ -6,8 +6,11 @@ import type { SelectState, SelectBehavior } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import { hitTestBoundingBox } from "../boundingBoxHitTest";
 import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
+import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 
 export class RotateBehavior implements SelectBehavior {
+  #snap: RotateSnapSession | null = null;
+
   canHandle(state: SelectState, event: ToolEvent): boolean {
     if (state.type === "rotating") {
       return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
@@ -37,6 +40,8 @@ export class RotateBehavior implements SelectBehavior {
       editor.clearHover();
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
+      if (this.#snap) this.#snap.clear();
+      this.#snap = null;
       editor.setHandlesVisible(true);
       if (event.type !== "dragEnd") {
         editor.cancelPreview();
@@ -53,18 +58,13 @@ export class RotateBehavior implements SelectBehavior {
       const rawAngle = this.calculateAngle(event.point, state.rotate.center);
       const rawDelta = rawAngle - state.rotate.startAngle;
 
-      let deltaAngle: number;
+      let deltaAngle = rawDelta;
       let snappedAngle: number | undefined;
 
-      if (event.shiftKey) {
-        const snapResult = editor.snapRotationDelta({
-          delta: rawDelta,
-          previousSnappedAngle: state.rotate.snappedAngle ?? null,
-        });
-        deltaAngle = snapResult.snappedDelta;
-        snappedAngle = snapResult.snappedAngle;
-      } else {
-        deltaAngle = rawDelta;
+      if (this.#snap) {
+        const snapResult = this.#snap.snap(rawDelta, { shiftKey: event.shiftKey });
+        deltaAngle = snapResult.delta;
+        if (snapResult.source === "angle") snappedAngle = snapResult.delta;
       }
 
       const currentAngle = state.rotate.startAngle + deltaAngle;
@@ -131,6 +131,7 @@ export class RotateBehavior implements SelectBehavior {
 
     const startAngle = this.calculateAngle(event.point, center);
     const draggedPointIds = [...editor.getSelectedPoints()];
+    this.#snap = editor.createRotateSnapSession();
 
     const initialPositions = new Map<PointId, Point2D>();
     const glyph = editor.getGlyph();

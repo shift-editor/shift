@@ -4,10 +4,13 @@ import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
 import { AddPointCommand, InsertPointCommand } from "@/lib/commands";
+import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
 const DRAG_THRESHOLD = 3;
 
 export class HandleBehavior implements PenBehavior {
+  #snap: DragSnapSession | null = null;
+
   canHandle(state: PenState, event: ToolEvent): boolean {
     if (state.type === "anchored") {
       return (
@@ -43,14 +46,8 @@ export class HandleBehavior implements PenBehavior {
       if (editor.commands.isBatching) {
         editor.commands.endBatch();
       }
-    }
-    if (next.type === "dragging") {
-      editor.setActiveSnapIndicator(next.snapIndicator ?? null);
-      return;
-    }
-    if (prev.type === "dragging") {
-      prev.snapSession?.end();
-      editor.setActiveSnapIndicator(null);
+      this.clearSnap();
+      editor.setSnapIndicator(null);
     }
   }
 
@@ -63,25 +60,23 @@ export class HandleBehavior implements PenBehavior {
       const dist = Vec2.dist(state.anchor.position, event.point);
 
       if (dist > DRAG_THRESHOLD) {
-        const snapSession = this.createSnapSession(editor, state.anchor);
-        let snappedPos: Point2D = event.point;
-        let snapIndicator = undefined;
+        this.startSnap(editor, state.anchor);
 
-        if (snapSession && event.shiftKey) {
-          const result = snapSession.snap(event.point, event.shiftKey);
-          snappedPos = result.snappedPoint;
-          snapIndicator = result.indicator;
+        let snappedPos: Point2D = event.point;
+
+        if (this.#snap) {
+          const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
+          snappedPos = result.point;
+          editor.setSnapIndicator(result.indicator);
         }
 
         const handles = this.createHandles(state.anchor, snappedPos, editor);
         return {
           type: "dragging",
-          snapSession,
           anchor: state.anchor,
           handles,
           mousePos: event.point,
           snappedPos: event.shiftKey ? snappedPos : undefined,
-          snapIndicator,
         };
       }
       return state;
@@ -121,12 +116,11 @@ export class HandleBehavior implements PenBehavior {
   ): PenState | null {
     if (event.type === "drag") {
       let snappedPos: Point2D = event.point;
-      let snapIndicator = undefined;
 
-      if (state.snapSession && event.shiftKey) {
-        const result = state.snapSession.snap(event.point, event.shiftKey);
-        snappedPos = result.snappedPoint;
-        snapIndicator = result.indicator;
+      if (this.#snap) {
+        const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
+        snappedPos = result.point;
+        editor.setSnapIndicator(result.indicator);
       }
 
       this.updateHandles(state.anchor, state.handles, snappedPos, editor);
@@ -134,7 +128,6 @@ export class HandleBehavior implements PenBehavior {
         ...state,
         mousePos: event.point,
         snappedPos: event.shiftKey ? snappedPos : undefined,
-        snapIndicator,
       };
     }
 
@@ -166,6 +159,21 @@ export class HandleBehavior implements PenBehavior {
     }
 
     return null;
+  }
+
+  private startSnap(editor: ToolContext, anchor: AnchorData): void {
+    this.clearSnap();
+
+    this.#snap = editor.createDragSnapSession({
+      anchorPointId: anchor.pointId,
+      dragStart: anchor.position,
+      excludedPointIds: [],
+    });
+  }
+
+  private clearSnap(): void {
+    if (this.#snap) this.#snap.clear();
+    this.#snap = null;
   }
 
   private createHandles(anchor: AnchorData, snappedPos: Point2D, editor: ToolContext): HandleData {
@@ -220,16 +228,5 @@ export class HandleBehavior implements PenBehavior {
       const mirroredPos = Vec2.mirror(snappedPos, anchor.position);
       editor.movePointTo(handles.cpIn, mirroredPos.x, mirroredPos.y);
     }
-  }
-
-  private createSnapSession(editor: ToolContext, anchor: AnchorData) {
-    const prefs = editor.getSnapPreferences();
-    if (!prefs.enabled || !prefs.angle) return null;
-
-    return editor.createSnapSession({
-      anchorPointId: anchor.pointId,
-      dragStart: anchor.position,
-      excludedPointIds: [],
-    });
   }
 }

@@ -3,8 +3,6 @@ import type { ToolEvent } from "../core/GestureDetector";
 import type { ToolContext } from "../core/ToolContext";
 import type { IRenderer } from "@/types/graphics";
 import type { PenIntent } from "./intents";
-import type { SnapIndicator, SnapSession } from "@/lib/editor/managers/SnapManager";
-
 export interface AnchorData {
   position: Point2D;
   pointId: PointId;
@@ -28,12 +26,10 @@ export type PenState =
   | { type: "anchored"; anchor: AnchorData; intent?: PenIntent }
   | {
       type: "dragging";
-      snapSession: SnapSession | null;
       anchor: AnchorData;
       handles: HandleData;
       mousePos: Point2D;
       snappedPos?: Point2D;
-      snapIndicator?: SnapIndicator;
       intent?: PenIntent;
     };
 

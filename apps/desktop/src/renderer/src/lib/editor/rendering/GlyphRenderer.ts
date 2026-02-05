@@ -144,7 +144,7 @@ export class GlyphRenderer {
     if (!this.#overlayContext) return;
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
-    const indicator = this.#editor.getActiveSnapIndicator();
+    const indicator = this.#editor.$overlayState.peek().snapIndicator;
     if (!indicator) return;
 
     ctx.save();

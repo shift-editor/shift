@@ -13,12 +13,10 @@ import type { Point2D, Rect2D } from "@shift/types";
 import { signal, computed, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type {
-  SnapPointArgs,
-  SnapRotationDeltaArgs,
-  SnapIndicator,
-  SnapSessionConfig,
-  SnapSession,
-} from "@/lib/editor/managers/SnapManager";
+  DragSnapSession,
+  DragSnapSessionConfig,
+  RotateSnapSession,
+} from "@/lib/editor/snapping/types";
 
 export interface ToolMouseEvent {
   readonly screen: Point2D;
@@ -31,7 +29,6 @@ export interface ToolMouseEvent {
 }
 import { FontEngine, MockFontEngine } from "@/engine";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
-import { Vec2 } from "@shift/geo";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -923,12 +920,60 @@ export function createMockToolContext(): MockToolContext {
   const $snapPreferences = signal<SnapPreferences>({
     enabled: true,
     angle: true,
-    axis: false,
+    metrics: false,
     pointToPoint: false,
     angleIncrementDeg: 45,
     pointRadiusPx: 8,
   });
-  const $activeSnapIndicator = signal<SnapIndicator | null>(null);
+
+  function createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession {
+    let previous: number | null = null;
+    const anchor = config.dragStart;
+    return {
+      getAnchorPosition: () => anchor,
+      snap: (point: Point2D, modifiers: { shiftKey: boolean }) => {
+        if (!modifiers.shiftKey) {
+          previous = null;
+          return { point, source: null, indicator: null };
+        }
+        const delta = { x: point.x - config.dragStart.x, y: point.y - config.dragStart.y };
+        const snappedAngle =
+          Math.round(Math.atan2(delta.y, delta.x) / (Math.PI / 4)) * (Math.PI / 4);
+        previous = snappedAngle;
+        const len = Math.hypot(delta.x, delta.y);
+        const snappedPoint = {
+          x: config.dragStart.x + Math.cos(previous) * len,
+          y: config.dragStart.y + Math.sin(previous) * len,
+        };
+        return {
+          point: snappedPoint,
+          source: "angle",
+          indicator: { lines: [{ from: config.dragStart, to: snappedPoint }] },
+        };
+      },
+      clear: () => {
+        previous = null;
+      },
+    };
+  }
+
+  function createRotateSnapSession(): RotateSnapSession {
+    let previous: number | null = null;
+    return {
+      snap: (delta: number, modifiers: { shiftKey: boolean }) => {
+        if (!modifiers.shiftKey) {
+          previous = null;
+          return { delta, source: null };
+        }
+        const snappedDelta = Math.round(delta / (Math.PI / 12)) * (Math.PI / 12);
+        previous = snappedDelta;
+        return { delta: previous, source: "angle" };
+      },
+      clear: () => {
+        previous = null;
+      },
+    };
+  }
 
   return {
     screen,
@@ -1043,62 +1088,9 @@ export function createMockToolContext(): MockToolContext {
     getSnapPreferences: () => $snapPreferences.value,
     setSnapPreferences: (next: Partial<SnapPreferences>) =>
       $snapPreferences.set({ ...$snapPreferences.value, ...next }),
-    resolveSnapReference: (_pointId: PointId, dragStart: Point2D) => dragStart,
-    createSnapSession: (config: SnapSessionConfig): SnapSession => {
-      let previousSnappedAngle: number | null = null;
-      return {
-        snap: (point: Point2D, shiftKey: boolean) => {
-          if (!shiftKey) {
-            return { snappedPoint: point };
-          }
-          const delta = Vec2.sub(point, config.dragStart);
-          const snapped = Vec2.snapToAngleWithHysteresis(delta, previousSnappedAngle, Math.PI / 4);
-          previousSnappedAngle = snapped.snappedAngle;
-          const snappedPoint = Vec2.add(config.dragStart, snapped.position);
-          return {
-            snappedPoint,
-            indicator: {
-              lines: [{ from: config.dragStart, to: snappedPoint }],
-            },
-          };
-        },
-        end: () => {
-          previousSnappedAngle = null;
-        },
-      };
-    },
-    snapPoint: (
-      args: Omit<SnapPointArgs, "snapshot" | "preferences" | "pointToPointRadius" | "increment">,
-    ) => {
-      if (!args.shiftKey) {
-        return { snappedPoint: args.point };
-      }
-      const delta = Vec2.sub(args.point, args.reference);
-      const snapped = Vec2.snapToAngleWithHysteresis(delta, null, Math.PI / 4);
-      const snappedPoint = Vec2.add(args.reference, snapped.position);
-      return {
-        snappedPoint,
-        indicator: {
-          lines: [
-            {
-              from: args.reference,
-              to: snappedPoint,
-            },
-          ],
-        },
-      };
-    },
-    snapRotationDelta: (args: SnapRotationDeltaArgs) => {
-      const snappedDelta = Vec2.snapAngleWithHysteresis(
-        args.delta,
-        args.previousSnappedAngle,
-        args.increment ?? Math.PI / 12,
-      );
-      return { snappedDelta, snappedAngle: snappedDelta };
-    },
-    setActiveSnapIndicator: (indicator: SnapIndicator | null) =>
-      $activeSnapIndicator.set(indicator),
-    getActiveSnapIndicator: () => $activeSnapIndicator.value,
+    createDragSnapSession,
+    createRotateSnapSession,
+    setSnapIndicator: vi.fn(),
     clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
