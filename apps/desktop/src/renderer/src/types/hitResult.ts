@@ -1,6 +1,7 @@
 import type { Point2D, PointId, ContourId, Point, Contour } from "@shift/types";
 import type { Segment } from "./segments";
 import type { SegmentId } from "./indicator";
+import type { BoundingBoxHitResult } from "./boundingBox";
 
 export type PointHit = {
   type: "point";
@@ -32,6 +33,12 @@ export type MiddlePointHit = {
 };
 
 export type HitResult = PointHit | SegmentHit | ContourEndpointHit | MiddlePointHit | null;
+
+export type HoverResult =
+  | { type: "boundingBox"; handle: BoundingBoxHitResult }
+  | { type: "point"; pointId: PointId }
+  | { type: "segment"; segmentId: SegmentId; closestPoint: Point2D; t: number }
+  | { type: "none" };
 
 export function isPointHit(hit: HitResult): hit is PointHit {
   return hit !== null && hit.type === "point";

@@ -25,7 +25,7 @@ import type {
 import { asContourId } from "@shift/types";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { HitResult, MiddlePointHit, ContourEndpointHit } from "@/types/hitResult";
+import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
@@ -1127,35 +1127,33 @@ export class Editor implements ToolContext {
   }
 
   public updateHover(pos: Point2D): void {
+    this.#hover.applyHoverResult(this.resolveHover(pos));
+  }
+
+  private resolveHover(pos: Point2D): HoverResult {
     if (this.#selection.selectedPointIds.peek().size > 1) {
       const bbHit = this.hitTestBoundingBoxAt(pos);
-      this.#hover.setHoveredBoundingBoxHandle(bbHit);
       if (bbHit) {
-        this.#hover.setHoveredPoint(null);
-        this.#hover.setHoveredSegment(null);
-        return;
+        return { type: "boundingBox", handle: bbHit };
       }
-    } else {
-      this.#hover.setHoveredBoundingBoxHandle(null);
     }
 
     const point = this.getPointAt(pos);
     if (point) {
-      this.#hover.setHoveredPoint(point.id);
-      return;
+      return { type: "point", pointId: point.id };
     }
 
     const segmentHit = this.getSegmentAt(pos);
     if (segmentHit) {
-      this.#hover.setHoveredSegment({
+      return {
+        type: "segment",
         segmentId: segmentHit.segmentId,
         closestPoint: segmentHit.point,
         t: segmentHit.t,
-      });
-      return;
+      };
     }
 
-    this.#hover.clearHover();
+    return { type: "none" };
   }
 
   public getAllPoints(): Point[] {

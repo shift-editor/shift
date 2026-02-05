@@ -4,6 +4,7 @@ import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { VisualState } from "@/types/editor";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { HoverResult } from "@/types/hitResult";
 
 export class HoverManager {
   private $hoveredPointId: WritableSignal<PointId | null>;
@@ -47,6 +48,31 @@ export class HoverManager {
     this.$hoveredSegmentId.set(indicator);
     if (indicator !== null) {
       this.$hoveredPointId.set(null);
+    }
+  }
+
+  applyHoverResult(result: HoverResult): void {
+    switch (result.type) {
+      case "boundingBox":
+        this.$hoveredBoundingBoxHandle.set(result.handle);
+        this.$hoveredPointId.set(null);
+        this.$hoveredSegmentId.set(null);
+        break;
+      case "point":
+        this.$hoveredBoundingBoxHandle.set(null);
+        this.setHoveredPoint(result.pointId);
+        break;
+      case "segment":
+        this.$hoveredBoundingBoxHandle.set(null);
+        this.setHoveredSegment({
+          segmentId: result.segmentId,
+          closestPoint: result.closestPoint,
+          t: result.t,
+        });
+        break;
+      case "none":
+        this.clearHover();
+        break;
     }
   }
 
