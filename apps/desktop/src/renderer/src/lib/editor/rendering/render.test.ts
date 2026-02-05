@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { buildContourPath, renderGlyph } from "./render";
 import type { IRenderer } from "@/types/graphics";
-import type { ContourSnapshot, GlyphSnapshot } from "@shift/types";
+import type { Contour, Glyph } from "@shift/types";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -36,7 +36,7 @@ function createMockRenderer(): IRenderer {
   };
 }
 
-function createClosedTriangleContour(): ContourSnapshot {
+function createClosedTriangleContour(): Contour {
   return {
     id: 0,
     closed: true,
@@ -48,7 +48,7 @@ function createClosedTriangleContour(): ContourSnapshot {
   };
 }
 
-function createOpenContour(): ContourSnapshot {
+function createOpenContour(): Contour {
   return {
     id: 0,
     closed: false,
@@ -59,7 +59,7 @@ function createOpenContour(): ContourSnapshot {
   };
 }
 
-function createGlyphWithHole(): GlyphSnapshot {
+function createGlyphWithHole(): Glyph {
   return {
     name: "O",
     contours: [
@@ -147,7 +147,7 @@ describe("render", () => {
     });
 
     it("returns false for degenerate contours (< 2 points)", () => {
-      const contour: ContourSnapshot = {
+      const contour: Contour = {
         id: 0,
         closed: true,
         points: [{ id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false }],
@@ -197,7 +197,7 @@ describe("render", () => {
     });
 
     it("returns false when glyph has only open contours", () => {
-      const glyph: GlyphSnapshot = {
+      const glyph: Glyph = {
         name: "line",
         contours: [createOpenContour()],
         xAdvance: 100,

@@ -69,35 +69,3 @@ export function findContourInSnapshot(
 ): ContourSnapshot | undefined {
   return snapshot.contours.find((c) => c.id === contourId);
 }
-
-/**
- * Gets all point IDs from a snapshot
- */
-export function getAllPointIds(snapshot: GlyphSnapshot): string[] {
-  return snapshot.contours.flatMap((c) => c.points.map((p) => p.id));
-}
-
-/**
- * Get all points from a snapshot as a flat array with contour info.
- */
-export function getAllPointsFromSnapshot(
-  snapshot: GlyphSnapshot,
-): Array<{ point: PointSnapshot; contour: ContourSnapshot; index: number }> {
-  const result: Array<{
-    point: PointSnapshot;
-    contour: ContourSnapshot;
-    index: number;
-  }> = [];
-
-  for (const contour of snapshot.contours) {
-    for (let i = 0; i < contour.points.length; i++) {
-      result.push({
-        point: contour.points[i],
-        contour,
-        index: i,
-      });
-    }
-  }
-
-  return result;
-}

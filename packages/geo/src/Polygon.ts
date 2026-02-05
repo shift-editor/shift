@@ -21,7 +21,7 @@ export const Polygon = {
    * Calculate the signed area of a polygon using the shoelace formula.
    * Positive for clockwise winding, negative for counter-clockwise.
    */
-  signedArea(points: Point2D[]): number {
+  signedArea(points: readonly Point2D[]): number {
     if (points.length < 3) return 0;
 
     let sum = 0;
@@ -37,7 +37,7 @@ export const Polygon = {
   /**
    * Calculate the absolute area of a polygon.
    */
-  area(points: Point2D[]): number {
+  area(points: readonly Point2D[]): number {
     return Math.abs(Polygon.signedArea(points));
   },
 
@@ -46,7 +46,7 @@ export const Polygon = {
    * Returns true for clockwise, false for counter-clockwise.
    * Returns true for degenerate polygons (fewer than 3 points).
    */
-  isClockwise(points: Point2D[]): boolean {
+  isClockwise(points: readonly Point2D[]): boolean {
     if (points.length < 3) return true;
     return Polygon.signedArea(points) > 0;
   },
@@ -54,7 +54,7 @@ export const Polygon = {
   /**
    * Check if a polygon is wound counter-clockwise.
    */
-  isCounterClockwise(points: Point2D[]): boolean {
+  isCounterClockwise(points: readonly Point2D[]): boolean {
     if (points.length < 3) return false;
     return Polygon.signedArea(points) < 0;
   },
@@ -63,7 +63,7 @@ export const Polygon = {
    * Calculate the axis-aligned bounding rectangle of a set of points.
    * Returns null for empty arrays.
    */
-  boundingRect(points: Point2D[]): Rect2D | null {
+  boundingRect(points: readonly Point2D[]): Rect2D | null {
     if (points.length === 0) return null;
 
     let minX = points[0].x;

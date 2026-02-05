@@ -5,7 +5,7 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type { GlyphSnapshot, ContourSnapshot } from "@shift/types";
+import type { Glyph, Contour } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { Polygon } from "@shift/geo";
 import { Segment } from "@/lib/geo/Segment";
@@ -19,7 +19,7 @@ export interface Guides {
   descender: { y: number };
 }
 
-export function buildContourPath(ctx: IRenderer, contour: ContourSnapshot): boolean {
+export function buildContourPath(ctx: IRenderer, contour: Contour): boolean {
   if (contour.points.length < 2) return false;
   const segments = Segment.parse(contour.points, contour.closed);
   if (segments.length === 0) return false;
@@ -55,11 +55,11 @@ export function buildContourPath(ctx: IRenderer, contour: ContourSnapshot): bool
   return contour.closed;
 }
 
-export function renderGlyph(ctx: IRenderer, snapshot: GlyphSnapshot): boolean {
+export function renderGlyph(ctx: IRenderer, glyph: Glyph): boolean {
   let hasClosed = false;
 
   ctx.beginPath();
-  for (const contour of snapshot.contours) {
+  for (const contour of glyph.contours) {
     const isClosed = buildContourPath(ctx, contour);
     if (isClosed) hasClosed = true;
   }
@@ -90,6 +90,6 @@ export function renderGuides(ctx: IRenderer, guides: Guides): void {
   ctx.stroke();
 }
 
-export function isContourClockwise(contour: ContourSnapshot): boolean {
+export function isContourClockwise(contour: Contour): boolean {
   return Polygon.isClockwise(contour.points);
 }

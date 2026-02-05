@@ -99,6 +99,7 @@ export class Editor implements ToolContext {
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
+  #$glyph: ComputedSignal<Glyph | null>;
   #staticEffect: Effect;
   #overlayEffect: Effect;
   #interactiveEffect: Effect;
@@ -123,6 +124,7 @@ export class Editor implements ToolContext {
   constructor() {
     this.#viewport = new ViewportManager();
     this.#fontEngine = new FontEngine();
+    this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.$glyph.value,
@@ -178,7 +180,7 @@ export class Editor implements ToolContext {
     });
 
     this.$renderState = computed<RenderState>(() => ({
-      glyph: this.#fontEngine.$glyph.value,
+      glyph: this.#$glyph.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
@@ -188,7 +190,7 @@ export class Editor implements ToolContext {
     }));
 
     this.$staticState = computed<StaticRenderState>(() => ({
-      glyph: this.#fontEngine.$glyph.value,
+      glyph: this.#$glyph.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       selectionMode: this.#selection.selectionMode.value,
@@ -199,7 +201,7 @@ export class Editor implements ToolContext {
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
-      glyph: this.#fontEngine.$glyph.value,
+      glyph: this.#$glyph.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
@@ -561,12 +563,12 @@ export class Editor implements ToolContext {
     this.#fontEngine.session.endEditSession();
   }
 
-  public get glyph() {
-    return this.#fontEngine.$glyph;
+  public get glyph(): Signal<Glyph | null> {
+    return this.#$glyph;
   }
 
   public getGlyph(): Glyph | null {
-    return this.#fontEngine.$glyph.value as Glyph | null;
+    return this.#$glyph.value;
   }
 
   public get commandHistory(): CommandHistory {
@@ -623,10 +625,6 @@ export class Editor implements ToolContext {
 
   public get isInPreview(): boolean {
     return this.#isInPreview;
-  }
-
-  public get previewSnapshot(): GlyphSnapshot | null {
-    return this.#previewSnapshot;
   }
 
   public undo() {

@@ -8,8 +8,7 @@ import {
   SEGMENT_SELECTED_STYLE,
 } from "@/lib/styles/style";
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
-import type { GlyphSnapshot, ContourSnapshot, PointSnapshot, Glyph } from "@shift/types";
-import { asPointId } from "@shift/types";
+import type { Glyph } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
@@ -215,13 +214,13 @@ export class GlyphRenderer {
 
       ctx.setStyle(DEFAULT_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
-      const hasClosed = renderGlyph(ctx, glyph as GlyphSnapshot);
+      const hasClosed = renderGlyph(ctx, glyph);
 
       if (hasClosed && previewMode) {
         ctx.fillStyle = "black";
         ctx.beginPath();
         for (const contour of glyph.contours) {
-          buildContourPath(ctx, contour as ContourSnapshot);
+          buildContourPath(ctx, contour);
         }
         ctx.fill();
       }
@@ -318,7 +317,7 @@ export class GlyphRenderer {
     if (!hoveredSegment && selectedSegments.size === 0) return;
 
     for (const contour of glyph.contours) {
-      const segments = Segment.parse(contour.points as PointSnapshot[], contour.closed);
+      const segments = Segment.parse(contour.points, contour.closed);
 
       for (const segment of segments) {
         const segmentId = Segment.id(segment);
@@ -396,7 +395,7 @@ export class GlyphRenderer {
       for (let idx = 0; idx < numPoints; idx++) {
         const point = points[idx];
         const pos = { x: point.x, y: point.y };
-        const handleState = this.#editor.getHandleState(asPointId(point.id));
+        const handleState = this.#editor.getHandleState(point.id);
 
         if (numPoints === 1) {
           draw.handle(pos, "corner", handleState);
