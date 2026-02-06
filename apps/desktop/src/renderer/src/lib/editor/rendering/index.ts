@@ -1,12 +1,10 @@
-export { GlyphRenderer } from "./GlyphRenderer";
+export {
+  CanvasCoordinator,
+  type CanvasCoordinatorDeps,
+  type ViewportTransform,
+} from "./CanvasCoordinator";
 export type { FontMetrics } from "@shift/types";
 export { FrameHandler } from "./FrameHandler";
-export {
-  renderGlyph,
-  renderGuides,
-  buildContourPath,
-  isContourClockwise,
-  type Guides,
-} from "./render";
-export * from "./handles";
+export { buildContourPath, isContourClockwise } from "./render";
 export { SCREEN_HIT_RADIUS } from "./constants";
+export type { HandleState, HandleType } from "@/types/graphics";

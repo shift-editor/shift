@@ -1,5 +1,5 @@
 import type { IGraphicContext } from "@/types/graphics";
-import type { HandleState } from "./rendering/handles";
+import type { HandleState } from "@/types/graphics";
 import type {
   CursorType,
   SnapPreferences,
@@ -65,7 +65,7 @@ import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
 import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
 import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
-import { GlyphRenderer } from "./rendering/GlyphRenderer";
+import { CanvasCoordinator } from "./rendering/CanvasCoordinator";
 import type { FocusZone } from "@/types/focus";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
@@ -84,7 +84,7 @@ export class Editor implements ToolContext {
 
   #selection: SelectionManager;
   #hover: HoverManager;
-  #renderer: GlyphRenderer;
+  #renderer: CanvasCoordinator;
   #edgePan: EdgePanManager;
   #snapManager: EditorSnapManager;
 
@@ -167,11 +167,32 @@ export class Editor implements ToolContext {
     this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
     this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
 
-    this.#renderer = new GlyphRenderer(
-      this,
-      (draw) => this.#toolManager?.render(draw),
-      (draw) => this.#toolManager?.renderBelowHandles(draw),
-    );
+    this.#renderer = new CanvasCoordinator({
+      getGlyph: () => this.getGlyph(),
+      getFontMetrics: () => this.getFontMetrics(),
+      isPreviewMode: () => this.isPreviewMode(),
+      isHandlesVisible: () => this.isHandlesVisible(),
+      getSelectionBoundingRect: () => this.getSelectionBoundingRect(),
+      getHoveredSegmentId: () => this.getHoveredSegment()?.segmentId ?? null,
+      isSegmentSelected: (id) => this.isSegmentSelected(id),
+      getHandleState: (id) => this.getHandleState(id),
+      getHoveredBoundingBoxHandle: () => this.getHoveredBoundingBoxHandle(),
+      getSnapIndicator: () => this.getSnapIndicator(),
+      getViewportTransform: () => ({
+        zoom: this.#viewport.zoom.peek(),
+        panX: this.#viewport.panX,
+        panY: this.#viewport.panY,
+        centre: this.#viewport.centre,
+        upmScale: this.#viewport.upmScale,
+        logicalHeight: this.#viewport.logicalHeight,
+        padding: this.#viewport.padding,
+        descender: this.#viewport.descender,
+      }),
+      screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
+      projectUpmToScreen: (x, y) => this.#viewport.projectUpmToScreen(x, y),
+      renderTool: (draw) => this.#toolManager?.render(draw),
+      renderToolBelowHandles: (draw) => this.#toolManager?.renderBelowHandles(draw),
+    });
 
     this.#clipboardService = new ClipboardService({
       getGlyph: () => this.getGlyph(),
@@ -834,10 +855,6 @@ export class Editor implements ToolContext {
     }
   }
 
-  /**
-   * Begins a preview session. Changes made after this can be
-   * committed with commitPreview() or rolled back with cancelPreview().
-   */
   public beginPreview(): void {
     if (this.#isInPreview) return;
     this.#previewSnapshot = this.#fontEngine.$glyph.value;

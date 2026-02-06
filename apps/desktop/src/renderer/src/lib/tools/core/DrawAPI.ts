@@ -11,7 +11,7 @@ import type {
 import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
-import { START_TRIANGLE_GAP } from "@/lib/editor/rendering/handles/constants";
+const START_TRIANGLE_GAP = 3;
 
 export type { StrokeStyle, FillStyle, ShapeStyle };
 

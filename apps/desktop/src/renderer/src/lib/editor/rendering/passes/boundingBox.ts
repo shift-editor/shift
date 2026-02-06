@@ -3,14 +3,18 @@ import type { Rect2D } from "@shift/types";
 import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import { getHandlePositions, type HandlePositions } from "@/lib/tools/select/boundingBoxHitTest";
-import { drawFilledCircle, drawStrokedCircle } from "./primitives";
+import type { RenderContext } from "./types";
+
+export function renderBoundingRect(rc: RenderContext, rect: Rect2D): void {
+  rc.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+}
 
 export interface BoundingBoxHandlesOptions {
   rect: Rect2D;
   hoveredHandle?: BoundingBoxHitResult;
 }
 
-export function drawBoundingBoxHandles(ctx: IRenderer, options: BoundingBoxHandlesOptions): void {
+export function renderBoundingBoxHandles(ctx: IRenderer, options: BoundingBoxHandlesOptions): void {
   const { rect, hoveredHandle } = options;
   const styles = BOUNDING_BOX_HANDLE_STYLES;
   const handles = getHandlePositions(rect, styles.handle.offset, styles.rotationZoneOffset);
@@ -35,8 +39,8 @@ function drawHandles(
     const isHovered = hoveredHandle?.type === "resize" && hoveredHandle.edge === cornerEdges[i];
     const handleRadius = isHovered ? radius + 1 : radius;
 
-    drawStrokedCircle(ctx, pos.x, pos.y, handleRadius);
-    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
+    ctx.strokeCircle(pos.x, pos.y, handleRadius);
+    ctx.fillCircle(pos.x, pos.y, handleRadius);
   }
 
   const midpointEdges = ["top", "bottom", "left", "right"] as const;
@@ -47,7 +51,7 @@ function drawHandles(
     const isHovered = hoveredHandle?.type === "resize" && hoveredHandle.edge === midpointEdges[i];
     const handleRadius = isHovered ? radius + 1 : radius;
 
-    drawStrokedCircle(ctx, pos.x, pos.y, handleRadius);
-    drawFilledCircle(ctx, pos.x, pos.y, handleRadius);
+    ctx.strokeCircle(pos.x, pos.y, handleRadius);
+    ctx.fillCircle(pos.x, pos.y, handleRadius);
   }
 }
