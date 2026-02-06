@@ -1,2 +1,2 @@
-export { Contours } from "./Contour";
-export { Glyphs } from "./Glyph";
+export { Contours, type PointWithNeighbors } from "./Contour";
+export { Glyphs, type PointInContour } from "./Glyph";

@@ -22,6 +22,15 @@
 
 import type { Point, Contour, PointId } from "@shift/types";
 
+export interface PointWithNeighbors {
+  prev: Point | null;
+  current: Point;
+  next: Point | null;
+  index: number;
+  isFirst: boolean;
+  isLast: boolean;
+}
+
 export const Contours = {
   /**
    * Get the first point of a contour
@@ -140,5 +149,20 @@ export const Contours = {
       prev: Contours.at(contour, index - 1),
       next: Contours.at(contour, index + 1),
     };
+  },
+
+  *withNeighbors(contour: Contour): Generator<PointWithNeighbors> {
+    const { points } = contour;
+    const len = points.length;
+    for (let i = 0; i < len; i++) {
+      yield {
+        prev: Contours.at(contour, i - 1),
+        current: points[i],
+        next: Contours.at(contour, i + 1),
+        index: i,
+        isFirst: i === 0,
+        isLast: i === len - 1,
+      };
+    }
   },
 } as const;

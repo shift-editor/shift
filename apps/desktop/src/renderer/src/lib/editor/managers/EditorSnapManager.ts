@@ -1,5 +1,5 @@
 import { Vec2 } from "@shift/geo";
-import { Contours } from "@shift/font";
+import { Contours, Glyphs } from "@shift/font";
 import type { Glyph, Point2D, PointId } from "@shift/types";
 import type {
   DragSnapSession,
@@ -100,15 +100,13 @@ export class EditorSnapManager {
       const excluded = new Set(query.excludedPointIds ?? []);
       const glyph = this.#deps.getGlyph();
       if (glyph) {
-        for (const contour of glyph.contours) {
-          for (const point of contour.points) {
-            if (excluded.has(point.id)) continue;
-            result.push({
-              kind: "pointTarget",
-              id: point.id,
-              point: { x: point.x, y: point.y },
-            });
-          }
+        for (const { point } of Glyphs.points(glyph)) {
+          if (excluded.has(point.id)) continue;
+          result.push({
+            kind: "pointTarget",
+            id: point.id,
+            point: { x: point.x, y: point.y },
+          });
         }
       }
     }

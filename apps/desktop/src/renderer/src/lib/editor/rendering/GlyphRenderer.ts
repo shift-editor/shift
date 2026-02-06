@@ -14,6 +14,7 @@ import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
 import { drawBoundingBoxHandles } from "./handles";
 import { Vec2 } from "@shift/geo";
+import { Contours } from "@shift/font";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
 import { SCREEN_LINE_WIDTH } from "./constants";
@@ -304,22 +305,18 @@ export class GlyphRenderer {
 
     if (!hoveredSegment && selectedSegments.length === 0) return;
 
-    for (const contour of glyph.contours) {
-      const segments = Segment.parse(contour.points, contour.closed);
+    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+      const segmentId = Segment.id(segment);
+      const isHovered = hoveredSegment?.segmentId === segmentId;
+      const isSelected = this.#editor.isSegmentSelected(segmentId);
 
-      for (const segment of segments) {
-        const segmentId = Segment.id(segment);
-        const isHovered = hoveredSegment?.segmentId === segmentId;
-        const isSelected = this.#editor.isSegmentSelected(segmentId);
+      if (!isHovered && !isSelected) continue;
 
-        if (!isHovered && !isSelected) continue;
+      const style = isSelected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
+      ctx.setStyle(style);
+      ctx.lineWidth = this.#lineWidthUpm(style.lineWidth);
 
-        const style = isSelected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
-        ctx.setStyle(style);
-        ctx.lineWidth = this.#lineWidthUpm(style.lineWidth);
-
-        this.#drawSegmentCurve(ctx, segment);
-      }
+      this.#drawSegmentCurve(ctx, segment);
     }
   }
 
@@ -347,25 +344,15 @@ export class GlyphRenderer {
     draw.setStyle(DEFAULT_STYLES);
 
     for (const contour of glyph.contours) {
-      const points = contour.points;
-      const numPoints = points.length;
+      for (const { current, prev, next } of Contours.withNeighbors(contour)) {
+        if (current.pointType !== "offCurve") continue;
 
-      if (numPoints === 0) continue;
-
-      for (let idx = 0; idx < numPoints; idx++) {
-        const point = points[idx];
-        if (point.pointType !== "offCurve") continue;
-
-        const nextPoint = points[(idx + 1) % numPoints];
-        const prevPoint = points[(idx - 1 + numPoints) % numPoints];
-
-        const anchor = nextPoint.pointType === "offCurve" ? prevPoint : nextPoint;
-
+        const anchor = next?.pointType === "offCurve" ? prev : next;
         if (!anchor || anchor.pointType === "offCurve") continue;
 
         draw.line(
           { x: anchor.x, y: anchor.y },
-          { x: point.x, y: point.y },
+          { x: current.x, y: current.y },
           {
             strokeStyle: DEFAULT_STYLES.strokeStyle,
             strokeWidth: DEFAULT_STYLES.lineWidth,
@@ -375,27 +362,20 @@ export class GlyphRenderer {
     }
 
     for (const contour of glyph.contours) {
-      const points = contour.points;
-      const numPoints = points.length;
-
+      const numPoints = contour.points.length;
       if (numPoints === 0) continue;
 
-      for (let idx = 0; idx < numPoints; idx++) {
-        const point = points[idx];
-        const pos = { x: point.x, y: point.y };
-        const handleState = this.#editor.getHandleState(point.id);
+      for (const { current, prev, next, isFirst, isLast } of Contours.withNeighbors(contour)) {
+        const pos = { x: current.x, y: current.y };
+        const handleState = this.#editor.getHandleState(current.id);
 
         if (numPoints === 1) {
           draw.handle(pos, "corner", handleState);
           continue;
         }
 
-        const isFirst = idx === 0;
-        const isLast = idx === numPoints - 1;
-
         if (isFirst) {
-          const nextPoint = points[1];
-          const segmentAngle = Vec2.angleTo(point, nextPoint);
+          const segmentAngle = Vec2.angleTo(current, next!);
 
           if (contour.closed) {
             draw.handleDirection(pos, segmentAngle, handleState);
@@ -406,13 +386,12 @@ export class GlyphRenderer {
         }
 
         if (isLast && !contour.closed) {
-          const prevPoint = points[idx - 1];
-          draw.handleLast({ anchor: pos, prev: { x: prevPoint.x, y: prevPoint.y } }, handleState);
+          draw.handleLast({ anchor: pos, prev: { x: prev!.x, y: prev!.y } }, handleState);
           continue;
         }
 
-        if (point.pointType === "onCurve") {
-          if (point.smooth) {
+        if (current.pointType === "onCurve") {
+          if (current.smooth) {
             draw.handle(pos, "smooth", handleState);
           } else {
             draw.handle(pos, "corner", handleState);

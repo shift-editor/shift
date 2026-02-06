@@ -1,6 +1,12 @@
 import type { Point, Contour, Glyph, PointId, Point2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 
+export interface PointInContour {
+  point: Point;
+  contour: Contour;
+  index: number;
+}
+
 export const Glyphs = {
   findPoint(
     glyph: Glyph,
@@ -19,35 +25,33 @@ export const Glyphs = {
     return glyph.contours.find((c) => c.id === contourId);
   },
 
+  *points(glyph: Glyph): Generator<PointInContour> {
+    for (const contour of glyph.contours) {
+      for (let i = 0; i < contour.points.length; i++) {
+        yield { point: contour.points[i], contour, index: i };
+      }
+    }
+  },
+
   findPoints(glyph: Glyph, pointIds: Iterable<PointId>): Point[] {
     const idSet = new Set(pointIds);
     const result: Point[] = [];
-
-    for (const contour of glyph.contours) {
-      for (const point of contour.points) {
-        if (idSet.has(point.id)) {
-          result.push(point);
-        }
+    for (const { point } of Glyphs.points(glyph)) {
+      if (idSet.has(point.id)) {
+        result.push(point);
       }
     }
-
     return result;
   },
 
   getAllPoints(glyph: Glyph): Point[] {
-    const result: Point[] = [];
-    for (const contour of glyph.contours) {
-      result.push(...contour.points);
-    }
-    return result;
+    return Array.from(Glyphs.points(glyph), ({ point }) => point);
   },
 
   getPointAt(glyph: Glyph, pos: Point2D, radius: number): Point | null {
-    for (const contour of glyph.contours) {
-      for (const point of contour.points) {
-        if (Vec2.dist(point, pos) < radius) {
-          return point;
-        }
+    for (const { point } of Glyphs.points(glyph)) {
+      if (Vec2.dist(point, pos) < radius) {
+        return point;
       }
     }
     return null;

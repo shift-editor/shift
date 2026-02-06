@@ -557,6 +557,66 @@ describe("Segment", () => {
     });
   });
 
+  describe("iterateGlyph", () => {
+    it("yields all segments across multiple contours", () => {
+      const contours = [
+        {
+          id: "c1",
+          points: [
+            makeSegmentPoint("p1", 0, 0),
+            makeSegmentPoint("p2", 100, 0),
+            makeSegmentPoint("p3", 100, 100),
+          ],
+          closed: false,
+        },
+        {
+          id: "c2",
+          points: [makeSegmentPoint("p4", 200, 0), makeSegmentPoint("p5", 300, 0)],
+          closed: false,
+        },
+      ];
+      const result = [...Segment.iterateGlyph(contours)];
+
+      expect(result).toHaveLength(3);
+      expect(result[0].contourId).toBe("c1");
+      expect(result[0].segment.type).toBe("line");
+      expect(result[1].contourId).toBe("c1");
+      expect(result[1].segment.type).toBe("line");
+      expect(result[2].contourId).toBe("c2");
+      expect(result[2].segment.type).toBe("line");
+    });
+
+    it("yields nothing for empty contours array", () => {
+      const result = [...Segment.iterateGlyph([])];
+      expect(result).toHaveLength(0);
+    });
+
+    it("yields nothing for contours with fewer than 2 points", () => {
+      const contours = [{ id: "c1", points: [makeSegmentPoint("p1", 0, 0)], closed: false }];
+      const result = [...Segment.iterateGlyph(contours)];
+      expect(result).toHaveLength(0);
+    });
+
+    it("handles closed contour wrap-around segments", () => {
+      const contours = [
+        {
+          id: "c1",
+          points: [
+            makeSegmentPoint("p1", 0, 0),
+            makeSegmentPoint("p2", 100, 0),
+            makeSegmentPoint("p3", 50, 87),
+          ],
+          closed: true,
+        },
+      ];
+      const result = [...Segment.iterateGlyph(contours)];
+
+      expect(result).toHaveLength(3);
+      expect(result.every((r) => r.contourId === "c1")).toBe(true);
+      expect(result.every((r) => r.segment.type === "line")).toBe(true);
+    });
+  });
+
   describe("type guards", () => {
     it("should identify line segments", () => {
       const segment: LineSegment = {

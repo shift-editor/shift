@@ -19,29 +19,27 @@ export function getSegmentAwareBounds(
   const processedSegments = new Set<string>();
   const pointsInFullSegments = new Set<PointId>();
 
-  for (const contour of snapshot.contours) {
-    const segments = Segment.parse(contour.points, contour.closed);
+  for (const { segment } of Segment.iterateGlyph(snapshot.contours)) {
+    const segmentPointIds = Segment.getPointIds(segment);
+    const allSelected = segmentPointIds.every((id) => selectedSet.has(id));
 
-    for (const segment of segments) {
-      const segmentPointIds = Segment.getPointIds(segment);
-      const allSelected = segmentPointIds.every((id) => selectedSet.has(id));
-
-      if (allSelected) {
-        const segKey = segmentPointIds.join(":");
-        if (!processedSegments.has(segKey)) {
-          processedSegments.add(segKey);
-          for (const id of segmentPointIds) {
-            pointsInFullSegments.add(id);
-          }
-          const bounds = Segment.bounds(segment);
-          minX = Math.min(minX, bounds.min.x);
-          minY = Math.min(minY, bounds.min.y);
-          maxX = Math.max(maxX, bounds.max.x);
-          maxY = Math.max(maxY, bounds.max.y);
+    if (allSelected) {
+      const segKey = segmentPointIds.join(":");
+      if (!processedSegments.has(segKey)) {
+        processedSegments.add(segKey);
+        for (const id of segmentPointIds) {
+          pointsInFullSegments.add(id);
         }
+        const bounds = Segment.bounds(segment);
+        minX = Math.min(minX, bounds.min.x);
+        minY = Math.min(minY, bounds.min.y);
+        maxX = Math.max(maxX, bounds.max.x);
+        maxY = Math.max(maxY, bounds.max.y);
       }
     }
+  }
 
+  for (const contour of snapshot.contours) {
     for (const point of contour.points) {
       const pointId = asPointId(point.id);
       if (selectedSet.has(pointId) && !pointsInFullSegments.has(pointId)) {

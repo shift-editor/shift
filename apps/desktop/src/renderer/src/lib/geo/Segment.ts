@@ -257,4 +257,16 @@ export const Segment = {
 
     return result;
   },
+
+  *iterateGlyph(contours: readonly Contour[]): Generator<{
+    segment: SegmentType;
+    contourId: string;
+  }> {
+    for (const contour of contours) {
+      const segments = Segment.parse(contour.points, contour.closed);
+      for (const segment of segments) {
+        yield { segment, contourId: contour.id };
+      }
+    }
+  },
 } as const;

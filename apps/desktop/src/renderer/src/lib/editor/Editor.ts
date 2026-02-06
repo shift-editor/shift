@@ -28,7 +28,7 @@ import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
 import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
-import { Segment as SegmentOps, type SegmentHitResult } from "../geo/Segment";
+import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Polygon, Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
@@ -1049,14 +1049,14 @@ export class Editor implements ToolContext {
     const glyph = this.getGlyph();
     if (!glyph) return null;
 
-    for (const contour of glyph.contours) {
-      const segments = SegmentOps.parse(contour.points, contour.closed);
-      const hit = SegmentOps.hitTestMultiple(segments, pos, this.hitRadius);
-      if (hit) {
-        return hit;
+    let bestHit: SegmentHitResult | null = null;
+    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+      const hit = Segment.hitTest(segment, pos, this.hitRadius);
+      if (hit && (!bestHit || hit.distance < bestHit.distance)) {
+        bestHit = hit;
       }
     }
-    return null;
+    return bestHit;
   }
 
   public getNodeAt(pos: Point2D): HitResult {
@@ -1198,12 +1198,9 @@ export class Editor implements ToolContext {
     const glyph = this.getGlyph();
     if (!glyph) return null;
 
-    for (const contour of glyph.contours) {
-      const segments = SegmentOps.parse(contour.points, contour.closed);
-      for (const segment of segments) {
-        if (SegmentOps.id(segment) === segmentId) {
-          return segment;
-        }
+    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+      if (Segment.id(segment) === segmentId) {
+        return segment;
       }
     }
     return null;

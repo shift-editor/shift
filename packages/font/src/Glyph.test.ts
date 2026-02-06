@@ -85,6 +85,40 @@ describe("Glyphs", () => {
     });
   });
 
+  describe("points", () => {
+    it("yields all points with contour context", () => {
+      const result = [...Glyphs.points(glyph)];
+      expect(result).toHaveLength(4);
+
+      expect(result[0].point).toBe(p1);
+      expect(result[0].contour).toBe(c1);
+      expect(result[0].index).toBe(0);
+
+      expect(result[1].point).toBe(p2);
+      expect(result[1].contour).toBe(c1);
+      expect(result[1].index).toBe(1);
+
+      expect(result[2].point).toBe(p3);
+      expect(result[2].contour).toBe(c1);
+      expect(result[2].index).toBe(2);
+
+      expect(result[3].point).toBe(p4);
+      expect(result[3].contour).toBe(c2);
+      expect(result[3].index).toBe(0);
+    });
+
+    it("yields nothing for empty glyph", () => {
+      const result = [...Glyphs.points(makeGlyph([]))];
+      expect(result).toHaveLength(0);
+    });
+
+    it("yields nothing for glyph with empty contours", () => {
+      const empty = makeContour("e1", []);
+      const result = [...Glyphs.points(makeGlyph([empty]))];
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe("getPointAt", () => {
     it("finds a point within radius", () => {
       const result = Glyphs.getPointAt(glyph, { x: 1, y: 1 }, 5);
