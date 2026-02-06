@@ -8,12 +8,12 @@ import {
   SEGMENT_SELECTED_STYLE,
 } from "@/lib/styles/style";
 import type { IGraphicContext, IRenderer } from "@/types/graphics";
-import type { Glyph } from "@shift/types";
+import type { Glyph, Rect2D } from "@shift/types";
 
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
 import { drawBoundingBoxHandles } from "./handles";
-import { Polygon, Vec2 } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
 import { renderGlyph, renderGuides, buildContourPath, type Guides } from "./render";
 import { Segment } from "@/lib/geo/Segment";
 import { SCREEN_LINE_WIDTH } from "./constants";
@@ -109,7 +109,7 @@ export class GlyphRenderer {
   #applyUserTransforms(ctx: IRenderer): void {
     const viewport = this.#editor.viewportManager;
     const center = viewport.centre;
-    const zoom = viewport.zoom.peek();
+    const zoom = this.#editor.getZoom();
     const { panX, panY } = viewport;
 
     ctx.transform(zoom, 0, 0, zoom, panX + center.x * (1 - zoom), panY + center.y * (1 - zoom));
@@ -143,7 +143,7 @@ export class GlyphRenderer {
     if (!this.#overlayContext) return;
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
-    const indicator = this.#editor.$overlayState.peek().snapIndicator;
+    const indicator = this.#editor.getSnapIndicator();
     if (!indicator) return;
 
     ctx.save();
@@ -195,8 +195,8 @@ export class GlyphRenderer {
     const draw = this.#staticDraw;
 
     const glyph = this.#editor.getGlyph();
-    const previewMode = this.#editor.previewMode.peek();
-    const handlesVisible = this.#editor.handlesVisible.peek();
+    const previewMode = this.#editor.isPreviewMode();
+    const handlesVisible = this.#editor.isHandlesVisible();
 
     ctx.clear();
     ctx.save();
@@ -226,15 +226,10 @@ export class GlyphRenderer {
       }
     }
 
-    const shouldDrawBoundingRect =
-      this.#editor.selectedPointIds.peek().size > 1 &&
-      !previewMode &&
-      this.#editor.selectionMode.peek() === "committed";
-
-    let bbRect: ReturnType<typeof Polygon.boundingRect> = null;
+    let bbRect: Rect2D | null = null;
+    const shouldDrawBoundingRect = !previewMode;
     if (shouldDrawBoundingRect) {
-      const selectedPointData = this.#getSelectedPointData();
-      bbRect = Polygon.boundingRect(selectedPointData);
+      bbRect = this.#editor.getSelectionBoundingRect();
       if (bbRect) {
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
         ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
@@ -303,18 +298,11 @@ export class GlyphRenderer {
     };
   }
 
-  #getSelectedPointData(): Array<{ x: number; y: number }> {
-    return Array.from(this.#editor.selectedPointIds.peek())
-      .map((id) => this.#editor.getPointById(id))
-      .filter((p): p is NonNullable<typeof p> => p !== null)
-      .map((p) => ({ x: p.x, y: p.y }));
-  }
-
   #drawSegmentHighlights(ctx: IRenderer, glyph: Glyph): void {
-    const hoveredSegment = this.#editor.hoveredSegmentId.peek();
-    const selectedSegments = this.#editor.selectedSegmentIds.peek();
+    const hoveredSegment = this.#editor.getHoveredSegment();
+    const selectedSegments = this.#editor.getSelectedSegments();
 
-    if (!hoveredSegment && selectedSegments.size === 0) return;
+    if (!hoveredSegment && selectedSegments.length === 0) return;
 
     for (const contour of glyph.contours) {
       const segments = Segment.parse(contour.points, contour.closed);
@@ -322,7 +310,7 @@ export class GlyphRenderer {
       for (const segment of segments) {
         const segmentId = Segment.id(segment);
         const isHovered = hoveredSegment?.segmentId === segmentId;
-        const isSelected = selectedSegments.has(segmentId);
+        const isSelected = this.#editor.isSegmentSelected(segmentId);
 
         if (!isHovered && !isSelected) continue;
 

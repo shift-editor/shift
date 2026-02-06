@@ -175,8 +175,8 @@ export class Editor implements ToolContext {
 
     this.#clipboardService = new ClipboardService({
       getGlyph: () => this.getGlyph(),
-      getSelectedPointIds: () => [...this.selectedPointIds.peek()],
-      getSelectedSegmentIds: () => [...this.selectedSegmentIds.peek()],
+      getSelectedPointIds: () => this.getSelectedPoints(),
+      getSelectedSegmentIds: () => this.getSelectedSegments(),
     });
 
     this.$renderState = computed<RenderState>(() => ({
@@ -490,6 +490,10 @@ export class Editor implements ToolContext {
     this.#snapIndicator.set(indicator);
   }
 
+  public getSnapIndicator(): SnapIndicator | null {
+    return this.#snapIndicator.peek();
+  }
+
   public getHoveredPoint(): PointId | null {
     return this.#hover.hoveredPointId.peek();
   }
@@ -518,6 +522,10 @@ export class Editor implements ToolContext {
     return this.$previewMode;
   }
 
+  public isPreviewMode(): boolean {
+    return this.$previewMode.peek();
+  }
+
   public setPreviewMode(enabled: boolean): void {
     this.$previewMode.set(enabled);
   }
@@ -535,6 +543,10 @@ export class Editor implements ToolContext {
 
   public get handlesVisible(): Signal<boolean> {
     return this.$handlesVisible;
+  }
+
+  public isHandlesVisible(): boolean {
+    return this.$handlesVisible.peek();
   }
 
   public setHandlesVisible(visible: boolean): void {
@@ -761,6 +773,10 @@ export class Editor implements ToolContext {
     return this.#viewport.zoom;
   }
 
+  public getZoom(): number {
+    return this.#viewport.zoom.peek();
+  }
+
   public get fps(): Signal<number> {
     return this.#renderer.fpsMonitor.fps;
   }
@@ -774,9 +790,9 @@ export class Editor implements ToolContext {
   }
 
   public deleteSelectedPoints(): void {
-    const selectedIds = this.#selection.selectedPointIds.peek();
-    if (selectedIds.size > 0) {
-      this.#fontEngine.editing.removePoints([...selectedIds]);
+    const selectedIds = this.getSelectedPoints();
+    if (selectedIds.length > 0) {
+      this.#fontEngine.editing.removePoints(selectedIds);
       this.clearSelection();
     }
   }
@@ -797,7 +813,7 @@ export class Editor implements ToolContext {
     const written = await this.#clipboardService.write(content, glyph?.name);
     if (!written) return false;
 
-    const pointIds = [...this.selectedPointIds.peek()];
+    const pointIds = this.getSelectedPoints();
     const cmd = new CutCommand(pointIds);
     this.#commandHistory.execute(cmd);
 
@@ -1111,13 +1127,12 @@ export class Editor implements ToolContext {
   }
 
   public getSelectionBoundingRect(): Rect2D | null {
-    const selectedPointIds = this.#selection.selectedPointIds.peek();
-    if (selectedPointIds.size <= 1) return null;
+    const selectedPoints = this.getSelectedPoints();
+    if (selectedPoints.length <= 1) return null;
 
-    const mode = this.#selection.selectionMode.peek();
-    if (mode !== "committed") return null;
+    if (this.getSelectionMode() !== "committed") return null;
 
-    const points = Array.from(selectedPointIds)
+    const points = selectedPoints
       .map((id) => this.getPointById(id))
       .filter((p): p is Point => p !== null);
 
@@ -1131,7 +1146,7 @@ export class Editor implements ToolContext {
   }
 
   private resolveHover(pos: Point2D): HoverResult {
-    if (this.#selection.selectedPointIds.peek().size > 1) {
+    if (this.getSelectedPoints().length > 1) {
       const bbHit = this.hitTestBoundingBoxAt(pos);
       if (bbHit) {
         return { type: "boundingBox", handle: bbHit };
@@ -1167,8 +1182,8 @@ export class Editor implements ToolContext {
     const glyph = this.getGlyph();
     if (!glyph) return [];
 
-    const selectedPointIds = [...this.#selection.selectedPointIds.peek()];
-    const selectedSegmentIds = [...this.#selection.selectedSegmentIds.peek()];
+    const selectedPointIds = this.getSelectedPoints();
+    const selectedSegmentIds = this.getSelectedSegments();
 
     const resolver = new ContentResolver();
     const content = resolver.resolve(glyph, selectedPointIds, selectedSegmentIds);

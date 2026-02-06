@@ -46,7 +46,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     initEditor();
 
     const toolManager = editor.getToolManager();
-    const activeToolId = editor.activeTool.peek();
+    const activeToolId = editor.getActiveTool();
     toolManager.activate(activeToolId);
 
     return () => {

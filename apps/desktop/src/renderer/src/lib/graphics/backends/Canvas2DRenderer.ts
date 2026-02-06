@@ -88,7 +88,7 @@ export class Canvas2DRenderer implements IRenderer {
 
   #normalizeDashPattern(pattern: number[]): number[] {
     if (pattern.length === 0) return pattern;
-    const zoom = getEditor().zoom.peek();
+    const zoom = getEditor().getZoom();
     return pattern.map((v) => v / zoom);
   }
 
