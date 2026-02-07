@@ -40,8 +40,6 @@ const Transform = {
   scalePoints(points, sx, sy, origin): TransformablePoint[];
   reflectPoints(points, axis, origin): TransformablePoint[];
   applyMatrix(points, matrix, origin): TransformablePoint[];
-  getSelectionBounds(points): SelectionBounds | null;
-  getSelectionCenter(points): Point2D | null;
   matrices: { rotate, scale, reflectHorizontal, reflectVertical, reflectAxis };
 };
 ```
@@ -119,17 +117,17 @@ class RotatePointsCommand extends BaseTransformCommand {
 
 ## API Surface
 
-| Function/Class               | Purpose                           |
-| ---------------------------- | --------------------------------- |
-| Transform.rotatePoints       | Rotate points around origin       |
-| Transform.scalePoints        | Scale from origin                 |
-| Transform.reflectPoints      | Mirror across axis through origin |
-| Transform.applyMatrix        | Apply arbitrary affine matrix     |
-| Transform.getSelectionBounds | Compute bounding box + center     |
-| RotatePointsCommand          | Undoable rotation                 |
-| ScalePointsCommand           | Undoable scaling                  |
-| ReflectPointsCommand         | Undoable reflection               |
-| TransformMatrixCommand       | Undoable matrix transform         |
+| Function/Class          | Purpose                                |
+| ----------------------- | -------------------------------------- |
+| Transform.rotatePoints  | Rotate points around origin            |
+| Transform.scalePoints   | Scale from origin                      |
+| Transform.reflectPoints | Mirror across axis through origin      |
+| Transform.applyMatrix   | Apply arbitrary affine matrix          |
+| Bounds.fromPoints       | Compute bounding box (from @shift/geo) |
+| RotatePointsCommand     | Undoable rotation                      |
+| ScalePointsCommand      | Undoable scaling                       |
+| ReflectPointsCommand    | Undoable reflection                    |
+| TransformMatrixCommand  | Undoable matrix transform              |
 
 ## Common Operations
 

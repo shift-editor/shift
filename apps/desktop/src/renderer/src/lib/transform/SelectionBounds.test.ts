@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getSegmentAwareBounds } from "./SelectionBounds";
+import { Bounds } from "@shift/geo";
 import type { GlyphSnapshot } from "@shift/types";
 import { asPointId } from "@shift/types";
 
@@ -40,10 +41,10 @@ describe("getSegmentAwareBounds", () => {
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
-    expect(result!.minX).toBe(0);
-    expect(result!.minY).toBe(0);
-    expect(result!.maxX).toBe(100);
-    expect(result!.maxY).toBe(50);
+    expect(result!.min.x).toBe(0);
+    expect(result!.min.y).toBe(0);
+    expect(result!.max.x).toBe(100);
+    expect(result!.max.y).toBe(50);
   });
 
   it("calculates segment-aware bounds for quadratic curve with vertical bulge", () => {
@@ -66,10 +67,10 @@ describe("getSegmentAwareBounds", () => {
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
-    expect(result!.minX).toBe(0);
-    expect(result!.minY).toBe(0);
-    expect(result!.maxX).toBe(100);
-    expect(result!.maxY).toBe(100);
+    expect(result!.min.x).toBe(0);
+    expect(result!.min.y).toBe(0);
+    expect(result!.max.x).toBe(100);
+    expect(result!.max.y).toBe(100);
   });
 
   it("calculates segment-aware bounds for cubic S-curve", () => {
@@ -98,10 +99,10 @@ describe("getSegmentAwareBounds", () => {
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
-    expect(result!.minX).toBe(0);
-    expect(result!.maxX).toBe(100);
-    expect(result!.minY).toBeLessThan(50);
-    expect(result!.maxY).toBeGreaterThan(50);
+    expect(result!.min.x).toBe(0);
+    expect(result!.max.x).toBe(100);
+    expect(result!.min.y).toBeLessThan(50);
+    expect(result!.max.y).toBeGreaterThan(50);
   });
 
   it("uses point bounds for partially selected curves", () => {
@@ -124,7 +125,7 @@ describe("getSegmentAwareBounds", () => {
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
-    expect(result!.maxY).toBe(200);
+    expect(result!.max.y).toBe(200);
   });
 
   it("returns null when selected points don't exist in snapshot", () => {
@@ -161,7 +162,8 @@ describe("getSegmentAwareBounds", () => {
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
     expect(result).not.toBeNull();
-    expect(result!.center.x).toBe(50);
-    expect(result!.center.y).toBe(50);
+    const center = Bounds.center(result!);
+    expect(center.x).toBe(50);
+    expect(center.y).toBe(50);
   });
 });

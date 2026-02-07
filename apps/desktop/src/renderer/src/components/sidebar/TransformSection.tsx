@@ -5,7 +5,7 @@ import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
-import { anchorToPoint, selectionBoundsToRect } from "@/lib/transform/anchor";
+import { anchorToPoint } from "@/lib/transform/anchor";
 
 import RotateIcon from "@/assets/sidebar/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar/rotate-cw.svg";
@@ -115,8 +115,8 @@ export const TransformSection = () => {
 
     const bounds = editor.getSelectionBounds();
     if (bounds) {
-      xRef.current?.setValue(Math.round(bounds.minX));
-      yRef.current?.setValue(Math.round(bounds.minY));
+      xRef.current?.setValue(Math.round(bounds.min.x));
+      yRef.current?.setValue(Math.round(bounds.min.y));
     }
   });
 
@@ -141,7 +141,7 @@ export const TransformSection = () => {
   const getOrigin = () => {
     const bounds = editor.getSelectionBounds();
     if (!bounds) return undefined;
-    return anchorToPoint(anchor, selectionBoundsToRect(bounds));
+    return anchorToPoint(anchor, bounds);
   };
 
   const handleRotate90 = () => {
@@ -167,7 +167,7 @@ export const TransformSection = () => {
     (axis: "x" | "y", value: number) => {
       const bounds = editor.getSelectionBounds();
       if (!bounds) return;
-      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      const anchorPoint = anchorToPoint(anchor, bounds);
       const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
       editor.moveSelectionTo(target, anchorPoint);
       editor.requestRedraw();

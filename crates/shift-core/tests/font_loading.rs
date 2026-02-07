@@ -39,7 +39,7 @@ fn test_load_mutatorsans_ufo() {
         );
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(ufo_path.to_str().unwrap())
         .expect("Failed to load UFO font");
@@ -54,7 +54,7 @@ fn test_mutatorsans_ufo_metrics() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let metrics = font.metrics();
@@ -72,7 +72,7 @@ fn test_mutatorsans_ufo_metadata() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let metadata = font.metadata();
@@ -95,7 +95,7 @@ fn test_mutatorsans_ufo_glyph_structure() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let glyph_a = font.glyph("A").expect("Glyph 'A' should exist");
@@ -118,7 +118,7 @@ fn test_mutatorsans_ufo_point_types() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let glyph_o = font.glyph("O").expect("Glyph 'O' should exist");
@@ -153,7 +153,7 @@ fn test_load_mutatorsans_ttf() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(ttf_path.to_str().unwrap())
         .expect("Failed to load TTF font");
@@ -169,7 +169,7 @@ fn test_load_mutatorsans_otf() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(otf_path.to_str().unwrap())
         .expect("Failed to load OTF font");
@@ -184,7 +184,7 @@ fn test_mutatorsans_ufo_anchors() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let glyph_e = font.glyph("E").expect("Glyph 'E' should exist");
@@ -216,7 +216,7 @@ fn test_mutatorsans_ufo_components() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let glyph = font.glyph("Aacute").expect("Glyph 'Aacute' should exist");
@@ -252,7 +252,7 @@ fn test_mutatorsans_ufo_kerning() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let kerning = font.kerning();
@@ -280,7 +280,7 @@ fn test_mutatorsans_ufo_multiple_layers() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     assert!(
@@ -306,7 +306,7 @@ fn test_ttf_has_glyph_contours() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(ttf_path.to_str().unwrap())
         .expect("Failed to load TTF font");
@@ -336,7 +336,7 @@ fn test_ttf_point_types() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(ttf_path.to_str().unwrap())
         .expect("Failed to load TTF font");
@@ -382,7 +382,7 @@ fn test_otf_has_glyph_contours() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let font = loader
         .read_font(otf_path.to_str().unwrap())
         .expect("Failed to load OTF font");

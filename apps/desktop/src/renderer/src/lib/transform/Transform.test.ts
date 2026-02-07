@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Transform } from "./Transform";
+import { Bounds } from "@shift/geo";
 import { asPointId } from "@shift/types";
 
 describe("Transform", () => {
@@ -193,51 +194,51 @@ describe("Transform", () => {
     });
   });
 
-  describe("getSelectionBounds", () => {
+  describe("Bounds.fromPoints (replaces getSelectionBounds)", () => {
     it("returns null for empty array", () => {
-      const result = Transform.getSelectionBounds([]);
+      const result = Bounds.fromPoints([]);
       expect(result).toBeNull();
     });
 
     it("calculates bounds for single point", () => {
       const points = [p("p1", 5, 7)];
 
-      const result = Transform.getSelectionBounds(points);
+      const result = Bounds.fromPoints(points);
 
       expect(result).not.toBeNull();
-      expect(result!.center).toEqual({ x: 5, y: 7 });
-      expect(result!.width).toBe(0);
-      expect(result!.height).toBe(0);
+      expect(Bounds.center(result!)).toEqual({ x: 5, y: 7 });
+      expect(Bounds.width(result!)).toBe(0);
+      expect(Bounds.height(result!)).toBe(0);
     });
 
     it("calculates bounds for multiple points", () => {
       const points = [p("p1", 0, 0), p("p2", 10, 0), p("p3", 10, 6), p("p4", 0, 6)];
 
-      const result = Transform.getSelectionBounds(points);
+      const result = Bounds.fromPoints(points);
 
       expect(result).not.toBeNull();
-      expect(result!.minX).toBe(0);
-      expect(result!.minY).toBe(0);
-      expect(result!.maxX).toBe(10);
-      expect(result!.maxY).toBe(6);
-      expect(result!.width).toBe(10);
-      expect(result!.height).toBe(6);
-      expect(result!.center).toEqual({ x: 5, y: 3 });
+      expect(result!.min.x).toBe(0);
+      expect(result!.min.y).toBe(0);
+      expect(result!.max.x).toBe(10);
+      expect(result!.max.y).toBe(6);
+      expect(Bounds.width(result!)).toBe(10);
+      expect(Bounds.height(result!)).toBe(6);
+      expect(Bounds.center(result!)).toEqual({ x: 5, y: 3 });
     });
   });
 
-  describe("getSelectionCenter", () => {
+  describe("Bounds.center (replaces getSelectionCenter)", () => {
     it("returns null for empty array", () => {
-      const result = Transform.getSelectionCenter([]);
+      const result = Bounds.fromPoints([]);
       expect(result).toBeNull();
     });
 
     it("returns center of bounding box", () => {
       const points = [p("p1", 0, 0), p("p2", 4, 6)];
 
-      const result = Transform.getSelectionCenter(points);
-
-      expect(result).toEqual({ x: 2, y: 3 });
+      const result = Bounds.fromPoints(points);
+      expect(result).not.toBeNull();
+      expect(Bounds.center(result!)).toEqual({ x: 2, y: 3 });
     });
   });
 

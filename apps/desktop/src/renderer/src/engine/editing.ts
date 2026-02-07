@@ -1,6 +1,7 @@
 import type { GlyphSnapshot, PointId, ContourId, Point2D } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { applyRules, applyMovesToGlyph } from "@shift/rules";
+import { ValidateSnapshot } from "@shift/validation";
 import { findPointInSnapshot } from "@/lib/utils/snapshot";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { PointMove } from "@shared/bridge/FontEngineAPI";
@@ -165,8 +166,11 @@ export class EditingManager {
       throw new NativeOperationError(result.error ?? "pasteContours failed");
     }
 
-    const glyph = this.#engine.native.getSnapshotData() as GlyphSnapshot;
-    this.#engine.emitGlyph(glyph);
+    const raw = this.#engine.native.getSnapshotData();
+    if (!ValidateSnapshot.isGlyphSnapshot(raw)) {
+      throw new NativeOperationError("pasteContours returned invalid snapshot");
+    }
+    this.#engine.emitGlyph(raw);
 
     return result;
   }
@@ -213,6 +217,9 @@ export class EditingManager {
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
+    if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {
+      throw new NativeOperationError("Cannot restore invalid snapshot");
+    }
     this.#engine.native.restoreSnapshot(snapshot);
     this.#engine.emitGlyph(snapshot);
   }

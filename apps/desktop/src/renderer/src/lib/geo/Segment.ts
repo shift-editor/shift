@@ -28,7 +28,8 @@
  * ```
  */
 
-import { Curve, Vec2, type CurveType, type Point2D } from "@shift/geo";
+import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
+import { Validate } from "@shift/validation";
 import type {
   Segment as SegmentType,
   LineSegment,
@@ -80,7 +81,7 @@ export const Segment = {
     }
   },
 
-  bounds(segment: SegmentType): { min: Point2D; max: Point2D } {
+  bounds(segment: SegmentType): Bounds {
     const curve = Segment.toCurve(segment);
     return Curve.bounds(curve);
   },
@@ -201,7 +202,7 @@ export const Segment = {
         break;
       }
 
-      if (p1.pointType === "onCurve" && p2.pointType === "onCurve") {
+      if (Validate.isOnCurve(p1) && Validate.isOnCurve(p2)) {
         segments.push({
           type: "line",
           points: { anchor1: p1, anchor2: p2 },
@@ -210,14 +211,14 @@ export const Segment = {
         continue;
       }
 
-      if (p1.pointType === "onCurve" && p2.pointType === "offCurve") {
+      if (Validate.isOnCurve(p1) && Validate.isOffCurve(p2)) {
         const p3 = getPoint(index + 2);
 
         if (!p3) {
           break;
         }
 
-        if (p3.pointType === "onCurve") {
+        if (Validate.isOnCurve(p3)) {
           segments.push({
             type: "quad",
             points: { anchor1: p1, control: p2, anchor2: p3 },
@@ -226,7 +227,7 @@ export const Segment = {
           continue;
         }
 
-        if (p3.pointType === "offCurve") {
+        if (Validate.isOffCurve(p3)) {
           const p4 = getPoint(index + 3);
           if (!p4) {
             break;

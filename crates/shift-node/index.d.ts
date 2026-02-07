@@ -91,9 +91,9 @@ export declare class FontEngine {
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
   removeContour(contourId: string): string;
   /**
-   * Set point positions directly - fire-and-forget for drag operations.
-   * Returns true on success, false on failure.
-   * Does NOT return a snapshot - use get_snapshot_data() when needed.
+   * Set point positions directly — fire-and-forget for drag operations.
+   * Returns true on success, false if no edit session is active.
+   * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
   setPointPositions(moves: Array<JSPointMove>): boolean;
   restoreSnapshotNative(snapshot: JSGlyphSnapshot): boolean;

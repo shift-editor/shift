@@ -7,11 +7,29 @@ use shift_core::{
   snapshot::{
     CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType,
   },
-  ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, Point, PointId, PointType,
-  UfoWriter,
+  ContourId, CurveSegment, CurveSegmentIter, Font, FontWriter, Glyph, GlyphLayer, LayerId,
+  PasteContour, Point, PointId, PointType, UfoWriter,
 };
 
 use crate::types::{JSFontMetaData, JSFontMetrics};
+
+fn to_json(value: &impl serde::Serialize) -> String {
+  serde_json::to_string(value).expect("NAPI result serialization failed")
+}
+
+macro_rules! parse_or_err {
+  ($id_str:expr, $ty:ty, $label:expr) => {
+    match $id_str.parse::<$ty>() {
+      Ok(id) => id,
+      Err(_) => {
+        return Ok(to_json(&CommandResult::error(format!(
+          concat!("Invalid ", $label, ": {}"),
+          $id_str
+        ))))
+      }
+    }
+  };
+}
 
 fn layer_to_svg_path(layer: &GlyphLayer) -> String {
   let mut parts: Vec<String> = Vec::new();
@@ -52,69 +70,42 @@ fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
   if points.len() < 2 {
     return String::new();
   }
-  let limit = if closed {
-    points.len()
-  } else {
-    points.len().saturating_sub(1)
-  };
+
   let mut out = Vec::new();
-  let mut i = 0usize;
+  let mut first = true;
 
-  let get = |idx: usize| -> Option<&Point> {
-    if idx < points.len() {
-      Some(&points[idx])
-    } else if closed && !points.is_empty() {
-      Some(&points[idx % points.len()])
-    } else {
-      None
-    }
-  };
-
-  while i < limit {
-    let (p1, p2) = match (get(i), get(i + 1)) {
-      (Some(a), Some(b)) => (a, b),
-      _ => break,
-    };
-
-    if p1.is_on_curve() && p2.is_on_curve() {
-      if out.is_empty() {
-        out.push(format!("M {} {}", p1.x(), p1.y()));
+  for seg in CurveSegmentIter::new(points, closed) {
+    match seg {
+      CurveSegment::Line(p1, p2) => {
+        if first {
+          out.push(format!("M {} {}", p1.x(), p1.y()));
+          first = false;
+        }
+        out.push(format!("L {} {}", p2.x(), p2.y()));
       }
-      out.push(format!("L {} {}", p2.x(), p2.y()));
-      i += 1;
-      continue;
-    }
-
-    if p1.is_on_curve() && !p2.is_on_curve() {
-      if let Some(p3) = get(i + 2) {
-        if p3.is_on_curve() {
-          if out.is_empty() {
-            out.push(format!("M {} {}", p1.x(), p1.y()));
-          }
-          out.push(format!("Q {} {} {} {}", p2.x(), p2.y(), p3.x(), p3.y()));
-          i += 2;
-          continue;
+      CurveSegment::Quad(p1, cp, p2) => {
+        if first {
+          out.push(format!("M {} {}", p1.x(), p1.y()));
+          first = false;
         }
-        if let Some(p4) = get(i + 3) {
-          if out.is_empty() {
-            out.push(format!("M {} {}", p1.x(), p1.y()));
-          }
-          out.push(format!(
-            "C {} {} {} {} {} {}",
-            p2.x(),
-            p2.y(),
-            p3.x(),
-            p3.y(),
-            p4.x(),
-            p4.y()
-          ));
-          i += 3;
-          continue;
+        out.push(format!("Q {} {} {} {}", cp.x(), cp.y(), p2.x(), p2.y()));
+      }
+      CurveSegment::Cubic(p1, cp1, cp2, p2) => {
+        if first {
+          out.push(format!("M {} {}", p1.x(), p1.y()));
+          first = false;
         }
+        out.push(format!(
+          "C {} {} {} {} {} {}",
+          cp1.x(),
+          cp1.y(),
+          cp2.x(),
+          cp2.y(),
+          p2.x(),
+          p2.y()
+        ));
       }
     }
-
-    i += 1;
   }
 
   if closed && !out.is_empty() {
@@ -231,6 +222,10 @@ impl FontEngine {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // METADATA & QUERY
+  // ═══════════════════════════════════════════════════════════
+
   #[napi]
   pub fn get_metadata(&self) -> JSFontMetaData {
     self.font.metadata().into()
@@ -284,6 +279,10 @@ impl FontEngine {
     layer_bbox(layer).map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // EDIT SESSIONS
+  // ═══════════════════════════════════════════════════════════
+
   #[napi]
   pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
     if self.current_edit_session.is_some() {
@@ -313,13 +312,10 @@ impl FontEngine {
     let (layer_id, layer) = glyph
       .layers()
       .iter()
-      .max_by_key(|(_, layer)| layer.contours().len())
-      .map(|(id, layer)| (*id, layer.clone()))
-      .map(|(id, layer)| (id, glyph.remove_layer(id).unwrap_or(layer)))
-      .unwrap_or_else(|| {
-        let id = self.font.default_layer_id();
-        (id, GlyphLayer::with_width(500.0))
-      });
+      .max_by_key(|(_, l)| l.contours().len())
+      .map(|(id, _)| *id)
+      .and_then(|id| glyph.remove_layer(id).map(|l| (id, l)))
+      .unwrap_or_else(|| (self.font.default_layer_id(), GlyphLayer::with_width(500.0)));
 
     let edit_session = EditSession::new(glyph.name().to_string(), unicode, layer);
 
@@ -387,22 +383,11 @@ impl FontEngine {
   #[napi]
   pub fn set_active_contour(&mut self, contour_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => ContourId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {contour_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
 
     session.set_active_contour(cid);
     let result = CommandResult::success_simple(session);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&result))
   }
 
   #[napi]
@@ -410,7 +395,7 @@ impl FontEngine {
     let session = self.get_edit_session()?;
     session.clear_active_contour();
     let result = CommandResult::success_simple(session);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&result))
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -434,26 +419,11 @@ impl FontEngine {
   #[napi]
   pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let pt = match point_type.as_str() {
-      "onCurve" => PointType::OnCurve,
-      "offCurve" => PointType::OffCurve,
-      _ => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {point_type}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let pt = parse_or_err!(point_type, PointType, "point type");
 
     match session.add_point(x, y, pt, smooth) {
-      Ok(point_id) => {
-        let result = CommandResult::success(session, vec![point_id]);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
@@ -467,38 +437,12 @@ impl FontEngine {
     smooth: bool,
   ) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let pt = match point_type.as_str() {
-      "onCurve" => PointType::OnCurve,
-      "offCurve" => PointType::OffCurve,
-      _ => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {point_type}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
-
-    let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => ContourId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {contour_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let pt = parse_or_err!(point_type, PointType, "point type");
+    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
 
     match session.add_point_to_contour(cid, x, y, pt, smooth) {
-      Ok(point_id) => {
-        let result = CommandResult::success(session, vec![point_id]);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
@@ -512,38 +456,12 @@ impl FontEngine {
     smooth: bool,
   ) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let pt = match point_type.as_str() {
-      "onCurve" => PointType::OnCurve,
-      "offCurve" => PointType::OffCurve,
-      _ => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point type: {point_type}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
-
-    let before_id = match before_point_id.parse::<u128>() {
-      Ok(raw) => PointId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point ID: {before_point_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let pt = parse_or_err!(point_type, PointType, "point type");
+    let before_id = parse_or_err!(before_point_id, PointId, "point ID");
 
     match session.insert_point_before(before_id, x, y, pt, smooth) {
-      Ok(point_id) => {
-        let result = CommandResult::success(session, vec![point_id]);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
@@ -551,8 +469,7 @@ impl FontEngine {
   pub fn add_contour(&mut self) -> Result<String> {
     let session = self.get_edit_session()?;
     let _contour_id = session.add_empty_contour();
-    let result = CommandResult::success_simple(session);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&CommandResult::success_simple(session)))
   }
 
   #[napi]
@@ -561,67 +478,34 @@ impl FontEngine {
 
     let contour_id = match session.active_contour_id() {
       Some(id) => id,
-      None => {
-        return Ok(serde_json::to_string(&CommandResult::error("No active contour")).unwrap())
-      }
+      None => return Ok(to_json(&CommandResult::error("No active contour"))),
     };
 
     match session.close_contour(contour_id) {
-      Ok(_) => {
-        let result = CommandResult::success_simple(session);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(_) => Ok(to_json(&CommandResult::success_simple(session))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
   #[napi]
   pub fn open_contour(&mut self, contour_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => ContourId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {contour_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
 
     match session.open_contour(cid) {
-      Ok(_) => {
-        let result = CommandResult::success_simple(session);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(_) => Ok(to_json(&CommandResult::success_simple(session))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
   #[napi]
   pub fn reverse_contour(&mut self, contour_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => ContourId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {contour_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
 
     match session.reverse_contour(cid) {
-      Ok(_) => {
-        let result = CommandResult::success_simple(session);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(_) => Ok(to_json(&CommandResult::success_simple(session))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
@@ -631,18 +515,17 @@ impl FontEngine {
 
     let parsed_ids: Vec<PointId> = point_ids
       .iter()
-      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
+      .filter_map(|id_str| id_str.parse::<PointId>().ok())
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(
-        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
-      );
+      return Ok(to_json(&CommandResult::error(
+        "No valid point IDs provided",
+      )));
     }
 
     let moved = session.move_points(&parsed_ids, dx, dy);
-    let result = CommandResult::success(session, moved);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&CommandResult::success(session, moved)))
   }
 
   #[napi]
@@ -651,42 +534,27 @@ impl FontEngine {
 
     let parsed_ids: Vec<PointId> = point_ids
       .iter()
-      .filter_map(|id_str| id_str.parse::<u128>().ok().map(PointId::from_raw))
+      .filter_map(|id_str| id_str.parse::<PointId>().ok())
       .collect();
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(
-        serde_json::to_string(&CommandResult::error("No valid point IDs provided")).unwrap(),
-      );
+      return Ok(to_json(&CommandResult::error(
+        "No valid point IDs provided",
+      )));
     }
 
     let removed = session.remove_points(&parsed_ids);
-    let result = CommandResult::success(session, removed);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&CommandResult::success(session, removed)))
   }
 
   #[napi]
   pub fn toggle_smooth(&mut self, point_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let parsed_id = match point_id.parse::<u128>() {
-      Ok(raw) => PointId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid point ID: {point_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let parsed_id = parse_or_err!(point_id, PointId, "point ID");
 
     match session.toggle_smooth(parsed_id) {
-      Ok(_) => {
-        let result = CommandResult::success(session, vec![parsed_id]);
-        Ok(serde_json::to_string(&result).unwrap())
-      }
-      Err(e) => Ok(serde_json::to_string(&CommandResult::error(e)).unwrap()),
+      Ok(_) => Ok(to_json(&CommandResult::success(session, vec![parsed_id]))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
     }
   }
 
@@ -706,77 +574,57 @@ impl FontEngine {
     let contours: Vec<PasteContour> = match serde_json::from_str(&contours_json) {
       Ok(c) => c,
       Err(e) => {
-        return Ok(
-          serde_json::to_string(&PasteResultJson {
-            success: false,
-            created_point_ids: vec![],
-            created_contour_ids: vec![],
-            error: Some(format!("Failed to parse contours: {e}")),
-          })
-          .unwrap(),
-        )
+        return Ok(to_json(&PasteResultJson {
+          success: false,
+          created_point_ids: vec![],
+          created_contour_ids: vec![],
+          error: Some(format!("Failed to parse contours: {e}")),
+        }))
       }
     };
 
     let result = session.paste_contours(contours, offset_x, offset_y);
 
-    Ok(
-      serde_json::to_string(&PasteResultJson {
-        success: result.success,
-        created_point_ids: result
-          .created_point_ids
-          .iter()
-          .map(|id| id.to_string())
-          .collect(),
-        created_contour_ids: result
-          .created_contour_ids
-          .iter()
-          .map(|id| id.to_string())
-          .collect(),
-        error: result.error,
-      })
-      .unwrap(),
-    )
+    Ok(to_json(&PasteResultJson {
+      success: result.success,
+      created_point_ids: result
+        .created_point_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect(),
+      created_contour_ids: result
+        .created_contour_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect(),
+      error: result.error,
+    }))
   }
 
   #[napi]
   pub fn remove_contour(&mut self, contour_id: String) -> Result<String> {
     let session = self.get_edit_session()?;
-
-    let cid = match contour_id.parse::<u128>() {
-      Ok(raw) => ContourId::from_raw(raw),
-      Err(_) => {
-        return Ok(
-          serde_json::to_string(&CommandResult::error(format!(
-            "Invalid contour ID: {contour_id}"
-          )))
-          .unwrap(),
-        )
-      }
-    };
+    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
 
     session.remove_contour(cid);
-    let result = CommandResult::success_simple(session);
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(to_json(&CommandResult::success_simple(session)))
   }
 
   // ═══════════════════════════════════════════════════════════
   // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
   // ═══════════════════════════════════════════════════════════
 
-  /// Set point positions directly - fire-and-forget for drag operations.
-  /// Returns true on success, false on failure.
-  /// Does NOT return a snapshot - use get_snapshot_data() when needed.
+  /// Set point positions directly — fire-and-forget for drag operations.
+  /// Returns true on success, false if no edit session is active.
+  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
   #[napi]
   pub fn set_point_positions(&mut self, moves: Vec<JSPointMove>) -> Result<bool> {
-    let session = match self.current_edit_session.as_mut() {
-      Some(s) => s,
-      None => return Ok(false),
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
     };
 
     for m in moves {
-      if let Ok(raw) = m.id.parse::<u128>() {
-        let point_id = PointId::from_raw(raw);
+      if let Ok(point_id) = m.id.parse::<PointId>() {
         session.set_point_position(point_id, m.x, m.y);
       }
     }
@@ -786,12 +634,10 @@ impl FontEngine {
 
   #[napi]
   pub fn restore_snapshot_native(&mut self, snapshot: JSGlyphSnapshot) -> Result<bool> {
-    let session = match self.current_edit_session.as_mut() {
-      Some(s) => s,
-      None => return Ok(false),
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
     };
 
-    // Convert JS snapshot to internal GlyphSnapshot
     let glyph_snapshot = GlyphSnapshot {
       unicode: snapshot.unicode,
       name: snapshot.name,
@@ -895,6 +741,8 @@ impl JSGlyphSnapshot {
               x: p.x(),
               y: p.y(),
               point_type: match p.point_type() {
+                // QCurve is intentionally mapped to "onCurve" — the editor does not
+                // yet distinguish quadratic vs cubic on-curve points at the JS layer.
                 PointType::OnCurve | PointType::QCurve => "onCurve".to_string(),
                 PointType::OffCurve => "offCurve".to_string(),
               },

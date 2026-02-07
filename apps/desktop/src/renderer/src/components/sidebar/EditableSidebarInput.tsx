@@ -21,7 +21,7 @@ interface EditableSidebarInputProps {
 const parseNumericValue = (input: string): number | null => {
   const cleaned = input.replace(/[^0-9.\-]/g, "");
   const parsed = parseFloat(cleaned);
-  return Number.isNaN(parsed) ? null : parsed;
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 export const EditableSidebarInput = forwardRef<

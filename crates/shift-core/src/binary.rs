@@ -13,8 +13,7 @@ use skrifa::{
 };
 
 pub fn load_font(font_bytes: &[u8]) -> Result<FontRef, String> {
-    let font = FontRef::new(font_bytes).expect("Failed to load font");
-    Ok(font)
+    FontRef::new(font_bytes).map_err(|e| format!("Failed to load font: {e}"))
 }
 
 #[derive(Default)]
@@ -22,54 +21,45 @@ struct ShiftPen {
     contours: Vec<Contour>,
 }
 
+impl ShiftPen {
+    /// Returns the contour currently being built.
+    /// Panics if called before `move_to` — skrifa guarantees `move_to` is called first.
+    fn current_contour(&mut self) -> &mut Contour {
+        self.contours
+            .last_mut()
+            .expect("move_to must be called before other pen methods")
+    }
+
+    pub fn contours(self) -> Vec<Contour> {
+        self.contours
+    }
+}
+
 impl OutlinePen for ShiftPen {
     fn move_to(&mut self, x: f32, y: f32) {
         self.contours.push(Contour::new());
-        self.contours
-            .last_mut()
-            .unwrap()
+        self.current_contour()
             .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.contours
-            .last_mut()
-            .unwrap()
+        self.current_contour()
             .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.contours.last_mut().unwrap().add_point(
-            cx0 as f64,
-            cy0 as f64,
-            PointType::OffCurve,
-            false,
-        );
-
-        self.contours
-            .last_mut()
-            .unwrap()
+        self.current_contour()
+            .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
+        self.current_contour()
             .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.contours.last_mut().unwrap().add_point(
-            cx0 as f64,
-            cy0 as f64,
-            PointType::OffCurve,
-            false,
-        );
-
-        self.contours.last_mut().unwrap().add_point(
-            cx1 as f64,
-            cy1 as f64,
-            PointType::OffCurve,
-            false,
-        );
-
-        self.contours
-            .last_mut()
-            .unwrap()
+        self.current_contour()
+            .add_point(cx0 as f64, cy0 as f64, PointType::OffCurve, false);
+        self.current_contour()
+            .add_point(cx1 as f64, cy1 as f64, PointType::OffCurve, false);
+        self.current_contour()
             .add_point(x as f64, y as f64, PointType::OnCurve, false);
     }
 
@@ -80,12 +70,9 @@ impl OutlinePen for ShiftPen {
     }
 }
 
-impl ShiftPen {
-    pub fn contours(self) -> Vec<Contour> {
-        self.contours
-    }
-}
-
+/// Maximum angle difference (in radians, ~2.9°) between incoming and outgoing
+/// handles for a point to be classified as smooth. Matches the tolerance used
+/// by common font editors for auto-detecting tangent continuity.
 const SMOOTH_ANGLE_TOLERANCE: f64 = 0.05;
 
 fn detect_smooth_points(contours: &mut [Contour]) {
@@ -104,13 +91,10 @@ fn detect_smooth_points(contours: &mut [Contour]) {
                 continue;
             }
 
-            let (prev_idx, next_idx) = if is_closed {
-                ((i + len - 1) % len, (i + 1) % len)
-            } else {
-                if i == 0 || i == len - 1 {
-                    continue;
-                }
-                (i - 1, i + 1)
+            let (prev_idx, next_idx) = match is_closed {
+                true => ((i + len - 1) % len, (i + 1) % len),
+                false if i == 0 || i == len - 1 => continue,
+                false => (i - 1, i + 1),
             };
 
             let prev = contour.get_point_at(prev_idx).unwrap();
@@ -179,8 +163,10 @@ fn font_from_skrifa(font: &FontRef) -> Font {
 pub struct BytesFontAdaptor;
 impl FontAdaptor for BytesFontAdaptor {
     fn read_font(&self, path: &str) -> Result<Font, String> {
-        let bytes = std::fs::read(path).unwrap();
-        let font = FontRef::new(&bytes).unwrap();
+        let bytes =
+            std::fs::read(path).map_err(|e| format!("Failed to read font file '{path}': {e}"))?;
+        let font = FontRef::new(&bytes)
+            .map_err(|e| format!("Failed to parse font data from '{path}': {e}"))?;
         Ok(font_from_skrifa(&font))
     }
 
@@ -194,13 +180,7 @@ pub fn compile_font(path: &str, build_dir: &Path, output_name: &str) -> Result<(
 
     args.output_file = Some(PathBuf::from(output_name));
     let timer = JobTimer::new(Instant::now());
-    let exec_result = fontc::run(args, timer);
-    if exec_result.is_err() {
-        return Err(format!(
-            "Failed to compile font: {}",
-            exec_result.err().unwrap()
-        ));
-    }
+    fontc::run(args, timer).map_err(|e| format!("Failed to compile font: {e}"))?;
     Ok(())
 }
 

@@ -22,5 +22,7 @@
  */
 
 export { Validate } from "./Validate";
+export { ValidateSnapshot } from "./ValidateSnapshot";
+export { ValidateClipboard } from "./ValidateClipboard";
 
 export type { ValidationResult, ValidationError, ValidationErrorCode, PointLike } from "./types";

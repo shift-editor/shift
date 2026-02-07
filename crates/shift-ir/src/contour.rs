@@ -1,5 +1,6 @@
 use crate::entity::{ContourId, PointId};
 use crate::point::{Point, PointType};
+use crate::segment::CurveSegmentIter;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -149,6 +150,10 @@ impl Contour {
 
     pub fn last_point(&self) -> Option<&Point> {
         self.points.last()
+    }
+
+    pub fn segments(&self) -> CurveSegmentIter<'_> {
+        CurveSegmentIter::new(&self.points, self.closed)
     }
 }
 

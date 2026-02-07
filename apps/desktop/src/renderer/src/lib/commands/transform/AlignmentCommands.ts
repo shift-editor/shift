@@ -1,8 +1,8 @@
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import { Bounds } from "@shift/geo";
 import { findPointsInSnapshot } from "@/lib/utils/snapshot";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
-import { Transform } from "../../transform/Transform";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
 
 function getPointsFromSnapshot(
@@ -43,7 +43,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
       }
     }
 
-    const bounds = Transform.getSelectionBounds(points);
+    const bounds = Bounds.fromPoints(points);
     if (!bounds) return;
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
@@ -64,7 +64,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const bounds = Transform.getSelectionBounds(points);
+    const bounds = Bounds.fromPoints(points);
     if (!bounds) return;
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);

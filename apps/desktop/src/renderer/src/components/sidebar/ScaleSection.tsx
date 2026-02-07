@@ -5,7 +5,8 @@ import { EditableSidebarInput, type EditableSidebarInputHandle } from "./Editabl
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
-import { anchorToPoint, selectionBoundsToRect } from "@/lib/transform/anchor";
+import { anchorToPoint } from "@/lib/transform/anchor";
+import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar/scale.svg";
 
 export const ScaleSection = () => {
@@ -20,18 +21,18 @@ export const ScaleSection = () => {
     editor.selectedPointIds.value;
 
     const bounds = editor.getSelectionBounds();
-    widthRef.current?.setValue(bounds ? Math.round(bounds.width) : 0);
-    heightRef.current?.setValue(bounds ? Math.round(bounds.height) : 0);
+    widthRef.current?.setValue(bounds ? Math.round(Bounds.width(bounds)) : 0);
+    heightRef.current?.setValue(bounds ? Math.round(Bounds.height(bounds)) : 0);
   });
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
       const bounds = editor.getSelectionBounds();
       if (!bounds) return;
-      const current = bounds[dimension];
+      const current = dimension === "width" ? Bounds.width(bounds) : Bounds.height(bounds);
       if (current === 0) return;
       const factor = value / current;
-      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      const anchorPoint = anchorToPoint(anchor, bounds);
       editor.scaleSelection(factor, factor, anchorPoint);
     },
     [anchor],
@@ -41,7 +42,7 @@ export const ScaleSection = () => {
     (scale: number) => {
       const bounds = editor.getSelectionBounds();
       if (!bounds) return;
-      const anchorPoint = anchorToPoint(anchor, selectionBoundsToRect(bounds));
+      const anchorPoint = anchorToPoint(anchor, bounds);
       editor.scaleSelection(scale, scale, anchorPoint);
     },
     [anchor],

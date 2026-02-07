@@ -1,6 +1,7 @@
 import type { Point2D, PointId } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
+import { Validate } from "@shift/validation";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
 import type { PenState, PenBehavior, ContourContext } from "../types";
@@ -90,7 +91,7 @@ export class PlaceBehavior implements PenBehavior {
       : null;
 
     return {
-      previousPointType: lastPoint.pointType === "offCurve" ? "offCurve" : "onCurve",
+      previousPointType: Validate.isOffCurve(lastPoint) ? "offCurve" : "onCurve",
       previousOnCurvePosition,
       isFirstPoint: false,
     };

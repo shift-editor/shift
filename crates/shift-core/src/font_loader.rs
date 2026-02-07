@@ -33,7 +33,6 @@ impl FontAdaptor for UfoFontAdaptor {
 }
 
 pub struct FontLoader {
-    file_name: String,
     adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>>,
 }
 
@@ -43,6 +42,22 @@ impl Default for FontLoader {
     }
 }
 
+fn format_from_extension(ext: &str) -> Result<FontFormat, String> {
+    match ext {
+        "ufo" => Ok(FontFormat::Ufo),
+        "ttf" => Ok(FontFormat::Ttf),
+        "otf" => Ok(FontFormat::Otf),
+        _ => Err(format!("Unsupported font format: {ext}")),
+    }
+}
+
+fn extension_from_path(path: &Path) -> Result<&str, String> {
+    path.extension()
+        .ok_or_else(|| "File has no extension".to_string())?
+        .to_str()
+        .ok_or_else(|| "Invalid UTF-8 in extension".to_string())
+}
+
 impl FontLoader {
     pub fn new() -> Self {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
@@ -50,53 +65,35 @@ impl FontLoader {
         adaptors.insert(FontFormat::Ttf, Box::new(BytesFontAdaptor));
         adaptors.insert(FontFormat::Otf, Box::new(BytesFontAdaptor));
 
-        Self {
-            file_name: String::new(),
-            adaptors,
-        }
+        Self { adaptors }
     }
 
     pub fn available_formats(&self) -> Vec<&FontFormat> {
         self.adaptors.keys().collect()
     }
 
-    pub fn read_font(&mut self, path: &str) -> Result<Font, String> {
+    pub fn read_font(&self, path: &str) -> Result<Font, String> {
         let path = Path::new(path);
-        let extension = path
-            .extension()
-            .ok_or_else(|| "File has no extension".to_string())?
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in extension".to_string())?;
-
-        let adaptor = match extension {
-            "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
-            "ttf" => self.adaptors.get(&FontFormat::Ttf).unwrap(),
-            "otf" => self.adaptors.get(&FontFormat::Otf).unwrap(),
-            _ => {
-                return Err(format!("Unsupported font format: {extension}"));
-            }
-        };
-
-        let font = adaptor.read_font(path.to_str().unwrap())?;
-        self.file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-        Ok(font)
+        let ext = extension_from_path(path)?;
+        let format = format_from_extension(ext)?;
+        let adaptor = self.adaptors.get(&format).expect("all formats registered");
+        adaptor.read_font(
+            path.to_str()
+                .ok_or_else(|| "Invalid UTF-8 in path".to_string())?,
+        )
     }
 
     pub fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
-        let path_obj = Path::new(path);
-        let extension = path_obj
-            .extension()
-            .ok_or_else(|| "File has no extension".to_string())?
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in extension".to_string())?;
+        let path = Path::new(path);
+        let ext = extension_from_path(path)?;
+        let format = format_from_extension(ext)?;
 
-        let adaptor = match extension {
-            "ufo" => self.adaptors.get(&FontFormat::Ufo).unwrap(),
-            _ => {
-                return Err(format!("Unsupported font format for writing: {extension}"));
-            }
-        };
+        match format {
+            FontFormat::Ufo => {}
+            _ => return Err(format!("Unsupported font format for writing: {ext}")),
+        }
 
-        adaptor.write_font(font, path)
+        let adaptor = self.adaptors.get(&format).expect("all formats registered");
+        adaptor.write_font(font, path.to_str().unwrap())
     }
 }

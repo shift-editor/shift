@@ -6,12 +6,17 @@ export type ValidationErrorCode =
   | "MUST_END_WITH_ON_CURVE"
   | "TOO_MANY_CONSECUTIVE_OFF_CURVE"
   | "ORPHAN_OFF_CURVE"
-  | "INCOMPLETE_SEGMENT";
+  | "INCOMPLETE_SEGMENT"
+  | "INVALID_SNAPSHOT_STRUCTURE"
+  | "INVALID_CONTOUR_STRUCTURE"
+  | "INVALID_POINT_STRUCTURE"
+  | "INVALID_POINT_TYPE"
+  | "INVALID_CLIPBOARD_CONTENT";
 
 export type ValidationError = {
   code: ValidationErrorCode;
   message: string;
-  context?: { index?: number; pointType?: PointType };
+  context?: Record<string, unknown>;
 };
 
 export type ValidationResult<T = void> =

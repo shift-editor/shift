@@ -19,9 +19,9 @@
  * ```
  */
 
-import { Mat, Vec2, type MatModel } from "@shift/geo";
+import { Mat, type MatModel } from "@shift/geo";
 import type { Point2D } from "@shift/types";
-import type { TransformablePoint, ReflectAxis, SelectionBounds } from "./types";
+import type { TransformablePoint, ReflectAxis } from "./types";
 
 /**
  * Pure transformation functions for geometry manipulation.
@@ -111,55 +111,6 @@ export const Transform = {
       const transformed = Mat.applyToPoint(composite, p);
       return { id: p.id, x: transformed.x, y: transformed.y };
     });
-  },
-
-  // ============================================
-  // Selection Utilities
-  // ============================================
-
-  /**
-   * Calculate the bounding box and center of a set of points.
-   *
-   * @param points - Points to analyze
-   * @returns Bounds object with center, extents, and dimensions
-   */
-  getSelectionBounds(points: readonly TransformablePoint[]): SelectionBounds | null {
-    if (points.length === 0) {
-      return null;
-    }
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const p of points) {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y > maxY) maxY = p.y;
-    }
-
-    return {
-      center: Vec2.midpoint({ x: minX, y: minY }, { x: maxX, y: maxY }),
-      minX,
-      minY,
-      maxX,
-      maxY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  },
-
-  /**
-   * Get the center point of a selection's bounding box.
-   *
-   * @param points - Points to analyze
-   * @returns Center point or null if no points
-   */
-  getSelectionCenter(points: readonly TransformablePoint[]): Point2D | null {
-    const bounds = Transform.getSelectionBounds(points);
-    return bounds?.center ?? null;
   },
 
   // ============================================

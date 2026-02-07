@@ -1,5 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
+import { Validate } from "@shift/validation";
 import type { Glyph, Point2D, PointId } from "@shift/types";
 import type {
   DragSnapSession,
@@ -139,20 +140,20 @@ export class EditorSnapManager {
       if (idx === -1) continue;
 
       const point = contour.points[idx];
-      if (point.pointType === "onCurve") {
+      if (Validate.isOnCurve(point)) {
         return fallback;
       }
 
       const { prev, next } = Contours.neighbors(contour, idx);
       if (!prev || !next) continue;
 
-      if (next.pointType === "offCurve" && prev.pointType === "onCurve") {
+      if (Validate.isOffCurve(next) && Validate.isOnCurve(prev)) {
         return { x: prev.x, y: prev.y };
       }
-      if (next.pointType === "onCurve") {
+      if (Validate.isOnCurve(next)) {
         return { x: next.x, y: next.y };
       }
-      if (prev.pointType === "onCurve") {
+      if (Validate.isOnCurve(prev)) {
         return { x: prev.x, y: prev.y };
       }
 

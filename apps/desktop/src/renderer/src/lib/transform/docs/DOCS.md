@@ -69,8 +69,8 @@ ctx.transform.reflect({ angle: Math.PI / 4 }); // Flip across 45° axis
 - `scalePoints(points, sx, sy, origin)` - Scale by factors
 - `reflectPoints(points, axis, origin)` - Mirror across axis
 - `applyMatrix(points, matrix, origin)` - Apply affine transform
-- `getSelectionBounds(points)` - Bounding box with center
-- `getSelectionCenter(points)` - Center point only
+- `Bounds.fromPoints(points)` - Bounding box (from `@shift/geo`)
+- `Bounds.center(bounds)` - Center point of bounds (from `@shift/geo`)
 
 ### Matrix Builders
 

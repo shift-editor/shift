@@ -1,26 +1,28 @@
-import type { TransformablePoint, SelectionBounds, AlignmentType, DistributeType } from "./types";
+import { Bounds } from "@shift/geo";
+import type { TransformablePoint, AlignmentType, DistributeType } from "./types";
 
 export const Alignment = {
   alignPoints(
     points: readonly TransformablePoint[],
     alignment: AlignmentType,
-    bounds: SelectionBounds,
+    bounds: Bounds,
   ): TransformablePoint[] {
     if (points.length === 0) return [];
 
+    const center = Bounds.center(bounds);
     switch (alignment) {
       case "left":
-        return points.map((p) => ({ ...p, x: bounds.minX }));
+        return points.map((p) => ({ ...p, x: bounds.min.x }));
       case "center-h":
-        return points.map((p) => ({ ...p, x: bounds.center.x }));
+        return points.map((p) => ({ ...p, x: center.x }));
       case "right":
-        return points.map((p) => ({ ...p, x: bounds.maxX }));
+        return points.map((p) => ({ ...p, x: bounds.max.x }));
       case "top":
-        return points.map((p) => ({ ...p, y: bounds.maxY }));
+        return points.map((p) => ({ ...p, y: bounds.max.y }));
       case "center-v":
-        return points.map((p) => ({ ...p, y: bounds.center.y }));
+        return points.map((p) => ({ ...p, y: center.y }));
       case "bottom":
-        return points.map((p) => ({ ...p, y: bounds.minY }));
+        return points.map((p) => ({ ...p, y: bounds.min.y }));
     }
   },
 

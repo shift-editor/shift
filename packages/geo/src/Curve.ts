@@ -25,6 +25,7 @@
  */
 
 import type { Point2D } from "./types";
+import type { Bounds } from "./Bounds";
 import { Vec2 } from "./Vec2";
 
 // ============================================
@@ -205,7 +206,7 @@ export const Curve = {
   /**
    * Get axis-aligned bounding box.
    */
-  bounds(curve: CurveType): { min: Point2D; max: Point2D } {
+  bounds(curve: CurveType): Bounds {
     switch (curve.type) {
       case "line":
         return {
@@ -317,10 +318,7 @@ function quadraticClosestPoint(curve: QuadraticCurve, point: Point2D): ClosestPo
   return { t: bestT, point: closest, distance: Vec2.dist(point, closest) };
 }
 
-function quadraticBounds(curve: QuadraticCurve): {
-  min: Point2D;
-  max: Point2D;
-} {
+function quadraticBounds(curve: QuadraticCurve): Bounds {
   let minX = Math.min(curve.p0.x, curve.p1.x);
   let maxX = Math.max(curve.p0.x, curve.p1.x);
   let minY = Math.min(curve.p0.y, curve.p1.y);
@@ -470,7 +468,7 @@ function newtonRaphsonCubic(curve: CubicCurve, point: Point2D, initialT: number)
   return t;
 }
 
-function cubicBounds(curve: CubicCurve): { min: Point2D; max: Point2D } {
+function cubicBounds(curve: CubicCurve): Bounds {
   let minX = Math.min(curve.p0.x, curve.p1.x);
   let maxX = Math.max(curve.p0.x, curve.p1.x);
   let minY = Math.min(curve.p0.y, curve.p1.y);

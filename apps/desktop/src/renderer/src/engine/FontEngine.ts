@@ -70,7 +70,10 @@ export class FontEngine implements EngineCore {
   }
 
   #parseCommandResult(json: string): CommandResult {
-    const raw = JSON.parse(json) as CommandResult;
+    const raw = JSON.parse(json);
+    if (typeof raw !== "object" || raw === null || typeof raw.success !== "boolean") {
+      throw new NativeOperationError("Invalid command result from native layer");
+    }
     return {
       success: raw.success,
       snapshot: raw.snapshot ?? null,

@@ -1,5 +1,6 @@
 import type { Rect2D } from "@shift/types";
 import { Polygon } from "@shift/geo";
+import { ValidateClipboard } from "@shift/validation";
 import type { ClipboardContent, ClipboardPayload } from "./types";
 
 const EMPTY_BOUNDS: Rect2D = {
@@ -33,6 +34,7 @@ export class PayloadSerializer {
       const payload = JSON.parse(text);
       if (payload.format !== "shift/glyph-data") return null;
       if (payload.version > 1) return null;
+      if (!ValidateClipboard.isClipboardContent(payload.content)) return null;
       return payload.content;
     } catch {
       return null;

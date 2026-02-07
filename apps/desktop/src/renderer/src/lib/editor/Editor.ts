@@ -28,7 +28,7 @@ import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from 
 import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
-import { Polygon, Vec2 } from "@shift/geo";
+import { Bounds, Polygon, Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
@@ -45,7 +45,6 @@ import {
   DistributePointsCommand,
   getSegmentAwareBounds,
   type ReflectAxis,
-  type SelectionBounds,
   type AlignmentType,
   type DistributeType,
 } from "../transform";
@@ -880,7 +879,7 @@ export class Editor implements EditorFacade {
     this.#isInPreview = false;
   }
 
-  public getSelectionBounds(): SelectionBounds | null {
+  public getSelectionBounds(): Bounds | null {
     const snapshot = this.#fontEngine.$glyph.value;
     if (!snapshot) return null;
     return getSegmentAwareBounds(snapshot, this.getSelectedPoints());
@@ -888,7 +887,8 @@ export class Editor implements EditorFacade {
 
   public getSelectionCenter(): Point2D | null {
     const bounds = this.getSelectionBounds();
-    return bounds?.center ?? null;
+    if (!bounds) return null;
+    return Bounds.center(bounds);
   }
 
   public rotateSelection(angle: number, origin?: Point2D): void {

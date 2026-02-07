@@ -61,7 +61,7 @@ export class SvgImporter implements ClipboardImporter {
             .split(/\s+/)
             .filter((s) => s.length > 0)
             .map(Number)
-            .filter((n) => !isNaN(n))
+            .filter((n) => Number.isFinite(n))
         : [];
       commands.push({ type, args });
     }

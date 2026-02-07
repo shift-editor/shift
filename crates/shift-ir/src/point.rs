@@ -15,6 +15,19 @@ impl Default for PointType {
     }
 }
 
+impl std::str::FromStr for PointType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "onCurve" => Ok(Self::OnCurve),
+            "offCurve" => Ok(Self::OffCurve),
+            "qCurve" => Ok(Self::QCurve),
+            _ => Err(format!("Invalid point type: {s}")),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Point {
     id: PointId,
@@ -117,6 +130,18 @@ mod tests {
         p.translate(5.0, -10.0);
         assert_eq!(p.x(), 35.0);
         assert_eq!(p.y(), 30.0);
+    }
+
+    #[test]
+    fn point_type_from_str() {
+        assert_eq!("onCurve".parse::<PointType>().unwrap(), PointType::OnCurve);
+        assert_eq!(
+            "offCurve".parse::<PointType>().unwrap(),
+            PointType::OffCurve
+        );
+        assert_eq!("qCurve".parse::<PointType>().unwrap(), PointType::QCurve);
+        assert!("invalid".parse::<PointType>().is_err());
+        assert!("OnCurve".parse::<PointType>().is_err());
     }
 
     #[test]

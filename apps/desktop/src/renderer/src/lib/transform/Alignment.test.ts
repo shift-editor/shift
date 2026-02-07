@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Alignment } from "./Alignment";
-import type { TransformablePoint, SelectionBounds } from "./types";
+import { Bounds } from "@shift/geo";
+import type { TransformablePoint } from "./types";
 import type { PointId } from "@shift/types";
 
 function createPoint(id: number, x: number, y: number): TransformablePoint {
@@ -9,15 +10,7 @@ function createPoint(id: number, x: number, y: number): TransformablePoint {
 
 describe("Alignment", () => {
   describe("alignPoints", () => {
-    const bounds: SelectionBounds = {
-      center: { x: 150, y: 150 },
-      minX: 100,
-      minY: 100,
-      maxX: 200,
-      maxY: 200,
-      width: 100,
-      height: 100,
-    };
+    const bounds = Bounds.create({ x: 100, y: 100 }, { x: 200, y: 200 });
 
     it("aligns points to left edge", () => {
       const points = [createPoint(1, 100, 150), createPoint(2, 150, 100), createPoint(3, 200, 200)];

@@ -16,16 +16,6 @@ export interface ScaleOptions extends TransformOptions {
   uniform?: boolean;
 }
 
-export interface SelectionBounds {
-  readonly center: Point2D;
-  readonly minX: number;
-  readonly minY: number;
-  readonly maxX: number;
-  readonly maxY: number;
-  readonly width: number;
-  readonly height: number;
-}
-
 export type AlignmentType = "left" | "center-h" | "right" | "top" | "center-v" | "bottom";
 
 export type DistributeType = "horizontal" | "vertical";

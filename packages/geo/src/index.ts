@@ -29,7 +29,10 @@
  */
 
 // Types
-export type { Point2D, BBox, Rect2D } from "./types";
+export type { Point2D, Rect2D } from "./types";
+
+// Bounds operations
+export { Bounds } from "./Bounds";
 
 // Core vector operations
 export { Vec2 } from "./Vec2";

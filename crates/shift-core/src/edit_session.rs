@@ -68,6 +68,12 @@ impl EditSession {
         self.layer.remove_contour(contour_id)
     }
 
+    fn contour_mut_or_err(&mut self, id: ContourId) -> Result<&mut Contour, String> {
+        self.layer
+            .contour_mut(id)
+            .ok_or_else(|| format!("Contour {id:?} not found"))
+    }
+
     pub fn add_point_to_contour(
         &mut self,
         contour_id: ContourId,
@@ -76,10 +82,7 @@ impl EditSession {
         point_type: PointType,
         is_smooth: bool,
     ) -> Result<PointId, String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour with id {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         let point_id = contour.add_point(x, y, point_type, is_smooth);
         Ok(point_id)
     }
@@ -103,10 +106,7 @@ impl EditSession {
             .find_point_contour(point_id)
             .ok_or_else(|| format!("Point {point_id:?} not found in any contour"))?;
 
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         let point = contour
             .get_point_mut(point_id)
             .ok_or_else(|| format!("Point {point_id:?} not found in contour"))?;
@@ -127,10 +127,7 @@ impl EditSession {
             .find_point_contour(before_id)
             .ok_or_else(|| format!("Point {before_id:?} not found in any contour"))?;
 
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         contour
             .insert_point_before(before_id, x, y, point_type, is_smooth)
             .ok_or_else(|| format!("Failed to insert point before {before_id:?}"))
@@ -143,10 +140,7 @@ impl EditSession {
         x: f64,
         y: f64,
     ) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         let point = contour
             .get_point_mut(point_id)
             .ok_or_else(|| format!("Point {point_id:?} not found"))?;
@@ -161,10 +155,7 @@ impl EditSession {
         dx: f64,
         dy: f64,
     ) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         let point = contour
             .get_point_mut(point_id)
             .ok_or_else(|| format!("Point {point_id:?} not found"))?;
@@ -173,10 +164,7 @@ impl EditSession {
     }
 
     pub fn remove_point(&mut self, contour_id: ContourId, point_id: PointId) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         contour
             .remove_point(point_id)
             .ok_or_else(|| format!("Point {point_id:?} not found"))?;
@@ -184,28 +172,19 @@ impl EditSession {
     }
 
     pub fn close_contour(&mut self, contour_id: ContourId) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         contour.close();
         Ok(())
     }
 
     pub fn open_contour(&mut self, contour_id: ContourId) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         contour.open();
         Ok(())
     }
 
     pub fn reverse_contour(&mut self, contour_id: ContourId) -> Result<(), String> {
-        let contour = self
-            .layer
-            .contour_mut(contour_id)
-            .ok_or_else(|| format!("Contour {contour_id:?} not found"))?;
+        let contour = self.contour_mut_or_err(contour_id)?;
         contour.reverse();
         Ok(())
     }
@@ -241,15 +220,17 @@ impl EditSession {
 
     /// Set absolute position for a single point
     pub fn set_point_position(&mut self, point_id: PointId, x: f64, y: f64) -> bool {
-        if let Some(contour_id) = self.find_point_contour(point_id) {
-            if let Some(contour) = self.layer.contour_mut(contour_id) {
-                if let Some(point) = contour.get_point_mut(point_id) {
-                    point.set_position(x, y);
-                    return true;
-                }
-            }
-        }
-        false
+        let Some(contour_id) = self.find_point_contour(point_id) else {
+            return false;
+        };
+        let Some(contour) = self.layer.contour_mut(contour_id) else {
+            return false;
+        };
+        let Some(point) = contour.get_point_mut(point_id) else {
+            return false;
+        };
+        point.set_position(x, y);
+        true
     }
 
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> Vec<PointId> {
@@ -331,19 +312,14 @@ impl EditSession {
         let active_contour_id = snapshot
             .active_contour_id
             .as_ref()
-            .and_then(|id_str| id_str.parse::<u128>().ok().map(ContourId::from_raw));
+            .and_then(|id_str| id_str.parse::<ContourId>().ok());
 
         for contour_snapshot in &snapshot.contours {
-            let contour_id = contour_snapshot
-                .id
-                .parse::<u128>()
-                .ok()
-                .map(ContourId::from_raw);
+            let contour_id = contour_snapshot.id.parse::<ContourId>().ok();
 
-            let mut contour = if let Some(id) = contour_id {
-                Contour::with_id(id)
-            } else {
-                Contour::new()
+            let mut contour = match contour_id {
+                Some(id) => Contour::with_id(id),
+                None => Contour::new(),
             };
 
             for point_snapshot in &contour_snapshot.points {
@@ -352,27 +328,24 @@ impl EditSession {
                     crate::snapshot::PointType::OffCurve => PointType::OffCurve,
                 };
 
-                let point_id = point_snapshot
-                    .id
-                    .parse::<u128>()
-                    .ok()
-                    .map(PointId::from_raw);
+                let point_id = point_snapshot.id.parse::<PointId>().ok();
 
-                if let Some(id) = point_id {
-                    contour.add_point_with_id(
+                match point_id {
+                    Some(id) => contour.add_point_with_id(
                         id,
                         point_snapshot.x,
                         point_snapshot.y,
                         point_type,
                         point_snapshot.smooth,
-                    );
-                } else {
-                    contour.add_point(
-                        point_snapshot.x,
-                        point_snapshot.y,
-                        point_type,
-                        point_snapshot.smooth,
-                    );
+                    ),
+                    None => {
+                        contour.add_point(
+                            point_snapshot.x,
+                            point_snapshot.y,
+                            point_type,
+                            point_snapshot.smooth,
+                        );
+                    }
                 }
             }
 

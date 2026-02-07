@@ -29,7 +29,7 @@ fn test_ufo_round_trip_glyph_count() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
     let original_count = original.glyph_count();
 
@@ -58,7 +58,7 @@ fn test_ufo_round_trip_metrics() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -104,7 +104,7 @@ fn test_ufo_round_trip_point_coordinates() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -184,7 +184,7 @@ fn test_ufo_round_trip_point_types() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -245,7 +245,7 @@ fn test_ufo_round_trip_smooth_flags() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -306,7 +306,7 @@ fn test_ufo_round_trip_contour_closed_state() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -361,7 +361,7 @@ fn test_ufo_round_trip_glyph_widths() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -410,7 +410,7 @@ fn test_ufo_round_trip_kerning_pairs() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -457,7 +457,7 @@ fn test_ufo_round_trip_kerning_groups() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -511,7 +511,7 @@ fn test_ufo_round_trip_kerning_lookup() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -555,7 +555,7 @@ fn test_ufo_round_trip_components() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -625,7 +625,7 @@ fn test_ufo_round_trip_component_transforms() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -690,7 +690,7 @@ fn test_ufo_round_trip_multiple_layers() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -731,7 +731,7 @@ fn test_ufo_round_trip_layer_glyph_counts() {
         return;
     }
 
-    let mut loader = FontLoader::new();
+    let loader = FontLoader::new();
     let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
 
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");

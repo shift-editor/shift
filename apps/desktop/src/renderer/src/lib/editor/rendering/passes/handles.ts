@@ -2,6 +2,7 @@ import type { Glyph, PointId } from "@shift/types";
 import type { HandleState } from "@/types/graphics";
 import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
+import { Validate } from "@shift/validation";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
@@ -14,10 +15,10 @@ export function renderHandles(
 
   for (const contour of glyph.contours) {
     for (const { current, prev, next } of Contours.withNeighbors(contour)) {
-      if (current.pointType !== "offCurve") continue;
+      if (!Validate.isOffCurve(current)) continue;
 
-      const anchor = next?.pointType === "offCurve" ? prev : next;
-      if (!anchor || anchor.pointType === "offCurve") continue;
+      const anchor = next && Validate.isOffCurve(next) ? prev : next;
+      if (!anchor || Validate.isOffCurve(anchor)) continue;
 
       draw.line(
         { x: anchor.x, y: anchor.y },
@@ -59,7 +60,7 @@ export function renderHandles(
         continue;
       }
 
-      if (current.pointType === "onCurve") {
+      if (Validate.isOnCurve(current)) {
         if (current.smooth) {
           draw.handle(pos, "smooth", handleState);
         } else {

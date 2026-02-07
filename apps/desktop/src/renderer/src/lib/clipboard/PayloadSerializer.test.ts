@@ -101,6 +101,16 @@ describe("PayloadSerializer", () => {
       expect(result).toBeNull();
     });
 
+    it("returns null for structurally invalid content", () => {
+      const json = JSON.stringify({
+        format: "shift/glyph-data",
+        version: 1,
+        content: { contours: [{ points: "not-an-array", closed: true }] },
+      });
+      const result = serializer.tryDeserialize(json);
+      expect(result).toBeNull();
+    });
+
     it("roundtrips content correctly", () => {
       const original: ClipboardContent = {
         contours: [

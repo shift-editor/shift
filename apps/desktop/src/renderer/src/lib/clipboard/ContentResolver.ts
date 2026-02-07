@@ -103,7 +103,7 @@ export class ContentResolver {
 
     for (const idx of selectedIndices) {
       const point = points[idx];
-      if (point.pointType === "onCurve") {
+      if (Validate.isOnCurve(point)) {
         this.#expandContextForOnCurve(points, idx, expanded);
       } else {
         this.#expandContextForOffCurve(points, idx, expanded);
@@ -118,18 +118,18 @@ export class ContentResolver {
     const prevIdx = idx > 0 ? idx - 1 : null;
     const nextIdx = idx < points.length - 1 ? idx + 1 : null;
 
-    if (prevIdx !== null && points[prevIdx].pointType === "offCurve") {
+    if (prevIdx !== null && Validate.isOffCurve(points[prevIdx])) {
       expanded.add(prevIdx);
       const prevPrevIdx = prevIdx > 0 ? prevIdx - 1 : null;
-      if (prevPrevIdx !== null && points[prevPrevIdx].pointType === "offCurve") {
+      if (prevPrevIdx !== null && Validate.isOffCurve(points[prevPrevIdx])) {
         expanded.add(prevPrevIdx);
       }
     }
 
-    if (nextIdx !== null && points[nextIdx].pointType === "offCurve") {
+    if (nextIdx !== null && Validate.isOffCurve(points[nextIdx])) {
       expanded.add(nextIdx);
       const nextNextIdx = nextIdx < points.length - 1 ? nextIdx + 1 : null;
-      if (nextNextIdx !== null && points[nextNextIdx].pointType === "offCurve") {
+      if (nextNextIdx !== null && Validate.isOffCurve(points[nextNextIdx])) {
         expanded.add(nextNextIdx);
       }
     }
