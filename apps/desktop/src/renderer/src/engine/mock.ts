@@ -6,15 +6,7 @@
  */
 
 import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
-import type {
-  PointType,
-  CommandResult,
-  PointId,
-  GlyphSnapshot,
-  FontMetadata,
-  FontMetrics,
-  ContourId,
-} from "@shift/types";
+import type { PointType, CommandResult, PointId, GlyphSnapshot, ContourId } from "@shift/types";
 
 interface MockPoint {
   id: string;
@@ -65,12 +57,8 @@ export class MockFontEngine implements FontEngineAPI {
     // No-op in mock
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // FONT INFO
-  // ═══════════════════════════════════════════════════════════
-
-  getMetadata(): FontMetadata {
-    return {
+  getMetadata(): string {
+    return JSON.stringify({
       familyName: "Mock Font",
       styleName: "Regular",
       versionMajor: 1,
@@ -85,11 +73,11 @@ export class MockFontEngine implements FontEngineAPI {
       licenseUrl: null,
       description: null,
       note: null,
-    };
+    });
   }
 
-  getMetrics(): FontMetrics {
-    return {
+  getMetrics(): string {
+    return JSON.stringify({
       unitsPerEm: 1000,
       ascender: 800,
       descender: -200,
@@ -99,7 +87,7 @@ export class MockFontEngine implements FontEngineAPI {
       italicAngle: 0,
       underlinePosition: -100,
       underlineThickness: 50,
-    };
+    });
   }
 
   getGlyphCount(): number {
@@ -152,15 +140,16 @@ export class MockFontEngine implements FontEngineAPI {
   // SNAPSHOT METHODS
   // ═══════════════════════════════════════════════════════════
 
-  getSnapshotData(): GlyphSnapshot {
+  getSnapshotData(): string {
     if (!this.#snapshot) {
       throw new Error("No active edit session");
     }
-    return this.#snapshot as unknown as GlyphSnapshot;
+    return JSON.stringify(this.#snapshot);
   }
 
-  restoreSnapshot(snapshot: GlyphSnapshot): boolean {
-    this.#snapshot = snapshot as unknown as MockSnapshot;
+  restoreSnapshot(snapshotJson: string): boolean {
+    const snapshot = JSON.parse(snapshotJson) as MockSnapshot;
+    this.#snapshot = snapshot;
     return true;
   }
 

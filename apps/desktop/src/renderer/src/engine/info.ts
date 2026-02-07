@@ -9,30 +9,30 @@ export class InfoManager {
   }
 
   getMetadata(): FontMetadata {
-    return this.#engine.native.getMetadata();
+    return this.#engine.getMetadata();
   }
 
   getMetrics(): FontMetrics {
-    return this.#engine.native.getMetrics();
+    return this.#engine.getMetrics();
   }
 
   getGlyphCount(): number {
-    return this.#engine.native.getGlyphCount();
+    return this.#engine.getGlyphCount();
   }
 
   getGlyphUnicodes(): number[] {
-    return this.#engine.native.getGlyphUnicodes();
+    return this.#engine.getGlyphUnicodes();
   }
 
   getGlyphSvgPath(unicode: number): string | null {
-    return this.#engine.native.getGlyphSvgPath(unicode);
+    return this.#engine.getGlyphSvgPath(unicode);
   }
 
   getGlyphAdvance(unicode: number): number | null {
-    return this.#engine.native.getGlyphAdvance(unicode);
+    return this.#engine.getGlyphAdvance(unicode);
   }
 
   getGlyphBbox(unicode: number): [number, number, number, number] | null {
-    return this.#engine.native.getGlyphBbox(unicode);
+    return this.#engine.getGlyphBbox(unicode);
   }
 }

@@ -9,49 +9,13 @@ export interface JsPointMove {
   x: number;
   y: number;
 }
-export interface JsPointSnapshot {
-  id: string;
-  x: number;
-  y: number;
-  pointType: string;
-  smooth: boolean;
-}
-export interface JsContourSnapshot {
-  id: string;
-  points: Array<JsPointSnapshot>;
-  closed: boolean;
-}
-export interface JsGlyphSnapshot {
-  unicode: number;
-  name: string;
-  xAdvance: number;
-  contours: Array<JsContourSnapshot>;
-  activeContourId?: string;
-}
-export interface JsFontMetrics {
-  unitsPerEm: number;
-  ascender: number;
-  descender: number;
-  capHeight?: number;
-  xHeight?: number;
-}
-export interface JsFontMetaData {
-  familyName?: string;
-  styleName?: string;
-  versionMajor?: number;
-  versionMinor?: number;
-}
-export const enum PointTypeJS {
-  OnCurve = 0,
-  OffCurve = 1,
-}
 export declare class FontEngine {
   constructor();
   loadFont(path: string): void;
   saveFont(path: string): void;
   saveFontAsync(path: string): Promise<void>;
-  getMetadata(): JSFontMetaData;
-  getMetrics(): JSFontMetrics;
+  getMetadata(): string;
+  getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): Array<number>;
   getGlyphSvgPath(unicode: number): string | null;
@@ -65,7 +29,7 @@ export declare class FontEngine {
   getActiveContourId(): string | null;
   setActiveContour(contourId: string): string;
   clearActiveContour(): string;
-  getSnapshotData(): JSGlyphSnapshot;
+  getSnapshotData(): string;
   addPoint(x: number, y: number, pointType: string, smooth: boolean): string;
   addPointToContour(
     contourId: string,
@@ -96,5 +60,5 @@ export declare class FontEngine {
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
   setPointPositions(moves: Array<JSPointMove>): boolean;
-  restoreSnapshotNative(snapshot: JSGlyphSnapshot): boolean;
+  restoreSnapshot(snapshotJson: string): boolean;
 }

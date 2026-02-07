@@ -1,28 +1,9 @@
-/**
- * Transform Commands
- *
- * Commands for geometry transformations with full undo/redo support.
- * Each command stores original positions to enable perfect undo.
- */
-
-import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
-import { findPointsInSnapshot } from "@/lib/utils/snapshot";
+import type { Point2D, PointId } from "@shift/types";
 import { Vec2, type MatModel } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
-
-function getPointsFromSnapshot(
-  snapshot: GlyphSnapshot | null,
-  pointIds: PointId[],
-): TransformablePoint[] {
-  if (!snapshot) return [];
-  return findPointsInSnapshot(snapshot, pointIds).map((p) => ({
-    id: p.id,
-    x: p.x,
-    y: p.y,
-  }));
-}
+import { Glyphs } from "@shift/font";
 
 abstract class BaseTransformCommand extends BaseCommand<void> {
   abstract readonly name: string;
@@ -40,7 +21,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = getPointsFromSnapshot(ctx.glyph, this.#pointIds);
+    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
     if (points.length === 0) return;
 
     if (this.#originalPositions.size === 0) {
@@ -146,10 +127,6 @@ export class TransformMatrixCommand extends BaseTransformCommand {
   }
 }
 
-/**
- * Move selection to an absolute position by translating all points.
- * The anchor determines which point of the selection bounding box is positioned.
- */
 export class MoveSelectionToCommand extends BaseTransformCommand {
   readonly name = "Move Selection To";
 

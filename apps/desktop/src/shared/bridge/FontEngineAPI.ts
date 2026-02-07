@@ -1,4 +1,4 @@
-import type { GlyphSnapshot, FontMetrics, FontMetadata, ContourId } from "@shift/types";
+import type { ContourId } from "@shift/types";
 
 export interface PointMove {
   id: string;
@@ -10,8 +10,8 @@ export interface FontEngineAPI {
   loadFont(path: string): void;
   saveFont(path: string): void;
   saveFontAsync(path: string): Promise<void>;
-  getMetadata(): FontMetadata;
-  getMetrics(): FontMetrics;
+  getMetadata(): string;
+  getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): number[];
   getGlyphSvgPath(unicode: number): string | null;
@@ -21,7 +21,7 @@ export interface FontEngineAPI {
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
-  getSnapshotData(): GlyphSnapshot;
+  getSnapshotData(): string;
   addEmptyContour(): string;
   addContour(): string;
   getActiveContourId(): ContourId | null;
@@ -51,7 +51,7 @@ export interface FontEngineAPI {
   toggleSmooth(pointId: string): string;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
   setPointPositions(moves: PointMove[]): boolean;
-  restoreSnapshot(snapshot: GlyphSnapshot): boolean;
+  restoreSnapshot(snapshotJson: string): boolean;
 }
 
 declare global {

@@ -33,7 +33,7 @@ describe("FontEngine Integration - UFO Loading", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    const metadata = engine.getMetadata();
+    const metadata = JSON.parse(engine.getMetadata());
     expect(metadata.familyName).toBe("MutatorMathTest");
     expect(metadata.styleName).toBe("LightCondensed");
   });
@@ -46,7 +46,7 @@ describe("FontEngine Integration - UFO Loading", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    const metrics = engine.getMetrics();
+    const metrics = JSON.parse(engine.getMetrics());
     expect(metrics.unitsPerEm).toBe(1000);
     expect(metrics.ascender).toBe(700);
     expect(metrics.descender).toBe(-200);
@@ -100,7 +100,7 @@ describe("FontEngine Integration - Edit Session", () => {
     engine.startEditSession(65);
     expect(engine.hasEditSession()).toBe(true);
 
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
     expect(snapshot).toBeTruthy();
     expect(snapshot.name).toBe("A");
     expect(snapshot.unicode).toBe(65);
@@ -126,7 +126,7 @@ describe("FontEngine Integration - Edit Session", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(65);
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
 
     expect(snapshot.name).toBe("A");
     expect(snapshot.unicode).toBe(65);
@@ -174,14 +174,14 @@ describe("FontEngine Integration - Round Trip", () => {
 
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
-    const originalMetrics = engine.getMetrics();
+    const originalMetrics = JSON.parse(engine.getMetrics());
 
     const outputPath = join(tempDir, "output.ufo");
     engine.saveFont(outputPath);
 
     const engine2 = new FontEngine();
     engine2.loadFont(outputPath);
-    const reloadedMetrics = engine2.getMetrics();
+    const reloadedMetrics = JSON.parse(engine2.getMetrics());
 
     expect(reloadedMetrics.unitsPerEm).toBe(originalMetrics.unitsPerEm);
     expect(reloadedMetrics.ascender).toBe(originalMetrics.ascender);
@@ -197,7 +197,7 @@ describe("FontEngine Integration - Round Trip", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(65);
-    const originalSnapshot = engine.getSnapshotData();
+    const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
     const outputPath = join(tempDir, "output.ufo");
@@ -207,7 +207,7 @@ describe("FontEngine Integration - Round Trip", () => {
     engine2.loadFont(outputPath);
 
     engine2.startEditSession(65);
-    const reloadedSnapshot = engine2.getSnapshotData();
+    const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     engine2.endEditSession();
 
     expect(reloadedSnapshot.contours.length).toBe(originalSnapshot.contours.length);
@@ -245,7 +245,7 @@ describe("FontEngine Integration - TTF Loading", () => {
     engine.startEditSession(65);
     expect(engine.hasEditSession()).toBe(true);
 
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
     expect(snapshot.unicode).toBe(65);
 
     engine.endEditSession();
@@ -260,7 +260,7 @@ describe("FontEngine Integration - TTF Loading", () => {
     engine.loadFont(MUTATORSANS_TTF);
 
     engine.startEditSession(65);
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
 
     expect(snapshot.contours.length).toBeGreaterThan(0);
 
@@ -286,7 +286,7 @@ describe("FontEngine Integration - Composite Glyphs", () => {
     engine.startEditSession(193);
     expect(engine.hasEditSession()).toBe(true);
 
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
     expect(snapshot.name).toBe("Aacute");
     expect(snapshot.unicode).toBe(193);
 
@@ -304,7 +304,7 @@ describe("FontEngine Integration - Point Types", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(79);
-    const originalSnapshot = engine.getSnapshotData();
+    const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
     const originalPointTypes = [];
@@ -330,7 +330,7 @@ describe("FontEngine Integration - Point Types", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(79);
-    const snapshot = engine.getSnapshotData();
+    const snapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
     const smoothFlags = [];
@@ -352,7 +352,7 @@ describe("FontEngine Integration - Point Types", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(65);
-    const originalSnapshot = engine.getSnapshotData();
+    const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
     for (const contour of originalSnapshot.contours) {
@@ -381,14 +381,14 @@ describe("FontEngine Integration - Extended Round Trip", () => {
 
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
-    const originalMetadata = engine.getMetadata();
+    const originalMetadata = JSON.parse(engine.getMetadata());
 
     const outputPath = join(tempDir, "output.ufo");
     engine.saveFont(outputPath);
 
     const engine2 = new FontEngine();
     engine2.loadFont(outputPath);
-    const reloadedMetadata = engine2.getMetadata();
+    const reloadedMetadata = JSON.parse(engine2.getMetadata());
 
     expect(reloadedMetadata.familyName).toBe(originalMetadata.familyName);
     expect(reloadedMetadata.styleName).toBe(originalMetadata.styleName);
@@ -403,7 +403,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(65);
-    const originalSnapshot = engine.getSnapshotData();
+    const originalSnapshot = JSON.parse(engine.getSnapshotData());
     const originalPoints = [];
     for (const contour of originalSnapshot.contours) {
       for (const point of contour.points) {
@@ -419,7 +419,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine2.loadFont(outputPath);
 
     engine2.startEditSession(65);
-    const reloadedSnapshot = engine2.getSnapshotData();
+    const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     const reloadedPoints = [];
     for (const contour of reloadedSnapshot.contours) {
       for (const point of contour.points) {
@@ -453,7 +453,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(79);
-    const originalSnapshot = engine.getSnapshotData();
+    const originalSnapshot = JSON.parse(engine.getSnapshotData());
     const originalTypes = [];
     for (const contour of originalSnapshot.contours) {
       for (const point of contour.points) {
@@ -469,7 +469,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine2.loadFont(outputPath);
 
     engine2.startEditSession(79);
-    const reloadedSnapshot = engine2.getSnapshotData();
+    const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     const reloadedTypes = [];
     for (const contour of reloadedSnapshot.contours) {
       for (const point of contour.points) {

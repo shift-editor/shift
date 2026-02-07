@@ -1,1 +1,1 @@
-export type TextState = { type: "idle" } | { type: "ready" };
+export type TextState = { type: "idle" } | { type: "ready" } | { type: "typing" };

@@ -768,6 +768,6 @@ interface ShiftScriptContext {
 - [x] tsgo for type checking
 - [x] Pre-commit hooks (format, lint, typecheck, test)
 - [ ] Remove debug logging from production
-- [ ] Consolidate duplicate types
+- [x] Consolidate duplicate types
 - [ ] Document public APIs
 - [ ] Architecture decision records

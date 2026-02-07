@@ -1,6 +1,6 @@
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
 import { Bounds } from "@shift/geo";
-import { findPointsInSnapshot } from "@/lib/utils/snapshot";
+import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
@@ -10,7 +10,7 @@ function getPointsFromSnapshot(
   pointIds: PointId[],
 ): TransformablePoint[] {
   if (!snapshot) return [];
-  return findPointsInSnapshot(snapshot, pointIds).map((p) => ({
+  return Glyphs.findPoints(snapshot, pointIds).map((p) => ({
     id: p.id,
     x: p.x,
     y: p.y,

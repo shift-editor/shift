@@ -8,10 +8,10 @@ export class IOManager {
   }
 
   loadFont(path: string): void {
-    this.#engine.native.loadFont(path);
+    this.#engine.loadFont(path);
   }
 
   async saveFontAsync(path: string): Promise<void> {
-    return this.#engine.native.saveFontAsync(path);
+    return this.#engine.saveFontAsync(path);
   }
 }

@@ -1,25 +1,5 @@
-import type { GlyphSnapshot, ContourId } from "@shift/types";
+import type { GlyphSnapshot } from "@shift/types";
 import type { EngineCore } from "@/types/engine";
-
-function convertNativeSnapshot(native: GlyphSnapshot): GlyphSnapshot {
-  return {
-    unicode: native.unicode,
-    name: native.name,
-    xAdvance: native.xAdvance,
-    contours: native.contours.map((c) => ({
-      id: c.id as ContourId,
-      points: c.points.map((p) => ({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        pointType: p.pointType,
-        smooth: p.smooth,
-      })),
-      closed: c.closed,
-    })),
-    activeContourId: native.activeContourId,
-  };
-}
 
 export class SessionManager {
   #engine: EngineCore;
@@ -37,23 +17,23 @@ export class SessionManager {
       this.endEditSession();
     }
 
-    this.#engine.native.startEditSession(unicode);
+    this.#engine.startEditSession(unicode);
 
     const glyph = this.getGlyph();
     this.#engine.emitGlyph(glyph);
   }
 
   endEditSession(): void {
-    this.#engine.native.endEditSession();
+    this.#engine.endEditSession();
     this.#engine.emitGlyph(null);
   }
 
   isActive(): boolean {
-    return this.#engine.native.hasEditSession();
+    return this.#engine.hasEditSession();
   }
 
   getEditingUnicode(): number | null {
-    return this.#engine.native.getEditingUnicode();
+    return this.#engine.getEditingUnicode();
   }
 
   getGlyph(): GlyphSnapshot | null {
@@ -62,8 +42,7 @@ export class SessionManager {
     }
 
     try {
-      const nativeSnapshot = this.#engine.native.getSnapshotData();
-      return convertNativeSnapshot(nativeSnapshot);
+      return this.#engine.getSnapshot();
     } catch {
       return null;
     }

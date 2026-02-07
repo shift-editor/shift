@@ -4,14 +4,10 @@ use napi_derive::napi;
 use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{
-    CommandResult, ContourSnapshot, GlyphSnapshot, PointSnapshot, PointType as SnapshotPointType,
-  },
+  snapshot::{CommandResult, GlyphSnapshot},
   ContourId, CurveSegment, CurveSegmentIter, Font, FontWriter, Glyph, GlyphLayer, LayerId,
   PasteContour, Point, PointId, PointType, UfoWriter,
 };
-
-use crate::types::{JSFontMetaData, JSFontMetrics};
 
 fn to_json(value: &impl serde::Serialize) -> String {
   serde_json::to_string(value).expect("NAPI result serialization failed")
@@ -222,18 +218,14 @@ impl FontEngine {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // METADATA & QUERY
-  // ═══════════════════════════════════════════════════════════
-
   #[napi]
-  pub fn get_metadata(&self) -> JSFontMetaData {
-    self.font.metadata().into()
+  pub fn get_metadata(&self) -> String {
+    to_json(self.font.metadata())
   }
 
   #[napi]
-  pub fn get_metrics(&self) -> JSFontMetrics {
-    self.font.metrics().into()
+  pub fn get_metrics(&self) -> String {
+    to_json(self.font.metrics())
   }
 
   #[napi]
@@ -398,23 +390,15 @@ impl FontEngine {
     Ok(to_json(&result))
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SNAPSHOT METHODS
-  // ═══════════════════════════════════════════════════════════
-
   #[napi]
-  pub fn get_snapshot_data(&self) -> Result<JSGlyphSnapshot> {
+  pub fn get_snapshot_data(&self) -> Result<String> {
     let session = self
       .current_edit_session
       .as_ref()
       .ok_or_else(|| Error::new(Status::GenericFailure, "No edit session active"))?;
 
-    Ok(JSGlyphSnapshot::from_edit_session(session))
+    Ok(to_json(&GlyphSnapshot::from_edit_session(session)))
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // POINT OPERATIONS
-  // ═══════════════════════════════════════════════════════════
 
   #[napi]
   pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
@@ -633,42 +617,19 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn restore_snapshot_native(&mut self, snapshot: JSGlyphSnapshot) -> Result<bool> {
+  pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
 
-    let glyph_snapshot = GlyphSnapshot {
-      unicode: snapshot.unicode,
-      name: snapshot.name,
-      x_advance: snapshot.x_advance,
-      contours: snapshot
-        .contours
-        .into_iter()
-        .map(|c| ContourSnapshot {
-          id: c.id,
-          points: c
-            .points
-            .into_iter()
-            .map(|p| PointSnapshot {
-              id: p.id,
-              x: p.x,
-              y: p.y,
-              point_type: if p.point_type == "offCurve" {
-                SnapshotPointType::OffCurve
-              } else {
-                SnapshotPointType::OnCurve
-              },
-              smooth: p.smooth,
-            })
-            .collect(),
-          closed: c.closed,
-        })
-        .collect(),
-      active_contour_id: snapshot.active_contour_id,
-    };
+    let snapshot: GlyphSnapshot = serde_json::from_str(&snapshot_json).map_err(|e| {
+      Error::new(
+        Status::GenericFailure,
+        format!("Invalid snapshot JSON: {e}"),
+      )
+    })?;
 
-    session.restore_from_snapshot(&glyph_snapshot);
+    session.restore_from_snapshot(&snapshot);
     Ok(true)
   }
 }
@@ -692,69 +653,6 @@ struct PasteResultJson {
   created_point_ids: Vec<String>,
   created_contour_ids: Vec<String>,
   error: Option<String>,
-}
-
-// ═══════════════════════════════════════════════════════════
-// JS-NATIVE SNAPSHOT TYPES (no JSON serialization)
-// ═══════════════════════════════════════════════════════════
-
-#[napi(object)]
-pub struct JSPointSnapshot {
-  pub id: String,
-  pub x: f64,
-  pub y: f64,
-  pub point_type: String,
-  pub smooth: bool,
-}
-
-#[napi(object)]
-pub struct JSContourSnapshot {
-  pub id: String,
-  pub points: Vec<JSPointSnapshot>,
-  pub closed: bool,
-}
-
-#[napi(object)]
-pub struct JSGlyphSnapshot {
-  pub unicode: u32,
-  pub name: String,
-  pub x_advance: f64,
-  pub contours: Vec<JSContourSnapshot>,
-  pub active_contour_id: Option<String>,
-}
-
-impl JSGlyphSnapshot {
-  pub fn from_edit_session(session: &EditSession) -> Self {
-    Self {
-      unicode: session.unicode(),
-      name: session.glyph_name().to_string(),
-      x_advance: session.width(),
-      contours: session
-        .contours_iter()
-        .map(|c| JSContourSnapshot {
-          id: c.id().to_string(),
-          points: c
-            .points()
-            .iter()
-            .map(|p| JSPointSnapshot {
-              id: p.id().to_string(),
-              x: p.x(),
-              y: p.y(),
-              point_type: match p.point_type() {
-                // QCurve is intentionally mapped to "onCurve" — the editor does not
-                // yet distinguish quadratic vs cubic on-curve points at the JS layer.
-                PointType::OnCurve | PointType::QCurve => "onCurve".to_string(),
-                PointType::OffCurve => "offCurve".to_string(),
-              },
-              smooth: p.is_smooth(),
-            })
-            .collect(),
-          closed: c.is_closed(),
-        })
-        .collect(),
-      active_contour_id: session.active_contour_id().map(|id| id.to_string()),
-    }
-  }
 }
 
 #[cfg(test)]

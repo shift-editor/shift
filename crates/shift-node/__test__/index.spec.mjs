@@ -16,8 +16,8 @@ describe("FontEngine", () => {
 
   it("FontEngine default values", () => {
     const engine = new FontEngine();
-    const metadata = engine.getMetadata();
-    const metrics = engine.getMetrics();
+    const metadata = JSON.parse(engine.getMetadata());
+    const metrics = JSON.parse(engine.getMetrics());
 
     expect(metadata.familyName).toBe("Untitled Font");
     expect(metadata.styleName).toBe("Regular");

@@ -1,21 +1,11 @@
 import type { GlyphSnapshot, PointId, ContourId, Point2D } from "@shift/types";
-import { asPointId, asContourId } from "@shift/types";
 import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
-import { findPointInSnapshot } from "@/lib/utils/snapshot";
+import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type { PointMove } from "@shared/bridge/FontEngineAPI";
 import type { EngineCore, PasteResult, PointEdit } from "@/types/engine";
-
-function parsePasteResult(json: string): PasteResult {
-  const raw = JSON.parse(json);
-  return {
-    success: raw.success,
-    createdPointIds: (raw.createdPointIds ?? []).map(asPointId),
-    createdContourIds: (raw.createdContourIds ?? []).map(asContourId),
-    error: raw.error ?? undefined,
-  };
-}
+import { ContourContent } from "@/lib/clipboard";
 
 export class EditingManager {
   #engine: EngineCore;
@@ -27,34 +17,31 @@ export class EditingManager {
   addPoint(edit: PointEdit): PointId {
     this.#requireSession();
 
-    return this.#engine.commit(
-      () => {
-        const { x, y, pointType, smooth } = edit;
-        return this.#engine.native.addPoint(x, y, pointType, smooth);
-      },
-      (result) => {
-        const pointId = result.affectedPointIds[0];
-        if (!pointId) {
-          const lastContour = result.snapshot?.contours[result.snapshot.contours.length - 1];
-          const lastPoint = lastContour?.points[lastContour.points.length - 1];
-          return lastPoint.id;
-        }
+    const response = this.#engine.addPoint(edit.x, edit.y, edit.pointType, edit.smooth);
+    this.#engine.emitGlyph(response.snapshot);
 
-        return pointId;
-      },
-    );
+    const pointId = response.affectedPointIds[0];
+    if (!pointId) {
+      const lastContour = response.snapshot.contours[response.snapshot.contours.length - 1];
+      const lastPoint = lastContour?.points[lastContour.points.length - 1];
+      return lastPoint.id;
+    }
+
+    return pointId;
   }
 
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     this.#requireSession();
 
-    return this.#engine.commit(
-      () => {
-        const { x, y, pointType, smooth } = edit;
-        return this.#engine.native.addPointToContour(contourId, x, y, pointType, smooth);
-      },
-      (result) => result.affectedPointIds[0],
+    const response = this.#engine.addPointToContour(
+      contourId,
+      edit.x,
+      edit.y,
+      edit.pointType,
+      edit.smooth,
     );
+    this.#engine.emitGlyph(response.snapshot);
+    return response.affectedPointIds[0];
   }
 
   movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
@@ -64,10 +51,9 @@ export class EditingManager {
       return [];
     }
 
-    return this.#engine.commit(
-      () => this.#engine.native.movePoints(pointIds, delta.x, delta.y),
-      (result) => result.affectedPointIds,
-    );
+    const response = this.#engine.movePoints(pointIds, delta.x, delta.y);
+    this.#engine.emitGlyph(response.snapshot);
+    return response.affectedPointIds;
   }
 
   movePointTo(pointId: PointId, x: number, y: number): void {
@@ -78,7 +64,7 @@ export class EditingManager {
       throw new NativeOperationError("No glyph available");
     }
 
-    const found = findPointInSnapshot(glyph, pointId);
+    const found = Glyphs.findPoint(glyph, pointId);
     if (!found) {
       throw new NativeOperationError(`Point ${pointId} not found`);
     }
@@ -92,31 +78,31 @@ export class EditingManager {
       return;
     }
 
-    this.#engine.commit(() => this.#engine.native.removePoints(pointIds));
+    const response = this.#engine.removePoints(pointIds);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     this.#requireSession();
 
     const { x, y, pointType, smooth } = edit;
-    return this.#engine.commit(
-      () => this.#engine.native.insertPointBefore(beforePointId, x, y, pointType, smooth),
-      (result) => result.affectedPointIds[0],
-    );
+    const response = this.#engine.insertPointBefore(beforePointId, x, y, pointType, smooth);
+    this.#engine.emitGlyph(response.snapshot);
+    return response.affectedPointIds[0];
   }
 
   addContour(): ContourId {
     this.#requireSession();
 
-    return this.#engine.commit(
-      () => this.#engine.native.addContour(),
-      (result) => result.snapshot?.activeContourId,
-    );
+    const response = this.#engine.addContour();
+    this.#engine.emitGlyph(response.snapshot);
+    return response.snapshot.activeContourId!;
   }
 
   closeContour(): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.closeContour());
+    const response = this.#engine.closeContour();
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   getActiveContourId(): ContourId | null {
@@ -124,13 +110,13 @@ export class EditingManager {
       return null;
     }
 
-    const id = this.#engine.native.getActiveContourId();
-    return id ?? null;
+    return this.#engine.getActiveContourId();
   }
 
   setActiveContour(contourId: ContourId): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.setActiveContour(contourId));
+    const response = this.#engine.setActiveContour(contourId);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   clearActiveContour(): void {
@@ -138,46 +124,48 @@ export class EditingManager {
       return;
     }
 
-    this.#engine.commit(() => this.#engine.native.clearActiveContour());
+    const response = this.#engine.clearActiveContour();
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   reverseContour(contourId: ContourId): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.reverseContour(contourId));
+    const response = this.#engine.reverseContour(contourId);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   removeContour(contourId: ContourId): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.removeContour(contourId));
+    const response = this.#engine.removeContour(contourId);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   openContour(contourId: ContourId): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.openContour(contourId));
+    const response = this.#engine.openContour(contourId);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
-  pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {
+  pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();
 
-    const resultJson = this.#engine.native.pasteContours(contoursJson, offsetX, offsetY);
-    const result = parsePasteResult(resultJson);
+    const contoursJson = JSON.stringify(contours);
+    const result = this.#engine.pasteContours(contoursJson, offsetX, offsetY);
 
     if (!result.success) {
       throw new NativeOperationError(result.error ?? "pasteContours failed");
     }
 
-    const raw = this.#engine.native.getSnapshotData();
-    if (!ValidateSnapshot.isGlyphSnapshot(raw)) {
-      throw new NativeOperationError("pasteContours returned invalid snapshot");
-    }
-    this.#engine.emitGlyph(raw);
+    const snapshot = this.#engine.getSnapshot();
+    this.#engine.emitGlyph(snapshot);
 
     return result;
   }
 
   toggleSmooth(pointId: PointId): void {
     this.#requireSession();
-    this.#engine.commit(() => this.#engine.native.toggleSmooth(pointId));
+    const response = this.#engine.toggleSmooth(pointId);
+    this.#engine.emitGlyph(response.snapshot);
   }
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
@@ -197,7 +185,7 @@ export class EditingManager {
       x: m.x,
       y: m.y,
     }));
-    this.#engine.native.setPointPositions(nativeMoves);
+    this.#engine.setPointPositions(nativeMoves);
 
     return moves.map((m) => m.id);
   }
@@ -212,7 +200,7 @@ export class EditingManager {
     const updatedGlyph = applyMovesToGlyph(glyph, moves);
     this.#engine.emitGlyph(updatedGlyph);
 
-    this.#engine.native.setPointPositions(moves);
+    this.#engine.setPointPositions(moves);
   }
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
@@ -220,7 +208,7 @@ export class EditingManager {
     if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {
       throw new NativeOperationError("Cannot restore invalid snapshot");
     }
-    this.#engine.native.restoreSnapshot(snapshot);
+    this.#engine.restoreSnapshot(snapshot);
     this.#engine.emitGlyph(snapshot);
   }
 

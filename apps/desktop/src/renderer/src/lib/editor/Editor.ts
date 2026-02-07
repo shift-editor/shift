@@ -1218,8 +1218,7 @@ export class Editor implements EditorFacade {
     const content = resolver.resolve(glyph, selectedPointIds, selectedSegmentIds);
     if (!content || content.contours.length === 0) return [];
 
-    const contoursJson = JSON.stringify(content.contours);
-    const result = this.#fontEngine.editing.pasteContours(contoursJson, 0, 0);
+    const result = this.#fontEngine.editing.pasteContours(content.contours, 0, 0);
     return result.success ? result.createdPointIds : [];
   }
 

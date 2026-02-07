@@ -48,9 +48,8 @@ export class PasteCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     this.#beforeSnapshot = ctx.glyph;
 
-    const contoursJson = JSON.stringify(this.#content.contours);
     const result = ctx.fontEngine.editing.pasteContours(
-      contoursJson,
+      this.#content.contours,
       this.#options.offset.x,
       this.#options.offset.y,
     );

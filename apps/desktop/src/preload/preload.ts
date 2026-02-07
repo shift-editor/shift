@@ -239,8 +239,8 @@ const fontEngineAPI = {
     return fontEngineInstance.setPointPositions(moves);
   },
 
-  restoreSnapshot: (snapshot: any): boolean => {
-    return fontEngineInstance.restoreSnapshotNative(snapshot);
+  restoreSnapshot: (snapshotJson: string): boolean => {
+    return fontEngineInstance.restoreSnapshot(snapshotJson);
   },
 } satisfies FontEngineAPI;
 
