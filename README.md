@@ -3,8 +3,7 @@
     <img width=150 src="https://github.com/user-attachments/assets/521e2732-341d-441d-bb6d-bf7bcdccf764" />
     <h1 align="center"><b>Shift</b></h1>
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
-    <img width="1822" height="1185" alt="image" src="https://github.com/user-attachments/assets/2a3063c9-add8-438a-819b-fe235e7dfbb2" />
-
+  <img width="2025" height="1140" alt="image" src="https://github.com/user-attachments/assets/6445f466-4652-4d30-90f7-6ea762041f98" />
   </p>
 </div>
 
@@ -56,6 +55,10 @@ pnpm dev
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for current implementation status and planned features. We are planning to ship a production grade font editor.
+
+## Community
+
+Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, report bugs, or contribute!
 
 ## License
 
