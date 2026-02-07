@@ -30,6 +30,7 @@ function createMockRenderer(): IRenderer {
     closePath: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
+    fillPath: vi.fn(),
     scale: vi.fn(),
     translate: vi.fn(),
     transform: vi.fn(),

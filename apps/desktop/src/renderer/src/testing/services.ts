@@ -1048,6 +1048,9 @@ export function createMockToolContext(): MockToolContext {
       underlinePosition: null,
       underlineThickness: null,
     }),
+    getGlyphSvgPath: (_unicode: number) => null as string | null,
+    getGlyphAdvance: (_unicode: number) => null as number | null,
+    getGlyphBbox: (_unicode: number) => null,
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),

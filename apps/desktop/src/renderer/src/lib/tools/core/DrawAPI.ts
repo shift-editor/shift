@@ -11,6 +11,7 @@ import type {
 import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
+import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 const START_TRIANGLE_GAP = 3;
 
 export type { StrokeStyle, FillStyle, ShapeStyle };
@@ -315,6 +316,15 @@ export class DrawAPI {
       this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
     }
     this.#renderer.stroke();
+    this.#renderer.restore();
+  }
+
+  svgPath(d: string, unicode: number, x: number, y: number, style?: FillStyle): void {
+    const path = GlyphRenderCache.get(unicode, d);
+    this.#renderer.save();
+    this.#renderer.translate(x, y);
+    if (style?.fillStyle) this.#renderer.fillStyle = style.fillStyle;
+    this.#renderer.fillPath(path);
     this.#renderer.restore();
   }
 

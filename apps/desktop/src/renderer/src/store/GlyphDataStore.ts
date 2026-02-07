@@ -1,5 +1,8 @@
 import type { FontMetrics } from "@shift/types";
+import type { Bounds } from "@shift/geo";
+import { Bounds as BoundsUtil } from "@shift/geo";
 import { LRUCache } from "@/lib/cache/LRUCache";
+import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
 import { getNative, hasNative } from "@/engine/native";
 
@@ -7,9 +10,10 @@ const SVG_PATH_CACHE_SIZE = 500;
 
 const DEFAULT_VERSION = 0;
 
-export class GlyphOutlineStore {
+export class GlyphDataStore {
   #svgCache: LRUCache<number, string>;
   #advanceCache: LRUCache<number, number>;
+  #bboxCache: LRUCache<number, Bounds>;
   #fontUnicodes: WritableSignal<number[]>;
   #fontLoaded: WritableSignal<boolean>;
   #fontMetrics: WritableSignal<FontMetrics | null>;
@@ -18,6 +22,7 @@ export class GlyphOutlineStore {
   constructor() {
     this.#svgCache = new LRUCache<number, string>({ max: SVG_PATH_CACHE_SIZE });
     this.#advanceCache = new LRUCache<number, number>({ max: SVG_PATH_CACHE_SIZE });
+    this.#bboxCache = new LRUCache<number, Bounds>({ max: SVG_PATH_CACHE_SIZE });
     this.#fontUnicodes = signal<number[]>([]);
     this.#fontLoaded = signal(false);
     this.#fontMetrics = signal<FontMetrics | null>(null);
@@ -26,7 +31,9 @@ export class GlyphOutlineStore {
   onFontLoaded(unicodes: number[], metrics?: FontMetrics): void {
     this.#svgCache.clear();
     this.#advanceCache.clear();
+    this.#bboxCache.clear();
     this.#glyphVersions.clear();
+    GlyphRenderCache.clear();
     this.#fontUnicodes.set(unicodes);
     this.#fontLoaded.set(true);
     this.#fontMetrics.set(metrics ?? null);
@@ -35,7 +42,9 @@ export class GlyphOutlineStore {
   onFontUnloaded(): void {
     this.#svgCache.clear();
     this.#advanceCache.clear();
+    this.#bboxCache.clear();
     this.#glyphVersions.clear();
+    GlyphRenderCache.clear();
     this.#fontUnicodes.set([]);
     this.#fontLoaded.set(false);
     this.#fontMetrics.set(null);
@@ -59,11 +68,15 @@ export class GlyphOutlineStore {
     return advance ?? null;
   }
 
-  getBbox(unicode: number): [number, number, number, number] | null {
+  getBbox(unicode: number): Bounds | null {
+    const cached = this.#bboxCache.get(unicode);
+    if (cached !== undefined) return cached;
     if (!hasNative()) return null;
     const b = getNative().getGlyphBbox(unicode);
     if (b == null || b.length !== 4) return null;
-    return [b[0], b[1], b[2], b[3]];
+    const bounds = BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
+    this.#bboxCache.set(unicode, bounds);
+    return bounds;
   }
 
   hasGlyph(unicode: number): boolean {
@@ -77,6 +90,8 @@ export class GlyphOutlineStore {
   invalidateGlyph(unicode: number): void {
     this.#svgCache.delete(unicode);
     this.#advanceCache.delete(unicode);
+    this.#bboxCache.delete(unicode);
+    GlyphRenderCache.delete(unicode);
     let v = this.#glyphVersions.get(unicode);
     if (!v) {
       v = signal(DEFAULT_VERSION);
@@ -133,4 +148,4 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
   return metrics.ascender - metrics.descender + marginTop + marginBottom;
 }
 
-export const glyphOutlineStore = new GlyphOutlineStore();
+export const glyphDataStore = new GlyphDataStore();

@@ -196,6 +196,11 @@ export class Canvas2DRenderer implements IRenderer {
     this.#renderCtx.fill(this.#path);
   }
 
+  fillPath(path: Path2D): void {
+    this.#applyFillStyle();
+    this.#renderCtx.fill(path);
+  }
+
   scale(x: number, y: number): void {
     this.#renderCtx.scale(x, y);
   }

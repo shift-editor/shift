@@ -28,6 +28,7 @@ function createMockRenderer(): IRenderer {
     closePath: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
+    fillPath: vi.fn(),
     scale: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
@@ -281,6 +282,33 @@ describe("DrawAPI", () => {
       expect(renderer.strokeStyle).toBe("#abc");
       expect(renderer.fillStyle).toBe("#def");
       expect(screen.toUpmDistance).toHaveBeenCalledWith(3);
+    });
+  });
+
+  describe("svgPath", () => {
+    it("should save/restore renderer state", () => {
+      draw.svgPath("M0 0L100 100", 65, 50, 100);
+
+      expect(renderer.save).toHaveBeenCalled();
+      expect(renderer.restore).toHaveBeenCalled();
+    });
+
+    it("should translate to position", () => {
+      draw.svgPath("M0 0L100 100", 65, 50, 100);
+
+      expect(renderer.translate).toHaveBeenCalledWith(50, 100);
+    });
+
+    it("should call fillPath with a Path2D", () => {
+      draw.svgPath("M0 0L100 100", 65, 0, 0);
+
+      expect(renderer.fillPath).toHaveBeenCalledWith(expect.any(Path2D));
+    });
+
+    it("should apply fill style when provided", () => {
+      draw.svgPath("M0 0L100 100", 65, 0, 0, { fillStyle: "#ff0000" });
+
+      expect(renderer.fillStyle).toBe("#ff0000");
     });
   });
 });

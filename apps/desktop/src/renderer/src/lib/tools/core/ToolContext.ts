@@ -8,6 +8,7 @@ import type {
   Rect2D,
   FontMetrics,
 } from "@shift/types";
+import type { Bounds } from "@shift/geo";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
@@ -130,6 +131,9 @@ export interface VisualStateContext {
 
 export interface FontContext {
   getFontMetrics(): FontMetrics;
+  getGlyphSvgPath(unicode: number): string | null;
+  getGlyphAdvance(unicode: number): number | null;
+  getGlyphBbox(unicode: number): Bounds | null;
 }
 
 export type ToolContext = ViewportContext &

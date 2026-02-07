@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { effect } from "@/lib/reactive/signal";
-import { GlyphOutlineStore } from "./GlyphOutlineStore";
+import { GlyphDataStore } from "./GlyphDataStore";
 
-describe("GlyphOutlineStore", () => {
-  let store: GlyphOutlineStore;
+describe("GlyphDataStore", () => {
+  let store: GlyphDataStore;
 
   beforeEach(() => {
-    store = new GlyphOutlineStore();
+    store = new GlyphDataStore();
   });
 
   describe("getGlyphVersion", () => {

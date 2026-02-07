@@ -34,7 +34,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
-import { glyphOutlineStore } from "@/store/GlyphOutlineStore";
+import { glyphDataStore } from "@/store/GlyphDataStore";
 import { CommandHistory, CutCommand, PasteCommand } from "../commands";
 import {
   RotatePointsCommand,
@@ -757,6 +757,18 @@ export class Editor implements EditorFacade {
     return this.#fontEngine.info.getMetrics();
   }
 
+  public getGlyphSvgPath(unicode: number): string | null {
+    return glyphDataStore.getSvgPath(unicode);
+  }
+
+  public getGlyphAdvance(unicode: number): number | null {
+    return glyphDataStore.getAdvance(unicode);
+  }
+
+  public getGlyphBbox(unicode: number) {
+    return glyphDataStore.getBbox(unicode);
+  }
+
   public getFontMetadata() {
     return this.#fontEngine.info.getMetadata();
   }
@@ -768,7 +780,7 @@ export class Editor implements EditorFacade {
     this.#fontEngine.io.loadFont(filePath);
     const unicodes = this.#fontEngine.info.getGlyphUnicodes();
     const metrics = this.#fontEngine.info.getMetrics();
-    glyphOutlineStore.onFontLoaded(unicodes, metrics);
+    glyphDataStore.onFontLoaded(unicodes, metrics);
     this.#commandHistory.clear();
     this.startEditSession(65);
   }

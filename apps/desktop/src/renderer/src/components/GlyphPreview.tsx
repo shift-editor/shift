@@ -1,10 +1,6 @@
 import { memo } from "react";
 import { useSignalState } from "@/lib/reactive";
-import {
-  computeViewBoxHeight,
-  glyphOutlineStore,
-  glyphPreviewViewBox,
-} from "@/store/GlyphOutlineStore";
+import { computeViewBoxHeight, glyphDataStore, glyphPreviewViewBox } from "@/store/GlyphDataStore";
 import type { FontMetrics } from "@shift/types";
 
 export const CELL_HEIGHT = 75;
@@ -33,11 +29,11 @@ export const GlyphPreview = memo(function GlyphPreview({
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  useSignalState(glyphOutlineStore.getGlyphVersion(unicode));
-  const advance = glyphOutlineStore.getAdvance(unicode);
+  useSignalState(glyphDataStore.getGlyphVersion(unicode));
+  const advance = glyphDataStore.getAdvance(unicode);
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
-  const path = glyphOutlineStore.getSvgPath(unicode);
+  const path = glyphDataStore.getSvgPath(unicode);
 
   if (!path) {
     return (

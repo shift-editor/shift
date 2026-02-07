@@ -45,7 +45,7 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSignalState } from "@/lib/reactive";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
-import { glyphOutlineStore } from "@/store/GlyphOutlineStore";
+import { glyphDataStore } from "@/store/GlyphDataStore";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 import { Button, Input } from "@shift/ui";
 
@@ -69,9 +69,9 @@ function unicodeToHex(unicode: number): string {
 
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
-  const fontLoaded = useSignalState(glyphOutlineStore.fontLoaded);
-  const fontUnicodes = useSignalState(glyphOutlineStore.fontUnicodes);
-  const fontMetrics = useSignalState(glyphOutlineStore.fontMetrics);
+  const fontLoaded = useSignalState(glyphDataStore.fontLoaded);
+  const fontUnicodes = useSignalState(glyphDataStore.fontUnicodes);
+  const fontMetrics = useSignalState(glyphDataStore.fontMetrics);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const unicodes = useMemo(
