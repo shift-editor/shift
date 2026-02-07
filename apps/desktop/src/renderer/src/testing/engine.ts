@@ -218,7 +218,13 @@ export function populateEngine(engine: FontEngine, snapshot: GlyphSnapshot): voi
   for (const contour of snapshot.contours) {
     engine.editing.addContour();
     for (const point of contour.points) {
-      engine.editing.addPoint(point.x, point.y, point.pointType, point.smooth);
+      engine.editing.addPoint({
+        id: point.id,
+        x: point.x,
+        y: point.y,
+        pointType: point.pointType,
+        smooth: point.smooth,
+      });
     }
     if (contour.closed) {
       engine.editing.closeContour();

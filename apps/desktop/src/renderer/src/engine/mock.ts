@@ -13,6 +13,7 @@ import type {
   GlyphSnapshot,
   FontMetadata,
   FontMetrics,
+  ContourId,
 } from "@shift/types";
 
 interface MockPoint {
@@ -186,8 +187,8 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, []);
   }
 
-  getActiveContourId(): string | null {
-    return this.#snapshot?.activeContourId ?? null;
+  getActiveContourId(): ContourId | null {
+    return this.#snapshot?.activeContourId as ContourId | null;
   }
 
   closeContour(): string {

@@ -774,10 +774,6 @@ export class Editor implements EditorFacade {
     this.startEditSession(65);
   }
 
-  public saveFont(filePath: string): void {
-    this.#fontEngine.io.saveFont(filePath);
-  }
-
   public async saveFontAsync(filePath: string): Promise<void> {
     return this.#fontEngine.io.saveFontAsync(filePath);
   }
@@ -999,7 +995,13 @@ export class Editor implements EditorFacade {
   }
 
   public addPoint(x: number, y: number, type: PointType, smooth = false): PointId {
-    return this.#fontEngine.editing.addPoint(x, y, type, smooth);
+    return this.#fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x,
+      y,
+      pointType: type,
+      smooth,
+    });
   }
 
   public addPointToContour(
@@ -1009,11 +1011,17 @@ export class Editor implements EditorFacade {
     type: PointType,
     smooth: boolean,
   ): PointId {
-    return this.#fontEngine.editing.addPointToContour(contourId, x, y, type, smooth);
+    return this.#fontEngine.editing.addPointToContour(contourId, {
+      id: "" as PointId,
+      x,
+      y,
+      pointType: type,
+      smooth,
+    });
   }
 
   public movePoints(ids: PointId[], dx: number, dy: number): void {
-    this.#fontEngine.editing.movePoints(ids, dx, dy);
+    this.#fontEngine.editing.movePoints(ids, { x: dx, y: dy });
   }
 
   public movePointTo(id: PointId, x: number, y: number): void {

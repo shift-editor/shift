@@ -1,61 +1,14 @@
-/**
- * FontEngine - The primary interface to the Rust font editing system.
- *
- * Organized into domain-specific managers:
- * - editing: Point and contour mutations
- * - session: Edit session lifecycle
- * - info: Font metadata and metrics
- * - io: File operations
- *
- * Usage:
- * ```typescript
- * const engine = new FontEngine();
- *
- * // Use effect to react to glyph changes
- * effect(() => {
- *   const glyph = engine.$glyph.value;
- *   // Update rendering
- * });
- *
- * // Start editing a glyph
- * engine.session.start(65); // 'A'
- *
- * // Add points
- * const pointId = engine.editing.addPoint(100, 200, 'onCurve');
- *
- * // Current glyph data is always available via signal
- * const glyph = engine.$glyph.value;
- * ```
- */
-
 import type { GlyphSnapshot, CommandResult } from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import { getNative, hasNative, type NativeFontEngine } from "./native";
+import { NativeOperationError } from "./errors";
 import { EditingManager } from "./editing";
 import { SessionManager } from "./session";
 import { InfoManager } from "./info";
 import { IOManager } from "./io";
+import type { EngineCore } from "@/types/engine";
 
-export interface CommitContext {
-  native: NativeFontEngine;
-  hasSession: () => boolean;
-  getGlyph: () => GlyphSnapshot | null;
-  commit: <T>(extract: (result: CommandResult) => T, operation: () => string) => T;
-  emitGlyph: (glyph: GlyphSnapshot | null) => void;
-}
-
-/**
- * FontEngine is the primary interface to the Rust font editing system.
- *
- * The `$glyph` property is a reactive signal. Use `effect()` to react to changes:
- * ```typescript
- * effect(() => {
- *   const glyph = fontEngine.$glyph.value;
- *   // This runs whenever glyph changes
- * });
- * ```
- */
-export class FontEngine {
+export class FontEngine implements EngineCore {
   readonly editing: EditingManager;
   readonly session: SessionManager;
   readonly info: InfoManager;
@@ -68,35 +21,47 @@ export class FontEngine {
     this.#native = native ?? getNative();
     this.#$glyph = signal<GlyphSnapshot | null>(null);
 
-    const ctx: CommitContext = {
-      native: this.#native,
-      hasSession: () => this.session.isActive(),
-      getGlyph: () => this.#$glyph.value,
-      commit: <T>(extract: (result: CommandResult) => T, operation: () => string): T => {
-        const resultJson = operation();
-        const result = this.#parseCommandResult(resultJson);
-        if (result.snapshot) {
-          this.#$glyph.set(result.snapshot);
-        }
-        return extract(result);
-      },
-      emitGlyph: (glyph: GlyphSnapshot | null) => {
-        this.#$glyph.set(glyph);
-      },
-    };
+    this.session = new SessionManager(this);
+    this.editing = new EditingManager(this);
+    this.info = new InfoManager(this);
+    this.io = new IOManager(this);
+  }
 
-    this.editing = new EditingManager(ctx);
-    this.session = new SessionManager(ctx);
-    this.info = new InfoManager(ctx);
-    this.io = new IOManager(ctx);
+  get native(): NativeFontEngine {
+    return this.#native;
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
     return this.#$glyph;
   }
 
+  hasSession(): boolean {
+    return this.session.isActive();
+  }
+
   getGlyph(): GlyphSnapshot | null {
     return this.#$glyph.value;
+  }
+
+  commit(operation: () => string): void;
+  commit<T>(operation: () => string, extract: (result: CommandResult) => T): T;
+  commit<T = void>(operation: () => string, extract?: (result: CommandResult) => T): T {
+    const json = operation();
+    const result = this.#parseCommandResult(json);
+
+    if (!result.success) {
+      throw new NativeOperationError(result.error ?? "Unknown native error");
+    }
+
+    if (result.snapshot) {
+      this.#$glyph.set(result.snapshot);
+    }
+
+    return extract ? extract(result) : (undefined as T);
+  }
+
+  emitGlyph(glyph: GlyphSnapshot | null): void {
+    this.#$glyph.set(glyph);
   }
 
   refreshGlyph(): void {

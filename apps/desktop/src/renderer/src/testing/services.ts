@@ -429,14 +429,20 @@ function createMockEditService(
 
   const mocks = {
     addPoint: vi.fn((x: number, y: number, type: any, smooth = false) =>
-      fontEngine.editing.addPoint(x, y, type, smooth),
+      fontEngine.editing.addPoint({ id: "" as PointId, x, y, pointType: type, smooth }),
     ),
     addPointToContour: vi.fn(
       (contourId: ContourId, x: number, y: number, type: any, smooth: boolean) =>
-        fontEngine.editing.addPointToContour(contourId, x, y, type, smooth),
+        fontEngine.editing.addPointToContour(contourId, {
+          id: "" as PointId,
+          x,
+          y,
+          pointType: type,
+          smooth,
+        }),
     ),
     movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) =>
-      fontEngine.editing.movePoints([...ids], dx, dy),
+      fontEngine.editing.movePoints([...ids], { x: dx, y: dy }),
     ),
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),

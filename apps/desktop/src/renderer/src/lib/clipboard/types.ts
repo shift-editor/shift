@@ -1,7 +1,7 @@
 import type { Glyph, PointId, PointSnapshot, Rect2D } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 
-export type { PasteResult } from "@/engine/editing";
+export type { PasteResult } from "@/types/engine";
 
 export type PointContent = Omit<PointSnapshot, "id">;
 

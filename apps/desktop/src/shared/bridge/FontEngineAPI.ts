@@ -1,4 +1,4 @@
-import type { GlyphSnapshot, FontMetrics, FontMetadata } from "@shift/types";
+import type { GlyphSnapshot, FontMetrics, FontMetadata, ContourId } from "@shift/types";
 
 export interface PointMove {
   id: string;
@@ -24,7 +24,7 @@ export interface FontEngineAPI {
   getSnapshotData(): GlyphSnapshot;
   addEmptyContour(): string;
   addContour(): string;
-  getActiveContourId(): string | null;
+  getActiveContourId(): ContourId | null;
   closeContour(): string;
   setActiveContour(contourId: string): string;
   clearActiveContour(): string;

@@ -1,51 +1,38 @@
-/**
- * InfoManager - Provides font metadata and metrics.
- *
- * Read-only operations that don't require an edit session.
- */
-
 import type { FontMetadata, FontMetrics } from "@shift/types";
-import type { NativeFontEngine } from "./native";
+import type { EngineCore } from "@/types/engine";
 
-export interface InfoManagerContext {
-  native: NativeFontEngine;
-}
-
-/**
- * InfoManager provides font metadata and metrics.
- */
 export class InfoManager {
-  #ctx: InfoManagerContext;
+  #engine: EngineCore;
 
-  constructor(ctx: InfoManagerContext) {
-    this.#ctx = ctx;
+  constructor(engine: EngineCore) {
+    this.#engine = engine;
   }
 
   getMetadata(): FontMetadata {
-    return this.#ctx.native.getMetadata();
+    return this.#engine.native.getMetadata();
   }
 
   getMetrics(): FontMetrics {
-    return this.#ctx.native.getMetrics();
+    return this.#engine.native.getMetrics();
   }
 
   getGlyphCount(): number {
-    return this.#ctx.native.getGlyphCount();
+    return this.#engine.native.getGlyphCount();
   }
 
   getGlyphUnicodes(): number[] {
-    return this.#ctx.native.getGlyphUnicodes();
+    return this.#engine.native.getGlyphUnicodes();
   }
 
   getGlyphSvgPath(unicode: number): string | null {
-    return this.#ctx.native.getGlyphSvgPath(unicode);
+    return this.#engine.native.getGlyphSvgPath(unicode);
   }
 
   getGlyphAdvance(unicode: number): number | null {
-    return this.#ctx.native.getGlyphAdvance(unicode);
+    return this.#engine.native.getGlyphAdvance(unicode);
   }
 
   getGlyphBbox(unicode: number): [number, number, number, number] | null {
-    return this.#ctx.native.getGlyphBbox(unicode);
+    return this.#engine.native.getGlyphBbox(unicode);
   }
 }

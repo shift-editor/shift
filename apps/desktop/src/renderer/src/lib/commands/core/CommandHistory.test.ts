@@ -16,6 +16,7 @@ import {
   NudgePointsCommand,
 } from "../primitives";
 import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
+import type { PointId } from "@shift/types";
 
 describe("CommandHistory", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
@@ -257,11 +258,17 @@ describe("batching", () => {
   describe("record", () => {
     it("should add command to undo stack without executing", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 100,
+        pointType: "onCurve",
+        smooth: false,
+      });
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point directly
-      fontEngine.editing.movePoints([pointId], 50, 50);
+      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
       const points = getAllPoints(fontEngine.$glyph.value);
       expect(points[0].x).toBe(150);
 
@@ -277,12 +284,18 @@ describe("batching", () => {
     });
 
     it("should work within a batch", () => {
-      const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 100,
+        pointType: "onCurve",
+        smooth: false,
+      });
 
       history.beginBatch("Drag");
-      fontEngine.editing.movePoints([pointId], 10, 0);
-      fontEngine.editing.movePoints([pointId], 10, 0);
-      fontEngine.editing.movePoints([pointId], 10, 0);
+      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
       // Record single command for total movement
       history.record(new MovePointsCommand([pointId], 30, 0));
       history.endBatch();
@@ -328,8 +341,14 @@ describe("onDirty callback", () => {
   });
 
   it("should call onDirty when command is recorded", () => {
-    const pointId = fontEngine.editing.addPoint(100, 100, "onCurve", false);
-    fontEngine.editing.movePoints([pointId], 50, 50);
+    const pointId = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
     expect(onDirtyCalled).toBe(0);
 
     history.record(new MovePointsCommand([pointId], 50, 50));
@@ -379,7 +398,13 @@ describe("Command integration with history", () => {
   describe("MovePointsCommand", () => {
     it("should move points and undo returns them to original position", () => {
       // Add a point first
-      const pointId = fontEngine.editing.addPoint(100, 200, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
       const originalPoints = getAllPoints(fontEngine.$glyph.value);
       expect(originalPoints[0].x).toBe(100);
       expect(originalPoints[0].y).toBe(200);
@@ -400,7 +425,13 @@ describe("Command integration with history", () => {
 
   describe("NudgePointsCommand", () => {
     it("should nudge points and undo returns them to original position", () => {
-      const pointId = fontEngine.editing.addPoint(100, 200, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
 
       history.execute(new NudgePointsCommand([pointId], 10, 0)); // Nudge right
       const nudgedPoints = getAllPoints(fontEngine.$glyph.value);
@@ -414,7 +445,13 @@ describe("Command integration with history", () => {
 
   describe("RemovePointsCommand", () => {
     it("should remove points and undo restores them", () => {
-      const pointId = fontEngine.editing.addPoint(100, 200, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       history.execute(new RemovePointsCommand([pointId]));
@@ -432,7 +469,13 @@ describe("Command integration with history", () => {
   describe("Complex undo/redo sequences", () => {
     it("should handle move undo/redo on existing points", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint(100, 200, "onCurve", false);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point through history
@@ -473,8 +516,14 @@ describe("Command integration with history", () => {
 
     it("should restore point at removed position when undoing remove", () => {
       // Add and move a point
-      const pointId = fontEngine.editing.addPoint(100, 200, "onCurve", false);
-      fontEngine.editing.movePoints([pointId], 50, 50);
+      const pointId = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
+      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
 
       // Now remove via command history
       history.execute(new RemovePointsCommand([pointId]));
@@ -490,8 +539,20 @@ describe("Command integration with history", () => {
     });
 
     it("should handle multiple points with single command", () => {
-      const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
-      const p2 = fontEngine.editing.addPoint(200, 200, "onCurve", false);
+      const p1 = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 100,
+        y: 100,
+        pointType: "onCurve",
+        smooth: false,
+      });
+      const p2 = fontEngine.editing.addPoint({
+        id: "" as PointId,
+        x: 200,
+        y: 200,
+        pointType: "onCurve",
+        smooth: false,
+      });
 
       // Move both points together
       history.execute(new MovePointsCommand([p1, p2], 50, 50));

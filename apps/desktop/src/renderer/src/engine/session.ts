@@ -1,17 +1,7 @@
-/**
- * SessionManager - Handles edit session lifecycle.
- *
- * An edit session must be active to perform any editing operations.
- * Only one glyph can be edited at a time.
- */
+import type { GlyphSnapshot, ContourId } from "@shift/types";
+import type { EngineCore } from "@/types/engine";
 
-import type { GlyphSnapshot, ContourId, PointId } from "@shift/types";
-import type { NativeGlyphSnapshot } from "./native";
-import type { CommitContext } from "./FontEngine";
-
-export type SessionManagerContext = CommitContext;
-
-function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
+function convertNativeSnapshot(native: GlyphSnapshot): GlyphSnapshot {
   return {
     unicode: native.unicode,
     name: native.name,
@@ -19,23 +9,23 @@ function convertNativeSnapshot(native: NativeGlyphSnapshot): GlyphSnapshot {
     contours: native.contours.map((c) => ({
       id: c.id as ContourId,
       points: c.points.map((p) => ({
-        id: p.id as PointId,
+        id: p.id,
         x: p.x,
         y: p.y,
-        pointType: p.pointType as "onCurve" | "offCurve",
+        pointType: p.pointType,
         smooth: p.smooth,
       })),
       closed: c.closed,
     })),
-    activeContourId: native.activeContourId as ContourId | null,
+    activeContourId: native.activeContourId,
   };
 }
 
 export class SessionManager {
-  #ctx: SessionManagerContext;
+  #engine: EngineCore;
 
-  constructor(ctx: SessionManagerContext) {
-    this.#ctx = ctx;
+  constructor(engine: EngineCore) {
+    this.#engine = engine;
   }
 
   startEditSession(unicode: number): void {
@@ -47,23 +37,23 @@ export class SessionManager {
       this.endEditSession();
     }
 
-    this.#ctx.native.startEditSession(unicode);
+    this.#engine.native.startEditSession(unicode);
 
     const glyph = this.getGlyph();
-    this.#ctx.emitGlyph(glyph);
+    this.#engine.emitGlyph(glyph);
   }
 
   endEditSession(): void {
-    this.#ctx.native.endEditSession();
-    this.#ctx.emitGlyph(null);
+    this.#engine.native.endEditSession();
+    this.#engine.emitGlyph(null);
   }
 
   isActive(): boolean {
-    return this.#ctx.native.hasEditSession();
+    return this.#engine.native.hasEditSession();
   }
 
   getEditingUnicode(): number | null {
-    return this.#ctx.native.getEditingUnicode();
+    return this.#engine.native.getEditingUnicode();
   }
 
   getGlyph(): GlyphSnapshot | null {
@@ -72,7 +62,7 @@ export class SessionManager {
     }
 
     try {
-      const nativeSnapshot = this.#ctx.native.getSnapshotData();
+      const nativeSnapshot = this.#engine.native.getSnapshotData();
       return convertNativeSnapshot(nativeSnapshot);
     } catch {
       return null;

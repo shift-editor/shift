@@ -244,7 +244,7 @@ describe("Select tool", () => {
       const afterSmall = getAllPoints(ctx.edit.getGlyph())[0].x;
       const smallNudge = afterSmall - before;
 
-      ctx.fontEngine.editing.movePoints([pointId], -smallNudge, 0);
+      ctx.fontEngine.editing.movePoints([pointId], { x: -smallNudge, y: 0 });
 
       sim.keyDown("ArrowRight", { shiftKey: true });
       const afterLarge = getAllPoints(ctx.edit.getGlyph())[0].x;

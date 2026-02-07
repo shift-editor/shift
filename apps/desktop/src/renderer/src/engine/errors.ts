@@ -22,8 +22,8 @@ export class NoEditSessionError extends FontEngineError {
  * Error thrown when an operation fails on the Rust side.
  */
 export class NativeOperationError extends FontEngineError {
-  constructor(operation: string, details?: string) {
-    super(details ? `${operation} failed: ${details}` : `${operation} failed`);
+  constructor(message: string) {
+    super(message);
     this.name = "NativeOperationError";
   }
 }

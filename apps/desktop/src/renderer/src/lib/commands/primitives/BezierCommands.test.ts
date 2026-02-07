@@ -7,6 +7,7 @@ import {
   SplitSegmentCommand,
 } from "./BezierCommands";
 import { asPointId } from "@shift/types";
+import type { PointId } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
 
@@ -42,13 +43,13 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // First call is anchor
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(
-      1,
-      100,
-      100,
-      "onCurve",
-      true, // smooth
-    );
+    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(1, {
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: true,
+    });
   });
 
   it("should add leading control in drag direction", () => {
@@ -58,7 +59,13 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Second call is leading control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(2, 150, 120, "offCurve", false);
+    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(2, {
+      id: "" as PointId,
+      x: 150,
+      y: 120,
+      pointType: "offCurve",
+      smooth: false,
+    });
   });
 
   it("should add trailing control mirrored across anchor", () => {
@@ -70,13 +77,13 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Third call is trailing control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(
-      3,
-      50, // 2 * 100 - 150
-      80, // 2 * 100 - 120
-      "offCurve",
-      false,
-    );
+    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(3, {
+      id: "" as PointId,
+      x: 50, // 2 * 100 - 150
+      y: 80, // 2 * 100 - 120
+      pointType: "offCurve",
+      smooth: false,
+    });
   });
 
   it("should return the anchor point ID", () => {
@@ -180,7 +187,7 @@ describe("NudgePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, 1, 0);
+    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, { x: 1, y: 0 });
   });
 
   it("should move points back on undo", () => {
@@ -193,8 +200,7 @@ describe("NudgePointsCommand", () => {
 
     expect(ctx.fontEngine.editing.movePoints).toHaveBeenLastCalledWith(
       pointIds,
-      -5,
-      10, // Negative of original
+      { x: -5, y: 10 }, // Negative of original
     );
   });
 
@@ -230,13 +236,12 @@ describe("SplitSegmentCommand", () => {
 
       // Should insert one point before anchor2
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(1);
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith(
-        "p2",
-        50, // midpoint x
-        0, // midpoint y
-        "onCurve",
-        false,
-      );
+      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith("p2", {
+        x: 50,
+        y: 0,
+        pointType: "onCurve",
+        smooth: false,
+      });
       expect(result).toBe("point-1");
       expect(cmd.splitPointId).toBe("point-1");
     });
@@ -254,13 +259,12 @@ describe("SplitSegmentCommand", () => {
 
       cmd.execute(ctx);
 
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith(
-        "p2",
-        25, // 0 + 0.25 * 100
-        25, // 0 + 0.25 * 100
-        "onCurve",
-        false,
-      );
+      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith("p2", {
+        x: 25,
+        y: 25,
+        pointType: "onCurve",
+        smooth: false,
+      });
     });
 
     it("should remove inserted point on undo", () => {
@@ -303,20 +307,14 @@ describe("SplitSegmentCommand", () => {
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         1,
         "p2",
-        expect.any(Number), // mid x (should be 50 for t=0.5)
-        expect.any(Number), // mid y (should be 50 for t=0.5)
-        "onCurve",
-        true,
+        expect.objectContaining({ pointType: "onCurve", smooth: true }),
       );
 
       // Second insertion: cB (offCurve)
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         2,
         "p2",
-        expect.any(Number),
-        expect.any(Number),
-        "offCurve",
-        false,
+        expect.objectContaining({ pointType: "offCurve", smooth: false }),
       );
 
       // Should move original control to cA position
@@ -378,30 +376,21 @@ describe("SplitSegmentCommand", () => {
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         1,
         "c2",
-        expect.any(Number),
-        expect.any(Number),
-        "offCurve",
-        false,
+        expect.objectContaining({ pointType: "offCurve", smooth: false }),
       );
 
       // Second insertion: mid (onCurve, smooth) before control2
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         2,
         "c2",
-        expect.any(Number),
-        expect.any(Number),
-        "onCurve",
-        true,
+        expect.objectContaining({ pointType: "onCurve", smooth: true }),
       );
 
       // Third insertion: c0B (offCurve) before control2
       expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
         3,
         "c2",
-        expect.any(Number),
-        expect.any(Number),
-        "offCurve",
-        false,
+        expect.objectContaining({ pointType: "offCurve", smooth: false }),
       );
 
       // Should move both existing controls

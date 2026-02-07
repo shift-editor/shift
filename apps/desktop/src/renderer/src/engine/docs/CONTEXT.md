@@ -13,7 +13,7 @@
 ```
 src/renderer/src/engine/
 ├── index.ts           # Public exports barrel
-├── FontEngine.ts      # Main orchestrator class
+├── FontEngine.ts      # Main orchestrator class (implements EngineCore)
 ├── editing.ts         # EditingManager (point/contour ops, smart edits)
 ├── session.ts         # SessionManager (lifecycle)
 ├── info.ts            # InfoManager (metadata)
@@ -26,25 +26,27 @@ src/renderer/src/engine/
 
 ## Core Abstractions
 
-### FontEngine (FontEngine.ts:25-60)
+### EngineCore (types/engine.ts)
 
 ```typescript
-export class FontEngine {
-  readonly snapshot: WritableSignal<GlyphSnapshot | null>;
+interface EngineCore {
+  readonly native: NativeFontEngine;
+  hasSession(): boolean;
+  getGlyph(): GlyphSnapshot | null;
+  commit(operation: () => string): void;
+  commit<T>(operation: () => string, extract: (result: CommandResult) => T): T;
+  emitGlyph(glyph: GlyphSnapshot | null): void;
+}
+```
+
+### FontEngine (FontEngine.ts)
+
+```typescript
+export class FontEngine implements EngineCore {
   readonly editing: EditingManager;
   readonly session: SessionManager;
   readonly info: InfoManager;
   readonly io: IOManager;
-}
-```
-
-### Manager Context (FontEngine.ts:35-45)
-
-```typescript
-interface ManagerContext {
-  native: NativeFontEngine;
-  hasSession: () => boolean;
-  emitSnapshot: (snapshot: GlyphSnapshot | null) => void;
 }
 ```
 
@@ -55,10 +57,9 @@ interface NativeFontEngine {
   loadFont(path: string): void;
   startEditSession(unicode: number): void;
   endEditSession(): void;
-  getSnapshotData(): NativeGlyphSnapshot;
+  getSnapshotData(): GlyphSnapshot;
   addPoint(x, y, pointType, smooth): string;
   movePoints(pointIds, dx, dy): string;
-  applyEditsUnified(pointIds, dx, dy): string;
   // ...more methods
 }
 ```
@@ -80,18 +81,42 @@ type Segment = LineSegment | QuadSegment | CubicSegment;
 
 ## Key Patterns
 
-### Manager Pattern with Shared Context
+### Interface-Based DI (EngineCore)
 
 ```typescript
-// FontEngine passes same context to all managers
-const ctx = {
-  native: this.#native,
-  hasSession: () => this.session.isActive(),
-  emitSnapshot: (s) => this.snapshot.set(s),
-};
+// FontEngine implements EngineCore and passes `this` to all managers
+class FontEngine implements EngineCore {
+  constructor(native?: NativeFontEngine) {
+    this.session = new SessionManager(this);
+    this.editing = new EditingManager(this);
+    this.info = new InfoManager(this);
+    this.io = new IOManager(this);
+  }
+}
 
-this.editing = new EditingManager(ctx);
-this.session = new SessionManager(ctx);
+// Managers accept the EngineCore abstraction, not FontEngine
+class EditingManager {
+  #engine: EngineCore;
+  constructor(engine: EngineCore) {
+    this.#engine = engine;
+  }
+}
+```
+
+### Centralized Commit with Error Handling
+
+```typescript
+// commit() handles JSON parsing, error checking, and glyph emission
+// Void operations (most common):
+this.#engine.commit(() => this.#engine.native.closeContour());
+
+// Extraction operations:
+return this.#engine.commit(
+  () => this.#engine.native.addContour(),
+  (result) => asContourId(result.snapshot?.activeContourId ?? ""),
+);
+
+// commit() throws NativeOperationError on failure — callers never check success
 ```
 
 ### Session Validation
@@ -99,16 +124,17 @@ this.session = new SessionManager(ctx);
 ```typescript
 class EditingManager {
   #requireSession(): void {
-    if (!this.#ctx.hasSession()) {
+    if (!this.#engine.hasSession()) {
       throw new NoEditSessionError();
     }
   }
 
-  addPoint(x, y, type, smooth): PointId {
+  addPoint(edit: PointEdit): PointId {
     this.#requireSession();
-    const result = JSON.parse(this.#ctx.native.addPoint(x, y, type, smooth));
-    this.#ctx.emitSnapshot(result.snapshot);
-    return asPointId(result.affectedPointIds[0]);
+    return this.#engine.commit(
+      () => this.#engine.native.addPoint(edit.x, edit.y, edit.pointType, edit.smooth),
+      (result) => asPointId(result.affectedPointIds?.[0] ?? ""),
+    );
   }
 }
 ```
@@ -132,9 +158,9 @@ export function hasNative(): boolean {
 | Class          | Method                            | Return                                   |
 | -------------- | --------------------------------- | ---------------------------------------- |
 | FontEngine     | constructor()                     | FontEngine                               |
-| EditingManager | addPoint(x, y, type, smooth)      | PointId                                  |
+| EditingManager | addPoint(edit)                    | PointId                                  |
 | EditingManager | addContour()                      | ContourId                                |
-| EditingManager | movePoints(ids, dx, dy)           | void                                     |
+| EditingManager | movePoints(ids, delta)            | PointId[]                                |
 | EditingManager | removePoints(ids)                 | void                                     |
 | EditingManager | applySmartEdits(selected, dx, dy) | PointId[]                                |
 | SessionManager | startEditSession(unicode)         | void                                     |
@@ -155,8 +181,8 @@ export function hasNative(): boolean {
 const engine = new FontEngine();
 
 effect(() => {
-  const snapshot = engine.snapshot.value;
-  console.log("Glyph changed:", snapshot?.name);
+  const glyph = engine.$glyph.value;
+  console.log("Glyph changed:", glyph?.name);
 });
 ```
 
@@ -167,10 +193,22 @@ engine.io.loadFont("/path/to/font.ufo");
 engine.session.startEditSession(65);
 
 const contourId = engine.editing.addContour();
-const p1 = engine.editing.addPoint(0, 0, "onCurve", false);
-const p2 = engine.editing.addPoint(100, 200, "offCurve", false);
+const p1 = engine.editing.addPoint({
+  id: "" as PointId,
+  x: 0,
+  y: 0,
+  pointType: "onCurve",
+  smooth: false,
+});
+const p2 = engine.editing.addPoint({
+  id: "" as PointId,
+  x: 100,
+  y: 200,
+  pointType: "offCurve",
+  smooth: false,
+});
 
-engine.editing.movePoints([p1, p2], 50, 0);
+engine.editing.movePoints([p1, p2], { x: 50, y: 0 });
 engine.session.endEditSession();
 ```
 
@@ -195,8 +233,9 @@ for (const seg of segments) {
 ## Constraints and Invariants
 
 1. **Session Required**: EditingManager methods throw NoEditSessionError without active session
-2. **Single Signal**: All state flows through `snapshot` signal
+2. **Single Signal**: All state flows through `$glyph` signal
 3. **ID Types**: PointId and ContourId are branded strings (type safety)
-4. **JSON Parse**: Native returns JSON strings, managers parse them
-5. **Context Sharing**: All managers share same context object
-6. **Native Availability**: `getNative()` throws if preload not ready
+4. **JSON Parse**: Native returns JSON strings, `commit()` parses and validates them
+5. **Error at Boundary**: `commit()` throws `NativeOperationError` on failure — callers handle only the happy path
+6. **Interface DI**: Managers depend on `EngineCore` interface, not `FontEngine` concrete class
+7. **Native Availability**: `getNative()` throws if preload not ready

@@ -4,68 +4,93 @@ TypeScript facade wrapping the native Rust FontEngine with reactive state manage
 
 ## Overview
 
-The engine layer provides a high-level TypeScript API for font editing, organizing functionality into specialized managers. It wraps the native NAPI bindings with reactive signals for automatic UI updates and structured error handling.
+The engine layer provides a high-level TypeScript API for font editing, organizing functionality into specialized managers. It wraps the native NAPI bindings with reactive signals for automatic UI updates and centralized error handling.
 
 ## Architecture
 
 ```
-FontEngine
-├── snapshot: WritableSignal<GlyphSnapshot | null>
+FontEngine implements EngineCore
+├── $glyph: Signal<GlyphSnapshot | null>
 ├── editing: EditingManager      (point/contour mutations, smart edits)
 ├── session: SessionManager      (edit session lifecycle)
 ├── info: InfoManager            (font metadata)
 └── io: IOManager                (file operations)
     ↓
-Shared Context { native, hasSession(), emitSnapshot() }
+EngineCore interface { native, hasSession(), commit(), getGlyph(), emitGlyph() }
     ↓
 window.shiftFont (Native NAPI via contextBridge)
 ```
 
 ### Key Design Decisions
 
-1. **Manager Pattern**: Domain-specific managers share context via dependency injection
-2. **Reactive Snapshot**: Single signal source of truth for glyph state
-3. **Session Validation**: All managers validate session before operations
-4. **Typed Errors**: Custom error hierarchy for precise error handling
+1. **Interface-Based DI**: `FontEngine` implements `EngineCore` and passes `this` to managers. Managers depend on the `EngineCore` abstraction, enabling easy testing with mocks.
+2. **Centralized Commit**: All native mutations flow through `commit()`, which parses JSON, checks for errors (throws `NativeOperationError` on failure), and updates the glyph signal. Callers never check `result.success`.
+3. **Reactive Signal**: Single `$glyph` signal as source of truth for glyph state.
+4. **Session Validation**: All editing managers validate session before operations.
+5. **Typed Errors**: Custom error hierarchy for precise error handling.
 
 ## Key Concepts
 
+### EngineCore Interface
+
+The contract that `FontEngine` implements and managers depend on:
+
+```typescript
+interface EngineCore {
+  readonly native: NativeFontEngine;
+  hasSession(): boolean;
+  getGlyph(): GlyphSnapshot | null;
+  commit(operation: () => string): void;
+  commit<T>(operation: () => string, extract: (result: CommandResult) => T): T;
+  emitGlyph(glyph: GlyphSnapshot | null): void;
+}
+```
+
 ### FontEngine Class
 
-Central orchestrator managing all editing functionality:
+Central orchestrator implementing `EngineCore`:
 
 ```typescript
 const engine = new FontEngine();
 
 // Reactive state - auto-updates UI
 effect(() => {
-  const snapshot = engine.snapshot.value;
-  renderGlyph(snapshot);
+  const glyph = engine.$glyph.value;
+  renderGlyph(glyph);
 });
 
 // Manager access
 engine.session.startEditSession(65);
-engine.editing.addPoint(100, 200, "onCurve", false);
+engine.editing.addPoint({ id: "" as PointId, x: 100, y: 200, pointType: "onCurve", smooth: false });
 ```
 
-### Shared Context
+### commit() — Centralized State Transitions
 
-All managers receive identical context for coordination:
+All native mutations flow through `commit()`:
 
 ```typescript
-const ctx = {
-  native: window.shiftFont, // NAPI bindings
-  hasSession: () => session.isActive(), // Session check
-  emitSnapshot: (s) => snapshot.set(s), // State updates
-};
+// Void operations (most editing methods):
+this.#engine.commit(() => this.#engine.native.closeContour());
+
+// Extraction operations (returns a value from the result):
+return this.#engine.commit(
+  () => this.#engine.native.addContour(),
+  (result) => asContourId(result.snapshot?.activeContourId ?? ""),
+);
 ```
+
+`commit()` handles:
+
+- Calling the native operation and parsing the JSON result
+- Throwing `NativeOperationError` if `result.success` is false
+- Updating the `$glyph` signal if the result includes a snapshot
 
 ### Bridge Types
 
 Native types are imported from the shared bridge:
 
 ```typescript
-import type { FontEngineAPI, JsGlyphSnapshot, JsFontMetrics } from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
 ```
 
 See [bridge docs](../../../shared/bridge/docs/DOCS.md) for type-safe bridge architecture.
@@ -83,7 +108,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ### FontEngine
 
-- `snapshot: WritableSignal<GlyphSnapshot | null>` - Reactive glyph state
+- `$glyph: Signal<GlyphSnapshot | null>` - Reactive glyph state
 - `editing: EditingManager` - Point/contour operations and smart edits
 - `session: SessionManager` - Session lifecycle
 - `info: InfoManager` - Font metadata
@@ -91,9 +116,9 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ### EditingManager
 
-- `addPoint(x, y, type, smooth): PointId`
+- `addPoint(edit): PointId`
 - `addContour(): ContourId`
-- `movePoints(ids, dx, dy): void`
+- `movePoints(ids, delta): PointId[]`
 - `removePoints(ids): void`
 - `toggleSmooth(id): void`
 - `applySmartEdits(selectedPoints, dx, dy): PointId[]` - Constraint-aware edits
@@ -118,7 +143,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 - `FontEngineError` - Base error class
 - `NoEditSessionError` - Operation requires session
-- `NativeOperationError` - Rust operation failed
+- `NativeOperationError` - Rust operation failed (thrown by `commit()`)
 
 ## Usage Examples
 
@@ -133,13 +158,19 @@ engine.session.startEditSession(65);
 
 // React to changes
 effect(() => {
-  const snapshot = engine.snapshot.value;
-  if (snapshot) redraw(snapshot);
+  const glyph = engine.$glyph.value;
+  if (glyph) redraw(glyph);
 });
 
 // Add geometry
 const contourId = engine.editing.addContour();
-const pointId = engine.editing.addPoint(100, 200, "onCurve", false);
+const pointId = engine.editing.addPoint({
+  id: "" as PointId,
+  x: 100,
+  y: 200,
+  pointType: "onCurve",
+  smooth: false,
+});
 
 // Apply constraint-aware edits (uses Rust rule engine)
 const affected = engine.editing.applySmartEdits(new Set([pointId]), 50, 0);
@@ -148,8 +179,8 @@ const affected = engine.editing.applySmartEdits(new Set([pointId]), 50, 0);
 ### Segment Rendering
 
 ```typescript
-const snapshot = engine.snapshot.value;
-const segmentMap = parseGlyphSegments(snapshot.contours);
+const glyph = engine.$glyph.value;
+const segmentMap = parseGlyphSegments(glyph.contours);
 
 for (const [contourId, segments] of segmentMap) {
   for (const segment of segments) {
@@ -175,13 +206,17 @@ User Action
     ↓
 Manager Method (e.g., editing.addPoint())
     ↓
-Validate Session (ctx.hasSession())
+Validate Session (#requireSession)
     ↓
-Call Native (ctx.native.addPoint())
+commit(operation, extract?)
+    ↓
+Call Native (engine.native.addPoint())
     ↓
 Parse JSON CommandResult
     ↓
-Emit Snapshot (ctx.emitSnapshot())
+Check success (throw NativeOperationError on failure)
+    ↓
+Emit Snapshot (engine.$glyph.set())
     ↓
 Signal Notifies Subscribers
     ↓

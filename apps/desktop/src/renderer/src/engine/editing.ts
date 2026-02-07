@@ -1,24 +1,10 @@
-/**
- * EditingManager - Handles point and contour operations.
- *
- * All mutations to glyph geometry go through this manager.
- */
-
-import type { PointType, GlyphSnapshot, PointId, ContourId } from "@shift/types";
+import type { GlyphSnapshot, PointId, ContourId, Point2D } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { applyRules, applyMovesToGlyph } from "@shift/rules";
+import { findPointInSnapshot } from "@/lib/utils/snapshot";
 import { NoEditSessionError, NativeOperationError } from "./errors";
-import type { CommitContext } from "./FontEngine";
 import type { PointMove } from "@shared/bridge/FontEngineAPI";
-
-export type ManagerContext = CommitContext;
-
-export interface PasteResult {
-  success: boolean;
-  createdPointIds: PointId[];
-  createdContourIds: ContourId[];
-  error?: string;
-}
+import type { EngineCore, PasteResult, PointEdit } from "@/types/engine";
 
 function parsePasteResult(json: string): PasteResult {
   const raw = JSON.parse(json);
@@ -31,88 +17,71 @@ function parsePasteResult(json: string): PasteResult {
 }
 
 export class EditingManager {
-  #ctx: ManagerContext;
+  #engine: EngineCore;
 
-  constructor(ctx: ManagerContext) {
-    this.#ctx = ctx;
+  constructor(engine: EngineCore) {
+    this.#engine = engine;
   }
 
-  addPoint(x: number, y: number, pointType: PointType, smooth: boolean = false): PointId {
+  addPoint(edit: PointEdit): PointId {
     this.#requireSession();
 
-    return this.#ctx.commit(
+    return this.#engine.commit(
+      () => {
+        const { x, y, pointType, smooth } = edit;
+        return this.#engine.native.addPoint(x, y, pointType, smooth);
+      },
       (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("addPoint", result.error ?? undefined);
-        }
-        const pointId = result.affectedPointIds?.[0];
+        const pointId = result.affectedPointIds[0];
         if (!pointId) {
           const lastContour = result.snapshot?.contours[result.snapshot.contours.length - 1];
           const lastPoint = lastContour?.points[lastContour.points.length - 1];
-          return asPointId(lastPoint?.id ?? "");
+          return lastPoint.id;
         }
-        return asPointId(pointId);
+
+        return pointId;
       },
-      () => this.#ctx.native.addPoint(x, y, pointType, smooth),
     );
   }
 
-  addPointToContour(
-    contourId: ContourId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ): PointId {
+  addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     this.#requireSession();
 
-    return this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("addPointToContour", result.error ?? undefined);
-        }
-        const pointId = result.affectedPointIds?.[0];
-        return asPointId(pointId ?? "");
+    return this.#engine.commit(
+      () => {
+        const { x, y, pointType, smooth } = edit;
+        return this.#engine.native.addPointToContour(contourId, x, y, pointType, smooth);
       },
-      () => this.#ctx.native.addPointToContour(contourId, x, y, pointType, smooth),
+      (result) => result.affectedPointIds[0],
     );
   }
 
-  movePoints(pointIds: PointId[], dx: number, dy: number): PointId[] {
+  movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
     this.#requireSession();
 
     if (pointIds.length === 0) {
       return [];
     }
 
-    return this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("movePoints", result.error ?? undefined);
-        }
-        return (result.affectedPointIds ?? []).map(asPointId);
-      },
-      () => this.#ctx.native.movePoints(pointIds, dx, dy),
+    return this.#engine.commit(
+      () => this.#engine.native.movePoints(pointIds, delta.x, delta.y),
+      (result) => result.affectedPointIds,
     );
   }
 
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
 
-    const glyph = this.#ctx.getGlyph();
+    const glyph = this.#engine.getGlyph();
     if (!glyph) {
-      throw new NativeOperationError("movePointTo", "No glyph available");
+      throw new NativeOperationError("No glyph available");
     }
 
-    for (const contour of glyph.contours) {
-      const point = contour.points.find((p) => p.id === pointId);
-      if (point) {
-        this.movePoints([pointId], x - point.x, y - point.y);
-        return;
-      }
+    const found = findPointInSnapshot(glyph, pointId);
+    if (!found) {
+      throw new NativeOperationError(`Point ${pointId} not found`);
     }
-
-    throw new NativeOperationError("movePointTo", `Point ${pointId} not found`);
+    this.movePoints([pointId], { x: x - found.point.x, y: y - found.point.y });
   }
 
   removePoints(pointIds: PointId[]): void {
@@ -122,217 +91,134 @@ export class EditingManager {
       return;
     }
 
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("removePoints", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.removePoints(pointIds),
-    );
+    this.#engine.commit(() => this.#engine.native.removePoints(pointIds));
   }
 
-  insertPointBefore(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ): PointId {
+  insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     this.#requireSession();
 
-    return this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("insertPointBefore", result.error ?? undefined);
-        }
-        const pointId = result.affectedPointIds?.[0];
-        return asPointId(pointId ?? "");
-      },
-      () => this.#ctx.native.insertPointBefore(beforePointId, x, y, pointType, smooth),
+    const { x, y, pointType, smooth } = edit;
+    return this.#engine.commit(
+      () => this.#engine.native.insertPointBefore(beforePointId, x, y, pointType, smooth),
+      (result) => result.affectedPointIds[0],
     );
   }
 
   addContour(): ContourId {
     this.#requireSession();
 
-    return this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("addContour", result.error ?? undefined);
-        }
-        return asContourId(result.snapshot?.activeContourId ?? "");
-      },
-      () => this.#ctx.native.addContour(),
+    return this.#engine.commit(
+      () => this.#engine.native.addContour(),
+      (result) => result.snapshot?.activeContourId,
     );
   }
 
   closeContour(): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("closeContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.closeContour(),
-    );
+    this.#engine.commit(() => this.#engine.native.closeContour());
   }
 
   getActiveContourId(): ContourId | null {
-    if (!this.#ctx.hasSession()) {
+    if (!this.#engine.hasSession()) {
       return null;
     }
 
-    const id = this.#ctx.native.getActiveContourId();
-    return id ? asContourId(id) : null;
+    const id = this.#engine.native.getActiveContourId();
+    return id ?? null;
   }
 
   setActiveContour(contourId: ContourId): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("setActiveContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.setActiveContour(contourId),
-    );
+    this.#engine.commit(() => this.#engine.native.setActiveContour(contourId));
   }
 
   clearActiveContour(): void {
-    if (!this.#ctx.hasSession()) {
+    if (!this.#engine.hasSession()) {
       return;
     }
 
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("clearActiveContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.clearActiveContour(),
-    );
+    this.#engine.commit(() => this.#engine.native.clearActiveContour());
   }
 
   reverseContour(contourId: ContourId): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("reverseContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.reverseContour(contourId),
-    );
+    this.#engine.commit(() => this.#engine.native.reverseContour(contourId));
   }
 
   removeContour(contourId: ContourId): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("removeContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.removeContour(contourId),
-    );
+    this.#engine.commit(() => this.#engine.native.removeContour(contourId));
   }
 
   openContour(contourId: ContourId): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("openContour", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.openContour(contourId),
-    );
+    this.#engine.commit(() => this.#engine.native.openContour(contourId));
   }
 
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();
 
-    const resultJson = this.#ctx.native.pasteContours(contoursJson, offsetX, offsetY);
+    const resultJson = this.#engine.native.pasteContours(contoursJson, offsetX, offsetY);
     const result = parsePasteResult(resultJson);
 
     if (!result.success) {
-      throw new NativeOperationError("pasteContours", result.error ?? undefined);
+      throw new NativeOperationError(result.error ?? "pasteContours failed");
     }
 
-    const glyph = this.#ctx.native.getSnapshotData() as GlyphSnapshot;
-    this.#ctx.emitGlyph(glyph);
+    const glyph = this.#engine.native.getSnapshotData() as GlyphSnapshot;
+    this.#engine.emitGlyph(glyph);
 
     return result;
   }
 
   toggleSmooth(pointId: PointId): void {
     this.#requireSession();
-
-    this.#ctx.commit(
-      (result) => {
-        if (!result.success) {
-          throw new NativeOperationError("toggleSmooth", result.error ?? undefined);
-        }
-      },
-      () => this.#ctx.native.toggleSmooth(pointId),
-    );
+    this.#engine.commit(() => this.#engine.native.toggleSmooth(pointId));
   }
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
-    if (!this.#ctx.hasSession()) return [];
+    if (!this.#engine.hasSession()) return [];
 
-    const glyph = this.#ctx.getGlyph();
+    const glyph = this.#engine.getGlyph();
     if (!glyph) return [];
 
     const { moves } = applyRules(glyph, selectedPoints, dx, dy);
     if (moves.length === 0) return [];
 
     const updatedGlyph = applyMovesToGlyph(glyph, moves);
-    this.#ctx.emitGlyph(updatedGlyph);
+    this.#engine.emitGlyph(updatedGlyph);
 
     const nativeMoves: PointMove[] = moves.map((m) => ({
       id: m.id,
       x: m.x,
       y: m.y,
     }));
-    this.#ctx.native.setPointPositions(nativeMoves);
+    this.#engine.native.setPointPositions(nativeMoves);
 
     return moves.map((m) => m.id);
   }
 
   setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
-    if (!this.#ctx.hasSession()) return;
+    if (!this.#engine.hasSession()) return;
     if (moves.length === 0) return;
 
-    const glyph = this.#ctx.getGlyph();
+    const glyph = this.#engine.getGlyph();
     if (!glyph) return;
 
     const updatedGlyph = applyMovesToGlyph(glyph, moves);
-    this.#ctx.emitGlyph(updatedGlyph);
+    this.#engine.emitGlyph(updatedGlyph);
 
-    const nativeMoves: PointMove[] = moves.map((m) => ({
-      id: m.id,
-      x: m.x,
-      y: m.y,
-    }));
-    this.#ctx.native.setPointPositions(nativeMoves);
+    this.#engine.native.setPointPositions(moves);
   }
 
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
-    this.#ctx.native.restoreSnapshot(snapshot);
-    this.#ctx.emitGlyph(snapshot);
+    this.#engine.native.restoreSnapshot(snapshot);
+    this.#engine.emitGlyph(snapshot);
   }
 
   #requireSession(): void {
-    if (!this.#ctx.hasSession()) {
+    if (!this.#engine.hasSession()) {
       throw new NoEditSessionError();
     }
   }

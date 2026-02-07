@@ -1,19 +1,7 @@
 import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
-import type {
-  GlyphSnapshot,
-  ContourSnapshot,
-  PointSnapshot,
-  FontMetrics,
-  FontMetadata,
-} from "@shift/types";
 
 export type { FontEngineAPI };
 export type NativeFontEngine = FontEngineAPI;
-export type NativeGlyphSnapshot = GlyphSnapshot;
-export type NativeContourSnapshot = ContourSnapshot;
-export type NativePointSnapshot = PointSnapshot;
-export type NativeFontMetrics = FontMetrics;
-export type NativeFontMetadata = FontMetadata;
 
 let cached: FontEngineAPI | null = null;
 

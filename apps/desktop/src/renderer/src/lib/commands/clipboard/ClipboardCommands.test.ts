@@ -3,6 +3,7 @@ import { CommandHistory } from "../core/CommandHistory";
 import { CutCommand, PasteCommand } from "./ClipboardCommands";
 import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
 import type { ClipboardContent } from "../../clipboard/types";
+import type { PointId } from "@shift/types";
 
 function createTestContent(points: Array<{ x: number; y: number }>): ClipboardContent {
   return {
@@ -32,8 +33,20 @@ describe("CutCommand", () => {
   });
 
   it("should remove points on execute", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
-    fontEngine.editing.addPoint(200, 200, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 200,
+      y: 200,
+      pointType: "onCurve",
+      smooth: false,
+    });
     expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
 
     history.execute(new CutCommand([p1]));
@@ -44,7 +57,13 @@ describe("CutCommand", () => {
   });
 
   it("should restore points on undo", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
     history.execute(new CutCommand([p1]));
     expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
 
@@ -57,7 +76,13 @@ describe("CutCommand", () => {
   });
 
   it("should remove same points on redo", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
     history.execute(new CutCommand([p1]));
     history.undo();
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
@@ -68,9 +93,27 @@ describe("CutCommand", () => {
   });
 
   it("should handle multiple points", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
-    const p2 = fontEngine.editing.addPoint(200, 200, "onCurve", false);
-    fontEngine.editing.addPoint(300, 300, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    const p2 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 200,
+      y: 200,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 300,
+      y: 300,
+      pointType: "onCurve",
+      smooth: false,
+    });
 
     history.execute(new CutCommand([p1, p2]));
 
@@ -183,7 +226,13 @@ describe("Cut + Paste integration", () => {
   });
 
   it("should support cut then paste workflow", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
     history.execute(new CutCommand([p1]));
@@ -200,7 +249,13 @@ describe("Cut + Paste integration", () => {
   });
 
   it("should undo cut and paste separately", () => {
-    const p1 = fontEngine.editing.addPoint(100, 100, "onCurve", false);
+    const p1 = fontEngine.editing.addPoint({
+      id: "" as PointId,
+      x: 100,
+      y: 100,
+      pointType: "onCurve",
+      smooth: false,
+    });
 
     history.execute(new CutCommand([p1]));
 

@@ -1,53 +1,17 @@
-/**
- * IOManager - Handles font file operations.
- *
- * Loading, saving, and exporting fonts.
- */
+import type { EngineCore } from "@/types/engine";
 
-import type { NativeFontEngine } from "./native";
-
-export interface IOManagerContext {
-  native: NativeFontEngine;
-}
-
-/**
- * IOManager handles font file operations.
- */
 export class IOManager {
-  #ctx: IOManagerContext;
+  #engine: EngineCore;
 
-  constructor(ctx: IOManagerContext) {
-    this.#ctx = ctx;
+  constructor(engine: EngineCore) {
+    this.#engine = engine;
   }
 
-  /**
-   * Load a font from a file path.
-   */
   loadFont(path: string): void {
-    this.#ctx.native.loadFont(path);
+    this.#engine.native.loadFont(path);
   }
 
-  /**
-   * Save the current font to a file path (sync - blocks UI).
-   * @deprecated Use saveFontAsync for better UI responsiveness.
-   */
-  saveFont(path: string): void {
-    this.#ctx.native.saveFont(path);
-  }
-
-  /**
-   * Save the current font to a file path asynchronously.
-   * This runs the file write on a background thread, keeping the UI responsive.
-   */
   async saveFontAsync(path: string): Promise<void> {
-    return this.#ctx.native.saveFontAsync(path);
-  }
-
-  /**
-   * Export font to a specific format.
-   * TODO: Implement when Rust backend supports export.
-   */
-  exportFont(_path: string, _format: "ufo" | "otf" | "ttf"): void {
-    console.warn("IOManager.exportFont() not yet implemented in Rust backend");
+    return this.#engine.native.saveFontAsync(path);
   }
 }
