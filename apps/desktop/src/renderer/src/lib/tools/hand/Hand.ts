@@ -1,4 +1,4 @@
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
+import { BaseTool, type ToolName, defineStateDiagram } from "../core";
 import type { CursorType } from "@/types/editor";
 import type { HandState, HandBehavior } from "./types";
 import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
@@ -17,7 +17,7 @@ export class Hand extends BaseTool<HandState> {
 
   readonly id: ToolName = "hand";
 
-  private behaviors: HandBehavior[] = [HandReadyBehavior, HandDraggingBehavior];
+  readonly behaviors: HandBehavior[] = [HandReadyBehavior, HandDraggingBehavior];
 
   getCursor(state: HandState): CursorType {
     if (state.type === "dragging") return { type: "grabbing" };
@@ -26,19 +26,6 @@ export class Hand extends BaseTool<HandState> {
 
   initialState(): HandState {
     return { type: "idle" };
-  }
-
-  transition(state: HandState, event: ToolEvent): HandState {
-    if (state.type === "idle") return state;
-
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result !== null) return result;
-      }
-    }
-
-    return state;
   }
 
   activate(): void {

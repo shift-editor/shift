@@ -1,6 +1,8 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import type { ContourId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { isSegmentHit } from "@/types/hitResult";
@@ -10,7 +12,11 @@ export class DoubleClickBehaviour implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
   }
 
-  transition(_state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    _state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
 
     const hit = editor.getNodeAt(event.point);
@@ -20,8 +26,8 @@ export class DoubleClickBehaviour implements SelectBehavior {
     if (!contourId) return null;
 
     return {
-      type: "selected",
-      intent: { action: "selectContour", contourId, additive: false },
+      state: { type: "selected" },
+      action: { type: "selectContour", contourId, additive: false },
     };
   }
 

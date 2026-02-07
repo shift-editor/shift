@@ -2,9 +2,8 @@ import type { PointId, Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
-import type { DrawAPI } from "../core/DrawAPI";
-import type { ToolContext } from "../core/ToolContext";
-import type { SelectIntent } from "./intents";
+import type { Behavior } from "../core/Behavior";
+import type { SelectAction } from "./actions";
 export interface SelectionData {
   startPos: Point2D;
   currentPos: Point2D;
@@ -42,17 +41,12 @@ export interface RotateData {
 }
 
 export type SelectState =
-  | { type: "idle"; intent?: SelectIntent }
-  | { type: "ready"; intent?: SelectIntent }
-  | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
-  | { type: "selected"; intent?: SelectIntent }
-  | { type: "translating"; translate: TranslateData; intent?: SelectIntent }
-  | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
-  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "selecting"; selection: SelectionData }
+  | { type: "selected" }
+  | { type: "translating"; translate: TranslateData }
+  | { type: "resizing"; resize: ResizeData }
+  | { type: "rotating"; rotate: RotateData };
 
-export interface SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean;
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null;
-  onTransition?(prev: SelectState, next: SelectState, event: ToolEvent, editor: ToolContext): void;
-  render?(draw: DrawAPI, state: SelectState, editor: ToolContext): void;
-}
+export type SelectBehavior = Behavior<SelectState, ToolEvent, SelectAction>;

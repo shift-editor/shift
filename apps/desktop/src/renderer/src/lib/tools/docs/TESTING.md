@@ -8,7 +8,7 @@ Tests are split into **unit**, **contract**, and **pipeline** layers so behavior
 
 - **What**: A single tool instance with a mock `ToolContext` (`createMockToolContext()`). No `ToolManager` or `GestureDetector`.
 - **How**: Instantiate the tool, call `handleEvent()` with `ToolEvent` objects (or use `ToolEventSimulator` to send drag/pointer sequences).
-- **Use for**: State transitions, intent execution, selection/command side effects, edge cases (modifiers, non–left click, etc.).
+- **Use for**: State transitions, action execution, selection/command side effects, edge cases (modifiers, non–left click, etc.).
 - **Examples**: `Pen.test.ts`, `Select.test.ts` (most tests).
 
 ### Contract tests (BaseTool lifecycle)

@@ -21,13 +21,13 @@ src/renderer/src/lib/tools/
 ├── pen/
 │   ├── Pen.ts                # Pen tool class
 │   ├── behaviors/            # State-specific behavior handlers
-│   ├── intents.ts            # Intent resolution and execution
+│   ├── actions.ts            # Action resolution and execution
 │   └── index.ts
 ├── select/
 │   ├── Select.ts             # Select tool class
 │   ├── behaviors/            # State-specific behavior handlers
 │   ├── cursor.ts             # Select cursor logic
-│   ├── intents.ts            # Intent resolution and execution
+│   ├── actions.ts            # Action resolution and execution
 │   ├── types.ts              # SelectState types
 │   ├── utils.ts              # Pure utility functions
 │   └── index.ts
@@ -45,25 +45,28 @@ src/renderer/src/lib/tools/
 
 ## Core Abstractions
 
-### BaseTool<S, Settings> (core/BaseTool.ts)
+### BaseTool<S, A, Settings> (core/BaseTool.ts)
 
 ```typescript
-abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
+abstract class BaseTool<S extends ToolState, A = never, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
+  abstract readonly behaviors: Behavior<S, ToolEvent, A>[];
   state: S;
   settings: Settings;
-  protected editor: Editor;
+  protected editor: ToolContext;
 
   abstract initialState(): S;
-  abstract transition(state: S, event: ToolEvent): S;
 
-  onTransition?(prev: S, next: S, event: ToolEvent): void;
+  // Optional hooks (tools do NOT override transition/onTransition)
+  protected preTransition?(state: S, event: ToolEvent): { state: S; action?: A } | null;
+  protected executeAction?(action: A, prev: S, next: S): void;
+  protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
+
   render?(renderer: IRenderer): void;
   activate?(): void;
   deactivate?(): void;
 
   handleEvent(event: ToolEvent): void;
-  handleModifier(key: string, pressed: boolean): boolean;
 
   protected batch<T>(name: string, fn: () => T): T;
   protected beginPreview(): void;
@@ -83,8 +86,8 @@ type ToolEvent =
   | { type: "drag"; point: Point2D; screenPoint: Point2D; origin: Point2D; ... }
   | { type: "dragEnd"; point: Point2D; screenPoint: Point2D; origin: Point2D; ... }
   | { type: "dragCancel" }
-  | { type: "keyDown"; key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean }
-  | { type: "keyUp"; key: string };
+  | { type: "keyDown"; key: ToolKey | (string & {}); shiftKey: boolean; altKey: boolean; metaKey: boolean }
+  | { type: "keyUp"; key: ToolKey | (string & {}) };
 ```
 
 ### ToolManager (core/ToolManager.ts)
@@ -122,13 +125,13 @@ type PenState =
 
 ```typescript
 type SelectState =
-  | { type: "idle"; intent?: SelectIntent }
-  | { type: "ready"; intent?: SelectIntent }
-  | { type: "selecting"; selection: SelectionData; intent?: SelectIntent }
-  | { type: "selected"; intent?: SelectIntent }
-  | { type: "translating"; translate: TranslateData; intent?: SelectIntent }
-  | { type: "resizing"; resize: ResizeData; intent?: SelectIntent }
-  | { type: "rotating"; rotate: RotateData; intent?: SelectIntent };
+  | { type: "idle" }
+  | { type: "ready" }
+  | { type: "selecting"; selection: SelectionData }
+  | { type: "selected" }
+  | { type: "translating"; translate: TranslateData }
+  | { type: "resizing"; resize: ResizeData }
+  | { type: "rotating"; rotate: RotateData };
 
 interface TranslateData {
   anchorPointId: PointId;
@@ -154,34 +157,31 @@ interface ResizeData {
 
 ### Behavior Pattern
 
-Complex tools delegate to behavior classes for cleaner separation:
+Complex tools delegate to behavior classes for cleaner separation. BaseTool owns the behavior loop -- tools declare `behaviors` and optionally override hooks:
 
 ```typescript
-class Select extends BaseTool<SelectState> {
-  private behaviors: SelectBehavior[] = [
+class Select extends BaseTool<SelectState, SelectAction> {
+  readonly behaviors: SelectBehavior[] = [
     new SelectionBehavior(),
     new TranslateBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
   ];
 
-  transition(state: SelectState, event: ToolEvent): SelectState {
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result) return result;
-      }
+  // BaseTool iterates behaviors in transition() automatically.
+  // Actions are dispatched to executeAction() by BaseTool.
+
+  protected executeAction(action: SelectAction, prev: SelectState, next: SelectState): void {
+    switch (action.type) {
+      case "selectPoint":
+        this.editor.selectPoints(action.pointIds);
+        break;
+      // ... other action types
     }
-    return state;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
-    if (next.intent) {
-      executeIntent(next.intent, this.editor);
-    }
-    for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.editor);
-    }
+  protected onStateChange(prev: SelectState, next: SelectState, event: ToolEvent): void {
+    // Tool-specific post-transition logic (preview management, etc.)
   }
 }
 ```
@@ -234,19 +234,15 @@ For cursor and hover feedback, ToolContext exposes reactive signals: `hoveredBou
 ```typescript
 class MyTool extends BaseTool<MyState> {
   readonly id: ToolName = "myTool";
+  readonly behaviors: Behavior<MyState, ToolEvent>[] = [];
 
   initialState(): MyState {
     return { type: "idle" };
   }
 
-  transition(state: MyState, event: ToolEvent): MyState {
-    // Pure state transition logic
-    return state;
-  }
-
-  onTransition(prev: MyState, next: MyState, event: ToolEvent): void {
-    // Side effects: cursor updates, preview commit, etc.
-  }
+  // Optional hooks:
+  // protected executeAction(action, prev, next): void { ... }
+  // protected onStateChange(prev, next, event): void { ... }
 
   activate(): void {
     this.state = { type: "ready" };
@@ -269,7 +265,7 @@ const NUDGES_VALUES = { small: 1, medium: 10, large: 100 };
 
 ## Constraints and Invariants
 
-1. **Pure Transitions**: `transition()` returns new state, side effects in `onTransition()`
+1. **Pure Transitions**: `transition()` returns new state, side effects in `onTransition()` (via `executeAction` and `onStateChange`)
 2. **State in State Machine**: No shadow state outside state variants
 3. **Idle on Deactivate**: Tools transition to 'idle' when deactivated
 4. **UPM Coordinates**: All tool operations work in UPM space

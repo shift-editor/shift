@@ -1,40 +1,54 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BaseTool } from "./BaseTool";
-import type { ToolContext } from "./ToolContext";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName } from "./createContext";
+import type { Behavior } from "./Behavior";
 import { createMockToolContext } from "@/testing";
 
-type ContractState = { type: "idle" } | { type: "ready" };
+type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
+
+const ClickBehavior: Behavior<ContractState> = {
+  canHandle(state, event) {
+    return state.type === "ready" && event.type === "click";
+  },
+  transition() {
+    return { state: { type: "clicked" } };
+  },
+};
 
 class ContractTestTool extends BaseTool<ContractState> {
   readonly id: ToolName = "select";
-  onTransition = vi.fn();
+  readonly behaviors: Behavior<ContractState>[] = [ClickBehavior];
+  onStateChangeSpy = vi.fn();
 
   initialState(): ContractState {
     return { type: "idle" };
   }
 
-  transition(state: ContractState, event: ToolEvent): ContractState {
-    if (state.type === "idle" && event.type === "click") return { type: "ready" };
-    return state;
+  activate(): void {
+    this.state = { type: "ready" };
+  }
+
+  protected onStateChange(prev: ContractState, next: ContractState, event: ToolEvent): void {
+    this.onStateChangeSpy(prev, next, event);
   }
 }
 
 describe("BaseTool contract", () => {
-  let ctx: ToolContext;
   let tool: ContractTestTool;
   let setActiveToolStateSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    ctx = createMockToolContext();
+    const ctx = createMockToolContext();
     setActiveToolStateSpy = vi.spyOn(ctx, "setActiveToolState");
     tool = new ContractTestTool(ctx);
-    tool.onTransition.mockClear();
+    tool.activate();
+    setActiveToolStateSpy.mockClear();
+    tool.onStateChangeSpy.mockClear();
   });
 
   describe("lifecycle when state changes", () => {
-    it("calls setActiveToolState with next state and onTransition with prev, next, event", () => {
+    it("calls setActiveToolState with next state and onStateChange with prev, next, event", () => {
       const clickEvent: ToolEvent = {
         type: "click",
         point: { x: 10, y: 10 },
@@ -45,19 +59,19 @@ describe("BaseTool contract", () => {
       tool.handleEvent(clickEvent);
 
       expect(setActiveToolStateSpy).toHaveBeenCalledTimes(1);
-      expect(setActiveToolStateSpy).toHaveBeenCalledWith({ type: "ready" });
-      expect(tool.onTransition).toHaveBeenCalledTimes(1);
-      expect(tool.onTransition).toHaveBeenCalledWith(
-        { type: "idle" },
+      expect(setActiveToolStateSpy).toHaveBeenCalledWith({ type: "clicked" });
+      expect(tool.onStateChangeSpy).toHaveBeenCalledTimes(1);
+      expect(tool.onStateChangeSpy).toHaveBeenCalledWith(
         { type: "ready" },
+        { type: "clicked" },
         clickEvent,
       );
-      expect(tool.getState()).toEqual({ type: "ready" });
+      expect(tool.getState()).toEqual({ type: "clicked" });
     });
   });
 
   describe("lifecycle when state is unchanged (same reference)", () => {
-    it("does not call onTransition when transition returns same state reference", () => {
+    it("does not call onStateChange when no behavior matches", () => {
       const moveEvent: ToolEvent = {
         type: "pointerMove",
         point: { x: 10, y: 10 },
@@ -66,11 +80,11 @@ describe("BaseTool contract", () => {
       tool.handleEvent(moveEvent);
 
       expect(setActiveToolStateSpy).not.toHaveBeenCalled();
-      expect(tool.onTransition).not.toHaveBeenCalled();
-      expect(tool.getState()).toEqual({ type: "idle" });
+      expect(tool.onStateChangeSpy).not.toHaveBeenCalled();
+      expect(tool.getState()).toEqual({ type: "ready" });
     });
 
-    it("does not call onTransition when transition returns same state after ready", () => {
+    it("does not call onStateChange when transition returns same state after clicked", () => {
       tool.handleEvent({
         type: "click",
         point: { x: 0, y: 0 },
@@ -78,7 +92,7 @@ describe("BaseTool contract", () => {
         altKey: false,
       });
       setActiveToolStateSpy.mockClear();
-      tool.onTransition.mockClear();
+      tool.onStateChangeSpy.mockClear();
 
       tool.handleEvent({
         type: "pointerMove",
@@ -86,7 +100,7 @@ describe("BaseTool contract", () => {
       });
 
       expect(setActiveToolStateSpy).not.toHaveBeenCalled();
-      expect(tool.onTransition).not.toHaveBeenCalled();
+      expect(tool.onStateChangeSpy).not.toHaveBeenCalled();
     });
   });
 });

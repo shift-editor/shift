@@ -6,12 +6,15 @@ import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetect
 import { BaseTool, type ToolState } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
 
-export type ToolConstructor = new (editor: ToolContext) => BaseTool<ToolState>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ToolConstructor = new (editor: ToolContext) => BaseTool<ToolState, any>;
 
 export class ToolManager implements ToolSwitchHandler {
   private registry = new Map<ToolName, ToolConstructor>();
-  private primaryTool: BaseTool<ToolState> | null = null;
-  private overrideTool: BaseTool<ToolState> | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private primaryTool: BaseTool<ToolState, any> | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private overrideTool: BaseTool<ToolState, any> | null = null;
   private gesture = new GestureDetector();
   private editor: ToolContext;
 
@@ -25,7 +28,8 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor = editor;
   }
 
-  get activeTool(): BaseTool<ToolState> | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get activeTool(): BaseTool<ToolState, any> | null {
     return this.overrideTool ?? this.primaryTool;
   }
 
@@ -160,7 +164,13 @@ export class ToolManager implements ToolSwitchHandler {
       metaKey: e.metaKey,
     });
 
-    if (this.primaryTool?.handleModifier(e.code, true)) {
+    // Global: Space → temporary hand tool
+    if (e.code === "Space") {
+      const wasPreview = this.editor.isPreviewMode();
+      this.requestTemporary("hand", {
+        onActivate: () => this.editor.setPreviewMode(true),
+        onReturn: () => this.editor.setPreviewMode(wasPreview),
+      });
       e.preventDefault();
       return;
     }
@@ -187,7 +197,8 @@ export class ToolManager implements ToolSwitchHandler {
       metaKey: e.metaKey,
     });
 
-    if (this.primaryTool?.handleModifier(e.code, false)) {
+    if (e.code === "Space") {
+      this.returnFromTemporary();
       return;
     }
 

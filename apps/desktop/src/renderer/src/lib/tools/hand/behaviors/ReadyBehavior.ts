@@ -8,13 +8,15 @@ export const HandReadyBehavior = createBehavior<HandState>({
     return state.type === "ready" && event.type === "dragStart";
   },
 
-  transition(state: HandState, event: ToolEvent, editor: ToolContext): HandState | null {
+  transition(state: HandState, event: ToolEvent, editor: ToolContext) {
     if (state.type !== "ready" || event.type !== "dragStart") return null;
     const startPan = editor.pan;
     return {
-      type: "dragging",
-      screenStart: event.screenPoint,
-      startPan,
+      state: {
+        type: "dragging" as const,
+        screenStart: event.screenPoint,
+        startPan,
+      },
     };
   },
 });

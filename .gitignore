@@ -100,4 +100,4 @@ npm/
 .turbo
 *.settings.local.json*
 
-.plans
+.plan/

@@ -1,4 +1,13 @@
-import type { Point2D, PointId, ContourId, Point, Contour, Glyph, Rect2D } from "@shift/types";
+import type {
+  Point2D,
+  PointId,
+  ContourId,
+  Point,
+  Contour,
+  Glyph,
+  Rect2D,
+  FontMetrics,
+} from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
@@ -20,29 +29,18 @@ import type {
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
 
-export interface ToolContext {
-  readonly activeToolState: Signal<ActiveToolState>;
-  getActiveToolState(): ActiveToolState;
-  setActiveToolState(state: ActiveToolState): void;
+export interface ViewportContext {
   getMousePosition(): Point2D;
   getScreenMousePosition(): Point2D;
-  /** Called by ToolManager on pointer frame flush; not part of the tool API. */
   flushMousePosition?(): void;
   projectScreenToUpm(x: number, y: number): Point2D;
-  requestStaticRedraw(): void;
-  updateHover(pos: Point2D): void;
-  readonly commands: CommandHistory;
-  beginPreview(): void;
-  commitPreview(label: string): void;
-  cancelPreview(): void;
-  getNodeAt(pos: Point2D): HitResult;
-  getPointAt(pos: Point2D): Point | null;
-  getSegmentAt(pos: Point2D): SegmentHitResult | null;
-  getSegmentById(segmentId: SegmentId): Segment | null;
-  getAllPoints(): Point[];
-  getGlyph(): Glyph | null;
-  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
-  getMiddlePointAt(pos: Point2D): MiddlePointHit | null;
+  screenToUpmDistance(pixels: number): number;
+  readonly hitRadius: number;
+  readonly pan: Point2D;
+  setPan(x: number, y: number): void;
+}
+
+export interface SelectionContext {
   getSelectedPoints(): PointId[];
   getSelectedSegments(): SegmentId[];
   hasSelection(): boolean;
@@ -58,43 +56,88 @@ export interface ToolContext {
   addSegmentToSelection(id: SegmentId): void;
   removeSegmentFromSelection(id: SegmentId): void;
   toggleSegmentInSelection(id: SegmentId): void;
-  movePointTo(id: PointId, x: number, y: number): void;
-  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
-  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
-  toggleSmooth(id: PointId): void;
+}
+
+export interface HitTestContext {
+  getNodeAt(pos: Point2D): HitResult;
+  getPointAt(pos: Point2D): Point | null;
+  getSegmentAt(pos: Point2D): SegmentHitResult | null;
+  getSegmentById(segmentId: SegmentId): Segment | null;
+  getAllPoints(): Point[];
+  getGlyph(): Glyph | null;
+  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
+  getMiddlePointAt(pos: Point2D): MiddlePointHit | null;
   getSelectionBoundingRect(): Rect2D | null;
-  screenToUpmDistance(pixels: number): number;
-  readonly hitRadius: number;
-  clearHover(): void;
-  setHandlesVisible(visible: boolean): void;
-  readonly pan: Point2D;
-  setPan(x: number, y: number): void;
-  requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
-  returnFromTemporaryTool(): void;
-  readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
   hitTestBoundingBoxAt(pos: Point2D): BoundingBoxHitResult;
-  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
-  readonly hoveredPointId: Signal<PointId | null>;
-  readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
-  /** True when the pointer is over a point or segment (outline node). */
-  readonly isHoveringNode: Signal<boolean>;
-  getIsHoveringNode(): boolean;
-  readonly currentModifiers: Signal<Modifiers>;
-  getCurrentModifiers(): Modifiers;
-  setCurrentModifiers?(modifiers: Modifiers): void;
+}
+
+export interface SnappingContext {
   getSnapPreferences(): SnapPreferences;
   setSnapPreferences(next: Partial<SnapPreferences>): void;
   createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession;
   createRotateSnapSession(): RotateSnapSession;
-  duplicateSelection(): PointId[];
   setSnapIndicator(indicator: SnapIndicator | null): void;
-  setPreviewMode(enabled: boolean): void;
-  setMarqueePreviewRect(rect: Rect2D | null): void;
-  isPointInMarqueePreview(pointId: PointId): boolean;
-  getFocusZone(): FocusZone;
+}
+
+export interface EditingContext {
+  movePointTo(id: PointId, x: number, y: number): void;
+  applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
+  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
+  toggleSmooth(id: PointId): void;
+  duplicateSelection(): PointId[];
   getActiveContour(): Contour | null;
   getActiveContourId(): ContourId | null;
   clearActiveContour(): void;
   setActiveContour(id: ContourId): void;
-  requestRedraw(): void;
 }
+
+export interface CommandContext {
+  readonly commands: CommandHistory;
+  beginPreview(): void;
+  commitPreview(label: string): void;
+  cancelPreview(): void;
+}
+
+export interface ToolLifecycleContext {
+  readonly activeToolState: Signal<ActiveToolState>;
+  getActiveToolState(): ActiveToolState;
+  setActiveToolState(state: ActiveToolState): void;
+  requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
+  returnFromTemporaryTool(): void;
+  readonly currentModifiers: Signal<Modifiers>;
+  getCurrentModifiers(): Modifiers;
+  setCurrentModifiers?(modifiers: Modifiers): void;
+  getFocusZone(): FocusZone;
+}
+
+export interface VisualStateContext {
+  requestStaticRedraw(): void;
+  requestRedraw(): void;
+  updateHover(pos: Point2D): void;
+  clearHover(): void;
+  readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
+  readonly hoveredPointId: Signal<PointId | null>;
+  readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
+  readonly isHoveringNode: Signal<boolean>;
+  getIsHoveringNode(): boolean;
+  setHandlesVisible(visible: boolean): void;
+  isPreviewMode(): boolean;
+  setPreviewMode(enabled: boolean): void;
+  setMarqueePreviewRect(rect: Rect2D | null): void;
+  isPointInMarqueePreview(pointId: PointId): boolean;
+}
+
+export interface FontContext {
+  getFontMetrics(): FontMetrics;
+}
+
+export type ToolContext = ViewportContext &
+  SelectionContext &
+  HitTestContext &
+  SnappingContext &
+  EditingContext &
+  CommandContext &
+  ToolLifecycleContext &
+  VisualStateContext &
+  FontContext;

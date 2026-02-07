@@ -1,6 +1,8 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import { getPointIdFromHit } from "@/types/hitResult";
 
 export class ToggleSmoothBehavior implements SelectBehavior {
@@ -8,7 +10,11 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
@@ -20,8 +26,8 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     if (!point || point.pointType !== "onCurve") return null;
 
     return {
-      ...state,
-      intent: { action: "toggleSmooth", pointId },
+      state: { ...state },
+      action: { type: "toggleSmooth", pointId },
     };
   }
 }

@@ -1,6 +1,8 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import { isSegmentHit } from "@/types/hitResult";
 
 export class UpgradeSegmentBehavior implements SelectBehavior {
@@ -12,15 +14,19 @@ export class UpgradeSegmentBehavior implements SelectBehavior {
     );
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "click" || !event.altKey) return null;
 
     const hit = editor.getNodeAt(event.point);
     if (!isSegmentHit(hit) || hit.segment.type !== "line") return null;
 
     return {
-      type: state.type === "selected" ? "selected" : "ready",
-      intent: { action: "upgradeLineToCubic", segment: hit.segment },
+      state: { type: state.type === "selected" ? "selected" : "ready" },
+      action: { type: "upgradeLineToCubic", segment: hit.segment },
     };
   }
 }

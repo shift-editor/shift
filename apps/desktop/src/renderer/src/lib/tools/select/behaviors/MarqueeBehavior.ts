@@ -1,10 +1,10 @@
 import type { PointId, Rect2D } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
-import type { DrawAPI } from "../../core/DrawAPI";
+import type { SelectAction } from "../actions";
 import { normalizeRect, pointInRect } from "../utils";
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 
 export class MarqueeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -17,7 +17,11 @@ export class MarqueeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "selecting") {
       return this.transitionSelecting(state, event, editor);
     }
@@ -27,21 +31,6 @@ export class MarqueeBehavior implements SelectBehavior {
     }
 
     return null;
-  }
-
-  render(draw: DrawAPI, state: SelectState, _editor: ToolContext): void {
-    if (state.type !== "selecting") return;
-
-    const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-    draw.rect(
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      {
-        fillStyle: SELECTION_RECTANGLE_STYLES.fillStyle,
-        strokeStyle: SELECTION_RECTANGLE_STYLES.strokeStyle,
-        strokeWidth: SELECTION_RECTANGLE_STYLES.lineWidth,
-      },
-    );
   }
 
   onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: ToolContext): void {
@@ -60,12 +49,13 @@ export class MarqueeBehavior implements SelectBehavior {
     state: SelectState & { type: "selecting" },
     event: ToolEvent,
     editor: ToolContext,
-  ): SelectState {
+  ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
-      // No intent on drag; commit on dragEnd to avoid per-frame selection cost.
       return {
-        type: "selecting",
-        selection: { ...state.selection, currentPos: event.point },
+        state: {
+          type: "selecting",
+          selection: { ...state.selection, currentPos: event.point },
+        },
       };
     }
 
@@ -75,46 +65,50 @@ export class MarqueeBehavior implements SelectBehavior {
 
       if (pointIds.size > 0) {
         return {
-          type: "selected",
-          intent: { action: "selectPointsInRect", rect },
+          state: { type: "selected" },
+          action: { type: "selectPointsInRect", rect },
         };
       }
       return {
-        type: "ready",
-        intent: { action: "selectPointsInRect", rect },
+        state: { type: "ready" },
+        action: { type: "selectPointsInRect", rect },
       };
     }
 
     if (event.type === "dragCancel") {
       return {
-        type: "ready",
-        intent: { action: "clearSelection" },
+        state: { type: "ready" },
+        action: { type: "clearSelection" },
       };
     }
 
-    return state;
+    return { state };
   }
 
   private tryStartMarquee(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
-  ): SelectState | null {
+  ): TransitionResult<SelectState, SelectAction> | null {
     const hit = editor.getNodeAt(event.point);
     if (hit !== null) return null;
 
     if (state.type === "selected") {
       return {
-        type: "selecting",
-        selection: { startPos: event.point, currentPos: event.point },
-        intent: { action: "clearAndStartMarquee" },
+        state: {
+          type: "selecting",
+          selection: { startPos: event.point, currentPos: event.point },
+        },
+        action: { type: "clearAndStartMarquee" },
       };
     }
 
     return {
-      type: "selecting",
-      selection: { startPos: event.point, currentPos: event.point },
-      intent: { action: "setSelectionMode", mode: "preview" },
+      state: {
+        type: "selecting",
+        selection: { startPos: event.point, currentPos: event.point },
+      },
+      action: { type: "setSelectionMode", mode: "preview" },
     };
   }
 

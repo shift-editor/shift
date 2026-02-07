@@ -2,7 +2,9 @@ import type { PointId } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 import { cacheSelectedPositions } from "../utils";
@@ -20,7 +22,11 @@ export class RotateBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "rotating") {
       return this.transitionRotating(state, event, editor);
     }
@@ -51,7 +57,7 @@ export class RotateBehavior implements SelectBehavior {
     state: SelectState & { type: "rotating" },
     event: ToolEvent,
     editor: ToolContext,
-  ): SelectState {
+  ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const rawAngle = Vec2.angleTo(state.rotate.center, event.point);
       const rawDelta = rawAngle - state.rotate.startAngle;
@@ -75,12 +81,14 @@ export class RotateBehavior implements SelectBehavior {
       editor.setPointPositions(moves);
 
       return {
-        type: "rotating",
-        rotate: {
-          ...state.rotate,
-          lastPos: event.point,
-          currentAngle,
-          snappedAngle,
+        state: {
+          type: "rotating",
+          rotate: {
+            ...state.rotate,
+            lastPos: event.point,
+            currentAngle,
+            snappedAngle,
+          },
         },
       };
     }
@@ -89,9 +97,9 @@ export class RotateBehavior implements SelectBehavior {
       const totalAngle = state.rotate.currentAngle - state.rotate.startAngle;
 
       return {
-        type: "selected",
-        intent: {
-          action: "rotatePoints",
+        state: { type: "selected" },
+        action: {
+          type: "rotatePoints",
           pointIds: state.rotate.draggedPointIds,
           angle: totalAngle,
           center: state.rotate.center,
@@ -101,19 +109,19 @@ export class RotateBehavior implements SelectBehavior {
 
     if (event.type === "dragCancel") {
       return {
-        type: "selected",
-        intent: { action: "cancelPreview" },
+        state: { type: "selected" },
+        action: { type: "cancelPreview" },
       };
     }
 
-    return state;
+    return { state };
   }
 
   private tryStartRotate(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
-  ): SelectState | null {
+  ): TransitionResult<SelectState, SelectAction> | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
 
@@ -134,16 +142,18 @@ export class RotateBehavior implements SelectBehavior {
     const initialPositions = cacheSelectedPositions(editor);
 
     return {
-      type: "rotating",
-      rotate: {
-        corner,
-        startPos: event.point,
-        lastPos: event.point,
-        center,
-        startAngle,
-        currentAngle: startAngle,
-        draggedPointIds,
-        initialPositions,
+      state: {
+        type: "rotating",
+        rotate: {
+          corner,
+          startPos: event.point,
+          lastPos: event.point,
+          center,
+          startAngle,
+          currentAngle: startAngle,
+          draggedPointIds,
+          initialPositions,
+        },
       },
     };
   }

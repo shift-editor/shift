@@ -44,7 +44,7 @@ describe("ToolManager", () => {
   });
 
   describe("space key for hand tool", () => {
-    it("should enable preview mode when space is pressed via tool handleModifier", () => {
+    it("should enable preview mode when space is pressed", () => {
       toolManager.activate("pen");
       editor.mocks.render.setPreviewMode.mockClear();
 

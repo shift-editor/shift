@@ -2,7 +2,9 @@ import type { PointId, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import type { BoundingRectEdge } from "../cursor";
 import { cacheSelectedPositions } from "../utils";
 
@@ -17,7 +19,11 @@ export class ResizeBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "resizing") {
       return this.transitionResizing(state, event, editor);
     }
@@ -45,7 +51,7 @@ export class ResizeBehavior implements SelectBehavior {
     state: SelectState & { type: "resizing" },
     event: ToolEvent,
     editor: ToolContext,
-  ): SelectState {
+  ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const uniformScale = event.shiftKey;
       const { sx, sy } = this.calculateScaleFactors(
@@ -67,11 +73,13 @@ export class ResizeBehavior implements SelectBehavior {
       editor.setPointPositions(moves);
 
       return {
-        type: "resizing",
-        resize: {
-          ...state.resize,
-          lastPos: event.point,
-          uniformScale,
+        state: {
+          type: "resizing",
+          resize: {
+            ...state.resize,
+            lastPos: event.point,
+            uniformScale,
+          },
         },
       };
     }
@@ -86,9 +94,9 @@ export class ResizeBehavior implements SelectBehavior {
       );
 
       return {
-        type: "selected",
-        intent: {
-          action: "scalePoints",
+        state: { type: "selected" },
+        action: {
+          type: "scalePoints",
           pointIds: state.resize.draggedPointIds,
           sx,
           sy,
@@ -99,19 +107,19 @@ export class ResizeBehavior implements SelectBehavior {
 
     if (event.type === "dragCancel") {
       return {
-        type: "selected",
-        intent: { action: "cancelPreview" },
+        state: { type: "selected" },
+        action: { type: "cancelPreview" },
       };
     }
 
-    return state;
+    return { state };
   }
 
   private tryStartResize(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
-  ): SelectState | null {
+  ): TransitionResult<SelectState, SelectAction> | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
 
@@ -126,16 +134,18 @@ export class ResizeBehavior implements SelectBehavior {
     const initialPositions = cacheSelectedPositions(editor);
 
     return {
-      type: "resizing",
-      resize: {
-        edge,
-        startPos: event.point,
-        lastPos: event.point,
-        initialBounds: bounds,
-        anchorPoint,
-        draggedPointIds,
-        initialPositions,
-        uniformScale: false,
+      state: {
+        type: "resizing",
+        resize: {
+          edge,
+          startPos: event.point,
+          lastPos: event.point,
+          initialBounds: bounds,
+          anchorPoint,
+          draggedPointIds,
+          initialPositions,
+          uniformScale: false,
+        },
       },
     };
   }

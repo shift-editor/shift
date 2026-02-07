@@ -3,6 +3,7 @@ import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } 
 import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
 import type { ShapeState, ShapeBehavior } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
+import { DEFAULT_STYLES } from "@/lib/styles/style";
 
 export class Shape extends BaseTool<ShapeState> {
   static stateSpec = defineStateDiagram<ShapeState["type"]>({
@@ -18,26 +19,13 @@ export class Shape extends BaseTool<ShapeState> {
 
   readonly id: ToolName = "shape";
 
-  private behaviors: ShapeBehavior[] = [ShapeReadyBehavior, ShapeDraggingBehavior];
+  readonly behaviors: ShapeBehavior[] = [ShapeReadyBehavior, ShapeDraggingBehavior];
 
   initialState(): ShapeState {
     return { type: "idle" };
   }
 
-  transition(state: ShapeState, event: ToolEvent): ShapeState {
-    if (state.type === "idle") return state;
-
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result !== null) return result;
-      }
-    }
-
-    return state;
-  }
-
-  onTransition(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
+  protected onStateChange(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
     if (prev.type === "dragging" && next.type === "ready") {
       if (event.type === "dragEnd") {
         this.commitRectangle(prev);
@@ -54,9 +42,14 @@ export class Shape extends BaseTool<ShapeState> {
   }
 
   render(draw: DrawAPI): void {
-    for (const behavior of this.behaviors) {
-      behavior.render?.(draw, this.state, this.editor);
-    }
+    if (this.state.type !== "dragging") return;
+    const rect = this.getRect(this.state);
+    if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;
+    draw.rect(
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { strokeStyle: DEFAULT_STYLES.strokeStyle, strokeWidth: DEFAULT_STYLES.lineWidth },
+    );
   }
 
   private getRect(state: { startPos: Point2D; currentPos: Point2D }): Rect2D {

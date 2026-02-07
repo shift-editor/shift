@@ -2,7 +2,9 @@ import { Vec2 } from "@shift/geo";
 import type { Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
@@ -20,7 +22,11 @@ export class TranslateBehavior implements SelectBehavior {
     return false;
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "translating") {
       return this.transitionTranslating(state, event, editor);
     }
@@ -48,7 +54,7 @@ export class TranslateBehavior implements SelectBehavior {
     state: SelectState & { type: "translating" },
     event: ToolEvent,
     _editor: ToolContext,
-  ): SelectState {
+  ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       let newLastPos = event.point;
 
@@ -60,13 +66,15 @@ export class TranslateBehavior implements SelectBehavior {
 
       const delta = Vec2.sub(newLastPos, state.translate.lastPos);
       return {
-        type: "translating",
-        translate: {
-          ...state.translate,
-          lastPos: { x: newLastPos.x, y: newLastPos.y },
-          totalDelta: Vec2.add(state.translate.totalDelta, delta),
+        state: {
+          type: "translating",
+          translate: {
+            ...state.translate,
+            lastPos: { x: newLastPos.x, y: newLastPos.y },
+            totalDelta: Vec2.add(state.translate.totalDelta, delta),
+          },
         },
-        intent: { action: "movePointsDelta", delta },
+        action: { type: "movePointsDelta", delta },
       };
     }
 
@@ -75,28 +83,28 @@ export class TranslateBehavior implements SelectBehavior {
       const hasMoved = (totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0;
 
       return {
-        type: "selected",
-        intent: hasMoved
-          ? { action: "commitPreview", label: "Move Points" }
-          : { action: "cancelPreview" },
+        state: { type: "selected" },
+        action: hasMoved
+          ? { type: "commitPreview", label: "Move Points" }
+          : { type: "cancelPreview" },
       };
     }
 
     if (event.type === "dragCancel") {
       return {
-        type: "selected",
-        intent: { action: "cancelPreview" },
+        state: { type: "selected" },
+        action: { type: "cancelPreview" },
       };
     }
 
-    return state;
+    return { state };
   }
 
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
     editor: ToolContext,
-  ): SelectState | null {
+  ): TransitionResult<SelectState, SelectAction> | null {
     const hit = editor.getNodeAt(event.point);
     const pointId = getPointIdFromHit(hit);
 
@@ -112,15 +120,17 @@ export class TranslateBehavior implements SelectBehavior {
       const anchorPos = this.startSnap(editor, pointId, event.point, draggedPointIds);
 
       return {
-        type: "translating",
-        translate: {
-          anchorPointId: pointId,
-          startPos: event.point,
-          lastPos: anchorPos,
-          totalDelta: { x: 0, y: 0 },
-          draggedPointIds,
+        state: {
+          type: "translating",
+          translate: {
+            anchorPointId: pointId,
+            startPos: event.point,
+            lastPos: anchorPos,
+            totalDelta: { x: 0, y: 0 },
+            draggedPointIds,
+          },
         },
-        intent: isSelected ? undefined : { action: "selectPoint", pointId, additive: false },
+        action: isSelected ? undefined : { type: "selectPoint", pointId, additive: false },
       };
     }
 
@@ -140,18 +150,20 @@ export class TranslateBehavior implements SelectBehavior {
       const anchorPos = this.startSnap(editor, anchorPointId, event.point, draggedPointIds);
 
       return {
-        type: "translating",
-        translate: {
-          anchorPointId,
-          startPos: event.point,
-          lastPos: anchorPos,
-          totalDelta: { x: 0, y: 0 },
-          draggedPointIds,
+        state: {
+          type: "translating",
+          translate: {
+            anchorPointId,
+            startPos: event.point,
+            lastPos: anchorPos,
+            totalDelta: { x: 0, y: 0 },
+            draggedPointIds,
+          },
         },
-        intent: isSelected
+        action: isSelected
           ? undefined
           : {
-              action: "selectSegment",
+              type: "selectSegment",
               segmentId: hit.segmentId,
               additive: false,
             },
@@ -161,22 +173,27 @@ export class TranslateBehavior implements SelectBehavior {
     return null;
   }
 
-  private startDuplicateDrag(editor: ToolContext, startPos: Point2D): SelectState | null {
+  private startDuplicateDrag(
+    editor: ToolContext,
+    startPos: Point2D,
+  ): TransitionResult<SelectState, SelectAction> | null {
     const newPointIds = editor.duplicateSelection();
     const firstPointId = newPointIds[0];
     if (!firstPointId) return null;
 
     const anchorPos = this.startSnap(editor, firstPointId, startPos, newPointIds);
     return {
-      type: "translating",
-      translate: {
-        anchorPointId: firstPointId,
-        startPos,
-        lastPos: anchorPos,
-        totalDelta: { x: 0, y: 0 },
-        draggedPointIds: newPointIds,
+      state: {
+        type: "translating",
+        translate: {
+          anchorPointId: firstPointId,
+          startPos,
+          lastPos: anchorPos,
+          totalDelta: { x: 0, y: 0 },
+          draggedPointIds: newPointIds,
+        },
       },
-      intent: { action: "selectPoints", pointIds: newPointIds },
+      action: { type: "selectPoints", pointIds: newPointIds },
     };
   }
 

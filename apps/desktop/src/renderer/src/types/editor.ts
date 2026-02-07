@@ -56,7 +56,8 @@ export type CursorType =
   | { type: "rotate-tl" }
   | { type: "rotate-tr" }
   | { type: "rotate-bl" }
-  | { type: "rotate-br" };
+  | { type: "rotate-br" }
+  | { type: "text" };
 
 export type VisualState = "idle" | "hovered" | "selected";
 

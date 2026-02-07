@@ -2,7 +2,9 @@ import type { Point2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
+import type { PenAction } from "../actions";
 import { AddPointCommand, InsertPointCommand } from "@/lib/commands";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
@@ -31,7 +33,11 @@ export class HandleBehavior implements PenBehavior {
     return false;
   }
 
-  transition(state: PenState, event: ToolEvent, editor: ToolContext): PenState | null {
+  transition(
+    state: PenState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<PenState, PenAction> | null {
     if (state.type === "anchored") {
       return this.transitionAnchored(state, event, editor);
     }
@@ -55,7 +61,7 @@ export class HandleBehavior implements PenBehavior {
     state: PenState & { type: "anchored" },
     event: ToolEvent,
     editor: ToolContext,
-  ): PenState | null {
+  ): TransitionResult<PenState, PenAction> | null {
     if (event.type === "drag") {
       const dist = Vec2.dist(state.anchor.position, event.point);
 
@@ -72,27 +78,33 @@ export class HandleBehavior implements PenBehavior {
 
         const handles = this.createHandles(state.anchor, snappedPos, editor);
         return {
-          type: "dragging",
-          anchor: state.anchor,
-          handles,
-          mousePos: event.point,
-          snappedPos: event.shiftKey ? snappedPos : undefined,
+          state: {
+            type: "dragging",
+            anchor: state.anchor,
+            handles,
+            mousePos: event.point,
+            snappedPos: event.shiftKey ? snappedPos : undefined,
+          },
         };
       }
-      return state;
+      return { state };
     }
 
     if (event.type === "dragEnd") {
       return {
-        type: "ready",
-        mousePos: event.point,
+        state: {
+          type: "ready",
+          mousePos: event.point,
+        },
       };
     }
 
     if (event.type === "dragCancel") {
       return {
-        type: "ready",
-        mousePos: state.anchor.position,
+        state: {
+          type: "ready",
+          mousePos: state.anchor.position,
+        },
       };
     }
 
@@ -101,8 +113,10 @@ export class HandleBehavior implements PenBehavior {
         editor.commands.cancelBatch();
       }
       return {
-        type: "ready",
-        mousePos: state.anchor.position,
+        state: {
+          type: "ready",
+          mousePos: state.anchor.position,
+        },
       };
     }
 
@@ -113,7 +127,7 @@ export class HandleBehavior implements PenBehavior {
     state: PenState & { type: "dragging" },
     event: ToolEvent,
     editor: ToolContext,
-  ): PenState | null {
+  ): TransitionResult<PenState, PenAction> | null {
     if (event.type === "drag") {
       let snappedPos: Point2D = event.point;
 
@@ -125,16 +139,20 @@ export class HandleBehavior implements PenBehavior {
 
       this.updateHandles(state.anchor, state.handles, snappedPos, editor);
       return {
-        ...state,
-        mousePos: event.point,
-        snappedPos: event.shiftKey ? snappedPos : undefined,
+        state: {
+          ...state,
+          mousePos: event.point,
+          snappedPos: event.shiftKey ? snappedPos : undefined,
+        },
       };
     }
 
     if (event.type === "dragEnd") {
       return {
-        type: "ready",
-        mousePos: event.point,
+        state: {
+          type: "ready",
+          mousePos: event.point,
+        },
       };
     }
 
@@ -143,8 +161,10 @@ export class HandleBehavior implements PenBehavior {
         editor.commands.cancelBatch();
       }
       return {
-        type: "ready",
-        mousePos: state.anchor.position,
+        state: {
+          type: "ready",
+          mousePos: state.anchor.position,
+        },
       };
     }
 
@@ -153,8 +173,10 @@ export class HandleBehavior implements PenBehavior {
         editor.commands.cancelBatch();
       }
       return {
-        type: "ready",
-        mousePos: state.anchor.position,
+        state: {
+          type: "ready",
+          mousePos: state.anchor.position,
+        },
       };
     }
 

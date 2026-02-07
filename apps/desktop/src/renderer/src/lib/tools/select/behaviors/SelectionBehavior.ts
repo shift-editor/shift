@@ -1,6 +1,8 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
 
 export class SelectionBehavior implements SelectBehavior {
@@ -8,7 +10,11 @@ export class SelectionBehavior implements SelectBehavior {
     return (state.type === "ready" || state.type === "selected") && event.type === "click";
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
@@ -22,13 +28,13 @@ export class SelectionBehavior implements SelectBehavior {
       const willHaveSelection =
         editor.hasSelection() && !(isSelected && selectedPoints.length === 1);
       const type = willHaveSelection || !isSelected ? "selected" : "ready";
-      return { type, intent: { action: "togglePoint", pointId } };
+      return { state: { type }, action: { type: "togglePoint", pointId } };
     }
 
     if (pointId !== null) {
       return {
-        type: "selected",
-        intent: { action: "selectPoint", pointId, additive: event.shiftKey },
+        state: { type: "selected" },
+        action: { type: "selectPoint", pointId, additive: event.shiftKey },
       };
     }
 
@@ -42,15 +48,15 @@ export class SelectionBehavior implements SelectBehavior {
         selectedSegments.length > 1 ||
         (selectedSegments.length === 1 && !isSelected);
       const type = hasOtherSelections || !isSelected ? "selected" : "ready";
-      return { type, intent: { action: "toggleSegment", segmentId: hit.segmentId } };
+      return { state: { type }, action: { type: "toggleSegment", segmentId: hit.segmentId } };
     }
 
     // Segment hit (no shift)
     if (hit !== null && isSegmentHit(hit)) {
       return {
-        type: "selected",
-        intent: {
-          action: "selectSegment",
+        state: { type: "selected" },
+        action: {
+          type: "selectSegment",
           segmentId: hit.segmentId,
           additive: event.shiftKey,
         },
@@ -59,7 +65,7 @@ export class SelectionBehavior implements SelectBehavior {
 
     // Clear selection if anything is selected
     if (state.type === "selected" || editor.hasSelection()) {
-      return { type: "ready", intent: { action: "clearSelection" } };
+      return { state: { type: "ready" }, action: { type: "clearSelection" } };
     }
 
     return null;

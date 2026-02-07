@@ -1,8 +1,7 @@
 import type { Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../core/GestureDetector";
-import type { ToolContext } from "../core/ToolContext";
-import type { IRenderer } from "@/types/graphics";
-import type { PenIntent } from "./intents";
+import type { Behavior } from "../core/Behavior";
+import type { PenAction } from "./actions";
 export interface AnchorData {
   position: Point2D;
   pointId: PointId;
@@ -21,21 +20,15 @@ export interface ContourContext {
 }
 
 export type PenState =
-  | { type: "idle"; intent?: PenIntent }
-  | { type: "ready"; mousePos: Point2D; intent?: PenIntent }
-  | { type: "anchored"; anchor: AnchorData; intent?: PenIntent }
+  | { type: "idle" }
+  | { type: "ready"; mousePos: Point2D }
+  | { type: "anchored"; anchor: AnchorData }
   | {
       type: "dragging";
       anchor: AnchorData;
       handles: HandleData;
       mousePos: Point2D;
       snappedPos?: Point2D;
-      intent?: PenIntent;
     };
 
-export interface PenBehavior {
-  canHandle(state: PenState, event: ToolEvent): boolean;
-  transition(state: PenState, event: ToolEvent, editor: ToolContext): PenState | null;
-  onTransition?(prev: PenState, next: PenState, event: ToolEvent, editor: ToolContext): void;
-  render?(renderer: IRenderer, state: PenState, editor: ToolContext): void;
-}
+export type PenBehavior = Behavior<PenState, ToolEvent, PenAction>;

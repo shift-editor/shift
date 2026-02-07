@@ -129,6 +129,7 @@ interface RenderService {
   requestStaticRedraw(): void;
   requestImmediateRedraw(): void;
   cancelRedraw(): void;
+  isPreviewMode(): boolean;
   setPreviewMode(enabled: boolean): void;
   setHandlesVisible(visible: boolean): void;
 }
@@ -621,6 +622,7 @@ function createMockRenderService(): RenderService & {
     requestStaticRedraw: mocks.requestStaticRedraw,
     requestImmediateRedraw: mocks.requestImmediateRedraw,
     cancelRedraw: mocks.cancelRedraw,
+    isPreviewMode: () => _previewMode,
     setPreviewMode: mocks.setPreviewMode,
     setHandlesVisible: mocks.setHandlesVisible,
     get _previewMode() {
@@ -1035,6 +1037,17 @@ export function createMockToolContext(): MockToolContext {
     toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
     getGlyph: () => edit.getGlyph() as Glyph | null,
+    getFontMetrics: () => ({
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+      capHeight: 700,
+      xHeight: 500,
+      lineGap: 0,
+      italicAngle: null,
+      underlinePosition: null,
+      underlineThickness: null,
+    }),
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
@@ -1052,6 +1065,7 @@ export function createMockToolContext(): MockToolContext {
     commitPreview: (label: string) => preview.commitPreview(label),
     requestRedraw: () => render.requestRedraw(),
     requestStaticRedraw: () => render.requestStaticRedraw(),
+    isPreviewMode: () => render.isPreviewMode(),
     setPreviewMode: (enabled: boolean) => render.setPreviewMode(enabled),
     setHandlesVisible: (visible: boolean) => render.setHandlesVisible(visible),
     setMarqueePreviewRect: (_rect: Rect2D | null) => {},

@@ -12,58 +12,58 @@ import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
 import type { LineSegment } from "@/types/segments";
 
-export type SelectIntent =
-  | { action: "selectPoint"; pointId: PointId; additive: boolean }
-  | { action: "selectSegment"; segmentId: SegmentId; additive: boolean }
-  | { action: "togglePoint"; pointId: PointId }
-  | { action: "toggleSegment"; segmentId: SegmentId }
-  | { action: "selectPointsInRect"; rect: Rect2D }
-  | { action: "clearSelection" }
-  | { action: "clearAndStartMarquee" }
-  | { action: "setSelectionMode"; mode: SelectionMode }
-  | { action: "beginPreview" }
-  | { action: "commitPreview"; label: string }
-  | { action: "cancelPreview" }
-  | { action: "movePointsDelta"; delta: Point2D }
+export type SelectAction =
+  | { type: "selectPoint"; pointId: PointId; additive: boolean }
+  | { type: "selectSegment"; segmentId: SegmentId; additive: boolean }
+  | { type: "togglePoint"; pointId: PointId }
+  | { type: "toggleSegment"; segmentId: SegmentId }
+  | { type: "selectPointsInRect"; rect: Rect2D }
+  | { type: "clearSelection" }
+  | { type: "clearAndStartMarquee" }
+  | { type: "setSelectionMode"; mode: SelectionMode }
+  | { type: "beginPreview" }
+  | { type: "commitPreview"; label: string }
+  | { type: "cancelPreview" }
+  | { type: "movePointsDelta"; delta: Point2D }
   | {
-      action: "scalePoints";
+      type: "scalePoints";
       pointIds: PointId[];
       sx: number;
       sy: number;
       anchor: Point2D;
     }
   | {
-      action: "rotatePoints";
+      type: "rotatePoints";
       pointIds: PointId[];
       angle: number;
       center: Point2D;
     }
-  | { action: "nudge"; dx: number; dy: number; pointIds: PointId[] }
-  | { action: "toggleSmooth"; pointId: PointId }
-  | { action: "selectPoints"; pointIds: PointId[] }
-  | { action: "upgradeLineToCubic"; segment: LineSegment }
-  | { action: "selectContour"; contourId: ContourId; additive: boolean };
+  | { type: "nudge"; dx: number; dy: number; pointIds: PointId[] }
+  | { type: "toggleSmooth"; pointId: PointId }
+  | { type: "selectPoints"; pointIds: PointId[] }
+  | { type: "upgradeLineToCubic"; segment: LineSegment }
+  | { type: "selectContour"; contourId: ContourId; additive: boolean };
 
-export function executeIntent(intent: SelectIntent, editor: ToolContext): void {
-  switch (intent.action) {
+export function executeAction(action: SelectAction, editor: ToolContext): void {
+  switch (action.type) {
     case "selectPoint":
-      executeSelectPoint(intent.pointId, intent.additive, editor);
+      executeSelectPoint(action.pointId, action.additive, editor);
       break;
 
     case "selectSegment":
-      executeSelectSegment(intent.segmentId, intent.additive, editor);
+      executeSelectSegment(action.segmentId, action.additive, editor);
       break;
 
     case "togglePoint":
-      editor.togglePointSelection(intent.pointId);
+      editor.togglePointSelection(action.pointId);
       break;
 
     case "toggleSegment":
-      executeToggleSegment(intent.segmentId, editor);
+      executeToggleSegment(action.segmentId, editor);
       break;
 
     case "selectPointsInRect":
-      executeSelectPointsInRect(intent.rect, editor);
+      executeSelectPointsInRect(action.rect, editor);
       break;
 
     case "clearSelection":
@@ -76,7 +76,7 @@ export function executeIntent(intent: SelectIntent, editor: ToolContext): void {
       break;
 
     case "setSelectionMode":
-      editor.setSelectionMode(intent.mode);
+      editor.setSelectionMode(action.mode);
       break;
 
     case "beginPreview":
@@ -84,7 +84,7 @@ export function executeIntent(intent: SelectIntent, editor: ToolContext): void {
       break;
 
     case "commitPreview":
-      editor.commitPreview(intent.label);
+      editor.commitPreview(action.label);
       break;
 
     case "cancelPreview":
@@ -92,36 +92,36 @@ export function executeIntent(intent: SelectIntent, editor: ToolContext): void {
       break;
 
     case "movePointsDelta":
-      executeMovePointsDelta(intent.delta, editor);
+      executeMovePointsDelta(action.delta, editor);
       break;
 
     case "scalePoints":
-      executeScalePoints(intent.pointIds, intent.sx, intent.sy, intent.anchor, editor);
+      executeScalePoints(action.pointIds, action.sx, action.sy, action.anchor, editor);
       break;
 
     case "rotatePoints":
-      executeRotatePoints(intent.pointIds, intent.angle, intent.center, editor);
+      executeRotatePoints(action.pointIds, action.angle, action.center, editor);
       break;
 
     case "nudge":
-      executeNudge(intent.pointIds, intent.dx, intent.dy, editor);
+      executeNudge(action.pointIds, action.dx, action.dy, editor);
       break;
 
     case "toggleSmooth":
-      editor.toggleSmooth(intent.pointId);
+      editor.toggleSmooth(action.pointId);
       break;
 
     case "selectPoints":
       editor.clearSelection();
-      editor.selectPoints(intent.pointIds);
+      editor.selectPoints(action.pointIds);
       break;
 
     case "upgradeLineToCubic":
-      executeUpgradeLineToCubic(intent.segment, editor);
+      executeUpgradeLineToCubic(action.segment, editor);
       break;
 
     case "selectContour":
-      executeSelectContour(intent.contourId, intent.additive, editor);
+      executeSelectContour(action.contourId, action.additive, editor);
       break;
   }
 }

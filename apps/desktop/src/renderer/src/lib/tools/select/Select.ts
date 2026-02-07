@@ -1,7 +1,7 @@
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
-import { executeIntent } from "./intents";
+import { executeAction, type SelectAction } from "./actions";
 import {
   SelectionBehavior,
   MarqueeBehavior,
@@ -14,11 +14,13 @@ import {
   UpgradeSegmentBehavior,
   DoubleClickSelectContourBehavior,
 } from "./behaviors";
+import { normalizeRect } from "./utils";
+import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
 
 export type { BoundingRectEdge, SelectState };
 
-export class Select extends BaseTool<SelectState> {
+export class Select extends BaseTool<SelectState, SelectAction> {
   static stateSpec = defineStateDiagram<SelectState["type"]>({
     states: ["idle", "ready", "selecting", "selected", "translating", "resizing", "rotating"],
     initial: "idle",
@@ -36,7 +38,7 @@ export class Select extends BaseTool<SelectState> {
 
   readonly id: ToolName = "select";
 
-  private behaviors: SelectBehavior[] = [
+  readonly behaviors: SelectBehavior[] = [
     new DoubleClickSelectContourBehavior(),
     new ToggleSmoothBehavior(),
     new UpgradeSegmentBehavior(),
@@ -81,62 +83,35 @@ export class Select extends BaseTool<SelectState> {
     this.state = { type: "idle" };
   }
 
-  handleModifier(key: string, pressed: boolean): boolean {
-    if (key === "Space") {
-      if (pressed) {
-        this.editor.requestTemporaryTool("hand", {
-          onActivate: () => this.editor.setPreviewMode(true),
-          onReturn: () => this.editor.setPreviewMode(false),
-        });
-      } else {
-        this.editor.returnFromTemporaryTool();
-      }
-      return true;
-    }
-    return false;
-  }
-
-  transition(state: SelectState, event: ToolEvent): SelectState {
-    if (state.type === "idle") {
-      return state;
-    }
-
+  protected preTransition(state: SelectState, event: ToolEvent) {
     if (event.type === "selectionChanged") {
       const hasSelection = this.editor.hasSelection();
       if (hasSelection && state.type === "ready") {
-        return { type: "selected" };
+        return { state: { type: "selected" as const } };
       }
       if (!hasSelection && state.type === "selected") {
-        return { type: "ready" };
+        return { state: { type: "ready" as const } };
       }
-      return state;
+      return { state };
     }
-
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result !== null) {
-          return result;
-        }
-      }
-    }
-
-    return state;
+    return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent): void {
-    if (next.intent) {
-      executeIntent(next.intent, this.editor);
-    }
-
-    for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.editor);
-    }
+  protected executeAction(action: SelectAction): void {
+    executeAction(action, this.editor);
   }
 
   render(draw: DrawAPI): void {
-    for (const behavior of this.behaviors) {
-      behavior.render?.(draw, this.state, this.editor);
-    }
+    if (this.state.type !== "selecting") return;
+    const rect = normalizeRect(this.state.selection.startPos, this.state.selection.currentPos);
+    draw.rect(
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      {
+        fillStyle: SELECTION_RECTANGLE_STYLES.fillStyle,
+        strokeStyle: SELECTION_RECTANGLE_STYLES.strokeStyle,
+        strokeWidth: SELECTION_RECTANGLE_STYLES.lineWidth,
+      },
+    );
   }
 }

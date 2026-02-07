@@ -3,17 +3,12 @@
 
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
+import { ContourId } from "@shift/types";
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
 
-// Create a single FontEngine instance
 const fontEngineInstance = new FontEngine();
 
-// Expose the full FontEngine API via contextBridge
 const fontEngineAPI = {
-  // ═══════════════════════════════════════════════════════════
-  // FONT LOADING
-  // ═══════════════════════════════════════════════════════════
-
   loadFont: (path: string) => {
     return fontEngineInstance.loadFont(path);
   },
@@ -25,10 +20,6 @@ const fontEngineAPI = {
   saveFontAsync: (path: string): Promise<void> => {
     return fontEngineInstance.saveFontAsync(path);
   },
-
-  // ═══════════════════════════════════════════════════════════
-  // FONT INFO
-  // ═══════════════════════════════════════════════════════════
 
   getMetadata: () => {
     return fontEngineInstance.getMetadata();
@@ -58,10 +49,6 @@ const fontEngineAPI = {
     return fontEngineInstance.getGlyphBbox(unicode) ?? null;
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // EDIT SESSION
-  // ═══════════════════════════════════════════════════════════
-
   startEditSession: (unicode: number) => {
     return fontEngineInstance.startEditSession(unicode);
   },
@@ -78,103 +65,50 @@ const fontEngineAPI = {
     return fontEngineInstance.getEditingUnicode() ?? null;
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // SNAPSHOT METHODS
-  // ═══════════════════════════════════════════════════════════
-
   getSnapshotData: () => {
     return fontEngineInstance.getSnapshotData();
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // CONTOUR OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Add an empty contour (legacy method, returns contour ID string).
-   */
   addEmptyContour: (): string => {
     return fontEngineInstance.addEmptyContour();
   },
 
-  /**
-   * Add a contour and return CommandResult JSON.
-   */
   addContour: (): string => {
     return fontEngineInstance.addContour();
   },
 
-  /**
-   * Get the active contour ID (or null).
-   */
-  getActiveContourId: (): string | null => {
+  getActiveContourId: (): ContourId | null => {
     return fontEngineInstance.getActiveContourId() ?? null;
   },
 
-  /**
-   * Close the active contour.
-   * Returns CommandResult JSON.
-   */
   closeContour: (): string => {
     return fontEngineInstance.closeContour();
   },
 
-  /**
-   * Set the active contour by ID.
-   * Returns CommandResult JSON.
-   */
   setActiveContour: (contourId: string): string => {
     return fontEngineInstance.setActiveContour(contourId);
   },
 
-  /**
-   * Clear the active contour (set to null).
-   * Returns CommandResult JSON.
-   */
   clearActiveContour: (): string => {
     return fontEngineInstance.clearActiveContour();
   },
 
-  /**
-   * Reverse the points in a contour.
-   * Returns CommandResult JSON.
-   */
   reverseContour: (contourId: string): string => {
     return fontEngineInstance.reverseContour(contourId);
   },
 
-  /**
-   * Remove a contour by ID.
-   * Returns CommandResult JSON.
-   */
   removeContour: (contourId: string): string => {
     return fontEngineInstance.removeContour(contourId);
   },
 
-  /**
-   * Open a closed contour.
-   * Returns CommandResult JSON.
-   */
   openContour: (contourId: string): string => {
     return fontEngineInstance.openContour(contourId);
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // POINT OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  /**
-   * Add a point to the active contour.
-   * Returns CommandResult JSON.
-   */
   addPoint: (x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string => {
     return fontEngineInstance.addPoint(x, y, pointType, smooth);
   },
 
-  /**
-   * Add a point to a specific contour.
-   * Returns CommandResult JSON.
-   */
   addPointToContour: (
     contourId: string,
     x: number,
@@ -185,26 +119,14 @@ const fontEngineAPI = {
     return fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth);
   },
 
-  /**
-   * Move multiple points by a delta.
-   * Returns CommandResult JSON with affected point IDs.
-   */
   movePoints: (pointIds: string[], dx: number, dy: number): string => {
     return fontEngineInstance.movePoints(pointIds, dx, dy);
   },
 
-  /**
-   * Remove multiple points by their IDs.
-   * Returns CommandResult JSON.
-   */
   removePoints: (pointIds: string[]): string => {
     return fontEngineInstance.removePoints(pointIds);
   },
 
-  /**
-   * Insert a point before an existing point.
-   * Returns CommandResult JSON.
-   */
   insertPointBefore: (
     beforePointId: string,
     x: number,
@@ -215,25 +137,13 @@ const fontEngineAPI = {
     return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
   },
 
-  /**
-   * Toggle the smooth property of a point.
-   * Returns CommandResult JSON.
-   */
   toggleSmooth: (pointId: string): string => {
     return fontEngineInstance.toggleSmooth(pointId);
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // CLIPBOARD OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
   pasteContours: (contoursJson: string, offsetX: number, offsetY: number): string => {
     return fontEngineInstance.pasteContours(contoursJson, offsetX, offsetY);
   },
-
-  // ═══════════════════════════════════════════════════════════
-  // LIGHTWEIGHT DRAG OPERATIONS
-  // ═══════════════════════════════════════════════════════════
 
   setPointPositions: (moves: Array<{ id: string; x: number; y: number }>): boolean => {
     return fontEngineInstance.setPointPositions(moves);

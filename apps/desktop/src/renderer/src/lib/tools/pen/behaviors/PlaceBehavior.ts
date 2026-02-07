@@ -4,46 +4,55 @@ import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { PenState, PenBehavior, ContourContext } from "../types";
-import { resolvePenIntent } from "../intents";
+import { resolvePenAction, type PenAction } from "../actions";
 
 export class PlaceBehavior implements PenBehavior {
   canHandle(state: PenState, event: ToolEvent): boolean {
     return state.type === "ready" && (event.type === "click" || event.type === "dragStart");
   }
 
-  transition(state: PenState, event: ToolEvent, editor: ToolContext): PenState | null {
+  transition(
+    state: PenState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<PenState, PenAction> | null {
     if (state.type !== "ready") return null;
     if (event.type !== "click" && event.type !== "dragStart") return null;
 
-    const intent = resolvePenIntent(event.point, {
+    const action = resolvePenAction(event.point, {
       getNodeAt: (pos) => editor.getNodeAt(pos),
       getActiveContourId: () => editor.getActiveContourId(),
       hasActiveDrawingContour: () => this.hasActiveDrawingContour(editor),
       shouldCloseContour: (p) => this.shouldCloseContour(p, editor),
     });
 
-    if (intent.action === "placePoint" && event.type === "dragStart") {
+    if (action.type === "placePoint" && event.type === "dragStart") {
       return {
-        type: "anchored",
-        anchor: {
-          position: intent.pos,
-          pointId: "" as PointId,
-          context: this.buildContourContext(editor),
+        state: {
+          type: "anchored",
+          anchor: {
+            position: action.pos,
+            pointId: "" as PointId,
+            context: this.buildContourContext(editor),
+          },
         },
-        intent,
+        action,
       };
     }
 
     return {
-      type: "ready",
-      mousePos: event.point,
-      intent,
+      state: {
+        type: "ready",
+        mousePos: event.point,
+      },
+      action,
     };
   }
 
   onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: ToolContext): void {
-    if (prev.type === "ready" && next.type === "anchored" && next.intent?.action === "placePoint") {
+    if (prev.type === "ready" && next.type === "anchored") {
       editor.commands.beginBatch("Add Point");
     }
   }

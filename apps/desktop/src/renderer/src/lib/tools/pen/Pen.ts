@@ -1,8 +1,8 @@
 import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
-import { executeIntent, type PenIntent } from "./intents";
+import { BaseTool, type ToolName, defineStateDiagram, DrawAPI } from "../core";
+import { executeAction, type PenAction } from "./actions";
 import type { PenState, PenBehavior } from "./types";
 import { PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
@@ -11,7 +11,7 @@ import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hi
 
 export type { PenState };
 
-export class Pen extends BaseTool<PenState> {
+export class Pen extends BaseTool<PenState, PenAction> {
   static stateSpec = defineStateDiagram<PenState["type"]>({
     states: ["idle", "ready", "anchored", "dragging"],
     initial: "idle",
@@ -27,7 +27,7 @@ export class Pen extends BaseTool<PenState> {
 
   readonly id: ToolName = "pen";
 
-  private behaviors: PenBehavior[] = [
+  readonly behaviors: PenBehavior[] = [
     new EscapeBehavior(),
     new PlaceBehavior(),
     new HandleBehavior(),
@@ -67,82 +67,43 @@ export class Pen extends BaseTool<PenState> {
     this.state = this.initialState();
   }
 
-  handleModifier(key: string, pressed: boolean): boolean {
-    if (key === "Space") {
-      if (pressed) {
-        this.editor.requestTemporaryTool("hand", {
-          onActivate: () => this.editor.setPreviewMode(true),
-          onReturn: () => this.editor.setPreviewMode(false),
-        });
-      } else {
-        this.editor.returnFromTemporaryTool();
-      }
-      return true;
-    }
-    return false;
-  }
-
-  transition(state: PenState, event: ToolEvent): PenState {
-    if (state.type === "idle") {
-      return state;
-    }
-
+  protected preTransition(state: PenState, event: import("../core").ToolEvent) {
     if (state.type === "ready" && event.type === "pointerMove") {
-      return { type: "ready", mousePos: event.point };
+      return { state: { type: "ready" as const, mousePos: event.point } };
     }
-
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result !== null) {
-          return result;
-        }
-      }
-    }
-
-    return state;
+    return null;
   }
 
-  onTransition(prev: PenState, next: PenState, event: ToolEvent): void {
-    if (next.intent) {
-      this.executePenIntent(next.intent, prev);
-    }
-
-    for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.editor);
-    }
-  }
-
-  private executePenIntent(intent: PenIntent, prev: PenState): void {
-    switch (intent.action) {
+  protected executeAction(action: PenAction, prev: PenState): void {
+    switch (action.type) {
       case "close":
         this.batch("Close Contour", () => {
-          executeIntent(intent, this.editor);
+          executeAction(action, this.editor);
         });
         break;
 
       case "continue":
         this.batch("Continue Contour", () => {
-          executeIntent(intent, this.editor);
+          executeAction(action, this.editor);
         });
         break;
 
       case "splitPoint":
         this.batch("Split Contour", () => {
-          executeIntent(intent, this.editor);
+          executeAction(action, this.editor);
         });
         break;
 
       case "splitSegment":
         this.batch("Split Segment", () => {
-          executeIntent(intent, this.editor);
+          executeAction(action, this.editor);
         });
         break;
 
       case "placePoint":
         if (prev.type === "ready") {
           this.batch("Add Point", () => {
-            const pointId = executeIntent(intent, this.editor);
+            const pointId = executeAction(action, this.editor);
             if (this.state.type === "anchored") {
               (this.state as any).anchor.pointId = pointId;
             }
@@ -152,12 +113,12 @@ export class Pen extends BaseTool<PenState> {
 
       case "abandonContour":
         this.batch("Abandon Contour", () => {
-          executeIntent(intent, this.editor);
+          executeAction(action, this.editor);
         });
         break;
 
       case "updateHover":
-        executeIntent(intent, this.editor);
+        executeAction(action, this.editor);
         break;
     }
   }

@@ -8,12 +8,14 @@ export const ShapeReadyBehavior = createBehavior<ShapeState>({
     return state.type === "ready" && event.type === "dragStart";
   },
 
-  transition(state: ShapeState, event: ToolEvent, _editor: ToolContext): ShapeState | null {
+  transition(state: ShapeState, event: ToolEvent, _editor: ToolContext) {
     if (state.type !== "ready" || event.type !== "dragStart") return null;
     return {
-      type: "dragging",
-      startPos: event.point,
-      currentPos: event.point,
+      state: {
+        type: "dragging" as const,
+        startPos: event.point,
+        currentPos: event.point,
+      },
     };
   },
 });

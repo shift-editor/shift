@@ -1,6 +1,8 @@
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/ToolContext";
+import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
+import type { SelectAction } from "../actions";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
 export class NudgeBehavior implements SelectBehavior {
@@ -12,7 +14,11 @@ export class NudgeBehavior implements SelectBehavior {
     return arrowKeys.includes(event.key);
   }
 
-  transition(state: SelectState, event: ToolEvent, editor: ToolContext): SelectState | null {
+  transition(
+    state: SelectState,
+    event: ToolEvent,
+    editor: ToolContext,
+  ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type !== "selected") return null;
     if (event.type !== "keyDown") return null;
 
@@ -43,8 +49,8 @@ export class NudgeBehavior implements SelectBehavior {
     }
 
     return {
-      ...state,
-      intent: { action: "nudge", dx, dy, pointIds: [...pointIds] },
+      state: { ...state },
+      action: { type: "nudge", dx, dy, pointIds: [...pointIds] },
     };
   }
 }

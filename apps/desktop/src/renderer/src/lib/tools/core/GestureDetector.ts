@@ -1,5 +1,7 @@
 import type { Point2D } from "@shift/types";
 
+export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Backspace";
+
 export type ToolEvent =
   | { type: "pointerMove"; point: Point2D }
   | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
@@ -32,12 +34,12 @@ export type ToolEvent =
   | { type: "dragCancel" }
   | {
       type: "keyDown";
-      key: string;
+      key: ToolKey | (string & {});
       shiftKey: boolean;
       altKey: boolean;
       metaKey: boolean;
     }
-  | { type: "keyUp"; key: string }
+  | { type: "keyUp"; key: ToolKey | (string & {}) }
   | { type: "selectionChanged" };
 
 export interface Modifiers {

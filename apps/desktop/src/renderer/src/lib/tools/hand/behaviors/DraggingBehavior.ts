@@ -11,7 +11,7 @@ export const HandDraggingBehavior = createBehavior<HandState>({
     );
   },
 
-  transition(state: HandState, event: ToolEvent, editor: ToolContext): HandState | null {
+  transition(state: HandState, event: ToolEvent, editor: ToolContext) {
     if (state.type !== "dragging") return null;
 
     if (event.type === "drag") {
@@ -22,11 +22,11 @@ export const HandDraggingBehavior = createBehavior<HandState>({
       };
       editor.setPan(newPan.x, newPan.y);
       editor.requestRedraw();
-      return state;
+      return { state };
     }
 
     if (event.type === "dragEnd" || event.type === "dragCancel") {
-      return { type: "ready" };
+      return { state: { type: "ready" as const } };
     }
 
     return null;
