@@ -8,4 +8,9 @@ export {
   type BoundingBoxHandlesOptions,
 } from "./boundingBox";
 export { renderSnapIndicators, collectLineEndpoints } from "./snapIndicators";
+export {
+  renderDebugTightBounds,
+  renderDebugHitRadii,
+  renderDebugSegmentBounds,
+} from "./debugOverlays";
 export type { RenderContext } from "./types";

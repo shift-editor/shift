@@ -3,6 +3,7 @@ import type { Glyph, Rect2D, Point2D, PointId, FontMetrics } from "@shift/types"
 import type { SegmentId } from "@/types/indicator";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { SnapIndicator } from "../snapping/types";
+import type { DebugOverlays } from "@/types/electron";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
 import {
@@ -14,7 +15,7 @@ import {
 
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
-import { SCREEN_LINE_WIDTH } from "./constants";
+import { SCREEN_HIT_RADIUS, SCREEN_LINE_WIDTH } from "./constants";
 import { DrawAPI as DrawAPIClass } from "@/lib/tools/core/DrawAPI";
 
 import {
@@ -27,6 +28,9 @@ import {
   renderBoundingRect,
   renderBoundingBoxHandles,
   renderSnapIndicators,
+  renderDebugTightBounds,
+  renderDebugHitRadii,
+  renderDebugSegmentBounds,
 } from "./passes";
 
 export interface ViewportTransform {
@@ -54,6 +58,7 @@ export interface CanvasCoordinatorContext {
   getViewportTransform(): ViewportTransform;
   screenToUpmDistance(px: number): number;
   projectUpmToScreen(x: number, y: number): Point2D;
+  getDebugOverlays(): DebugOverlays;
   renderTool(draw: DrawAPI): void;
   renderToolBelowHandles(draw: DrawAPI): void;
 }
@@ -229,6 +234,19 @@ export class CanvasCoordinator {
       renderSegmentHighlights(rc, glyph, this.#ctx.getHoveredSegmentId(), (id) =>
         this.#ctx.isSegmentSelected(id),
       );
+    }
+
+    if (!previewMode && glyph) {
+      const debugOverlays = this.#ctx.getDebugOverlays();
+      if (debugOverlays.segmentBounds) {
+        renderDebugSegmentBounds(rc, glyph);
+      }
+      if (debugOverlays.tightBounds) {
+        renderDebugTightBounds(rc, glyph, this.#ctx.getHoveredSegmentId());
+      }
+      if (debugOverlays.hitRadii) {
+        renderDebugHitRadii(rc, glyph, this.#ctx.screenToUpmDistance(SCREEN_HIT_RADIUS));
+      }
     }
 
     if (!previewMode) {

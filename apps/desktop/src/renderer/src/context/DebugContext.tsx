@@ -2,10 +2,18 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { isDev } from "@/lib/utils/utils";
 import { enableReactScan, disableReactScan } from "@/lib/debug/reactScan";
 import { getEditor } from "@/store/store";
+import type { DebugOverlays } from "@/types/electron";
+
+const DEFAULT_OVERLAYS: DebugOverlays = {
+  tightBounds: false,
+  hitRadii: false,
+  segmentBounds: false,
+};
 
 interface DebugContextValue {
   reactScanEnabled: boolean;
   debugPanelOpen: boolean;
+  overlays: DebugOverlays;
   dumpSnapshot: () => void;
 }
 
@@ -18,6 +26,7 @@ interface DebugProviderProps {
 export function DebugProvider({ children }: DebugProviderProps) {
   const [reactScanEnabled, setReactScanEnabled] = useState(false);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [overlays, setOverlays] = useState<DebugOverlays>(DEFAULT_OVERLAYS);
 
   useEffect(() => {
     if (!isDev) return undefined;
@@ -25,6 +34,9 @@ export function DebugProvider({ children }: DebugProviderProps) {
     window.electronAPI?.getDebugState().then((state) => {
       setReactScanEnabled(state.reactScanEnabled);
       setDebugPanelOpen(state.debugPanelOpen);
+      if (state.overlays) {
+        setOverlays(state.overlays);
+      }
       if (state.reactScanEnabled) {
         void enableReactScan();
       }
@@ -47,10 +59,15 @@ export function DebugProvider({ children }: DebugProviderProps) {
       dumpSnapshot();
     });
 
+    const unsubscribeOverlays = window.electronAPI?.onDebugOverlays((newOverlays) => {
+      setOverlays(newOverlays);
+    });
+
     return () => {
       unsubscribeReactScan?.();
       unsubscribePanel?.();
       unsubscribeDump?.();
+      unsubscribeOverlays?.();
     };
   }, []);
 
@@ -66,12 +83,16 @@ export function DebugProvider({ children }: DebugProviderProps) {
     window.electronAPI?.clipboardWriteText(json);
   };
 
+  useEffect(() => {
+    getEditor().setDebugOverlays(overlays);
+  }, [overlays]);
+
   if (!isDev) {
     return <>{children}</>;
   }
 
   return (
-    <DebugContext.Provider value={{ reactScanEnabled, debugPanelOpen, dumpSnapshot }}>
+    <DebugContext.Provider value={{ reactScanEnabled, debugPanelOpen, overlays, dumpSnapshot }}>
       {children}
     </DebugContext.Provider>
   );

@@ -557,7 +557,7 @@
 
 **Debug Menu**
 
-- [ ] Toggle debug overlay
+- [x] Toggle debug overlay
 - [ ] Point/contour ID labels
 - [ ] Performance statistics (fps, render time)
 - [ ] Snapshot JSON inspector

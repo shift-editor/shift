@@ -36,7 +36,18 @@ export interface ElectronAPI {
   onDebugReactScan: (callback: (enabled: boolean) => void) => () => void;
   onDebugPanel: (callback: (open: boolean) => void) => () => void;
   onDebugDumpSnapshot: (callback: () => void) => () => void;
-  getDebugState: () => Promise<{ reactScanEnabled: boolean; debugPanelOpen: boolean }>;
+  onDebugOverlays: (callback: (overlays: DebugOverlays) => void) => () => void;
+  getDebugState: () => Promise<{
+    reactScanEnabled: boolean;
+    debugPanelOpen: boolean;
+    overlays: DebugOverlays;
+  }>;
+}
+
+export interface DebugOverlays {
+  tightBounds: boolean;
+  hitRadii: boolean;
+  segmentBounds: boolean;
 }
 
 declare global {

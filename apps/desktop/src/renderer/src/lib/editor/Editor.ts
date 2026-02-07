@@ -69,6 +69,7 @@ import {
   type ViewportTransform,
 } from "./rendering/CanvasCoordinator";
 import type { FocusZone } from "@/types/focus";
+import type { DebugOverlays } from "@/types/electron";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
 import type { DrawAPI } from "../tools/core/DrawAPI";
@@ -126,6 +127,7 @@ export class Editor implements EditorFacade {
   #isHoveringNode: ComputedSignal<boolean>;
   #snapPreferences: WritableSignal<SnapPreferences>;
   #snapIndicator: WritableSignal<SnapIndicator | null>;
+  #debugOverlays: WritableSignal<DebugOverlays>;
 
   constructor() {
     this.#viewport = new ViewportManager();
@@ -153,6 +155,11 @@ export class Editor implements EditorFacade {
       pointRadiusPx: 8,
     });
     this.#snapIndicator = signal<SnapIndicator | null>(null);
+    this.#debugOverlays = signal<DebugOverlays>({
+      tightBounds: false,
+      hitRadii: false,
+      segmentBounds: false,
+    });
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
@@ -201,6 +208,7 @@ export class Editor implements EditorFacade {
       handlesVisible: this.$handlesVisible.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+      debugOverlays: this.#debugOverlays.value,
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
@@ -492,6 +500,18 @@ export class Editor implements EditorFacade {
 
   public getSnapIndicator(): SnapIndicator | null {
     return this.#snapIndicator.peek();
+  }
+
+  public get debugOverlays(): Signal<DebugOverlays> {
+    return this.#debugOverlays;
+  }
+
+  public getDebugOverlays(): DebugOverlays {
+    return this.#debugOverlays.value;
+  }
+
+  public setDebugOverlays(overlays: DebugOverlays): void {
+    this.#debugOverlays.set(overlays);
   }
 
   public getHoveredPoint(): PointId | null {

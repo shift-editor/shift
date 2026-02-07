@@ -4,9 +4,16 @@ import type { WindowManager } from "./WindowManager";
 
 export type Theme = "light" | "dark" | "system";
 
+export interface DebugOverlays {
+  tightBounds: boolean;
+  hitRadii: boolean;
+  segmentBounds: boolean;
+}
+
 interface DebugState {
   reactScanEnabled: boolean;
   debugPanelOpen: boolean;
+  overlays: DebugOverlays;
 }
 
 export class MenuManager {
@@ -16,6 +23,11 @@ export class MenuManager {
   private debugState: DebugState = {
     reactScanEnabled: false,
     debugPanelOpen: false,
+    overlays: {
+      tightBounds: false,
+      hitRadii: false,
+      segmentBounds: false,
+    },
   };
 
   constructor(documentState: DocumentState, windowManager: WindowManager) {
@@ -39,6 +51,13 @@ export class MenuManager {
       debugPanelOpen: "debug:panel",
     };
     window?.webContents.send(channelMap[key], value);
+    this.create();
+  }
+
+  private toggleOverlay(key: keyof DebugOverlays): void {
+    this.debugState.overlays[key] = !this.debugState.overlays[key];
+    const window = this.windowManager.getWindow();
+    window?.webContents.send("debug:overlays", { ...this.debugState.overlays });
     this.create();
   }
 
@@ -246,6 +265,30 @@ export class MenuManager {
                   label: "Dump Glyph Snapshot",
                   accelerator: "CmdOrCtrl+Shift+D",
                   click: () => window?.webContents.send("debug:dump-snapshot"),
+                },
+                { type: "separator" as const },
+                {
+                  label: "Debug Overlays",
+                  submenu: [
+                    {
+                      label: "Tight Bounds on Hover",
+                      type: "checkbox" as const,
+                      checked: this.debugState.overlays.tightBounds,
+                      click: () => this.toggleOverlay("tightBounds"),
+                    },
+                    {
+                      label: "Hit Test Radii",
+                      type: "checkbox" as const,
+                      checked: this.debugState.overlays.hitRadii,
+                      click: () => this.toggleOverlay("hitRadii"),
+                    },
+                    {
+                      label: "Segment Bounding Boxes",
+                      type: "checkbox" as const,
+                      checked: this.debugState.overlays.segmentBounds,
+                      click: () => this.toggleOverlay("segmentBounds"),
+                    },
+                  ],
                 },
               ],
             },

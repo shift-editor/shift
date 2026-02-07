@@ -237,8 +237,25 @@ const electronAPI = {
     ipcRenderer.on("debug:dump-snapshot", callback);
     return () => ipcRenderer.removeListener("debug:dump-snapshot", callback);
   },
-  getDebugState: (): Promise<{ reactScanEnabled: boolean; debugPanelOpen: boolean }> =>
-    ipcRenderer.invoke("debug:getState"),
+  onDebugOverlays: (
+    callback: (overlays: {
+      tightBounds: boolean;
+      hitRadii: boolean;
+      segmentBounds: boolean;
+    }) => void,
+  ) => {
+    const handler = (
+      _event: any,
+      overlays: { tightBounds: boolean; hitRadii: boolean; segmentBounds: boolean },
+    ) => callback(overlays);
+    ipcRenderer.on("debug:overlays", handler);
+    return () => ipcRenderer.removeListener("debug:overlays", handler);
+  },
+  getDebugState: (): Promise<{
+    reactScanEnabled: boolean;
+    debugPanelOpen: boolean;
+    overlays: { tightBounds: boolean; hitRadii: boolean; segmentBounds: boolean };
+  }> => ipcRenderer.invoke("debug:getState"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
