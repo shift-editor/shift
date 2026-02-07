@@ -6,7 +6,7 @@ import { getEditor } from "@/store/store";
 export const InteractiveScene = () => {
   const { interactiveCanvasRef } = useContext(CanvasContext);
   const editor = getEditor();
-  const toolManager = editor.getToolManager();
+  const toolManager = editor.toolManager;
 
   const getScreenPoint = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {

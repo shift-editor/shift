@@ -20,7 +20,7 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
 
   useEffect(() => {
     const editor = getEditor();
-    const toolManager = editor.getToolManager();
+    const toolManager = editor.toolManager;
 
     const keyDownHandler = (e: KeyboardEvent) => {
       const canvasActive = activeZone === "canvas" || focusLock || toolManager.isDragging;

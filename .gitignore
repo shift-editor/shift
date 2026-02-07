@@ -99,3 +99,5 @@ npm/
 
 .turbo
 *.settings.local.json*
+
+.plans

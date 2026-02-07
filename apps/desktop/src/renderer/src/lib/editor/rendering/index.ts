@@ -1,6 +1,6 @@
 export {
   CanvasCoordinator,
-  type CanvasCoordinatorDeps,
+  type CanvasCoordinatorContext,
   type ViewportTransform,
 } from "./CanvasCoordinator";
 export type { FontMetrics } from "@shift/types";

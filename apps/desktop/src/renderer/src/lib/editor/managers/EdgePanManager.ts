@@ -28,7 +28,7 @@ export class EdgePanManager {
 
   update(screenPos: Point2D, canvasBounds: Rect2D): void {
     this.lastScreenPos = screenPos;
-    const toolManager = this.editor.getToolManager();
+    const toolManager = this.editor.toolManager;
 
     if (!toolManager.isDragging) {
       this.stop();
@@ -56,9 +56,11 @@ export class EdgePanManager {
     const newPan = Vec2.sub(this.editor.pan, this.velocity);
     this.editor.setPan(newPan.x, newPan.y);
 
-    this.editor
-      .getToolManager()
-      .handlePointerMove(this.lastScreenPos, { shiftKey: false, altKey: false }, { force: true });
+    this.editor.toolManager.handlePointerMove(
+      this.lastScreenPos,
+      { shiftKey: false, altKey: false },
+      { force: true },
+    );
 
     this.editor.requestRedraw();
     requestAnimationFrame(() => this.tick());

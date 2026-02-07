@@ -47,28 +47,31 @@ export function resolvePenIntent(pos: Point2D, ctx: PenIntentContext): PenIntent
     const hit = ctx.getNodeAt(pos);
 
     if (isContourEndpointHit(hit) && !hit.contour.closed) {
+      const { contourId, pointId, position } = hit;
       return {
         action: "continue",
-        contourId: hit.contourId,
-        pointId: hit.pointId,
-        fromStart: hit.position === "start",
+        contourId,
+        pointId,
+        fromStart: position === "start",
       };
     }
 
     if (isMiddlePointHit(hit)) {
+      const { contourId, pointId, pointIndex } = hit;
       return {
         action: "splitPoint",
-        contourId: hit.contourId,
-        pointId: hit.pointId,
-        pointIndex: hit.pointIndex,
+        contourId,
+        pointId,
+        pointIndex,
       };
     }
 
     if (isSegmentHit(hit)) {
+      const { segment, t } = hit;
       return {
         action: "splitSegment",
-        segment: hit.segment,
-        t: hit.t,
+        segment,
+        t,
       };
     }
   }

@@ -26,7 +26,7 @@ export class SelectionManager {
     return this.$selectionMode;
   }
 
-  selectPoints(pointIds: ReadonlySet<PointId>): void {
+  selectPoints(pointIds: PointId[]): void {
     this.$selectedPointIds.set(new Set(pointIds));
   }
 

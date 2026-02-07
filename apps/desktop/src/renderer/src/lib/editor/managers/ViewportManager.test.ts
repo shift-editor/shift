@@ -23,7 +23,7 @@ describe("ViewportManager", () => {
 
   describe("initialization", () => {
     it("should initialize with default values", () => {
-      expect(viewport.zoom.peek()).toBe(1);
+      expect(viewport.zoomLevel).toBe(1);
       expect(viewport.panX).toBe(0);
       expect(viewport.panY).toBe(0);
       expect(viewport.upm).toBe(1000);
@@ -106,20 +106,20 @@ describe("ViewportManager", () => {
 
   describe("zoom", () => {
     it("should have default zoom of 1", () => {
-      expect(viewport.zoom.peek()).toBe(1);
+      expect(viewport.zoomLevel).toBe(1);
     });
 
     it("should zoom in to canvas center", () => {
-      const oldZoom = viewport.zoom.peek();
+      const oldZoom = viewport.zoomLevel;
       viewport.zoomIn();
-      expect(viewport.zoom.peek()).toBeGreaterThan(oldZoom);
+      expect(viewport.zoomLevel).toBeGreaterThan(oldZoom);
     });
 
     it("should zoom out from canvas center", () => {
       viewport.zoomIn();
-      const beforeZoomOut = viewport.zoom.peek();
+      const beforeZoomOut = viewport.zoomLevel;
       viewport.zoomOut();
-      expect(viewport.zoom.peek()).toBeLessThan(beforeZoomOut);
+      expect(viewport.zoomLevel).toBeLessThan(beforeZoomOut);
     });
 
     it("should clamp zoom to valid range", () => {
@@ -127,13 +127,13 @@ describe("ViewportManager", () => {
       for (let i = 0; i < 50; i++) {
         viewport.zoomIn();
       }
-      expect(viewport.zoom.peek()).toBeLessThanOrEqual(32);
+      expect(viewport.zoomLevel).toBeLessThanOrEqual(32);
 
       // Zoom out to min
       for (let i = 0; i < 100; i++) {
         viewport.zoomOut();
       }
-      expect(viewport.zoom.peek()).toBeGreaterThanOrEqual(0.01);
+      expect(viewport.zoomLevel).toBeGreaterThanOrEqual(0.01);
     });
   });
 
@@ -166,15 +166,15 @@ describe("ViewportManager", () => {
 
     it("should clamp zoom to valid range", () => {
       viewport.zoomToPoint(500, 400, 1000);
-      expect(viewport.zoom.peek()).toBeLessThanOrEqual(32);
+      expect(viewport.zoomLevel).toBeLessThanOrEqual(32);
 
       viewport.zoomToPoint(500, 400, 0.00001);
-      expect(viewport.zoom.peek()).toBeGreaterThanOrEqual(0.01);
+      expect(viewport.zoomLevel).toBeGreaterThanOrEqual(0.01);
     });
 
     it("should handle zoom at different zoom levels", () => {
       viewport.zoomToPoint(500, 400, 1.5);
-      expect(viewport.zoom.peek()).toBeGreaterThan(1);
+      expect(viewport.zoomLevel).toBeGreaterThan(1);
 
       const upmBefore = viewport.projectScreenToUpm(500, 400);
       viewport.zoomToPoint(500, 400, 1.5);
@@ -430,12 +430,12 @@ describe("ViewportManager", () => {
       for (let i = 0; i < 100; i++) {
         viewport.zoomToPoint(500, 400, 1.2);
       }
-      expect(viewport.zoom.peek()).toBeLessThanOrEqual(32);
+      expect(viewport.zoomLevel).toBeLessThanOrEqual(32);
 
       for (let i = 0; i < 200; i++) {
         viewport.zoomToPoint(500, 400, 0.9);
       }
-      expect(viewport.zoom.peek()).toBeGreaterThanOrEqual(0.01);
+      expect(viewport.zoomLevel).toBeGreaterThanOrEqual(0.01);
     });
   });
 });

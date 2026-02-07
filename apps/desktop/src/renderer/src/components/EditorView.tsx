@@ -45,7 +45,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     initEditor();
 
-    const toolManager = editor.getToolManager();
+    const toolManager = editor.toolManager;
     const activeToolId = editor.getActiveTool();
     toolManager.activate(activeToolId);
 
@@ -60,7 +60,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const element = containerRef.current;
     if (!element) return undefined;
 
-    const toolManager = editor.getToolManager();
+    const toolManager = editor.toolManager;
 
     const handleWheel = (e: WheelEvent) => {
       editor.updateMousePosition(e.clientX, e.clientY);

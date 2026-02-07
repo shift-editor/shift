@@ -1010,8 +1010,6 @@ export function createMockToolContext(): MockToolContext {
     flushMousePosition: () => {},
     projectScreenToUpm: (x: number, y: number) => screen.projectScreenToUpm(x, y),
     screenToUpmDistance: (pixels: number) => pixels,
-    getSelectedPointsCount: () => selection.getSelectedPointsCount(),
-    getSelectedSegmentsCount: () => selection.getSelectedSegmentsCount(),
     hasSelection: () => selection.hasSelection(),
     getActiveToolState: () => $activeToolState.value,
     setActiveToolState: (state: ActiveToolState) => {

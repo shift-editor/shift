@@ -40,22 +40,22 @@ export interface ViewportTransform {
   descender: number;
 }
 
-export interface CanvasCoordinatorDeps {
-  getGlyph: () => Glyph | null;
-  getFontMetrics: () => FontMetrics;
-  isPreviewMode: () => boolean;
-  isHandlesVisible: () => boolean;
-  getSelectionBoundingRect: () => Rect2D | null;
-  getHoveredSegmentId: () => SegmentId | null;
-  isSegmentSelected: (segmentId: SegmentId) => boolean;
-  getHandleState: (pointId: PointId) => HandleState;
-  getHoveredBoundingBoxHandle: () => BoundingBoxHitResult | null;
-  getSnapIndicator: () => SnapIndicator | null;
-  getViewportTransform: () => ViewportTransform;
-  screenToUpmDistance: (px: number) => number;
-  projectUpmToScreen: (x: number, y: number) => Point2D;
-  renderTool: (draw: DrawAPI) => void;
-  renderToolBelowHandles?: (draw: DrawAPI) => void;
+export interface CanvasCoordinatorContext {
+  getGlyph(): Glyph | null;
+  getFontMetrics(): FontMetrics;
+  isPreviewMode(): boolean;
+  isHandlesVisible(): boolean;
+  getSelectionBoundingRect(): Rect2D | null;
+  getHoveredSegmentId(): SegmentId | null;
+  isSegmentSelected(segmentId: SegmentId): boolean;
+  getHandleState(pointId: PointId): HandleState;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult | null;
+  getSnapIndicator(): SnapIndicator | null;
+  getViewportTransform(): ViewportTransform;
+  screenToUpmDistance(px: number): number;
+  projectUpmToScreen(x: number, y: number): Point2D;
+  renderTool(draw: DrawAPI): void;
+  renderToolBelowHandles(draw: DrawAPI): void;
 }
 
 export class CanvasCoordinator {
@@ -68,10 +68,10 @@ export class CanvasCoordinator {
   #overlayFrameHandler: FrameHandler;
   #interactiveFrameHandler: FrameHandler;
   #fpsMonitor: FpsMonitor;
-  #deps: CanvasCoordinatorDeps;
+  #ctx: CanvasCoordinatorContext;
 
-  constructor(deps: CanvasCoordinatorDeps) {
-    this.#deps = deps;
+  constructor(ctx: CanvasCoordinatorContext) {
+    this.#ctx = ctx;
     this.#staticFrameHandler = new FrameHandler();
     this.#overlayFrameHandler = new FrameHandler();
     this.#interactiveFrameHandler = new FrameHandler();
@@ -83,7 +83,7 @@ export class CanvasCoordinator {
   }
 
   #createScreenConverter() {
-    return { toUpmDistance: (px: number) => this.#deps.screenToUpmDistance(px) };
+    return { toUpmDistance: (px: number) => this.#ctx.screenToUpmDistance(px) };
   }
 
   setStaticContext(context: IGraphicContext): void {
@@ -131,7 +131,7 @@ export class CanvasCoordinator {
   }
 
   #applyTransforms(ctx: IRenderer): void {
-    const vt = this.#deps.getViewportTransform();
+    const vt = this.#ctx.getViewportTransform();
 
     ctx.transform(
       vt.zoom,
@@ -147,7 +147,7 @@ export class CanvasCoordinator {
   }
 
   #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
-    return this.#deps.screenToUpmDistance(screenPixels);
+    return this.#ctx.screenToUpmDistance(screenPixels);
   }
 
   #drawInteractive(): void {
@@ -157,7 +157,7 @@ export class CanvasCoordinator {
     ctx.save();
 
     this.#applyTransforms(ctx);
-    this.#deps.renderTool(this.#interactiveDraw);
+    this.#ctx.renderTool(this.#interactiveDraw);
 
     ctx.restore();
   }
@@ -167,14 +167,14 @@ export class CanvasCoordinator {
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
 
-    const indicator = this.#deps.getSnapIndicator();
+    const indicator = this.#ctx.getSnapIndicator();
     if (!indicator) return;
 
     ctx.save();
     this.#applyTransforms(ctx);
 
     const rc = { ctx, lineWidthUpm: (px?: number) => this.#lineWidthUpm(px) };
-    const crossHalf = this.#deps.screenToUpmDistance(SNAP_INDICATOR_CROSS_SIZE_PX);
+    const crossHalf = this.#ctx.screenToUpmDistance(SNAP_INDICATOR_CROSS_SIZE_PX);
     renderSnapIndicators(rc, indicator, crossHalf);
 
     ctx.restore();
@@ -185,9 +185,9 @@ export class CanvasCoordinator {
     const ctx = this.#staticContext.getContext();
     const draw = this.#staticDraw;
 
-    const glyph = this.#deps.getGlyph();
-    const previewMode = this.#deps.isPreviewMode();
-    const handlesVisible = this.#deps.isHandlesVisible();
+    const glyph = this.#ctx.getGlyph();
+    const previewMode = this.#ctx.isPreviewMode();
+    const handlesVisible = this.#ctx.isHandlesVisible();
 
     const rc = { ctx, lineWidthUpm: (px?: number) => this.#lineWidthUpm(px) };
 
@@ -197,7 +197,7 @@ export class CanvasCoordinator {
     this.#applyTransforms(ctx);
 
     if (glyph) {
-      const guides = getGuides(glyph, this.#deps.getFontMetrics());
+      const guides = getGuides(glyph, this.#ctx.getFontMetrics());
       ctx.setStyle(GUIDE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
 
@@ -217,7 +217,7 @@ export class CanvasCoordinator {
     let bbRect: Rect2D | null = null;
     const shouldDrawBoundingRect = !previewMode;
     if (shouldDrawBoundingRect) {
-      bbRect = this.#deps.getSelectionBoundingRect();
+      bbRect = this.#ctx.getSelectionBoundingRect();
       if (bbRect) {
         ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
         ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
@@ -226,20 +226,17 @@ export class CanvasCoordinator {
     }
 
     if (!previewMode && glyph) {
-      renderSegmentHighlights(
-        rc,
-        glyph,
-        this.#deps.getHoveredSegmentId(),
-        this.#deps.isSegmentSelected,
+      renderSegmentHighlights(rc, glyph, this.#ctx.getHoveredSegmentId(), (id) =>
+        this.#ctx.isSegmentSelected(id),
       );
     }
 
     if (!previewMode) {
-      this.#deps.renderToolBelowHandles?.(draw);
+      this.#ctx.renderToolBelowHandles(draw);
     }
 
     if (!previewMode && handlesVisible && glyph) {
-      renderHandles(draw, glyph, this.#deps.getHandleState);
+      renderHandles(draw, glyph, (id) => this.#ctx.getHandleState(id));
     }
 
     ctx.restore();
@@ -256,8 +253,8 @@ export class CanvasCoordinator {
     ctx: IRenderer,
     bbRect: { x: number; y: number; width: number; height: number },
   ): void {
-    const topLeft = this.#deps.projectUpmToScreen(bbRect.x, bbRect.y + bbRect.height);
-    const bottomRight = this.#deps.projectUpmToScreen(bbRect.x + bbRect.width, bbRect.y);
+    const topLeft = this.#ctx.projectUpmToScreen(bbRect.x, bbRect.y + bbRect.height);
+    const bottomRight = this.#ctx.projectUpmToScreen(bbRect.x + bbRect.width, bbRect.y);
 
     const screenRect = {
       x: topLeft.x,
@@ -270,7 +267,7 @@ export class CanvasCoordinator {
       bottom: bottomRight.y,
     };
 
-    const hoveredHandle = this.#deps.getHoveredBoundingBoxHandle();
+    const hoveredHandle = this.#ctx.getHoveredBoundingBoxHandle();
     renderBoundingBoxHandles(ctx, {
       rect: screenRect,
       hoveredHandle: hoveredHandle ?? undefined,

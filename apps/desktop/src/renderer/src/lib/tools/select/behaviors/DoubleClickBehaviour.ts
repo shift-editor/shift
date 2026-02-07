@@ -5,7 +5,7 @@ import type { ContourId } from "@shift/types";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { isSegmentHit } from "@/types/hitResult";
 
-export class DoubleClickSelectContourBehavior implements SelectBehavior {
+export class DoubleClickBehaviour implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
     return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
   }

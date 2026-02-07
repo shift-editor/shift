@@ -22,11 +22,10 @@ import type {
   Point,
   PointType,
 } from "@shift/types";
-import { asContourId } from "@shift/types";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
-import { ToolManager, type ToolConstructor } from "../tools/core/ToolManager";
+import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Polygon, Vec2 } from "@shift/geo";
@@ -65,10 +64,15 @@ import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
 import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
 import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
-import { CanvasCoordinator } from "./rendering/CanvasCoordinator";
+import {
+  CanvasCoordinator,
+  type CanvasCoordinatorContext,
+  type ViewportTransform,
+} from "./rendering/CanvasCoordinator";
 import type { FocusZone } from "@/types/focus";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
+import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
   DragSnapSession,
@@ -77,8 +81,11 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { EditorSnapManager } from "./managers/EditorSnapManager";
+import { ToolDescriptor } from "@/types/tools";
 
-export class Editor implements ToolContext {
+interface EditorFacade extends ToolContext, CanvasCoordinatorContext {}
+
+export class Editor implements EditorFacade {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
 
@@ -88,7 +95,7 @@ export class Editor implements ToolContext {
   #edgePan: EdgePanManager;
   #snapManager: EditorSnapManager;
 
-  #toolManager: ToolManager | null = null;
+  #toolManager: ToolManager;
   #toolMetadata: Map<
     ToolName,
     { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string; shortcut?: string }
@@ -167,32 +174,8 @@ export class Editor implements ToolContext {
     this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
     this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
 
-    this.#renderer = new CanvasCoordinator({
-      getGlyph: () => this.getGlyph(),
-      getFontMetrics: () => this.getFontMetrics(),
-      isPreviewMode: () => this.isPreviewMode(),
-      isHandlesVisible: () => this.isHandlesVisible(),
-      getSelectionBoundingRect: () => this.getSelectionBoundingRect(),
-      getHoveredSegmentId: () => this.getHoveredSegment()?.segmentId ?? null,
-      isSegmentSelected: (id) => this.isSegmentSelected(id),
-      getHandleState: (id) => this.getHandleState(id),
-      getHoveredBoundingBoxHandle: () => this.getHoveredBoundingBoxHandle(),
-      getSnapIndicator: () => this.getSnapIndicator(),
-      getViewportTransform: () => ({
-        zoom: this.#viewport.zoom.peek(),
-        panX: this.#viewport.panX,
-        panY: this.#viewport.panY,
-        centre: this.#viewport.centre,
-        upmScale: this.#viewport.upmScale,
-        logicalHeight: this.#viewport.logicalHeight,
-        padding: this.#viewport.padding,
-        descender: this.#viewport.descender,
-      }),
-      screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
-      projectUpmToScreen: (x, y) => this.#viewport.projectUpmToScreen(x, y),
-      renderTool: (draw) => this.#toolManager?.render(draw),
-      renderToolBelowHandles: (draw) => this.#toolManager?.renderBelowHandles(draw),
-    });
+    this.#toolManager = new ToolManager(this);
+    this.#renderer = new CanvasCoordinator(this);
 
     this.#clipboardService = new ClipboardService({
       getGlyph: () => this.getGlyph(),
@@ -252,21 +235,21 @@ export class Editor implements ToolContext {
       // Depend on active tool signals to re-run when tool changes
       this.$activeTool.value;
       this.$activeToolState.value;
-      const cursor = this.#toolManager?.activeTool?.$cursor.value ?? { type: "default" };
-      this.setCursor(cursor);
+      const activeTool = this.#toolManager.activeTool;
+      if (activeTool) {
+        const cursor = activeTool.getCursor(activeTool.state);
+        this.setCursor(cursor);
+        return;
+      }
+
+      this.setCursor({ type: "default" });
     });
   }
 
-  public registerTool(descriptor: {
-    id: ToolName;
-    ToolClass: ToolConstructor;
-    icon: React.FC<React.SVGProps<SVGSVGElement>>;
-    tooltip: string;
-    shortcut?: string;
-  }): void {
+  public registerTool(descriptor: ToolDescriptor): void {
     const { id, ToolClass, icon, tooltip, shortcut } = descriptor;
     this.#toolMetadata.set(id, { icon, tooltip, shortcut });
-    this.getToolManager().register(id, ToolClass);
+    this.toolManager.register(id, ToolClass);
   }
 
   public get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem> {
@@ -315,31 +298,36 @@ export class Editor implements ToolContext {
     const currentToolName = this.$activeTool.value;
     if (currentToolName === toolName) return;
 
-    this.getToolManager().activate(toolName);
+    this.toolManager.activate(toolName);
     this.$activeTool.set(toolName);
   }
 
-  public getToolManager(): ToolManager {
-    if (!this.#toolManager) {
-      this.#toolManager = new ToolManager(this);
-    }
+  public get toolManager(): ToolManager {
     return this.#toolManager;
   }
 
+  public renderTool(draw: DrawAPI): void {
+    this.#toolManager.render(draw);
+  }
+
+  public renderToolBelowHandles(draw: DrawAPI): void {
+    this.#toolManager.renderBelowHandles(draw);
+  }
+
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
-    this.getToolManager().requestTemporary(toolId, options);
+    this.toolManager.requestTemporary(toolId, options);
   }
 
   public returnFromTemporaryTool(): void {
-    this.getToolManager().returnFromTemporary();
+    this.toolManager.returnFromTemporary();
   }
 
   public get selectedPointIds(): Signal<ReadonlySet<PointId>> {
     return this.#selection.selectedPointIds;
   }
 
-  public selectPoints(pointIds: readonly PointId[]): void {
-    this.#selection.selectPoints(new Set(pointIds));
+  public selectPoints(pointIds: PointId[]): void {
+    this.#selection.selectPoints(pointIds);
   }
 
   public addPointToSelection(pointId: PointId): void {
@@ -398,22 +386,14 @@ export class Editor implements ToolContext {
     return [...this.#selection.selectedSegmentIds.peek()];
   }
 
-  public getSelectedPointsCount(): number {
-    return this.#selection.selectedPointIds.peek().size;
-  }
-
-  public getSelectedSegmentsCount(): number {
-    return this.#selection.selectedSegmentIds.peek().size;
-  }
-
   public getSelectionMode(): SelectionMode {
     return this.#selection.selectionMode.peek();
   }
 
   public selectAll(): void {
     const points = this.getAllPoints();
-    this.#selection.selectPoints(new Set(points.map((p) => p.id)));
-    this.getToolManager().notifySelectionChanged();
+    this.#selection.selectPoints(points.map((p) => p.id));
+    this.toolManager.notifySelectionChanged();
   }
 
   public get selectionMode(): Signal<SelectionMode> {
@@ -523,6 +503,13 @@ export class Editor implements ToolContext {
     return this.#hover.hoveredSegmentId.peek();
   }
 
+  public getHoveredSegmentId(): SegmentId | null {
+    const hoveredSegment = this.getHoveredSegment();
+    if (hoveredSegment == null) return null;
+
+    return hoveredSegment.segmentId;
+  }
+
   public getPointVisualState(pointId: PointId): VisualState {
     const isSelected = (id: PointId) =>
       this.#selection.isPointSelected(id) || this.isPointInMarqueePreview(id);
@@ -530,7 +517,10 @@ export class Editor implements ToolContext {
   }
 
   public isPointInMarqueePreview(pointId: PointId): boolean {
-    return this.#marqueePreviewPointIds.peek()?.has(pointId) ?? false;
+    const marqueePreviewPointIds = this.#marqueePreviewPointIds.peek();
+    if (marqueePreviewPointIds == null) return false;
+
+    return marqueePreviewPointIds.has(pointId);
   }
 
   public getSegmentVisualState(segmentId: SegmentId): VisualState {
@@ -554,11 +544,12 @@ export class Editor implements ToolContext {
   public setMarqueePreviewRect(rect: Rect2D | null): void {
     if (rect === null) {
       this.#marqueePreviewPointIds.set(null);
-    } else {
-      const points = this.getAllPoints();
-      const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => p.id));
-      this.#marqueePreviewPointIds.set(ids);
+      return;
     }
+
+    const points = this.getAllPoints();
+    const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
+    this.#marqueePreviewPointIds.set(new Set(ids));
     this.requestStaticRedraw();
   }
 
@@ -615,16 +606,8 @@ export class Editor implements ToolContext {
     return this.#viewport;
   }
 
-  /**
-   * Direct access to the font engine for advanced operations.
-   * Prefer using ToolContext.edit for standard editing.
-   */
   public get fontEngine(): FontEngine {
     return this.#fontEngine;
-  }
-
-  public get selectionManager(): SelectionManager {
-    return this.#selection;
   }
 
   public get hoverManager(): HoverManager {
@@ -730,6 +713,23 @@ export class Editor implements ToolContext {
     return this.#viewport.screenToUpmDistance(pixels);
   }
 
+  public getViewportTransform(): ViewportTransform {
+    return {
+      zoom: this.#viewport.zoomLevel,
+      panX: this.#viewport.panX,
+      panY: this.#viewport.panY,
+      centre: this.#viewport.centre,
+      upmScale: this.#viewport.upmScale,
+      logicalHeight: this.#viewport.logicalHeight,
+      padding: this.#viewport.padding,
+      descender: this.#viewport.descender,
+    };
+  }
+
+  public projectUpmToScreen(x: number, y: number): Point2D {
+    return this.#viewport.projectUpmToScreen(x, y);
+  }
+
   public get pan(): Point2D {
     return this.#viewport.pan;
   }
@@ -795,7 +795,7 @@ export class Editor implements ToolContext {
   }
 
   public getZoom(): number {
-    return this.#viewport.zoom.peek();
+    return this.#viewport.zoomLevel;
   }
 
   public get fps(): Signal<number> {
@@ -988,7 +988,8 @@ export class Editor implements ToolContext {
 
   public getActiveContourId(): ContourId | null {
     const id = this.#fontEngine.editing.getActiveContourId();
-    return id ? asContourId(id) : null;
+    if (id == null) return null;
+    return id;
   }
 
   public getActiveContour(): Contour | null {
@@ -1011,8 +1012,8 @@ export class Editor implements ToolContext {
     return this.#fontEngine.editing.addPointToContour(contourId, x, y, type, smooth);
   }
 
-  public movePoints(ids: Iterable<PointId>, dx: number, dy: number): void {
-    this.#fontEngine.editing.movePoints([...ids], dx, dy);
+  public movePoints(ids: PointId[], dx: number, dy: number): void {
+    this.#fontEngine.editing.movePoints(ids, dx, dy);
   }
 
   public movePointTo(id: PointId, x: number, y: number): void {
@@ -1027,8 +1028,8 @@ export class Editor implements ToolContext {
     this.#fontEngine.editing.setPointPositions(moves);
   }
 
-  public removePoints(ids: Iterable<PointId>): void {
-    this.#fontEngine.editing.removePoints([...ids]);
+  public removePoints(ids: PointId[]): void {
+    this.#fontEngine.editing.removePoints(ids);
   }
 
   public addContour(): ContourId {
@@ -1078,13 +1079,16 @@ export class Editor implements ToolContext {
 
   public getNodeAt(pos: Point2D): HitResult {
     const endpoint = this.getContourEndpointAt(pos);
+
     if (endpoint) {
+      const { contourId, pointId, position, contour } = endpoint;
+
       return {
         type: "contourEndpoint",
-        contourId: endpoint.contourId,
-        pointId: endpoint.pointId,
-        position: endpoint.position,
-        contour: endpoint.contour,
+        contourId,
+        pointId,
+        position,
+        contour,
       };
     }
 

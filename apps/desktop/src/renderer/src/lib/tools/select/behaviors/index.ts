@@ -7,4 +7,4 @@ export { NudgeBehavior } from "./NudgeBehavior";
 export { EscapeBehavior } from "./EscapeBehavior";
 export { ToggleSmoothBehavior } from "./ToggleSmoothBehavior";
 export { UpgradeSegmentBehavior } from "./UpgradeSegmentBehavior";
-export { DoubleClickSelectContourBehavior } from "./DoubleClickSelectContourBehavior";
+export { DoubleClickBehaviour as DoubleClickSelectContourBehavior } from "./DoubleClickBehaviour";

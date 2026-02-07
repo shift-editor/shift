@@ -48,8 +48,6 @@ export interface ToolContext {
   hasSelection(): boolean;
   isPointSelected(id: PointId): boolean;
   isSegmentSelected(id: SegmentId): boolean;
-  getSelectedPointsCount(): number;
-  getSelectedSegmentsCount(): number;
   selectPoints(ids: readonly PointId[]): void;
   clearSelection(): void;
   setSelectionMode(mode: SelectionMode): void;

@@ -15,54 +15,38 @@ export class SelectionBehavior implements SelectBehavior {
     const hit = editor.getNodeAt(event.point);
     const pointId = getPointIdFromHit(hit);
 
+    // Point hit + shift toggle
+    if (pointId !== null && state.type === "selected" && event.shiftKey) {
+      const selectedPoints = editor.getSelectedPoints();
+      const isSelected = editor.isPointSelected(pointId);
+      const willHaveSelection =
+        editor.hasSelection() && !(isSelected && selectedPoints.length === 1);
+      const type = willHaveSelection || !isSelected ? "selected" : "ready";
+      return { type, intent: { action: "togglePoint", pointId } };
+    }
+
     if (pointId !== null) {
-      if (state.type === "selected" && event.shiftKey) {
-        const hasSelection = editor.hasSelection();
-        const isSelected = editor.isPointSelected(pointId);
-        const willHaveSelection =
-          hasSelection && !(isSelected && editor.getSelectedPointsCount() === 1);
-
-        if (willHaveSelection || !isSelected) {
-          return {
-            type: "selected",
-            intent: { action: "togglePoint", pointId },
-          };
-        }
-        return {
-          type: "ready",
-          intent: { action: "togglePoint", pointId },
-        };
-      }
-
       return {
         type: "selected",
         intent: { action: "selectPoint", pointId, additive: event.shiftKey },
       };
     }
 
+    // Segment hit + shift toggle
+    if (hit !== null && isSegmentHit(hit) && state.type === "selected" && event.shiftKey) {
+      const selectedPoints = editor.getSelectedPoints();
+      const selectedSegments = editor.getSelectedSegments();
+      const isSelected = editor.isSegmentSelected(hit.segmentId);
+      const hasOtherSelections =
+        selectedPoints.length > 0 ||
+        selectedSegments.length > 1 ||
+        (selectedSegments.length === 1 && !isSelected);
+      const type = hasOtherSelections || !isSelected ? "selected" : "ready";
+      return { type, intent: { action: "toggleSegment", segmentId: hit.segmentId } };
+    }
+
+    // Segment hit (no shift)
     if (hit !== null && isSegmentHit(hit)) {
-      if (state.type === "selected" && event.shiftKey) {
-        const isSelected = editor.isSegmentSelected(hit.segmentId);
-        const hasOtherSelections =
-          editor.getSelectedPointsCount() > 0 ||
-          editor.getSelectedSegmentsCount() > 1 ||
-          (editor.getSelectedSegmentsCount() === 1 && !isSelected);
-
-        if (hasOtherSelections || !isSelected) {
-          return {
-            type: "selected",
-            intent: {
-              action: "toggleSegment",
-              segmentId: hit.segmentId,
-            },
-          };
-        }
-        return {
-          type: "ready",
-          intent: { action: "toggleSegment", segmentId: hit.segmentId },
-        };
-      }
-
       return {
         type: "selected",
         intent: {
@@ -73,18 +57,9 @@ export class SelectionBehavior implements SelectBehavior {
       };
     }
 
-    if (state.type === "selected") {
-      return {
-        type: "ready",
-        intent: { action: "clearSelection" },
-      };
-    }
-
-    if (state.type === "ready" && editor.hasSelection()) {
-      return {
-        ...state,
-        intent: { action: "clearSelection" },
-      };
+    // Clear selection if anything is selected
+    if (state.type === "selected" || editor.hasSelection()) {
+      return { type: "ready", intent: { action: "clearSelection" } };
     }
 
     return null;

@@ -134,6 +134,10 @@ export class ViewportManager {
     return this.$zoom;
   }
 
+  get zoomLevel(): number {
+    return this.$zoom.value;
+  }
+
   get centre(): Point2D {
     return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
   }
@@ -215,6 +219,6 @@ export class ViewportManager {
   }
 
   public screenToUpmDistance(screenDistance: number): number {
-    return screenDistance / (this.upmScale * this.$zoom.value);
+    return screenDistance / (this.upmScale * this.zoomLevel);
   }
 }

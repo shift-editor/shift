@@ -28,11 +28,38 @@ if (canvas === interactiveCanvas) {
 }
 ```
 
-- Avoid adding comments unless absolutely neccessary.
+- Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level.
+
+```typescript
+// Prefer
+if (rect === null) {
+  this.#marqueePreviewPointIds.set(null);
+  return;
+}
+
+const points = this.getAllPoints();
+const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
+this.#marqueePreviewPointIds.set(new Set(ids));
+
+// Avoid
+if (rect === null) {
+  this.#marqueePreviewPointIds.set(null);
+} else {
+  const points = this.getAllPoints();
+  const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => p.id));
+  this.#marqueePreviewPointIds.set(ids);
+}
+```
+
+## Documentation
+
+Always keep it up to date after completing a large feature
+
+## Roadmap
+
+When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature.
+
 - ALWAYS add tests to verify behaviour after completing a feature
-- ALWAYS keep documentation up to date
-- Consult the documentation and code together
-- When completing a feature YOU MUST check if it ticks off an item in the roadmap, and tick it off if so
 
 ## Frontend
 
@@ -93,16 +120,6 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 - `pnpm clean` - Clean build artifacts and node_modules
 - `pnpm check-deps` - Check for unused dependencies
-
-## Pre-commit Hooks
-
-This project uses [pre-commit](https://pre-commit.com/) for git hooks. Install with `pre-commit install`.
-
-Hooks run on each commit:
-
-- **File hygiene**: trailing whitespace, end-of-file fixer, YAML validation, large file checks
-- **Rust**: `cargo fmt`, `cargo clippy`, `cargo test`
-- **TypeScript/JavaScript**: Prettier formatting, Oxlint, tsgo typecheck, Vitest
 
 ## Project Structure
 
@@ -184,6 +201,18 @@ public get activeTool(): Signal<ToolName> {
 
 // BAD: Expose raw writable signal
 public $activeTool: WritableSignal<ToolName>;
+```
+
+- Always access signal values through getters, never via `.value` or `.peek()` from outside the owning class. Getters encapsulate the signal and keep the reactive contract consistent. `.peek()` should only be used internally within the signal's owning class in computed signals where subscribing would cause circular updates.
+
+```typescript
+// GOOD: Use the getter
+const zoom = viewport.zoomLevel;
+const pan = viewport.panX;
+
+// BAD: Reaching through to the signal
+const zoom = viewport.zoom.value;
+const zoom = viewport.zoom.peek();
 ```
 
 ### File Size Guidelines
