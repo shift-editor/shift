@@ -2,6 +2,7 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{
+  curve::segment_bounds,
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot},
@@ -44,17 +45,18 @@ fn layer_bbox(layer: &GlyphLayer) -> Option<(f64, f64, f64, f64)> {
   let mut max_x = f64::MIN;
   let mut max_y = f64::MIN;
   let mut any = false;
+
   for contour in layer.contours_iter() {
-    for p in contour.points() {
-      let x = p.x();
-      let y = p.y();
-      min_x = min_x.min(x);
-      min_y = min_y.min(y);
-      max_x = max_x.max(x);
-      max_y = max_y.max(y);
+    for segment in contour.segments() {
+      let (sx, sy, ex, ey) = segment_bounds(&segment);
+      min_x = min_x.min(sx);
+      min_y = min_y.min(sy);
+      max_x = max_x.max(ex);
+      max_y = max_y.max(ey);
       any = true;
     }
   }
+
   if any {
     Some((min_x, min_y, max_x, max_y))
   } else {

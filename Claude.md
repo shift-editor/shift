@@ -103,6 +103,8 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - `pnpm lint` - Lint code with Oxlint (auto-fix)
 - `pnpm lint:check` - Lint code without auto-fix
 - `pnpm typecheck` - Type check with tsgo
+- `cargo fmt` - Format Rust code (run after any Rust changes)
+- `cargo clippy` - Lint Rust code (run after any Rust changes)
 
 ### Testing
 

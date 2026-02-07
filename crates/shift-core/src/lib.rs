@@ -1,5 +1,6 @@
 pub mod binary;
 pub mod constants;
+pub mod curve;
 pub mod edit_session;
 pub mod font_loader;
 pub mod snapshot;
