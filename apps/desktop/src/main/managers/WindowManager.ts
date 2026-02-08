@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import type { DocumentState } from "./DocumentState";
+import * as ipc from "../../shared/ipc/main";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 
@@ -95,15 +96,15 @@ export class WindowManager {
   }
 
   private registerIpcHandlers() {
-    ipcMain.handle("window:close", () => {
+    ipc.handle(ipcMain, "window:close", () => {
       this.window?.close();
     });
 
-    ipcMain.handle("window:minimize", () => {
+    ipc.handle(ipcMain, "window:minimize", () => {
       this.window?.minimize();
     });
 
-    ipcMain.handle("window:maximize", () => {
+    ipc.handle(ipcMain, "window:maximize", () => {
       if (this.window?.isMaximized()) {
         this.window.unmaximize();
       } else {
@@ -111,19 +112,19 @@ export class WindowManager {
       }
     });
 
-    ipcMain.handle("window:isMaximized", () => {
+    ipc.handle(ipcMain, "window:isMaximized", () => {
       return this.window?.isMaximized() ?? false;
     });
 
-    ipcMain.handle("document:setDirty", (_event, dirty: boolean) => {
+    ipc.handle(ipcMain, "document:setDirty", (_event, dirty) => {
       this.documentState.setDirty(dirty);
     });
 
-    ipcMain.handle("document:setFilePath", (_event, filePath: string | null) => {
+    ipc.handle(ipcMain, "document:setFilePath", (_event, filePath) => {
       this.documentState.setFilePath(filePath);
     });
 
-    ipcMain.handle("document:saveCompleted", (_event, filePath: string) => {
+    ipc.handle(ipcMain, "document:saveCompleted", (_event, filePath) => {
       this.documentState.onSaveCompleted(filePath);
     });
   }

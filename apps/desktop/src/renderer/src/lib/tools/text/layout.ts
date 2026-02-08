@@ -8,6 +8,7 @@ export interface GlyphSlot {
   advance: number;
   bounds: Bounds | null;
   svgPath: string | null;
+  selected: boolean;
 }
 
 export interface TextLayout {
@@ -21,28 +22,29 @@ export function computeTextLayout(
   fontContext: FontContext,
 ): TextLayout {
   const slots: GlyphSlot[] = [];
-  let cursor = origin.x;
+  let x = origin.x;
+  const selected = false;
 
   for (const unicode of codepoints) {
-    const advance = fontContext.getGlyphAdvance(unicode);
+    const advance = fontContext.getGlyphAdvance(unicode) ?? 0;
     const bounds = fontContext.getGlyphBbox(unicode);
     const svgPath = fontContext.getGlyphSvgPath(unicode);
-    const glyphAdvance = advance ?? 0;
 
     slots.push({
       unicode,
-      x: cursor,
-      advance: glyphAdvance,
+      x,
+      advance,
       bounds,
       svgPath,
+      selected,
     });
 
-    cursor += glyphAdvance;
+    x += advance;
   }
 
   return {
     slots,
-    totalAdvance: cursor - origin.x,
+    totalAdvance: x - origin.x,
   };
 }
 

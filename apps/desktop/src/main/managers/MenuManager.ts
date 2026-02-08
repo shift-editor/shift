@@ -1,25 +1,13 @@
 import { Menu, dialog, nativeTheme, app } from "electron";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
-
-export type Theme = "light" | "dark" | "system";
-
-export interface DebugOverlays {
-  tightBounds: boolean;
-  hitRadii: boolean;
-  segmentBounds: boolean;
-}
-
-interface DebugState {
-  reactScanEnabled: boolean;
-  debugPanelOpen: boolean;
-  overlays: DebugOverlays;
-}
+import type { ThemeName, DebugOverlays, DebugState } from "../../shared/ipc/types";
+import * as ipc from "../../shared/ipc/main";
 
 export class MenuManager {
   private documentState: DocumentState;
   private windowManager: WindowManager;
-  private currentTheme: Theme = "light";
+  private currentTheme: ThemeName = "light";
   private debugState: DebugState = {
     reactScanEnabled: false,
     debugPanelOpen: false,
@@ -35,7 +23,7 @@ export class MenuManager {
     this.windowManager = windowManager;
   }
 
-  getTheme(): Theme {
+  getTheme(): ThemeName {
     return this.currentTheme;
   }
 
@@ -45,19 +33,29 @@ export class MenuManager {
 
   private setDebugState<K extends keyof DebugState>(key: K, value: DebugState[K]) {
     this.debugState[key] = value;
-    const window = this.windowManager.getWindow();
-    const channelMap: Record<keyof DebugState, string> = {
-      reactScanEnabled: "debug:react-scan",
-      debugPanelOpen: "debug:panel",
-    };
-    window?.webContents.send(channelMap[key], value);
+    const webContents = this.windowManager.getWindow()?.webContents;
+    if (webContents) {
+      switch (key) {
+        case "reactScanEnabled":
+          ipc.send(webContents, "debug:react-scan", value as boolean);
+          break;
+        case "debugPanelOpen":
+          ipc.send(webContents, "debug:panel", value as boolean);
+          break;
+        case "overlays":
+          ipc.send(webContents, "debug:overlays", value as DebugOverlays);
+          break;
+      }
+    }
     this.create();
   }
 
   private toggleOverlay(key: keyof DebugOverlays): void {
     this.debugState.overlays[key] = !this.debugState.overlays[key];
-    const window = this.windowManager.getWindow();
-    window?.webContents.send("debug:overlays", { ...this.debugState.overlays });
+    const webContents = this.windowManager.getWindow()?.webContents;
+    if (webContents) {
+      ipc.send(webContents, "debug:overlays", { ...this.debugState.overlays });
+    }
     this.create();
   }
 
@@ -89,10 +87,12 @@ export class MenuManager {
     return levels[0];
   }
 
-  setTheme(theme: Theme) {
+  setTheme(theme: ThemeName) {
     this.currentTheme = theme;
-    const window = this.windowManager.getWindow();
-    window?.webContents.send("theme:set", theme);
+    const webContents = this.windowManager.getWindow()?.webContents;
+    if (webContents) {
+      ipc.send(webContents, "theme:set", theme);
+    }
 
     if (theme === "system") {
       nativeTheme.themeSource = "system";
@@ -106,6 +106,7 @@ export class MenuManager {
   create() {
     const isMac = process.platform === "darwin";
     const window = this.windowManager.getWindow();
+    const webContents = window?.webContents;
 
     const template: Electron.MenuItemConstructorOptions[] = [
       ...(isMac ? [{ role: "appMenu" as const }] : []),
@@ -122,7 +123,9 @@ export class MenuManager {
               });
               if (!result.canceled && result.filePaths[0]) {
                 this.documentState.setFilePath(result.filePaths[0]);
-                window?.webContents.send("menu:open-font", result.filePaths[0]);
+                if (webContents) {
+                  ipc.send(webContents, "menu:open-font", result.filePaths[0]);
+                }
               }
             },
           },
@@ -147,12 +150,16 @@ export class MenuManager {
           {
             label: "Undo",
             accelerator: "CmdOrCtrl+Z",
-            click: () => window?.webContents.send("menu:undo"),
+            click: () => {
+              if (webContents) ipc.send(webContents, "menu:undo");
+            },
           },
           {
             label: "Redo",
             accelerator: "CmdOrCtrl+Shift+Z",
-            click: () => window?.webContents.send("menu:redo"),
+            click: () => {
+              if (webContents) ipc.send(webContents, "menu:redo");
+            },
           },
           { type: "separator" },
           { role: "cut" },
@@ -161,13 +168,17 @@ export class MenuManager {
           {
             label: "Delete",
             accelerator: "Backspace",
-            click: () => window?.webContents.send("menu:delete"),
+            click: () => {
+              if (webContents) ipc.send(webContents, "menu:delete");
+            },
           },
           { type: "separator" },
           {
             label: "Select All",
             accelerator: "CmdOrCtrl+A",
-            click: () => window?.webContents.send("menu:select-all"),
+            click: () => {
+              if (webContents) ipc.send(webContents, "menu:select-all");
+            },
           },
         ],
       },
@@ -187,7 +198,7 @@ export class MenuManager {
                 const currentPercent = this.zoomLevelToPercent(win.webContents.getZoomLevel());
                 const newPercent = this.getNextZoomPercent(currentPercent);
                 win.webContents.setZoomLevel(this.percentToZoomLevel(newPercent));
-                win.webContents.send("ui:zoom-changed", newPercent);
+                ipc.send(win.webContents, "ui:zoom-changed", newPercent);
               }
             },
           },
@@ -200,7 +211,7 @@ export class MenuManager {
                 const currentPercent = this.zoomLevelToPercent(win.webContents.getZoomLevel());
                 const newPercent = this.getPrevZoomPercent(currentPercent);
                 win.webContents.setZoomLevel(this.percentToZoomLevel(newPercent));
-                win.webContents.send("ui:zoom-changed", newPercent);
+                ipc.send(win.webContents, "ui:zoom-changed", newPercent);
               }
             },
           },
@@ -211,7 +222,7 @@ export class MenuManager {
               const win = this.windowManager.getWindow();
               if (win) {
                 win.webContents.setZoomLevel(0);
-                win.webContents.send("ui:zoom-changed", 100);
+                ipc.send(win.webContents, "ui:zoom-changed", 100);
               }
             },
           },
@@ -264,7 +275,9 @@ export class MenuManager {
                 {
                   label: "Dump Glyph Snapshot",
                   accelerator: "CmdOrCtrl+Shift+D",
-                  click: () => window?.webContents.send("debug:dump-snapshot"),
+                  click: () => {
+                    if (webContents) ipc.send(webContents, "debug:dump-snapshot");
+                  },
                 },
                 { type: "separator" as const },
                 {

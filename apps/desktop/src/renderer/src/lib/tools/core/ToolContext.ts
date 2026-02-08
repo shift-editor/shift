@@ -65,7 +65,7 @@ export interface HitTestContext {
   getSegmentAt(pos: Point2D): SegmentHitResult | null;
   getSegmentById(segmentId: SegmentId): Segment | null;
   getAllPoints(): Point[];
-  getGlyph(): Glyph | null;
+  getActiveGlyph(): Glyph | null;
   getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
   getMiddlePointAt(pos: Point2D): MiddlePointHit | null;
   getSelectionBoundingRect(): Rect2D | null;
@@ -112,6 +112,8 @@ export interface ToolLifecycleContext {
 }
 
 export interface VisualStateContext {
+  getDrawOffset(): Point2D;
+  setDrawOffset(offset: Point2D): void;
   requestStaticRedraw(): void;
   requestRedraw(): void;
   updateHover(pos: Point2D): void;

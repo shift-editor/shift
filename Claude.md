@@ -145,7 +145,7 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - `@/*` for app-wide imports (from renderer/src root)
 - Relative imports (`./`, `../`) only within the same module directory
 - Never mix import styles for the same module
-- **Never use inline type imports** such as `import("@shift/types").PointId` or `import("@/types/hitResult").ContourEndpointHit`. Always use top-level imports: `import type { PointId } from "@shift/types"` or `import type { ContourEndpointHit } from "@/types/hitResult"`.
+- **Never use inline type imports** such as `import("@shift/types").PointId`, `import("@/types/hitResult").ContourEndpointHit`, or `import("../core").ToolEvent`. Always use top-level imports: `import type { PointId } from "@shift/types"`, `import type { ContourEndpointHit } from "@/types/hitResult"`, or `import type { ToolEvent } from "../core"`.
 
 ### Type Definitions
 

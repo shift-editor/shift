@@ -1,8 +1,16 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from "react";
 import { isDev } from "@/lib/utils/utils";
 import { enableReactScan, disableReactScan } from "@/lib/debug/reactScan";
 import { getEditor } from "@/store/store";
-import type { DebugOverlays } from "@/types/electron";
+import type { DebugOverlays } from "@shared/ipc/types";
 
 const DEFAULT_OVERLAYS: DebugOverlays = {
   tightBounds: false,
@@ -27,6 +35,22 @@ export function DebugProvider({ children }: DebugProviderProps) {
   const [reactScanEnabled, setReactScanEnabled] = useState(false);
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   const [overlays, setOverlays] = useState<DebugOverlays>(DEFAULT_OVERLAYS);
+
+  const dumpSnapshot = useCallback(() => {
+    const editor = getEditor();
+    const glyph = editor.getActiveGlyph();
+    console.log(glyph);
+    if (!glyph) {
+      return;
+    }
+
+    const json = JSON.stringify(glyph, null, 2);
+
+    window.electronAPI?.clipboardWriteText(json);
+  }, []);
+
+  const dumpSnapshotRef = useRef(dumpSnapshot);
+  dumpSnapshotRef.current = dumpSnapshot;
 
   useEffect(() => {
     if (!isDev) return undefined;
@@ -56,7 +80,7 @@ export function DebugProvider({ children }: DebugProviderProps) {
     });
 
     const unsubscribeDump = window.electronAPI?.onDebugDumpSnapshot(() => {
-      dumpSnapshot();
+      dumpSnapshotRef.current();
     });
 
     const unsubscribeOverlays = window.electronAPI?.onDebugOverlays((newOverlays) => {
@@ -70,18 +94,6 @@ export function DebugProvider({ children }: DebugProviderProps) {
       unsubscribeOverlays?.();
     };
   }, []);
-
-  const dumpSnapshot = () => {
-    const editor = getEditor();
-    const glyph = editor.getGlyph();
-    if (!glyph) {
-      return;
-    }
-
-    const json = JSON.stringify(glyph, null, 2);
-
-    window.electronAPI?.clipboardWriteText(json);
-  };
 
   useEffect(() => {
     getEditor().setDebugOverlays(overlays);

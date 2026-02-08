@@ -7,23 +7,46 @@ export class TypingBehavior implements TextBehavior {
   }
 
   transition(
-    _state: TextState,
+    state: TextState,
     event: ToolEvent,
     _editor: ToolContext,
   ): TransitionResult<TextState, TextAction> | null {
     if (event.type !== "keyDown") return null;
+    if (state.type !== "typing") return null;
+
+    const { layout } = state;
+
+    console.log(event.key);
 
     switch (event.key) {
       case "Backspace":
-        return { state: { type: "typing" }, action: { type: "delete" } };
+        return {
+          state: { type: "typing", layout: layout },
+          action: { type: "delete" },
+        };
       case "Escape":
-        return { state: { type: "idle" }, action: { type: "cancel" } };
+        return {
+          state: { type: "idle" },
+          action: { type: "cancel" },
+        };
       case "ArrowLeft":
-        return { state: { type: "typing" }, action: { type: "moveLeft" } };
+        return {
+          state: { type: "typing", layout: { slots: [], totalAdvance: 0 } },
+          action: { type: "moveLeft" },
+        };
       case "ArrowRight":
-        return { state: { type: "typing" }, action: { type: "moveRight" } };
+        return {
+          state: { type: "typing", layout: { slots: [], totalAdvance: 0 } },
+          action: { type: "moveRight" },
+        };
       default:
-        return null;
+        return {
+          state: {
+            type: "typing",
+            layout: { slots: [], totalAdvance: 0 },
+          },
+          action: { type: "insert", codepoint: event.key.codePointAt(0) },
+        };
     }
   }
 

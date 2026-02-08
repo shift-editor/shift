@@ -15,6 +15,7 @@ import { InfoManager } from "./info";
 import { IOManager } from "./io";
 import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
 import type { EngineCore, CommandResponse, PasteResult } from "@/types/engine";
+import { Bounds } from "@shift/geo";
 
 export class FontEngine implements EngineCore {
   readonly editing: EditingManager;
@@ -87,8 +88,11 @@ export class FontEngine implements EngineCore {
     return this.#raw.getGlyphAdvance(unicode);
   }
 
-  getGlyphBbox(unicode: number): [number, number, number, number] | null {
-    return this.#raw.getGlyphBbox(unicode);
+  getGlyphBbox(unicode: number): Bounds | null {
+    const bbox = this.#raw.getGlyphBbox(unicode);
+    if (!bbox) return null;
+
+    return Bounds.create({ x: bbox[0], y: bbox[1] }, { x: bbox[2], y: bbox[3] });
   }
 
   startEditSession(unicode: number): void {

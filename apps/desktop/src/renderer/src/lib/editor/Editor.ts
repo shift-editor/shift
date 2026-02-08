@@ -69,7 +69,7 @@ import {
   type ViewportTransform,
 } from "./rendering/CanvasCoordinator";
 import type { FocusZone } from "@/types/focus";
-import type { DebugOverlays } from "@/types/electron";
+import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { ToolContext } from "../tools/core/ToolContext";
 import type { DrawAPI } from "../tools/core/DrawAPI";
@@ -118,6 +118,7 @@ export class Editor implements EditorFacade {
   #zone: FocusZone = "canvas";
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
+  #drawOffset: WritableSignal<Point2D>;
   $renderState: ComputedSignal<RenderState>;
   $staticState: ComputedSignal<StaticRenderState>;
   $overlayState: ComputedSignal<OverlayRenderState>;
@@ -165,7 +166,7 @@ export class Editor implements EditorFacade {
     this.#hover = new HoverManager();
     this.#edgePan = new EdgePanManager(this);
     this.#snapManager = new EditorSnapManager({
-      getGlyph: () => this.getGlyph(),
+      getGlyph: () => this.getActiveGlyph(),
       getMetrics: () => this.getFontMetrics(),
       getPreferences: () => this.#snapPreferences.value,
       screenToUpmDistance: (px) => this.screenToUpmDistance(px),
@@ -184,13 +185,15 @@ export class Editor implements EditorFacade {
     this.#renderer = new CanvasCoordinator(this);
 
     this.#clipboardService = new ClipboardService({
-      getGlyph: () => this.getGlyph(),
+      getGlyph: () => this.getActiveGlyph(),
       getSelectedPointIds: () => this.getSelectedPoints(),
       getSelectedSegmentIds: () => this.getSelectedSegments(),
     });
 
+    this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
     this.$renderState = computed<RenderState>(() => ({
       glyph: this.#$glyph.value,
+      drawOffset: this.#drawOffset.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
@@ -201,6 +204,7 @@ export class Editor implements EditorFacade {
 
     this.$staticState = computed<StaticRenderState>(() => ({
       glyph: this.#$glyph.value,
+      drawOffset: this.#drawOffset.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       selectionMode: this.#selection.selectionMode.value,
@@ -213,6 +217,7 @@ export class Editor implements EditorFacade {
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
       glyph: this.#$glyph.value,
+      drawOffset: this.#drawOffset.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
@@ -609,7 +614,7 @@ export class Editor implements EditorFacade {
     return this.#$glyph;
   }
 
-  public getGlyph(): Glyph | null {
+  public getActiveGlyph(): Glyph | null {
     return this.#$glyph.value;
   }
 
@@ -662,8 +667,6 @@ export class Editor implements EditorFacade {
   }
 
   public undo() {
-    // If in preview mode, cancel the preview first to restore the pre-drag state.
-    // This ensures the undo stack stays consistent with the actual state.
     if (this.#isInPreview) {
       this.cancelPreview();
       return;
@@ -672,8 +675,6 @@ export class Editor implements EditorFacade {
   }
 
   public redo() {
-    // If in preview mode, cancel the preview first.
-    // Redo during drag doesn't make semantic sense, so just cancel.
     if (this.#isInPreview) {
       this.cancelPreview();
       return;
@@ -849,7 +850,7 @@ export class Editor implements EditorFacade {
     const content = this.#clipboardService.resolveSelection();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     return this.#clipboardService.write(content, glyph?.name);
   }
 
@@ -857,7 +858,7 @@ export class Editor implements EditorFacade {
     const content = this.#clipboardService.resolveSelection();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     const written = await this.#clipboardService.write(content, glyph?.name);
     if (!written) return false;
 
@@ -1001,14 +1002,14 @@ export class Editor implements EditorFacade {
   }
 
   public getPointById(pointId: PointId): Point | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     return Glyphs.findPoint(glyph, pointId)?.point ?? null;
   }
 
   public getContourById(contourId: ContourId): Contour | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     return Glyphs.findContour(glyph, contourId) ?? null;
@@ -1028,7 +1029,6 @@ export class Editor implements EditorFacade {
 
   public addPoint(x: number, y: number, type: PointType, smooth = false): PointId {
     return this.#fontEngine.editing.addPoint({
-      id: "" as PointId,
       x,
       y,
       pointType: type,
@@ -1044,7 +1044,6 @@ export class Editor implements EditorFacade {
     smooth: boolean,
   ): PointId {
     return this.#fontEngine.editing.addPointToContour(contourId, {
-      id: "" as PointId,
       x,
       y,
       pointType: type,
@@ -1097,14 +1096,14 @@ export class Editor implements EditorFacade {
   }
 
   public getPointAt(pos: Point2D): Point | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     return Glyphs.getPointAt(glyph, pos, this.hitRadius);
   }
 
   public getSegmentAt(pos: Point2D): SegmentHitResult | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     let bestHit: SegmentHitResult | null = null;
@@ -1155,7 +1154,7 @@ export class Editor implements EditorFacade {
   }
 
   public getContourEndpointAt(pos: Point2D): ContourEndpointHit | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     for (const contour of glyph.contours) {
@@ -1233,14 +1232,14 @@ export class Editor implements EditorFacade {
   }
 
   public getAllPoints(): Point[] {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return [];
 
     return Glyphs.getAllPoints(glyph);
   }
 
   public duplicateSelection(): PointId[] {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return [];
 
     const selectedPointIds = this.getSelectedPoints();
@@ -1255,7 +1254,7 @@ export class Editor implements EditorFacade {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
@@ -1267,7 +1266,7 @@ export class Editor implements EditorFacade {
   }
 
   public getMiddlePointAt(pos: Point2D): MiddlePointHit | null {
-    const glyph = this.getGlyph();
+    const glyph = this.getActiveGlyph();
     if (!glyph) return null;
 
     const activeContourId = this.getActiveContourId();
@@ -1290,6 +1289,14 @@ export class Editor implements EditorFacade {
       }
     }
     return null;
+  }
+
+  public getDrawOffset(): Point2D {
+    return this.#drawOffset.value;
+  }
+
+  public setDrawOffset(offset: Point2D): void {
+    this.#drawOffset.set(offset);
   }
 
   public requestRedraw() {

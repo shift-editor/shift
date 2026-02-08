@@ -984,6 +984,8 @@ export function createMockToolContext(): MockToolContext {
   }
 
   return {
+    getDrawOffset: vi.fn(() => ({ x: 0, y: 0 })),
+    setDrawOffset: vi.fn((_offset: Point2D) => {}),
     fontEngine,
     screen,
     selection,
@@ -1036,7 +1038,7 @@ export function createMockToolContext(): MockToolContext {
     removeSegmentFromSelection: (id: SegmentId) => selection.removeSegment(id),
     toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
-    getGlyph: () => edit.getGlyph() as Glyph | null,
+    getActiveGlyph: () => edit.getGlyph() as Glyph | null,
     getFontMetrics: () => ({
       unitsPerEm: 1000,
       ascender: 800,

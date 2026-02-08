@@ -3,7 +3,7 @@ import type { Glyph, Rect2D, Point2D, PointId, FontMetrics } from "@shift/types"
 import type { SegmentId } from "@/types/indicator";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { SnapIndicator } from "../snapping/types";
-import type { DebugOverlays } from "@/types/electron";
+import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
 import {
@@ -45,7 +45,9 @@ export interface ViewportTransform {
 }
 
 export interface CanvasCoordinatorContext {
-  getGlyph(): Glyph | null;
+  getDrawOffset(): Point2D;
+  setDrawOffset(offset: Point2D): void;
+  getActiveGlyph(): Glyph | null;
   getFontMetrics(): FontMetrics;
   isPreviewMode(): boolean;
   isHandlesVisible(): boolean;
@@ -149,6 +151,9 @@ export class CanvasCoordinator {
 
     const baselineY = vt.logicalHeight - vt.padding - vt.descender * vt.upmScale;
     ctx.transform(vt.upmScale, 0, 0, -vt.upmScale, vt.padding, baselineY);
+
+    const { x, y } = this.#ctx.getDrawOffset();
+    ctx.translate(x, y);
   }
 
   #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
@@ -190,7 +195,7 @@ export class CanvasCoordinator {
     const ctx = this.#staticContext.getContext();
     const draw = this.#staticDraw;
 
-    const glyph = this.#ctx.getGlyph();
+    const glyph = this.#ctx.getActiveGlyph();
     const previewMode = this.#ctx.isPreviewMode();
     const handlesVisible = this.#ctx.isHandlesVisible();
 
@@ -219,15 +224,11 @@ export class CanvasCoordinator {
       }
     }
 
-    let bbRect: Rect2D | null = null;
-    const shouldDrawBoundingRect = !previewMode;
-    if (shouldDrawBoundingRect) {
-      bbRect = this.#ctx.getSelectionBoundingRect();
-      if (bbRect) {
-        ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
-        ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
-        renderBoundingRect(rc, bbRect);
-      }
+    const bbRect = this.#ctx.getSelectionBoundingRect();
+    if (!previewMode && bbRect) {
+      ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
+      ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
+      renderBoundingRect(rc, bbRect);
     }
 
     if (!previewMode && glyph) {
@@ -260,7 +261,7 @@ export class CanvasCoordinator {
     ctx.restore();
     ctx.save();
 
-    if (shouldDrawBoundingRect && bbRect && handlesVisible) {
+    if (!previewMode && bbRect && handlesVisible) {
       this.#drawBoundingBoxHandles(ctx, bbRect);
     }
 

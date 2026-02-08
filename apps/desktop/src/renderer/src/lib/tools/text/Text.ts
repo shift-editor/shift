@@ -18,31 +18,59 @@ class TextTool extends BaseTool<TextState, TextAction> {
   }
 
   activate(): void {
-    this.state = { type: "idle" };
+    this.state = {
+      type: "typing",
+      layout: { slots: [], totalAdvance: 0 },
+    };
     this.editor.setPreviewMode(true);
   }
 
   deactivate(): void {
     this.state = { type: "idle" };
     this.editor.setPreviewMode(false);
+    this.editor.setDrawOffset({ x: 0, y: 0 });
+  }
+
+  protected executeAction(action: TextAction, _prev: TextState): void {
+    switch (action.type) {
+      case "moveLeft":
+        // move cursor left
+        break;
+      case "moveRight":
+        // move cursor right
+        break;
+      case "delete":
+        // delete character at cursor position
+        break;
+      case "cancel":
+        // cancel typing
+        break;
+      case "insert":
+        // insert character at cursor position
+        break;
+    }
   }
 
   render(draw: DrawAPI): void {
-    const glyph = this.editor.getGlyph();
+    const glyph = this.editor.getActiveGlyph();
+    const randomGlyph = this.editor.getGlyphSvgPath(101);
+
+    this.editor.setDrawOffset({ x: -200, y: 0 });
     const metrics = this.editor.getFontMetrics();
+    draw.svgPath(randomGlyph, 70, glyph.xAdvance, 0, { fillStyle: "black" });
 
     const start = { x: glyph.xAdvance, y: metrics.descender };
     const end = { x: glyph.xAdvance, y: metrics.ascender };
 
-    draw.line(start, end, { strokeStyle: "#0C92F4", strokeWidth: 2 });
+    draw.line(start, end, { strokeStyle: "#0C92F4", strokeWidth: 1.25 });
 
     const barTopS = { x: glyph.xAdvance - 20, y: metrics.ascender };
     const barTopE = { x: glyph.xAdvance + 20, y: metrics.ascender };
-    draw.line(barTopS, barTopE, { strokeStyle: "#0C92F4", strokeWidth: 2.5 });
+    draw.line(barTopS, barTopE, { strokeStyle: "#0C92F4", strokeWidth: 1.25 });
 
     const barBottomS = { x: glyph.xAdvance - 20, y: metrics.descender };
     const barBottomE = { x: glyph.xAdvance + 20, y: metrics.descender };
-    draw.line(barBottomS, barBottomE, { strokeStyle: "#0C92F4", strokeWidth: 2.5 });
+    draw.line(barBottomS, barBottomE, { strokeStyle: "#0C92F4", strokeWidth: 1.25 });
   }
 }
 

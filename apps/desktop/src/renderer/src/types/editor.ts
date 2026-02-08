@@ -1,4 +1,4 @@
-import type { PointId, Glyph } from "@shift/types";
+import type { PointId, Glyph, Point2D } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
 import type { SnapIndicator } from "@/lib/editor/snapping/types";
 import type { DebugOverlays } from "./electron";
@@ -7,6 +7,7 @@ export type SelectionMode = "preview" | "committed";
 
 export interface RenderState {
   glyph: Glyph | null;
+  drawOffset: Point2D;
   selectedPointIds: ReadonlySet<PointId>;
   selectedSegmentIds: ReadonlySet<SegmentId>;
   hoveredPointId: PointId | null;
@@ -17,6 +18,7 @@ export interface RenderState {
 
 export interface StaticRenderState {
   glyph: Glyph | null;
+  drawOffset: Point2D;
   selectedPointIds: ReadonlySet<PointId>;
   selectedSegmentIds: ReadonlySet<SegmentId>;
   selectionMode: SelectionMode;
@@ -29,6 +31,7 @@ export interface StaticRenderState {
 
 export interface OverlayRenderState {
   glyph: Glyph | null;
+  drawOffset: Point2D;
   selectedSegmentIds: ReadonlySet<SegmentId>;
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { ThemeTokens, lightTheme, applyThemeToCss } from "@/lib/styles/theme";
 
-export type ThemeName = "light" | "dark" | "system";
+import type { ThemeName } from "@shared/ipc/types";
+export type { ThemeName };
 
 interface ThemeContextValue {
   themeName: ThemeName;

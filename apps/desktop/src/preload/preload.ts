@@ -5,6 +5,9 @@ const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
 import { ContourId } from "@shift/types";
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
+import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
+import type { ElectronAPI } from "../shared/ipc/electronAPI";
+import { listener, command } from "../shared/ipc/preload";
 
 const fontEngineInstance = new FontEngine();
 
@@ -157,107 +160,41 @@ const fontEngineAPI = {
 // Expose to renderer via contextBridge
 contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
 
-type ThemeName = "light" | "dark" | "system";
+const on = <K extends keyof IpcEvents>(ch: K) => listener(ipcRenderer, ch);
+const invoke = <K extends keyof IpcCommands>(ch: K) => command(ipcRenderer, ch);
 
-const electronAPI = {
-  openFontDialog: (): Promise<string | null> => ipcRenderer.invoke("dialog:openFont"),
-  onMenuOpenFont: (callback: (path: string) => void) => {
-    const handler = (_event: any, path: string) => callback(path);
-    ipcRenderer.on("menu:open-font", handler);
-    return () => ipcRenderer.removeListener("menu:open-font", handler);
-  },
-  onMenuSaveFont: (callback: (path: string) => void) => {
-    const handler = (_event: any, path: string) => callback(path);
-    ipcRenderer.on("menu:save-font", handler);
-    return () => ipcRenderer.removeListener("menu:save-font", handler);
-  },
-  onMenuUndo: (callback: () => void) => {
-    ipcRenderer.on("menu:undo", callback);
-    return () => ipcRenderer.removeListener("menu:undo", callback);
-  },
-  onMenuRedo: (callback: () => void) => {
-    ipcRenderer.on("menu:redo", callback);
-    return () => ipcRenderer.removeListener("menu:redo", callback);
-  },
-  onMenuDelete: (callback: () => void) => {
-    ipcRenderer.on("menu:delete", callback);
-    return () => ipcRenderer.removeListener("menu:delete", callback);
-  },
-  onSetTheme: (callback: (theme: ThemeName) => void) => {
-    const handler = (_event: any, theme: ThemeName) => callback(theme);
-    ipcRenderer.on("theme:set", handler);
-    return () => ipcRenderer.removeListener("theme:set", handler);
-  },
-  getTheme: (): Promise<ThemeName> => ipcRenderer.invoke("theme:get"),
-  setTheme: (theme: ThemeName): Promise<void> => ipcRenderer.invoke("theme:set", theme),
+const electronAPI: ElectronAPI = {
+  // Commands
+  openFontDialog: invoke("dialog:openFont"),
+  getTheme: invoke("theme:get"),
+  setTheme: invoke("theme:set"),
+  closeWindow: invoke("window:close"),
+  minimizeWindow: invoke("window:minimize"),
+  maximizeWindow: invoke("window:maximize"),
+  isWindowMaximized: invoke("window:isMaximized"),
+  setDocumentDirty: invoke("document:setDirty"),
+  setDocumentFilePath: invoke("document:setFilePath"),
+  saveCompleted: invoke("document:saveCompleted"),
+  getDebugState: invoke("debug:getState"),
 
-  // UI Zoom
-  onUiZoomChanged: (callback: (zoomPercent: number) => void) => {
-    const handler = (_event: any, zoomPercent: number) => callback(zoomPercent);
-    ipcRenderer.on("ui:zoom-changed", handler);
-    return () => ipcRenderer.removeListener("ui:zoom-changed", handler);
-  },
+  // Events
+  onMenuOpenFont: on("menu:open-font"),
+  onMenuSaveFont: on("menu:save-font"),
+  onMenuUndo: on("menu:undo"),
+  onMenuRedo: on("menu:redo"),
+  onMenuDelete: on("menu:delete"),
+  onMenuSelectAll: on("menu:select-all"),
+  onSetTheme: on("theme:set"),
+  onUiZoomChanged: on("ui:zoom-changed"),
+  onDevToolsToggled: on("devtools-toggled"),
+  onDebugReactScan: on("debug:react-scan"),
+  onDebugPanel: on("debug:panel"),
+  onDebugDumpSnapshot: on("debug:dump-snapshot"),
+  onDebugOverlays: on("debug:overlays"),
 
-  // DevTools toggle
-  onDevToolsToggled: (callback: () => void) => {
-    ipcRenderer.on("devtools-toggled", callback);
-    return () => ipcRenderer.removeListener("devtools-toggled", callback);
-  },
-
-  // Window controls
-  closeWindow: (): Promise<void> => ipcRenderer.invoke("window:close"),
-  minimizeWindow: (): Promise<void> => ipcRenderer.invoke("window:minimize"),
-  maximizeWindow: (): Promise<void> => ipcRenderer.invoke("window:maximize"),
-  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke("window:isMaximized"),
-
-  // Document state
-  setDocumentDirty: (dirty: boolean): Promise<void> =>
-    ipcRenderer.invoke("document:setDirty", dirty),
-  setDocumentFilePath: (filePath: string | null): Promise<void> =>
-    ipcRenderer.invoke("document:setFilePath", filePath),
-  saveCompleted: (filePath: string): Promise<void> =>
-    ipcRenderer.invoke("document:saveCompleted", filePath),
-
-  // Clipboard
+  // Clipboard (direct, no IPC)
   clipboardReadText: (): string => clipboard.readText(),
   clipboardWriteText: (text: string): void => clipboard.writeText(text),
-
-  // Debug
-  onDebugReactScan: (callback: (enabled: boolean) => void) => {
-    const handler = (_event: any, enabled: boolean) => callback(enabled);
-    ipcRenderer.on("debug:react-scan", handler);
-    return () => ipcRenderer.removeListener("debug:react-scan", handler);
-  },
-  onDebugPanel: (callback: (open: boolean) => void) => {
-    const handler = (_event: any, open: boolean) => callback(open);
-    ipcRenderer.on("debug:panel", handler);
-    return () => ipcRenderer.removeListener("debug:panel", handler);
-  },
-  onDebugDumpSnapshot: (callback: () => void) => {
-    ipcRenderer.on("debug:dump-snapshot", callback);
-    return () => ipcRenderer.removeListener("debug:dump-snapshot", callback);
-  },
-  onDebugOverlays: (
-    callback: (overlays: {
-      tightBounds: boolean;
-      hitRadii: boolean;
-      segmentBounds: boolean;
-    }) => void,
-  ) => {
-    const handler = (
-      _event: any,
-      overlays: { tightBounds: boolean; hitRadii: boolean; segmentBounds: boolean },
-    ) => callback(overlays);
-    ipcRenderer.on("debug:overlays", handler);
-    return () => ipcRenderer.removeListener("debug:overlays", handler);
-  },
-  getDebugState: (): Promise<{
-    reactScanEnabled: boolean;
-    debugPanelOpen: boolean;
-    overlays: { tightBounds: boolean; hitRadii: boolean; segmentBounds: boolean };
-  }> => ipcRenderer.invoke("debug:getState"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
-
-export type ElectronAPI = typeof electronAPI;

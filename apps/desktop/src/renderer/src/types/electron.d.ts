@@ -1,54 +1,7 @@
-/**
- * Type declarations for the Electron preload API
- *
- * Note: FontEngineAPI types are defined in @shared/bridge/FontEngineAPI.ts
- * which is the single source of truth for the preload bridge types.
- */
+import type { ElectronAPI } from "@shared/ipc/electronAPI";
 
-export type ThemeName = "light" | "dark" | "system";
-
-export interface ElectronAPI {
-  openFontDialog: () => Promise<string | null>;
-  onMenuOpenFont: (callback: (path: string) => void) => () => void;
-  onMenuSaveFont: (callback: (path: string) => void) => () => void;
-  onMenuUndo: (callback: () => void) => () => void;
-  onMenuRedo: (callback: () => void) => () => void;
-  onMenuDelete: (callback: () => void) => () => void;
-  onSetTheme: (callback: (theme: ThemeName) => void) => () => void;
-  getTheme: () => Promise<ThemeName>;
-  setTheme: (theme: ThemeName) => Promise<void>;
-  onUiZoomChanged: (callback: (zoomPercent: number) => void) => () => void;
-  onDevToolsToggled: (callback: () => void) => () => void;
-
-  closeWindow: () => Promise<void>;
-  minimizeWindow: () => Promise<void>;
-  maximizeWindow: () => Promise<void>;
-  isWindowMaximized: () => Promise<boolean>;
-
-  setDocumentDirty: (dirty: boolean) => Promise<void>;
-  setDocumentFilePath: (filePath: string | null) => Promise<void>;
-  saveCompleted: (filePath: string) => Promise<void>;
-
-  clipboardReadText: () => string;
-  clipboardWriteText: (text: string) => void;
-
-  // Debug
-  onDebugReactScan: (callback: (enabled: boolean) => void) => () => void;
-  onDebugPanel: (callback: (open: boolean) => void) => () => void;
-  onDebugDumpSnapshot: (callback: () => void) => () => void;
-  onDebugOverlays: (callback: (overlays: DebugOverlays) => void) => () => void;
-  getDebugState: () => Promise<{
-    reactScanEnabled: boolean;
-    debugPanelOpen: boolean;
-    overlays: DebugOverlays;
-  }>;
-}
-
-export interface DebugOverlays {
-  tightBounds: boolean;
-  hitRadii: boolean;
-  segmentBounds: boolean;
-}
+export type { ThemeName, DebugOverlays, DebugState } from "@shared/ipc/types";
+export type { ElectronAPI } from "@shared/ipc/electronAPI";
 
 declare global {
   interface Window {

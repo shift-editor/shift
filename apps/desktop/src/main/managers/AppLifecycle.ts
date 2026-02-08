@@ -3,6 +3,7 @@ import path from "node:path";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
 import type { MenuManager } from "./MenuManager";
+import * as ipc from "../../shared/ipc/main";
 
 export class AppLifecycle {
   private documentState: DocumentState;
@@ -98,24 +99,24 @@ export class AppLifecycle {
     if (!window) return;
 
     window.webContents.on("devtools-opened", () => {
-      window.webContents.send("devtools-toggled");
+      ipc.send(window.webContents, "devtools-toggled");
     });
 
     window.webContents.on("devtools-closed", () => {
-      window.webContents.send("devtools-toggled");
+      ipc.send(window.webContents, "devtools-toggled");
     });
   }
 
   private registerIpcHandlers() {
-    ipcMain.handle("theme:get", () => this.menuManager.getTheme());
+    ipc.handle(ipcMain, "theme:get", () => this.menuManager.getTheme());
 
-    ipcMain.handle("theme:set", (_event, theme: "light" | "dark" | "system") => {
+    ipc.handle(ipcMain, "theme:set", (_event, theme) => {
       this.menuManager.setTheme(theme);
     });
 
-    ipcMain.handle("debug:getState", () => this.menuManager.getDebugState());
+    ipc.handle(ipcMain, "debug:getState", () => this.menuManager.getDebugState());
 
-    ipcMain.handle("dialog:openFont", async () => {
+    ipc.handle(ipcMain, "dialog:openFont", async () => {
       const result = await dialog.showOpenDialog({
         properties: ["openFile"],
         filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo"] }],

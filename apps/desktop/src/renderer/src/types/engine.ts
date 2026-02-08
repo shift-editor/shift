@@ -8,6 +8,7 @@ import type {
 } from "@shift/types";
 import type { Signal } from "@/lib/reactive/signal";
 import type { PointMove } from "@shared/bridge/FontEngineAPI";
+import { Bounds } from "@shift/geo";
 
 export interface CommandResponse {
   snapshot: GlyphSnapshot;
@@ -29,7 +30,7 @@ export interface EngineCore {
   getGlyphUnicodes(): number[];
   getGlyphSvgPath(unicode: number): string | null;
   getGlyphAdvance(unicode: number): number | null;
-  getGlyphBbox(unicode: number): [number, number, number, number] | null;
+  getGlyphBbox(unicode: number): Bounds | null;
 
   startEditSession(unicode: number): void;
   endEditSession(): void;

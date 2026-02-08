@@ -1,5 +1,6 @@
 import { dialog, BrowserWindow } from "electron";
 import path from "node:path";
+import * as ipc from "../../shared/ipc/main";
 
 const AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -74,7 +75,9 @@ export class DocumentState {
       }
     }
 
-    this.window?.webContents.send("menu:save-font", savePath);
+    if (this.window) {
+      ipc.send(this.window.webContents, "menu:save-font", savePath);
+    }
     return true;
   }
 

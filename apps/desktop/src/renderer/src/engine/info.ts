@@ -1,5 +1,6 @@
 import type { FontMetadata, FontMetrics } from "@shift/types";
 import type { EngineCore } from "@/types/engine";
+import { Bounds } from "@shift/geo";
 
 export class InfoManager {
   #engine: EngineCore;
@@ -32,7 +33,7 @@ export class InfoManager {
     return this.#engine.getGlyphAdvance(unicode);
   }
 
-  getGlyphBbox(unicode: number): [number, number, number, number] | null {
+  getGlyphBbox(unicode: number): Bounds | null {
     return this.#engine.getGlyphBbox(unicode);
   }
 }

@@ -1,7 +1,7 @@
 import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, defineStateDiagram, DrawAPI } from "../core";
+import { BaseTool, type ToolName, defineStateDiagram, DrawAPI, ToolEvent } from "../core";
 import { executeAction, type PenAction } from "./actions";
 import type { PenState, PenBehavior } from "./types";
 import { PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
@@ -67,7 +67,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
     this.state = this.initialState();
   }
 
-  protected preTransition(state: PenState, event: import("../core").ToolEvent) {
+  protected preTransition(state: PenState, event: ToolEvent) {
     if (state.type === "ready" && event.type === "pointerMove") {
       return { state: { type: "ready" as const, mousePos: event.point } };
     }

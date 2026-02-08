@@ -235,7 +235,7 @@ function executeUpgradeLineToCubic(segment: LineSegment, editor: ToolContext): v
 }
 
 function executeSelectContour(contourId: ContourId, additive: boolean, editor: ToolContext): void {
-  const glyph = editor.getGlyph();
+  const glyph = editor.getActiveGlyph();
   if (!glyph) return;
 
   const contour = glyph.contours.find((c) => c.id === contourId);
