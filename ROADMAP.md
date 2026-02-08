@@ -282,6 +282,7 @@
 
 **Unicode & Naming**
 
+- [x] Unicode character database (`@shift/unicode-db` — SQLite-backed BMP codepoint lookups)
 - [ ] Editable unicode codepoint in glyph info panel
 - [ ] Support multiple unicodes per glyph
 - [ ] Unencoded glyphs (`.notdef`, ligatures)

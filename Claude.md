@@ -118,6 +118,11 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
+### Unicode DB
+
+- `pnpm generate:unicode` - Generate the Unicode BMP database (SQLite)
+- `pnpm unicode:repl` - Start interactive REPL with UnicodeDB pre-loaded
+
 ### Maintenance
 
 - `pnpm clean` - Clean build artifacts and node_modules
