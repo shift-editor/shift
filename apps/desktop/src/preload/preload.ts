@@ -1,29 +1,36 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
+import { join } from "node:path";
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
+import { GlyphInfo } from "@shift/glyph-info";
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
+import type { GlyphInfoAPI } from "../shared/bridge/GlyphInfoAPI";
 import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
 import type { ElectronAPI } from "../shared/ipc/electronAPI";
 import { listener, command } from "../shared/ipc/preload";
 
 const fontEngineInstance = new FontEngine();
+const glyphInfoResourcesDir = join(__dirname, "../../node_modules/@shift/glyph-info/resources");
+const glyphInfoInstance = new GlyphInfo(glyphInfoResourcesDir);
 
-function buildFontEngineAPI(instance: InstanceType<typeof FontEngine>): FontEngineAPI {
+function buildBridgeAPI<T>(instance: Record<string, unknown>): T {
   const api: Record<string, unknown> = {};
   const proto = Object.getPrototypeOf(instance);
   for (const name of Object.getOwnPropertyNames(proto)) {
     if (name === "constructor" || typeof instance[name] !== "function") continue;
-    api[name] = (...args: unknown[]) => instance[name](...args);
+    api[name] = (...args: unknown[]) => (instance[name] as Function)(...args);
   }
-  return api as unknown as FontEngineAPI;
+  return api as unknown as T;
 }
 
-const fontEngineAPI = buildFontEngineAPI(fontEngineInstance);
+const fontEngineAPI = buildBridgeAPI<FontEngineAPI>(fontEngineInstance);
+const glyphInfoAPI = buildBridgeAPI<GlyphInfoAPI>(glyphInfoInstance);
 
 // Expose to renderer via contextBridge
 contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftGlyphInfo", glyphInfoAPI);
 
 const on = <K extends keyof IpcEvents>(ch: K) => listener(ipcRenderer, ch);
 const invoke = <K extends keyof IpcCommands>(ch: K) => command(ipcRenderer, ch);

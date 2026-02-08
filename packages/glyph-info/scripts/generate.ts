@@ -47,10 +47,10 @@ function generate() {
   const charsetCount = generateCharsets(charsetsPath);
   console.log(`  charsets.json: ${charsetCount} charsets (${formatSize(charsetsPath)})`);
 
-  // Step 4: search.db (depends on glyph-data.json)
-  const searchDbPath = join(RESOURCES_DIR, "search.db");
-  const searchCount = generateSearchIndex(glyphDataPath, searchDbPath);
-  console.log(`  search.db: ${searchCount} entries (${formatSize(searchDbPath)})`);
+  // Step 4: search-data.json (depends on glyph-data.json)
+  const searchDataPath = join(RESOURCES_DIR, "search-data.json");
+  const searchCount = generateSearchIndex(glyphDataPath, searchDataPath);
+  console.log(`  search-data.json: ${searchCount} entries (${formatSize(searchDataPath)})`);
 
   console.log("\nDone!");
 }

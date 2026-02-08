@@ -45,9 +45,10 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSignalState } from "@/lib/reactive";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
+import { getGlyphInfo, hasGlyphInfo } from "@/engine/glyphInfo";
 import { glyphDataStore } from "@/store/GlyphDataStore";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
-import { Button, Input } from "@shift/ui";
+import { Button } from "@shift/ui";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -113,11 +114,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     overscan: OVERSCAN,
   });
 
-  const [inputValues, setInputValues] = useState<Record<string, string>>({});
-
-  const handleInputChange = useCallback((unicode: number, value: string) => {
-    setInputValues((prev) => ({ ...prev, [unicodeToHex(unicode)]: value }));
-  }, []);
+  const glyphInfo = hasGlyphInfo() ? getGlyphInfo() : null;
 
   const handleCellClick = useCallback(
     (unicode: number) => {
@@ -171,13 +168,9 @@ export const GlyphGrid = memo(function GlyphGrid() {
                       fontMetrics={fontMetrics}
                     />
                   </Button>
-                  <Input
-                    className="w-full text-center bg-none"
-                    value={inputValues[unicodeToHex(unicode)] ?? String.fromCodePoint(unicode)}
-                    onChange={(e) => handleInputChange(unicode, e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+                  <span className="w-full truncate text-center text-xs text-muted-foreground">
+                    {glyphInfo?.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
+                  </span>
                 </div>
               ))}
             </div>

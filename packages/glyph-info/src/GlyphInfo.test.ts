@@ -454,7 +454,7 @@ describe("search", () => {
     expect(results.length).toBeGreaterThan(0);
   });
 
-  it("handles special FTS5 characters gracefully", () => {
+  it("handles special characters gracefully", () => {
     // These should not crash — they may return no results
     expect(() => db.search('"')).not.toThrow();
     expect(() => db.search("(")).not.toThrow();

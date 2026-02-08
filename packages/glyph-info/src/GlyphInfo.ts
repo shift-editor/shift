@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import MiniSearch from "minisearch";
 import type { CharsetDefinition, CharsetSummary, GlyphData, SearchResult } from "./types.js";
 
 interface DecompositionData {
@@ -13,7 +13,7 @@ export class GlyphInfo {
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
-  #searchDb: Database.Database;
+  #searchIndex: MiniSearch;
 
   constructor(resourcesDir: string) {
     const glyphDataRaw: GlyphData[] = JSON.parse(
@@ -31,7 +31,14 @@ export class GlyphInfo {
 
     this.#charsets = JSON.parse(readFileSync(join(resourcesDir, "charsets.json"), "utf-8"));
 
-    this.#searchDb = new Database(join(resourcesDir, "search.db"), { readonly: true });
+    const searchData = JSON.parse(readFileSync(join(resourcesDir, "search-data.json"), "utf-8"));
+    this.#searchIndex = new MiniSearch({
+      fields: ["glyphName", "unicodeName", "altNames", "category", "subCategory"],
+      storeFields: ["codepoint", "glyphName", "unicodeName", "category", "subCategory"],
+      idField: "codepoint",
+      searchOptions: { prefix: true, combineWith: "AND" },
+    });
+    this.#searchIndex.addAll(searchData);
   }
 
   // --- Glyph Data (Map lookups) ---
@@ -92,49 +99,30 @@ export class GlyphInfo {
     return charset?.codepoints ?? [];
   }
 
-  // --- Search (FTS5) ---
+  // --- Search (MiniSearch) ---
 
   search(query: string, limit = 50): SearchResult[] {
     if (!query.trim()) return [];
 
-    // Strip FTS5 special characters that would cause syntax errors
     const sanitized = query.trim().replace(/['"()*:^{}]/g, " ");
     if (!sanitized.trim()) return [];
 
-    const ftsQuery = sanitized
-      .trim()
-      .split(/\s+/)
-      .map((term) => `${term}*`)
-      .join(" ");
+    const results = this.#searchIndex.search(sanitized, {
+      prefix: true,
+      combineWith: "AND",
+    });
 
-    const rows = this.#searchDb
-      .prepare(
-        `SELECT codepoint, glyph_name, unicode_name, category, sub_category, rank
-         FROM search_index
-         WHERE search_index MATCH ?
-         ORDER BY rank
-         LIMIT ?`,
-      )
-      .all(ftsQuery, limit) as Array<{
-      codepoint: number;
-      glyph_name: string | null;
-      unicode_name: string | null;
-      category: string | null;
-      sub_category: string | null;
-      rank: number;
-    }>;
-
-    return rows.map((r) => ({
-      codepoint: r.codepoint,
-      glyphName: r.glyph_name,
-      unicodeName: r.unicode_name,
-      category: r.category,
-      subCategory: r.sub_category,
-      rank: r.rank,
+    return results.slice(0, limit).map((r) => ({
+      codepoint: r.codepoint as number,
+      glyphName: (r.glyphName as string | null) ?? null,
+      unicodeName: (r.unicodeName as string | null) ?? null,
+      category: (r.category as string | null) ?? null,
+      subCategory: (r.subCategory as string | null) ?? null,
+      rank: r.score,
     }));
   }
 
   close(): void {
-    this.#searchDb.close();
+    // No-op — MiniSearch is in-memory, no resources to release
   }
 }

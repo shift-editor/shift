@@ -3,5 +3,5 @@ import { externalizeDepsPlugin } from "electron-vite";
 
 // https://vitejs.dev/config
 export default defineConfig({
-  plugins: [externalizeDepsPlugin()],
+  plugins: [externalizeDepsPlugin({ exclude: ["@shift/glyph-info"] })],
 });
