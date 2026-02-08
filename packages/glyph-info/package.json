@@ -1,8 +1,8 @@
 {
-  "name": "@shift/unicode-db",
+  "name": "@shift/glyph-info",
   "version": "0.0.1",
   "private": true,
-  "description": "SQLite-backed Unicode BMP character database for font editing",
+  "description": "Glyph reference data for font editing — names, categories, decomposition, charsets, and FTS5 search",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,13 +20,11 @@
     "repl": "tsx scripts/repl.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
-    "unicode-blocks": "^2.0.4",
-    "unicode-properties": "^1.4.1"
+    "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
-    "@types/unicode-properties": "^1.3.2",
+    "fast-xml-parser": "^5.2.0",
     "unicode-name": "^1.1.0",
     "typescript": "^5.3.0",
     "vitest": "^4.0.17"

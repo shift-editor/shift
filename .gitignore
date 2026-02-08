@@ -102,5 +102,6 @@ npm/
 
 .plans/
 
-# Generated Unicode DB
-packages/unicode-db/resources/*.db
+# Generated Glyph Info resources
+packages/glyph-info/resources/*.json
+packages/glyph-info/resources/*.db

@@ -118,10 +118,10 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
-### Unicode DB
+### Glyph Info
 
-- `pnpm generate:unicode` - Generate the Unicode BMP database (SQLite)
-- `pnpm unicode:repl` - Start interactive REPL with UnicodeDB pre-loaded
+- `pnpm generate:glyph-info` - Generate glyph data, decomposition, charsets, and FTS5 search index
+- `pnpm glyph-info:repl` - Start interactive REPL with GlyphInfo pre-loaded
 
 ### Maintenance
 

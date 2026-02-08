@@ -282,11 +282,11 @@
 
 **Unicode & Naming**
 
-- [x] Unicode character database (`@shift/unicode-db` — SQLite-backed BMP codepoint lookups)
+- [x] Unicode character database (`@shift/glyph-info` — glyph names, categories, decomposition, charsets, FTS5 search)
 - [ ] Editable unicode codepoint in glyph info panel
 - [ ] Support multiple unicodes per glyph
 - [ ] Unencoded glyphs (`.notdef`, ligatures)
-- [ ] AGL (Adobe Glyph List) name lookup
+- [x] AGL (Adobe Glyph List) name lookup
 - [ ] Rename glyph with cascade
 
 ---
