@@ -327,6 +327,40 @@ impl FontEngine {
       .ok_or(Error::new(Status::GenericFailure, "No edit session active"))
   }
 
+  fn command(&mut self, f: impl FnOnce(&mut EditSession) -> Vec<PointId>) -> Result<String> {
+    let session = self.get_edit_session()?;
+    let ids = f(session);
+    Ok(to_json(&CommandResult::success(session, ids)))
+  }
+
+  fn command_simple(&mut self, f: impl FnOnce(&mut EditSession)) -> Result<String> {
+    let session = self.get_edit_session()?;
+    f(session);
+    Ok(to_json(&CommandResult::success_simple(session)))
+  }
+
+  fn command_try(
+    &mut self,
+    f: impl FnOnce(&mut EditSession) -> std::result::Result<Vec<PointId>, String>,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+    match f(session) {
+      Ok(ids) => Ok(to_json(&CommandResult::success(session, ids))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
+    }
+  }
+
+  fn command_try_simple(
+    &mut self,
+    f: impl FnOnce(&mut EditSession) -> std::result::Result<(), String>,
+  ) -> Result<String> {
+    let session = self.get_edit_session()?;
+    match f(session) {
+      Ok(()) => Ok(to_json(&CommandResult::success_simple(session))),
+      Err(e) => Ok(to_json(&CommandResult::error(e))),
+    }
+  }
+
   #[napi]
   pub fn end_edit_session(&mut self) -> Result<()> {
     let session = self
@@ -376,20 +410,13 @@ impl FontEngine {
 
   #[napi]
   pub fn set_active_contour(&mut self, contour_id: String) -> Result<String> {
-    let session = self.get_edit_session()?;
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-
-    session.set_active_contour(cid);
-    let result = CommandResult::success_simple(session);
-    Ok(to_json(&result))
+    self.command_simple(|s| s.set_active_contour(cid))
   }
 
   #[napi]
   pub fn clear_active_contour(&mut self) -> Result<String> {
-    let session = self.get_edit_session()?;
-    session.clear_active_contour();
-    let result = CommandResult::success_simple(session);
-    Ok(to_json(&result))
+    self.command_simple(|s| s.clear_active_contour())
   }
 
   #[napi]
@@ -404,13 +431,8 @@ impl FontEngine {
 
   #[napi]
   pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
-    let session = self.get_edit_session()?;
     let pt = parse_or_err!(point_type, PointType, "point type");
-
-    match session.add_point(x, y, pt, smooth) {
-      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try(|s| s.add_point(x, y, pt, smooth).map(|id| vec![id]))
   }
 
   #[napi]
@@ -422,14 +444,12 @@ impl FontEngine {
     point_type: String,
     smooth: bool,
   ) -> Result<String> {
-    let session = self.get_edit_session()?;
     let pt = parse_or_err!(point_type, PointType, "point type");
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-
-    match session.add_point_to_contour(cid, x, y, pt, smooth) {
-      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try(|s| {
+      s.add_point_to_contour(cid, x, y, pt, smooth)
+        .map(|id| vec![id])
+    })
   }
 
   #[napi]
@@ -441,21 +461,19 @@ impl FontEngine {
     point_type: String,
     smooth: bool,
   ) -> Result<String> {
-    let session = self.get_edit_session()?;
     let pt = parse_or_err!(point_type, PointType, "point type");
     let before_id = parse_or_err!(before_point_id, PointId, "point ID");
-
-    match session.insert_point_before(before_id, x, y, pt, smooth) {
-      Ok(point_id) => Ok(to_json(&CommandResult::success(session, vec![point_id]))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try(|s| {
+      s.insert_point_before(before_id, x, y, pt, smooth)
+        .map(|id| vec![id])
+    })
   }
 
   #[napi]
   pub fn add_contour(&mut self) -> Result<String> {
-    let session = self.get_edit_session()?;
-    let _contour_id = session.add_empty_contour();
-    Ok(to_json(&CommandResult::success_simple(session)))
+    self.command_simple(|s| {
+      s.add_empty_contour();
+    })
   }
 
   #[napi]
@@ -475,30 +493,18 @@ impl FontEngine {
 
   #[napi]
   pub fn open_contour(&mut self, contour_id: String) -> Result<String> {
-    let session = self.get_edit_session()?;
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-
-    match session.open_contour(cid) {
-      Ok(_) => Ok(to_json(&CommandResult::success_simple(session))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try_simple(|s| s.open_contour(cid))
   }
 
   #[napi]
   pub fn reverse_contour(&mut self, contour_id: String) -> Result<String> {
-    let session = self.get_edit_session()?;
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-
-    match session.reverse_contour(cid) {
-      Ok(_) => Ok(to_json(&CommandResult::success_simple(session))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try_simple(|s| s.reverse_contour(cid))
   }
 
   #[napi]
   pub fn move_points(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
-    let session = self.get_edit_session()?;
-
     let parsed_ids: Vec<PointId> = point_ids
       .iter()
       .filter_map(|id_str| id_str.parse::<PointId>().ok())
@@ -510,14 +516,11 @@ impl FontEngine {
       )));
     }
 
-    let moved = session.move_points(&parsed_ids, dx, dy);
-    Ok(to_json(&CommandResult::success(session, moved)))
+    self.command(|s| s.move_points(&parsed_ids, dx, dy))
   }
 
   #[napi]
   pub fn remove_points(&mut self, point_ids: Vec<String>) -> Result<String> {
-    let session = self.get_edit_session()?;
-
     let parsed_ids: Vec<PointId> = point_ids
       .iter()
       .filter_map(|id_str| id_str.parse::<PointId>().ok())
@@ -529,19 +532,13 @@ impl FontEngine {
       )));
     }
 
-    let removed = session.remove_points(&parsed_ids);
-    Ok(to_json(&CommandResult::success(session, removed)))
+    self.command(|s| s.remove_points(&parsed_ids))
   }
 
   #[napi]
   pub fn toggle_smooth(&mut self, point_id: String) -> Result<String> {
-    let session = self.get_edit_session()?;
     let parsed_id = parse_or_err!(point_id, PointId, "point ID");
-
-    match session.toggle_smooth(parsed_id) {
-      Ok(_) => Ok(to_json(&CommandResult::success(session, vec![parsed_id]))),
-      Err(e) => Ok(to_json(&CommandResult::error(e))),
-    }
+    self.command_try(|s| s.toggle_smooth(parsed_id).map(|_| vec![parsed_id]))
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -589,11 +586,10 @@ impl FontEngine {
 
   #[napi]
   pub fn remove_contour(&mut self, contour_id: String) -> Result<String> {
-    let session = self.get_edit_session()?;
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-
-    session.remove_contour(cid);
-    Ok(to_json(&CommandResult::success_simple(session)))
+    self.command_simple(|s| {
+      s.remove_contour(cid);
+    })
   }
 
   // ═══════════════════════════════════════════════════════════

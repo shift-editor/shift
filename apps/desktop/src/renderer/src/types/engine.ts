@@ -7,7 +7,7 @@ import type {
   FontMetrics,
 } from "@shift/types";
 import type { Signal } from "@/lib/reactive/signal";
-import type { PointMove } from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
 import { Bounds } from "@shift/geo";
 
 export interface CommandResponse {
@@ -17,6 +17,7 @@ export interface CommandResponse {
 
 export interface EngineCore {
   readonly $glyph: Signal<GlyphSnapshot | null>;
+  readonly raw: FontEngineAPI;
   hasSession(): boolean;
   getGlyph(): GlyphSnapshot | null;
   emitGlyph(glyph: GlyphSnapshot | null): void;
@@ -41,32 +42,6 @@ export interface EngineCore {
 
   getSnapshot(): GlyphSnapshot;
   restoreSnapshot(snapshot: GlyphSnapshot): void;
-
-  addPoint(x: number, y: number, pointType: PointType, smooth: boolean): CommandResponse;
-  addPointToContour(
-    contourId: ContourId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean,
-  ): CommandResponse;
-  movePoints(pointIds: PointId[], dx: number, dy: number): CommandResponse;
-  removePoints(pointIds: PointId[]): CommandResponse;
-  insertPointBefore(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean,
-  ): CommandResponse;
-  toggleSmooth(pointId: PointId): CommandResponse;
-  addContour(): CommandResponse;
-  closeContour(): CommandResponse;
-  setActiveContour(contourId: ContourId): CommandResponse;
-  clearActiveContour(): CommandResponse;
-  reverseContour(contourId: ContourId): CommandResponse;
-  removeContour(contourId: ContourId): CommandResponse;
-  openContour(contourId: ContourId): CommandResponse;
 
   setPointPositions(moves: PointMove[]): boolean;
 

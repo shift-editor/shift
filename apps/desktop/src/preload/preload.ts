@@ -3,7 +3,6 @@
 
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
-import { ContourId } from "@shift/types";
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
 import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
 import type { ElectronAPI } from "../shared/ipc/electronAPI";
@@ -11,151 +10,17 @@ import { listener, command } from "../shared/ipc/preload";
 
 const fontEngineInstance = new FontEngine();
 
-const fontEngineAPI = {
-  loadFont: (path: string) => {
-    return fontEngineInstance.loadFont(path);
-  },
+function buildFontEngineAPI(instance: InstanceType<typeof FontEngine>): FontEngineAPI {
+  const api: Record<string, unknown> = {};
+  const proto = Object.getPrototypeOf(instance);
+  for (const name of Object.getOwnPropertyNames(proto)) {
+    if (name === "constructor" || typeof instance[name] !== "function") continue;
+    api[name] = (...args: unknown[]) => instance[name](...args);
+  }
+  return api as unknown as FontEngineAPI;
+}
 
-  saveFont: (path: string) => {
-    return fontEngineInstance.saveFont(path);
-  },
-
-  saveFontAsync: (path: string): Promise<void> => {
-    return fontEngineInstance.saveFontAsync(path);
-  },
-
-  getMetadata: () => {
-    return fontEngineInstance.getMetadata();
-  },
-
-  getMetrics: () => {
-    return fontEngineInstance.getMetrics();
-  },
-
-  getGlyphCount: (): number => {
-    return fontEngineInstance.getGlyphCount();
-  },
-
-  getGlyphUnicodes: (): number[] => {
-    return fontEngineInstance.getGlyphUnicodes();
-  },
-
-  getGlyphSvgPath: (unicode: number): string | null => {
-    return fontEngineInstance.getGlyphSvgPath(unicode) ?? null;
-  },
-
-  getGlyphAdvance: (unicode: number): number | null => {
-    return fontEngineInstance.getGlyphAdvance(unicode) ?? null;
-  },
-
-  getGlyphBbox: (unicode: number): [number, number, number, number] | null => {
-    return fontEngineInstance.getGlyphBbox(unicode) ?? null;
-  },
-
-  startEditSession: (unicode: number) => {
-    return fontEngineInstance.startEditSession(unicode);
-  },
-
-  endEditSession: () => {
-    return fontEngineInstance.endEditSession();
-  },
-
-  hasEditSession: (): boolean => {
-    return fontEngineInstance.hasEditSession();
-  },
-
-  getEditingUnicode: (): number | null => {
-    return fontEngineInstance.getEditingUnicode() ?? null;
-  },
-
-  getSnapshotData: () => {
-    return fontEngineInstance.getSnapshotData();
-  },
-
-  addEmptyContour: (): string => {
-    return fontEngineInstance.addEmptyContour();
-  },
-
-  addContour: (): string => {
-    return fontEngineInstance.addContour();
-  },
-
-  getActiveContourId: (): ContourId | null => {
-    return fontEngineInstance.getActiveContourId() ?? null;
-  },
-
-  closeContour: (): string => {
-    return fontEngineInstance.closeContour();
-  },
-
-  setActiveContour: (contourId: string): string => {
-    return fontEngineInstance.setActiveContour(contourId);
-  },
-
-  clearActiveContour: (): string => {
-    return fontEngineInstance.clearActiveContour();
-  },
-
-  reverseContour: (contourId: string): string => {
-    return fontEngineInstance.reverseContour(contourId);
-  },
-
-  removeContour: (contourId: string): string => {
-    return fontEngineInstance.removeContour(contourId);
-  },
-
-  openContour: (contourId: string): string => {
-    return fontEngineInstance.openContour(contourId);
-  },
-
-  addPoint: (x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string => {
-    return fontEngineInstance.addPoint(x, y, pointType, smooth);
-  },
-
-  addPointToContour: (
-    contourId: string,
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string => {
-    return fontEngineInstance.addPointToContour(contourId, x, y, pointType, smooth);
-  },
-
-  movePoints: (pointIds: string[], dx: number, dy: number): string => {
-    return fontEngineInstance.movePoints(pointIds, dx, dy);
-  },
-
-  removePoints: (pointIds: string[]): string => {
-    return fontEngineInstance.removePoints(pointIds);
-  },
-
-  insertPointBefore: (
-    beforePointId: string,
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string => {
-    return fontEngineInstance.insertPointBefore(beforePointId, x, y, pointType, smooth);
-  },
-
-  toggleSmooth: (pointId: string): string => {
-    return fontEngineInstance.toggleSmooth(pointId);
-  },
-
-  pasteContours: (contoursJson: string, offsetX: number, offsetY: number): string => {
-    return fontEngineInstance.pasteContours(contoursJson, offsetX, offsetY);
-  },
-
-  setPointPositions: (moves: Array<{ id: string; x: number; y: number }>): boolean => {
-    return fontEngineInstance.setPointPositions(moves);
-  },
-
-  restoreSnapshot: (snapshotJson: string): boolean => {
-    return fontEngineInstance.restoreSnapshot(snapshotJson);
-  },
-} satisfies FontEngineAPI;
+const fontEngineAPI = buildFontEngineAPI(fontEngineInstance);
 
 // Expose to renderer via contextBridge
 contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
