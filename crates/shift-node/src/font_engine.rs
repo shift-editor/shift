@@ -395,7 +395,6 @@ impl FontEngine {
     self.current_edit_session.as_ref().map(|s| s.unicode())
   }
 
-  #[napi]
   pub fn add_empty_contour(&mut self) -> Result<String> {
     let edit_session = self.get_edit_session()?;
     let contour_id = edit_session.add_empty_contour();
@@ -406,6 +405,11 @@ impl FontEngine {
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
     Ok(edit_session.active_contour_id().map(|id| id.to_string()))
+  }
+
+  #[napi]
+  pub fn set_x_advance(&mut self, width: f64) -> Result<String> {
+    self.command_simple(|s| s.set_x_advance(width))
   }
 
   #[napi]

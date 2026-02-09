@@ -45,6 +45,10 @@ impl EditSession {
         self.active_contour_id
     }
 
+    pub fn set_x_advance(&mut self, width: f64) {
+        self.layer.set_width(width);
+    }
+
     pub fn set_active_contour(&mut self, contour_id: ContourId) {
         self.active_contour_id = Some(contour_id);
     }
@@ -313,6 +317,8 @@ impl EditSession {
             .active_contour_id
             .as_ref()
             .and_then(|id_str| id_str.parse::<ContourId>().ok());
+
+        self.set_x_advance(snapshot.x_advance);
 
         for contour_snapshot in &snapshot.contours {
             let contour_id = contour_snapshot.id.parse::<ContourId>().ok();

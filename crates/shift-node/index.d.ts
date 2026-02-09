@@ -25,8 +25,8 @@ export declare class FontEngine {
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
-  addEmptyContour(): string;
   getActiveContourId(): string | null;
+  setXAdvance(width: number): string;
   setActiveContour(contourId: string): string;
   clearActiveContour(): string;
   getSnapshotData(): string;

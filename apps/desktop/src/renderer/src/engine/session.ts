@@ -1,10 +1,18 @@
 import type { GlyphSnapshot } from "@shift/types";
-import type { EngineCore } from "@/types/engine";
+
+export interface Session {
+  startEditSession(unicode: number): void;
+  endEditSession(): void;
+  hasEditSession(): boolean;
+  getEditingUnicode(): number | null;
+  getSnapshot(): GlyphSnapshot;
+  emitGlyph(glyph: GlyphSnapshot | null): void;
+}
 
 export class SessionManager {
-  #engine: EngineCore;
+  #engine: Session;
 
-  constructor(engine: EngineCore) {
+  constructor(engine: Session) {
     this.#engine = engine;
   }
 

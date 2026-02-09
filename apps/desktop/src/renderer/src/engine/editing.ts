@@ -3,14 +3,26 @@ import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
-import type { PointMove } from "@shared/bridge/FontEngineAPI";
-import type { EngineCore, CommandResponse, PasteResult, PointEdit } from "@/types/engine";
+import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
+import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 
-export class EditingManager {
-  #engine: EngineCore;
+export interface EditingEngineDeps {
+  readonly raw: FontEngineAPI;
+  hasSession(): boolean;
+  getGlyph(): GlyphSnapshot | null;
+  emitGlyph(glyph: GlyphSnapshot | null): void;
+  getActiveContourId(): ContourId | null;
+  getSnapshot(): GlyphSnapshot;
+  restoreSnapshot(snapshot: GlyphSnapshot): void;
+  setPointPositions(moves: PointMove[]): boolean;
+  pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult;
+}
 
-  constructor(engine: EngineCore) {
+export class EditingManager {
+  #engine: EditingEngineDeps;
+
+  constructor(engine: EditingEngineDeps) {
     this.#engine = engine;
   }
 
@@ -114,6 +126,10 @@ export class EditingManager {
   getActiveContourId(): ContourId | null {
     if (!this.#engine.hasSession()) return null;
     return this.#engine.getActiveContourId();
+  }
+
+  setXAdvance(width: number): void {
+    this.#dispatchVoid(this.#engine.raw.setXAdvance(width));
   }
 
   setActiveContour(contourId: ContourId): void {

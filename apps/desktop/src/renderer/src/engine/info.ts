@@ -1,11 +1,20 @@
 import type { FontMetadata, FontMetrics } from "@shift/types";
-import type { EngineCore } from "@/types/engine";
 import { Bounds } from "@shift/geo";
 
-export class InfoManager {
-  #engine: EngineCore;
+export interface Info {
+  getMetadata(): FontMetadata;
+  getMetrics(): FontMetrics;
+  getGlyphCount(): number;
+  getGlyphUnicodes(): number[];
+  getGlyphSvgPath(unicode: number): string | null;
+  getGlyphAdvance(unicode: number): number | null;
+  getGlyphBbox(unicode: number): Bounds | null;
+}
 
-  constructor(engine: EngineCore) {
+export class InfoManager {
+  #engine: Info;
+
+  constructor(engine: Info) {
     this.#engine = engine;
   }
 

@@ -1,24 +1,27 @@
-import { Input } from "@shift/ui";
 import { SidebarSection } from "./SidebarSection";
+import { EditableSidebarInput } from "./EditableSidebarInput";
 import Glyph from "@/assets/sidebar/placeholder-glyph.svg";
+import { getEditor } from "@/store/store";
+import { useSignalState } from "@/lib/reactive";
 
 export const GlyphSection = () => {
+  const editor = getEditor();
+  const glyph = useSignalState(editor.glyph);
+  if (!glyph) return null;
+
   return (
     <SidebarSection title="Glyph">
       <div className="flex justify-center items-center gap-2">
-        <Input className="text-right bg-transparent" value="20" />
+        <EditableSidebarInput className="text-right bg-transparent" value={20} />
         <div>
           <Glyph />
         </div>
-        <Input className="text-left bg-transparent" value="20" />
+        <EditableSidebarInput className="text-left bg-transparent" value={20} />
       </div>
-      <Input className="text-center bg-transparent" value="600" />
-      <Input
+      <EditableSidebarInput
         className="text-center bg-transparent"
-        value="A"
-        onChange={(e) => {
-          console.log(e.target.value);
-        }}
+        value={glyph.xAdvance}
+        onValueChange={(width) => editor.setXAdvance(width)}
       />
     </SidebarSection>
   );

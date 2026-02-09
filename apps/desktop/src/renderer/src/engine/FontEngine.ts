@@ -2,15 +2,15 @@ import type { GlyphSnapshot, FontMetadata, FontMetrics, ContourId } from "@shift
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import { getNative, hasNative } from "./native";
 import { NativeOperationError } from "./errors";
-import { EditingManager } from "./editing";
-import { SessionManager } from "./session";
-import { InfoManager } from "./info";
-import { IOManager } from "./io";
+import { EditingManager, type EditingEngineDeps } from "./editing";
+import { SessionManager, type Session } from "./session";
+import { InfoManager, type Info } from "./info";
+import { IOManager, type IO } from "./io";
 import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
-import type { EngineCore, PasteResult } from "@/types/engine";
+import type { PasteResult } from "@/types/engine";
 import { Bounds } from "@shift/geo";
 
-export class FontEngine implements EngineCore {
+export class FontEngine implements EditingEngineDeps, Session, Info, IO {
   readonly editing: EditingManager;
   readonly session: SessionManager;
   readonly info: InfoManager;
@@ -106,10 +106,6 @@ export class FontEngine implements EngineCore {
 
   getEditingUnicode(): number | null {
     return this.#raw.getEditingUnicode();
-  }
-
-  addEmptyContour(): string {
-    return this.#raw.addEmptyContour();
   }
 
   getActiveContourId(): ContourId | null {

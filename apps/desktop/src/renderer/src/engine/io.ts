@@ -1,9 +1,12 @@
-import type { EngineCore } from "@/types/engine";
+export interface IO {
+  loadFont(path: string): void;
+  saveFontAsync(path: string): Promise<void>;
+}
 
 export class IOManager {
-  #engine: EngineCore;
+  #engine: IO;
 
-  constructor(engine: EngineCore) {
+  constructor(engine: IO) {
     this.#engine = engine;
   }
 

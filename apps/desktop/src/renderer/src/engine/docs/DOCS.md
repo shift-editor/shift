@@ -9,21 +9,21 @@ The engine layer provides a high-level TypeScript API for font editing, organizi
 ## Architecture
 
 ```
-FontEngine implements EngineCore
+FontEngine implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
 ├── $glyph: Signal<GlyphSnapshot | null>
 ├── editing: EditingManager      (point/contour mutations, smart edits)
 ├── session: SessionManager      (edit session lifecycle)
 ├── info: InfoManager            (font metadata)
 └── io: IOManager                (file operations)
     ↓
-EngineCore interface { native, hasSession(), commit(), getGlyph(), emitGlyph() }
+Per-manager dep interfaces (focused slices of FontEngine)
     ↓
 window.shiftFont (Native NAPI via contextBridge)
 ```
 
 ### Key Design Decisions
 
-1. **Interface-Based DI**: `FontEngine` implements `EngineCore` and passes `this` to managers. Managers depend on the `EngineCore` abstraction, enabling easy testing with mocks.
+1. **Per-Manager Dep Interfaces**: Each manager declares a focused deps interface (`EditingEngineDeps`, `SessionEngineDeps`, etc.) for exactly the methods it uses. `FontEngine` implements all of them and passes `this` to each manager.
 2. **Centralized Commit**: All native mutations flow through `commit()`, which parses JSON, checks for errors (throws `NativeOperationError` on failure), and updates the glyph signal. Callers never check `result.success`.
 3. **Reactive Signal**: Single `$glyph` signal as source of truth for glyph state.
 4. **Session Validation**: All editing managers validate session before operations.
@@ -31,24 +31,18 @@ window.shiftFont (Native NAPI via contextBridge)
 
 ## Key Concepts
 
-### EngineCore Interface
+### Per-Manager Dep Interfaces
 
-The contract that `FontEngine` implements and managers depend on:
+Each manager declares a focused deps interface for exactly the methods it uses:
 
-```typescript
-interface EngineCore {
-  readonly native: NativeFontEngine;
-  hasSession(): boolean;
-  getGlyph(): GlyphSnapshot | null;
-  commit(operation: () => string): void;
-  commit<T>(operation: () => string, extract: (result: CommandResult) => T): T;
-  emitGlyph(glyph: GlyphSnapshot | null): void;
-}
-```
+- `EditingEngineDeps` — raw API, session check, glyph access, snapshot restore, paste
+- `SessionEngineDeps` — session lifecycle, snapshot, glyph emit
+- `InfoEngineDeps` — metadata, metrics, glyph queries
+- `IOEngineDeps` — load/save
 
 ### FontEngine Class
 
-Central orchestrator implementing `EngineCore`:
+Central orchestrator implementing all dep interfaces:
 
 ```typescript
 const engine = new FontEngine();

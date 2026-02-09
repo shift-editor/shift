@@ -116,17 +116,20 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
 
   useEffect(() => {
     const editor = getEditor();
+    if (!window.electronAPI) return () => {};
 
-    const unsubscribeUndo = window.electronAPI?.onMenuUndo(() => editor.undo());
-    const unsubscribeRedo = window.electronAPI?.onMenuRedo(() => editor.redo());
-    const unsubscribeDelete = window.electronAPI?.onMenuDelete(() => {
+    const { onMenuUndo, onMenuRedo, onMenuDelete } = window.electronAPI;
+
+    const unsubscribeUndo = onMenuUndo(() => editor.undo());
+    const unsubscribeRedo = onMenuRedo(() => editor.redo());
+    const unsubscribeDelete = onMenuDelete(() => {
       editor.deleteSelectedPoints();
     });
 
     return () => {
-      unsubscribeUndo?.();
-      unsubscribeRedo?.();
-      unsubscribeDelete?.();
+      unsubscribeUndo();
+      unsubscribeRedo();
+      unsubscribeDelete();
     };
   }, []);
 

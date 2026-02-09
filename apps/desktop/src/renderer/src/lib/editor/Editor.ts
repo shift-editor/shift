@@ -618,6 +618,10 @@ export class Editor implements EditorFacade {
     return this.#$glyph.value;
   }
 
+  public getActiveGlyphUnicode(): number | null {
+    return this.#fontEngine.session.getEditingUnicode();
+  }
+
   public get commandHistory(): CommandHistory {
     return this.#commandHistory;
   }
@@ -688,6 +692,16 @@ export class Editor implements EditorFacade {
 
   public setViewportUpm(upm: number) {
     this.#viewport.upm = upm;
+  }
+
+  public get xAdvance(): number {
+    return this.glyph.value.xAdvance;
+  }
+
+  public setXAdvance(width: number): void {
+    this.beginPreview();
+    this.#fontEngine.editing.setXAdvance(width);
+    this.commitPreview("Set X Advance");
   }
 
   public updateMetricsFromFont(): void {

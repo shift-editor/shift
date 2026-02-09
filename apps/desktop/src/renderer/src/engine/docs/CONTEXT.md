@@ -13,7 +13,7 @@
 ```
 src/renderer/src/engine/
 ├── index.ts           # Public exports barrel
-├── FontEngine.ts      # Main orchestrator class (implements EngineCore)
+├── FontEngine.ts      # Main orchestrator class (implements per-manager dep interfaces)
 ├── editing.ts         # EditingManager (point/contour ops, smart edits)
 ├── session.ts         # SessionManager (lifecycle)
 ├── info.ts            # InfoManager (metadata)
@@ -26,23 +26,21 @@ src/renderer/src/engine/
 
 ## Core Abstractions
 
-### EngineCore (types/engine.ts)
+### Per-Manager Dep Interfaces
 
-```typescript
-interface EngineCore {
-  readonly native: NativeFontEngine;
-  hasSession(): boolean;
-  getGlyph(): GlyphSnapshot | null;
-  commit(operation: () => string): void;
-  commit<T>(operation: () => string, extract: (result: CommandResult) => T): T;
-  emitGlyph(glyph: GlyphSnapshot | null): void;
-}
-```
+Each manager declares its own focused deps interface:
+
+- `EditingEngineDeps` (editing.ts) — raw API, session check, glyph access, snapshot ops, paste
+- `SessionEngineDeps` (session.ts) — session lifecycle, snapshot, glyph emit
+- `InfoEngineDeps` (info.ts) — metadata, metrics, glyph queries
+- `IOEngineDeps` (io.ts) — load/save
 
 ### FontEngine (FontEngine.ts)
 
 ```typescript
-export class FontEngine implements EngineCore {
+export class FontEngine
+  implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
+{
   readonly editing: EditingManager;
   readonly session: SessionManager;
   readonly info: InfoManager;
@@ -81,12 +79,12 @@ type Segment = LineSegment | QuadSegment | CubicSegment;
 
 ## Key Patterns
 
-### Interface-Based DI (EngineCore)
+### Per-Manager Dep Interfaces
 
 ```typescript
-// FontEngine implements EngineCore and passes `this` to all managers
-class FontEngine implements EngineCore {
-  constructor(native?: NativeFontEngine) {
+// FontEngine implements all dep interfaces and passes `this` to each manager
+class FontEngine implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps {
+  constructor(raw?: FontEngineAPI) {
     this.session = new SessionManager(this);
     this.editing = new EditingManager(this);
     this.info = new InfoManager(this);
@@ -94,10 +92,10 @@ class FontEngine implements EngineCore {
   }
 }
 
-// Managers accept the EngineCore abstraction, not FontEngine
+// Each manager accepts its focused dep interface
 class EditingManager {
-  #engine: EngineCore;
-  constructor(engine: EngineCore) {
+  #engine: EditingEngineDeps;
+  constructor(engine: EditingEngineDeps) {
     this.#engine = engine;
   }
 }
@@ -237,5 +235,5 @@ for (const seg of segments) {
 3. **ID Types**: PointId and ContourId are branded strings (type safety)
 4. **JSON Parse**: Native returns JSON strings, `commit()` parses and validates them
 5. **Error at Boundary**: `commit()` throws `NativeOperationError` on failure — callers handle only the happy path
-6. **Interface DI**: Managers depend on `EngineCore` interface, not `FontEngine` concrete class
+6. **Per-Manager DI**: Managers depend on focused dep interfaces, not `FontEngine` concrete class
 7. **Native Availability**: `getNative()` throws if preload not ready

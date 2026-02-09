@@ -11,6 +11,8 @@ import type {
 import { Glyphs } from "@shift/font";
 
 export class MockFontEngine implements FontEngineAPI {
+  // Note: also satisfies EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
+  // when wrapped by FontEngine (used via managers in tests)
   #snapshot: GlyphSnapshot | null = null;
   #nextId = 1;
 
@@ -129,7 +131,7 @@ export class MockFontEngine implements FontEngineAPI {
     return true;
   }
 
-  addEmptyContour(): string {
+  #addEmptyContour(): ContourId {
     return this.#withSession((snap) => {
       const contourId = this.#generateId() as ContourId;
       snap.contours.push({ id: contourId, points: [], closed: false });
@@ -139,7 +141,7 @@ export class MockFontEngine implements FontEngineAPI {
   }
 
   addContour(): string {
-    this.addEmptyContour();
+    this.#addEmptyContour();
     return this.#makeResult(true, []);
   }
 
@@ -154,6 +156,13 @@ export class MockFontEngine implements FontEngineAPI {
     if (activeContour) activeContour.closed = true;
 
     return this.#makeResult(true, []);
+  }
+
+  setXAdvance(width: number): string {
+    return this.#withSession((snap) => {
+      snap.xAdvance = width;
+      return this.#makeResult(true, []);
+    });
   }
 
   setActiveContour(contourId: string): string {
@@ -210,7 +219,7 @@ export class MockFontEngine implements FontEngineAPI {
   addPoint(x: number, y: number, pointType: PointType, smooth: boolean): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
-    if (!this.#snapshot.activeContourId) this.addEmptyContour();
+    if (!this.#snapshot.activeContourId) this.#addEmptyContour();
 
     const activeContour = this.#findContour(this.#snapshot.activeContourId ?? "");
     if (!activeContour) return this.#makeResult(false, [], "No active contour");
