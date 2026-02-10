@@ -1,5 +1,7 @@
 import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Rect2D, Point2D, PointId, FontMetrics } from "@shift/types";
+import type { Glyph, Rect2D, Point2D, PointId } from "@shift/types";
+import type { Font } from "@/lib/editor/Font";
+import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { SnapIndicator } from "../snapping/types";
@@ -33,22 +35,42 @@ import {
   renderDebugSegmentBounds,
 } from "./passes";
 
+/**
+ * Parameters that position and scale the UPM coordinate system onto the screen.
+ * Combines zoom/pan (user interaction) with the fixed UPM-to-pixel mapping
+ * derived from font metrics and canvas dimensions.
+ */
 export interface ViewportTransform {
+  /** User zoom level (1.0 = no zoom). Multiplied into the affine transform. */
   zoom: number;
+  /** Horizontal pan offset in screen pixels. */
   panX: number;
+  /** Vertical pan offset in screen pixels. */
   panY: number;
+  /** Zoom origin in screen pixels -- zoom scales around this point. */
   centre: Point2D;
+  /** Pixels per UPM unit, derived from canvas height and font UPM. */
   upmScale: number;
+  /** Canvas logical height in CSS pixels, used to position the baseline. */
   logicalHeight: number;
+  /** Horizontal padding in screen pixels between canvas edge and glyph origin. */
   padding: number;
+  /** Font descender in UPM units (typically negative), used to offset the baseline vertically. */
   descender: number;
 }
 
+/**
+ * Dependency interface that the {@link CanvasCoordinator} uses to read editor state
+ * each frame. Keeps the coordinator decoupled from concrete Editor/ToolManager
+ * implementations -- callers wire up callbacks at construction time.
+ */
 export interface CanvasCoordinatorContext {
+  /** Sidebearing offset applied before glyph rendering, in UPM units. */
   getDrawOffset(): Point2D;
   setDrawOffset(offset: Point2D): void;
-  getActiveGlyph(): Glyph | null;
-  getFontMetrics(): FontMetrics;
+  readonly glyph: Signal<Glyph | null>;
+  readonly font: Font;
+  /** When true, renders filled glyph silhouette without guides or handles. */
   isPreviewMode(): boolean;
   isHandlesVisible(): boolean;
   getSelectionBoundingRect(): Rect2D | null;
@@ -58,13 +80,34 @@ export interface CanvasCoordinatorContext {
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult | null;
   getSnapIndicator(): SnapIndicator | null;
   getViewportTransform(): ViewportTransform;
+  /** Converts a screen-pixel distance to UPM units at the current zoom level. */
   screenToUpmDistance(px: number): number;
+  /** Projects a point from UPM space to screen pixels, used for screen-space handle rendering. */
   projectUpmToScreen(x: number, y: number): Point2D;
   getDebugOverlays(): DebugOverlays;
+  /** Delegates to the active tool's render method (interactive canvas). */
   renderTool(draw: DrawAPI): void;
+  /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
   renderToolBelowHandles(draw: DrawAPI): void;
 }
 
+/**
+ * Orchestrates all rendering across the editor's three-layer canvas stack.
+ *
+ * **Canvas layers (back to front):**
+ * - **Static** -- glyph outline, guides, handles, bounding box, segment highlights.
+ * - **Overlay** -- transient visuals such as snap indicators.
+ * - **Interactive** -- tool-specific drawing (marquee, pen preview, shape drag).
+ *
+ * Each layer owns an independent {@link FrameHandler} so redraws are
+ * coalesced per-layer via `requestAnimationFrame`.
+ *
+ * **Two-phase rendering (static layer):**
+ * 1. **UPM space** -- `save()` -> viewport transforms -> glyph passes -> `restore()`.
+ * 2. **Screen space** -- `save()` -> bounding-box handles (pixel-perfect) -> `restore()`.
+ *
+ * The overlay and interactive layers render exclusively in UPM space.
+ */
 export class CanvasCoordinator {
   #staticContext: IGraphicContext | null = null;
   #overlayContext: IGraphicContext | null = null;
@@ -195,7 +238,7 @@ export class CanvasCoordinator {
     const ctx = this.#staticContext.getContext();
     const draw = this.#staticDraw;
 
-    const glyph = this.#ctx.getActiveGlyph();
+    const glyph = this.#ctx.glyph.peek();
     const previewMode = this.#ctx.isPreviewMode();
     const handlesVisible = this.#ctx.isHandlesVisible();
 
@@ -207,7 +250,7 @@ export class CanvasCoordinator {
     this.#applyTransforms(ctx);
 
     if (glyph) {
-      const guides = getGuides(glyph, this.#ctx.getFontMetrics());
+      const guides = getGuides(glyph, this.#ctx.font.getMetrics());
       ctx.setStyle(GUIDE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
 

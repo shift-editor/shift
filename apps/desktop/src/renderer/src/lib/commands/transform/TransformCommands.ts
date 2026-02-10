@@ -5,6 +5,12 @@ import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
 import { Glyphs } from "@shift/font";
 
+/**
+ * Template for point-set transform commands. Captures original positions on
+ * first execute, delegates to {@link transformPoints} for the actual math,
+ * and writes results back via the font engine. Subclasses only need to
+ * implement `transformPoints`.
+ */
 abstract class BaseTransformCommand extends BaseCommand<void> {
   abstract readonly name: string;
 
@@ -57,6 +63,10 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Rotates selected points by a given angle (radians) around an origin.
+ * Used by the rotate handle on the bounding box and keyboard shortcuts.
+ */
 export class RotatePointsCommand extends BaseTransformCommand {
   readonly name = "Rotate Points";
 
@@ -74,6 +84,10 @@ export class RotatePointsCommand extends BaseTransformCommand {
   }
 }
 
+/**
+ * Scales selected points by independent x/y factors relative to an origin.
+ * Drives bounding-box resize handles.
+ */
 export class ScalePointsCommand extends BaseTransformCommand {
   readonly name = "Scale Points";
 
@@ -93,6 +107,10 @@ export class ScalePointsCommand extends BaseTransformCommand {
   }
 }
 
+/**
+ * Mirrors selected points across a horizontal or vertical axis through an
+ * origin. Used for flip-horizontal / flip-vertical menu actions.
+ */
 export class ReflectPointsCommand extends BaseTransformCommand {
   readonly name = "Reflect Points";
 
@@ -110,6 +128,11 @@ export class ReflectPointsCommand extends BaseTransformCommand {
   }
 }
 
+/**
+ * Applies an arbitrary 2x3 affine matrix to selected points around an origin.
+ * Use this for compound transforms (e.g. skew) that don't map to a dedicated
+ * command.
+ */
 export class TransformMatrixCommand extends BaseTransformCommand {
   readonly name = "Transform Points";
 
@@ -127,6 +150,11 @@ export class TransformMatrixCommand extends BaseTransformCommand {
   }
 }
 
+/**
+ * Translates selected points so that a given anchor position lands on a
+ * target position. Computes the delta internally. Used for snap-to-position
+ * and alignment workflows where the destination is absolute.
+ */
 export class MoveSelectionToCommand extends BaseTransformCommand {
   readonly name = "Move Selection To";
 

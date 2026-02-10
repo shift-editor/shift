@@ -10,7 +10,7 @@ import { GlyphSection } from "./GlyphSection";
 
 export const Sidebar = () => {
   const editor = getEditor();
-  const { familyName } = editor.getFontMetadata();
+  const { familyName } = editor.font.getMetadata();
   const zoom = useSignalState(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
 

@@ -1,6 +1,15 @@
+/**
+ * Guide render pass -- draws horizontal metric lines (ascender, cap height,
+ * x-height, baseline, descender) and vertical sidebearing lines (origin, x-advance).
+ *
+ * Operates in UPM space. The caller should set guide stroke styles before invoking
+ * {@link renderGuides}.
+ */
+
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph, FontMetrics } from "@shift/types";
 
+/** Horizontal and vertical guide positions derived from font metrics and glyph advance width. */
 export interface Guides {
   xAdvance: number;
   ascender: { y: number };
@@ -10,6 +19,7 @@ export interface Guides {
   descender: { y: number };
 }
 
+/** Builds guide positions from the active glyph's advance width and the font's vertical metrics. */
 export function getGuides(glyph: Glyph, metrics: FontMetrics): Guides {
   return {
     ascender: { y: metrics.ascender },
@@ -21,6 +31,7 @@ export function getGuides(glyph: Glyph, metrics: FontMetrics): Guides {
   };
 }
 
+/** Strokes horizontal metric lines and vertical sidebearing lines for the given guides. */
 export function renderGuides(ctx: IRenderer, guides: Guides): void {
   ctx.beginPath();
 

@@ -7,3 +7,8 @@ export type ToolDescriptor = {
   tooltip: string;
   shortcut?: string;
 };
+
+export type ToolShortcutEntry = {
+  toolId: ToolName;
+  shortcut: string;
+};

@@ -1,7 +1,7 @@
 import { Vec2 } from "@shift/geo";
 import type { Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
@@ -25,7 +25,7 @@ export class TranslateBehavior implements SelectBehavior {
   transition(
     state: SelectState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "translating") {
       return this.transitionTranslating(state, event, editor);
@@ -38,7 +38,7 @@ export class TranslateBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: ToolContext): void {
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
     if (prev.type !== "translating" && next.type === "translating") {
       editor.beginPreview();
       editor.clearHover();
@@ -53,7 +53,7 @@ export class TranslateBehavior implements SelectBehavior {
   private transitionTranslating(
     state: SelectState & { type: "translating" },
     event: ToolEvent,
-    _editor: ToolContext,
+    _editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       let newLastPos = event.point;
@@ -103,7 +103,7 @@ export class TranslateBehavior implements SelectBehavior {
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     const hit = editor.getNodeAt(event.point);
     const pointId = getPointIdFromHit(hit);
@@ -174,7 +174,7 @@ export class TranslateBehavior implements SelectBehavior {
   }
 
   private startDuplicateDrag(
-    editor: ToolContext,
+    editor: EditorAPI,
     startPos: Point2D,
   ): TransitionResult<SelectState, SelectAction> | null {
     const newPointIds = editor.duplicateSelection();
@@ -198,7 +198,7 @@ export class TranslateBehavior implements SelectBehavior {
   }
 
   private startSnap(
-    editor: ToolContext,
+    editor: EditorAPI,
     anchorPointId: PointId,
     dragStart: Point2D,
     excludedPointIds: PointId[],

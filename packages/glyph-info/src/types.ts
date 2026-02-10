@@ -36,3 +36,15 @@ export interface SearchResult {
   subCategory: string | null;
   rank: number;
 }
+
+export interface DecompositionData {
+  decomposed: Record<string, number[]>;
+  usedBy: Record<string, number[]>;
+}
+
+export interface GlyphInfoResources {
+  glyphData: GlyphData[];
+  decomposition: DecompositionData;
+  charsets: CharsetDefinition[];
+  searchData: Record<string, unknown>[];
+}

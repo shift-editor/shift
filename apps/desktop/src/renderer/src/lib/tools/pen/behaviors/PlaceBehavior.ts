@@ -3,7 +3,7 @@ import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { PenState, PenBehavior, ContourContext } from "../types";
 import { resolvePenAction, type PenAction } from "../actions";
@@ -16,7 +16,7 @@ export class PlaceBehavior implements PenBehavior {
   transition(
     state: PenState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<PenState, PenAction> | null {
     if (state.type !== "ready") return null;
     if (event.type !== "click" && event.type !== "dragStart") return null;
@@ -51,19 +51,19 @@ export class PlaceBehavior implements PenBehavior {
     };
   }
 
-  onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: ToolContext): void {
+  onTransition(prev: PenState, next: PenState, _event: ToolEvent, editor: EditorAPI): void {
     if (prev.type === "ready" && next.type === "anchored") {
       editor.commands.beginBatch("Add Point");
     }
   }
 
-  private hasActiveDrawingContour(editor: ToolContext): boolean {
+  private hasActiveDrawingContour(editor: EditorAPI): boolean {
     const contour = editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
-  private shouldCloseContour(pos: Point2D, editor: ToolContext): boolean {
+  private shouldCloseContour(pos: Point2D, editor: EditorAPI): boolean {
     const contour = editor.getActiveContour();
     if (!contour || contour.closed || contour.points.length < 2) {
       return false;
@@ -75,7 +75,7 @@ export class PlaceBehavior implements PenBehavior {
     return Vec2.isWithin(pos, firstPoint, editor.hitRadius);
   }
 
-  private buildContourContext(editor: ToolContext): ContourContext {
+  private buildContourContext(editor: EditorAPI): ContourContext {
     const contour = editor.getActiveContour();
     if (!contour || Contours.isEmpty(contour)) {
       return {

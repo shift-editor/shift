@@ -4,11 +4,14 @@ import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
 import type { SelectAction } from "./actions";
+
+/** Tracks the start and current positions of a marquee drag. */
 export interface SelectionData {
   startPos: Point2D;
   currentPos: Point2D;
 }
 
+/** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
   anchorPointId: PointId;
   startPos: Point2D;
@@ -17,6 +20,7 @@ export interface TranslateData {
   draggedPointIds: PointId[];
 }
 
+/** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
 export interface ResizeData {
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
@@ -28,6 +32,7 @@ export interface ResizeData {
   uniformScale: boolean;
 }
 
+/** Live state of a rotation drag, tracking angles and initial point positions for the transform. */
 export interface RotateData {
   corner: CornerHandle;
   startPos: Point2D;
@@ -40,6 +45,17 @@ export interface RotateData {
   snappedAngle?: number;
 }
 
+/**
+ * State machine for the select tool.
+ *
+ * - `idle` -- no glyph loaded or tool not active.
+ * - `ready` -- listening for clicks or drags.
+ * - `selecting` -- marquee rectangle being drawn.
+ * - `selected` -- one or more points are selected; bounding box visible.
+ * - `translating` -- dragging selected points.
+ * - `resizing` -- dragging a bounding-box edge handle.
+ * - `rotating` -- dragging a bounding-box corner to rotate.
+ */
 export type SelectState =
   | { type: "idle" }
   | { type: "ready" }
@@ -49,4 +65,5 @@ export type SelectState =
   | { type: "resizing"; resize: ResizeData }
   | { type: "rotating"; rotate: RotateData };
 
+/** Behavior type alias for the select tool's state/event/action triple. */
 export type SelectBehavior = Behavior<SelectState, ToolEvent, SelectAction>;

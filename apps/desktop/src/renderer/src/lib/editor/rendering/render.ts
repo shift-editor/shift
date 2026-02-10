@@ -19,6 +19,10 @@ export interface Guides {
   descender: { y: number };
 }
 
+/**
+ * Traces the contour's segments into the current path without stroking or filling.
+ * Returns `true` if the contour is closed (caller can decide to fill).
+ */
 export function buildContourPath(ctx: IRenderer, contour: Contour): boolean {
   if (contour.points.length < 2) return false;
   const segments = Segment.parse(contour.points, contour.closed);
@@ -55,6 +59,10 @@ export function buildContourPath(ctx: IRenderer, contour: Contour): boolean {
   return contour.closed;
 }
 
+/**
+ * Strokes every contour of the glyph.
+ * Returns `true` if at least one contour is closed (filled preview is viable).
+ */
 export function renderGlyph(ctx: IRenderer, glyph: Glyph): boolean {
   let hasClosed = false;
 
@@ -90,6 +98,10 @@ export function renderGuides(ctx: IRenderer, guides: Guides): void {
   ctx.stroke();
 }
 
+/**
+ * Tests contour winding direction. Clockwise contours define filled regions
+ * under the non-zero fill rule; counter-clockwise contours define holes.
+ */
 export function isContourClockwise(contour: Contour): boolean {
   return Polygon.isClockwise(contour.points);
 }

@@ -6,32 +6,32 @@ import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
 import { getNative, hasNative } from "@/engine/native";
 
-const SVG_PATH_CACHE_SIZE = 500;
+const CACHE_SIZE = 500;
 
 const DEFAULT_VERSION = 0;
 
+interface GlyphData {
+  svgPath?: string;
+  advance?: number;
+  bbox?: Bounds;
+}
+
 export class GlyphDataStore {
-  #svgCache: LRUCache<number, string>;
-  #advanceCache: LRUCache<number, number>;
-  #bboxCache: LRUCache<number, Bounds>;
+  #cache: LRUCache<number, GlyphData>;
   #fontUnicodes: WritableSignal<number[]>;
   #fontLoaded: WritableSignal<boolean>;
   #fontMetrics: WritableSignal<FontMetrics | null>;
   #glyphVersions = new Map<number, WritableSignal<number>>();
 
   constructor() {
-    this.#svgCache = new LRUCache<number, string>({ max: SVG_PATH_CACHE_SIZE });
-    this.#advanceCache = new LRUCache<number, number>({ max: SVG_PATH_CACHE_SIZE });
-    this.#bboxCache = new LRUCache<number, Bounds>({ max: SVG_PATH_CACHE_SIZE });
+    this.#cache = new LRUCache<number, GlyphData>({ max: CACHE_SIZE });
     this.#fontUnicodes = signal<number[]>([]);
     this.#fontLoaded = signal(false);
     this.#fontMetrics = signal<FontMetrics | null>(null);
   }
 
   onFontLoaded(unicodes: number[], metrics?: FontMetrics): void {
-    this.#svgCache.clear();
-    this.#advanceCache.clear();
-    this.#bboxCache.clear();
+    this.#cache.clear();
     this.#glyphVersions.clear();
     GlyphRenderCache.clear();
     this.#fontUnicodes.set(unicodes);
@@ -40,9 +40,7 @@ export class GlyphDataStore {
   }
 
   onFontUnloaded(): void {
-    this.#svgCache.clear();
-    this.#advanceCache.clear();
-    this.#bboxCache.clear();
+    this.#cache.clear();
     this.#glyphVersions.clear();
     GlyphRenderCache.clear();
     this.#fontUnicodes.set([]);
@@ -51,31 +49,38 @@ export class GlyphDataStore {
   }
 
   getSvgPath(unicode: number): string | null {
-    const cached = this.#svgCache.get(unicode);
-    if (cached !== undefined) return cached;
+    const entry = this.#cache.get(unicode);
+    if (entry?.svgPath !== undefined) return entry.svgPath;
     if (!hasNative()) return null;
     const path = getNative().getGlyphSvgPath(unicode);
-    if (path != null) this.#svgCache.set(unicode, path);
+    if (path != null) {
+      const existing = this.#cache.get(unicode) ?? {};
+      this.#cache.set(unicode, { ...existing, svgPath: path });
+    }
     return path ?? null;
   }
 
   getAdvance(unicode: number): number | null {
-    const cached = this.#advanceCache.get(unicode);
-    if (cached !== undefined) return cached;
+    const entry = this.#cache.get(unicode);
+    if (entry?.advance !== undefined) return entry.advance;
     if (!hasNative()) return null;
     const advance = getNative().getGlyphAdvance(unicode);
-    if (advance != null) this.#advanceCache.set(unicode, advance);
+    if (advance != null) {
+      const existing = this.#cache.get(unicode) ?? {};
+      this.#cache.set(unicode, { ...existing, advance });
+    }
     return advance ?? null;
   }
 
   getBbox(unicode: number): Bounds | null {
-    const cached = this.#bboxCache.get(unicode);
-    if (cached !== undefined) return cached;
+    const entry = this.#cache.get(unicode);
+    if (entry?.bbox !== undefined) return entry.bbox;
     if (!hasNative()) return null;
     const b = getNative().getGlyphBbox(unicode);
     if (b == null || b.length !== 4) return null;
     const bounds = BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
-    this.#bboxCache.set(unicode, bounds);
+    const existing = this.#cache.get(unicode) ?? {};
+    this.#cache.set(unicode, { ...existing, bbox: bounds });
     return bounds;
   }
 
@@ -84,13 +89,11 @@ export class GlyphDataStore {
   }
 
   hasCachedPath(unicode: number): boolean {
-    return this.#svgCache.has(unicode);
+    return this.#cache.get(unicode)?.svgPath !== undefined;
   }
 
   invalidateGlyph(unicode: number): void {
-    this.#svgCache.delete(unicode);
-    this.#advanceCache.delete(unicode);
-    this.#bboxCache.delete(unicode);
+    this.#cache.delete(unicode);
     GlyphRenderCache.delete(unicode);
     let v = this.#glyphVersions.get(unicode);
     if (!v) {

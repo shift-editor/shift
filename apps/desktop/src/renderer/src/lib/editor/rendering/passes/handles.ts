@@ -1,3 +1,13 @@
+/**
+ * Handle render pass -- draws on-curve and off-curve point handles for the active glyph.
+ *
+ * Operates in UPM space via the {@link DrawAPI}, which internally converts
+ * screen-pixel sizes to UPM units. Two sub-passes run in order:
+ * 1. Control-point tether lines connecting off-curve handles to their anchors.
+ * 2. Handle shapes (corner, smooth, control, direction, first, last) with
+ *    per-point interaction state (idle / hovered / selected).
+ */
+
 import type { Glyph, PointId } from "@shift/types";
 import type { HandleState } from "@/types/graphics";
 import { Vec2 } from "@shift/geo";
@@ -6,6 +16,10 @@ import { Validate } from "@shift/validation";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
+/**
+ * Draws all point handles for the glyph, including off-curve tether lines.
+ * `getHandleState` is called per point to determine visual styling.
+ */
 export function renderHandles(
   draw: DrawAPI,
   glyph: Glyph,

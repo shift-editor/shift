@@ -2,6 +2,13 @@ import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal"
 
 const UPDATE_INTERVAL_MS = 250;
 
+/**
+ * Measures the browser's actual frame rate using a rolling one-second window.
+ *
+ * Exposes the current FPS as a reactive signal, updated at most every
+ * {@link UPDATE_INTERVAL_MS} to avoid excessive signal notifications.
+ * Start/stop the monitor when the debug overlay is toggled.
+ */
 export class FpsMonitor {
   readonly #fps: WritableSignal<number>;
   #timestamps: number[] = [];
@@ -13,10 +20,12 @@ export class FpsMonitor {
     this.#fps = signal(0);
   }
 
+  /** Reactive read-only signal holding the current frames-per-second count. */
   get fps(): Signal<number> {
     return this.#fps;
   }
 
+  /** Begins sampling frames. Safe to call if already running. */
   start(): void {
     if (this.#running) return;
     this.#running = true;
@@ -25,6 +34,7 @@ export class FpsMonitor {
     this.#rafId = requestAnimationFrame(this.#tick);
   }
 
+  /** Stops sampling frames, cancels the pending rAF, and resets the FPS signal to 0. */
   stop(): void {
     this.#running = false;
     if (this.#rafId !== null) {

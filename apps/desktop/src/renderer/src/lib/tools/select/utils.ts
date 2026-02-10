@@ -1,6 +1,6 @@
 import type { Point2D, PointId, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
-import type { ToolContext } from "../core/ToolContext";
+import type { EditorAPI } from "../core/EditorAPI";
 
 export function normalizeRect(start: Point2D, current: Point2D): Rect2D {
   const min = Vec2.min(start, current);
@@ -21,7 +21,7 @@ export function pointInRect(p: Point2D, rect: Rect2D): boolean {
   return p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
 }
 
-export function cacheSelectedPositions(editor: ToolContext): Map<PointId, Point2D> {
+export function cacheSelectedPositions(editor: EditorAPI): Map<PointId, Point2D> {
   const positions = new Map<PointId, Point2D>();
   for (const p of editor.getAllPoints()) {
     if (editor.isPointSelected(p.id as PointId)) {

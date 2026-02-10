@@ -1,7 +1,7 @@
 import type { PointId, Point2D, Rect2D, ContourId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
-import type { ToolContext } from "@/lib/tools/core";
+import type { EditorAPI } from "@/lib/tools/core";
 import {
   NudgePointsCommand,
   ScalePointsCommand,
@@ -44,7 +44,7 @@ export type SelectAction =
   | { type: "upgradeLineToCubic"; segment: LineSegment }
   | { type: "selectContour"; contourId: ContourId; additive: boolean };
 
-export function executeAction(action: SelectAction, editor: ToolContext): void {
+export function executeAction(action: SelectAction, editor: EditorAPI): void {
   switch (action.type) {
     case "selectPoint":
       executeSelectPoint(action.pointId, action.additive, editor);
@@ -126,7 +126,7 @@ export function executeAction(action: SelectAction, editor: ToolContext): void {
   }
 }
 
-function executeSelectPoint(pointId: PointId, additive: boolean, editor: ToolContext): void {
+function executeSelectPoint(pointId: PointId, additive: boolean, editor: EditorAPI): void {
   if (additive) {
     const current = editor.getSelectedPoints();
     editor.selectPoints([...current, pointId]);
@@ -139,7 +139,7 @@ function executeSelectPoint(pointId: PointId, additive: boolean, editor: ToolCon
 function executeSelectSegment(
   segmentId: SegmentId,
   additive: boolean,
-  editor: ToolContext,
+  editor: EditorAPI,
 ): PointId[] {
   const segment = editor.getSegmentById(segmentId);
   if (!segment) return [];
@@ -159,7 +159,7 @@ function executeSelectSegment(
   return pointIds;
 }
 
-function executeToggleSegment(segmentId: SegmentId, editor: ToolContext): PointId[] {
+function executeToggleSegment(segmentId: SegmentId, editor: EditorAPI): PointId[] {
   const wasSelected = editor.isSegmentSelected(segmentId);
   editor.toggleSegmentInSelection(segmentId);
 
@@ -181,7 +181,7 @@ function executeToggleSegment(segmentId: SegmentId, editor: ToolContext): PointI
   }
 }
 
-function executeSelectPointsInRect(rect: Rect2D, editor: ToolContext): PointId[] {
+function executeSelectPointsInRect(rect: Rect2D, editor: EditorAPI): PointId[] {
   const allPoints = editor.getAllPoints();
   const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
   const pointIds = hitPoints.map((p) => p.id);
@@ -190,7 +190,7 @@ function executeSelectPointsInRect(rect: Rect2D, editor: ToolContext): PointId[]
   return pointIds;
 }
 
-function executeMovePointsDelta(delta: Point2D, editor: ToolContext): void {
+function executeMovePointsDelta(delta: Point2D, editor: EditorAPI): void {
   if (delta.x === 0 && delta.y === 0) return;
   const selectedPoints = editor.getSelectedPoints();
   editor.applySmartEdits(selectedPoints, delta.x, delta.y);
@@ -201,7 +201,7 @@ function executeScalePoints(
   sx: number,
   sy: number,
   anchor: Point2D,
-  editor: ToolContext,
+  editor: EditorAPI,
 ): void {
   editor.cancelPreview();
   if (sx !== 1 || sy !== 1) {
@@ -214,7 +214,7 @@ function executeRotatePoints(
   pointIds: PointId[],
   angle: number,
   center: Point2D,
-  editor: ToolContext,
+  editor: EditorAPI,
 ): void {
   editor.cancelPreview();
   if (angle !== 0) {
@@ -223,19 +223,19 @@ function executeRotatePoints(
   }
 }
 
-function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: ToolContext): void {
+function executeNudge(pointIds: PointId[], dx: number, dy: number, editor: EditorAPI): void {
   if (pointIds.length === 0) return;
   const cmd = new NudgePointsCommand(pointIds, dx, dy);
   editor.commands.execute(cmd);
 }
 
-function executeUpgradeLineToCubic(segment: LineSegment, editor: ToolContext): void {
+function executeUpgradeLineToCubic(segment: LineSegment, editor: EditorAPI): void {
   const cmd = new UpgradeLineToCubicCommand(segment);
   editor.commands.execute(cmd);
 }
 
-function executeSelectContour(contourId: ContourId, additive: boolean, editor: ToolContext): void {
-  const glyph = editor.getActiveGlyph();
+function executeSelectContour(contourId: ContourId, additive: boolean, editor: EditorAPI): void {
+  const glyph = editor.glyph.peek();
   if (!glyph) return;
 
   const contour = glyph.contours.find((c) => c.id === contourId);

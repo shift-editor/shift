@@ -1,7 +1,7 @@
 import type { PointId } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
@@ -25,7 +25,7 @@ export class RotateBehavior implements SelectBehavior {
   transition(
     state: SelectState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     if (state.type === "rotating") {
       return this.transitionRotating(state, event, editor);
@@ -38,7 +38,7 @@ export class RotateBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: ToolContext): void {
+  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: EditorAPI): void {
     if (prev.type !== "rotating" && next.type === "rotating") {
       editor.beginPreview();
       editor.setHandlesVisible(false);
@@ -56,7 +56,7 @@ export class RotateBehavior implements SelectBehavior {
   private transitionRotating(
     state: SelectState & { type: "rotating" },
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const rawAngle = Vec2.angleTo(state.rotate.center, event.point);
@@ -120,7 +120,7 @@ export class RotateBehavior implements SelectBehavior {
   private tryStartRotate(
     _state: SelectState & { type: "selected" },
     event: ToolEvent & { type: "dragStart" },
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     const point = editor.getPointAt(event.point);
     if (point) return null;
@@ -158,7 +158,7 @@ export class RotateBehavior implements SelectBehavior {
     };
   }
 
-  private startSnap(editor: ToolContext): void {
+  private startSnap(editor: EditorAPI): void {
     this.clearSnap();
     this.#snap = editor.createRotateSnapSession();
   }

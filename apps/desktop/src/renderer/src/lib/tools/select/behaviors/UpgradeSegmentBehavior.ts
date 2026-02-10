@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
@@ -17,7 +17,7 @@ export class UpgradeSegmentBehavior implements SelectBehavior {
   transition(
     state: SelectState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "click" || !event.altKey) return null;
 

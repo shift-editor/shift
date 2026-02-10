@@ -1,4 +1,4 @@
-import { ToolContext, ToolEvent, TransitionResult } from "../../core";
+import { EditorAPI, ToolEvent, TransitionResult } from "../../core";
 import { TextAction, TextBehavior, TextState } from "../types";
 
 export class TypingBehavior implements TextBehavior {
@@ -9,7 +9,7 @@ export class TypingBehavior implements TextBehavior {
   transition(
     state: TextState,
     event: ToolEvent,
-    _editor: ToolContext,
+    _editor: EditorAPI,
   ): TransitionResult<TextState, TextAction> | null {
     if (event.type !== "keyDown") return null;
     if (state.type !== "typing") return null;

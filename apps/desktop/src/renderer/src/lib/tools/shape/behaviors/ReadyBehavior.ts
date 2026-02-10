@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { ShapeState } from "../types";
 import { createBehavior } from "../../core/Behavior";
 
@@ -8,7 +8,7 @@ export const ShapeReadyBehavior = createBehavior<ShapeState>({
     return state.type === "ready" && event.type === "dragStart";
   },
 
-  transition(state: ShapeState, event: ToolEvent, _editor: ToolContext) {
+  transition(state: ShapeState, event: ToolEvent, _editor: EditorAPI) {
     if (state.type !== "ready" || event.type !== "dragStart") return null;
     return {
       state: {

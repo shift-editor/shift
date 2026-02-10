@@ -10,6 +10,14 @@ import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
 import type { PasteResult } from "@/types/engine";
 import { Bounds } from "@shift/geo";
 
+/**
+ * Facade over the four engine managers ({@link EditingManager}, {@link SessionManager},
+ * {@link InfoManager}, {@link IOManager}), each receiving a focused dep-interface slice.
+ *
+ * Owns the raw NAPI bridge and the reactive {@link $glyph} signal. Consumers interact
+ * with the managers (`engine.editing`, `engine.session`, etc.) rather than calling
+ * FontEngine methods directly.
+ */
 export class FontEngine implements EditingEngineDeps, Session, Info, IO {
   readonly editing: EditingManager;
   readonly session: SessionManager;
@@ -29,6 +37,7 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     this.io = new IOManager(this);
   }
 
+  /** Reactive glyph snapshot. Updated by {@link emitGlyph} and {@link refreshGlyph}; null when no session is active. */
   get $glyph(): Signal<GlyphSnapshot | null> {
     return this.#$glyph;
   }
@@ -45,10 +54,12 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     return this.#$glyph.value;
   }
 
+  /** Directly sets the glyph signal. Use when you already have a snapshot (e.g. optimistic update). */
   emitGlyph(glyph: GlyphSnapshot | null): void {
     this.#$glyph.set(glyph);
   }
 
+  /** Re-reads the glyph from the native engine and emits it. Use after mutations that bypass {@link emitGlyph}. */
   refreshGlyph(): void {
     this.#$glyph.set(this.getSnapshot());
   }
@@ -138,6 +149,7 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
   }
 }
 
+/** Creates a FontEngine backed by the native NAPI bridge. Throws if unavailable (tests should pass a mock to the constructor instead). */
 export function createFontEngine(): FontEngine {
   if (hasNative()) {
     return new FontEngine();

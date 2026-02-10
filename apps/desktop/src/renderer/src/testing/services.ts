@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import type { PointId, ContourId, GlyphSnapshot, Point, Contour, Glyph } from "@shift/types";
-import type { ToolContext, ActiveToolState } from "@/lib/tools/core";
+import type { EditorAPI, ActiveToolState } from "@/lib/tools/core";
 import type { ToolEvent, Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
@@ -160,7 +160,7 @@ interface ToolSwitchService {
   returnFromTemporary(): void;
 }
 
-export interface MockToolContext extends ToolContext {
+export interface MockToolContext extends EditorAPI {
   readonly fontEngine: FontEngine;
   readonly screen: ReturnType<typeof createMockScreenService>;
   readonly selection: ReturnType<typeof createMockSelectionService>;
@@ -1038,21 +1038,39 @@ export function createMockToolContext(): MockToolContext {
     removeSegmentFromSelection: (id: SegmentId) => selection.removeSegment(id),
     toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
-    getActiveGlyph: () => edit.getGlyph() as Glyph | null,
-    getFontMetrics: () => ({
-      unitsPerEm: 1000,
-      ascender: 800,
-      descender: -200,
-      capHeight: 700,
-      xHeight: 500,
-      lineGap: 0,
-      italicAngle: null,
-      underlinePosition: null,
-      underlineThickness: null,
-    }),
-    getGlyphSvgPath: (_unicode: number) => null as string | null,
-    getGlyphAdvance: (_unicode: number) => null as number | null,
-    getGlyphBbox: (_unicode: number) => null,
+    glyph: computed<Glyph | null>(() => edit.getGlyph() as Glyph | null),
+    font: {
+      getMetrics: () => ({
+        unitsPerEm: 1000,
+        ascender: 800,
+        descender: -200,
+        capHeight: 700,
+        xHeight: 500,
+        lineGap: 0,
+        italicAngle: null,
+        underlinePosition: null,
+        underlineThickness: null,
+      }),
+      getMetadata: () => ({
+        familyName: "Test",
+        styleName: null,
+        versionMajor: 1,
+        versionMinor: 0,
+        copyright: null,
+        trademark: null,
+        designer: null,
+        designerUrl: null,
+        manufacturer: null,
+        manufacturerUrl: null,
+        license: null,
+        licenseUrl: null,
+        description: null,
+        note: null,
+      }),
+      getSvgPath: (_unicode: number) => null as string | null,
+      getAdvance: (_unicode: number) => null as number | null,
+      getBbox: (_unicode: number) => null,
+    },
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),

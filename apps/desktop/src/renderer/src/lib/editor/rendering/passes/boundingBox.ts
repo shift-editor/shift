@@ -1,3 +1,13 @@
+/**
+ * Bounding-box render pass -- draws the selection bounding rectangle and its
+ * resize/rotate handles.
+ *
+ * The bounding rectangle itself is drawn in UPM space (via {@link RenderContext}).
+ * The corner and midpoint handles are drawn in screen space by
+ * {@link renderBoundingBoxHandles} so they remain a fixed pixel size regardless
+ * of zoom level.
+ */
+
 import type { IRenderer } from "@/types/graphics";
 import type { Rect2D } from "@shift/types";
 import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
@@ -5,15 +15,22 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import { getHandlePositions, type HandlePositions } from "@/lib/tools/select/boundingBoxHitTest";
 import type { RenderContext } from "./types";
 
+/** Strokes the selection bounding rectangle in UPM space. */
 export function renderBoundingRect(rc: RenderContext, rect: Rect2D): void {
   rc.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
 }
 
 export interface BoundingBoxHandlesOptions {
+  /** Bounding rectangle in screen pixels (already projected from UPM). */
   rect: Rect2D;
+  /** When set, the hovered handle renders slightly larger as visual feedback. */
   hoveredHandle?: BoundingBoxHitResult;
 }
 
+/**
+ * Draws corner and midpoint resize handles in screen space.
+ * Hovered handles are rendered slightly larger to provide visual feedback.
+ */
 export function renderBoundingBoxHandles(ctx: IRenderer, options: BoundingBoxHandlesOptions): void {
   const { rect, hoveredHandle } = options;
   const styles = BOUNDING_BOX_HANDLE_STYLES;

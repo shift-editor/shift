@@ -12,15 +12,32 @@ import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
 import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
+/** Gap in pixels between the anchor bar and the start-direction triangle. */
 const START_TRIANGLE_GAP = 3;
 
 export type { StrokeStyle, FillStyle, ShapeStyle };
 
+/**
+ * Position data needed to render the "last point" bar handle.
+ * The bar is drawn perpendicular to the direction from `prev` to `anchor`.
+ */
 export interface LastHandlePosition {
+  /** The anchor (on-curve) point where the bar is drawn. */
   anchor: Point2D;
+  /** The preceding point, used to derive the bar's orientation angle. */
   prev: Point2D;
 }
 
+/**
+ * High-level drawing API for tool overlays, operating in UPM space.
+ *
+ * Wraps a low-level {@link IRenderer} and a {@link ScreenConverter}, automatically
+ * converting pixel-based sizes (stroke widths, handle radii, dash patterns) into
+ * UPM units at the current zoom level. All coordinate arguments are in UPM space;
+ * the renderer's transform stack handles the UPM-to-screen mapping.
+ *
+ * Tools receive a `DrawAPI` in their `render()` and `renderBelowHandles()` callbacks.
+ */
 export class DrawAPI {
   readonly #renderer: IRenderer;
   readonly #screen: ScreenConverter;
@@ -123,6 +140,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Draw an on-curve or off-curve handle: corner renders as a square, smooth/control as a circle. */
   handle(
     point: Point2D,
     type: Exclude<HandleType, "first" | "last" | "direction">,
@@ -186,6 +204,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Draw the contour start-point indicator: a perpendicular bar at the anchor plus a direction triangle offset by {@link START_TRIANGLE_GAP} pixels along the contour direction. */
   handleFirst(point: Point2D, angle: number, state: HandleState): void {
     const style = HANDLE_STYLES.first[state];
     const sizeUpm = this.#toUpm(style.size);
@@ -219,6 +238,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Draw a standalone direction triangle (used for mid-contour direction indicators). */
   handleDirection(point: Point2D, angle: number, state: HandleState): void {
     const style = HANDLE_STYLES.direction[state];
     const sizeUpm = this.#toUpm(style.size);
@@ -240,6 +260,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Draw the contour end-point indicator: a perpendicular bar whose angle is derived from the preceding point. */
   handleLast(pos: LastHandlePosition, state: HandleState): void {
     const style = HANDLE_STYLES.last[state];
     const sizeUpm = this.#toUpm(style.size);
@@ -264,6 +285,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Draw a Bezier control arm: the thin line from an on-curve anchor to its off-curve control point, then draw the control handle circle at the end. */
   controlLine(anchor: Point2D, control: Point2D, state: HandleState): void {
     const style = HANDLE_STYLES.control[state];
     const lineWidthUpm = this.#toUpm(style.lineWidth);
@@ -319,6 +341,7 @@ export class DrawAPI {
     this.#renderer.restore();
   }
 
+  /** Render an SVG path string at a UPM offset. The Path2D is cached per unicode codepoint via {@link GlyphRenderCache}. */
   svgPath(d: string, unicode: number, x: number, y: number, style?: FillStyle): void {
     const path = GlyphRenderCache.get(unicode, d);
     this.#renderer.save();

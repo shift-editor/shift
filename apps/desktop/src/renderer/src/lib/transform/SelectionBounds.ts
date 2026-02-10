@@ -3,6 +3,15 @@ import { Bounds } from "@shift/geo";
 import { asPointId } from "@shift/types";
 import type { GlyphSnapshot, PointId } from "@shift/types";
 
+/**
+ * Compute a tight bounding box for the current selection that accounts for
+ * curve geometry. When every point of a segment is selected, the segment's
+ * full bezier bounds are used (which may extend beyond the on-curve points).
+ * Points that belong to only partially-selected segments are treated as
+ * isolated coordinates.
+ *
+ * Returns `null` when `selectedPointIds` is empty.
+ */
 export function getSegmentAwareBounds(
   snapshot: GlyphSnapshot,
   selectedPointIds: readonly PointId[],

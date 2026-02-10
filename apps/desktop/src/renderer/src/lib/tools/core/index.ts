@@ -10,16 +10,16 @@ export { DrawAPI, type StrokeStyle, type ShapeStyle, type LastHandlePosition } f
 export { ToolManager, type ToolConstructor } from "./ToolManager";
 export { type ToolName } from "./createContext";
 export type {
-  ToolContext,
-  ViewportContext,
-  SelectionContext,
-  HitTestContext,
-  SnappingContext,
-  EditingContext,
-  CommandContext,
-  ToolLifecycleContext,
-  VisualStateContext,
-} from "./ToolContext";
+  EditorAPI,
+  Viewport,
+  Selection,
+  HitTesting,
+  Snapping,
+  Editing,
+  Commands,
+  ToolLifecycle,
+  VisualState,
+} from "./EditorAPI";
 export type { ToolStateMap, ActiveToolState } from "./ToolStateMap";
 export {
   defineStateDiagram,

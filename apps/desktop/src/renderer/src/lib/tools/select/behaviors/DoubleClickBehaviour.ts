@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
@@ -15,7 +15,7 @@ export class DoubleClickBehaviour implements SelectBehavior {
   transition(
     _state: SelectState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
 
@@ -31,8 +31,8 @@ export class DoubleClickBehaviour implements SelectBehavior {
     };
   }
 
-  private findContourForSegment(segmentId: string, editor: ToolContext): ContourId | null {
-    const glyph = editor.getActiveGlyph();
+  private findContourForSegment(segmentId: string, editor: EditorAPI): ContourId | null {
+    const glyph = editor.glyph.peek();
     if (!glyph) return null;
 
     for (const contour of glyph.contours) {

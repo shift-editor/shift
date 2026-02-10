@@ -28,10 +28,11 @@ interface SignalNode {
   _unsubscribe(computation: Computation): void;
 }
 
-// ═══════════════════════════════════════════════════════════
-// SIGNAL
-// ═══════════════════════════════════════════════════════════
-
+/**
+ * Read-only reactive value. Accessing `.value` inside a `computed` or `effect`
+ * automatically registers a dependency so the consumer re-runs when the signal changes.
+ * Use `.peek()` to read without subscribing.
+ */
 export interface Signal<T> {
   /** Get the current value. Tracks dependency if inside computed/effect. */
   readonly value: T;
@@ -39,6 +40,11 @@ export interface Signal<T> {
   peek(): T;
 }
 
+/**
+ * A signal that can be both read and written. Assigning to `.value` or calling
+ * `.set()` notifies all subscribers. Typically kept private within a class and
+ * exposed externally as a read-only `Signal<T>` via a getter.
+ */
 export interface WritableSignal<T> extends Signal<T> {
   /** Set or get the value. Setting notifies subscribers. */
   value: T;
@@ -132,10 +138,10 @@ export function signal<T>(initialValue: T): WritableSignal<T> {
   return new SignalImpl(initialValue);
 }
 
-// ═══════════════════════════════════════════════════════════
-// COMPUTED
-// ═══════════════════════════════════════════════════════════
-
+/**
+ * A derived signal whose value is lazily recomputed when any upstream dependency
+ * changes. Use `invalidate()` to force a recomputation on the next read.
+ */
 export interface ComputedSignal<T> extends Signal<T> {
   /** Force recomputation even if dependencies haven't changed. */
   invalidate(): void;
@@ -231,10 +237,10 @@ export function computed<T>(fn: () => T): ComputedSignal<T> {
   return new ComputedImpl(fn);
 }
 
-// ═══════════════════════════════════════════════════════════
-// EFFECT
-// ═══════════════════════════════════════════════════════════
-
+/**
+ * Handle returned by `effect()`. Call `dispose()` to stop the effect,
+ * run its cleanup function, and unsubscribe from all tracked signals.
+ */
 export interface Effect {
   /** Stop the effect and clean up subscriptions. */
   dispose(): void;

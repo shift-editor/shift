@@ -1,5 +1,6 @@
 import type { GlyphSnapshot } from "@shift/types";
 
+/** Low-level session lifecycle primitives that {@link SessionManager} orchestrates. */
 export interface Session {
   startEditSession(unicode: number): void;
   endEditSession(): void;
@@ -9,6 +10,10 @@ export interface Session {
   emitGlyph(glyph: GlyphSnapshot | null): void;
 }
 
+/**
+ * One glyph at a time: a session binds the native engine to a single glyph by unicode.
+ * Starting a new session automatically ends the previous one; ending clears the glyph signal.
+ */
 export class SessionManager {
   #engine: Session;
 
@@ -16,6 +21,7 @@ export class SessionManager {
     this.#engine = engine;
   }
 
+  /** No-op if the same glyph is already active; ends the previous session if a different glyph is active. */
   startEditSession(unicode: number): void {
     if (this.isActive()) {
       const currentUnicode = this.getEditingUnicode();

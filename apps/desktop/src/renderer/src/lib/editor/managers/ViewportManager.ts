@@ -10,10 +10,25 @@ import {
 } from "@/lib/reactive/signal";
 import { SCREEN_HIT_RADIUS } from "../rendering/constants";
 
+/** Lower bound for zoom level. Prevents the glyph from becoming invisible. */
 const MIN_ZOOM = 0.01;
+/** Upper bound for zoom level. Prevents extreme magnification artifacts. */
 const MAX_ZOOM = 32;
+/** Padding in screen pixels around the glyph drawing area. Keeps the glyph away from canvas edges. */
 const PADDING = 300;
 
+/**
+ * Owns the UPM-to-screen and screen-to-UPM coordinate transformations.
+ *
+ * The glyph coordinate system (UPM space) has Y-up with the origin at the
+ * baseline; screen space has Y-down with the origin at the top-left corner of
+ * the canvas. ViewportManager maintains two lazily-computed affine matrices
+ * that map between these spaces, incorporating zoom, pan, DPR, descender
+ * offset, and padding.
+ *
+ * Tools, hit-testing, and rendering all go through this manager to convert
+ * positions, distances, and radii between the two coordinate systems.
+ */
 export class ViewportManager {
   private readonly $zoom: WritableSignal<number>;
   private readonly $panX: WritableSignal<number>;
@@ -104,6 +119,7 @@ export class ViewportManager {
     return PADDING;
   }
 
+  /** Pixels per UPM unit at zoom 1. */
   get upmScale(): number {
     const availableHeight = this.logicalHeight - 2 * PADDING;
     if (availableHeight <= 0 || this.$upm.value <= 0) return 1;
@@ -154,6 +170,7 @@ export class ViewportManager {
     return this.$panY.value;
   }
 
+  /** Hit-test radius in UPM units. Grows as you zoom out so handles remain clickable. */
   get hitRadius(): number {
     return this.screenToUpmDistance(SCREEN_HIT_RADIUS);
   }
@@ -170,6 +187,11 @@ export class ViewportManager {
     return this.$screenMousePosition.peek();
   }
 
+  /**
+   * Buffers a raw client mouse position. Call {@link flushMousePosition} to
+   * commit it to the screen-space signal. This two-phase update avoids
+   * redundant UPM projections during high-frequency mouse events.
+   */
   updateMousePosition(clientX: number, clientY: number): void {
     this.#pendingClientX = clientX;
     this.#pendingClientY = clientY;
@@ -181,10 +203,12 @@ export class ViewportManager {
     this.$screenMousePosition.set({ x: this.#mouseX, y: this.#mouseY });
   }
 
+  /** Screen pixels (Y-down, origin top-left) to UPM units (Y-up, origin baseline). */
   public projectScreenToUpm(x: number, y: number): Point2D {
     return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
   }
 
+  /** UPM units (Y-up, origin baseline) to screen pixels (Y-down, origin top-left). */
   public projectUpmToScreen(x: number, y: number): Point2D {
     return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
   }
@@ -194,6 +218,10 @@ export class ViewportManager {
     this.$panY.value = y;
   }
 
+  /**
+   * Zooms toward or away from a screen-space point, adjusting pan so the
+   * point under the cursor stays fixed. Used for scroll-wheel zoom.
+   */
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
     const before = this.projectScreenToUpm(screenX, screenY);
 

@@ -5,6 +5,11 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
 
+/**
+ * Resolves point ids against a glyph snapshot, returning lightweight
+ * {@link TransformablePoint} objects suitable for alignment math.
+ * Returns an empty array if the snapshot is null or no ids match.
+ */
 function getPointsFromSnapshot(
   snapshot: GlyphSnapshot | null,
   pointIds: PointId[],
@@ -17,6 +22,11 @@ function getPointsFromSnapshot(
   }));
 }
 
+/**
+ * Aligns selected points along one edge or center of the selection's own
+ * bounding box (not the glyph bounds). Supports left, right, top, bottom,
+ * horizontal center, and vertical center. Captures original positions for undo.
+ */
 export class AlignPointsCommand extends BaseCommand<void> {
   readonly name: string;
 
@@ -74,6 +84,11 @@ export class AlignPointsCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Evenly distributes selected points along the horizontal or vertical axis.
+ * Requires at least 3 points; the outermost points remain fixed while inner
+ * points are spaced equally between them. Captures original positions for undo.
+ */
 export class DistributePointsCommand extends BaseCommand<void> {
   readonly name: string;
 

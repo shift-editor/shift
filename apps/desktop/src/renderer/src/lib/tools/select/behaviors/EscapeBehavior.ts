@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
@@ -14,7 +14,7 @@ export class EscapeBehavior implements SelectBehavior {
   transition(
     state: SelectState,
     event: ToolEvent,
-    _editor: ToolContext,
+    _editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
 

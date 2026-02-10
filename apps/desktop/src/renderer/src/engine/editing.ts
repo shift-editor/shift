@@ -7,6 +7,7 @@ import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 
+/** Raw NAPI surface that {@link EditingManager} wraps. Provides bridge access, session guards, glyph read/write, and low-level mutation primitives. */
 export interface EditingEngineDeps {
   readonly raw: FontEngineAPI;
   hasSession(): boolean;
@@ -19,6 +20,14 @@ export interface EditingEngineDeps {
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult;
 }
 
+/**
+ * All glyph mutations flow through this manager.
+ *
+ * Every public method guards on an active session, then dispatches via one of three internal helpers:
+ * - `#execute` -- parses the JSON command response and throws on failure
+ * - `#dispatch` -- executes, emits the snapshot, and returns affected point IDs
+ * - `#dispatchVoid` -- executes and emits, discarding the ID list
+ */
 export class EditingManager {
   #engine: EditingEngineDeps;
 
@@ -153,6 +162,7 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.openContour(contourId));
   }
 
+  /** Returns {@link PasteResult} containing the IDs of all newly created points and contours. Offset is in UPM units. */
   pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();
 
@@ -169,6 +179,10 @@ export class EditingManager {
     return result;
   }
 
+  /**
+   * Runs the rules engine on selected points, applies resulting moves optimistically
+   * to the glyph signal, then syncs absolute positions to native. Returns affected IDs.
+   */
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.#engine.hasSession()) return [];
 
@@ -191,6 +205,7 @@ export class EditingManager {
     return moves.map((m) => m.id);
   }
 
+  /** Batch-sets absolute positions. Applies optimistically to the signal, then syncs to native. */
   setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
     if (!this.#engine.hasSession()) return;
     if (moves.length === 0) return;
@@ -204,6 +219,7 @@ export class EditingManager {
     this.#engine.setPointPositions(moves);
   }
 
+  /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
     if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {

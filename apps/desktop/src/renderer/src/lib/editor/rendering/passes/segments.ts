@@ -1,3 +1,11 @@
+/**
+ * Segment highlight render pass -- overlays hovered or selected curve segments
+ * with distinct stroke styles so the user can see which segment is targeted.
+ *
+ * Operates in UPM space. Each segment is individually re-stroked on top of
+ * the base glyph outline using thicker / coloured styles.
+ */
+
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
@@ -5,6 +13,10 @@ import { Segment } from "@/lib/geo/Segment";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 
+/**
+ * Highlights hovered and selected segments in the glyph.
+ * Skips work entirely when nothing is hovered and no segments are selected.
+ */
 export function renderSegmentHighlights(
   rc: RenderContext,
   glyph: Glyph,

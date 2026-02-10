@@ -2,6 +2,12 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 import type { PointId, ContourId, GlyphSnapshot } from "@shift/types";
 import type { ClipboardContent, PasteOptions } from "../../clipboard/types";
 
+/**
+ * Removes the specified points from the glyph as part of a cut operation.
+ * The clipboard write happens outside this command; CutCommand only handles
+ * the destructive removal and undo. Undo restores the full glyph snapshot
+ * captured before the cut.
+ */
 export class CutCommand extends BaseCommand<void> {
   readonly name = "Cut";
 
@@ -29,6 +35,12 @@ export class CutCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Pastes clipboard contours into the glyph at the given offset. Tracks
+ * created point and contour ids so callers can select the pasted geometry.
+ * Uses snapshot-based redo after the first execute to avoid id drift.
+ * Access results via {@link createdPointIds} and {@link createdContourIds}.
+ */
 export class PasteCommand extends BaseCommand<void> {
   readonly name = "Paste";
 

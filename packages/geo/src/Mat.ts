@@ -22,6 +22,12 @@ export interface MatModel {
   readonly f: number;
 }
 
+/**
+ * Mutable 2D affine transformation matrix.
+ *
+ * Instance methods mutate in place and return `this` for chaining.
+ * Static factory methods return new instances.
+ */
 export class Mat implements MatModel {
   a = 1.0;
   b = 0.0;
@@ -39,6 +45,10 @@ export class Mat implements MatModel {
     this.f = f;
   }
 
+  /**
+   * Post-multiply by `m` in place: `this = this * m`.
+   * @param m The right-hand matrix.
+   */
   multiply(m: MatModel): this {
     const { a, b, c, d, e, f } = this;
     this.a = a * m.a + c * m.b;
@@ -50,6 +60,10 @@ export class Mat implements MatModel {
     return this;
   }
 
+  /**
+   * Invert this matrix in place.
+   * @throws If the matrix is singular (determinant is zero).
+   */
   invert(): this {
     const { a, b, c, d, e, f } = this;
     const denom = a * d - b * c;
@@ -81,6 +95,10 @@ export class Mat implements MatModel {
     return this;
   }
 
+  /**
+   * Apply a rotation in place.
+   * @param angle Rotation in radians (counter-clockwise).
+   */
   rotate(angle: number): this {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
@@ -92,6 +110,7 @@ export class Mat implements MatModel {
     return this;
   }
 
+  /** Return the six components in the order expected by `CanvasRenderingContext2D.setTransform`. */
   toCanvasTransform(): [number, number, number, number, number, number] {
     return [this.a, this.b, this.c, this.d, this.e, this.f];
   }
@@ -108,26 +127,37 @@ export class Mat implements MatModel {
     return new Mat(sx, 0, 0, sy, 0, 0);
   }
 
+  /**
+   * Pure rotation matrix.
+   * @param angle Rotation in radians (counter-clockwise).
+   */
   static Rotate(angle: number): Mat {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     return new Mat(cos, sin, -sin, cos, 0, 0);
   }
 
+  /** Reflect across the x-axis (negate y). */
   static ReflectHorizontal(): Mat {
     return new Mat(1, 0, 0, -1, 0, 0);
   }
 
+  /** Reflect across the y-axis (negate x). */
   static ReflectVertical(): Mat {
     return new Mat(-1, 0, 0, 1, 0, 0);
   }
 
+  /**
+   * Reflect across an arbitrary axis through the origin.
+   * @param angle Axis angle in radians.
+   */
   static ReflectAxis(angle: number): Mat {
     const cos2a = Math.cos(2 * angle);
     const sin2a = Math.sin(2 * angle);
     return new Mat(cos2a, sin2a, sin2a, -cos2a, 0, 0);
   }
 
+  /** Return a new matrix equal to `m1 * m2` without mutating either input. */
   static Compose(m1: MatModel, m2: MatModel): Mat {
     return new Mat(
       m1.a * m2.a + m1.c * m2.b,
@@ -139,10 +169,15 @@ export class Mat implements MatModel {
     );
   }
 
+  /**
+   * Return the inverse of `m` as a new matrix.
+   * @throws If the matrix is singular.
+   */
   static Inverse(m: MatModel): Mat {
     return new Mat(m.a, m.b, m.c, m.d, m.e, m.f).invert();
   }
 
+  /** Transform a point by the given matrix and return the result. */
   static applyToPoint(m: MatModel, point: Point2D): Point2D {
     return {
       x: m.a * point.x + m.c * point.y + m.e,
@@ -150,6 +185,10 @@ export class Mat implements MatModel {
     };
   }
 
+  /**
+   * Recompose a matrix from its decomposed components (translate, rotate,
+   * scale, skew, transform center). Inverse of {@link Mat.toDecomposed}.
+   */
   static fromDecomposed(d: DecomposedTransform): Mat {
     const cosR = Math.cos((d.rotation * Math.PI) / 180);
     const sinR = Math.sin((d.rotation * Math.PI) / 180);
@@ -169,6 +208,10 @@ export class Mat implements MatModel {
     return new Mat(a, b, c, dd, e, f);
   }
 
+  /**
+   * Decompose a matrix into translate, rotate, scale, and skew components.
+   * Inverse of {@link Mat.fromDecomposed}.
+   */
   static toDecomposed(m: MatModel): DecomposedTransform {
     const scaleX = Math.sqrt(m.a * m.a + m.b * m.b);
     let scaleY = Math.sqrt(m.c * m.c + m.d * m.d);

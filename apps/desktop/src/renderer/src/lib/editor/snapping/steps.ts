@@ -1,9 +1,31 @@
+/**
+ * Snap step factories and source collectors.
+ *
+ * Each factory returns a stateless {@link PointSnapStep} or {@link RotateSnapStep}
+ * that can be fed into {@link SnapPipelineRunner}. Steps are evaluated in pipeline
+ * order; the runner handles priority resolution (point-to-point wins, then closest
+ * for point pipelines; first-match for rotate pipelines).
+ *
+ * Steps are **pure** — all mutable state lives in the {@link SnapContext} passed
+ * through `args`. This keeps steps composable and testable in isolation.
+ */
 import { Vec2 } from "@shift/geo";
 import type { FontMetrics, Point2D } from "@shift/types";
 import type { PointSnapStep, RotateSnapStep, SnappableObject } from "./types";
 
+/**
+ * Minimum distance (in UPM) below which a source point is treated as the
+ * dragged point itself and ignored. Prevents a point from snapping to its
+ * own position.
+ */
 const SELF_SNAP_EPSILON = 1e-6;
 
+/**
+ * Snaps the dragged point to the nearest anchor or control point within the
+ * snap radius. Skips self-matches via {@link SELF_SNAP_EPSILON}. Disabled when
+ * Shift is held (angle snap takes precedence). This is the highest-priority
+ * point step — the pipeline runner short-circuits when it matches.
+ */
 export function createPointToPointStep(): PointSnapStep {
   return {
     id: "pointToPoint",
@@ -34,6 +56,11 @@ export function createPointToPointStep(): PointSnapStep {
   };
 }
 
+/**
+ * Snaps the dragged point's Y coordinate to the nearest horizontal font metric
+ * guide (baseline, x-height, cap-height, ascender, descender) within the snap
+ * radius. X is left unchanged. Disabled when Shift is held.
+ */
 export function createMetricsStep(): PointSnapStep {
   return {
     id: "metrics",
@@ -66,6 +93,12 @@ export function createMetricsStep(): PointSnapStep {
   };
 }
 
+/**
+ * Constrains the drag vector from the reference point to the nearest angle
+ * increment (e.g. 15-degree steps). Only active when Shift is held. Uses
+ * hysteresis via {@link SnapContext.previousSnappedAngle} to prevent jitter
+ * near angle boundaries.
+ */
 export function createAngleStep(): PointSnapStep {
   return {
     id: "angle",
@@ -95,6 +128,11 @@ export function createAngleStep(): PointSnapStep {
   };
 }
 
+/**
+ * Quantizes a rotation delta to 15-degree increments when Shift is held.
+ * Uses hysteresis to avoid oscillation near snap boundaries. This is the
+ * rotate-pipeline counterpart of {@link createAngleStep}.
+ */
 export function createRotateAngleStep(): RotateSnapStep {
   return {
     id: "rotateAngle",
@@ -120,8 +158,12 @@ export function createRotateAngleStep(): RotateSnapStep {
   };
 }
 
-export function collectMetricSources(metrics: FontMetrics | null): SnappableObject[] {
-  if (!metrics) return [];
+/**
+ * Converts {@link FontMetrics} into an array of `"metricGuide"` snap sources.
+ * Returns guides for baseline (y=0), x-height, cap-height, ascender, and descender.
+ * Returns an empty array when metrics are unavailable.
+ */
+export function collectMetricSources(metrics: FontMetrics): SnappableObject[] {
   return [
     { kind: "metricGuide", y: 0, label: "baseline" },
     { kind: "metricGuide", y: metrics.xHeight ?? 0, label: "xHeight" },

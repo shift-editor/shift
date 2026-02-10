@@ -45,7 +45,7 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSignalState } from "@/lib/reactive";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
-import { getGlyphInfo, hasGlyphInfo } from "@/engine/glyphInfo";
+import { getGlyphInfo } from "@/store/glyphInfo";
 import { glyphDataStore } from "@/store/GlyphDataStore";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 import { Button } from "@shift/ui";
@@ -114,7 +114,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     overscan: OVERSCAN,
   });
 
-  const glyphInfo = hasGlyphInfo() ? getGlyphInfo() : null;
+  const glyphInfo = getGlyphInfo();
 
   const handleCellClick = useCallback(
     (unicode: number) => {
@@ -169,7 +169,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                     />
                   </Button>
                   <span className="w-full truncate text-center text-xs text-muted-foreground">
-                    {glyphInfo?.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
+                    {glyphInfo.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
                   </span>
                 </div>
               ))}

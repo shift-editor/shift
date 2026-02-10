@@ -3,8 +3,8 @@ import { getEditor } from "@/store/store";
 
 export const FontInfo = () => {
   const editor = getEditor();
-  const metrics = editor.getFontMetrics();
-  const metadata = editor.getFontMetadata();
+  const metrics = editor.font.getMetrics();
+  const metadata = editor.font.getMetadata();
 
   return (
     <>

@@ -1,8 +1,20 @@
+/**
+ * Snap indicator render pass -- draws alignment lines and endpoint markers
+ * on the overlay canvas while a drag-snap session is active.
+ *
+ * Operates in UPM space. Lines connect the snapped point to the reference
+ * anchor; cross markers appear at each unique endpoint.
+ */
+
 import type { IRenderer } from "@/types/graphics";
 import type { SnapIndicator } from "../../snapping/types";
 import { SNAP_INDICATOR_STYLE } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 
+/**
+ * Draws snap alignment lines and cross markers for the given indicator.
+ * `crossHalf` is the half-size of the X marker in UPM units.
+ */
 export function renderSnapIndicators(
   rc: RenderContext,
   indicator: SnapIndicator,
@@ -21,6 +33,7 @@ export function renderSnapIndicators(
   }
 }
 
+/** Deduplicates the `from` and `to` endpoints of all snap lines for marker placement. */
 export function collectLineEndpoints(
   lines: ReadonlyArray<{ from: { x: number; y: number }; to: { x: number; y: number } }>,
 ): Array<{ x: number; y: number }> {

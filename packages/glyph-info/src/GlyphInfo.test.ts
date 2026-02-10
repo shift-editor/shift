@@ -1,16 +1,12 @@
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GlyphInfo } from "./GlyphInfo.js";
+import { defaultResources } from "./resources.js";
 import type { GlyphData, SearchResult } from "./types.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const RESOURCES_DIR = join(__dirname, "..", "resources");
 
 let db: GlyphInfo;
 
 beforeAll(() => {
-  db = new GlyphInfo(RESOURCES_DIR);
+  db = new GlyphInfo(defaultResources);
 });
 
 afterAll(() => {
@@ -459,12 +455,6 @@ describe("search", () => {
     expect(() => db.search('"')).not.toThrow();
     expect(() => db.search("(")).not.toThrow();
     expect(() => db.search(")")).not.toThrow();
-  });
-});
-
-describe("constructor", () => {
-  it("throws when resources directory does not exist", () => {
-    expect(() => new GlyphInfo("/nonexistent/path")).toThrow();
   });
 });
 

@@ -35,7 +35,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { glyphDataStore } from "@/store/GlyphDataStore";
-import { CommandHistory, CutCommand, PasteCommand } from "../commands";
+import { CommandHistory } from "../commands";
 import {
   RotatePointsCommand,
   ScalePointsCommand,
@@ -57,7 +57,8 @@ import {
   type Signal,
   type WritableSignal,
 } from "../reactive/signal";
-import { ClipboardService, ContentResolver } from "../clipboard";
+import { ContentResolver } from "../clipboard";
+import { ClipboardManager } from "./managers/ClipboardManager";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
 import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
@@ -71,7 +72,8 @@ import {
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
-import type { ToolContext } from "../tools/core/ToolContext";
+import type { EditorAPI } from "../tools/core/EditorAPI";
+import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
@@ -80,12 +82,33 @@ import type {
   RotateSnapSession,
   SnapIndicator,
 } from "./snapping/types";
-import { EditorSnapManager } from "./managers/EditorSnapManager";
-import { ToolDescriptor } from "@/types/tools";
+import { SnapManager } from "./managers/SnapManager";
+import { FontManager } from "./managers/FontManager";
+import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 
-interface EditorFacade extends ToolContext, CanvasCoordinatorContext {}
+export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
-export class Editor implements EditorFacade {
+/**
+ * Central orchestrator for the glyph editing surface.
+ *
+ * Editor owns and wires together every subsystem: viewport (UPM/screen
+ * transforms), selection, hover, command history, snapping, clipboard,
+ * tool management, and rendering (via CanvasCoordinator). It implements
+ * both `EditorAPI` (the facade tools interact with) and
+ * `CanvasCoordinatorContext` (the data the renderer reads).
+ *
+ * Subsystems communicate through reactive signals. Effects watch composite
+ * render-state signals and schedule redraws on the appropriate canvas layer
+ * (static, overlay, interactive) when their dependencies change.
+ *
+ * Typical lifecycle:
+ * 1. Construct the Editor (creates all managers and wires signals).
+ * 2. Call `loadFont()` to open a font file and populate the glyph store.
+ * 3. Register tools via `registerTool()`.
+ * 4. Call `setActiveTool()` to begin interaction.
+ * 5. Call `destroy()` on teardown to dispose effects and the renderer.
+ */
+export class Editor implements ShiftEditor {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
 
@@ -93,7 +116,7 @@ export class Editor implements EditorFacade {
   #hover: HoverManager;
   #renderer: CanvasCoordinator;
   #edgePan: EdgePanManager;
-  #snapManager: EditorSnapManager;
+  #snapManager: SnapManager;
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -107,11 +130,12 @@ export class Editor implements EditorFacade {
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
   #$glyph: ComputedSignal<Glyph | null>;
+  #fontManager: FontManager;
   #staticEffect: Effect;
   #overlayEffect: Effect;
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
-  #clipboardService: ClipboardService;
+  #clipboard: ClipboardManager;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -130,10 +154,22 @@ export class Editor implements EditorFacade {
   #snapIndicator: WritableSignal<SnapIndicator | null>;
   #debugOverlays: WritableSignal<DebugOverlays>;
 
+  /**
+   * Initializes all subsystems, wires signal dependencies, and sets up
+   * reactive effects that schedule canvas redraws when state changes.
+   *
+   */
   constructor() {
     this.#viewport = new ViewportManager();
     this.#fontEngine = new FontEngine();
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
+    this.#fontManager = new FontManager({
+      getMetrics: () => this.#fontEngine.info.getMetrics(),
+      getMetadata: () => this.#fontEngine.info.getMetadata(),
+      getSvgPath: (unicode) => glyphDataStore.getSvgPath(unicode),
+      getAdvance: (unicode) => glyphDataStore.getAdvance(unicode),
+      getBbox: (unicode) => glyphDataStore.getBbox(unicode),
+    });
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.$glyph.value,
@@ -165,11 +201,11 @@ export class Editor implements EditorFacade {
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
     this.#edgePan = new EdgePanManager(this);
-    this.#snapManager = new EditorSnapManager({
-      getGlyph: () => this.getActiveGlyph(),
-      getMetrics: () => this.getFontMetrics(),
-      getPreferences: () => this.#snapPreferences.value,
-      screenToUpmDistance: (px) => this.screenToUpmDistance(px),
+    this.#snapManager = new SnapManager({
+      getGlyph: () => this.#$glyph.value,
+      getMetrics: () => this.#fontManager.getMetrics(),
+      getSnapPreferences: () => this.#snapPreferences.value,
+      screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
     this.#isHoveringNode = computed(
       () =>
@@ -183,12 +219,7 @@ export class Editor implements EditorFacade {
 
     this.#toolManager = new ToolManager(this);
     this.#renderer = new CanvasCoordinator(this);
-
-    this.#clipboardService = new ClipboardService({
-      getGlyph: () => this.getActiveGlyph(),
-      getSelectedPointIds: () => this.getSelectedPoints(),
-      getSelectedSegmentIds: () => this.getSelectedSegments(),
-    });
+    this.#clipboard = new ClipboardManager(this);
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
     this.$renderState = computed<RenderState>(() => ({
@@ -276,8 +307,8 @@ export class Editor implements EditorFacade {
     return result;
   }
 
-  public getToolShortcuts(): Array<{ toolId: ToolName; shortcut: string }> {
-    const out: Array<{ toolId: ToolName; shortcut: string }> = [];
+  public getToolShortcuts(): ToolShortcutEntry[] {
+    const out: ToolShortcutEntry[] = [];
     for (const [toolId, metadata] of this.#toolMetadata) {
       if (metadata.shortcut != null) {
         out.push({ toolId, shortcut: metadata.shortcut });
@@ -294,6 +325,10 @@ export class Editor implements EditorFacade {
     return this.$activeTool.value;
   }
 
+  /**
+   * Typed as `ActiveToolState` (which is `any`) because each tool defines its
+   * own state shape. Consumers should narrow the type based on `activeTool`.
+   */
   public get activeToolState(): Signal<ActiveToolState> {
     return this.$activeToolState;
   }
@@ -499,6 +534,13 @@ export class Editor implements EditorFacade {
     return this.#snapManager.createRotateSession();
   }
 
+  /**
+   * Sets or clears the snap indicator rendered on the overlay canvas.
+   *
+   * Tools call this with a result from `DragSnapSession.snap()` during a drag,
+   * and with `null` when the drag ends or the tool deactivates. Forgetting to
+   * clear leaves a stale indicator on screen.
+   */
   public setSnapIndicator(indicator: SnapIndicator | null): void {
     this.#snapIndicator.set(indicator);
   }
@@ -601,6 +643,10 @@ export class Editor implements EditorFacade {
     this.#renderer.setInteractiveContext(context);
   }
 
+  /**
+   * Opens a glyph for editing by its Unicode codepoint.
+   * Starts a session in the font engine and adds an initial empty contour.
+   */
   public startEditSession(unicode: number): void {
     this.#fontEngine.session.startEditSession(unicode);
     this.#fontEngine.editing.addContour();
@@ -610,12 +656,12 @@ export class Editor implements EditorFacade {
     this.#fontEngine.session.endEditSession();
   }
 
-  public get glyph(): Signal<Glyph | null> {
-    return this.#$glyph;
+  public get font(): Font {
+    return this.#fontManager;
   }
 
-  public getActiveGlyph(): Glyph | null {
-    return this.#$glyph.value;
+  public get glyph(): Signal<Glyph | null> {
+    return this.#$glyph;
   }
 
   public getActiveGlyphUnicode(): number | null {
@@ -788,26 +834,13 @@ export class Editor implements EditorFacade {
     return this.getPointVisualState(pointId);
   }
 
-  public getFontMetrics() {
-    return this.#fontEngine.info.getMetrics();
-  }
-
-  public getGlyphSvgPath(unicode: number): string | null {
-    return glyphDataStore.getSvgPath(unicode);
-  }
-
-  public getGlyphAdvance(unicode: number): number | null {
-    return glyphDataStore.getAdvance(unicode);
-  }
-
-  public getGlyphBbox(unicode: number) {
-    return glyphDataStore.getBbox(unicode);
-  }
-
-  public getFontMetadata() {
-    return this.#fontEngine.info.getMetadata();
-  }
-
+  /**
+   * Loads a font from disk, populates the glyph data store, clears command
+   * history, and opens an edit session on Unicode 65 ('A').
+   *
+   * Ends any active session first. After loading, the viewport UPM and
+   * descender are NOT updated here -- call `updateMetricsFromFont()` to sync.
+   */
   public loadFont(filePath: string): void {
     if (this.#fontEngine.session.isActive()) {
       this.#fontEngine.session.endEditSession();
@@ -861,42 +894,24 @@ export class Editor implements EditorFacade {
   }
 
   public async copy(): Promise<boolean> {
-    const content = this.#clipboardService.resolveSelection();
-    if (!content || content.contours.length === 0) return false;
-
-    const glyph = this.getActiveGlyph();
-    return this.#clipboardService.write(content, glyph?.name);
+    return this.#clipboard.copy();
   }
 
   public async cut(): Promise<boolean> {
-    const content = this.#clipboardService.resolveSelection();
-    if (!content || content.contours.length === 0) return false;
-
-    const glyph = this.getActiveGlyph();
-    const written = await this.#clipboardService.write(content, glyph?.name);
-    if (!written) return false;
-
-    const pointIds = this.getSelectedPoints();
-    const cmd = new CutCommand(pointIds);
-    this.#commandHistory.execute(cmd);
-
-    this.clearSelection();
-    return true;
+    return this.#clipboard.cut();
   }
 
   public async paste(): Promise<void> {
-    const state = await this.#clipboardService.read();
-    if (!state.content || state.content.contours.length === 0) return;
-
-    const offset = this.#clipboardService.getNextPasteOffset();
-    const cmd = new PasteCommand(state.content, { offset });
-    this.#commandHistory.execute(cmd);
-
-    if (cmd.createdPointIds.length > 0) {
-      this.selectPoints(cmd.createdPointIds);
-    }
+    return this.#clipboard.paste();
   }
 
+  /**
+   * Captures a glyph snapshot and enters preview mode.
+   *
+   * While in preview, tools can mutate the glyph freely. Call `commitPreview()`
+   * to record the changes as a single undoable command, or `cancelPreview()`
+   * to restore the snapshot. No-op if already in preview.
+   */
   public beginPreview(): void {
     if (this.#isInPreview) return;
     this.#previewSnapshot = this.#fontEngine.$glyph.value;
@@ -938,6 +953,7 @@ export class Editor implements EditorFacade {
     return Bounds.center(bounds);
   }
 
+  /** @param angle - Rotation in radians. */
   public rotateSelection(angle: number, origin?: Point2D): void {
     const pointIds = this.getSelectedPoints();
     if (pointIds.length === 0) return;
@@ -1016,14 +1032,14 @@ export class Editor implements EditorFacade {
   }
 
   public getPointById(pointId: PointId): Point | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     return Glyphs.findPoint(glyph, pointId)?.point ?? null;
   }
 
   public getContourById(contourId: ContourId): Contour | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     return Glyphs.findContour(glyph, contourId) ?? null;
@@ -1110,14 +1126,14 @@ export class Editor implements EditorFacade {
   }
 
   public getPointAt(pos: Point2D): Point | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     return Glyphs.getPointAt(glyph, pos, this.hitRadius);
   }
 
   public getSegmentAt(pos: Point2D): SegmentHitResult | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     let bestHit: SegmentHitResult | null = null;
@@ -1130,6 +1146,12 @@ export class Editor implements EditorFacade {
     return bestHit;
   }
 
+  /**
+   * Performs a prioritized hit-test at a UPM-space position.
+   *
+   * Priority order: contour endpoint > middle point > any point > segment.
+   * Returns `null` if nothing is within `hitRadius`.
+   */
   public getNodeAt(pos: Point2D): HitResult {
     const endpoint = this.getContourEndpointAt(pos);
 
@@ -1167,8 +1189,13 @@ export class Editor implements EditorFacade {
     return null;
   }
 
+  /**
+   * Hit-tests for the start or end point of an open contour.
+   * Used by the pen tool to detect when the user clicks an endpoint to close
+   * or extend a contour.
+   */
   public getContourEndpointAt(pos: Point2D): ContourEndpointHit | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     for (const contour of glyph.contours) {
@@ -1200,6 +1227,11 @@ export class Editor implements EditorFacade {
     return null;
   }
 
+  /**
+   * Returns the axis-aligned bounding rect of the current committed selection
+   * in UPM space, or `null` if fewer than two points are selected or the
+   * selection is still in preview mode.
+   */
   public getSelectionBoundingRect(): Rect2D | null {
     const selectedPoints = this.getSelectedPoints();
     if (selectedPoints.length <= 1) return null;
@@ -1215,6 +1247,11 @@ export class Editor implements EditorFacade {
     return Polygon.boundingRect(points);
   }
 
+  /**
+   * Runs the full hover resolution pipeline at a UPM-space position and
+   * applies the result to the hover manager. Checks bounding box handles
+   * first (when multi-selected), then points, then segments.
+   */
   public updateHover(pos: Point2D): void {
     this.#hover.applyHoverResult(this.resolveHover(pos));
   }
@@ -1246,14 +1283,14 @@ export class Editor implements EditorFacade {
   }
 
   public getAllPoints(): Point[] {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return [];
 
     return Glyphs.getAllPoints(glyph);
   }
 
   public duplicateSelection(): PointId[] {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return [];
 
     const selectedPointIds = this.getSelectedPoints();
@@ -1268,7 +1305,7 @@ export class Editor implements EditorFacade {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
@@ -1279,8 +1316,13 @@ export class Editor implements EditorFacade {
     return null;
   }
 
+  /**
+   * Hit-tests for an interior point of an open contour (not first or last).
+   * Skips the active contour and closed contours. Used by the pen tool to
+   * detect mid-contour clicks for splitting or joining.
+   */
   public getMiddlePointAt(pos: Point2D): MiddlePointHit | null {
-    const glyph = this.getActiveGlyph();
+    const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     const activeContourId = this.getActiveContourId();

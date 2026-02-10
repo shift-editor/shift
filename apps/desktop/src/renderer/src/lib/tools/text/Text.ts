@@ -52,11 +52,11 @@ class TextTool extends BaseTool<TextState, TextAction> {
   }
 
   render(draw: DrawAPI): void {
-    const glyph = this.editor.getActiveGlyph();
-    const randomGlyph = this.editor.getGlyphSvgPath(101);
+    const glyph = this.editor.glyph.peek();
+    const randomGlyph = this.editor.font.getSvgPath(101);
 
     this.editor.setDrawOffset({ x: -200, y: 0 });
-    const metrics = this.editor.getFontMetrics();
+    const metrics = this.editor.font.getMetrics();
     draw.svgPath(randomGlyph, 70, glyph.xAdvance, 0, { fillStyle: "black" });
 
     const start = { x: glyph.xAdvance, y: metrics.descender };

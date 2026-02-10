@@ -4,6 +4,11 @@ import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 
+/**
+ * Inserts a point into an existing contour immediately before a reference point.
+ * Used by the pen tool to add on-curve or off-curve points at a specific
+ * position in the contour's winding order. Undo removes the inserted point.
+ */
 export class InsertPointCommand extends BaseCommand<PointId> {
   readonly name = "Insert Point";
 
@@ -51,6 +56,12 @@ export class InsertPointCommand extends BaseCommand<PointId> {
   }
 }
 
+/**
+ * Adds a smooth cubic anchor with symmetric leading and trailing off-curve
+ * handles. The trailing handle is auto-reflected through the anchor so the
+ * curve enters and exits smoothly. Returns the anchor's PointId; handle ids
+ * are available via {@link anchorId}, {@link leadingId}, and {@link trailingId}.
+ */
 export class AddBezierAnchorCommand extends BaseCommand<PointId> {
   readonly name = "Add Bezier Anchor";
 
@@ -133,6 +144,11 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
   }
 }
 
+/**
+ * Toggles a point's smooth flag, switching between a sharp corner and a
+ * smooth tangent-continuous joint. Currently a stub pending FontEngine API
+ * support; captures the original state for eventual undo.
+ */
 export class TogglePointSmoothCommand extends BaseCommand<void> {
   readonly name = "Toggle Point Smooth";
 
@@ -167,6 +183,11 @@ export class TogglePointSmoothCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Closes the active contour, connecting the last point back to the first.
+ * No-ops if the contour is already closed. Undo reopens the contour only
+ * if this command actually closed it.
+ */
 export class CloseContourCommand extends BaseCommand<void> {
   readonly name = "Close Contour";
 
@@ -197,6 +218,11 @@ export class CloseContourCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Creates a new empty contour in the glyph and makes it active. Remembers
+ * the previously active contour so undo can restore it after removing the
+ * new one.
+ */
 export class AddContourCommand extends BaseCommand<ContourId> {
   readonly name = "Add Contour";
 
@@ -219,6 +245,11 @@ export class AddContourCommand extends BaseCommand<ContourId> {
   }
 }
 
+/**
+ * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
+ * Functionally identical to {@link MovePointsCommand} but carries its own
+ * command name for distinct undo history labeling.
+ */
 export class NudgePointsCommand extends BaseCommand<void> {
   readonly name = "Nudge Points";
 
@@ -244,6 +275,11 @@ export class NudgePointsCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Switches the active contour in the font engine. New points are appended
+ * to the active contour, so this controls where subsequent drawing lands.
+ * Undo restores the previously active contour.
+ */
 export class SetActiveContourCommand extends BaseCommand<void> {
   readonly name = "Set Active Contour";
 
@@ -267,6 +303,11 @@ export class SetActiveContourCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Reverses a contour's winding direction. This affects fill rule rendering
+ * (e.g. counter-shapes) and path direction conventions. The operation is
+ * self-inverse, so undo simply reverses again.
+ */
 export class ReverseContourCommand extends BaseCommand<void> {
   readonly name = "Reverse Contour";
 
@@ -286,6 +327,13 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Splits a segment at parametric value t, inserting new points and adjusting
+ * control handles to preserve the curve's shape. Handles line, quadratic, and
+ * cubic segments using de Casteljau subdivision. Returns the id of the new
+ * on-curve split point. Undo removes inserted points and restores original
+ * control positions.
+ */
 export class SplitSegmentCommand extends BaseCommand<PointId> {
   readonly name = "Split Segment";
 
@@ -446,6 +494,12 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 }
 
+/**
+ * Converts a line segment into a cubic bezier by inserting two off-curve
+ * control points at the 1/3 and 2/3 positions. The resulting cubic traces
+ * the same path as the original line, enabling subsequent handle manipulation
+ * to introduce curvature. Undo removes the inserted control points.
+ */
 export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   readonly name = "Upgrade Line to Cubic";
 

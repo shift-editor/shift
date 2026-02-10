@@ -1,4 +1,4 @@
-export { Editor } from "./Editor";
+export { Editor, type ShiftEditor } from "./Editor";
 export { ViewportManager, SelectionManager, HoverManager } from "./managers";
 export {
   CanvasCoordinator,

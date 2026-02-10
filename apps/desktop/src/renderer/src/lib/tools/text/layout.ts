@@ -1,6 +1,6 @@
 import type { Point2D, FontMetrics } from "@shift/types";
 import type { Bounds } from "@shift/geo";
-import type { FontContext } from "../core/ToolContext";
+import type { Font } from "@/lib/editor/Font";
 
 export interface GlyphSlot {
   unicode: number;
@@ -16,19 +16,15 @@ export interface TextLayout {
   totalAdvance: number;
 }
 
-export function computeTextLayout(
-  codepoints: number[],
-  origin: Point2D,
-  fontContext: FontContext,
-): TextLayout {
+export function computeTextLayout(codepoints: number[], origin: Point2D, font: Font): TextLayout {
   const slots: GlyphSlot[] = [];
   let x = origin.x;
   const selected = false;
 
   for (const unicode of codepoints) {
-    const advance = fontContext.getGlyphAdvance(unicode) ?? 0;
-    const bounds = fontContext.getGlyphBbox(unicode);
-    const svgPath = fontContext.getGlyphSvgPath(unicode);
+    const advance = font.getAdvance(unicode) ?? 0;
+    const bounds = font.getBbox(unicode);
+    const svgPath = font.getSvgPath(unicode);
 
     slots.push({
       unicode,

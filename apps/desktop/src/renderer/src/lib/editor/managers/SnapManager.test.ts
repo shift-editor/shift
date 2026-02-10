@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { asPointId, type FontMetrics, type PointId } from "@shift/types";
-import { EditorSnapManager } from "./EditorSnapManager";
+import { SnapManager } from "./SnapManager";
 
-describe("EditorSnapManager", () => {
+describe("SnapManager", () => {
   const metrics: FontMetrics = {
     unitsPerEm: 1000,
     ascender: 800,
@@ -16,7 +16,7 @@ describe("EditorSnapManager", () => {
   };
 
   function createManager() {
-    return new EditorSnapManager({
+    return new SnapManager({
       getGlyph: () => ({
         name: "A",
         xAdvance: 600,
@@ -32,7 +32,7 @@ describe("EditorSnapManager", () => {
         ],
       }),
       getMetrics: () => metrics,
-      getPreferences: () => ({
+      getSnapPreferences: () => ({
         enabled: true,
         angle: true,
         metrics: true,

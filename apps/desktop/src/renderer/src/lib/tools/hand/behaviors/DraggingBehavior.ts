@@ -1,5 +1,5 @@
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { HandState } from "../types";
 import { createBehavior } from "../../core/Behavior";
 
@@ -11,7 +11,7 @@ export const HandDraggingBehavior = createBehavior<HandState>({
     );
   },
 
-  transition(state: HandState, event: ToolEvent, editor: ToolContext) {
+  transition(state: HandState, event: ToolEvent, editor: EditorAPI) {
     if (state.type !== "dragging") return null;
 
     if (event.type === "drag") {

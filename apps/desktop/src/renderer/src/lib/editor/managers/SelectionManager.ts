@@ -3,6 +3,14 @@ import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 
+/**
+ * Point-level and segment-level selection state.
+ *
+ * Selection operates in two modes: "committed" (user-confirmed) and "preview"
+ * (transient marquee highlight that has not been finalized). There is no
+ * contour-level selection; contours are implicitly selected when all their
+ * points are selected.
+ */
 export class SelectionManager {
   private $selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
   private $selectedSegmentIds: WritableSignal<ReadonlySet<SegmentId>>;

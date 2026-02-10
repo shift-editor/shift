@@ -1,5 +1,5 @@
 import type { Point2D, ContourId, PointId } from "@shift/types";
-import type { ToolContext } from "@/lib/tools/core";
+import type { EditorAPI } from "@/lib/tools/core";
 import type { Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
 import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
@@ -79,7 +79,7 @@ export function resolvePenAction(pos: Point2D, ctx: PenActionContext): PenAction
   return { type: "placePoint", pos };
 }
 
-export function executeAction(action: PenAction, editor: ToolContext): PointId | null {
+export function executeAction(action: PenAction, editor: EditorAPI): PointId | null {
   switch (action.type) {
     case "close":
       editor.commands.execute(new CloseContourCommand());

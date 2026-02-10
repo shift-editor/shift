@@ -1,6 +1,11 @@
 import type { PointType, PointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
+/**
+ * Appends a new point to the active contour. Returns the engine-assigned PointId
+ * so callers can immediately reference the point for follow-up commands (e.g.
+ * bezier handle placement). Undo removes the point by id.
+ */
 export class AddPointCommand extends BaseCommand<PointId> {
   readonly name = "Add Point";
 
@@ -41,6 +46,10 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 }
 
+/**
+ * Translates one or more points by a delta vector. Used for drag operations
+ * where the displacement is known. Undo applies the inverse delta.
+ */
 export class MovePointsCommand extends BaseCommand<void> {
   readonly name = "Move Points";
 
@@ -71,6 +80,11 @@ export class MovePointsCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Moves a single point to an absolute position. Captures the original position
+ * on first execute for undo. Prefer {@link MovePointsCommand} for delta-based
+ * batch moves; use this when exact placement matters (e.g. snapping).
+ */
 export class MovePointToCommand extends BaseCommand<void> {
   readonly name = "Move Point";
 
@@ -115,6 +129,10 @@ export class MovePointToCommand extends BaseCommand<void> {
   }
 }
 
+/**
+ * Deletes one or more points from the glyph. Snapshots each removed point's
+ * contour, position, type, and smoothness so undo can re-add them in order.
+ */
 export class RemovePointsCommand extends BaseCommand<void> {
   readonly name = "Remove Points";
 

@@ -1,6 +1,6 @@
 import { Contours } from "@shift/font";
 import type { ToolEvent } from "../../core/GestureDetector";
-import type { ToolContext } from "../../core/ToolContext";
+import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { PenState, PenBehavior } from "../types";
 import type { PenAction } from "../actions";
@@ -13,7 +13,7 @@ export class EscapeBehavior implements PenBehavior {
   transition(
     state: PenState,
     event: ToolEvent,
-    editor: ToolContext,
+    editor: EditorAPI,
   ): TransitionResult<PenState, PenAction> | null {
     if (state.type !== "ready") return null;
     if (event.type !== "keyDown" || event.key !== "Escape") return null;
@@ -28,7 +28,7 @@ export class EscapeBehavior implements PenBehavior {
     return null;
   }
 
-  private hasActiveDrawingContour(editor: ToolContext): boolean {
+  private hasActiveDrawingContour(editor: EditorAPI): boolean {
     const contour = editor.getActiveContour();
     if (!contour) return false;
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
