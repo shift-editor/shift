@@ -12,5 +12,6 @@ export {
   renderDebugTightBounds,
   renderDebugHitRadii,
   renderDebugSegmentBounds,
+  renderDebugGlyphBbox,
 } from "./debugOverlays";
 export type { RenderContext } from "./types";

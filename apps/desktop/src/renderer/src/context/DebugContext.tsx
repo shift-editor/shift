@@ -16,6 +16,7 @@ const DEFAULT_OVERLAYS: DebugOverlays = {
   tightBounds: false,
   hitRadii: false,
   segmentBounds: false,
+  glyphBbox: false,
 };
 
 interface DebugContextValue {

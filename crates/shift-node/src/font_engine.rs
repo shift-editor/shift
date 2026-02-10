@@ -248,10 +248,19 @@ impl FontEngine {
     unicodes
   }
 
+  fn editing_layer_for(&self, unicode: u32) -> Option<&GlyphLayer> {
+    if let Some(session) = &self.current_edit_session {
+      if session.unicode() == unicode {
+        return Some(session.layer());
+      }
+    }
+    let glyph = self.font.glyph_by_unicode(unicode)?;
+    glyph.layers().values().max_by_key(|l| l.contours().len())
+  }
+
   #[napi]
   pub fn get_glyph_svg_path(&self, unicode: u32) -> Option<String> {
-    let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    let layer = self.editing_layer_for(unicode)?;
     let path = layer_to_svg_path(layer);
     if path.is_empty() {
       return None;
@@ -261,15 +270,13 @@ impl FontEngine {
 
   #[napi]
   pub fn get_glyph_advance(&self, unicode: u32) -> Option<f64> {
-    let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    let layer = self.editing_layer_for(unicode)?;
     Some(layer.width())
   }
 
   #[napi]
   pub fn get_glyph_bbox(&self, unicode: u32) -> Option<Vec<f64>> {
-    let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = glyph.layers().values().max_by_key(|l| l.contours().len())?;
+    let layer = self.editing_layer_for(unicode)?;
     layer_bbox(layer).map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 

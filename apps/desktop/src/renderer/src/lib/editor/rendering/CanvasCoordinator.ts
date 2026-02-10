@@ -33,6 +33,7 @@ import {
   renderDebugTightBounds,
   renderDebugHitRadii,
   renderDebugSegmentBounds,
+  renderDebugGlyphBbox,
 } from "./passes";
 
 /**
@@ -290,6 +291,9 @@ export class CanvasCoordinator {
       }
       if (debugOverlays.hitRadii) {
         renderDebugHitRadii(rc, glyph, this.#ctx.screenToUpmDistance(SCREEN_HIT_RADIUS));
+      }
+      if (debugOverlays.glyphBbox) {
+        renderDebugGlyphBbox(rc, glyph);
       }
     }
 

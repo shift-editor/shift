@@ -196,6 +196,7 @@ export class Editor implements ShiftEditor {
       tightBounds: false,
       hitRadii: false,
       segmentBounds: false,
+      glyphBbox: false,
     });
 
     this.#selection = new SelectionManager();

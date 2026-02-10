@@ -15,6 +15,7 @@ export class MenuManager {
       tightBounds: false,
       hitRadii: false,
       segmentBounds: false,
+      glyphBbox: false,
     },
   };
 
@@ -300,6 +301,12 @@ export class MenuManager {
                       type: "checkbox" as const,
                       checked: this.debugState.overlays.segmentBounds,
                       click: () => this.toggleOverlay("segmentBounds"),
+                    },
+                    {
+                      label: "Glyph Bounding Box",
+                      type: "checkbox" as const,
+                      checked: this.debugState.overlays.glyphBbox,
+                      click: () => this.toggleOverlay("glyphBbox"),
                     },
                   ],
                 },
