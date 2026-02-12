@@ -59,7 +59,8 @@ export class RotateBehavior implements SelectBehavior {
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
-      const rawAngle = Vec2.angleTo(state.rotate.center, event.point);
+      const currentPos = event.coords.glyphLocal;
+      const rawAngle = Vec2.angleTo(state.rotate.center, currentPos);
       const rawDelta = rawAngle - state.rotate.startAngle;
 
       let deltaAngle = rawDelta;
@@ -85,7 +86,7 @@ export class RotateBehavior implements SelectBehavior {
           type: "rotating",
           rotate: {
             ...state.rotate,
-            lastPos: event.point,
+            lastPos: currentPos,
             currentAngle,
             snappedAngle,
           },
@@ -122,21 +123,22 @@ export class RotateBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
-    const point = editor.getPointAt(event.point);
+    const point = editor.getPointAt(event.coords);
     if (point) return null;
 
-    const bbHit = editor.hitTestBoundingBoxAt(event.point);
+    const bbHit = editor.hitTestBoundingBoxAt(event.coords);
     const corner: CornerHandle | null = bbHit?.type === "rotate" ? bbHit.corner : null;
     const bounds = editor.getSelectionBoundingRect();
 
     if (!corner || !bounds) return null;
 
+    const localPoint = event.coords.glyphLocal;
     const center = Vec2.midpoint(
       { x: bounds.left, y: bounds.top },
       { x: bounds.right, y: bounds.bottom },
     );
 
-    const startAngle = Vec2.angleTo(center, event.point);
+    const startAngle = Vec2.angleTo(center, localPoint);
     const draggedPointIds = [...editor.getSelectedPoints()];
     this.startSnap(editor);
     const initialPositions = cacheSelectedPositions(editor);
@@ -146,8 +148,8 @@ export class RotateBehavior implements SelectBehavior {
         type: "rotating",
         rotate: {
           corner,
-          startPos: event.point,
-          lastPos: event.point,
+          startPos: localPoint,
+          lastPos: localPoint,
           center,
           startAngle,
           currentAngle: startAngle,

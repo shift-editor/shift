@@ -21,7 +21,7 @@ export class UpgradeSegmentBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "click" || !event.altKey) return null;
 
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     if (!isSegmentHit(hit) || hit.segment.type !== "line") return null;
 
     return {

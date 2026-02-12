@@ -1,9 +1,9 @@
-import { EditorAPI, ToolEvent, TransitionResult } from "../../core";
-import { TextAction, TextBehavior, TextState } from "../types";
+import type { EditorAPI, ToolEvent, TransitionResult } from "../../core";
+import type { TextAction, TextBehavior, TextState } from "../types";
 
 export class TypingBehavior implements TextBehavior {
-  canHandle(state: TextState, _event: ToolEvent): boolean {
-    return state.type === "typing";
+  canHandle(state: TextState, event: ToolEvent): boolean {
+    return state.type === "typing" && event.type === "keyDown";
   }
 
   transition(
@@ -14,41 +14,21 @@ export class TypingBehavior implements TextBehavior {
     if (event.type !== "keyDown") return null;
     if (state.type !== "typing") return null;
 
-    const { layout } = state;
-
-    console.log(event.key);
-
     switch (event.key) {
       case "Backspace":
-        return {
-          state: { type: "typing", layout: layout },
-          action: { type: "delete" },
-        };
+        return { state: { ...state }, action: { type: "delete" } };
       case "Escape":
-        return {
-          state: { type: "idle" },
-          action: { type: "cancel" },
-        };
+        return { state: { type: "idle" }, action: { type: "cancel" } };
       case "ArrowLeft":
-        return {
-          state: { type: "typing", layout: { slots: [], totalAdvance: 0 } },
-          action: { type: "moveLeft" },
-        };
+        return { state: { ...state }, action: { type: "moveLeft" } };
       case "ArrowRight":
-        return {
-          state: { type: "typing", layout: { slots: [], totalAdvance: 0 } },
-          action: { type: "moveRight" },
-        };
-      default:
-        return {
-          state: {
-            type: "typing",
-            layout: { slots: [], totalAdvance: 0 },
-          },
-          action: { type: "insert", codepoint: event.key.codePointAt(0) },
-        };
+        return { state: { ...state }, action: { type: "moveRight" } };
+      default: {
+        if (event.key.length !== 1 || event.metaKey) return null;
+        const codepoint = event.key.codePointAt(0);
+        if (codepoint === undefined) return null;
+        return { state: { ...state }, action: { type: "insert", codepoint } };
+      }
     }
   }
-
-  onTransition(_prev: TextState, _next: TextState, _event: ToolEvent): void {}
 }

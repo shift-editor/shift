@@ -19,7 +19,7 @@ export class DoubleClickBehaviour implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
 
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     if (!isSegmentHit(hit)) return null;
 
     const contourId = this.findContourForSegment(hit.segmentId, editor);

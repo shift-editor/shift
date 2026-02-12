@@ -41,10 +41,11 @@ export function DebugPanel() {
     if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
-      const upm = editor.projectScreenToUpm(screen.x, screen.y);
-      if (upmRef.current) upmRef.current.textContent = formatCoords(upm.x, upm.y);
+      const coords = editor.fromScreen(screen.x, screen.y);
+      if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
-      if (worldRef.current) worldRef.current.textContent = formatCoords(upm.x, upm.y);
+      if (worldRef.current)
+        worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
     });
     return () => fx.dispose();
   }, [isOpen, editor]);

@@ -14,4 +14,5 @@ export {
   renderDebugSegmentBounds,
   renderDebugGlyphBbox,
 } from "./debugOverlays";
+export { renderTextRun } from "./textRun";
 export type { RenderContext } from "./types";

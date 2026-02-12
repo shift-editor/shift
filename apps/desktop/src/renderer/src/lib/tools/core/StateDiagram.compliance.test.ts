@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { ToolEvent } from "./GestureDetector";
 import type { StateDiagram } from "./StateDiagram";
 import { transitionInDiagram } from "./StateDiagram";
-import { createMockToolContext } from "@/testing";
+import { createMockToolContext, makeTestCoordinates } from "@/testing";
 import { Hand } from "../hand/Hand";
 import { Shape } from "../shape/Shape";
 import { Pen } from "../pen/Pen";
@@ -11,20 +11,29 @@ import { asPointId } from "@shift/types";
 import type { HandleData } from "../pen/types";
 
 const p = { x: 0, y: 0 };
+const coordsP = makeTestCoordinates(p);
 
 function makePointerMove(): ToolEvent {
-  return { type: "pointerMove", point: p };
+  return { type: "pointerMove", point: p, coords: coordsP };
 }
 function makeClick(): ToolEvent {
-  return { type: "click", point: p, shiftKey: false, altKey: false };
+  return { type: "click", point: p, coords: coordsP, shiftKey: false, altKey: false };
 }
 function makeDragStart(): ToolEvent {
-  return { type: "dragStart", point: p, screenPoint: p, shiftKey: false, altKey: false };
+  return {
+    type: "dragStart",
+    point: p,
+    coords: coordsP,
+    screenPoint: p,
+    shiftKey: false,
+    altKey: false,
+  };
 }
 function makeDrag(): ToolEvent {
   return {
     type: "drag",
     point: p,
+    coords: coordsP,
     screenPoint: p,
     origin: p,
     screenOrigin: p,
@@ -35,7 +44,14 @@ function makeDrag(): ToolEvent {
   };
 }
 function makeDragEnd(): ToolEvent {
-  return { type: "dragEnd", point: p, screenPoint: p, origin: p, screenOrigin: p };
+  return {
+    type: "dragEnd",
+    point: p,
+    coords: coordsP,
+    screenPoint: p,
+    origin: p,
+    screenOrigin: p,
+  };
 }
 function makeDragCancel(): ToolEvent {
   return { type: "dragCancel" };

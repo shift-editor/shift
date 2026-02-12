@@ -5,3 +5,4 @@ export { EdgePanManager } from "./EdgePanManager";
 export { SnapManager } from "./SnapManager";
 export { ClipboardManager } from "./ClipboardManager";
 export { FontManager } from "./FontManager";
+export { TextRunManager } from "./TextRunManager";

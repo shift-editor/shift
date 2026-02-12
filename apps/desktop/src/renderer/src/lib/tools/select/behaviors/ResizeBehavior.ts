@@ -54,9 +54,10 @@ export class ResizeBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const uniformScale = event.shiftKey;
+      const currentPos = event.coords.glyphLocal;
       const { sx, sy } = this.calculateScaleFactors(
         state.resize.edge,
-        event.point,
+        currentPos,
         state.resize.anchorPoint,
         state.resize.initialBounds,
         uniformScale,
@@ -77,7 +78,7 @@ export class ResizeBehavior implements SelectBehavior {
           type: "resizing",
           resize: {
             ...state.resize,
-            lastPos: event.point,
+            lastPos: currentPos,
             uniformScale,
           },
         },
@@ -120,15 +121,16 @@ export class ResizeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
-    const point = editor.getPointAt(event.point);
+    const point = editor.getPointAt(event.coords);
     if (point) return null;
 
-    const bbHit = editor.hitTestBoundingBoxAt(event.point);
+    const bbHit = editor.hitTestBoundingBoxAt(event.coords);
     const edge: BoundingRectEdge = bbHit?.type === "resize" ? bbHit.edge : null;
     const bounds = editor.getSelectionBoundingRect();
 
     if (!edge || !bounds) return null;
 
+    const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
     const draggedPointIds = [...editor.getSelectedPoints()];
     const initialPositions = cacheSelectedPositions(editor);
@@ -138,8 +140,8 @@ export class ResizeBehavior implements SelectBehavior {
         type: "resizing",
         resize: {
           edge,
-          startPos: event.point,
-          lastPos: event.point,
+          startPos: localPoint,
+          lastPos: localPoint,
           initialBounds: bounds,
           anchorPoint,
           draggedPointIds,

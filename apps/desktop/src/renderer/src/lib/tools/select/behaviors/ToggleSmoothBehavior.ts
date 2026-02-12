@@ -18,7 +18,7 @@ export class ToggleSmoothBehavior implements SelectBehavior {
     if (event.type !== "doubleClick") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
     if (pointId === null) return null;
 

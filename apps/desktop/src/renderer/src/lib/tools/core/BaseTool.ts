@@ -78,6 +78,9 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
    * Stashes any emitted action in `#pendingAction` for `onTransition`.
    */
   transition(state: S, event: ToolEvent): S {
+    this.#lastTransitionHandled = false;
+    this.#pendingAction = null;
+
     if (state.type === "idle") {
       return state;
     }
@@ -85,6 +88,7 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
     if (this.preTransition) {
       const result = this.preTransition(state, event);
       if (result !== null) {
+        this.#lastTransitionHandled = true;
         this.#pendingAction = result.action ?? null;
         return result.state;
       }
@@ -94,6 +98,7 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
       if (behavior.canHandle(state, event)) {
         const result = behavior.transition(state, event, this.editor);
         if (result !== null) {
+          this.#lastTransitionHandled = true;
           this.#pendingAction = result.action ?? null;
           return result.state;
         }
@@ -104,6 +109,7 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
   }
 
   #pendingAction: A | null = null;
+  #lastTransitionHandled = false;
 
   /**
    * Post-transition hook: executes the pending action (if any), then notifies
@@ -126,9 +132,10 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
    * Main entry point called by ToolManager on every gesture event.
    * Runs transition, and if the state changed, commits it in a reactive batch.
    */
-  handleEvent(event: ToolEvent): void {
+  handleEvent(event: ToolEvent): boolean {
     const prev = this.state;
     const next = this.transition(this.state, event);
+    const handled = this.#lastTransitionHandled;
 
     if (next !== prev) {
       batch(() => {
@@ -137,6 +144,8 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
         this.onTransition(prev, next, event);
       });
     }
+
+    return handled;
   }
 
   isInState<T extends S["type"]>(...types: T[]): boolean {

@@ -12,11 +12,53 @@ import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Point2D, Rect2D } from "@shift/types";
 import { signal, computed, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { Coordinates } from "@/types/coordinates";
 import type {
   DragSnapSession,
   DragSnapSessionConfig,
   RotateSnapSession,
 } from "@/lib/editor/snapping/types";
+
+/** For tests: build Coordinates with the same point in all three spaces. */
+export function makeTestCoordinates(p: Point2D): Coordinates {
+  return { screen: { ...p }, scene: { ...p }, glyphLocal: { ...p } };
+}
+
+/**
+ * For tests: build Coordinates from scene space with an explicit draw offset.
+ * Screen defaults to scene unless a custom screen point is provided.
+ */
+export function makeTestCoordinatesFromScene(
+  scene: Point2D,
+  drawOffset: Point2D,
+  screen: Point2D = scene,
+): Coordinates {
+  return {
+    screen: { ...screen },
+    scene: { ...scene },
+    glyphLocal: {
+      x: scene.x - drawOffset.x,
+      y: scene.y - drawOffset.y,
+    },
+  };
+}
+
+/** For tests: build Coordinates from glyph-local space with an explicit draw offset. */
+export function makeTestCoordinatesFromGlyphLocal(
+  glyphLocal: Point2D,
+  drawOffset: Point2D,
+  screen?: Point2D,
+): Coordinates {
+  const scene = {
+    x: glyphLocal.x + drawOffset.x,
+    y: glyphLocal.y + drawOffset.y,
+  };
+  return {
+    screen: { ...(screen ?? scene) },
+    scene,
+    glyphLocal: { ...glyphLocal },
+  };
+}
 
 export interface ToolMouseEvent {
   readonly screen: Point2D;
@@ -28,13 +70,14 @@ export interface ToolMouseEvent {
   readonly button: number;
 }
 import { FontEngine, MockFontEngine } from "@/engine";
+import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
   readonly hitRadius: number;
   lineWidth(pixels?: number): number;
-  projectScreenToUpm(x: number, y: number): Point2D;
+  projectScreenToScene(x: number, y: number): Point2D;
   getMousePosition(x?: number, y?: number): Point2D;
 }
 
@@ -144,15 +187,15 @@ interface ViewportService {
 }
 
 interface HitTestService {
-  getNodeAt(pos: Point2D): HitResult;
-  getPointAt(pos: Point2D): Point | null;
-  getSegmentAt(pos: Point2D): any | null;
-  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
+  getNodeAt(coords: Coordinates): HitResult;
+  getPointAt(coords: Coordinates): Point | null;
+  getSegmentAt(coords: Coordinates): any | null;
+  getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null;
   getSelectionBoundingRect(): any | null;
   getAllPoints(): Point[];
   getSegmentById(segmentId: SegmentId): any | null;
-  updateHover(pos: Point2D): void;
-  getMiddlePointAt(pos: Point2D): any | null;
+  updateHover(coords: Coordinates): void;
+  getMiddlePointAt(coords: Coordinates): any | null;
 }
 
 interface ToolSwitchService {
@@ -204,7 +247,7 @@ function createMockScreenService(): ScreenService & {
   const mocks = {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
-    projectScreenToUpm: vi.fn((x: number, y: number) => ({ x, y })),
+    projectScreenToScene: vi.fn((x: number, y: number) => ({ x, y })),
     getMousePosition: vi.fn((x?: number, y?: number) => ({
       x: x ?? 0,
       y: y ?? 0,
@@ -217,7 +260,7 @@ function createMockScreenService(): ScreenService & {
       return 8;
     },
     lineWidth: mocks.lineWidth,
-    projectScreenToUpm: mocks.projectScreenToUpm,
+    projectScreenToScene: mocks.projectScreenToScene,
     getMousePosition: mocks.getMousePosition,
     mocks,
   };
@@ -788,7 +831,8 @@ function createMockHitTestService(
     return null;
   };
 
-  const getNodeAt = (pos: Point2D): HitResult => {
+  const getNodeAt = (coords: Coordinates): HitResult => {
+    const pos = coords.scene;
     const endpoint = getContourEndpointAt(pos);
     if (endpoint) return endpoint;
 
@@ -811,16 +855,21 @@ function createMockHitTestService(
     return null;
   };
 
+  const getPointAtCoords = (coords: Coordinates) => getPointAt(coords.scene);
+  const getSegmentAtCoords = (coords: Coordinates) => getSegmentAt(coords.scene);
+  const getContourEndpointAtCoords = (coords: Coordinates) => getContourEndpointAt(coords.scene);
+  const getMiddlePointAtCoords = (coords: Coordinates) => getMiddlePointAt(coords.scene);
+
   const mocks = {
     getNodeAt: vi.fn(getNodeAt),
-    getPointAt: vi.fn(getPointAt),
-    getSegmentAt: vi.fn(getSegmentAt),
-    getContourEndpointAt: vi.fn(getContourEndpointAt),
+    getPointAt: vi.fn(getPointAtCoords),
+    getSegmentAt: vi.fn(getSegmentAtCoords),
+    getContourEndpointAt: vi.fn(getContourEndpointAtCoords),
     getSelectionBoundingRect: vi.fn(() => null),
     getAllPoints: vi.fn(getAllPoints),
     getSegmentById: vi.fn(getSegmentById),
     updateHover: vi.fn(),
-    getMiddlePointAt: vi.fn(getMiddlePointAt),
+    getMiddlePointAt: vi.fn(getMiddlePointAtCoords),
   };
 
   return {
@@ -911,6 +960,8 @@ export function createMockToolContext(): MockToolContext {
     returnFromTemporary: vi.fn(),
   };
 
+  const textRunManager = new TextRunManager();
+
   const zone = {
     getZone: vi.fn().mockReturnValue("canvas" as const),
   };
@@ -933,6 +984,7 @@ export function createMockToolContext(): MockToolContext {
     angleIncrementDeg: 45,
     pointRadiusPx: 8,
   });
+  let drawOffset: Point2D = { x: 0, y: 0 };
 
   function createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession {
     let previous: number | null = null;
@@ -984,8 +1036,10 @@ export function createMockToolContext(): MockToolContext {
   }
 
   return {
-    getDrawOffset: vi.fn(() => ({ x: 0, y: 0 })),
-    setDrawOffset: vi.fn((_offset: Point2D) => {}),
+    getDrawOffset: vi.fn(() => drawOffset),
+    setDrawOffset: vi.fn((offset: Point2D) => {
+      drawOffset = offset;
+    }),
     fontEngine,
     screen,
     selection,
@@ -1015,10 +1069,26 @@ export function createMockToolContext(): MockToolContext {
       return $activeToolState;
     },
     getMousePosition: () =>
-      screen.projectScreenToUpm($screenMousePosition.peek().x, $screenMousePosition.peek().y),
+      screen.projectScreenToScene($screenMousePosition.peek().x, $screenMousePosition.peek().y),
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
-    projectScreenToUpm: (x: number, y: number) => screen.projectScreenToUpm(x, y),
+    projectScreenToScene: (x: number, y: number) => screen.projectScreenToScene(x, y),
+    sceneToGlyphLocal: (point: Point2D) => ({
+      x: point.x - drawOffset.x,
+      y: point.y - drawOffset.y,
+    }),
+    glyphLocalToScene: (point: Point2D) => ({
+      x: point.x + drawOffset.x,
+      y: point.y + drawOffset.y,
+    }),
+    fromScreen: (sx: number, sy: number) =>
+      makeTestCoordinatesFromScene(screen.projectScreenToScene(sx, sy), drawOffset, {
+        x: sx,
+        y: sy,
+      }),
+    fromScene: (x: number, y: number) => makeTestCoordinatesFromScene({ x, y }, drawOffset),
+    fromGlyphLocal: (x: number, y: number) =>
+      makeTestCoordinatesFromGlyphLocal({ x, y }, drawOffset),
     screenToUpmDistance: (pixels: number) => pixels,
     hasSelection: () => selection.hasSelection(),
     getActiveToolState: () => $activeToolState.value,
@@ -1093,15 +1163,15 @@ export function createMockToolContext(): MockToolContext {
     setHandlesVisible: (visible: boolean) => render.setHandlesVisible(visible),
     setMarqueePreviewRect: (_rect: Rect2D | null) => {},
     isPointInMarqueePreview: (_pointId: PointId) => false,
-    getNodeAt: (pos: Point2D) => hitTest.getNodeAt(pos),
-    getPointAt: (pos: Point2D) => hitTest.getPointAt(pos),
-    getSegmentAt: (pos: Point2D) => hitTest.getSegmentAt(pos),
-    getContourEndpointAt: (pos: Point2D) => hitTest.getContourEndpointAt(pos),
+    getNodeAt: (coords: Coordinates) => hitTest.getNodeAt(coords),
+    getPointAt: (coords: Coordinates) => hitTest.getPointAt(coords),
+    getSegmentAt: (coords: Coordinates) => hitTest.getSegmentAt(coords),
+    getContourEndpointAt: (coords: Coordinates) => hitTest.getContourEndpointAt(coords),
     getSelectionBoundingRect: () => hitTest.getSelectionBoundingRect(),
     getAllPoints: () => hitTest.getAllPoints(),
     getSegmentById: (id: SegmentId) => hitTest.getSegmentById(id),
-    updateHover: (pos: Point2D) => hitTest.updateHover(pos),
-    getMiddlePointAt: (pos: Point2D) => hitTest.getMiddlePointAt(pos),
+    updateHover: (coords: Coordinates) => hitTest.updateHover(coords),
+    getMiddlePointAt: (coords: Coordinates) => hitTest.getMiddlePointAt(coords),
     getFocusZone: () => zone.getZone(),
     get pan() {
       return viewport.getPan();
@@ -1110,7 +1180,7 @@ export function createMockToolContext(): MockToolContext {
     get hoveredBoundingBoxHandle() {
       return $hoveredBoundingBoxHandle;
     },
-    hitTestBoundingBoxAt: vi.fn(() => null),
+    hitTestBoundingBoxAt: vi.fn((_coords: Coordinates) => null),
     getHoveredBoundingBoxHandle: () => $hoveredBoundingBoxHandle.peek(),
     get hoveredPointId() {
       return hover.hoveredPointId;
@@ -1134,6 +1204,13 @@ export function createMockToolContext(): MockToolContext {
     createRotateSnapSession,
     duplicateSelection: vi.fn(() => []),
     setSnapIndicator: vi.fn(),
+    textRunManager,
+    startEditSession: vi.fn((unicode: number) => {
+      fontEngine.session.startEditSession(unicode);
+      fontEngine.editing.addContour();
+    }),
+    getActiveGlyphUnicode: vi.fn(() => fontEngine.session.getEditingUnicode()),
+    setActiveTool: vi.fn(),
     clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
@@ -1202,9 +1279,11 @@ export class ToolEventSimulator {
     this.mouseDown = true;
     this.downPoint = event.upm;
     this.downScreenPoint = event.screen;
+    const coords = makeTestCoordinates(event.upm);
     this.tool.handleEvent({
       type: "dragStart",
       point: event.upm,
+      coords,
       screenPoint: event.screen,
       shiftKey: event.shiftKey,
       altKey: event.altKey,
@@ -1212,10 +1291,12 @@ export class ToolEventSimulator {
   }
 
   onMouseMove(event: ToolMouseEvent): void {
+    const coords = makeTestCoordinates(event.upm);
     if (this.mouseDown && this.downPoint && this.downScreenPoint) {
       this.tool.handleEvent({
         type: "drag",
         point: event.upm,
+        coords,
         screenPoint: event.screen,
         origin: this.downPoint,
         screenOrigin: this.downScreenPoint,
@@ -1234,15 +1315,18 @@ export class ToolEventSimulator {
       this.tool.handleEvent({
         type: "pointerMove",
         point: event.upm,
+        coords,
       });
     }
   }
 
   onMouseUp(event: ToolMouseEvent): void {
+    const coords = makeTestCoordinates(event.upm);
     if (this.mouseDown && this.downPoint && this.downScreenPoint) {
       this.tool.handleEvent({
         type: "dragEnd",
         point: event.upm,
+        coords,
         screenPoint: event.screen,
         origin: this.downPoint,
         screenOrigin: this.downScreenPoint,
@@ -1254,9 +1338,12 @@ export class ToolEventSimulator {
   }
 
   click(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): void {
+    const point = { x, y };
+    const coords = makeTestCoordinates(point);
     this.tool.handleEvent({
       type: "click",
-      point: { x, y },
+      point,
+      coords,
       shiftKey: options?.shiftKey ?? false,
       altKey: options?.altKey ?? false,
     });

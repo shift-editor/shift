@@ -7,6 +7,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
+import type { TextRunState } from "../managers/TextRunManager";
 
 import {
   BOUNDING_RECTANGLE_STYLES,
@@ -30,6 +31,7 @@ import {
   renderBoundingRect,
   renderBoundingBoxHandles,
   renderSnapIndicators,
+  renderTextRun,
   renderDebugTightBounds,
   renderDebugHitRadii,
   renderDebugSegmentBounds,
@@ -84,12 +86,16 @@ export interface CanvasCoordinatorContext {
   /** Converts a screen-pixel distance to UPM units at the current zoom level. */
   screenToUpmDistance(px: number): number;
   /** Projects a point from UPM space to screen pixels, used for screen-space handle rendering. */
-  projectUpmToScreen(x: number, y: number): Point2D;
+  projectSceneToScreen(x: number, y: number): Point2D;
   getDebugOverlays(): DebugOverlays;
   /** Delegates to the active tool's render method (interactive canvas). */
   renderTool(draw: DrawAPI): void;
   /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
   renderToolBelowHandles(draw: DrawAPI): void;
+  /** Return the current text run state for rendering, or null if no text run. */
+  getTextRunState(): TextRunState | null;
+  /** Return unicode of currently active editable glyph, or null if none. */
+  getActiveGlyphUnicode(): number | null;
 }
 
 /**
@@ -181,7 +187,7 @@ export class CanvasCoordinator {
     this.#interactiveFrameHandler.cancelUpdate();
   }
 
-  #applyTransforms(ctx: IRenderer): void {
+  #applyViewportTransform(ctx: IRenderer): void {
     const vt = this.#ctx.getViewportTransform();
 
     ctx.transform(
@@ -195,7 +201,10 @@ export class CanvasCoordinator {
 
     const baselineY = vt.logicalHeight - vt.padding - vt.descender * vt.upmScale;
     ctx.transform(vt.upmScale, 0, 0, -vt.upmScale, vt.padding, baselineY);
+  }
 
+  #applyTransforms(ctx: IRenderer): void {
+    this.#applyViewportTransform(ctx);
     const { x, y } = this.#ctx.getDrawOffset();
     ctx.translate(x, y);
   }
@@ -246,11 +255,28 @@ export class CanvasCoordinator {
     const rc = { ctx, lineWidthUpm: (px?: number) => this.#lineWidthUpm(px) };
 
     ctx.clear();
-    ctx.save();
 
+    // Text run at absolute UPM positions (no drawOffset)
+    const textRunState = this.#ctx.getTextRunState();
+    if (textRunState) {
+      ctx.save();
+      this.#applyViewportTransform(ctx);
+      const metrics = this.#ctx.font.getMetrics();
+      const activeUnicode = this.#ctx.getActiveGlyphUnicode();
+      const drawOffset = this.#ctx.getDrawOffset();
+      const liveGlyph =
+        glyph && activeUnicode !== null
+          ? { unicode: activeUnicode, x: drawOffset.x, contours: glyph.contours }
+          : null;
+      renderTextRun(rc, textRunState, metrics, liveGlyph);
+      ctx.restore();
+    }
+    const shouldRenderEditableGlyph = !textRunState || textRunState.editingIndex !== null;
+
+    ctx.save();
     this.#applyTransforms(ctx);
 
-    if (glyph) {
+    if (glyph && shouldRenderEditableGlyph) {
       const guides = getGuides(glyph, this.#ctx.font.getMetrics());
       ctx.setStyle(GUIDE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
@@ -269,19 +295,19 @@ export class CanvasCoordinator {
     }
 
     const bbRect = this.#ctx.getSelectionBoundingRect();
-    if (!previewMode && bbRect) {
+    if (!previewMode && bbRect && shouldRenderEditableGlyph) {
       ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
       ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
       renderBoundingRect(rc, bbRect);
     }
 
-    if (!previewMode && glyph) {
+    if (!previewMode && glyph && shouldRenderEditableGlyph) {
       renderSegmentHighlights(rc, glyph, this.#ctx.getHoveredSegmentId(), (id) =>
         this.#ctx.isSegmentSelected(id),
       );
     }
 
-    if (!previewMode && glyph) {
+    if (!previewMode && glyph && shouldRenderEditableGlyph) {
       const debugOverlays = this.#ctx.getDebugOverlays();
       if (debugOverlays.segmentBounds) {
         renderDebugSegmentBounds(rc, glyph);
@@ -301,14 +327,14 @@ export class CanvasCoordinator {
       this.#ctx.renderToolBelowHandles(draw);
     }
 
-    if (!previewMode && handlesVisible && glyph) {
+    if (!previewMode && handlesVisible && glyph && shouldRenderEditableGlyph) {
       renderHandles(draw, glyph, (id) => this.#ctx.getHandleState(id));
     }
 
     ctx.restore();
     ctx.save();
 
-    if (!previewMode && bbRect && handlesVisible) {
+    if (!previewMode && bbRect && handlesVisible && shouldRenderEditableGlyph) {
       this.#drawBoundingBoxHandles(ctx, bbRect);
     }
 
@@ -319,8 +345,8 @@ export class CanvasCoordinator {
     ctx: IRenderer,
     bbRect: { x: number; y: number; width: number; height: number },
   ): void {
-    const topLeft = this.#ctx.projectUpmToScreen(bbRect.x, bbRect.y + bbRect.height);
-    const bottomRight = this.#ctx.projectUpmToScreen(bbRect.x + bbRect.width, bbRect.y);
+    const topLeft = this.#projectGlyphLocalToScreen(bbRect.x, bbRect.y + bbRect.height);
+    const bottomRight = this.#projectGlyphLocalToScreen(bbRect.x + bbRect.width, bbRect.y);
 
     const screenRect = {
       x: topLeft.x,
@@ -338,6 +364,11 @@ export class CanvasCoordinator {
       rect: screenRect,
       hoveredHandle: hoveredHandle ?? undefined,
     });
+  }
+
+  #projectGlyphLocalToScreen(x: number, y: number): Point2D {
+    const offset = this.#ctx.getDrawOffset();
+    return this.#ctx.projectSceneToScreen(x + offset.x, y + offset.y);
   }
 
   destroy(): void {

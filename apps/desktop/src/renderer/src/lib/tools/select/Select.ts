@@ -14,6 +14,8 @@ import {
   UpgradeSegmentBehavior,
   DoubleClickSelectContourBehavior,
 } from "./behaviors";
+import { TextRunEditBehavior } from "./behaviors/TextRunEditBehavior";
+import { TextRunHoverBehavior } from "./behaviors/TextRunHoverBehavior";
 import { normalizeRect } from "./utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
@@ -39,6 +41,8 @@ export class Select extends BaseTool<SelectState, SelectAction> {
   readonly id: ToolName = "select";
 
   readonly behaviors: SelectBehavior[] = [
+    new TextRunHoverBehavior(),
+    new TextRunEditBehavior(),
     new DoubleClickSelectContourBehavior(),
     new ToggleSmoothBehavior(),
     new UpgradeSegmentBehavior(),

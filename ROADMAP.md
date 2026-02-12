@@ -95,7 +95,7 @@
   - [x] Drag to create bezier handles
   - [x] Click on first point to close contour
   - [x] Custom pen cursor
-- [x] Select tool with state machine
+  - [x] Select tool with state machine
   - [x] Click to select single point
   - [x] Shift+click to toggle in selection
   - [x] Box selection (drag on empty space)
@@ -144,7 +144,7 @@
 ## 🚧 In Progress / Partial Implementation
 
 - [x] Font file opening in app (loader exists, UI integration needed)
-- [ ] Shape tool (placeholder only)
+- [x] Shape tool (placeholder only)
 
 ---
 
@@ -219,20 +219,20 @@
 
 **Metric Snapping**
 
-- [ ] Snap to baseline, x-height, cap height, ascender, descender
+- [x] Snap to baseline, x-height, cap height, ascender, descender
 - [ ] Snap to sidebearings (0, xAdvance)
-- [ ] Visual indicator when snapped
+- [x] Visual indicator when snapped
 
 **Point Snapping**
 
-- [ ] Snap to other points in glyph
+- [x] Snap to other points in glyph
 - [ ] Snap to horizontal/vertical alignment
 - [ ] Smart guides (temporary alignment lines)
 
 **Angle Constraint**
 
-- [ ] Hold `Shift` to constrain to 0°/45°/90°
-- [ ] Perpendicular constraint for smooth points
+- [x] Hold `Shift` to constrain to 0°/45°/90°
+- [x] Perpendicular constraint for smooth points
 
 **Measurement & Guidelines**
 
@@ -256,8 +256,8 @@
 
 **Grid Panel Improvements**
 
-- [ ] Glyph thumbnails (render actual outlines)
-- [ ] Visual indicator: empty vs. has content
+- [x] Glyph thumbnails (render actual outlines)
+- [x] Visual indicator: empty vs. has content
 - [ ] Grid zoom (cell size slider)
 - [ ] List view alternative
 - [ ] Search by glyph name, unicode, or character
@@ -398,8 +398,8 @@
 
 **Spacing View**
 
-- [ ] Text layout view (multiple glyphs on same canvas)
-- [ ] Double-click glyph in text view to edit
+- [x] Text layout view (multiple glyphs on same canvas)
+- [x] Double-click glyph in text view to edit
 - [ ] Spacing string presets (HOHOHOnnnooo, etc.)
 - [ ] Custom spacing strings
 - [ ] Adjust spacing while viewing in context

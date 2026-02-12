@@ -2,6 +2,7 @@ import type { Point2D, ContourId, PointId } from "@shift/types";
 import type { EditorAPI } from "@/lib/tools/core";
 import type { Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
+import type { Coordinates } from "@/types/coordinates";
 import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
 import {
   AddPointCommand,
@@ -32,19 +33,19 @@ export type PenAction =
   | { type: "updateHover"; pos: Point2D };
 
 export interface PenActionContext {
-  getNodeAt(pos: Point2D): HitResult;
+  getNodeAt(coords: Coordinates): HitResult;
   getActiveContourId(): ContourId | null;
   hasActiveDrawingContour(): boolean;
-  shouldCloseContour(pos: Point2D): boolean;
+  shouldCloseContour(coords: Coordinates): boolean;
 }
 
-export function resolvePenAction(pos: Point2D, ctx: PenActionContext): PenAction {
-  if (ctx.shouldCloseContour(pos)) {
+export function resolvePenAction(coords: Coordinates, ctx: PenActionContext): PenAction {
+  if (ctx.shouldCloseContour(coords)) {
     return { type: "close" };
   }
 
   if (!ctx.hasActiveDrawingContour()) {
-    const hit = ctx.getNodeAt(pos);
+    const hit = ctx.getNodeAt(coords);
 
     if (isContourEndpointHit(hit) && !hit.contour.closed) {
       const { contourId, pointId, position } = hit;
@@ -76,7 +77,7 @@ export function resolvePenAction(pos: Point2D, ctx: PenActionContext): PenAction
     }
   }
 
-  return { type: "placePoint", pos };
+  return { type: "placePoint", pos: coords.glyphLocal };
 }
 
 export function executeAction(action: PenAction, editor: EditorAPI): PointId | null {
@@ -115,7 +116,7 @@ export function executeAction(action: PenAction, editor: EditorAPI): PointId | n
       return null;
 
     case "updateHover":
-      editor.updateHover(action.pos);
+      editor.updateHover(editor.fromGlyphLocal(action.pos.x, action.pos.y));
       return null;
   }
 }

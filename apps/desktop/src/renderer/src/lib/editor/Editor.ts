@@ -31,6 +31,7 @@ import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Bounds, Polygon, Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { Coordinates } from "@/types/coordinates";
 
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
@@ -84,6 +85,7 @@ import type {
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
 import { FontManager } from "./managers/FontManager";
+import { TextRunManager } from "./managers/TextRunManager";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
@@ -136,6 +138,7 @@ export class Editor implements ShiftEditor {
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
+  #textRunManager: TextRunManager;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -221,6 +224,7 @@ export class Editor implements ShiftEditor {
     this.#toolManager = new ToolManager(this);
     this.#renderer = new CanvasCoordinator(this);
     this.#clipboard = new ClipboardManager(this);
+    this.#textRunManager = new TextRunManager();
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
     this.$renderState = computed<RenderState>(() => ({
@@ -245,6 +249,7 @@ export class Editor implements ShiftEditor {
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
       debugOverlays: this.#debugOverlays.value,
+      textRunState: this.#textRunManager.state.value,
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
@@ -476,7 +481,7 @@ export class Editor implements ShiftEditor {
     this.#hover.setHoveredBoundingBoxHandle(handle);
   }
 
-  public hitTestBoundingBoxAt(pos: Point2D): BoundingBoxHitResult {
+  public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
@@ -485,7 +490,13 @@ export class Editor implements ShiftEditor {
       BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
     );
 
-    return hitTestBoundingBox(pos, rect, this.hitRadius, handleOffset, rotationZoneOffset);
+    return hitTestBoundingBox(
+      coords.glyphLocal,
+      rect,
+      this.hitRadius,
+      handleOffset,
+      rotationZoneOffset,
+    );
   }
 
   public getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
@@ -657,6 +668,14 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.session.endEditSession();
   }
 
+  public get textRunManager(): TextRunManager {
+    return this.#textRunManager;
+  }
+
+  public getTextRunState() {
+    return this.#textRunManager.state.peek();
+  }
+
   public get font(): Font {
     return this.#fontManager;
   }
@@ -782,8 +801,18 @@ export class Editor implements ShiftEditor {
     this.#viewport.flushMousePosition();
   }
 
-  public projectScreenToUpm(x: number, y: number): Point2D {
-    return this.#viewport.projectScreenToUpm(x, y);
+  public projectScreenToScene(x: number, y: number): Point2D {
+    return this.#viewport.projectScreenToScene(x, y);
+  }
+
+  public sceneToGlyphLocal(point: Point2D): Point2D {
+    const offset = this.#drawOffset.value;
+    return { x: point.x - offset.x, y: point.y - offset.y };
+  }
+
+  public glyphLocalToScene(point: Point2D): Point2D {
+    const offset = this.#drawOffset.value;
+    return { x: point.x + offset.x, y: point.y + offset.y };
   }
 
   public get hitRadius(): number {
@@ -807,8 +836,28 @@ export class Editor implements ShiftEditor {
     };
   }
 
-  public projectUpmToScreen(x: number, y: number): Point2D {
-    return this.#viewport.projectUpmToScreen(x, y);
+  public projectSceneToScreen(x: number, y: number): Point2D {
+    return this.#viewport.projectSceneToScreen(x, y);
+  }
+
+  public fromScreen(sx: number, sy: number): Coordinates {
+    const scene = this.projectScreenToScene(sx, sy);
+    const glyphLocal = this.sceneToGlyphLocal(scene);
+    return { screen: { x: sx, y: sy }, scene, glyphLocal };
+  }
+
+  public fromScene(x: number, y: number): Coordinates {
+    const scene = { x, y };
+    const screen = this.projectSceneToScreen(x, y);
+    const glyphLocal = this.sceneToGlyphLocal(scene);
+    return { screen, scene, glyphLocal };
+  }
+
+  public fromGlyphLocal(x: number, y: number): Coordinates {
+    const glyphLocal = { x, y };
+    const scene = this.glyphLocalToScene(glyphLocal);
+    const screen = this.projectSceneToScreen(scene.x, scene.y);
+    return { screen, scene, glyphLocal };
   }
 
   public get pan(): Point2D {
@@ -1126,20 +1175,20 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.editing.reverseContour(contourId);
   }
 
-  public getPointAt(pos: Point2D): Point | null {
+  public getPointAt(coords: Coordinates): Point | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
-    return Glyphs.getPointAt(glyph, pos, this.hitRadius);
+    return Glyphs.getPointAt(glyph, coords.glyphLocal, this.hitRadius);
   }
 
-  public getSegmentAt(pos: Point2D): SegmentHitResult | null {
+  public getSegmentAt(coords: Coordinates): SegmentHitResult | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     let bestHit: SegmentHitResult | null = null;
     for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      const hit = Segment.hitTest(segment, pos, this.hitRadius);
+      const hit = Segment.hitTest(segment, coords.glyphLocal, this.hitRadius);
       if (hit && (!bestHit || hit.distance < bestHit.distance)) {
         bestHit = hit;
       }
@@ -1148,13 +1197,13 @@ export class Editor implements ShiftEditor {
   }
 
   /**
-   * Performs a prioritized hit-test at a UPM-space position.
+   * Performs a prioritized hit-test at a position (given as Coordinates).
    *
    * Priority order: contour endpoint > middle point > any point > segment.
    * Returns `null` if nothing is within `hitRadius`.
    */
-  public getNodeAt(pos: Point2D): HitResult {
-    const endpoint = this.getContourEndpointAt(pos);
+  public getNodeAt(coords: Coordinates): HitResult {
+    const endpoint = this.getContourEndpointAt(coords);
 
     if (endpoint) {
       const { contourId, pointId, position, contour } = endpoint;
@@ -1168,15 +1217,15 @@ export class Editor implements ShiftEditor {
       };
     }
 
-    const middle = this.getMiddlePointAt(pos);
+    const middle = this.getMiddlePointAt(coords);
     if (middle) return middle;
 
-    const point = this.getPointAt(pos);
+    const point = this.getPointAt(coords);
     if (point) {
       return { type: "point", point, pointId: point.id };
     }
 
-    const segmentHit = this.getSegmentAt(pos);
+    const segmentHit = this.getSegmentAt(coords);
     if (segmentHit) {
       return {
         type: "segment",
@@ -1195,7 +1244,7 @@ export class Editor implements ShiftEditor {
    * Used by the pen tool to detect when the user clicks an endpoint to close
    * or extend a contour.
    */
-  public getContourEndpointAt(pos: Point2D): ContourEndpointHit | null {
+  public getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
@@ -1205,7 +1254,7 @@ export class Editor implements ShiftEditor {
       const firstPoint = contour.points[0];
       const lastPoint = contour.points[contour.points.length - 1];
 
-      if (Vec2.dist(firstPoint, pos) < this.hitRadius) {
+      if (Vec2.dist(firstPoint, coords.glyphLocal) < this.hitRadius) {
         return {
           type: "contourEndpoint",
           contourId: contour.id,
@@ -1215,7 +1264,7 @@ export class Editor implements ShiftEditor {
         };
       }
 
-      if (Vec2.dist(lastPoint, pos) < this.hitRadius) {
+      if (Vec2.dist(lastPoint, coords.glyphLocal) < this.hitRadius) {
         return {
           type: "contourEndpoint",
           contourId: contour.id,
@@ -1249,28 +1298,28 @@ export class Editor implements ShiftEditor {
   }
 
   /**
-   * Runs the full hover resolution pipeline at a UPM-space position and
-   * applies the result to the hover manager. Checks bounding box handles
+   * Runs the full hover resolution pipeline at a position (given as Coordinates)
+   * and applies the result to the hover manager. Checks bounding box handles
    * first (when multi-selected), then points, then segments.
    */
-  public updateHover(pos: Point2D): void {
-    this.#hover.applyHoverResult(this.resolveHover(pos));
+  public updateHover(coords: Coordinates): void {
+    this.#hover.applyHoverResult(this.resolveHover(coords));
   }
 
-  private resolveHover(pos: Point2D): HoverResult {
+  private resolveHover(coords: Coordinates): HoverResult {
     if (this.getSelectedPoints().length > 1) {
-      const bbHit = this.hitTestBoundingBoxAt(pos);
+      const bbHit = this.hitTestBoundingBoxAt(coords);
       if (bbHit) {
         return { type: "boundingBox", handle: bbHit };
       }
     }
 
-    const point = this.getPointAt(pos);
+    const point = this.getPointAt(coords);
     if (point) {
       return { type: "point", pointId: point.id };
     }
 
-    const segmentHit = this.getSegmentAt(pos);
+    const segmentHit = this.getSegmentAt(coords);
     if (segmentHit) {
       return {
         type: "segment",
@@ -1322,7 +1371,7 @@ export class Editor implements ShiftEditor {
    * Skips the active contour and closed contours. Used by the pen tool to
    * detect mid-contour clicks for splitting or joining.
    */
-  public getMiddlePointAt(pos: Point2D): MiddlePointHit | null {
+  public getMiddlePointAt(coords: Coordinates): MiddlePointHit | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
@@ -1335,7 +1384,7 @@ export class Editor implements ShiftEditor {
 
       for (let i = 1; i < contour.points.length - 1; i++) {
         const point = contour.points[i];
-        if (Vec2.dist(pos, point) < hitRadius) {
+        if (Vec2.dist(coords.glyphLocal, point) < hitRadius) {
           return {
             type: "middlePoint",
             contourId: contour.id,

@@ -5,6 +5,7 @@ import {
   createMockToolContext,
   createToolMouseEvent,
   ToolEventSimulator,
+  makeTestCoordinates,
   type MockToolContext,
 } from "@/testing";
 import type { PointId } from "@shift/types";
@@ -99,14 +100,22 @@ describe("Select tool", () => {
     it("should call toggleSmooth when double-clicking on-curve point", () => {
       const pointId = ctx.edit.addPoint(100, 100, "onCurve", false);
       ctx.mocks.edit.toggleSmooth.mockClear();
-      select.handleEvent({ type: "doubleClick", point: { x: 100, y: 100 } });
+      select.handleEvent({
+        type: "doubleClick",
+        point: { x: 100, y: 100 },
+        coords: makeTestCoordinates({ x: 100, y: 100 }),
+      });
       expect(ctx.mocks.edit.toggleSmooth).toHaveBeenCalledWith(pointId);
     });
 
     it("should not call toggleSmooth when double-clicking empty space", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
       ctx.mocks.edit.toggleSmooth.mockClear();
-      select.handleEvent({ type: "doubleClick", point: { x: 500, y: 500 } });
+      select.handleEvent({
+        type: "doubleClick",
+        point: { x: 500, y: 500 },
+        coords: makeTestCoordinates({ x: 500, y: 500 }),
+      });
       expect(ctx.mocks.edit.toggleSmooth).not.toHaveBeenCalled();
     });
   });

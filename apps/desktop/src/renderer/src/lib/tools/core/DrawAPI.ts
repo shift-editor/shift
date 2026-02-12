@@ -153,6 +153,8 @@ export class DrawAPI {
         this.#drawCornerHandle(point, style);
         break;
       case "control":
+        this.#drawCircleHandle(point, style);
+        break;
       case "smooth":
         this.#drawCircleHandle(point, style);
         break;
@@ -184,6 +186,7 @@ export class DrawAPI {
   #drawCircleHandle(point: Point2D, style: BaseHandleStyle): void {
     // For control/smooth handles, style.size IS the radius (not diameter)
     const radiusUpm = this.#toUpm(style.size);
+    console.log("size", style);
 
     this.#renderer.save();
     this.#renderer.lineWidth = this.#toUpm(style.lineWidth);

@@ -79,6 +79,7 @@ export interface IRenderer {
   stroke(): void;
   fill(): void;
   fillPath(path: Path2D): void;
+  strokePath(path: Path2D): void;
 
   scale(x: number, y: number): void;
   translate(x: number, y: number): void;

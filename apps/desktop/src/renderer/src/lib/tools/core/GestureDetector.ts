@@ -6,9 +6,13 @@
  * threshold, detects double-clicks by timing, and emits a discriminated
  * union of events that tools consume without knowing about raw DOM events.
  *
+ * Pointer events carry {@link Coordinates} so tools use `event.coords` for
+ * hit-test and layout without converting at each call site.
+ *
  * @module
  */
 import type { Point2D } from "@shift/types";
+import type { Coordinates } from "@/types/coordinates";
 
 /** Well-known key names that tools handle directly. */
 export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Backspace";
@@ -16,18 +20,18 @@ export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "Arrow
 /**
  * Discriminated union of all events a tool can receive.
  *
- * Coordinates come in two flavors: `point` is in UPM space (used for glyph
- * editing), `screenPoint` is in screen pixels (used for drag thresholds and
- * panning). Drag events include cumulative `delta`/`screenDelta` from the
- * drag origin.
+ * Pointer events include `coords` (screen + scene + glyphLocal) so tools use
+ * `event.coords` for hit-test and layout. `point` is kept as `coords.scene`.
+ * Drag events include cumulative `delta`/`screenDelta` from the drag origin.
  */
 export type ToolEvent =
-  | { type: "pointerMove"; point: Point2D }
-  | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
-  | { type: "doubleClick"; point: Point2D }
+  | { type: "pointerMove"; point: Point2D; coords: Coordinates }
+  | { type: "click"; point: Point2D; coords: Coordinates; shiftKey: boolean; altKey: boolean }
+  | { type: "doubleClick"; point: Point2D; coords: Coordinates }
   | {
       type: "dragStart";
       point: Point2D;
+      coords: Coordinates;
       screenPoint: Point2D;
       shiftKey: boolean;
       altKey: boolean;
@@ -35,6 +39,7 @@ export type ToolEvent =
   | {
       type: "drag";
       point: Point2D;
+      coords: Coordinates;
       screenPoint: Point2D;
       origin: Point2D;
       screenOrigin: Point2D;
@@ -46,6 +51,7 @@ export type ToolEvent =
   | {
       type: "dragEnd";
       point: Point2D;
+      coords: Coordinates;
       screenPoint: Point2D;
       origin: Point2D;
       screenOrigin: Point2D;
@@ -101,6 +107,7 @@ const DEFAULT_CONFIG: Required<GestureDetectorConfig> = {
  */
 export class GestureDetector {
   private downPoint: Point2D | null = null;
+  private downCoords: Coordinates | null = null;
   private downScreenPoint: Point2D | null = null;
   private downModifiers: Modifiers | null = null;
   private dragging = false;
@@ -122,8 +129,9 @@ export class GestureDetector {
     return this.dragging;
   }
 
-  pointerDown(point: Point2D, screenPoint: Point2D, modifiers: Modifiers): void {
-    this.downPoint = point;
+  pointerDown(coords: Coordinates, screenPoint: Point2D, modifiers: Modifiers): void {
+    this.downPoint = coords.scene;
+    this.downCoords = coords;
     this.downScreenPoint = screenPoint;
     this.downModifiers = modifiers;
     this.dragging = false;
@@ -133,9 +141,9 @@ export class GestureDetector {
    * Process a pointer move. Returns `pointerMove` if not pressed, `dragStart`
    * on threshold crossing, or `drag` while dragging.
    */
-  pointerMove(point: Point2D, screenPoint: Point2D, modifiers: Modifiers): ToolEvent[] {
-    if (!this.downPoint || !this.downScreenPoint || !this.downModifiers) {
-      return [{ type: "pointerMove", point }];
+  pointerMove(coords: Coordinates, screenPoint: Point2D, modifiers: Modifiers): ToolEvent[] {
+    if (!this.downPoint || !this.downCoords || !this.downScreenPoint || !this.downModifiers) {
+      return [{ type: "pointerMove", point: coords.scene, coords }];
     }
 
     const distance = Math.hypot(
@@ -149,6 +157,7 @@ export class GestureDetector {
         {
           type: "dragStart",
           point: this.downPoint,
+          coords: this.downCoords,
           screenPoint: this.downScreenPoint,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
@@ -160,13 +169,14 @@ export class GestureDetector {
       return [
         {
           type: "drag",
-          point,
+          point: coords.scene,
+          coords,
           screenPoint,
           origin: this.downPoint,
           screenOrigin: this.downScreenPoint,
           delta: {
-            x: point.x - this.downPoint.x,
-            y: point.y - this.downPoint.y,
+            x: coords.scene.x - this.downPoint.x,
+            y: coords.scene.y - this.downPoint.y,
           },
           screenDelta: {
             x: screenPoint.x - this.downScreenPoint.x,
@@ -185,15 +195,18 @@ export class GestureDetector {
    * Process a pointer release. Returns `dragEnd` if dragging, `doubleClick`
    * if within timing/distance thresholds, or `click` otherwise.
    */
-  pointerUp(point: Point2D, screenPoint: Point2D): ToolEvent[] {
-    if (!this.downPoint || !this.downScreenPoint || !this.downModifiers) return [];
+  pointerUp(coords: Coordinates, screenPoint: Point2D): ToolEvent[] {
+    if (!this.downPoint || !this.downCoords || !this.downScreenPoint || !this.downModifiers)
+      return [];
 
     const events: ToolEvent[] = [];
+    const point = coords.scene;
 
     if (this.dragging) {
       events.push({
         type: "dragEnd",
         point,
+        coords,
         screenPoint,
         origin: this.downPoint,
         screenOrigin: this.downScreenPoint,
@@ -209,13 +222,14 @@ export class GestureDetector {
         timeSinceLastClick < this.doubleClickTime &&
         distFromLastClick < this.doubleClickDistance
       ) {
-        events.push({ type: "doubleClick", point });
+        events.push({ type: "doubleClick", point, coords });
         this.lastClickTime = 0;
         this.lastClickPoint = null;
       } else {
         events.push({
           type: "click",
           point,
+          coords,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
         });
@@ -236,6 +250,7 @@ export class GestureDetector {
 
   private resetPointerState(): void {
     this.downPoint = null;
+    this.downCoords = null;
     this.downScreenPoint = null;
     this.downModifiers = null;
     this.dragging = false;

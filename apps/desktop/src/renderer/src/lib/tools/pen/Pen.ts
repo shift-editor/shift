@@ -45,7 +45,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
       return { type: "pen" };
     }
 
-    const hit = this.editor.getNodeAt(pos);
+    const hit = this.editor.getNodeAt(this.editor.fromGlyphLocal(pos.x, pos.y));
     if (isContourEndpointHit(hit) && !hit.contour.closed) return { type: "pen-end" };
     if (isMiddlePointHit(hit)) return { type: "pen-end" };
     if (isSegmentHit(hit)) return { type: "pen-add" };
@@ -58,7 +58,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
   }
 
   activate(): void {
-    const pos = this.editor.getMousePosition();
+    const pos = this.editor.sceneToGlyphLocal(this.editor.getMousePosition());
     this.state = { type: "ready", mousePos: pos };
     this.editor.clearActiveContour();
   }
@@ -69,7 +69,9 @@ export class Pen extends BaseTool<PenState, PenAction> {
 
   protected preTransition(state: PenState, event: ToolEvent) {
     if (state.type === "ready" && event.type === "pointerMove") {
-      return { state: { type: "ready" as const, mousePos: event.point } };
+      return {
+        state: { type: "ready" as const, mousePos: event.coords.glyphLocal },
+      };
     }
     return null;
   }

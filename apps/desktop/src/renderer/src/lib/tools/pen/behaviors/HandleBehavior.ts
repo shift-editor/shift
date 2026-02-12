@@ -63,15 +63,16 @@ export class HandleBehavior implements PenBehavior {
     editor: EditorAPI,
   ): TransitionResult<PenState, PenAction> | null {
     if (event.type === "drag") {
-      const dist = Vec2.dist(state.anchor.position, event.point);
+      const localPoint = event.coords.glyphLocal;
+      const dist = Vec2.dist(state.anchor.position, localPoint);
 
       if (dist > DRAG_THRESHOLD) {
         this.startSnap(editor, state.anchor);
 
-        let snappedPos: Point2D = event.point;
+        let snappedPos: Point2D = localPoint;
 
         if (this.#snap) {
-          const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
+          const result = this.#snap.snap(localPoint, { shiftKey: event.shiftKey });
           snappedPos = result.point;
           editor.setSnapIndicator(result.indicator);
         }
@@ -82,7 +83,7 @@ export class HandleBehavior implements PenBehavior {
             type: "dragging",
             anchor: state.anchor,
             handles,
-            mousePos: event.point,
+            mousePos: localPoint,
             snappedPos: event.shiftKey ? snappedPos : undefined,
           },
         };
@@ -91,10 +92,11 @@ export class HandleBehavior implements PenBehavior {
     }
 
     if (event.type === "dragEnd") {
+      const localPoint = event.coords.glyphLocal;
       return {
         state: {
           type: "ready",
-          mousePos: event.point,
+          mousePos: localPoint,
         },
       };
     }
@@ -129,10 +131,11 @@ export class HandleBehavior implements PenBehavior {
     editor: EditorAPI,
   ): TransitionResult<PenState, PenAction> | null {
     if (event.type === "drag") {
-      let snappedPos: Point2D = event.point;
+      const localPoint = event.coords.glyphLocal;
+      let snappedPos: Point2D = localPoint;
 
       if (this.#snap) {
-        const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
+        const result = this.#snap.snap(localPoint, { shiftKey: event.shiftKey });
         snappedPos = result.point;
         editor.setSnapIndicator(result.indicator);
       }
@@ -141,17 +144,18 @@ export class HandleBehavior implements PenBehavior {
       return {
         state: {
           ...state,
-          mousePos: event.point,
+          mousePos: localPoint,
           snappedPos: event.shiftKey ? snappedPos : undefined,
         },
       };
     }
 
     if (event.type === "dragEnd") {
+      const localPoint = event.coords.glyphLocal;
       return {
         state: {
           type: "ready",
-          mousePos: event.point,
+          mousePos: localPoint,
         },
       };
     }

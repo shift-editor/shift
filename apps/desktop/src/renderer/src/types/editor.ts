@@ -2,6 +2,7 @@ import type { PointId, Glyph, Point2D } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
 import type { SnapIndicator } from "@/lib/editor/snapping/types";
 import type { DebugOverlays } from "./electron";
+import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 
 export type SelectionMode = "preview" | "committed";
 
@@ -27,6 +28,7 @@ export interface StaticRenderState {
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;
   debugOverlays: DebugOverlays;
+  textRunState: TextRunState | null;
 }
 
 export interface OverlayRenderState {

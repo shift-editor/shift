@@ -99,8 +99,8 @@ export class ToolManager implements ToolSwitchHandler {
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
     this.editor.setCurrentModifiers?.(modifiers);
-    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
-    this.gesture.pointerDown(point, screenPoint, modifiers);
+    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    this.gesture.pointerDown(coords, screenPoint, modifiers);
   }
 
   handlePointerMove(
@@ -138,12 +138,12 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.editor.setCurrentModifiers?.(modifiers);
 
-    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
-    const events = this.gesture.pointerMove(point, screenPoint, modifiers);
+    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
     this.dispatchEvents(events);
 
     if (!this.gesture.isDragging) {
-      this.editor.updateHover(point);
+      this.editor.updateHover(coords);
     }
 
     if (this.activeTool?.renderBelowHandles) {
@@ -152,57 +152,48 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerUp(screenPoint: Point2D): void {
-    const point = this.editor.projectScreenToUpm(screenPoint.x, screenPoint.y);
-    const events = this.gesture.pointerUp(point, screenPoint);
+    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const events = this.gesture.pointerUp(coords, screenPoint);
     this.dispatchEvents(events);
   }
 
-  handleKeyDown(e: KeyboardEvent): void {
+  handleKeyDown(e: KeyboardEvent): boolean {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
       metaKey: e.metaKey,
     });
-
-    // Global: Space → temporary hand tool
-    if (e.code === "Space") {
-      const wasPreview = this.editor.isPreviewMode();
-      this.requestTemporary("hand", {
-        onActivate: () => this.editor.setPreviewMode(true),
-        onReturn: () => this.editor.setPreviewMode(wasPreview),
-      });
-      e.preventDefault();
-      return;
-    }
 
     if (e.key === "Escape" && this.gesture.isDragging) {
       this.gesture.reset();
       this.activeTool?.handleEvent({ type: "dragCancel" });
-      return;
+      return true;
     }
 
-    this.activeTool?.handleEvent({
-      type: "keyDown",
-      key: e.key,
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      metaKey: e.metaKey,
-    });
+    return (
+      this.activeTool?.handleEvent({
+        type: "keyDown",
+        key: e.key,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey,
+      }) ?? false
+    );
   }
 
-  handleKeyUp(e: KeyboardEvent): void {
+  handleKeyUp(e: KeyboardEvent): boolean {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
       metaKey: e.metaKey,
     });
 
-    if (e.code === "Space") {
-      this.returnFromTemporary();
-      return;
-    }
-
-    this.activeTool?.handleEvent({ type: "keyUp", key: e.key });
+    return (
+      this.activeTool?.handleEvent({
+        type: "keyUp",
+        key: e.key,
+      }) ?? false
+    );
   }
 
   render(draw: DrawAPI): void {

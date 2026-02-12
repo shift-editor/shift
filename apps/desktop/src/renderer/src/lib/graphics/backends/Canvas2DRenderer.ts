@@ -201,6 +201,11 @@ export class Canvas2DRenderer implements IRenderer {
     this.#renderCtx.fill(path);
   }
 
+  strokePath(path: Path2D): void {
+    this.#applyStrokeStyle();
+    this.#renderCtx.stroke(path);
+  }
+
   scale(x: number, y: number): void {
     this.#renderCtx.scale(x, y);
   }

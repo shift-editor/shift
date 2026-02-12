@@ -4,6 +4,7 @@ import { createMockToolContext, type MockToolContext } from "@/testing";
 import { Hand } from "../hand/Hand";
 import { Select } from "../select/Select";
 import { Pen } from "../pen/Pen";
+import TextTool from "../text/Text";
 import type { ToolName } from "./createContext";
 import type { Modifiers } from "./GestureDetector";
 
@@ -41,38 +42,25 @@ describe("ToolManager", () => {
     toolManager.register("hand", Hand);
     toolManager.register("select", Select);
     toolManager.register("pen", Pen);
+    toolManager.register("text", TextTool);
   });
 
-  describe("space key for hand tool", () => {
-    it("should enable preview mode when space is pressed", () => {
+  describe("keyboard delegation", () => {
+    it("does not switch tools on space keydown by itself", () => {
       toolManager.activate("pen");
       editor.mocks.render.setPreviewMode.mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
 
-      expect(editor.mocks.render.setPreviewMode).toHaveBeenCalledWith(true);
-      expect(toolManager.activeToolId).toBe("hand");
-    });
-
-    it("should disable preview mode when space is released", () => {
-      toolManager.activate("pen");
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
-      editor.mocks.render.setPreviewMode.mockClear();
-
-      toolManager.handleKeyUp(createKeyboardEvent("keyup", { code: "Space" }));
-
-      expect(editor.mocks.render.setPreviewMode).toHaveBeenCalledWith(false);
+      expect(editor.mocks.render.setPreviewMode).not.toHaveBeenCalledWith(true);
       expect(toolManager.activeToolId).toBe("pen");
     });
 
-    it("should return to primary tool after space is released", () => {
-      toolManager.activate("select");
+    it("returns true when active tool handles keydown", () => {
+      toolManager.activate("text");
+      const handled = toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "a" }));
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
-      expect(toolManager.activeToolId).toBe("hand");
-
-      toolManager.handleKeyUp(createKeyboardEvent("keyup", { code: "Space" }));
-      expect(toolManager.activeToolId).toBe("select");
+      expect(handled).toBe(true);
     });
   });
 
@@ -114,10 +102,10 @@ describe("ToolManager", () => {
       expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "pen" });
     });
 
-    it("should provide cursor signal when activating hand tool via space", () => {
+    it("should provide cursor signal when activating temporary hand tool", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
+      editor.requestTemporaryTool("hand");
 
       expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "grab" });
     });
@@ -127,17 +115,17 @@ describe("ToolManager", () => {
     it("should not activate override if already overridden", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
+      editor.requestTemporaryTool("hand");
       expect(toolManager.activeToolId).toBe("hand");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
+      editor.requestTemporaryTool("hand");
       expect(toolManager.activeToolId).toBe("hand");
     });
 
     it("should track primary tool separately from active tool", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
+      editor.requestTemporaryTool("hand");
 
       expect(toolManager.primaryToolId).toBe("pen");
       expect(toolManager.activeToolId).toBe("hand");

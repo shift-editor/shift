@@ -105,7 +105,7 @@ export class TranslateBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
 
     if (pointId !== null) {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BaseTool } from "./BaseTool";
 import type { ToolEvent } from "./GestureDetector";
+import { makeTestCoordinates } from "@/testing";
 import type { ToolName } from "./createContext";
 import type { Behavior } from "./Behavior";
 import { createMockToolContext } from "@/testing";
@@ -52,6 +53,7 @@ describe("BaseTool contract", () => {
       const clickEvent: ToolEvent = {
         type: "click",
         point: { x: 10, y: 10 },
+        coords: makeTestCoordinates({ x: 10, y: 10 }),
         shiftKey: false,
         altKey: false,
       };
@@ -75,6 +77,7 @@ describe("BaseTool contract", () => {
       const moveEvent: ToolEvent = {
         type: "pointerMove",
         point: { x: 10, y: 10 },
+        coords: makeTestCoordinates({ x: 10, y: 10 }),
       };
 
       tool.handleEvent(moveEvent);
@@ -88,6 +91,7 @@ describe("BaseTool contract", () => {
       tool.handleEvent({
         type: "click",
         point: { x: 0, y: 0 },
+        coords: makeTestCoordinates({ x: 0, y: 0 }),
         shiftKey: false,
         altKey: false,
       });
@@ -97,6 +101,7 @@ describe("BaseTool contract", () => {
       tool.handleEvent({
         type: "pointerMove",
         point: { x: 5, y: 5 },
+        coords: makeTestCoordinates({ x: 5, y: 5 }),
       });
 
       expect(setActiveToolStateSpy).not.toHaveBeenCalled();

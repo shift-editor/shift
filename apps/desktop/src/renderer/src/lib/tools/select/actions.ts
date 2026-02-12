@@ -42,7 +42,8 @@ export type SelectAction =
   | { type: "toggleSmooth"; pointId: PointId }
   | { type: "selectPoints"; pointIds: PointId[] }
   | { type: "upgradeLineToCubic"; segment: LineSegment }
-  | { type: "selectContour"; contourId: ContourId; additive: boolean };
+  | { type: "selectContour"; contourId: ContourId; additive: boolean }
+  | { type: "editTextRunSlot"; index: number };
 
 export function executeAction(action: SelectAction, editor: EditorAPI): void {
   switch (action.type) {
@@ -122,6 +123,10 @@ export function executeAction(action: SelectAction, editor: EditorAPI): void {
 
     case "selectContour":
       executeSelectContour(action.contourId, action.additive, editor);
+      break;
+
+    case "editTextRunSlot":
+      executeEditTextRunSlot(action.index, editor);
       break;
   }
 }
@@ -247,4 +252,17 @@ function executeSelectContour(contourId: ContourId, additive: boolean, editor: E
     editor.clearSelection();
   }
   editor.selectPoints(pointIds);
+}
+
+function executeEditTextRunSlot(index: number, editor: EditorAPI): void {
+  const textRunState = editor.textRunManager.state.peek();
+  if (!textRunState) return;
+
+  const slot = textRunState.layout.slots[index];
+  if (!slot) return;
+
+  editor.startEditSession(slot.unicode);
+  editor.setDrawOffset({ x: slot.x, y: 0 });
+  editor.setPreviewMode(false);
+  editor.textRunManager.setEditingSlot(index, slot.unicode);
 }

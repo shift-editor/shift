@@ -51,10 +51,11 @@ export class MarqueeBehavior implements SelectBehavior {
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
+      const localPoint = event.coords.glyphLocal;
       return {
         state: {
           type: "selecting",
-          selection: { ...state.selection, currentPos: event.point },
+          selection: { ...state.selection, currentPos: localPoint },
         },
       };
     }
@@ -90,14 +91,15 @@ export class MarqueeBehavior implements SelectBehavior {
     event: ToolEvent & { type: "dragStart" },
     editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> | null {
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     if (hit !== null) return null;
+    const localPoint = event.coords.glyphLocal;
 
     if (state.type === "selected") {
       return {
         state: {
           type: "selecting",
-          selection: { startPos: event.point, currentPos: event.point },
+          selection: { startPos: localPoint, currentPos: localPoint },
         },
         action: { type: "clearAndStartMarquee" },
       };
@@ -106,7 +108,7 @@ export class MarqueeBehavior implements SelectBehavior {
     return {
       state: {
         type: "selecting",
-        selection: { startPos: event.point, currentPos: event.point },
+        selection: { startPos: localPoint, currentPos: localPoint },
       },
       action: { type: "setSelectionMode", mode: "preview" },
     };

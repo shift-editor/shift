@@ -1,18 +1,26 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ToolEvent } from "../core/GestureDetector";
 import { Shape } from "./Shape";
-import { createMockToolContext } from "@/testing";
+import { createMockToolContext, makeTestCoordinates } from "@/testing";
 
 const p = { x: 0, y: 0 };
 const q = { x: 100, y: 50 };
 
 function makeDragStart(point: { x: number; y: number } = p): ToolEvent {
-  return { type: "dragStart", point, screenPoint: point, shiftKey: false, altKey: false };
+  return {
+    type: "dragStart",
+    point,
+    coords: makeTestCoordinates(point),
+    screenPoint: point,
+    shiftKey: false,
+    altKey: false,
+  };
 }
 function makeDrag(point: { x: number; y: number }): ToolEvent {
   return {
     type: "drag",
     point,
+    coords: makeTestCoordinates(point),
     screenPoint: point,
     origin: p,
     screenOrigin: p,
@@ -23,7 +31,14 @@ function makeDrag(point: { x: number; y: number }): ToolEvent {
   };
 }
 function makeDragEnd(point: { x: number; y: number } = q): ToolEvent {
-  return { type: "dragEnd", point, screenPoint: point, origin: p, screenOrigin: p };
+  return {
+    type: "dragEnd",
+    point,
+    coords: makeTestCoordinates(point),
+    screenPoint: point,
+    origin: p,
+    screenOrigin: p,
+  };
 }
 function makeDragCancel(): ToolEvent {
   return { type: "dragCancel" };
@@ -93,7 +108,11 @@ describe("Shape outcome", () => {
 
   it("ready + pointerMove -> ready (no state change)", () => {
     const ready = { type: "ready" as const };
-    const move: ToolEvent = { type: "pointerMove", point: q };
+    const move: ToolEvent = {
+      type: "pointerMove",
+      point: q,
+      coords: makeTestCoordinates(q),
+    };
     const result = shape.transition(ready, move);
 
     expect(result.type).toBe("ready");

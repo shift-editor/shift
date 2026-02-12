@@ -18,7 +18,7 @@ export class SelectionBehavior implements SelectBehavior {
     if (event.type !== "click") return null;
     if (state.type !== "ready" && state.type !== "selected") return null;
 
-    const hit = editor.getNodeAt(event.point);
+    const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
 
     // Point hit + shift toggle

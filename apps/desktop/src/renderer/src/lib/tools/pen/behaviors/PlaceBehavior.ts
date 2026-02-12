@@ -21,12 +21,14 @@ export class PlaceBehavior implements PenBehavior {
     if (state.type !== "ready") return null;
     if (event.type !== "click" && event.type !== "dragStart") return null;
 
-    const action = resolvePenAction(event.point, {
-      getNodeAt: (pos) => editor.getNodeAt(pos),
+    const rawAction = resolvePenAction(event.coords, {
+      getNodeAt: (coords) => editor.getNodeAt(coords),
       getActiveContourId: () => editor.getActiveContourId(),
       hasActiveDrawingContour: () => this.hasActiveDrawingContour(editor),
-      shouldCloseContour: (p) => this.shouldCloseContour(p, editor),
+      shouldCloseContour: (coords) => this.shouldCloseContour(coords.glyphLocal, editor),
     });
+    const localPoint = event.coords.glyphLocal;
+    const action = rawAction;
 
     if (action.type === "placePoint" && event.type === "dragStart") {
       return {
@@ -45,7 +47,7 @@ export class PlaceBehavior implements PenBehavior {
     return {
       state: {
         type: "ready",
-        mousePos: event.point,
+        mousePos: localPoint,
       },
       action,
     };
@@ -63,16 +65,15 @@ export class PlaceBehavior implements PenBehavior {
     return Contours.isOpen(contour) && !Contours.isEmpty(contour);
   }
 
-  private shouldCloseContour(pos: Point2D, editor: EditorAPI): boolean {
+  private shouldCloseContour(localPos: Point2D, editor: EditorAPI): boolean {
     const contour = editor.getActiveContour();
     if (!contour || contour.closed || contour.points.length < 2) {
       return false;
     }
-
     const firstPoint = Contours.firstPoint(contour);
     if (!firstPoint) return false;
 
-    return Vec2.isWithin(pos, firstPoint, editor.hitRadius);
+    return Vec2.isWithin(localPos, firstPoint, editor.hitRadius);
   }
 
   private buildContourContext(editor: EditorAPI): ContourContext {

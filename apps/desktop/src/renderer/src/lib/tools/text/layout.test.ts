@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Font } from "@/lib/editor/Font";
-import { computeTextLayout, hitTestLayout } from "./layout";
+import type { Bounds } from "@shift/geo";
+import { computeTextLayout, hitTestTextSlot, hitTestTextCaret } from "./layout";
 
 function createMockFont(
   advances: Record<number, number> = {},
   svgPaths: Record<number, string> = {},
+  bboxes: Record<number, Bounds> = {},
 ): Font {
   return {
     getMetrics: () => ({
@@ -36,7 +38,7 @@ function createMockFont(
     }),
     getAdvance: (unicode: number) => advances[unicode] ?? null,
     getSvgPath: (unicode: number) => svgPaths[unicode] ?? null,
-    getBbox: () => null,
+    getBbox: (unicode: number) => bboxes[unicode] ?? null,
   };
 }
 
@@ -83,7 +85,7 @@ describe("computeTextLayout", () => {
   });
 });
 
-describe("hitTestLayout", () => {
+describe("hitTestTextSlot", () => {
   const metrics = {
     unitsPerEm: 1000,
     ascender: 800,
@@ -98,22 +100,22 @@ describe("hitTestLayout", () => {
 
   it("should return null for empty layout", () => {
     const layout = { slots: [], totalAdvance: 0 };
-    expect(hitTestLayout(layout, { x: 50, y: 400 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 50, y: 400 }, metrics)).toBeNull();
   });
 
   it("should return null when y is above ascender", () => {
     const font = createMockFont({ 65: 500 });
     const layout = computeTextLayout([65], { x: 0, y: 0 }, font);
-    expect(hitTestLayout(layout, { x: 250, y: 900 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 250, y: 900 }, metrics)).toBeNull();
   });
 
   it("should return null when y is below descender", () => {
     const font = createMockFont({ 65: 500 });
     const layout = computeTextLayout([65], { x: 0, y: 0 }, font);
-    expect(hitTestLayout(layout, { x: 250, y: -300 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 250, y: -300 }, metrics)).toBeNull();
   });
 
-  it("should return index of glyph at position", () => {
+  it("should return slot index only when point is inside slot bounds", () => {
     const font = createMockFont({
       72: 600, // H: 0-600
       101: 500, // e: 600-1100
@@ -121,13 +123,107 @@ describe("hitTestLayout", () => {
     });
     const layout = computeTextLayout([72, 101, 108], { x: 0, y: 0 }, font);
 
-    // Click in first half of H → index 0
-    expect(hitTestLayout(layout, { x: 100, y: 400 }, metrics)).toBe(0);
-    // Click in second half of H → index 1
-    expect(hitTestLayout(layout, { x: 400, y: 400 }, metrics)).toBe(1);
-    // Click in first half of e → index 1
-    expect(hitTestLayout(layout, { x: 700, y: 400 }, metrics)).toBe(1);
-    // Click past all glyphs → length
-    expect(hitTestLayout(layout, { x: 1400, y: 400 }, metrics)).toBe(3);
+    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics)).toBe(0);
+    expect(hitTestTextSlot(layout, { x: 400, y: 400 }, metrics)).toBe(0);
+    expect(hitTestTextSlot(layout, { x: 700, y: 400 }, metrics)).toBe(1);
+    expect(hitTestTextSlot(layout, { x: 1400, y: 400 }, metrics)).toBeNull();
+  });
+
+  it("shape hit test should reject points outside glyph bbox before path hit", () => {
+    const pathHitTester = {
+      hitPath: vi.fn(() => true),
+    };
+
+    const font = createMockFont(
+      { 65: 500 },
+      { 65: "M0 0L100 100" },
+      {
+        65: {
+          min: { x: 10, y: 0 },
+          max: { x: 100, y: 100 },
+        },
+      },
+    );
+    const layout = computeTextLayout([65], { x: 0, y: 0 }, font);
+
+    const result = hitTestTextSlot(layout, { x: 5, y: 50 }, metrics, {
+      outlineRadius: 0,
+      includeFill: true,
+      requireShape: true,
+      pathHitTester,
+    });
+
+    expect(result).toBeNull();
+    expect(pathHitTester.hitPath).not.toHaveBeenCalled();
+  });
+
+  it("shape hit test should return slot only when path hit succeeds", () => {
+    const pathHitTester = {
+      hitPath: vi.fn(
+        (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) => {
+          return x >= 20 && x <= 80 && y >= 10 && y <= 90;
+        },
+      ),
+    };
+
+    const font = createMockFont(
+      { 65: 500 },
+      { 65: "M0 0L100 100" },
+      {
+        65: {
+          min: { x: 0, y: 0 },
+          max: { x: 100, y: 100 },
+        },
+      },
+    );
+    const layout = computeTextLayout([65], { x: 0, y: 0 }, font);
+
+    expect(
+      hitTestTextSlot(layout, { x: 15, y: 50 }, metrics, {
+        outlineRadius: 2,
+        includeFill: true,
+        requireShape: true,
+        pathHitTester,
+      }),
+    ).toBeNull();
+
+    expect(
+      hitTestTextSlot(layout, { x: 50, y: 50 }, metrics, {
+        outlineRadius: 2,
+        includeFill: true,
+        requireShape: true,
+        pathHitTester,
+      }),
+    ).toBe(0);
+
+    expect(pathHitTester.hitPath).toHaveBeenCalled();
+  });
+});
+
+describe("hitTestTextCaret", () => {
+  const metrics = {
+    unitsPerEm: 1000,
+    ascender: 800,
+    descender: -200,
+    capHeight: 700,
+    xHeight: 500,
+    lineGap: 0,
+    italicAngle: null,
+    underlinePosition: null,
+    underlineThickness: null,
+  };
+
+  it("should return caret insertion index using slot midpoints", () => {
+    const font = createMockFont({
+      72: 600, // H: 0-600
+      101: 500, // e: 600-1100
+      108: 250, // l: 1100-1350
+    });
+    const layout = computeTextLayout([72, 101, 108], { x: 0, y: 0 }, font);
+
+    expect(hitTestTextCaret(layout, { x: 100, y: 400 }, metrics)).toBe(0);
+    expect(hitTestTextCaret(layout, { x: 400, y: 400 }, metrics)).toBe(1);
+    expect(hitTestTextCaret(layout, { x: 700, y: 400 }, metrics)).toBe(1);
+    expect(hitTestTextCaret(layout, { x: 1400, y: 400 }, metrics)).toBe(3);
   });
 });

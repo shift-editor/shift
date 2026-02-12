@@ -39,7 +39,7 @@ describe("ViewportManager", () => {
   describe("coordinate projections", () => {
     it("should project screen to UPM", () => {
       const screenPos = { x: 500, y: 400 };
-      const upm = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upm = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upm.x).toBeDefined();
       expect(upm.y).toBeDefined();
       expect(typeof upm.x).toBe("number");
@@ -48,7 +48,7 @@ describe("ViewportManager", () => {
 
     it("should project UPM to screen", () => {
       const upmPos = { x: 0, y: 0 };
-      const screen = viewport.projectUpmToScreen(upmPos.x, upmPos.y);
+      const screen = viewport.projectSceneToScreen(upmPos.x, upmPos.y);
       expect(screen.x).toBeDefined();
       expect(screen.y).toBeDefined();
       expect(typeof screen.x).toBe("number");
@@ -59,8 +59,8 @@ describe("ViewportManager", () => {
       const screenX = 500;
       const screenY = 400;
 
-      const upm = viewport.projectScreenToUpm(screenX, screenY);
-      const screen = viewport.projectUpmToScreen(upm.x, upm.y);
+      const upm = viewport.projectScreenToScene(screenX, screenY);
+      const screen = viewport.projectSceneToScreen(upm.x, upm.y);
 
       expect(screen.x).toBeCloseTo(screenX, 0);
       expect(screen.y).toBeCloseTo(screenY, 0);
@@ -70,8 +70,8 @@ describe("ViewportManager", () => {
       const upmX = 100;
       const upmY = 200;
 
-      const screen = viewport.projectUpmToScreen(upmX, upmY);
-      const upm = viewport.projectScreenToUpm(screen.x, screen.y);
+      const screen = viewport.projectSceneToScreen(upmX, upmY);
+      const upm = viewport.projectScreenToScene(screen.x, screen.y);
 
       expect(upm.x).toBeCloseTo(upmX, 0);
       expect(upm.y).toBeCloseTo(upmY, 0);
@@ -87,11 +87,11 @@ describe("ViewportManager", () => {
 
     it("should affect screen to UPM projection", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmBefore = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       viewport.setPan(100, 50);
 
-      const upmAfter = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfter = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upmAfter.x).not.toBeCloseTo(upmBefore.x, 0);
       expect(upmAfter.y).not.toBeCloseTo(upmBefore.y, 0);
     });
@@ -141,11 +141,11 @@ describe("ViewportManager", () => {
     it("should maintain UPM coordinate under cursor when zooming in", () => {
       const screenX = 500;
       const screenY = 400;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 2.0);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, -1);
     });
@@ -155,11 +155,11 @@ describe("ViewportManager", () => {
 
       const screenX = 500;
       const screenY = 400;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 0.5);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, -1);
     });
@@ -176,9 +176,9 @@ describe("ViewportManager", () => {
       viewport.zoomToPoint(500, 400, 1.5);
       expect(viewport.zoomLevel).toBeGreaterThan(1);
 
-      const upmBefore = viewport.projectScreenToUpm(500, 400);
+      const upmBefore = viewport.projectScreenToScene(500, 400);
       viewport.zoomToPoint(500, 400, 1.5);
-      const upmAfter = viewport.projectScreenToUpm(500, 400);
+      const upmAfter = viewport.projectScreenToScene(500, 400);
 
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, -1);
@@ -189,11 +189,11 @@ describe("ViewportManager", () => {
     it("should keep UPM coordinate stable under cursor during zoom in", () => {
       const screenX = 700;
       const screenY = 300;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 1.5);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
     });
@@ -201,11 +201,11 @@ describe("ViewportManager", () => {
     it("should keep UPM coordinate stable under cursor during zoom out", () => {
       const screenX = 200;
       const screenY = 600;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 0.7);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(Math.abs(upmAfter.x - upmBefore.x)).toBeLessThanOrEqual(1);
       expect(Math.abs(upmAfter.y - upmBefore.y)).toBeLessThanOrEqual(1);
     });
@@ -213,14 +213,14 @@ describe("ViewportManager", () => {
     it("should maintain cursor stability through multiple zoom operations", () => {
       const screenX = 400;
       const screenY = 500;
-      const upmInitial = viewport.projectScreenToUpm(screenX, screenY);
+      const upmInitial = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 1.3);
       viewport.zoomToPoint(screenX, screenY, 1.5);
       viewport.zoomToPoint(screenX, screenY, 0.8);
       viewport.zoomToPoint(screenX, screenY, 1.2);
 
-      const upmFinal = viewport.projectScreenToUpm(screenX, screenY);
+      const upmFinal = viewport.projectScreenToScene(screenX, screenY);
       expect(upmFinal.x).toBeCloseTo(upmInitial.x, 0);
       expect(upmFinal.y).toBeCloseTo(upmInitial.y, 0);
     });
@@ -228,11 +228,11 @@ describe("ViewportManager", () => {
     it("should handle cursor at canvas edges", () => {
       const screenX = 50;
       const screenY = 50;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 2.0);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
     });
@@ -242,11 +242,11 @@ describe("ViewportManager", () => {
 
       const screenX = 500;
       const screenY = 400;
-      const upmBefore = viewport.projectScreenToUpm(screenX, screenY);
+      const upmBefore = viewport.projectScreenToScene(screenX, screenY);
 
       viewport.zoomToPoint(screenX, screenY, 1.5);
 
-      const upmAfter = viewport.projectScreenToUpm(screenX, screenY);
+      const upmAfter = viewport.projectScreenToScene(screenX, screenY);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
     });
@@ -265,21 +265,21 @@ describe("ViewportManager", () => {
 
     it("should invalidate matrices when UPM changes", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmBefore = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       viewport.upm = 2000;
 
-      const upmAfter = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfter = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upmAfter.x).not.toBeCloseTo(upmBefore.x, 0);
     });
 
     it("should invalidate matrices when descender changes", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmBefore = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       viewport.descender = -300;
 
-      const upmAfter = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfter = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upmAfter.y).not.toBeCloseTo(upmBefore.y, 0);
     });
   });
@@ -400,28 +400,28 @@ describe("ViewportManager", () => {
   describe("complex scenarios", () => {
     it("should handle zoom then pan", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmBefore = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       viewport.zoomToPoint(screenPos.x, screenPos.y, 1.5);
-      const upmAfterZoom = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfterZoom = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       expect(upmAfterZoom.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfterZoom.y).toBeCloseTo(upmBefore.y, -1);
 
       viewport.setPan(100, 50);
-      const upmAfterPan = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfterPan = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upmAfterPan.x).not.toBeCloseTo(upmBefore.x, -1);
     });
 
     it("should handle multiple zoom operations", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmBefore = viewport.projectScreenToScene(screenPos.x, screenPos.y);
 
       viewport.zoomToPoint(screenPos.x, screenPos.y, 1.5);
       viewport.zoomToPoint(screenPos.x, screenPos.y, 1.5);
       viewport.zoomToPoint(screenPos.x, screenPos.y, 0.667);
 
-      const upmAfter = viewport.projectScreenToUpm(screenPos.x, screenPos.y);
+      const upmAfter = viewport.projectScreenToScene(screenPos.x, screenPos.y);
       expect(upmAfter.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfter.y).toBeCloseTo(upmBefore.y, -1);
     });

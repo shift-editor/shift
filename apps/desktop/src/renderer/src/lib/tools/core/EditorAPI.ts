@@ -35,6 +35,8 @@ import type {
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
 import type { Font } from "@/lib/editor/Font";
+import type { TextRunManager } from "@/lib/editor/managers/TextRunManager";
+import type { Coordinates } from "@/types/coordinates";
 
 /**
  * Coordinate-space conversions and viewport state.
@@ -47,7 +49,18 @@ export interface Viewport {
   getScreenMousePosition(): Point2D;
   /** Force an immediate position update (used before hit-testing during drags). */
   flushMousePosition?(): void;
-  projectScreenToUpm(x: number, y: number): Point2D;
+  /** Convert screen pixels to scene (UPM) coordinates. */
+  projectScreenToScene(x: number, y: number): Point2D;
+  /** Convert a scene point into glyph-local coordinates using the current draw offset. */
+  sceneToGlyphLocal(point: Point2D): Point2D;
+  /** Convert a glyph-local point into scene coordinates using the current draw offset. */
+  glyphLocalToScene(point: Point2D): Point2D;
+  /** Build Coordinates from a screen position. */
+  fromScreen(sx: number, sy: number): Coordinates;
+  /** Build Coordinates from a scene (UPM) position. */
+  fromScene(x: number, y: number): Coordinates;
+  /** Build Coordinates from a glyph-local position. */
+  fromGlyphLocal(x: number, y: number): Coordinates;
   screenToUpmDistance(pixels: number): number;
   /** Hit-test radius in UPM units, derived from a fixed pixel radius and current zoom. */
   readonly hitRadius: number;
@@ -83,22 +96,22 @@ export interface Selection {
 /**
  * Spatial queries against the current glyph.
  *
- * All positions are in UPM space. Methods return typed hit results that
- * callers can discriminate via {@link HitResult} to determine what was hit
- * (point, segment, contour endpoint, etc.).
+ * Hit-test methods accept {@link Coordinates}; the implementation uses the
+ * scene position. Methods return typed hit results that callers can
+ * discriminate via {@link HitResult}.
  */
 export interface HitTesting {
-  /** Return the highest-priority hit at a UPM position (point > segment > endpoint). */
-  getNodeAt(pos: Point2D): HitResult;
-  getPointAt(pos: Point2D): Point | null;
-  getSegmentAt(pos: Point2D): SegmentHitResult | null;
+  /** Return the highest-priority hit at the given position (point > segment > endpoint). */
+  getNodeAt(coords: Coordinates): HitResult;
+  getPointAt(coords: Coordinates): Point | null;
+  getSegmentAt(coords: Coordinates): SegmentHitResult | null;
   getSegmentById(segmentId: SegmentId): Segment | null;
   getAllPoints(): Point[];
-  getContourEndpointAt(pos: Point2D): ContourEndpointHit | null;
-  getMiddlePointAt(pos: Point2D): MiddlePointHit | null;
+  getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null;
+  getMiddlePointAt(coords: Coordinates): MiddlePointHit | null;
   getSelectionBoundingRect(): Rect2D | null;
   /** Hit-test the bounding box resize/rotate handles (not the glyph points). */
-  hitTestBoundingBoxAt(pos: Point2D): BoundingBoxHitResult;
+  hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult;
 }
 
 /**
@@ -134,6 +147,10 @@ export interface Editing {
   getActiveContourId(): ContourId | null;
   clearActiveContour(): void;
   setActiveContour(id: ContourId): void;
+  /** Open a glyph for editing by its Unicode codepoint. */
+  startEditSession(unicode: number): void;
+  /** Return the unicode codepoint of the glyph currently being edited, or null. */
+  getActiveGlyphUnicode(): number | null;
 }
 
 /**
@@ -188,7 +205,7 @@ export interface VisualState {
   setDrawOffset(offset: Point2D): void;
   requestStaticRedraw(): void;
   requestRedraw(): void;
-  updateHover(pos: Point2D): void;
+  updateHover(coords: Coordinates): void;
   clearHover(): void;
   readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
@@ -202,6 +219,10 @@ export interface VisualState {
   /** Set or clear the marquee rectangle (UPM space). Points inside are highlighted as a selection preview. */
   setMarqueePreviewRect(rect: Rect2D | null): void;
   isPointInMarqueePreview(pointId: PointId): boolean;
+  /** The persistent text run manager, owned by the editor. */
+  readonly textRunManager: TextRunManager;
+  /** Switch to a different tool by name. */
+  setActiveTool(toolName: ToolName): void;
 }
 
 /**

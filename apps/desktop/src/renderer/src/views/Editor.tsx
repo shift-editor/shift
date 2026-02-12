@@ -6,6 +6,7 @@ import { Toolbar } from "@/components/Toolbar";
 import { Sidebar } from "@/components/sidebar";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
+import { KeyboardRouter } from "@/lib/keyboard";
 
 import { EditorView } from "../components/EditorView";
 
@@ -21,83 +22,19 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
   useEffect(() => {
     const editor = getEditor();
     const toolManager = editor.toolManager;
+    const keyboardRouter = new KeyboardRouter(() => ({
+      canvasActive: activeZone === "canvas" || focusLock || toolManager.isDragging,
+      activeTool: editor.getActiveTool(),
+      editor,
+      toolManager,
+    }));
 
     const keyDownHandler = (e: KeyboardEvent) => {
-      const canvasActive = activeZone === "canvas" || focusLock || toolManager.isDragging;
-
-      if ((e.key === "=" || e.key === "+") && e.metaKey && !e.shiftKey) {
-        e.preventDefault();
-        editor.zoomIn();
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "-" && e.metaKey && !e.shiftKey) {
-        e.preventDefault();
-        editor.zoomOut();
-        editor.requestRedraw();
-        return;
-      }
-
-      if (e.key === "c" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        editor.copy();
-        return;
-      }
-
-      if (e.key === "x" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        editor.cut();
-        return;
-      }
-
-      if (e.key === "v" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        editor.paste();
-        return;
-      }
-
-      if (e.key === "z" && e.metaKey && !e.shiftKey) {
-        e.preventDefault();
-        editor.undo();
-        return;
-      }
-
-      if (e.key === "z" && e.metaKey && e.shiftKey) {
-        e.preventDefault();
-        editor.redo();
-        return;
-      }
-
-      if (!canvasActive) return;
-
-      for (const { toolId, shortcut } of editor.getToolShortcuts()) {
-        if (e.key === shortcut) {
-          e.preventDefault();
-          editor.setActiveTool(toolId);
-          editor.requestRedraw();
-          return;
-        }
-      }
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        e.preventDefault();
-        editor.deleteSelectedPoints();
-        return;
-      }
-
-      if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
-        editor.selectAll();
-        e.preventDefault();
-        return;
-      }
-
-      toolManager.handleKeyDown(e);
+      keyboardRouter.handleKeyDown(e);
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {
-      if (activeZone !== "canvas" && !focusLock && !toolManager.isDragging) return;
-      toolManager.handleKeyUp(e);
+      keyboardRouter.handleKeyUp(e);
     };
 
     document.addEventListener("keydown", keyDownHandler);

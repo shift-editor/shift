@@ -176,7 +176,7 @@ export class ViewportManager {
   }
 
   get mousePosition(): Point2D {
-    return this.projectScreenToUpm(this.#mouseX, this.#mouseY);
+    return this.projectScreenToScene(this.#mouseX, this.#mouseY);
   }
 
   get screenMousePosition(): Signal<Point2D> {
@@ -203,13 +203,13 @@ export class ViewportManager {
     this.$screenMousePosition.set({ x: this.#mouseX, y: this.#mouseY });
   }
 
-  /** Screen pixels (Y-down, origin top-left) to UPM units (Y-up, origin baseline). */
-  public projectScreenToUpm(x: number, y: number): Point2D {
+  /** Screen pixels (Y-down, origin top-left) to scene (UPM, Y-up, origin baseline). */
+  public projectScreenToScene(x: number, y: number): Point2D {
     return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
   }
 
-  /** UPM units (Y-up, origin baseline) to screen pixels (Y-down, origin top-left). */
-  public projectUpmToScreen(x: number, y: number): Point2D {
+  /** Scene (UPM, Y-up, origin baseline) to screen pixels (Y-down, origin top-left). */
+  public projectSceneToScreen(x: number, y: number): Point2D {
     return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
   }
 
@@ -223,12 +223,12 @@ export class ViewportManager {
    * point under the cursor stays fixed. Used for scroll-wheel zoom.
    */
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
-    const before = this.projectScreenToUpm(screenX, screenY);
+    const before = this.projectScreenToScene(screenX, screenY);
 
     const newZoom = clamp(this.$zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
     this.$zoom.value = newZoom;
 
-    const after = this.projectScreenToUpm(screenX, screenY);
+    const after = this.projectScreenToScene(screenX, screenY);
 
     const scale = this.upmScale;
     const deltaX = (before.x - after.x) * scale * newZoom;
