@@ -1,8 +1,8 @@
 import type { PointId, Glyph, Point2D } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "./indicator";
+import type { BoundingBoxHitResult } from "./boundingBox";
 import type { SnapIndicator } from "@/lib/editor/snapping/types";
 import type { DebugOverlays } from "./electron";
-import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { ToolName } from "@/lib/tools/core";
 
 export type SelectionMode = "preview" | "committed";
@@ -28,8 +28,8 @@ export interface StaticRenderState {
   handlesVisible: boolean;
   hoveredPointId: PointId | null;
   hoveredSegmentId: SegmentIndicator | null;
+  hoveredBoundingBoxHandle: BoundingBoxHitResult;
   debugOverlays: DebugOverlays;
-  textRunState: TextRunState | null;
 }
 
 export interface OverlayRenderState {

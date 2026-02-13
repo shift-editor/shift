@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { signal } from "../../reactive/signal";
 import type { IGraphicContext, IRenderer } from "../../../types/graphics";
-import type { Rect2D, Point2D } from "@shift/types";
+import type { Point2D } from "@shift/types";
 import type { Font } from "../Font";
 import { CanvasCoordinator, type CanvasCoordinatorContext } from "./CanvasCoordinator";
 
@@ -48,23 +48,10 @@ function createGraphicContext(renderer: IRenderer): IGraphicContext {
   };
 }
 
-function rect(x: number, y: number, width: number, height: number): Rect2D {
-  return {
-    x,
-    y,
-    width,
-    height,
-    left: x,
-    top: y,
-    right: x + width,
-    bottom: y + height,
-  };
-}
-
 function createContext(
   drawOffset: Point2D,
-  selectionRect: Rect2D | null,
   projectSceneToScreen: (x: number, y: number) => Point2D,
+  renderToolContributors: CanvasCoordinatorContext["renderToolContributors"] = vi.fn(),
 ): CanvasCoordinatorContext {
   const font: Font = {
     getMetrics: () => ({
@@ -95,11 +82,9 @@ function createContext(
     font,
     isPreviewMode: () => false,
     isHandlesVisible: () => true,
-    getSelectionBoundingRect: () => selectionRect,
     getHoveredSegmentId: () => null,
     isSegmentSelected: () => false,
     getHandleState: () => "idle",
-    getHoveredBoundingBoxHandle: () => null,
     getSnapIndicator: () => null,
     getViewportTransform: () => ({
       zoom: 1,
@@ -121,16 +106,21 @@ function createContext(
     }),
     renderTool: vi.fn(),
     renderToolBelowHandles: vi.fn(),
-    getTextRunState: () => null,
-    getActiveGlyphUnicode: () => null,
+    renderToolContributors,
+    shouldRenderEditableGlyph: () => true,
   };
 }
 
 describe("CanvasCoordinator", () => {
-  it("applies drawOffset when projecting selection bounding-box handles", () => {
+  it("applies drawOffset when projecting contributor screen points", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
-    const context = createContext({ x: 600, y: 25 }, rect(10, 20, 100, 40), projectSceneToScreen);
+    const renderToolContributors = vi.fn((layer, context) => {
+      if (layer !== "static-screen-after-handles") return;
+      context.projectGlyphLocalToScreen({ x: 10, y: 60 });
+      context.projectGlyphLocalToScreen({ x: 110, y: 20 });
+    });
+    const context = createContext({ x: 600, y: 25 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
     coordinator.setStaticContext(createGraphicContext(renderer));
 
@@ -141,10 +131,15 @@ describe("CanvasCoordinator", () => {
     expect(projectSceneToScreen).toHaveBeenNthCalledWith(2, 710, 45);
   });
 
-  it("uses raw selection rect when drawOffset is zero", () => {
+  it("uses raw contributor points when drawOffset is zero", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
-    const context = createContext({ x: 0, y: 0 }, rect(10, 20, 100, 40), projectSceneToScreen);
+    const renderToolContributors = vi.fn((layer, context) => {
+      if (layer !== "static-screen-after-handles") return;
+      context.projectGlyphLocalToScreen({ x: 10, y: 60 });
+      context.projectGlyphLocalToScreen({ x: 110, y: 20 });
+    });
+    const context = createContext({ x: 0, y: 0 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
     coordinator.setStaticContext(createGraphicContext(renderer));
 
@@ -155,10 +150,11 @@ describe("CanvasCoordinator", () => {
     expect(projectSceneToScreen).toHaveBeenNthCalledWith(2, 110, 20);
   });
 
-  it("does not project bounding-box handles when no selection rect exists", () => {
+  it("does not project points when contributor does not request projection", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
-    const context = createContext({ x: 350, y: 40 }, null, projectSceneToScreen);
+    const renderToolContributors = vi.fn();
+    const context = createContext({ x: 350, y: 40 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
     coordinator.setStaticContext(createGraphicContext(renderer));
 

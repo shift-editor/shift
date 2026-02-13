@@ -1,20 +1,14 @@
 import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Rect2D, Point2D, PointId } from "@shift/types";
+import type { Glyph, Point2D, PointId } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
-import type { TextRunState } from "../managers/TextRunManager";
+import type { ToolRenderContext, ToolRenderLayer } from "@/lib/tools/core/ToolRenderContributor";
 
-import {
-  BOUNDING_RECTANGLE_STYLES,
-  DEFAULT_STYLES,
-  GUIDE_STYLES,
-  SNAP_INDICATOR_CROSS_SIZE_PX,
-} from "@/lib/styles/style";
+import { DEFAULT_STYLES, GUIDE_STYLES, SNAP_INDICATOR_CROSS_SIZE_PX } from "@/lib/styles/style";
 
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
@@ -28,10 +22,7 @@ import {
   renderGlyphFilled,
   renderSegmentHighlights,
   renderHandles,
-  renderBoundingRect,
-  renderBoundingBoxHandles,
   renderSnapIndicators,
-  renderTextRun,
   renderDebugTightBounds,
   renderDebugHitRadii,
   renderDebugSegmentBounds,
@@ -76,11 +67,9 @@ export interface CanvasCoordinatorContext {
   /** When true, renders filled glyph silhouette without guides or handles. */
   isPreviewMode(): boolean;
   isHandlesVisible(): boolean;
-  getSelectionBoundingRect(): Rect2D | null;
   getHoveredSegmentId(): SegmentId | null;
   isSegmentSelected(segmentId: SegmentId): boolean;
   getHandleState(pointId: PointId): HandleState;
-  getHoveredBoundingBoxHandle(): BoundingBoxHitResult | null;
   getSnapIndicator(): SnapIndicator | null;
   getViewportTransform(): ViewportTransform;
   /** Converts a screen-pixel distance to UPM units at the current zoom level. */
@@ -92,26 +81,24 @@ export interface CanvasCoordinatorContext {
   renderTool(draw: DrawAPI): void;
   /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
   renderToolBelowHandles(draw: DrawAPI): void;
-  /** Return the current text run state for rendering, or null if no text run. */
-  getTextRunState(): TextRunState | null;
-  /** Return unicode of currently active editable glyph, or null if none. */
-  getActiveGlyphUnicode(): number | null;
+  renderToolContributors(layer: ToolRenderLayer, context: Omit<ToolRenderContext, "editor">): void;
+  shouldRenderEditableGlyph(): boolean;
 }
 
 /**
  * Orchestrates all rendering across the editor's three-layer canvas stack.
  *
  * **Canvas layers (back to front):**
- * - **Static** -- glyph outline, guides, handles, bounding box, segment highlights.
+ * - **Static** -- core glyph passes plus tool contributors.
  * - **Overlay** -- transient visuals such as snap indicators.
- * - **Interactive** -- tool-specific drawing (marquee, pen preview, shape drag).
+ * - **Interactive** -- active-tool visuals plus interactive contributors.
  *
  * Each layer owns an independent {@link FrameHandler} so redraws are
  * coalesced per-layer via `requestAnimationFrame`.
  *
  * **Two-phase rendering (static layer):**
- * 1. **UPM space** -- `save()` -> viewport transforms -> glyph passes -> `restore()`.
- * 2. **Screen space** -- `save()` -> bounding-box handles (pixel-perfect) -> `restore()`.
+ * 1. **UPM space** -- `save()` -> viewport transforms -> contributors + glyph passes -> `restore()`.
+ * 2. **Screen space** -- `save()` -> fixed-pixel contributors -> `restore()`.
  *
  * The overlay and interactive layers render exclusively in UPM space.
  */
@@ -213,6 +200,17 @@ export class CanvasCoordinator {
     return this.#ctx.screenToUpmDistance(screenPixels);
   }
 
+  #createToolRenderContext(context: {
+    draw?: DrawAPI;
+    renderer?: IRenderer;
+  }): Omit<ToolRenderContext, "editor"> {
+    return {
+      ...context,
+      lineWidthUpm: (px?: number) => this.#lineWidthUpm(px),
+      projectGlyphLocalToScreen: (point) => this.#projectGlyphLocalToScreen(point.x, point.y),
+    };
+  }
+
   #drawInteractive(): void {
     if (!this.#interactiveContext || !this.#interactiveDraw) return;
     const ctx = this.#interactiveContext.getContext();
@@ -221,6 +219,12 @@ export class CanvasCoordinator {
 
     this.#applyTransforms(ctx);
     this.#ctx.renderTool(this.#interactiveDraw);
+    this.#ctx.renderToolContributors(
+      "interactive-scene",
+      this.#createToolRenderContext({
+        draw: this.#interactiveDraw,
+      }),
+    );
 
     ctx.restore();
   }
@@ -256,22 +260,17 @@ export class CanvasCoordinator {
 
     ctx.clear();
 
-    // Text run at absolute UPM positions (no drawOffset)
-    const textRunState = this.#ctx.getTextRunState();
-    if (textRunState) {
-      ctx.save();
-      this.#applyViewportTransform(ctx);
-      const metrics = this.#ctx.font.getMetrics();
-      const activeUnicode = this.#ctx.getActiveGlyphUnicode();
-      const drawOffset = this.#ctx.getDrawOffset();
-      const liveGlyph =
-        glyph && activeUnicode !== null
-          ? { unicode: activeUnicode, x: drawOffset.x, contours: glyph.contours }
-          : null;
-      renderTextRun(rc, textRunState, metrics, liveGlyph);
-      ctx.restore();
-    }
-    const shouldRenderEditableGlyph = !textRunState || textRunState.editingIndex !== null;
+    ctx.save();
+    this.#applyViewportTransform(ctx);
+    this.#ctx.renderToolContributors(
+      "static-scene-before-handles",
+      this.#createToolRenderContext({
+        draw,
+      }),
+    );
+    ctx.restore();
+
+    const shouldRenderEditableGlyph = this.#ctx.shouldRenderEditableGlyph();
 
     ctx.save();
     this.#applyTransforms(ctx);
@@ -292,13 +291,6 @@ export class CanvasCoordinator {
       if (hasClosed && previewMode) {
         renderGlyphFilled(ctx, glyph);
       }
-    }
-
-    const bbRect = this.#ctx.getSelectionBoundingRect();
-    if (!previewMode && bbRect && shouldRenderEditableGlyph) {
-      ctx.setStyle(BOUNDING_RECTANGLE_STYLES);
-      ctx.lineWidth = this.#lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
-      renderBoundingRect(rc, bbRect);
     }
 
     if (!previewMode && glyph && shouldRenderEditableGlyph) {
@@ -333,37 +325,16 @@ export class CanvasCoordinator {
 
     ctx.restore();
     ctx.save();
-
-    if (!previewMode && bbRect && handlesVisible && shouldRenderEditableGlyph) {
-      this.#drawBoundingBoxHandles(ctx, bbRect);
+    if (!previewMode && handlesVisible && shouldRenderEditableGlyph) {
+      this.#ctx.renderToolContributors(
+        "static-screen-after-handles",
+        this.#createToolRenderContext({
+          renderer: ctx,
+        }),
+      );
     }
 
     ctx.restore();
-  }
-
-  #drawBoundingBoxHandles(
-    ctx: IRenderer,
-    bbRect: { x: number; y: number; width: number; height: number },
-  ): void {
-    const topLeft = this.#projectGlyphLocalToScreen(bbRect.x, bbRect.y + bbRect.height);
-    const bottomRight = this.#projectGlyphLocalToScreen(bbRect.x + bbRect.width, bbRect.y);
-
-    const screenRect = {
-      x: topLeft.x,
-      y: topLeft.y,
-      width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y,
-      left: topLeft.x,
-      top: topLeft.y,
-      right: bottomRight.x,
-      bottom: bottomRight.y,
-    };
-
-    const hoveredHandle = this.#ctx.getHoveredBoundingBoxHandle();
-    renderBoundingBoxHandles(ctx, {
-      rect: screenRect,
-      hoveredHandle: hoveredHandle ?? undefined,
-    });
   }
 
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {

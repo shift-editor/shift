@@ -3,6 +3,7 @@ import { effect, type Effect } from "@/lib/reactive/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
 import { textRunModule } from "./modules/textRun";
+import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";
 import { userPreferencesModule } from "./modules/userPreferences";
 import {
   PERSISTENCE_DOCUMENT_LIMIT,
@@ -54,6 +55,8 @@ export class DocumentStatePersistence {
   constructor(extraModules: PersistenceModule[] = []) {
     this.registerModule(userPreferencesModule);
     this.registerModule(textRunModule);
+    this.registerModule(toolStateAppModule);
+    this.registerModule(toolStateDocumentModule);
     for (const module of extraModules) {
       this.registerModule(module);
     }
@@ -164,6 +167,13 @@ export class DocumentStatePersistence {
         this.scheduleSave();
       }),
     );
+
+    this.#effects.push(
+      effect(() => {
+        editor.toolStateVersion.value;
+        this.scheduleSave();
+      }),
+    );
   }
 
   private disposeWatchers(): void {
@@ -201,7 +211,11 @@ export class DocumentStatePersistence {
   }
 
   private hydrateModule(module: PersistenceModule, envelope?: PersistedModuleEnvelope): void {
-    if (!this.#editor || !envelope) return;
+    if (!this.#editor) return;
+    if (!envelope) {
+      module.clear?.({ editor: this.#editor });
+      return;
+    }
 
     let payload: unknown = envelope.payload;
     if (envelope.moduleVersion !== module.version) {

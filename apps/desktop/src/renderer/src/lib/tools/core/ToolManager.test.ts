@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { FC, SVGProps } from "react";
 import { ToolManager } from "./ToolManager";
 import { createMockToolContext, type MockToolContext } from "@/testing";
 import { Hand } from "../hand/Hand";
@@ -7,6 +8,8 @@ import { Pen } from "../pen/Pen";
 import TextTool from "../text/Text";
 import type { ToolName } from "./createContext";
 import type { Modifiers } from "./GestureDetector";
+
+const MockIcon = (() => null) as FC<SVGProps<SVGSVGElement>>;
 
 function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return {
@@ -39,10 +42,30 @@ describe("ToolManager", () => {
     editor.requestTemporaryTool = (toolId, options) =>
       toolManager.requestTemporary(toolId, options);
     editor.returnFromTemporaryTool = () => toolManager.returnFromTemporary();
-    toolManager.register("hand", Hand);
-    toolManager.register("select", Select);
-    toolManager.register("pen", Pen);
-    toolManager.register("text", TextTool);
+    toolManager.register({
+      id: "hand",
+      create: (api) => new Hand(api),
+      icon: MockIcon,
+      tooltip: "Hand",
+    });
+    toolManager.register({
+      id: "select",
+      create: (api) => new Select(api),
+      icon: MockIcon,
+      tooltip: "Select",
+    });
+    toolManager.register({
+      id: "pen",
+      create: (api) => new Pen(api),
+      icon: MockIcon,
+      tooltip: "Pen",
+    });
+    toolManager.register({
+      id: "text",
+      create: (api) => new TextTool(api),
+      icon: MockIcon,
+      tooltip: "Text",
+    });
   });
 
   describe("keyboard delegation", () => {

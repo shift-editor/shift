@@ -1,12 +1,6 @@
-import { ToolConstructor, ToolName } from "@/lib/tools/core";
+import type { ToolManifest, ToolName } from "@/lib/tools/core";
 
-export type ToolDescriptor = {
-  id: ToolName;
-  ToolClass: ToolConstructor;
-  icon: React.FC<React.SVGProps<SVGSVGElement>>;
-  tooltip: string;
-  shortcut?: string;
-};
+export type ToolDescriptor = ToolManifest;
 
 export type ToolShortcutEntry = {
   toolId: ToolName;

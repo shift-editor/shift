@@ -3,6 +3,13 @@ import { Vec2 } from "@shift/geo";
 import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
 import type { BoundingRectEdge } from "./cursor";
 
+type YAxisDirection = "up" | "down";
+export const BOUNDING_BOX_MIN_VISIBLE_ZOOM = 0.15;
+
+export function isBoundingBoxVisibleAtZoom(zoom: number): boolean {
+  return zoom > BOUNDING_BOX_MIN_VISIBLE_ZOOM;
+}
+
 export interface HandlePositions {
   corners: {
     topLeft: Point2D;
@@ -24,58 +31,93 @@ export interface HandlePositions {
   };
 }
 
+interface ExpandedHandleRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+function getExpandedHandleRect(
+  rect: Rect2D,
+  offset: number,
+  yAxisDirection: YAxisDirection,
+): ExpandedHandleRect {
+  const left = rect.left - offset;
+  const right = rect.right + offset;
+
+  if (yAxisDirection === "up") {
+    return {
+      left,
+      right,
+      top: rect.bottom + offset,
+      bottom: rect.top - offset,
+    };
+  }
+
+  return {
+    left,
+    right,
+    top: rect.top - offset,
+    bottom: rect.bottom + offset,
+  };
+}
+
 export function getHandlePositions(
   rect: Rect2D,
   handleOffset: number,
   rotationZoneOffset: number,
+  yAxisDirection: YAxisDirection = "up",
 ): HandlePositions {
-  const diagonalOffset = handleOffset / Math.SQRT2;
-  const rotationDiagonalOffset = rotationZoneOffset / Math.SQRT2;
+  const alignmentRect = getExpandedHandleRect(rect, handleOffset, yAxisDirection);
+  const rotationRect = getExpandedHandleRect(rect, rotationZoneOffset, yAxisDirection);
+  const centerX = (alignmentRect.left + alignmentRect.right) / 2;
+  const centerY = (alignmentRect.top + alignmentRect.bottom) / 2;
 
   return {
     corners: {
       topLeft: {
-        x: rect.left - diagonalOffset,
-        y: rect.bottom + diagonalOffset,
+        x: alignmentRect.left,
+        y: alignmentRect.top,
       },
       topRight: {
-        x: rect.right + diagonalOffset,
-        y: rect.bottom + diagonalOffset,
+        x: alignmentRect.right,
+        y: alignmentRect.top,
       },
       bottomLeft: {
-        x: rect.left - diagonalOffset,
-        y: rect.top - diagonalOffset,
+        x: alignmentRect.left,
+        y: alignmentRect.bottom,
       },
       bottomRight: {
-        x: rect.right + diagonalOffset,
-        y: rect.top - diagonalOffset,
+        x: alignmentRect.right,
+        y: alignmentRect.bottom,
       },
     },
     midpoints: {
-      top: { x: (rect.left + rect.right) / 2, y: rect.bottom + handleOffset },
+      top: { x: centerX, y: alignmentRect.top },
       bottom: {
-        x: (rect.left + rect.right) / 2,
-        y: rect.top - handleOffset,
+        x: centerX,
+        y: alignmentRect.bottom,
       },
-      left: { x: rect.left - handleOffset, y: (rect.top + rect.bottom) / 2 },
-      right: { x: rect.right + handleOffset, y: (rect.top + rect.bottom) / 2 },
+      left: { x: alignmentRect.left, y: centerY },
+      right: { x: alignmentRect.right, y: centerY },
     },
     rotationZones: {
       topLeft: {
-        x: rect.left - rotationDiagonalOffset,
-        y: rect.bottom + rotationDiagonalOffset,
+        x: rotationRect.left,
+        y: rotationRect.top,
       },
       topRight: {
-        x: rect.right + rotationDiagonalOffset,
-        y: rect.bottom + rotationDiagonalOffset,
+        x: rotationRect.right,
+        y: rotationRect.top,
       },
       bottomLeft: {
-        x: rect.left - rotationDiagonalOffset,
-        y: rect.top - rotationDiagonalOffset,
+        x: rotationRect.left,
+        y: rotationRect.bottom,
       },
       bottomRight: {
-        x: rect.right + rotationDiagonalOffset,
-        y: rect.top - rotationDiagonalOffset,
+        x: rotationRect.right,
+        y: rotationRect.bottom,
       },
     },
   };

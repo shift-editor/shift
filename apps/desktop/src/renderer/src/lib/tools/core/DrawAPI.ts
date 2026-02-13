@@ -59,9 +59,7 @@ export class DrawAPI {
     this.#renderer.save();
     if (style?.strokeStyle) this.#renderer.strokeStyle = style.strokeStyle;
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    if (style?.dashPattern) {
-      this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
-    }
+    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
     this.#renderer.drawLine(from.x, from.y, to.x, to.y);
     this.#renderer.restore();
   }
@@ -75,9 +73,7 @@ export class DrawAPI {
     const height = Math.abs(b.y - a.y);
 
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    if (style?.dashPattern) {
-      this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
-    }
+    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
 
     if (style?.fillStyle) {
       this.#renderer.fillStyle = style.fillStyle;
@@ -94,9 +90,7 @@ export class DrawAPI {
     this.#renderer.save();
     const radiusUpm = this.#toUpm(radiusPx);
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    if (style?.dashPattern) {
-      this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
-    }
+    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
 
     if (style?.fillStyle) {
       this.#renderer.fillStyle = style.fillStyle;
@@ -114,9 +108,7 @@ export class DrawAPI {
 
     this.#renderer.save();
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    if (style?.dashPattern) {
-      this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
-    }
+    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
 
     this.#renderer.beginPath();
     this.#renderer.moveTo(points[0].x, points[0].y);
@@ -337,9 +329,7 @@ export class DrawAPI {
     this.#renderer.save();
     if (style?.strokeStyle) this.#renderer.strokeStyle = style.strokeStyle;
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    if (style?.dashPattern) {
-      this.#renderer.dashPattern = style.dashPattern.map((v) => this.#toUpm(v));
-    }
+    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
     this.#renderer.stroke();
     this.#renderer.restore();
   }

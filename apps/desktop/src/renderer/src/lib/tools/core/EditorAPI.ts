@@ -51,6 +51,8 @@ export interface Viewport {
   flushMousePosition?(): void;
   /** Convert screen pixels to scene (UPM) coordinates. */
   projectScreenToScene(x: number, y: number): Point2D;
+  /** Convert scene (UPM) coordinates to screen pixels. */
+  projectSceneToScreen(x: number, y: number): Point2D;
   /** Convert a scene point into glyph-local coordinates using the current draw offset. */
   sceneToGlyphLocal(point: Point2D): Point2D;
   /** Convert a glyph-local point into scene coordinates using the current draw offset. */
@@ -176,6 +178,20 @@ export interface TextRunAccess {
   moveTextCursorRight(): boolean;
   moveTextCursorToEnd(): void;
   recomputeTextRun(originX?: number): void;
+  shouldRenderEditableGlyph(): boolean;
+}
+
+export type ToolStateScope = "app" | "document";
+
+/**
+ * Tool-scoped persisted state access.
+ *
+ * Keys are namespaced by `toolId` and persisted by scope.
+ */
+export interface ToolStateStore {
+  getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
+  setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
+  deleteToolState(scope: ToolStateScope, toolId: string, key: string): void;
 }
 
 /**
@@ -260,6 +276,7 @@ export type EditorAPI = Viewport &
   Commands &
   ToolLifecycle &
   TextRunAccess &
+  ToolStateStore &
   VisualState & {
     readonly font: Font;
     readonly glyph: Signal<Glyph | null>;

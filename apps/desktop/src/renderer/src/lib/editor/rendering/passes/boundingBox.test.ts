@@ -101,7 +101,7 @@ describe("boundingBox", () => {
       expect(ctx.setStyle).toHaveBeenCalled();
     });
 
-    it("hovered corner handle gets larger radius", () => {
+    it("hovered corner handle keeps the same radius", () => {
       const radiusCalls: number[] = [];
       ctx.strokeCircle = vi.fn((_x, _y, r) => radiusCalls.push(r));
       ctx.fillCircle = vi.fn((_x, _y, r) => radiusCalls.push(r));
@@ -112,14 +112,10 @@ describe("boundingBox", () => {
       });
 
       const uniqueRadii = [...new Set(radiusCalls)];
-      expect(uniqueRadii.length).toBe(2);
-
-      const maxRadius = Math.max(...uniqueRadii);
-      const minRadius = Math.min(...uniqueRadii);
-      expect(maxRadius).toBe(minRadius + 1);
+      expect(uniqueRadii.length).toBe(1);
     });
 
-    it("hovered midpoint handle gets larger radius", () => {
+    it("hovered midpoint handle keeps the same radius", () => {
       const radiusCalls: number[] = [];
       ctx.strokeCircle = vi.fn((_x, _y, r) => radiusCalls.push(r));
       ctx.fillCircle = vi.fn((_x, _y, r) => radiusCalls.push(r));
@@ -130,11 +126,7 @@ describe("boundingBox", () => {
       });
 
       const uniqueRadii = [...new Set(radiusCalls)];
-      expect(uniqueRadii.length).toBe(2);
-
-      const maxRadius = Math.max(...uniqueRadii);
-      const minRadius = Math.min(...uniqueRadii);
-      expect(maxRadius).toBe(minRadius + 1);
+      expect(uniqueRadii.length).toBe(1);
     });
 
     it("without hovered handle all handles have same radius", () => {
@@ -152,6 +144,23 @@ describe("boundingBox", () => {
 
       expect(ctx.strokeCircle).toHaveBeenCalledTimes(8);
       expect(ctx.fillCircle).toHaveBeenCalledTimes(8);
+    });
+
+    it("aligns edge handles to the midpoint of an expanded screen-space box", () => {
+      const strokeCalls: Array<{ x: number; y: number }> = [];
+      ctx.strokeCircle = vi.fn((x, y) => strokeCalls.push({ x, y }));
+
+      renderBoundingBoxHandles(ctx, { rect: testRect });
+
+      const topY = Math.min(...strokeCalls.map((p) => p.y));
+      const bottomY = Math.max(...strokeCalls.map((p) => p.y));
+      const leftX = Math.min(...strokeCalls.map((p) => p.x));
+      const rightX = Math.max(...strokeCalls.map((p) => p.x));
+
+      expect(strokeCalls).toContainEqual({ x: (leftX + rightX) / 2, y: topY });
+      expect(strokeCalls).toContainEqual({ x: (leftX + rightX) / 2, y: bottomY });
+      expect(strokeCalls).toContainEqual({ x: leftX, y: (topY + bottomY) / 2 });
+      expect(strokeCalls).toContainEqual({ x: rightX, y: (topY + bottomY) / 2 });
     });
 
     it("rotation hit result does not enlarge any handle", () => {

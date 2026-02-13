@@ -12,6 +12,9 @@ export const textRunModule: PersistenceModule<TextRunModulePayload> = {
   hydrate: ({ editor }, payload) => {
     editor.hydrateTextRuns(payload.runsByGlyph);
   },
+  clear: ({ editor }) => {
+    editor.hydrateTextRuns({});
+  },
   validate: (payload: unknown): payload is TextRunModulePayload =>
     TextRunModulePayloadSchema.safeParse(payload).success,
 };

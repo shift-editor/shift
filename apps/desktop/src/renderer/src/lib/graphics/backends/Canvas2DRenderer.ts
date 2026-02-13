@@ -13,6 +13,7 @@ export class Canvas2DRenderer implements IRenderer {
   #ctx: Canvas2DContext;
   #renderCtx: CanvasRenderingContext2D;
   #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
+  #styleStack: DrawStyle[] = [];
   #path: Path2D;
 
   public constructor(ctx: Canvas2DContext) {
@@ -34,9 +35,7 @@ export class Canvas2DRenderer implements IRenderer {
     this.strokeStyle = style.strokeStyle;
     this.fillStyle = style.fillStyle;
     this.lineWidth = style.lineWidth;
-    if (style.dashPattern) {
-      this.dashPattern = style.dashPattern;
-    }
+    this.dashPattern = style.dashPattern;
   }
 
   public get lineWidth(): number {
@@ -103,11 +102,19 @@ export class Canvas2DRenderer implements IRenderer {
   }
 
   save(): void {
+    this.#styleStack.push({
+      ...this.#currentStyle,
+      dashPattern: [...this.#currentStyle.dashPattern],
+    });
     this.#renderCtx.save();
   }
 
   restore(): void {
     this.#renderCtx.restore();
+    const prevStyle = this.#styleStack.pop();
+    if (prevStyle) {
+      this.#currentStyle = prevStyle;
+    }
   }
 
   clear(): void {

@@ -3,18 +3,25 @@ import type { EditorAPI } from "./EditorAPI";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
-import { BaseTool, type ToolState } from "./BaseTool";
+import type { BaseTool, ToolState } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
+import type { ToolManifest } from "./ToolManifest";
+import type { ToolRenderContext, ToolRenderLayer } from "./ToolRenderContributor";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ToolConstructor = new (editor: EditorAPI) => BaseTool<ToolState, any>;
+type ToolInstance = BaseTool<ToolState, any>;
+const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = [
+  "static-scene-before-handles",
+  "static-screen-after-handles",
+];
+function isStaticRenderLayer(layer: ToolRenderLayer): boolean {
+  return STATIC_RENDER_LAYERS.includes(layer);
+}
 
 export class ToolManager implements ToolSwitchHandler {
-  private registry = new Map<ToolName, ToolConstructor>();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private primaryTool: BaseTool<ToolState, any> | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private overrideTool: BaseTool<ToolState, any> | null = null;
+  private registry = new Map<ToolName, ToolManifest>();
+  private primaryTool: ToolInstance | null = null;
+  private overrideTool: ToolInstance | null = null;
   private gesture = new GestureDetector();
   private editor: EditorAPI;
 
@@ -28,8 +35,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor = editor;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  get activeTool(): BaseTool<ToolState, any> | null {
+  get activeTool(): ToolInstance | null {
     return this.overrideTool ?? this.primaryTool;
   }
 
@@ -45,8 +51,14 @@ export class ToolManager implements ToolSwitchHandler {
     return this.gesture.isDragging;
   }
 
-  register(id: ToolName, ToolClass: ToolConstructor): void {
-    this.registry.set(id, ToolClass);
+  register(manifest: ToolManifest): void {
+    if (typeof manifest.id !== "string" || manifest.id.trim() === "") {
+      throw new Error("[ToolManager] Tool id must be a non-empty string");
+    }
+    if (this.registry.has(manifest.id)) {
+      throw new Error(`[ToolManager] Tool already registered: ${manifest.id}`);
+    }
+    this.registry.set(manifest.id, manifest);
   }
 
   activate(id: ToolName): void {
@@ -57,16 +69,16 @@ export class ToolManager implements ToolSwitchHandler {
     this.primaryTool?.deactivate?.();
     this.gesture.reset();
 
-    const ToolClass = this.registry.get(id);
-    if (!ToolClass) {
+    const nextTool = this.createToolInstance(id);
+    if (!nextTool) {
       console.warn(`[ToolManager] Unknown tool: ${id}`);
       return;
     }
 
-    this.primaryTool = new ToolClass(this.editor);
+    this.primaryTool = nextTool;
     this.primaryTool.activate?.();
     this.editor.setActiveToolState(this.primaryTool.getState());
-    if (this.primaryTool.renderBelowHandles) {
+    if (this.needsStaticRedrawOnActivation()) {
       this.editor.requestStaticRedraw();
     }
   }
@@ -74,11 +86,11 @@ export class ToolManager implements ToolSwitchHandler {
   requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void {
     if (this.overrideTool || this.gesture.isDragging) return;
 
-    const ToolClass = this.registry.get(toolId);
-    if (!ToolClass) return;
+    const nextTool = this.createToolInstance(toolId);
+    if (!nextTool) return;
 
     this.temporaryOptions = options ?? null;
-    this.overrideTool = new ToolClass(this.editor);
+    this.overrideTool = nextTool;
     this.overrideTool.activate?.();
     this.editor.setActiveToolState(this.overrideTool.getState());
     this.temporaryOptions?.onActivate?.();
@@ -146,7 +158,7 @@ export class ToolManager implements ToolSwitchHandler {
       this.editor.updateHover(coords);
     }
 
-    if (this.activeTool?.renderBelowHandles) {
+    if (this.activeTool?.renderBelowHandles || this.hasActiveStaticContributors()) {
       this.editor.requestStaticRedraw();
     }
   }
@@ -204,6 +216,19 @@ export class ToolManager implements ToolSwitchHandler {
     this.activeTool?.renderBelowHandles?.(draw);
   }
 
+  renderContributors(layer: ToolRenderLayer, context: Omit<ToolRenderContext, "editor">): void {
+    const activeToolId = this.activeToolId;
+    this.forEachContributor((toolId, contributor) => {
+      if (contributor.layer !== layer) return;
+      const visibility = contributor.visibility ?? "active-only";
+      if (visibility === "active-only" && toolId !== activeToolId) return;
+      contributor.render({
+        editor: this.editor,
+        ...context,
+      });
+    });
+  }
+
   private dispatchEvents(events: ToolEvent[]): void {
     for (const event of events) {
       this.activeTool?.handleEvent(event);
@@ -230,6 +255,60 @@ export class ToolManager implements ToolSwitchHandler {
 
   notifySelectionChanged(): void {
     this.activeTool?.handleEvent({ type: "selectionChanged" });
+  }
+
+  private createToolInstance(id: ToolName): ToolInstance | null {
+    const manifest = this.registry.get(id);
+    if (!manifest) return null;
+    return manifest.create(this.editor);
+  }
+
+  private hasActiveStaticContributors(): boolean {
+    const activeToolId = this.activeToolId;
+    if (!activeToolId) return false;
+
+    return this.hasStaticContributors(activeToolId, "active-only");
+  }
+
+  private hasAlwaysStaticContributors(): boolean {
+    for (const toolId of this.registry.keys()) {
+      if (this.hasStaticContributors(toolId, "always")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private hasStaticContributors(toolId: ToolName, visibility: "always" | "active-only"): boolean {
+    const manifest = this.registry.get(toolId);
+    if (!manifest?.renderContributors) return false;
+
+    return manifest.renderContributors.some((contributor) => {
+      const contributorVisibility = contributor.visibility ?? "active-only";
+      return contributorVisibility === visibility && isStaticRenderLayer(contributor.layer);
+    });
+  }
+
+  private needsStaticRedrawOnActivation(): boolean {
+    return (
+      !!this.primaryTool?.renderBelowHandles ||
+      this.hasActiveStaticContributors() ||
+      this.hasAlwaysStaticContributors()
+    );
+  }
+
+  private forEachContributor(
+    visit: (
+      toolId: ToolName,
+      contributor: NonNullable<ToolManifest["renderContributors"]>[number],
+    ) => void,
+  ): void {
+    for (const [toolId, manifest] of this.registry) {
+      const contributors = manifest.renderContributors ?? [];
+      for (const contributor of contributors) {
+        visit(toolId, contributor);
+      }
+    }
   }
 
   destroy(): void {

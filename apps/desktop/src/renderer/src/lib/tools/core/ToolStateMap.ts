@@ -1,9 +1,9 @@
-import type { ToolName, ToolState } from "./createContext";
+import type { ToolState } from "./createContext";
 import type { HandState } from "../hand/types";
 import type { ShapeState } from "../shape/types";
 import type { SelectState } from "../select/types";
 import type { PenState } from "../pen/types";
-import { TextState } from "../text/types";
+import type { TextState } from "../text/types";
 
 export interface ToolStateMap {
   hand: HandState;
@@ -14,4 +14,4 @@ export interface ToolStateMap {
   text: TextState;
 }
 
-export type ActiveToolState = ToolStateMap[ToolName];
+export type ActiveToolState = ToolStateMap[keyof ToolStateMap] | ToolState;

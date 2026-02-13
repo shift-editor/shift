@@ -11,41 +11,45 @@ import { Pen } from "./pen";
 import { Select } from "./select";
 import { Shape } from "./shape";
 import TextTool from "./text/Text";
+import { selectRenderContributors } from "./select/BoundingBoxRenderContributors";
+import { textRunRenderContributor } from "./text/TextRunRenderContributor";
 
 export function registerBuiltInTools(editor: Editor): void {
   editor.registerTool({
     id: "select",
-    ToolClass: Select,
+    create: (api) => new Select(api),
     icon: SelectIcon,
     tooltip: "Select Tool (V)",
     shortcut: "v",
+    renderContributors: selectRenderContributors,
   });
   editor.registerTool({
     id: "pen",
-    ToolClass: Pen,
+    create: (api) => new Pen(api),
     icon: PenIcon,
     tooltip: "Pen Tool (P)",
     shortcut: "p",
   });
   editor.registerTool({
     id: "hand",
-    ToolClass: Hand,
+    create: (api) => new Hand(api),
     icon: HandIcon,
     tooltip: "Hand Tool (H)",
     shortcut: "h",
   });
   editor.registerTool({
     id: "shape",
-    ToolClass: Shape,
+    create: (api) => new Shape(api),
     icon: ShapeIcon,
     tooltip: "Shape Tool (S)",
     shortcut: "s",
   });
   editor.registerTool({
     id: "text",
-    ToolClass: TextTool,
+    create: (api) => new TextTool(api),
     icon: TextIcon,
     tooltip: "Text Tool (T)",
     shortcut: "t",
+    renderContributors: [textRunRenderContributor],
   });
 }

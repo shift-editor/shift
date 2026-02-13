@@ -78,6 +78,7 @@ interface ScreenService {
   readonly hitRadius: number;
   lineWidth(pixels?: number): number;
   projectScreenToScene(x: number, y: number): Point2D;
+  projectSceneToScreen(x: number, y: number): Point2D;
   getMousePosition(x?: number, y?: number): Point2D;
 }
 
@@ -249,6 +250,7 @@ function createMockScreenService(): ScreenService & {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
     projectScreenToScene: vi.fn((x: number, y: number) => ({ x, y })),
+    projectSceneToScreen: vi.fn((x: number, y: number) => ({ x, y })),
     getMousePosition: vi.fn((x?: number, y?: number) => ({
       x: x ?? 0,
       y: y ?? 0,
@@ -262,6 +264,7 @@ function createMockScreenService(): ScreenService & {
     },
     lineWidth: mocks.lineWidth,
     projectScreenToScene: mocks.projectScreenToScene,
+    projectSceneToScreen: mocks.projectSceneToScreen,
     getMousePosition: mocks.getMousePosition,
     mocks,
   };
@@ -1020,6 +1023,10 @@ export function createMockToolContext(): MockToolContext {
     angleIncrementDeg: 45,
     pointRadiusPx: 8,
   });
+  const toolState = {
+    app: new Map<string, unknown>(),
+    document: new Map<string, unknown>(),
+  };
   let drawOffset: Point2D = { x: 0, y: 0 };
 
   function createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession {
@@ -1109,6 +1116,7 @@ export function createMockToolContext(): MockToolContext {
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
     projectScreenToScene: (x: number, y: number) => screen.projectScreenToScene(x, y),
+    projectSceneToScreen: (x: number, y: number) => screen.projectSceneToScreen(x, y),
     sceneToGlyphLocal: (point: Point2D) => ({
       x: point.x - drawOffset.x,
       y: point.y - drawOffset.y,
@@ -1224,6 +1232,18 @@ export function createMockToolContext(): MockToolContext {
     moveTextCursorRight: () => textRunManager.buffer.moveRight(),
     moveTextCursorToEnd: () => textRunManager.buffer.moveTo(textRunManager.buffer.length),
     recomputeTextRun: (originX?: number) => textRunManager.recompute(font, originX),
+    shouldRenderEditableGlyph: () => {
+      const state = textRunManager.state.peek();
+      return !state || state.editingIndex !== null;
+    },
+    getToolState: (scope: "app" | "document", toolId: string, key: string) =>
+      toolState[scope].get(`${toolId}:${key}`),
+    setToolState: (scope: "app" | "document", toolId: string, key: string, value: unknown) => {
+      toolState[scope].set(`${toolId}:${key}`, value);
+    },
+    deleteToolState: (scope: "app" | "document", toolId: string, key: string) => {
+      toolState[scope].delete(`${toolId}:${key}`);
+    },
     startEditSession: vi.fn((unicode: number) => {
       fontEngine.session.startEditSession(unicode);
       fontEngine.editing.addContour();

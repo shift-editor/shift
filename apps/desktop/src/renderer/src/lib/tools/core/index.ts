@@ -7,8 +7,15 @@ export {
 } from "./GestureDetector";
 export { BaseTool, type ToolState } from "./BaseTool";
 export { DrawAPI, type StrokeStyle, type ShapeStyle, type LastHandlePosition } from "./DrawAPI";
-export { ToolManager, type ToolConstructor } from "./ToolManager";
-export { type ToolName } from "./createContext";
+export { ToolManager } from "./ToolManager";
+export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
+export type { ToolFactory, ToolManifest } from "./ToolManifest";
+export type {
+  ToolRenderContributor,
+  ToolRenderContext,
+  ToolRenderLayer,
+  ToolRenderVisibility,
+} from "./ToolRenderContributor";
 export type {
   EditorAPI,
   Viewport,
@@ -18,6 +25,9 @@ export type {
   Editing,
   Commands,
   ToolLifecycle,
+  TextRunAccess,
+  ToolStateStore,
+  ToolStateScope,
   VisualState,
 } from "./EditorAPI";
 export type { ToolStateMap, ActiveToolState } from "./ToolStateMap";

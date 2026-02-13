@@ -62,7 +62,7 @@ import { ContentResolver } from "../clipboard";
 import { ClipboardManager } from "./managers/ClipboardManager";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
-import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
+import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "../tools/select/boundingBoxHitTest";
 import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import {
@@ -77,6 +77,7 @@ import type { EditorAPI } from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
+import type { ToolRenderContext, ToolRenderLayer } from "../tools/core/ToolRenderContributor";
 import type {
   DragSnapSession,
   DragSnapSessionConfig,
@@ -88,6 +89,7 @@ import { FontManager } from "./managers/FontManager";
 import { TextRunManager } from "./managers/TextRunManager";
 import type { PersistedTextRun, TextRunState } from "./managers/TextRunManager";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
+import type { ToolStateScope } from "../tools/core/EditorAPI";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -158,6 +160,11 @@ export class Editor implements ShiftEditor {
   #snapPreferences: WritableSignal<SnapPreferences>;
   #snapIndicator: WritableSignal<SnapIndicator | null>;
   #debugOverlays: WritableSignal<DebugOverlays>;
+  #toolState: {
+    app: Map<string, unknown>;
+    document: Map<string, unknown>;
+  };
+  #toolStateVersion: WritableSignal<number>;
 
   /**
    * Initializes all subsystems, wires signal dependencies, and sets up
@@ -203,6 +210,11 @@ export class Editor implements ShiftEditor {
       segmentBounds: false,
       glyphBbox: false,
     });
+    this.#toolState = {
+      app: new Map<string, unknown>(),
+      document: new Map<string, unknown>(),
+    };
+    this.#toolStateVersion = signal(0);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
@@ -250,8 +262,8 @@ export class Editor implements ShiftEditor {
       handlesVisible: this.$handlesVisible.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+      hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
       debugOverlays: this.#debugOverlays.value,
-      textRunState: this.#textRunManager.state.value,
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
@@ -269,6 +281,7 @@ export class Editor implements ShiftEditor {
 
     this.#staticEffect = effect(() => {
       this.$staticState.value;
+      this.#textRunManager.state.value;
       this.#renderer.requestStaticRedraw();
     });
 
@@ -286,6 +299,8 @@ export class Editor implements ShiftEditor {
       // Depend on active tool signals to re-run when tool changes
       this.$activeTool.value;
       this.$activeToolState.value;
+      this.#hover.hoveredBoundingBoxHandle.value;
+      this.#hover.hoveredPointId.value;
       const activeTool = this.#toolManager.activeTool;
       if (activeTool) {
         const cursor = activeTool.getCursor(activeTool.state);
@@ -298,9 +313,9 @@ export class Editor implements ShiftEditor {
   }
 
   public registerTool(descriptor: ToolDescriptor): void {
-    const { id, ToolClass, icon, tooltip, shortcut } = descriptor;
+    const { id, icon, tooltip, shortcut } = descriptor;
     this.#toolMetadata.set(id, { icon, tooltip, shortcut });
-    this.toolManager.register(id, ToolClass);
+    this.toolManager.register(descriptor);
   }
 
   public get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem> {
@@ -367,6 +382,13 @@ export class Editor implements ShiftEditor {
 
   public renderToolBelowHandles(draw: DrawAPI): void {
     this.#toolManager.renderBelowHandles(draw);
+  }
+
+  public renderToolContributors(
+    layer: ToolRenderLayer,
+    context: Omit<ToolRenderContext, "editor">,
+  ): void {
+    this.#toolManager.renderContributors(layer, context);
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -484,6 +506,8 @@ export class Editor implements ShiftEditor {
   }
 
   public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
+    if (!isBoundingBoxVisibleAtZoom(this.getZoom())) return null;
+
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
@@ -569,6 +593,10 @@ export class Editor implements ShiftEditor {
 
   public get debugOverlays(): Signal<DebugOverlays> {
     return this.#debugOverlays;
+  }
+
+  public get toolStateVersion(): Signal<number> {
+    return this.#toolStateVersion;
   }
 
   public getDebugOverlays(): DebugOverlays {
@@ -735,6 +763,54 @@ export class Editor implements ShiftEditor {
 
   public recomputeTextRun(originX?: number): void {
     this.#textRunManager.recompute(this.#fontManager, originX);
+  }
+
+  public shouldRenderEditableGlyph(): boolean {
+    const state = this.#textRunManager.state.peek();
+    return !state || state.editingIndex !== null;
+  }
+
+  public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
+    return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
+  }
+
+  public setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void {
+    const scopedState = this.#getToolScopeMap(scope);
+    const stateKey = this.#toolStateKey(toolId, key);
+    if (scopedState.get(stateKey) === value) return;
+    scopedState.set(stateKey, value);
+    this.#bumpToolStateVersion();
+  }
+
+  public deleteToolState(scope: ToolStateScope, toolId: string, key: string): void {
+    const scopedState = this.#getToolScopeMap(scope);
+    const stateKey = this.#toolStateKey(toolId, key);
+    if (!scopedState.delete(stateKey)) return;
+    this.#bumpToolStateVersion();
+  }
+
+  public exportToolState(scope: ToolStateScope): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of this.#getToolScopeMap(scope).entries()) {
+      out[key] = value;
+    }
+    return out;
+  }
+
+  public hydrateToolState(scope: ToolStateScope, state: Record<string, unknown>): void {
+    const scopedState = this.#getToolScopeMap(scope);
+    scopedState.clear();
+    for (const [key, value] of Object.entries(state)) {
+      scopedState.set(key, value);
+    }
+    this.#bumpToolStateVersion();
+  }
+
+  public clearToolState(scope: ToolStateScope): void {
+    const scopedState = this.#getToolScopeMap(scope);
+    if (scopedState.size === 0) return;
+    scopedState.clear();
+    this.#bumpToolStateVersion();
   }
 
   public exportTextRuns(): Record<string, PersistedTextRun> {
@@ -1509,5 +1585,17 @@ export class Editor implements ShiftEditor {
     this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();
     this.#renderer.destroy();
+  }
+
+  #toolStateKey(toolId: string, key: string): string {
+    return `${toolId}:${key}`;
+  }
+
+  #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
+    return this.#toolState[scope];
+  }
+
+  #bumpToolStateVersion(): void {
+    this.#toolStateVersion.set(this.#toolStateVersion.peek() + 1);
   }
 }
