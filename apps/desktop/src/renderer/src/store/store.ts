@@ -1,9 +1,7 @@
 import { Editor } from "@/lib/editor/Editor";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { isDev } from "@/lib/utils/utils";
 import { create } from "zustand";
 import type { StoreApi } from "zustand";
-import { persist } from "zustand/middleware";
 
 interface AppState {
   editor: Editor;
@@ -62,29 +60,7 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
   };
 };
 
-const storeDev = persist((set): AppState => createStore(set), {
-  name: "dev-app-state",
-  partialize: (state) => ({ filePath: state.filePath }),
-  storage: {
-    getItem: (name) => {
-      const str = sessionStorage.getItem(name);
-      return str ? JSON.parse(str) : null;
-    },
-    setItem: (name, value) => {
-      sessionStorage.setItem(name, JSON.stringify(value));
-    },
-    removeItem: (name) => sessionStorage.removeItem(name),
-  },
-  onRehydrateStorage: () => {
-    return (state) => {
-      if (state?.filePath && typeof state.filePath === "string") {
-        state.editor.loadFont(state.filePath);
-      }
-    };
-  },
-});
-
-const AppState = create<AppState>()(isDev ? storeDev : createStore);
+const AppState = create<AppState>()(createStore);
 
 export const getEditor = () => AppState.getState().editor;
 export const setFilePath = (path: string | null) => AppState.getState().setFilePath(path);

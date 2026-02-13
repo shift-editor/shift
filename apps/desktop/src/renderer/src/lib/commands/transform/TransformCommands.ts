@@ -26,6 +26,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
+    if (!ctx.glyph) return;
 
     const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
     if (points.length === 0) return;

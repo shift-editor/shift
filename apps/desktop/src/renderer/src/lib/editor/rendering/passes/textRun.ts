@@ -44,7 +44,7 @@ export function renderTextRun(
     ctx.translate(slot.x, 0);
     ctx.fillStyle = "black";
 
-    if (shouldUseLiveGlyph) {
+    if (shouldUseLiveGlyph && liveGlyph) {
       ctx.beginPath();
       for (const contour of liveGlyph.contours) {
         buildContourPath(ctx, contour);

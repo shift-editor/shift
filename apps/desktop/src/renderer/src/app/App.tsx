@@ -7,25 +7,35 @@ import { FocusZoneProvider } from "@/context/FocusZoneContext";
 import { DebugProvider } from "@/context/DebugContext";
 import { ZoomToast } from "@/components/ZoomToast";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";
+import { documentPersistence } from "@/persistence";
 
 import { RouteDispatcher } from "./RouteDispatcher";
 
 export const App = () => {
   useEffect(() => {
+    const editor = getEditor();
+    documentPersistence.init(editor);
+
+    const handleBeforeUnload = () => {
+      documentPersistence.flushNow();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont((filePath) => {
-      const editor = getEditor();
       editor.loadFont(filePath);
       editor.updateMetricsFromFont();
       setFilePath(filePath);
       clearDirty();
+      documentPersistence.openDocument(filePath);
     });
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
-        const editor = getEditor();
         await editor.saveFontAsync(savePath);
         setFilePath(savePath);
         clearDirty();
+        documentPersistence.onDocumentPathChanged(savePath);
+        documentPersistence.flushNow();
         await window.electronAPI?.saveCompleted(savePath);
       } catch (error) {
         console.error("Failed to save font:", error);
@@ -33,6 +43,8 @@ export const App = () => {
     });
 
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      documentPersistence.dispose();
       unsubscribeOpen?.();
       unsubscribeSave?.();
     };

@@ -23,7 +23,7 @@ export class TextRunEditBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
 
-    const textRunState = editor.textRunManager.state.peek();
+    const textRunState = editor.getTextRunState();
     if (!textRunState) return null;
 
     const metrics = editor.font.getMetrics();

@@ -216,7 +216,9 @@ export class ToolManager implements ToolSwitchHandler {
     this.temporaryOptions?.onReturn?.();
     this.temporaryOptions = null;
     this.primaryTool?.activate?.();
-    this.editor.setActiveToolState(this.primaryTool.getState());
+    if (this.primaryTool) {
+      this.editor.setActiveToolState(this.primaryTool.getState());
+    }
   }
 
   reset(): void {

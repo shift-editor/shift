@@ -21,6 +21,25 @@ export interface TextRunState {
   cursorX: number | null;
 }
 
+export interface PersistedTextRun {
+  codepoints: number[];
+  cursorPosition: number;
+  originX: number;
+  editingIndex: number | null;
+  editingUnicode: number | null;
+}
+
+const DEFAULT_RUN_KEY = "__default__";
+
+interface TextRunEntry {
+  buffer: GapBuffer;
+  originX: number;
+  cursorVisible: boolean;
+  editingIndex: number | null;
+  editingUnicode: number | null;
+  hoveredIndex: number | null;
+}
+
 /**
  * Persistent text run state that survives tool switches.
  *
@@ -29,17 +48,15 @@ export interface TextRunState {
  * between text/select/pen tools preserves the typed text.
  */
 export class TextRunManager {
-  #buffer: GapBuffer;
   #$state: WritableSignal<TextRunState | null>;
-  #originX: number = 0;
-  #cursorVisible: boolean = false;
-  #editingIndex: number | null = null;
-  #editingUnicode: number | null = null;
-  #hoveredIndex: number | null = null;
+  #runs: Map<string, TextRunEntry>;
+  #activeKey: string;
+  #font: Font | null = null;
 
   constructor() {
-    this.#buffer = GapBuffer.create();
     this.#$state = signal<TextRunState | null>(null);
+    this.#runs = new Map();
+    this.#activeKey = DEFAULT_RUN_KEY;
   }
 
   get state(): Signal<TextRunState | null> {
@@ -47,7 +64,23 @@ export class TextRunManager {
   }
 
   get buffer(): GapBuffer {
-    return this.#buffer;
+    return this.#activeRun().buffer;
+  }
+
+  setOwnerGlyph(unicode: number | null): void {
+    const nextKey = this.#glyphKey(unicode);
+    if (nextKey === this.#activeKey) return;
+
+    this.#activeKey = nextKey;
+    const run = this.#activeRun();
+    run.hoveredIndex = null;
+
+    if (this.#font) {
+      this.recompute(this.#font);
+      return;
+    }
+
+    this.#$state.set(null);
   }
 
   /**
@@ -56,54 +89,58 @@ export class TextRunManager {
    * @param originX — optional new horizontal origin in UPM for the text run baseline.
    */
   recompute(font: Font, originX?: number): void {
+    this.#font = font;
+    const run = this.#activeRun();
     if (originX !== undefined) {
-      this.#originX = originX;
+      run.originX = originX;
     }
 
-    const codepoints = this.#buffer.getText();
+    const codepoints = run.buffer.getText();
     const layout =
       codepoints.length > 0
-        ? computeTextLayout(codepoints, { x: this.#originX, y: 0 }, font)
+        ? computeTextLayout(codepoints, { x: run.originX, y: 0 }, font)
         : { slots: [], totalAdvance: 0 };
 
     // If buffer is empty and cursor isn't visible, clear state entirely
-    if (codepoints.length === 0 && !this.#cursorVisible) {
+    if (codepoints.length === 0 && !run.cursorVisible) {
       this.#$state.set(null);
       return;
     }
 
-    const cursorPos = this.#buffer.cursorPosition;
+    const cursorPos = run.buffer.cursorPosition;
 
     let cursorX: number | null = null;
-    if (this.#cursorVisible) {
+    if (run.cursorVisible) {
       if (cursorPos === 0) {
-        cursorX = this.#originX;
+        cursorX = run.originX;
       } else if (cursorPos <= layout.slots.length) {
         const prevSlot = layout.slots[cursorPos - 1];
         cursorX = prevSlot.x + prevSlot.advance;
       } else {
-        cursorX = this.#originX + layout.totalAdvance;
+        cursorX = run.originX + layout.totalAdvance;
       }
     }
 
     this.#$state.set({
       layout,
-      editingIndex: this.#editingIndex,
-      editingUnicode: this.#editingUnicode,
-      hoveredIndex: this.#hoveredIndex,
+      editingIndex: run.editingIndex,
+      editingUnicode: run.editingUnicode,
+      hoveredIndex: run.hoveredIndex,
       cursorX,
     });
   }
 
   setHovered(index: number | null): void {
-    this.#hoveredIndex = index;
+    const run = this.#activeRun();
+    run.hoveredIndex = index;
     const current = this.#$state.peek();
     if (!current) return;
     this.#$state.set({ ...current, hoveredIndex: index });
   }
 
   setCursorVisible(visible: boolean): void {
-    this.#cursorVisible = visible;
+    const run = this.#activeRun();
+    run.cursorVisible = visible;
     const current = this.#$state.peek();
     if (!current) return;
     if (!visible) {
@@ -112,21 +149,23 @@ export class TextRunManager {
   }
 
   setEditingSlot(index: number | null, unicode?: number | null): void {
-    this.#editingIndex = index;
-    this.#editingUnicode = unicode ?? null;
+    const run = this.#activeRun();
+    run.editingIndex = index;
+    run.editingUnicode = unicode ?? null;
     const current = this.#$state.peek();
     if (!current) return;
     this.#$state.set({
       ...current,
       editingIndex: index,
-      editingUnicode: this.#editingUnicode,
+      editingUnicode: run.editingUnicode,
     });
   }
 
   resetEditingContext(): void {
-    this.#editingIndex = null;
-    this.#editingUnicode = null;
-    this.#hoveredIndex = null;
+    const run = this.#activeRun();
+    run.editingIndex = null;
+    run.editingUnicode = null;
+    run.hoveredIndex = null;
     const current = this.#$state.peek();
     if (!current) return;
     this.#$state.set({
@@ -138,15 +177,88 @@ export class TextRunManager {
   }
 
   ensureSeeded(unicode: number | null): void {
-    if (unicode === null || this.#buffer.length > 0) return;
-    this.#buffer.insert(unicode);
+    const run = this.#activeRun();
+    if (unicode === null || run.buffer.length > 0) return;
+    run.buffer.insert(unicode);
   }
 
   clear(): void {
-    this.#buffer.clear();
-    this.#originX = 0;
-    this.resetEditingContext();
-    this.#cursorVisible = false;
+    const run = this.#activeRun();
+    run.buffer.clear();
+    run.originX = 0;
+    run.editingIndex = null;
+    run.editingUnicode = null;
+    run.hoveredIndex = null;
+    run.cursorVisible = false;
     this.#$state.set(null);
+  }
+
+  clearAll(): void {
+    this.#runs.clear();
+    this.#$state.set(null);
+  }
+
+  exportRuns(): Record<string, PersistedTextRun> {
+    const out: Record<string, PersistedTextRun> = {};
+    for (const [key, run] of this.#runs.entries()) {
+      if (key === DEFAULT_RUN_KEY || run.buffer.length === 0) continue;
+      out[key] = {
+        codepoints: run.buffer.getText(),
+        cursorPosition: run.buffer.cursorPosition,
+        originX: run.originX,
+        editingIndex: run.editingIndex,
+        editingUnicode: run.editingUnicode,
+      };
+    }
+    return out;
+  }
+
+  hydrateRuns(next: Record<string, PersistedTextRun>): void {
+    this.#runs.clear();
+
+    for (const [glyphKey, run] of Object.entries(next)) {
+      this.#runs.set(glyphKey, {
+        buffer: GapBuffer.from(run.codepoints ?? [], run.cursorPosition),
+        originX: Number.isFinite(run.originX) ? run.originX : 0,
+        cursorVisible: false,
+        editingIndex: run.editingIndex ?? null,
+        editingUnicode: run.editingUnicode ?? null,
+        hoveredIndex: null,
+      });
+    }
+
+    if (!this.#runs.has(this.#activeKey)) {
+      this.#runs.set(this.#activeKey, this.#createRun());
+    }
+
+    if (this.#font) {
+      this.recompute(this.#font);
+      return;
+    }
+    this.#$state.set(null);
+  }
+
+  #glyphKey(unicode: number | null): string {
+    if (unicode === null) return DEFAULT_RUN_KEY;
+    return String(unicode);
+  }
+
+  #activeRun(): TextRunEntry {
+    let run = this.#runs.get(this.#activeKey);
+    if (run) return run;
+    run = this.#createRun();
+    this.#runs.set(this.#activeKey, run);
+    return run;
+  }
+
+  #createRun(): TextRunEntry {
+    return {
+      buffer: GapBuffer.create(),
+      originX: 0,
+      cursorVisible: false,
+      editingIndex: null,
+      editingUnicode: null,
+      hoveredIndex: null,
+    };
   }
 }

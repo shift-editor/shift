@@ -248,7 +248,7 @@ export interface Effect {
 
 class EffectImpl implements Effect, Computation {
   #fn: () => void | (() => void);
-  #cleanup: (() => void) | void;
+  #cleanup: (() => void) | void = undefined;
   #disposed = false;
   #running = false;
   dependencies = new Set<SignalNode>();

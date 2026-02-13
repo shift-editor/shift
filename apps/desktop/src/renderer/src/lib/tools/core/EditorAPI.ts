@@ -2,8 +2,8 @@
  * Editor API — interface-sliced surface for tools.
  *
  * Instead of handing every tool a monolithic Editor reference, the API is
- * decomposed into 8 focused sub-interfaces (Viewport, Selection, HitTesting,
- * Snapping, Editing, Commands, ToolLifecycle, VisualState). Each sub-interface
+ * decomposed into focused sub-interfaces (Viewport, Selection, HitTesting,
+ * Snapping, Editing, Commands, ToolLifecycle, TextRunAccess, VisualState). Each sub-interface
  * groups a single responsibility so that behaviors and tools only depend on the
  * slice they actually use, while the composite {@link EditorAPI} type provides
  * the full surface when needed.
@@ -35,7 +35,7 @@ import type {
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
 import type { Font } from "@/lib/editor/Font";
-import type { TextRunManager } from "@/lib/editor/managers/TextRunManager";
+import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { Coordinates } from "@/types/coordinates";
 
 /**
@@ -151,6 +151,31 @@ export interface Editing {
   startEditSession(unicode: number): void;
   /** Return the unicode codepoint of the glyph currently being edited, or null. */
   getActiveGlyphUnicode(): number | null;
+  /** Set/get the main glyph selected from the grid/route. */
+  setMainGlyphUnicode(unicode: number | null): void;
+  getMainGlyphUnicode(): number | null;
+}
+
+/**
+ * Text-run editing access.
+ *
+ * Keeps text-run ownership and mutation APIs explicit, without exposing
+ * manager internals to tools.
+ */
+export interface TextRunAccess {
+  getTextRunState(): TextRunState | null;
+  getTextRunLength(): number;
+  ensureTextRunSeed(unicode: number | null): void;
+  setTextRunCursorVisible(visible: boolean): void;
+  setTextRunEditingSlot(index: number | null, unicode?: number | null): void;
+  resetTextRunEditingContext(): void;
+  setTextRunHovered(index: number | null): void;
+  insertTextCodepoint(codepoint: number): void;
+  deleteTextCodepoint(): boolean;
+  moveTextCursorLeft(): boolean;
+  moveTextCursorRight(): boolean;
+  moveTextCursorToEnd(): void;
+  recomputeTextRun(originX?: number): void;
 }
 
 /**
@@ -219,14 +244,12 @@ export interface VisualState {
   /** Set or clear the marquee rectangle (UPM space). Points inside are highlighted as a selection preview. */
   setMarqueePreviewRect(rect: Rect2D | null): void;
   isPointInMarqueePreview(pointId: PointId): boolean;
-  /** The persistent text run manager, owned by the editor. */
-  readonly textRunManager: TextRunManager;
   /** Switch to a different tool by name. */
   setActiveTool(toolName: ToolName): void;
 }
 
 /**
- * Full editor surface available to tools — the intersection of all 8
+ * Full editor surface available to tools — the intersection of all
  * sub-interfaces plus the font and reactive glyph signal.
  */
 export type EditorAPI = Viewport &
@@ -236,6 +259,7 @@ export type EditorAPI = Viewport &
   Editing &
   Commands &
   ToolLifecycle &
+  TextRunAccess &
   VisualState & {
     readonly font: Font;
     readonly glyph: Signal<Glyph | null>;

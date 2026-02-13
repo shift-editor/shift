@@ -31,9 +31,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
   useEffect(() => {
     // Parse glyphId as hex (e.g., "0041" for 'A')
-    const unicode = parseInt(glyphId, 16) || 0x41; // Default to 'A' if invalid
+    const parsed = Number.parseInt(glyphId, 16);
+    const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
 
     const initEditor = () => {
+      editor.setMainGlyphUnicode(unicode);
       // Start Rust edit session for this glyph
       editor.startEditSession(unicode);
 

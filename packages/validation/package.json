@@ -18,10 +18,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@shift/types": "workspace:*"
+    "@shift/types": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
+    "typescript": "^5.5.4",
     "vitest": "^4.0.17"
   }
 }

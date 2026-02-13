@@ -255,7 +255,7 @@ function executeSelectContour(contourId: ContourId, additive: boolean, editor: E
 }
 
 function executeEditTextRunSlot(index: number, editor: EditorAPI): void {
-  const textRunState = editor.textRunManager.state.peek();
+  const textRunState = editor.getTextRunState();
   if (!textRunState) return;
 
   const slot = textRunState.layout.slots[index];
@@ -264,5 +264,5 @@ function executeEditTextRunSlot(index: number, editor: EditorAPI): void {
   editor.startEditSession(slot.unicode);
   editor.setDrawOffset({ x: slot.x, y: 0 });
   editor.setPreviewMode(false);
-  editor.textRunManager.setEditingSlot(index, slot.unicode);
+  editor.setTextRunEditingSlot(index, slot.unicode);
 }

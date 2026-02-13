@@ -86,6 +86,7 @@ import type {
 import { SnapManager } from "./managers/SnapManager";
 import { FontManager } from "./managers/FontManager";
 import { TextRunManager } from "./managers/TextRunManager";
+import type { PersistedTextRun, TextRunState } from "./managers/TextRunManager";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
@@ -139,6 +140,7 @@ export class Editor implements ShiftEditor {
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
   #textRunManager: TextRunManager;
+  #mainGlyphUnicode: number | null = null;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -531,6 +533,10 @@ export class Editor implements ShiftEditor {
     return this.#snapPreferences.value;
   }
 
+  public get snapPreferences(): Signal<SnapPreferences> {
+    return this.#snapPreferences;
+  }
+
   public setSnapPreferences(next: Partial<SnapPreferences>): void {
     this.#snapPreferences.set({
       ...this.#snapPreferences.value,
@@ -660,8 +666,15 @@ export class Editor implements ShiftEditor {
    * Starts a session in the font engine and adds an initial empty contour.
    */
   public startEditSession(unicode: number): void {
+    const currentUnicode = this.#fontEngine.session.getEditingUnicode();
+    if (currentUnicode === unicode) {
+      this.#textRunManager.recompute(this.#fontManager);
+      return;
+    }
+
     this.#fontEngine.session.startEditSession(unicode);
     this.#fontEngine.editing.addContour();
+    this.#textRunManager.recompute(this.#fontManager);
   }
 
   public endEditSession(): void {
@@ -672,8 +685,65 @@ export class Editor implements ShiftEditor {
     return this.#textRunManager;
   }
 
-  public getTextRunState() {
-    return this.#textRunManager.state.peek();
+  public getTextRunState(): TextRunState | null {
+    return this.#textRunManager.state.value;
+  }
+
+  public getTextRunLength(): number {
+    return this.#textRunManager.buffer.length;
+  }
+
+  public ensureTextRunSeed(unicode: number | null): void {
+    this.#textRunManager.ensureSeeded(unicode);
+  }
+
+  public setTextRunCursorVisible(visible: boolean): void {
+    this.#textRunManager.setCursorVisible(visible);
+  }
+
+  public setTextRunEditingSlot(index: number | null, unicode?: number | null): void {
+    this.#textRunManager.setEditingSlot(index, unicode);
+  }
+
+  public resetTextRunEditingContext(): void {
+    this.#textRunManager.resetEditingContext();
+  }
+
+  public setTextRunHovered(index: number | null): void {
+    this.#textRunManager.setHovered(index);
+  }
+
+  public insertTextCodepoint(codepoint: number): void {
+    this.#textRunManager.buffer.insert(codepoint);
+  }
+
+  public deleteTextCodepoint(): boolean {
+    return this.#textRunManager.buffer.delete();
+  }
+
+  public moveTextCursorLeft(): boolean {
+    return this.#textRunManager.buffer.moveLeft();
+  }
+
+  public moveTextCursorRight(): boolean {
+    return this.#textRunManager.buffer.moveRight();
+  }
+
+  public moveTextCursorToEnd(): void {
+    this.#textRunManager.buffer.moveTo(this.#textRunManager.buffer.length);
+  }
+
+  public recomputeTextRun(originX?: number): void {
+    this.#textRunManager.recompute(this.#fontManager, originX);
+  }
+
+  public exportTextRuns(): Record<string, PersistedTextRun> {
+    return this.#textRunManager.exportRuns();
+  }
+
+  public hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void {
+    this.#textRunManager.hydrateRuns(runsByGlyph);
+    this.#textRunManager.recompute(this.#fontManager);
   }
 
   public get font(): Font {
@@ -686,6 +756,16 @@ export class Editor implements ShiftEditor {
 
   public getActiveGlyphUnicode(): number | null {
     return this.#fontEngine.session.getEditingUnicode();
+  }
+
+  public setMainGlyphUnicode(unicode: number | null): void {
+    this.#mainGlyphUnicode = unicode;
+    this.#textRunManager.setOwnerGlyph(unicode);
+    this.#textRunManager.recompute(this.#fontManager);
+  }
+
+  public getMainGlyphUnicode(): number | null {
+    return this.#mainGlyphUnicode;
   }
 
   public get commandHistory(): CommandHistory {
@@ -761,7 +841,7 @@ export class Editor implements ShiftEditor {
   }
 
   public get xAdvance(): number {
-    return this.glyph.value.xAdvance;
+    return this.glyph.value?.xAdvance ?? 0;
   }
 
   public setXAdvance(width: number): void {
@@ -900,6 +980,8 @@ export class Editor implements ShiftEditor {
     const metrics = this.#fontEngine.info.getMetrics();
     glyphDataStore.onFontLoaded(unicodes, metrics);
     this.#commandHistory.clear();
+    this.#textRunManager.clearAll();
+    this.setMainGlyphUnicode(65);
     this.startEditSession(65);
   }
 

@@ -40,6 +40,7 @@ export class ClipboardService {
     this.#pasteCount = 0;
 
     try {
+      if (!window.electronAPI) return false;
       const json = this.#serializer.serialize(content, sourceGlyph);
       window.electronAPI.clipboardWriteText(json);
       return true;
@@ -50,6 +51,7 @@ export class ClipboardService {
 
   async read(): Promise<ClipboardState> {
     try {
+      if (!window.electronAPI) return this.#internalState;
       const text = window.electronAPI.clipboardReadText();
       const native = this.#serializer.tryDeserialize(text);
       if (native) {

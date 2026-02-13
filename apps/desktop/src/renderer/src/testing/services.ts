@@ -205,6 +205,7 @@ interface ToolSwitchService {
 
 export interface MockToolContext extends EditorAPI {
   readonly fontEngine: FontEngine;
+  readonly textRunManager: TextRunManager;
   readonly screen: ReturnType<typeof createMockScreenService>;
   readonly selection: ReturnType<typeof createMockSelectionService>;
   readonly hover: ReturnType<typeof createMockHoverService> & {
@@ -961,6 +962,41 @@ export function createMockToolContext(): MockToolContext {
   };
 
   const textRunManager = new TextRunManager();
+  let mainGlyphUnicode: number | null = 65;
+  textRunManager.setOwnerGlyph(mainGlyphUnicode);
+
+  const font = {
+    getMetrics: () => ({
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+      capHeight: 700,
+      xHeight: 500,
+      lineGap: 0,
+      italicAngle: null,
+      underlinePosition: null,
+      underlineThickness: null,
+    }),
+    getMetadata: () => ({
+      familyName: "Test",
+      styleName: null,
+      versionMajor: 1,
+      versionMinor: 0,
+      copyright: null,
+      trademark: null,
+      designer: null,
+      designerUrl: null,
+      manufacturer: null,
+      manufacturerUrl: null,
+      license: null,
+      licenseUrl: null,
+      description: null,
+      note: null,
+    }),
+    getSvgPath: (_unicode: number) => null as string | null,
+    getAdvance: (_unicode: number) => null as number | null,
+    getBbox: (_unicode: number) => null,
+  };
 
   const zone = {
     getZone: vi.fn().mockReturnValue("canvas" as const),
@@ -1109,38 +1145,7 @@ export function createMockToolContext(): MockToolContext {
     toggleSegmentInSelection: (id: SegmentId) => selection.toggleSegment(id),
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
     glyph: computed<Glyph | null>(() => edit.getGlyph() as Glyph | null),
-    font: {
-      getMetrics: () => ({
-        unitsPerEm: 1000,
-        ascender: 800,
-        descender: -200,
-        capHeight: 700,
-        xHeight: 500,
-        lineGap: 0,
-        italicAngle: null,
-        underlinePosition: null,
-        underlineThickness: null,
-      }),
-      getMetadata: () => ({
-        familyName: "Test",
-        styleName: null,
-        versionMajor: 1,
-        versionMinor: 0,
-        copyright: null,
-        trademark: null,
-        designer: null,
-        designerUrl: null,
-        manufacturer: null,
-        manufacturerUrl: null,
-        license: null,
-        licenseUrl: null,
-        description: null,
-        note: null,
-      }),
-      getSvgPath: (_unicode: number) => null as string | null,
-      getAdvance: (_unicode: number) => null as number | null,
-      getBbox: (_unicode: number) => null,
-    },
+    font,
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
@@ -1205,11 +1210,32 @@ export function createMockToolContext(): MockToolContext {
     duplicateSelection: vi.fn(() => []),
     setSnapIndicator: vi.fn(),
     textRunManager,
+    getTextRunState: () => textRunManager.state.peek(),
+    getTextRunLength: () => textRunManager.buffer.length,
+    ensureTextRunSeed: (unicode: number | null) => textRunManager.ensureSeeded(unicode),
+    setTextRunCursorVisible: (visible: boolean) => textRunManager.setCursorVisible(visible),
+    setTextRunEditingSlot: (index: number | null, unicode?: number | null) =>
+      textRunManager.setEditingSlot(index, unicode),
+    resetTextRunEditingContext: () => textRunManager.resetEditingContext(),
+    setTextRunHovered: (index: number | null) => textRunManager.setHovered(index),
+    insertTextCodepoint: (codepoint: number) => textRunManager.buffer.insert(codepoint),
+    deleteTextCodepoint: () => textRunManager.buffer.delete(),
+    moveTextCursorLeft: () => textRunManager.buffer.moveLeft(),
+    moveTextCursorRight: () => textRunManager.buffer.moveRight(),
+    moveTextCursorToEnd: () => textRunManager.buffer.moveTo(textRunManager.buffer.length),
+    recomputeTextRun: (originX?: number) => textRunManager.recompute(font, originX),
     startEditSession: vi.fn((unicode: number) => {
       fontEngine.session.startEditSession(unicode);
       fontEngine.editing.addContour();
+      textRunManager.recompute(font);
     }),
     getActiveGlyphUnicode: vi.fn(() => fontEngine.session.getEditingUnicode()),
+    setMainGlyphUnicode: (unicode: number | null) => {
+      mainGlyphUnicode = unicode;
+      textRunManager.setOwnerGlyph(unicode);
+      textRunManager.recompute(font);
+    },
+    getMainGlyphUnicode: () => mainGlyphUnicode,
     setActiveTool: vi.fn(),
     clearHover: () => hoverProxy.clearAll(),
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>

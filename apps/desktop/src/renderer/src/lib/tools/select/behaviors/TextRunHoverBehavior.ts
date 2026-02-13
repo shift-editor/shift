@@ -23,7 +23,7 @@ export class TextRunHoverBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "pointerMove") return null;
 
-    const textRunState = editor.textRunManager.state.peek();
+    const textRunState = editor.getTextRunState();
     if (!textRunState) return null;
 
     const metrics = editor.font.getMetrics();
@@ -33,7 +33,7 @@ export class TextRunHoverBehavior implements SelectBehavior {
       requireShape: true,
     });
 
-    editor.textRunManager.setHovered(hitIndex);
+    editor.setTextRunHovered(hitIndex);
 
     // Return null to let other behaviors also process this event
     return null;

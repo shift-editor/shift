@@ -27,8 +27,8 @@ class TextTool extends BaseTool<TextState, TextAction> {
   }
 
   activate(): void {
-    const previous = this.editor.textRunManager.state.peek();
-    const hasExistingRun = this.editor.textRunManager.buffer.length > 0;
+    const previous = this.editor.getTextRunState();
+    const hasExistingRun = this.editor.getTextRunLength() > 0;
     const drawOffset = this.editor.getDrawOffset();
     const activeUnicode = this.editor.getActiveGlyphUnicode();
     this.#resumeContext = {
@@ -38,19 +38,19 @@ class TextTool extends BaseTool<TextState, TextAction> {
       activeUnicode,
     };
 
-    this.editor.textRunManager.ensureSeeded(activeUnicode);
+    this.editor.ensureTextRunSeed(activeUnicode);
     this.#pendingOriginX = hasExistingRun ? null : drawOffset.x;
-    this.editor.textRunManager.buffer.moveTo(this.editor.textRunManager.buffer.length);
+    this.editor.moveTextCursorToEnd();
 
     this.state = { type: "typing" };
-    this.editor.textRunManager.resetEditingContext();
-    this.editor.textRunManager.setCursorVisible(true);
+    this.editor.resetTextRunEditingContext();
+    this.editor.setTextRunCursorVisible(true);
     this.editor.setPreviewMode(true);
     this.#recompute();
   }
 
   deactivate(): void {
-    this.editor.textRunManager.setCursorVisible(false);
+    this.editor.setTextRunCursorVisible(false);
     this.editor.setPreviewMode(false);
     this.#restoreEditingContext();
     this.state = { type: "idle" };
@@ -60,25 +60,23 @@ class TextTool extends BaseTool<TextState, TextAction> {
   }
 
   protected executeAction(action: TextAction): void {
-    const buffer = this.editor.textRunManager.buffer;
-
     switch (action.type) {
       case "insert":
-        buffer.insert(action.codepoint);
+        this.editor.insertTextCodepoint(action.codepoint);
         this.#recompute();
         break;
       case "delete":
-        if (buffer.delete()) {
+        if (this.editor.deleteTextCodepoint()) {
           this.#recompute();
         }
         break;
       case "moveLeft":
-        if (buffer.moveLeft()) {
+        if (this.editor.moveTextCursorLeft()) {
           this.#recompute();
         }
         break;
       case "moveRight":
-        if (buffer.moveRight()) {
+        if (this.editor.moveTextCursorRight()) {
           this.#recompute();
         }
         break;
@@ -91,22 +89,22 @@ class TextTool extends BaseTool<TextState, TextAction> {
   #restoreEditingContext(): void {
     if (!this.#resumeContext) {
       this.editor.setDrawOffset({ x: 0, y: 0 });
-      this.editor.textRunManager.resetEditingContext();
+      this.editor.resetTextRunEditingContext();
       return;
     }
 
     this.editor.setDrawOffset(this.#resumeContext.drawOffset);
     const restored = this.#resolveEditingSlot();
     if (restored) {
-      this.editor.textRunManager.setEditingSlot(restored.index, restored.unicode);
+      this.editor.setTextRunEditingSlot(restored.index, restored.unicode);
       return;
     }
-    this.editor.textRunManager.resetEditingContext();
+    this.editor.resetTextRunEditingContext();
   }
 
   #resolveEditingSlot(): { index: number; unicode: number } | null {
     const resume = this.#resumeContext;
-    const textRunState = this.editor.textRunManager.state.peek();
+    const textRunState = this.editor.getTextRunState();
     if (!resume || !textRunState) return null;
 
     const slots = textRunState.layout.slots;
@@ -152,11 +150,11 @@ class TextTool extends BaseTool<TextState, TextAction> {
 
   #recompute(): void {
     if (this.#pendingOriginX !== null) {
-      this.editor.textRunManager.recompute(this.editor.font, this.#pendingOriginX);
+      this.editor.recomputeTextRun(this.#pendingOriginX);
       this.#pendingOriginX = null;
       return;
     }
-    this.editor.textRunManager.recompute(this.editor.font);
+    this.editor.recomputeTextRun();
   }
 }
 

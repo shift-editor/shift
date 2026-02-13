@@ -37,7 +37,7 @@
     "prettier": "^3.4.2",
     "tsx": "^4.7.0",
     "turbo": "^2.7.5",
-    "typescript": "^5.3.0"
+    "typescript": "^5.5.4"
   },
   "pnpm": {
     "overrides": {

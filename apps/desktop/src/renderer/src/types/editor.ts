@@ -3,6 +3,7 @@ import type { SegmentId, SegmentIndicator } from "./indicator";
 import type { SnapIndicator } from "@/lib/editor/snapping/types";
 import type { DebugOverlays } from "./electron";
 import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
+import type { ToolName } from "@/lib/tools/core";
 
 export type SelectionMode = "preview" | "committed";
 
@@ -89,6 +90,6 @@ export interface SnapPreferences {
 }
 
 export interface ToolSwitchHandler {
-  requestTemporary: (toolId: string, options?: TemporaryToolOptions) => void;
+  requestTemporary: (toolId: ToolName, options?: TemporaryToolOptions) => void;
   returnFromTemporary: () => void;
 }

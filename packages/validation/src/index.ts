@@ -24,5 +24,25 @@
 export { Validate } from "./Validate";
 export { ValidateSnapshot } from "./ValidateSnapshot";
 export { ValidateClipboard } from "./ValidateClipboard";
+export {
+  PersistedTextRunSchema,
+  TextRunModulePayloadSchema,
+  SnapPreferencesSchema,
+  UserPreferencesSchema,
+  PersistedModuleEnvelopeSchema,
+  PersistenceRegistrySchema,
+  PersistedDocumentStateSchema,
+  PersistedRootSchema,
+} from "./persistence";
 
 export type { ValidationResult, ValidationError, ValidationErrorCode, PointLike } from "./types";
+export type {
+  PersistedTextRun,
+  TextRunModulePayload,
+  SnapPreferencesShape,
+  UserPreferences,
+  PersistedModuleEnvelope,
+  PersistenceRegistry,
+  PersistedDocumentState,
+  PersistedRoot,
+} from "./persistence";
