@@ -85,6 +85,7 @@ function createContext(
     getHoveredSegmentId: () => null,
     isSegmentSelected: () => false,
     getHandleState: () => "idle",
+    getAnchorHandleState: () => "idle",
     getSnapIndicator: () => null,
     getViewportTransform: () => ({
       zoom: 1,

@@ -4,16 +4,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Anchor {
     id: AnchorId,
-    name: String,
+    name: Option<String>,
     x: f64,
     y: f64,
 }
 
 impl Anchor {
-    pub fn new(name: String, x: f64, y: f64) -> Self {
+    pub fn new(name: impl Into<Option<String>>, x: f64, y: f64) -> Self {
         Self {
             id: AnchorId::new(),
-            name,
+            name: name.into(),
+            x,
+            y,
+        }
+    }
+
+    pub fn with_id(id: AnchorId, name: impl Into<Option<String>>, x: f64, y: f64) -> Self {
+        Self {
+            id,
+            name: name.into(),
             x,
             y,
         }
@@ -23,8 +32,8 @@ impl Anchor {
         self.id
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     pub fn x(&self) -> f64 {
@@ -44,8 +53,8 @@ impl Anchor {
         self.y = y;
     }
 
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
+    pub fn set_name(&mut self, name: impl Into<Option<String>>) {
+        self.name = name.into();
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
@@ -61,7 +70,7 @@ mod tests {
     #[test]
     fn anchor_creation() {
         let a = Anchor::new("top".to_string(), 250.0, 700.0);
-        assert_eq!(a.name(), "top");
+        assert_eq!(a.name(), Some("top"));
         assert_eq!(a.x(), 250.0);
         assert_eq!(a.y(), 700.0);
     }
@@ -74,5 +83,16 @@ mod tests {
 
         a.translate(-50.0, 50.0);
         assert_eq!(a.position(), (250.0, 800.0));
+
+        a.set_name(None::<String>);
+        assert_eq!(a.name(), None);
+    }
+
+    #[test]
+    fn anchor_with_id_roundtrip() {
+        let id = AnchorId::new();
+        let a = Anchor::with_id(id, Some("top".to_string()), 1.0, 2.0);
+        assert_eq!(a.id(), id);
+        assert_eq!(a.name(), Some("top"));
     }
 }

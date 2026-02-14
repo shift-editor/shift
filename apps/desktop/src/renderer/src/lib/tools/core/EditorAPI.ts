@@ -13,7 +13,16 @@
  *
  * @module
  */
-import type { Point2D, PointId, ContourId, Point, Contour, Glyph, Rect2D } from "@shift/types";
+import type {
+  Point2D,
+  PointId,
+  ContourId,
+  Point,
+  Contour,
+  Glyph,
+  Rect2D,
+  AnchorId,
+} from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
@@ -82,13 +91,19 @@ export interface Selection {
   getSelectedSegments(): SegmentId[];
   hasSelection(): boolean;
   isPointSelected(id: PointId): boolean;
+  isAnchorSelected(id: AnchorId): boolean;
   isSegmentSelected(id: SegmentId): boolean;
   selectPoints(ids: readonly PointId[]): void;
+  selectAnchors(ids: readonly AnchorId[]): void;
   clearSelection(): void;
   setSelectionMode(mode: SelectionMode): void;
   addPointToSelection(id: PointId): void;
+  addAnchorToSelection(id: AnchorId): void;
   removePointFromSelection(id: PointId): void;
+  removeAnchorFromSelection(id: AnchorId): void;
   togglePointSelection(id: PointId): void;
+  toggleAnchorSelection(id: AnchorId): void;
+  getSelectedAnchors(): AnchorId[];
   selectSegments(ids: readonly SegmentId[]): void;
   addSegmentToSelection(id: SegmentId): void;
   removeSegmentFromSelection(id: SegmentId): void;
@@ -105,6 +120,9 @@ export interface Selection {
 export interface HitTesting {
   /** Return the highest-priority hit at the given position (point > segment > endpoint). */
   getNodeAt(coords: Coordinates): HitResult;
+  getAnchorAt(
+    coords: Coordinates,
+  ): { id: AnchorId; name: string | null; x: number; y: number } | null;
   getPointAt(coords: Coordinates): Point | null;
   getSegmentAt(coords: Coordinates): SegmentHitResult | null;
   getSegmentById(segmentId: SegmentId): Segment | null;
@@ -142,6 +160,8 @@ export interface Editing {
   /** Translate points by a delta, adjusting adjacent off-curve handles to preserve tangent continuity. Returns all affected IDs (including handles). */
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
+  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void;
+  moveAnchors(ids: AnchorId[], delta: Point2D): void;
   toggleSmooth(id: PointId): void;
   duplicateSelection(): PointId[];
   /** The contour currently being extended by the Pen tool, or null. */
@@ -251,6 +271,7 @@ export interface VisualState {
   readonly hoveredBoundingBoxHandle: Signal<BoundingBoxHitResult>;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   readonly hoveredPointId: Signal<PointId | null>;
+  readonly hoveredAnchorId: Signal<AnchorId | null>;
   readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
   readonly isHoveringNode: Signal<boolean>;
   getIsHoveringNode(): boolean;

@@ -23,7 +23,7 @@ pub struct GlyphLayer {
     height: Option<f64>,
     contours: HashMap<ContourId, Contour>,
     components: HashMap<ComponentId, Component>,
-    anchors: HashMap<AnchorId, Anchor>,
+    anchors: Vec<Anchor>,
     guidelines: Vec<Guideline>,
     lib: LibData,
 }
@@ -108,26 +108,58 @@ impl GlyphLayer {
         self.components.remove(&id)
     }
 
-    pub fn anchors(&self) -> &HashMap<AnchorId, Anchor> {
+    pub fn anchors(&self) -> &[Anchor] {
         &self.anchors
     }
 
     pub fn anchors_iter(&self) -> impl Iterator<Item = &Anchor> {
-        self.anchors.values()
+        self.anchors.iter()
     }
 
     pub fn anchor(&self, id: AnchorId) -> Option<&Anchor> {
-        self.anchors.get(&id)
+        self.anchors.iter().find(|anchor| anchor.id() == id)
+    }
+
+    pub fn anchor_mut(&mut self, id: AnchorId) -> Option<&mut Anchor> {
+        self.anchors.iter_mut().find(|anchor| anchor.id() == id)
+    }
+
+    pub fn anchor_index(&self, id: AnchorId) -> Option<usize> {
+        self.anchors.iter().position(|anchor| anchor.id() == id)
     }
 
     pub fn add_anchor(&mut self, anchor: Anchor) -> AnchorId {
         let id = anchor.id();
-        self.anchors.insert(id, anchor);
+        self.anchors.push(anchor);
         id
     }
 
     pub fn remove_anchor(&mut self, id: AnchorId) -> Option<Anchor> {
-        self.anchors.remove(&id)
+        self.anchor_index(id)
+            .map(|index| self.anchors.remove(index))
+    }
+
+    pub fn clear_anchors(&mut self) {
+        self.anchors.clear();
+    }
+
+    pub fn set_anchor_position(&mut self, id: AnchorId, x: f64, y: f64) -> bool {
+        let Some(anchor) = self.anchor_mut(id) else {
+            return false;
+        };
+        anchor.set_position(x, y);
+        true
+    }
+
+    pub fn move_anchors(&mut self, ids: &[AnchorId], dx: f64, dy: f64) -> Vec<AnchorId> {
+        let mut moved = Vec::new();
+        for id in ids {
+            if let Some(anchor) = self.anchor_mut(*id) {
+                anchor.translate(dx, dy);
+                moved.push(*id);
+            }
+        }
+        moved
     }
 
     pub fn guidelines(&self) -> &[Guideline] {
@@ -147,7 +179,7 @@ impl GlyphLayer {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.contours.is_empty() && self.components.is_empty()
+        self.contours.is_empty() && self.components.is_empty() && self.anchors.is_empty()
     }
 }
 
@@ -242,6 +274,7 @@ impl Glyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Anchor;
 
     #[test]
     fn glyph_creation() {
@@ -271,5 +304,15 @@ mod tests {
 
         assert!(!layer.is_empty());
         assert!(layer.contour(id).is_some());
+    }
+
+    #[test]
+    fn glyph_layer_anchors_are_ordered() {
+        let mut layer = GlyphLayer::new();
+        let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
+        let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
+
+        let ids: Vec<_> = layer.anchors_iter().map(|a| a.id()).collect();
+        assert_eq!(ids, vec![a1, a2]);
     }
 }

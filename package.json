@@ -4,7 +4,7 @@
   "private": true,
   "description": "Shift font editor monorepo",
   "scripts": {
-    "dev": "pnpm --filter @shift/desktop dev",
+    "dev": "pnpm run build:native:debug && pnpm --filter @shift/desktop dev",
     "dev:watch": "scripts/watch.sh",
     "build": "turbo run build",
     "build:native": "pnpm --filter shift-node run build",

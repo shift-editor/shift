@@ -3,7 +3,16 @@ import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
-import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
+import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
+
+function nextSelectionStateAfterToggle(
+  isSelected: boolean,
+  selectedInTypeCount: number,
+  selectedInOtherTypesCount: number,
+): "ready" | "selected" {
+  const nextInTypeCount = selectedInTypeCount + (isSelected ? -1 : 1);
+  return nextInTypeCount + selectedInOtherTypesCount > 0 ? "selected" : "ready";
+}
 
 export class SelectionBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -20,14 +29,40 @@ export class SelectionBehavior implements SelectBehavior {
 
     const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
+    const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
+
+    // Anchor hit + shift toggle
+    if (anchorId !== null && state.type === "selected" && event.shiftKey) {
+      const selectedPoints = editor.getSelectedPoints();
+      const selectedAnchors = editor.getSelectedAnchors();
+      const selectedSegments = editor.getSelectedSegments();
+      const isSelected = editor.isAnchorSelected(anchorId);
+      const type = nextSelectionStateAfterToggle(
+        isSelected,
+        selectedAnchors.length,
+        selectedPoints.length + selectedSegments.length,
+      );
+      return { state: { type }, action: { type: "toggleAnchor", anchorId } };
+    }
+
+    if (anchorId !== null) {
+      return {
+        state: { type: "selected" },
+        action: { type: "selectAnchor", anchorId, additive: event.shiftKey },
+      };
+    }
 
     // Point hit + shift toggle
     if (pointId !== null && state.type === "selected" && event.shiftKey) {
       const selectedPoints = editor.getSelectedPoints();
+      const selectedAnchors = editor.getSelectedAnchors();
+      const selectedSegments = editor.getSelectedSegments();
       const isSelected = editor.isPointSelected(pointId);
-      const willHaveSelection =
-        editor.hasSelection() && !(isSelected && selectedPoints.length === 1);
-      const type = willHaveSelection || !isSelected ? "selected" : "ready";
+      const type = nextSelectionStateAfterToggle(
+        isSelected,
+        selectedPoints.length,
+        selectedAnchors.length + selectedSegments.length,
+      );
       return { state: { type }, action: { type: "togglePoint", pointId } };
     }
 
@@ -41,13 +76,14 @@ export class SelectionBehavior implements SelectBehavior {
     // Segment hit + shift toggle
     if (hit !== null && isSegmentHit(hit) && state.type === "selected" && event.shiftKey) {
       const selectedPoints = editor.getSelectedPoints();
+      const selectedAnchors = editor.getSelectedAnchors();
       const selectedSegments = editor.getSelectedSegments();
       const isSelected = editor.isSegmentSelected(hit.segmentId);
-      const hasOtherSelections =
-        selectedPoints.length > 0 ||
-        selectedSegments.length > 1 ||
-        (selectedSegments.length === 1 && !isSelected);
-      const type = hasOtherSelections || !isSelected ? "selected" : "ready";
+      const type = nextSelectionStateAfterToggle(
+        isSelected,
+        selectedSegments.length,
+        selectedPoints.length + selectedAnchors.length,
+      );
       return { state: { type }, action: { type: "toggleSegment", segmentId: hit.segmentId } };
     }
 

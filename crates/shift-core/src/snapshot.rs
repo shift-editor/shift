@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{edit_session::EditSession, Contour, Point, PointId, PointType as IrPointType};
+use crate::{edit_session::EditSession, Anchor, Contour, Point, PointId, PointType as IrPointType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -68,12 +68,79 @@ impl From<&Contour> for ContourSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct AnchorSnapshot {
+    #[ts(type = "AnchorId")]
+    pub id: String,
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
+}
+
+impl From<&Anchor> for AnchorSnapshot {
+    fn from(anchor: &Anchor) -> Self {
+        Self {
+            id: anchor.id().raw().to_string(),
+            name: anchor.name().map(|name| name.to_string()),
+            x: anchor.x(),
+            y: anchor.y(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct RenderPointSnapshot {
+    pub x: f64,
+    pub y: f64,
+    pub point_type: PointType,
+    pub smooth: bool,
+}
+
+impl From<&Point> for RenderPointSnapshot {
+    fn from(point: &Point) -> Self {
+        Self {
+            x: point.x(),
+            y: point.y(),
+            point_type: point.point_type().into(),
+            smooth: point.is_smooth(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct RenderContourSnapshot {
+    pub points: Vec<RenderPointSnapshot>,
+    pub closed: bool,
+}
+
+impl From<&Contour> for RenderContourSnapshot {
+    fn from(contour: &Contour) -> Self {
+        Self {
+            points: contour
+                .points()
+                .iter()
+                .map(RenderPointSnapshot::from)
+                .collect(),
+            closed: contour.is_closed(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct GlyphSnapshot {
     pub unicode: u32,
     pub name: String,
     #[ts(rename = "xAdvance")]
     pub x_advance: f64,
     pub contours: Vec<ContourSnapshot>,
+    pub anchors: Vec<AnchorSnapshot>,
+    #[serde(default)]
+    pub composite_contours: Vec<RenderContourSnapshot>,
     #[ts(rename = "activeContourId", type = "ContourId | null")]
     pub active_contour_id: Option<String>,
 }
@@ -85,6 +152,12 @@ impl GlyphSnapshot {
             name: session.glyph_name().to_string(),
             x_advance: session.width(),
             contours: session.contours_iter().map(ContourSnapshot::from).collect(),
+            anchors: session
+                .layer()
+                .anchors_iter()
+                .map(AnchorSnapshot::from)
+                .collect(),
+            composite_contours: Vec::new(),
             active_contour_id: session.active_contour_id().map(|id| id.raw().to_string()),
         }
     }
@@ -187,6 +260,9 @@ mod tests {
         session
             .add_point(50.0, 50.0, IrPointType::OnCurve, false)
             .unwrap();
+        session
+            .layer_mut()
+            .add_anchor(crate::Anchor::new(Some("top".to_string()), 250.0, 700.0));
 
         let snapshot = GlyphSnapshot::from_edit_session(&session);
 
@@ -195,6 +271,9 @@ mod tests {
         assert_eq!(snapshot.x_advance, 600.0);
         assert_eq!(snapshot.contours.len(), 1);
         assert_eq!(snapshot.contours[0].points.len(), 1);
+        assert_eq!(snapshot.anchors.len(), 1);
+        assert_eq!(snapshot.anchors[0].name.as_deref(), Some("top"));
+        assert!(snapshot.composite_contours.is_empty());
         assert_eq!(
             snapshot.active_contour_id,
             Some(contour_id.raw().to_string())
@@ -236,6 +315,7 @@ mod tests {
         assert!(json.contains("\"name\":\"C\""));
         assert!(json.contains("\"xAdvance\":550"));
         assert!(json.contains("\"contours\":"));
+        assert!(json.contains("\"compositeContours\":"));
         assert!(json.contains("\"activeContourId\":"));
     }
 }

@@ -15,6 +15,7 @@ import type {
   Point2D,
   Rect2D,
   PointId,
+  AnchorId,
   ContourId,
   GlyphSnapshot,
   Glyph,
@@ -227,7 +228,9 @@ export class Editor implements ShiftEditor {
     });
     this.#isHoveringNode = computed(
       () =>
-        this.#hover.hoveredPointId.value !== null || this.#hover.hoveredSegmentId.value !== null,
+        this.#hover.hoveredPointId.value !== null ||
+        this.#hover.hoveredAnchorId.value !== null ||
+        this.#hover.hoveredSegmentId.value !== null,
     );
 
     this.#toolMetadata = new Map();
@@ -245,8 +248,10 @@ export class Editor implements ShiftEditor {
       glyph: this.#$glyph.value,
       drawOffset: this.#drawOffset.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
+      selectedAnchorIds: this.#selection.selectedAnchorIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
       selectionMode: this.#selection.selectionMode.value,
       previewMode: this.$previewMode.value,
@@ -256,11 +261,13 @@ export class Editor implements ShiftEditor {
       glyph: this.#$glyph.value,
       drawOffset: this.#drawOffset.value,
       selectedPointIds: this.#selection.selectedPointIds.value,
+      selectedAnchorIds: this.#selection.selectedAnchorIds.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       selectionMode: this.#selection.selectionMode.value,
       previewMode: this.$previewMode.value,
       handlesVisible: this.$handlesVisible.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
       hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
       debugOverlays: this.#debugOverlays.value,
@@ -271,6 +278,7 @@ export class Editor implements ShiftEditor {
       drawOffset: this.#drawOffset.value,
       selectedSegmentIds: this.#selection.selectedSegmentIds.value,
       hoveredPointId: this.#hover.hoveredPointId.value,
+      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
       snapIndicator: this.#snapIndicator.value,
     }));
@@ -301,6 +309,7 @@ export class Editor implements ShiftEditor {
       this.$activeToolState.value;
       this.#hover.hoveredBoundingBoxHandle.value;
       this.#hover.hoveredPointId.value;
+      this.#hover.hoveredAnchorId.value;
       const activeTool = this.#toolManager.activeTool;
       if (activeTool) {
         const cursor = activeTool.getCursor(activeTool.state);
@@ -403,24 +412,48 @@ export class Editor implements ShiftEditor {
     return this.#selection.selectedPointIds;
   }
 
+  public get selectedAnchorIds(): Signal<ReadonlySet<AnchorId>> {
+    return this.#selection.selectedAnchorIds;
+  }
+
   public selectPoints(pointIds: PointId[]): void {
     this.#selection.selectPoints(pointIds);
+  }
+
+  public selectAnchors(anchorIds: AnchorId[]): void {
+    this.#selection.selectAnchors(anchorIds);
   }
 
   public addPointToSelection(pointId: PointId): void {
     this.#selection.addPointToSelection(pointId);
   }
 
+  public addAnchorToSelection(anchorId: AnchorId): void {
+    this.#selection.addAnchorToSelection(anchorId);
+  }
+
   public removePointFromSelection(pointId: PointId): void {
     this.#selection.removePointFromSelection(pointId);
+  }
+
+  public removeAnchorFromSelection(anchorId: AnchorId): void {
+    this.#selection.removeAnchorFromSelection(anchorId);
   }
 
   public togglePointSelection(pointId: PointId): void {
     this.#selection.togglePointSelection(pointId);
   }
 
+  public toggleAnchorSelection(anchorId: AnchorId): void {
+    this.#selection.toggleAnchorSelection(anchorId);
+  }
+
   public isPointSelected(pointId: PointId): boolean {
     return this.#selection.isPointSelected(pointId);
+  }
+
+  public isAnchorSelected(anchorId: AnchorId): boolean {
+    return this.#selection.isAnchorSelected(anchorId);
   }
 
   public get selectedSegmentIds(): Signal<ReadonlySet<SegmentId>> {
@@ -459,6 +492,10 @@ export class Editor implements ShiftEditor {
     return [...this.#selection.selectedPointIds.peek()];
   }
 
+  public getSelectedAnchors(): AnchorId[] {
+    return [...this.#selection.selectedAnchorIds.peek()];
+  }
+
   public getSelectedSegments(): SegmentId[] {
     return [...this.#selection.selectedSegmentIds.peek()];
   }
@@ -485,6 +522,10 @@ export class Editor implements ShiftEditor {
     return this.#hover.hoveredPointId;
   }
 
+  public get hoveredAnchorId(): Signal<AnchorId | null> {
+    return this.#hover.hoveredAnchorId;
+  }
+
   public get hoveredSegmentId(): Signal<SegmentIndicator | null> {
     return this.#hover.hoveredSegmentId;
   }
@@ -495,6 +536,10 @@ export class Editor implements ShiftEditor {
 
   public setHoveredPoint(pointId: PointId | null): void {
     this.#hover.setHoveredPoint(pointId);
+  }
+
+  public setHoveredAnchor(anchorId: AnchorId | null): void {
+    this.#hover.setHoveredAnchor(anchorId);
   }
 
   public setHoveredSegment(indicator: SegmentIndicator | null): void {
@@ -611,6 +656,10 @@ export class Editor implements ShiftEditor {
     return this.#hover.hoveredPointId.peek();
   }
 
+  public getHoveredAnchor(): AnchorId | null {
+    return this.#hover.hoveredAnchorId.peek();
+  }
+
   public getHoveredSegment(): SegmentIndicator | null {
     return this.#hover.hoveredSegmentId.peek();
   }
@@ -626,6 +675,16 @@ export class Editor implements ShiftEditor {
     const isSelected = (id: PointId) =>
       this.#selection.isPointSelected(id) || this.isPointInMarqueePreview(id);
     return this.#hover.getPointVisualState(pointId, isSelected);
+  }
+
+  public getAnchorVisualState(anchorId: AnchorId): VisualState {
+    if (this.#selection.isAnchorSelected(anchorId)) {
+      return "selected";
+    }
+    if (this.#hover.hoveredAnchorId.value === anchorId) {
+      return "hovered";
+    }
+    return "idle";
   }
 
   public isPointInMarqueePreview(pointId: PointId): boolean {
@@ -1040,6 +1099,10 @@ export class Editor implements ShiftEditor {
     return this.getPointVisualState(pointId);
   }
 
+  public getAnchorHandleState(anchorId: AnchorId): HandleState {
+    return this.getAnchorVisualState(anchorId);
+  }
+
   /**
    * Loads a font from disk, populates the glyph data store, clears command
    * history, and opens an edit session on Unicode 65 ('A').
@@ -1293,6 +1356,10 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.editing.movePoints(ids, { x: dx, y: dy });
   }
 
+  public moveAnchors(ids: AnchorId[], delta: Point2D): void {
+    this.#fontEngine.editing.moveAnchors(ids, delta);
+  }
+
   public movePointTo(id: PointId, x: number, y: number): void {
     this.#fontEngine.editing.movePointTo(id, x, y);
   }
@@ -1303,6 +1370,10 @@ export class Editor implements ShiftEditor {
 
   public setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
     this.#fontEngine.editing.setPointPositions(moves);
+  }
+
+  public setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void {
+    this.#fontEngine.editing.setAnchorPositions(moves);
   }
 
   public removePoints(ids: PointId[]): void {
@@ -1340,6 +1411,21 @@ export class Editor implements ShiftEditor {
     return Glyphs.getPointAt(glyph, coords.glyphLocal, this.hitRadius);
   }
 
+  public getAnchorAt(
+    coords: Coordinates,
+  ): { id: AnchorId; name: string | null; x: number; y: number } | null {
+    const glyph = this.#$glyph.value;
+    if (!glyph) return null;
+
+    for (const anchor of glyph.anchors) {
+      if (Vec2.dist(anchor, coords.glyphLocal) < this.hitRadius) {
+        return { id: anchor.id, name: anchor.name, x: anchor.x, y: anchor.y };
+      }
+    }
+
+    return null;
+  }
+
   public getSegmentAt(coords: Coordinates): SegmentHitResult | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
@@ -1357,7 +1443,7 @@ export class Editor implements ShiftEditor {
   /**
    * Performs a prioritized hit-test at a position (given as Coordinates).
    *
-   * Priority order: contour endpoint > middle point > any point > segment.
+   * Priority order: contour endpoint > middle point > anchor > any point > segment.
    * Returns `null` if nothing is within `hitRadius`.
    */
   public getNodeAt(coords: Coordinates): HitResult {
@@ -1377,6 +1463,11 @@ export class Editor implements ShiftEditor {
 
     const middle = this.getMiddlePointAt(coords);
     if (middle) return middle;
+
+    const anchor = this.getAnchorAt(coords);
+    if (anchor) {
+      return { type: "anchor", anchorId: anchor.id };
+    }
 
     const point = this.getPointAt(coords);
     if (point) {
@@ -1470,6 +1561,22 @@ export class Editor implements ShiftEditor {
       if (bbHit) {
         return { type: "boundingBox", handle: bbHit };
       }
+    }
+
+    // Keep hover precedence aligned with getNodeAt() for click/drag consistency.
+    const endpoint = this.getContourEndpointAt(coords);
+    if (endpoint) {
+      return { type: "point", pointId: endpoint.pointId };
+    }
+
+    const middle = this.getMiddlePointAt(coords);
+    if (middle) {
+      return { type: "point", pointId: middle.pointId };
+    }
+
+    const anchor = this.getAnchorAt(coords);
+    if (anchor) {
+      return { type: "anchor", anchorId: anchor.id };
     }
 
     const point = this.getPointAt(coords);

@@ -114,10 +114,18 @@ export interface ScreenConverter {
  * - `corner` -- on-curve point with an angle discontinuity (square handle).
  * - `smooth` -- on-curve point with continuous tangent (circle handle).
  * - `control` -- off-curve Bezier control point (small diamond).
+ * - `anchor` -- glyph attachment anchor (diamond handle).
  * - `direction` -- first point of a closed contour, indicates path direction (triangle).
  * - `first` / `last` -- endpoints of an open contour (directional arrows).
  */
-export type HandleType = "corner" | "smooth" | "control" | "direction" | "first" | "last";
+export type HandleType =
+  | "corner"
+  | "smooth"
+  | "control"
+  | "anchor"
+  | "direction"
+  | "first"
+  | "last";
 /**
  * Interaction state that determines handle styling (colour, size).
  * - `idle` -- default appearance.

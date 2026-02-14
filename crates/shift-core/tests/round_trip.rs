@@ -1,5 +1,5 @@
 use shift_core::font_loader::FontLoader;
-use shift_core::GlyphLayer;
+use shift_core::{Anchor, GlyphLayer};
 use std::path::PathBuf;
 
 fn fixtures_path() -> PathBuf {
@@ -774,4 +774,150 @@ fn test_ufo_round_trip_layer_glyph_counts() {
             "Glyph count in layer '{orig_name}' should match: {orig_glyph_count} vs {reload_glyph_count}"
         );
     }
+}
+
+#[test]
+fn test_ufo_round_trip_anchors_preserve_order_and_values() {
+    let ufo_path = mutatorsans_ufo_path();
+    if !ufo_path.exists() {
+        return;
+    }
+
+    let loader = FontLoader::new();
+    let original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let temp_ufo = temp_dir.path().join("test_output.ufo");
+
+    loader
+        .write_font(&original, temp_ufo.to_str().unwrap())
+        .expect("Failed to write UFO");
+
+    let reloaded = loader
+        .read_font(temp_ufo.to_str().unwrap())
+        .expect("Failed to reload UFO");
+
+    let glyph_name = "E";
+    let orig_glyph = original.glyph(glyph_name).expect("Original glyph missing");
+    let reload_glyph = reloaded.glyph(glyph_name).expect("Reloaded glyph missing");
+
+    for (orig_layer_id, orig_font_layer) in original.layers() {
+        let Some(orig_layer) = orig_glyph.layer(*orig_layer_id) else {
+            continue;
+        };
+
+        let reload_layer_id = reloaded
+            .layers()
+            .iter()
+            .find(|(_, layer)| layer.name() == orig_font_layer.name())
+            .map(|(id, _)| *id)
+            .unwrap_or_else(|| panic!("Missing reloaded layer '{}'", orig_font_layer.name()));
+
+        let Some(reload_layer) = reload_glyph.layer(reload_layer_id) else {
+            panic!(
+                "Glyph '{}' missing in reloaded layer '{}'",
+                glyph_name,
+                orig_font_layer.name()
+            );
+        };
+
+        let orig_anchors: Vec<_> = orig_layer.anchors_iter().collect();
+        let reload_anchors: Vec<_> = reload_layer.anchors_iter().collect();
+
+        assert_eq!(
+            orig_anchors.len(),
+            reload_anchors.len(),
+            "Anchor count should match after round-trip in layer '{}'",
+            orig_font_layer.name()
+        );
+
+        for (orig_anchor, reload_anchor) in orig_anchors.iter().zip(reload_anchors.iter()) {
+            assert_eq!(
+                orig_anchor.name(),
+                reload_anchor.name(),
+                "Anchor names should preserve order and value in layer '{}'",
+                orig_font_layer.name()
+            );
+            assert!(
+                (orig_anchor.x() - reload_anchor.x()).abs() < 0.001,
+                "Anchor x should match after round-trip in layer '{}': {} vs {}",
+                orig_font_layer.name(),
+                orig_anchor.x(),
+                reload_anchor.x()
+            );
+            assert!(
+                (orig_anchor.y() - reload_anchor.y()).abs() < 0.001,
+                "Anchor y should match after round-trip in layer '{}': {} vs {}",
+                orig_font_layer.name(),
+                orig_anchor.y(),
+                reload_anchor.y()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_ufo_round_trip_preserves_unnamed_anchor() {
+    let ufo_path = mutatorsans_ufo_path();
+    if !ufo_path.exists() {
+        return;
+    }
+
+    let loader = FontLoader::new();
+    let mut original = loader.read_font(ufo_path.to_str().unwrap()).unwrap();
+
+    let target_layer_id = {
+        let glyph = original
+            .glyph_mut("E")
+            .expect("Glyph 'E' should exist to append unnamed anchor");
+        let target_layer_id = glyph
+            .layers()
+            .iter()
+            .max_by_key(|(_, layer)| layer.contours().len())
+            .map(|(id, _)| *id)
+            .expect("Glyph 'E' should have at least one layer");
+        let layer = glyph
+            .layer_mut(target_layer_id)
+            .expect("Layer should exist");
+        layer.add_anchor(Anchor::new(None::<String>, 123.0, 456.0));
+        target_layer_id
+    };
+    let target_layer_name = original
+        .layers()
+        .get(&target_layer_id)
+        .map(|layer| layer.name().to_string())
+        .expect("Target layer should exist");
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let temp_ufo = temp_dir.path().join("test_output.ufo");
+
+    loader
+        .write_font(&original, temp_ufo.to_str().unwrap())
+        .expect("Failed to write UFO");
+
+    let reloaded = loader
+        .read_font(temp_ufo.to_str().unwrap())
+        .expect("Failed to reload UFO");
+
+    let glyph = reloaded
+        .glyph("E")
+        .expect("Reloaded glyph 'E' should exist after round-trip");
+    let reload_layer_id = reloaded
+        .layers()
+        .iter()
+        .find(|(_, layer)| layer.name() == target_layer_name)
+        .map(|(id, _)| *id)
+        .unwrap_or_else(|| reloaded.default_layer_id());
+    let layer = glyph
+        .layer(reload_layer_id)
+        .or_else(|| get_main_layer(glyph))
+        .expect("Reloaded glyph should have a matching layer");
+    let unnamed = layer.anchors_iter().find(|a| {
+        a.name().is_none() && (a.x() - 123.0).abs() < 0.001 && (a.y() - 456.0).abs() < 0.001
+    });
+
+    assert!(
+        unnamed.is_some(),
+        "Unnamed anchor should survive UFO round-trip with preserved coordinates"
+    );
 }

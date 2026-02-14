@@ -1,5 +1,5 @@
 import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Point2D, PointId } from "@shift/types";
+import type { Glyph, Point2D, PointId, AnchorId } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
@@ -22,6 +22,7 @@ import {
   renderGlyphFilled,
   renderSegmentHighlights,
   renderHandles,
+  renderAnchors,
   renderSnapIndicators,
   renderDebugTightBounds,
   renderDebugHitRadii,
@@ -70,6 +71,7 @@ export interface CanvasCoordinatorContext {
   getHoveredSegmentId(): SegmentId | null;
   isSegmentSelected(segmentId: SegmentId): boolean;
   getHandleState(pointId: PointId): HandleState;
+  getAnchorHandleState(anchorId: AnchorId): HandleState;
   getSnapIndicator(): SnapIndicator | null;
   getViewportTransform(): ViewportTransform;
   /** Converts a screen-pixel distance to UPM units at the current zoom level. */
@@ -321,6 +323,7 @@ export class CanvasCoordinator {
 
     if (!previewMode && handlesVisible && glyph && shouldRenderEditableGlyph) {
       renderHandles(draw, glyph, (id) => this.#ctx.getHandleState(id));
+      renderAnchors(draw, glyph, (id) => this.#ctx.getAnchorHandleState(id));
     }
 
     ctx.restore();

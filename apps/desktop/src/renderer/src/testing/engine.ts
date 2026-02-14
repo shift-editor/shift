@@ -199,6 +199,8 @@ export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapsh
     name: String.fromCodePoint(unicode),
     xAdvance: 500,
     contours,
+    anchors: [],
+    compositeContours: [],
     activeContourId: config.activeContourId
       ? asContourId(config.activeContourId)
       : contours.length > 0

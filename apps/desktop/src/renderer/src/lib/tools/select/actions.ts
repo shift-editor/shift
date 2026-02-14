@@ -1,4 +1,4 @@
-import type { PointId, Point2D, Rect2D, ContourId } from "@shift/types";
+import type { PointId, Point2D, Rect2D, ContourId, AnchorId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 import type { EditorAPI } from "@/lib/tools/core";
@@ -14,8 +14,10 @@ import type { LineSegment } from "@/types/segments";
 
 export type SelectAction =
   | { type: "selectPoint"; pointId: PointId; additive: boolean }
+  | { type: "selectAnchor"; anchorId: AnchorId; additive: boolean }
   | { type: "selectSegment"; segmentId: SegmentId; additive: boolean }
   | { type: "togglePoint"; pointId: PointId }
+  | { type: "toggleAnchor"; anchorId: AnchorId }
   | { type: "toggleSegment"; segmentId: SegmentId }
   | { type: "selectPointsInRect"; rect: Rect2D }
   | { type: "clearSelection" }
@@ -24,7 +26,7 @@ export type SelectAction =
   | { type: "beginPreview" }
   | { type: "commitPreview"; label: string }
   | { type: "cancelPreview" }
-  | { type: "movePointsDelta"; delta: Point2D }
+  | { type: "moveSelectionDelta"; delta: Point2D; pointIds: PointId[]; anchorIds: AnchorId[] }
   | {
       type: "scalePoints";
       pointIds: PointId[];
@@ -51,12 +53,20 @@ export function executeAction(action: SelectAction, editor: EditorAPI): void {
       executeSelectPoint(action.pointId, action.additive, editor);
       break;
 
+    case "selectAnchor":
+      executeSelectAnchor(action.anchorId, action.additive, editor);
+      break;
+
     case "selectSegment":
       executeSelectSegment(action.segmentId, action.additive, editor);
       break;
 
     case "togglePoint":
       editor.togglePointSelection(action.pointId);
+      break;
+
+    case "toggleAnchor":
+      editor.toggleAnchorSelection(action.anchorId);
       break;
 
     case "toggleSegment":
@@ -92,8 +102,8 @@ export function executeAction(action: SelectAction, editor: EditorAPI): void {
       editor.cancelPreview();
       break;
 
-    case "movePointsDelta":
-      executeMovePointsDelta(action.delta, editor);
+    case "moveSelectionDelta":
+      executeMoveSelectionDelta(action.delta, action.pointIds, action.anchorIds, editor);
       break;
 
     case "scalePoints":
@@ -141,6 +151,16 @@ function executeSelectPoint(pointId: PointId, additive: boolean, editor: EditorA
   }
 }
 
+function executeSelectAnchor(anchorId: AnchorId, additive: boolean, editor: EditorAPI): void {
+  if (additive) {
+    const current = editor.getSelectedAnchors();
+    editor.selectAnchors([...current, anchorId]);
+  } else {
+    editor.clearSelection();
+    editor.selectAnchors([anchorId]);
+  }
+}
+
 function executeSelectSegment(
   segmentId: SegmentId,
   additive: boolean,
@@ -157,6 +177,7 @@ function executeSelectSegment(
       editor.addPointToSelection(id);
     }
   } else {
+    editor.clearSelection();
     editor.selectSegments([segmentId]);
     editor.selectPoints(pointIds);
   }
@@ -195,10 +216,33 @@ function executeSelectPointsInRect(rect: Rect2D, editor: EditorAPI): PointId[] {
   return pointIds;
 }
 
-function executeMovePointsDelta(delta: Point2D, editor: EditorAPI): void {
+function executeMoveSelectionDelta(
+  delta: Point2D,
+  pointIds: PointId[],
+  anchorIds: AnchorId[],
+  editor: EditorAPI,
+): void {
   if (delta.x === 0 && delta.y === 0) return;
-  const selectedPoints = editor.getSelectedPoints();
-  editor.applySmartEdits(selectedPoints, delta.x, delta.y);
+
+  if (pointIds.length > 0) {
+    editor.applySmartEdits(pointIds, delta.x, delta.y);
+  }
+
+  if (anchorIds.length > 0) {
+    const glyph = editor.glyph.peek();
+    if (!glyph) return;
+
+    const selected = new Set(anchorIds);
+    const moves = glyph.anchors
+      .filter((anchor) => selected.has(anchor.id))
+      .map((anchor) => ({
+        id: anchor.id,
+        x: anchor.x + delta.x,
+        y: anchor.y + delta.y,
+      }));
+
+    editor.setAnchorPositions(moves);
+  }
 }
 
 function executeScalePoints(

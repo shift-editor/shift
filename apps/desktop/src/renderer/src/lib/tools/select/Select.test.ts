@@ -8,7 +8,7 @@ import {
   makeTestCoordinates,
   type MockToolContext,
 } from "@/testing";
-import type { PointId } from "@shift/types";
+import { asAnchorId, type PointId } from "@shift/types";
 
 describe("Select tool", () => {
   let select: Select;
@@ -326,6 +326,15 @@ describe("Select tool", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
     });
+
+    it("clears anchor selection on non-additive segment select", () => {
+      ctx.selectAnchors([asAnchorId("a-segment")]);
+
+      sim.click(150, 150);
+
+      expect(ctx.getSelectedAnchors()).toEqual([]);
+      expect(select.getState().type).toBe("selected");
+    });
   });
 
   describe("segment shift-click", () => {
@@ -345,6 +354,29 @@ describe("Select tool", () => {
       sim.onMouseUp(createToolMouseEvent(550, 550));
 
       expect(select.getState().type).toBe("ready");
+    });
+
+    it("stays selected when toggling off a point while an anchor remains selected", () => {
+      sim.click(100, 100);
+      expect(select.getState().type).toBe("selected");
+
+      ctx.selectAnchors([asAnchorId("a-point-toggle")]);
+      sim.click(100, 100, { shiftKey: true });
+
+      expect(select.getState().type).toBe("selected");
+      expect(ctx.getSelectedAnchors()).toEqual([asAnchorId("a-point-toggle")]);
+    });
+
+    it("stays selected when toggling off a segment while an anchor remains selected", () => {
+      sim.click(200, 100);
+      sim.click(150, 150);
+      expect(select.getState().type).toBe("selected");
+
+      ctx.selectAnchors([asAnchorId("a-segment-toggle")]);
+      sim.click(150, 150, { shiftKey: true });
+
+      expect(select.getState().type).toBe("selected");
+      expect(ctx.getSelectedAnchors()).toEqual([asAnchorId("a-segment-toggle")]);
     });
   });
 

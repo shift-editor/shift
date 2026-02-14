@@ -1,4 +1,6 @@
-use crate::{snapshot::GlyphSnapshot, Contour, ContourId, GlyphLayer, PointId, PointType};
+use crate::{
+    snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, PointId, PointType,
+};
 
 pub struct EditSession {
     layer: GlyphLayer,
@@ -237,6 +239,11 @@ impl EditSession {
         true
     }
 
+    /// Set absolute position for a single anchor
+    pub fn set_anchor_position(&mut self, anchor_id: AnchorId, x: f64, y: f64) -> bool {
+        self.layer.set_anchor_position(anchor_id, x, y)
+    }
+
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> Vec<PointId> {
         let mut removed_points = Vec::new();
 
@@ -254,6 +261,10 @@ impl EditSession {
         }
 
         removed_points
+    }
+
+    pub fn move_anchors(&mut self, anchor_ids: &[AnchorId], dx: f64, dy: f64) -> Vec<AnchorId> {
+        self.layer.move_anchors(anchor_ids, dx, dy)
     }
 
     pub fn contour(&self, id: ContourId) -> Option<&Contour> {
@@ -312,6 +323,7 @@ impl EditSession {
 
     pub fn restore_from_snapshot(&mut self, snapshot: &GlyphSnapshot) {
         self.layer.clear_contours();
+        self.layer.clear_anchors();
 
         let active_contour_id = snapshot
             .active_contour_id
@@ -360,6 +372,24 @@ impl EditSession {
             }
 
             self.layer.add_contour(contour);
+        }
+
+        for anchor_snapshot in &snapshot.anchors {
+            let anchor = match anchor_snapshot.id.parse::<AnchorId>() {
+                Ok(id) => Anchor::with_id(
+                    id,
+                    anchor_snapshot.name.clone(),
+                    anchor_snapshot.x,
+                    anchor_snapshot.y,
+                ),
+                Err(_) => Anchor::new(
+                    anchor_snapshot.name.clone(),
+                    anchor_snapshot.x,
+                    anchor_snapshot.y,
+                ),
+            };
+
+            self.layer.add_anchor(anchor);
         }
 
         self.active_contour_id = active_contour_id;

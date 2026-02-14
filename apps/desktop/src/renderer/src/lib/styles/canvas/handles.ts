@@ -27,6 +27,7 @@ export interface HandleStyles<T extends BaseHandleStyle = BaseHandleStyle> {
 export type HandleStylesMap = {
   first: HandleStyles<FirstHandleStyle>;
   corner: HandleStyles;
+  anchor: HandleStyles;
   control: HandleStyles;
   smooth: HandleStyles;
   direction: HandleStyles;
@@ -73,6 +74,33 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
       },
     },
     corner: {
+      idle: {
+        size: 6,
+        lineWidth: 1,
+        antiAlias: false,
+        strokeStyle: cyan,
+        fillStyle: white,
+        dashPattern: [],
+      },
+      hovered: {
+        size: 6,
+        lineWidth: 1,
+        antiAlias: false,
+        strokeStyle: cyan,
+        fillStyle: white,
+        dashPattern: [],
+        overlayColor: hoverOverlay(0.75),
+      },
+      selected: {
+        size: 8,
+        lineWidth: 2,
+        antiAlias: false,
+        strokeStyle: white,
+        fillStyle: cyan,
+        dashPattern: [],
+      },
+    },
+    anchor: {
       idle: {
         size: 6,
         lineWidth: 1,

@@ -1,5 +1,5 @@
 import { signal, type WritableSignal, type Signal } from "../../reactive/signal";
-import type { PointId } from "@shift/types";
+import type { PointId, AnchorId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 
@@ -13,11 +13,13 @@ import type { SelectionMode } from "@/types/editor";
  */
 export class SelectionManager {
   private $selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
+  private $selectedAnchorIds: WritableSignal<ReadonlySet<AnchorId>>;
   private $selectedSegmentIds: WritableSignal<ReadonlySet<SegmentId>>;
   private $selectionMode: WritableSignal<SelectionMode>;
 
   constructor() {
     this.$selectedPointIds = signal<ReadonlySet<PointId>>(new Set());
+    this.$selectedAnchorIds = signal<ReadonlySet<AnchorId>>(new Set());
     this.$selectedSegmentIds = signal<ReadonlySet<SegmentId>>(new Set());
     this.$selectionMode = signal<SelectionMode>("committed");
   }
@@ -28,6 +30,10 @@ export class SelectionManager {
 
   get selectedSegmentIds(): Signal<ReadonlySet<SegmentId>> {
     return this.$selectedSegmentIds;
+  }
+
+  get selectedAnchorIds(): Signal<ReadonlySet<AnchorId>> {
+    return this.$selectedAnchorIds;
   }
 
   get selectionMode(): Signal<SelectionMode> {
@@ -64,6 +70,36 @@ export class SelectionManager {
     return this.$selectedPointIds.peek().has(pointId);
   }
 
+  selectAnchors(anchorIds: AnchorId[]): void {
+    this.$selectedAnchorIds.set(new Set(anchorIds));
+  }
+
+  addAnchorToSelection(anchorId: AnchorId): void {
+    const next = new Set(this.$selectedAnchorIds.peek());
+    next.add(anchorId);
+    this.$selectedAnchorIds.set(next);
+  }
+
+  removeAnchorFromSelection(anchorId: AnchorId): void {
+    const next = new Set(this.$selectedAnchorIds.peek());
+    next.delete(anchorId);
+    this.$selectedAnchorIds.set(next);
+  }
+
+  toggleAnchorSelection(anchorId: AnchorId): void {
+    const next = new Set(this.$selectedAnchorIds.peek());
+    if (next.has(anchorId)) {
+      next.delete(anchorId);
+    } else {
+      next.add(anchorId);
+    }
+    this.$selectedAnchorIds.set(next);
+  }
+
+  isAnchorSelected(anchorId: AnchorId): boolean {
+    return this.$selectedAnchorIds.peek().has(anchorId);
+  }
+
   selectSegments(segmentIds: ReadonlySet<SegmentId>): void {
     this.$selectedSegmentIds.set(new Set(segmentIds));
   }
@@ -96,11 +132,16 @@ export class SelectionManager {
 
   clearSelection(): void {
     this.$selectedPointIds.set(new Set());
+    this.$selectedAnchorIds.set(new Set());
     this.$selectedSegmentIds.set(new Set());
   }
 
   hasSelection(): boolean {
-    return this.$selectedPointIds.peek().size > 0 || this.$selectedSegmentIds.peek().size > 0;
+    return (
+      this.$selectedPointIds.peek().size > 0 ||
+      this.$selectedAnchorIds.peek().size > 0 ||
+      this.$selectedSegmentIds.peek().size > 0
+    );
   }
 
   setSelectionMode(mode: SelectionMode): void {

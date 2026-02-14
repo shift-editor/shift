@@ -85,7 +85,7 @@ impl UfoWriter {
         norad::Anchor::new(
             anchor.x(),
             anchor.y(),
-            Some(Name::new(anchor.name()).unwrap()),
+            anchor.name().map(|name| Name::new(name).unwrap()),
             None,
             None,
         )

@@ -52,11 +52,12 @@ impl UfoReader {
         Component::with_matrix(component.base.to_string(), &matrix)
     }
 
-    fn convert_anchor(anchor: &norad::Anchor) -> Option<Anchor> {
-        anchor
-            .name
-            .as_ref()
-            .map(|name| Anchor::new(name.to_string(), anchor.x, anchor.y))
+    fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
+        Anchor::new(
+            anchor.name.as_ref().map(|name| name.to_string()),
+            anchor.x,
+            anchor.y,
+        )
     }
 
     fn convert_guideline(guideline: &norad::Guideline) -> Guideline {
@@ -114,9 +115,7 @@ impl UfoReader {
         }
 
         for anchor in &norad_glyph.anchors {
-            if let Some(a) = Self::convert_anchor(anchor) {
-                glyph_layer.add_anchor(a);
-            }
+            glyph_layer.add_anchor(Self::convert_anchor(anchor));
         }
 
         for guideline in &norad_glyph.guidelines {

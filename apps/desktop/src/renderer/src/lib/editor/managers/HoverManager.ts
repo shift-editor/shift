@@ -1,5 +1,5 @@
 import { signal, type WritableSignal, type Signal } from "../../reactive/signal";
-import type { PointId } from "@shift/types";
+import type { PointId, AnchorId } from "@shift/types";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { VisualState } from "@/types/editor";
@@ -8,11 +8,13 @@ import type { HoverResult } from "@/types/hitResult";
 
 export class HoverManager {
   private $hoveredPointId: WritableSignal<PointId | null>;
+  private $hoveredAnchorId: WritableSignal<AnchorId | null>;
   private $hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
   private $hoveredBoundingBoxHandle: WritableSignal<BoundingBoxHitResult>;
 
   constructor() {
     this.$hoveredPointId = signal<PointId | null>(null);
+    this.$hoveredAnchorId = signal<AnchorId | null>(null);
     this.$hoveredSegmentId = signal<SegmentIndicator | null>(null);
     this.$hoveredBoundingBoxHandle = signal<BoundingBoxHitResult>(null);
   }
@@ -23,6 +25,10 @@ export class HoverManager {
 
   get hoveredSegmentId(): Signal<SegmentIndicator | null> {
     return this.$hoveredSegmentId;
+  }
+
+  get hoveredAnchorId(): Signal<AnchorId | null> {
+    return this.$hoveredAnchorId;
   }
 
   get hoveredBoundingBoxHandle(): Signal<BoundingBoxHitResult> {
@@ -40,6 +46,15 @@ export class HoverManager {
   setHoveredPoint(pointId: PointId | null): void {
     this.$hoveredPointId.set(pointId);
     if (pointId !== null) {
+      this.$hoveredAnchorId.set(null);
+      this.$hoveredSegmentId.set(null);
+    }
+  }
+
+  setHoveredAnchor(anchorId: AnchorId | null): void {
+    this.$hoveredAnchorId.set(anchorId);
+    if (anchorId !== null) {
+      this.$hoveredPointId.set(null);
       this.$hoveredSegmentId.set(null);
     }
   }
@@ -56,7 +71,12 @@ export class HoverManager {
       case "boundingBox":
         this.$hoveredBoundingBoxHandle.set(result.handle);
         this.$hoveredPointId.set(null);
+        this.$hoveredAnchorId.set(null);
         this.$hoveredSegmentId.set(null);
+        break;
+      case "anchor":
+        this.$hoveredBoundingBoxHandle.set(null);
+        this.setHoveredAnchor(result.anchorId);
         break;
       case "point":
         this.$hoveredBoundingBoxHandle.set(null);
@@ -78,6 +98,7 @@ export class HoverManager {
 
   clearHover(): void {
     this.$hoveredPointId.set(null);
+    this.$hoveredAnchorId.set(null);
     this.$hoveredSegmentId.set(null);
     this.$hoveredBoundingBoxHandle.set(null);
   }

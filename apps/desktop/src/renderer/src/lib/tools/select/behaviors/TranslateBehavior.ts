@@ -6,7 +6,7 @@ import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
-import { getPointIdFromHit, isSegmentHit } from "@/types/hitResult";
+import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
 export class TranslateBehavior implements SelectBehavior {
@@ -74,18 +74,33 @@ export class TranslateBehavior implements SelectBehavior {
             totalDelta: Vec2.add(state.translate.totalDelta, delta),
           },
         },
-        action: { type: "movePointsDelta", delta },
+        action: {
+          type: "moveSelectionDelta",
+          delta,
+          pointIds: state.translate.draggedPointIds,
+          anchorIds: state.translate.draggedAnchorIds,
+        },
       };
     }
 
     if (event.type === "dragEnd") {
-      const { totalDelta, draggedPointIds } = state.translate;
-      const hasMoved = (totalDelta.x !== 0 || totalDelta.y !== 0) && draggedPointIds.length > 0;
+      const { totalDelta, draggedPointIds, draggedAnchorIds } = state.translate;
+      const hasMoved =
+        (totalDelta.x !== 0 || totalDelta.y !== 0) &&
+        (draggedPointIds.length > 0 || draggedAnchorIds.length > 0);
 
       return {
         state: { type: "selected" },
         action: hasMoved
-          ? { type: "commitPreview", label: "Move Points" }
+          ? {
+              type: "commitPreview",
+              label:
+                draggedPointIds.length > 0 && draggedAnchorIds.length > 0
+                  ? "Move Selection"
+                  : draggedAnchorIds.length > 0
+                    ? "Move Anchors"
+                    : "Move Points",
+            }
           : { type: "cancelPreview" },
       };
     }
@@ -107,6 +122,32 @@ export class TranslateBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
+    const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
+
+    if (anchorId !== null) {
+      const isSelected = state.type === "selected" && editor.isAnchorSelected(anchorId);
+      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [];
+      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [anchorId];
+      const snapAnchorPointId = draggedPointIds[0] ?? null;
+      const anchorPos = snapAnchorPointId
+        ? this.startSnap(editor, snapAnchorPointId, event.point, draggedPointIds)
+        : event.point;
+
+      return {
+        state: {
+          type: "translating",
+          translate: {
+            anchorPointId: snapAnchorPointId,
+            startPos: event.point,
+            lastPos: anchorPos,
+            totalDelta: { x: 0, y: 0 },
+            draggedPointIds,
+            draggedAnchorIds,
+          },
+        },
+        action: isSelected ? undefined : { type: "selectAnchor", anchorId, additive: false },
+      };
+    }
 
     if (pointId !== null) {
       const isSelected = state.type === "selected" && editor.isPointSelected(pointId);
@@ -117,6 +158,7 @@ export class TranslateBehavior implements SelectBehavior {
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [pointId];
+      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [];
       const anchorPos = this.startSnap(editor, pointId, event.point, draggedPointIds);
 
       return {
@@ -128,6 +170,7 @@ export class TranslateBehavior implements SelectBehavior {
             lastPos: anchorPos,
             totalDelta: { x: 0, y: 0 },
             draggedPointIds,
+            draggedAnchorIds,
           },
         },
         action: isSelected ? undefined : { type: "selectPoint", pointId, additive: false },
@@ -144,6 +187,7 @@ export class TranslateBehavior implements SelectBehavior {
       }
 
       const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : pointIds;
+      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [];
       const anchorPointId = draggedPointIds[0];
       if (!anchorPointId) return null;
 
@@ -158,6 +202,7 @@ export class TranslateBehavior implements SelectBehavior {
             lastPos: anchorPos,
             totalDelta: { x: 0, y: 0 },
             draggedPointIds,
+            draggedAnchorIds,
           },
         },
         action: isSelected
@@ -191,6 +236,7 @@ export class TranslateBehavior implements SelectBehavior {
           lastPos: anchorPos,
           totalDelta: { x: 0, y: 0 },
           draggedPointIds: newPointIds,
+          draggedAnchorIds: [],
         },
       },
       action: { type: "selectPoints", pointIds: newPointIds },

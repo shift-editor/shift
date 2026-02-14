@@ -9,6 +9,12 @@ export interface JsPointMove {
   x: number;
   y: number;
 }
+/** Input type for set_anchor_positions - a single anchor move */
+export interface JsAnchorMove {
+  id: string;
+  x: number;
+  y: number;
+}
 export declare class FontEngine {
   constructor();
   loadFont(path: string): void;
@@ -50,6 +56,7 @@ export declare class FontEngine {
   openContour(contourId: string): string;
   reverseContour(contourId: string): string;
   movePoints(pointIds: Array<string>, dx: number, dy: number): string;
+  moveAnchors(anchorIds: Array<string>, dx: number, dy: number): string;
   removePoints(pointIds: Array<string>): string;
   toggleSmooth(pointId: string): string;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
@@ -60,5 +67,11 @@ export declare class FontEngine {
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
   setPointPositions(moves: Array<JSPointMove>): boolean;
+  /**
+   * Set anchor positions directly — fire-and-forget for drag operations.
+   * Returns true on success, false if no edit session is active.
+   * Does NOT return a snapshot — use get_snapshot_data() when needed.
+   */
+  setAnchorPositions(moves: Array<JSAnchorMove>): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }

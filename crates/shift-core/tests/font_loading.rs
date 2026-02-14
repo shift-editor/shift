@@ -194,7 +194,7 @@ fn test_mutatorsans_ufo_anchors() {
         if !layer.anchors().is_empty() {
             found_anchor = true;
             let anchors: Vec<_> = layer.anchors_iter().collect();
-            let top_anchor = anchors.iter().find(|a| a.name() == "top");
+            let top_anchor = anchors.iter().find(|a| a.name() == Some("top"));
             assert!(
                 top_anchor.is_some(),
                 "If glyph 'E' has anchors, it should have 'top' anchor"

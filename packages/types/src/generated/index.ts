@@ -5,6 +5,9 @@
 export type { PointType } from "./PointType";
 export type { PointSnapshot } from "./PointSnapshot";
 export type { ContourSnapshot } from "./ContourSnapshot";
+export type { AnchorSnapshot } from "./AnchorSnapshot";
+export type { RenderPointSnapshot } from "./RenderPointSnapshot";
+export type { RenderContourSnapshot } from "./RenderContourSnapshot";
 export type { GlyphSnapshot } from "./GlyphSnapshot";
 export type { CommandResult } from "./CommandResult";
 export type { RuleId } from "./RuleId";

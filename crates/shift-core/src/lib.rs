@@ -7,8 +7,8 @@ pub mod snapshot;
 pub mod vec2;
 
 pub use shift_ir::{
-    Contour, ContourId, CurveSegment, CurveSegmentIter, Font, FontMetadata, FontMetrics, Glyph,
-    GlyphLayer, GlyphName, LayerId, Point, PointId, PointType,
+    Anchor, AnchorId, Contour, ContourId, CurveSegment, CurveSegmentIter, Font, FontMetadata,
+    FontMetrics, Glyph, GlyphLayer, GlyphName, LayerId, Point, PointId, PointType,
 };
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};

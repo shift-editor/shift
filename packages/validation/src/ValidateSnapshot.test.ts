@@ -15,11 +15,32 @@ const validContour = () => ({
   closed: true,
 });
 
+const validAnchor = () => ({
+  id: "a1",
+  name: "top",
+  x: 150,
+  y: 650,
+});
+
+const validRenderPoint = () => ({
+  x: 100,
+  y: 720,
+  pointType: "onCurve" as const,
+  smooth: false,
+});
+
+const validRenderContour = () => ({
+  points: [validRenderPoint()],
+  closed: true,
+});
+
 const validGlyph = () => ({
   unicode: 65,
   name: "A",
   xAdvance: 600,
   contours: [validContour()],
+  anchors: [validAnchor()],
+  compositeContours: [validRenderContour()],
   activeContourId: null,
 });
 
@@ -140,6 +161,16 @@ describe("ValidateSnapshot", () => {
       expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), contours: [] })).toBe(true);
     });
 
+    it("accepts glyph with empty anchors", () => {
+      expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), anchors: [] })).toBe(true);
+    });
+
+    it("accepts glyph with empty compositeContours", () => {
+      expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), compositeContours: [] })).toBe(
+        true,
+      );
+    });
+
     it("rejects non-object", () => {
       expect(ValidateSnapshot.isGlyphSnapshot(null)).toBe(false);
       expect(ValidateSnapshot.isGlyphSnapshot("glyph")).toBe(false);
@@ -162,6 +193,16 @@ describe("ValidateSnapshot", () => {
       expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), contours: {} })).toBe(false);
     });
 
+    it("rejects non-array anchors", () => {
+      expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), anchors: {} })).toBe(false);
+    });
+
+    it("rejects non-array compositeContours", () => {
+      expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), compositeContours: {} })).toBe(
+        false,
+      );
+    });
+
     it("rejects invalid activeContourId type", () => {
       expect(ValidateSnapshot.isGlyphSnapshot({ ...validGlyph(), activeContourId: 42 })).toBe(
         false,
@@ -173,6 +214,24 @@ describe("ValidateSnapshot", () => {
         ValidateSnapshot.isGlyphSnapshot({
           ...validGlyph(),
           contours: [{ id: "c1", points: "bad", closed: true }],
+        }),
+      ).toBe(false);
+    });
+
+    it("rejects glyph with invalid anchor", () => {
+      expect(
+        ValidateSnapshot.isGlyphSnapshot({
+          ...validGlyph(),
+          anchors: [{ id: "a1", name: 12, x: 100, y: 200 }],
+        }),
+      ).toBe(false);
+    });
+
+    it("rejects glyph with invalid composite contour", () => {
+      expect(
+        ValidateSnapshot.isGlyphSnapshot({
+          ...validGlyph(),
+          compositeContours: [{ points: "bad", closed: true }],
         }),
       ).toBe(false);
     });
@@ -228,6 +287,14 @@ describe("ValidateSnapshot", () => {
       }
     });
 
+    it("returns error for non-array anchors", () => {
+      const result = ValidateSnapshot.glyphSnapshot({ ...validGlyph(), anchors: "bad" });
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0].context?.field).toBe("anchors");
+      }
+    });
+
     it("returns error for invalid activeContourId", () => {
       const result = ValidateSnapshot.glyphSnapshot({
         ...validGlyph(),
@@ -248,6 +315,17 @@ describe("ValidateSnapshot", () => {
       if (!result.valid) {
         expect(result.errors[0].code).toBe("INVALID_CONTOUR_STRUCTURE");
         expect(result.errors[0].context?.index).toBe(0);
+      }
+    });
+
+    it("returns error for non-array compositeContours", () => {
+      const result = ValidateSnapshot.glyphSnapshot({
+        ...validGlyph(),
+        compositeContours: "bad",
+      });
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0].context?.field).toBe("compositeContours");
       }
     });
   });

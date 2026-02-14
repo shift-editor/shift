@@ -1,4 +1,4 @@
-import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
 import type {
   PointType,
   CommandResult,
@@ -36,6 +36,11 @@ export class MockFontEngine implements FontEngineAPI {
     const result = Glyphs.findPoint(this.#snapshot!, pointId as PointId);
     if (!result) return null;
     return result as { contour: ContourSnapshot; point: PointSnapshot; index: number };
+  }
+
+  #findAnchor(anchorId: string): { id: string; name: string | null; x: number; y: number } | null {
+    if (!this.#snapshot) return null;
+    return this.#snapshot.anchors.find((a) => a.id === anchorId) ?? null;
   }
 
   loadFont(_path: string): void {}
@@ -103,6 +108,8 @@ export class MockFontEngine implements FontEngineAPI {
       name: String.fromCodePoint(unicode),
       xAdvance: 500,
       contours: [],
+      anchors: [],
+      compositeContours: [],
       activeContourId: null as ContourId | null,
     };
   }
@@ -127,7 +134,11 @@ export class MockFontEngine implements FontEngineAPI {
   }
 
   restoreSnapshot(snapshotJson: string): boolean {
-    this.#snapshot = JSON.parse(snapshotJson) as GlyphSnapshot;
+    const snapshot = JSON.parse(snapshotJson) as GlyphSnapshot;
+    if (!Array.isArray(snapshot.compositeContours)) {
+      snapshot.compositeContours = [];
+    }
+    this.#snapshot = snapshot;
     return true;
   }
 
@@ -262,6 +273,18 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, moved);
   }
 
+  moveAnchors(anchorIds: string[], dx: number, dy: number): string {
+    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
+
+    for (const anchor of this.#snapshot.anchors) {
+      if (anchorIds.includes(anchor.id)) {
+        anchor.x += dx;
+        anchor.y += dy;
+      }
+    }
+    return this.#makeResult(true, []);
+  }
+
   removePoints(pointIds: string[]): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
@@ -306,6 +329,20 @@ export class MockFontEngine implements FontEngineAPI {
       if (found) {
         found.point.x = move.x;
         found.point.y = move.y;
+      }
+    }
+
+    return true;
+  }
+
+  setAnchorPositions(moves: AnchorMove[]): boolean {
+    if (!this.#snapshot) return false;
+
+    for (const move of moves) {
+      const found = this.#findAnchor(move.id);
+      if (found) {
+        found.x = move.x;
+        found.y = move.y;
       }
     }
 

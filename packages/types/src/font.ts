@@ -7,6 +7,9 @@ export type {
   PointType,
   PointSnapshot,
   ContourSnapshot,
+  AnchorSnapshot,
+  RenderPointSnapshot,
+  RenderContourSnapshot,
   GlyphSnapshot,
   CommandResult,
   RuleId,
@@ -16,4 +19,12 @@ export type {
 } from "./generated";
 
 // Domain types (for Editor API)
-export type { Point, Contour, Glyph, DecomposedTransform } from "./domain";
+export type {
+  Point,
+  Anchor,
+  RenderPoint,
+  Contour,
+  RenderContour,
+  Glyph,
+  DecomposedTransform,
+} from "./domain";

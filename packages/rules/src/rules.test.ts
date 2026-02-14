@@ -43,6 +43,8 @@ function createGlyph(contours: ContourSnapshot[]): GlyphSnapshot {
     name: "test",
     xAdvance: 500,
     contours,
+    anchors: [],
+    compositeContours: [],
     activeContourId: null,
   };
 }

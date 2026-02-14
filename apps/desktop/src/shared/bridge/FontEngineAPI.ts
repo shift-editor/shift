@@ -6,6 +6,12 @@ export interface PointMove {
   y: number;
 }
 
+export interface AnchorMove {
+  id: string;
+  x: number;
+  y: number;
+}
+
 export interface FontEngineAPI {
   // ── Font I/O ──
   loadFont(path: string): void;
@@ -58,6 +64,7 @@ export interface FontEngineAPI {
     smooth: boolean,
   ): string;
   movePoints(pointIds: string[], dx: number, dy: number): string;
+  moveAnchors(anchorIds: string[], dx: number, dy: number): string;
   removePoints(pointIds: string[]): string;
   toggleSmooth(pointId: string): string;
 
@@ -66,6 +73,7 @@ export interface FontEngineAPI {
 
   // ── Drag Operations ──
   setPointPositions(moves: PointMove[]): boolean;
+  setAnchorPositions(moves: AnchorMove[]): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }
 

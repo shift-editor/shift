@@ -13,7 +13,7 @@
  *
  * @module
  */
-import type { Point2D, PointId, ContourId, Point, Contour } from "@shift/types";
+import type { Point2D, PointId, ContourId, Point, Contour, AnchorId } from "@shift/types";
 import type { Segment } from "./segments";
 import type { SegmentId } from "./indicator";
 import type { BoundingBoxHitResult } from "./boundingBox";
@@ -23,6 +23,12 @@ export type PointHit = {
   type: "point";
   point: Point;
   pointId: PointId;
+};
+
+/** A glyph attachment anchor was hit. */
+export type AnchorHit = {
+  type: "anchor";
+  anchorId: AnchorId;
 };
 
 /** A curve segment was hit. Includes the parametric `t` value and closest point on the curve. */
@@ -59,7 +65,13 @@ export type MiddlePointHit = {
  * Union of all hit-test outcomes. `null` means nothing was within the
  * hit radius. Discriminate on `type` to access variant-specific fields.
  */
-export type HitResult = PointHit | SegmentHit | ContourEndpointHit | MiddlePointHit | null;
+export type HitResult =
+  | PointHit
+  | AnchorHit
+  | SegmentHit
+  | ContourEndpointHit
+  | MiddlePointHit
+  | null;
 
 /**
  * Higher-level hover state used for cursor and highlight feedback.
@@ -68,12 +80,17 @@ export type HitResult = PointHit | SegmentHit | ContourEndpointHit | MiddlePoint
  */
 export type HoverResult =
   | { type: "boundingBox"; handle: BoundingBoxHitResult }
+  | { type: "anchor"; anchorId: AnchorId }
   | { type: "point"; pointId: PointId }
   | { type: "segment"; segmentId: SegmentId; closestPoint: Point2D; t: number }
   | { type: "none" };
 
 export function isPointHit(hit: HitResult): hit is PointHit {
   return hit !== null && hit.type === "point";
+}
+
+export function isAnchorHit(hit: HitResult): hit is AnchorHit {
+  return hit !== null && hit.type === "anchor";
 }
 
 export function isSegmentHit(hit: HitResult): hit is SegmentHit {

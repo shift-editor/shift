@@ -1,4 +1,12 @@
-import type { PointType, PointSnapshot, ContourSnapshot, GlyphSnapshot } from "@shift/types";
+import type {
+  PointType,
+  PointSnapshot,
+  ContourSnapshot,
+  AnchorSnapshot,
+  RenderPointSnapshot,
+  RenderContourSnapshot,
+  GlyphSnapshot,
+} from "@shift/types";
 import type { ValidationResult } from "./types";
 import { Validate } from "./Validate";
 
@@ -31,14 +39,45 @@ export const ValidateSnapshot = {
     return v.points.every((p: unknown) => ValidateSnapshot.isPointSnapshot(p));
   },
 
+  isAnchorSnapshot(v: unknown): v is AnchorSnapshot {
+    if (!isRecord(v)) return false;
+    if (typeof v.id !== "string") return false;
+    if (v.name !== null && typeof v.name !== "string") return false;
+    if (typeof v.x !== "number" || !Number.isFinite(v.x)) return false;
+    if (typeof v.y !== "number" || !Number.isFinite(v.y)) return false;
+    return true;
+  },
+
+  isRenderPointSnapshot(v: unknown): v is RenderPointSnapshot {
+    if (!isRecord(v)) return false;
+    if (typeof v.x !== "number" || !Number.isFinite(v.x)) return false;
+    if (typeof v.y !== "number" || !Number.isFinite(v.y)) return false;
+    if (!ValidateSnapshot.isValidPointType(v.pointType)) return false;
+    if (typeof v.smooth !== "boolean") return false;
+    return true;
+  },
+
+  isRenderContourSnapshot(v: unknown): v is RenderContourSnapshot {
+    if (!isRecord(v)) return false;
+    if (typeof v.closed !== "boolean") return false;
+    if (!Array.isArray(v.points)) return false;
+    return v.points.every((p: unknown) => ValidateSnapshot.isRenderPointSnapshot(p));
+  },
+
   isGlyphSnapshot(v: unknown): v is GlyphSnapshot {
     if (!isRecord(v)) return false;
     if (typeof v.unicode !== "number" || !Number.isFinite(v.unicode)) return false;
     if (typeof v.name !== "string") return false;
     if (typeof v.xAdvance !== "number" || !Number.isFinite(v.xAdvance)) return false;
     if (!Array.isArray(v.contours)) return false;
+    if (!Array.isArray(v.anchors)) return false;
+    if (!Array.isArray(v.compositeContours)) return false;
     if (v.activeContourId !== null && typeof v.activeContourId !== "string") return false;
-    return v.contours.every((c: unknown) => ValidateSnapshot.isContourSnapshot(c));
+    return (
+      v.contours.every((c: unknown) => ValidateSnapshot.isContourSnapshot(c)) &&
+      v.anchors.every((a: unknown) => ValidateSnapshot.isAnchorSnapshot(a)) &&
+      v.compositeContours.every((c: unknown) => ValidateSnapshot.isRenderContourSnapshot(c))
+    );
   },
 
   glyphSnapshot(v: unknown): ValidationResult<GlyphSnapshot> {
@@ -81,6 +120,26 @@ export const ValidateSnapshot = {
       );
     }
 
+    if (!Array.isArray(v.anchors)) {
+      return Validate.fail(
+        Validate.error("INVALID_SNAPSHOT_STRUCTURE", "Invalid or missing 'anchors' field", {
+          field: "anchors",
+        }),
+      );
+    }
+
+    if (!Array.isArray(v.compositeContours)) {
+      return Validate.fail(
+        Validate.error(
+          "INVALID_SNAPSHOT_STRUCTURE",
+          "Invalid or missing 'compositeContours' field",
+          {
+            field: "compositeContours",
+          },
+        ),
+      );
+    }
+
     if (v.activeContourId !== null && typeof v.activeContourId !== "string") {
       return Validate.fail(
         Validate.error("INVALID_SNAPSHOT_STRUCTURE", "Invalid 'activeContourId' field", {
@@ -95,6 +154,28 @@ export const ValidateSnapshot = {
       if (!ValidateSnapshot.isContourSnapshot(contour)) {
         return Validate.fail(
           Validate.error("INVALID_CONTOUR_STRUCTURE", `Invalid contour at index ${i}`, {
+            index: i,
+          }),
+        );
+      }
+    }
+
+    for (let i = 0; i < v.anchors.length; i++) {
+      const anchor = v.anchors[i];
+      if (!ValidateSnapshot.isAnchorSnapshot(anchor)) {
+        return Validate.fail(
+          Validate.error("INVALID_SNAPSHOT_STRUCTURE", `Invalid anchor at index ${i}`, {
+            index: i,
+          }),
+        );
+      }
+    }
+
+    for (let i = 0; i < v.compositeContours.length; i++) {
+      const contour = v.compositeContours[i];
+      if (!ValidateSnapshot.isRenderContourSnapshot(contour)) {
+        return Validate.fail(
+          Validate.error("INVALID_SNAPSHOT_STRUCTURE", `Invalid composite contour at index ${i}`, {
             index: i,
           }),
         );

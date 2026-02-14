@@ -1,4 +1,4 @@
-import type { PointId, Point2D, Rect2D } from "@shift/types";
+import type { PointId, Point2D, Rect2D, AnchorId } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
@@ -13,11 +13,12 @@ export interface SelectionData {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
-  anchorPointId: PointId;
+  anchorPointId: PointId | null;
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
   draggedPointIds: PointId[];
+  draggedAnchorIds: AnchorId[];
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */

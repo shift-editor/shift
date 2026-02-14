@@ -1,5 +1,13 @@
 import { vi } from "vitest";
-import type { PointId, ContourId, GlyphSnapshot, Point, Contour, Glyph } from "@shift/types";
+import type {
+  PointId,
+  ContourId,
+  GlyphSnapshot,
+  Point,
+  Contour,
+  Glyph,
+  AnchorId,
+} from "@shift/types";
 import type { EditorAPI, ActiveToolState } from "@/lib/tools/core";
 import type { ToolEvent, Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
@@ -84,15 +92,22 @@ interface ScreenService {
 
 interface SelectionService {
   getSelectedPoints(): readonly PointId[];
+  getSelectedAnchors(): readonly AnchorId[];
   getSelectedSegments(): readonly SegmentId[];
   getSelectedPointsCount(): number;
+  getSelectedAnchorsCount(): number;
   getSelectedSegmentsCount(): number;
   getMode(): SelectionMode;
   selectPoints(ids: readonly PointId[]): void;
+  selectAnchors(ids: readonly AnchorId[]): void;
   addPoint(id: PointId): void;
+  addAnchor(id: AnchorId): void;
   removePoint(id: PointId): void;
+  removeAnchor(id: AnchorId): void;
   togglePoint(id: PointId): void;
+  toggleAnchor(id: AnchorId): void;
   isPointSelected(id: PointId): boolean;
+  isAnchorSelected(id: AnchorId): boolean;
   selectSegments(ids: readonly SegmentId[]): void;
   addSegment(id: SegmentId): void;
   removeSegment(id: SegmentId): void;
@@ -105,11 +120,14 @@ interface SelectionService {
 
 interface HoverService {
   getHoveredPoint(): PointId | null;
+  getHoveredAnchor(): AnchorId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   readonly hoveredPointId: Signal<PointId | null>;
+  readonly hoveredAnchorId: Signal<AnchorId | null>;
   readonly hoveredSegmentId: Signal<SegmentIndicator | null>;
   setHoveredPoint(id: PointId | null): void;
+  setHoveredAnchor(id: AnchorId | null): void;
   setHoveredSegment(indicator: SegmentIndicator | null): void;
   setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
   clearAll(): void;
@@ -131,6 +149,8 @@ interface EditService {
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
   setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
+  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void;
+  moveAnchors(ids: AnchorId[], dx: number, dy: number): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
   addContour(): ContourId;
@@ -189,6 +209,9 @@ interface ViewportService {
 
 interface HitTestService {
   getNodeAt(coords: Coordinates): HitResult;
+  getAnchorAt(
+    coords: Coordinates,
+  ): { id: AnchorId; name: string | null; x: number; y: number } | null;
   getPointAt(coords: Coordinates): Point | null;
   getSegmentAt(coords: Coordinates): any | null;
   getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null;
@@ -223,6 +246,7 @@ export interface MockToolContext extends EditorAPI {
   tools: ToolSwitchService;
   getSelectionMode(): SelectionMode;
   getHoveredPoint(): PointId | null;
+  getHoveredAnchor(): AnchorId | null;
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
   readonly screenMousePosition: Signal<Point2D>;
@@ -272,14 +296,19 @@ function createMockScreenService(): ScreenService & {
 
 function createMockSelectionService(): SelectionService & {
   _selectedPoints: Set<PointId>;
+  _selectedAnchors: Set<AnchorId>;
   _selectedSegments: Set<SegmentId>;
   _mode: SelectionMode;
   mocks: Record<string, ReturnType<typeof vi.fn>>;
 } {
   const _selectedPoints = new Set<PointId>();
+  const _selectedAnchors = new Set<AnchorId>();
   const _selectedSegments = new Set<SegmentId>();
   let _mode: SelectionMode = "committed";
   const $selectedPoints: WritableSignal<ReadonlySet<PointId>> = signal<ReadonlySet<PointId>>(
+    new Set(),
+  );
+  const $selectedAnchors: WritableSignal<ReadonlySet<AnchorId>> = signal<ReadonlySet<AnchorId>>(
     new Set(),
   );
   const $selectedSegments: WritableSignal<ReadonlySet<SegmentId>> = signal<ReadonlySet<SegmentId>>(
@@ -289,6 +318,7 @@ function createMockSelectionService(): SelectionService & {
 
   const updateSignals = () => {
     $selectedPoints.set(new Set(_selectedPoints));
+    $selectedAnchors.set(new Set(_selectedAnchors));
     $selectedSegments.set(new Set(_selectedSegments));
     $mode.set(_mode);
   };
@@ -316,6 +346,28 @@ function createMockSelectionService(): SelectionService & {
       updateSignals();
     }),
     isPointSelected: vi.fn((id: PointId) => _selectedPoints.has(id)),
+    selectAnchors: vi.fn((ids: readonly AnchorId[]) => {
+      _selectedAnchors.clear();
+      for (const id of ids) _selectedAnchors.add(id);
+      updateSignals();
+    }),
+    addAnchor: vi.fn((id: AnchorId) => {
+      _selectedAnchors.add(id);
+      updateSignals();
+    }),
+    removeAnchor: vi.fn((id: AnchorId) => {
+      _selectedAnchors.delete(id);
+      updateSignals();
+    }),
+    toggleAnchor: vi.fn((id: AnchorId) => {
+      if (_selectedAnchors.has(id)) {
+        _selectedAnchors.delete(id);
+      } else {
+        _selectedAnchors.add(id);
+      }
+      updateSignals();
+    }),
+    isAnchorSelected: vi.fn((id: AnchorId) => _selectedAnchors.has(id)),
     selectSegments: vi.fn((ids: readonly SegmentId[]) => {
       _selectedSegments.clear();
       for (const id of ids) _selectedSegments.add(id);
@@ -340,10 +392,13 @@ function createMockSelectionService(): SelectionService & {
     isSegmentSelected: vi.fn((id: SegmentId) => _selectedSegments.has(id)),
     clear: vi.fn(() => {
       _selectedPoints.clear();
+      _selectedAnchors.clear();
       _selectedSegments.clear();
       updateSignals();
     }),
-    hasSelection: vi.fn(() => _selectedPoints.size > 0 || _selectedSegments.size > 0),
+    hasSelection: vi.fn(
+      () => _selectedPoints.size > 0 || _selectedAnchors.size > 0 || _selectedSegments.size > 0,
+    ),
     setMode: vi.fn((mode: SelectionMode) => {
       _mode = mode;
       updateSignals();
@@ -352,15 +407,22 @@ function createMockSelectionService(): SelectionService & {
 
   return {
     getSelectedPoints: () => [..._selectedPoints] as readonly PointId[],
+    getSelectedAnchors: () => [..._selectedAnchors] as readonly AnchorId[],
     getSelectedSegments: () => [..._selectedSegments] as readonly SegmentId[],
     getSelectedPointsCount: () => _selectedPoints.size,
+    getSelectedAnchorsCount: () => _selectedAnchors.size,
     getSelectedSegmentsCount: () => _selectedSegments.size,
     getMode: () => _mode,
     selectPoints: mocks.selectPoints,
+    selectAnchors: mocks.selectAnchors,
     addPoint: mocks.addPoint,
+    addAnchor: mocks.addAnchor,
     removePoint: mocks.removePoint,
+    removeAnchor: mocks.removeAnchor,
     togglePoint: mocks.togglePoint,
+    toggleAnchor: mocks.toggleAnchor,
     isPointSelected: mocks.isPointSelected,
+    isAnchorSelected: mocks.isAnchorSelected,
     selectSegments: mocks.selectSegments,
     addSegment: mocks.addSegment,
     removeSegment: mocks.removeSegment,
@@ -370,6 +432,7 @@ function createMockSelectionService(): SelectionService & {
     hasSelection: mocks.hasSelection,
     setMode: mocks.setMode,
     _selectedPoints,
+    _selectedAnchors,
     _selectedSegments,
     get _mode() {
       return _mode;
@@ -383,14 +446,17 @@ function createMockSelectionService(): SelectionService & {
 
 function createMockHoverService(): HoverService & {
   _hoveredPoint: PointId | null;
+  _hoveredAnchor: AnchorId | null;
   _hoveredSegment: SegmentIndicator | null;
   _hoveredBoundingBoxHandle: BoundingBoxHitResult;
   mocks: Record<string, ReturnType<typeof vi.fn>>;
 } {
   let _hoveredPoint: PointId | null = null;
+  let _hoveredAnchor: AnchorId | null = null;
   let _hoveredSegment: SegmentIndicator | null = null;
   let _hoveredBoundingBoxHandle: BoundingBoxHitResult = null;
   const $hoveredPoint: WritableSignal<PointId | null> = signal<PointId | null>(null);
+  const $hoveredAnchor: WritableSignal<AnchorId | null> = signal<AnchorId | null>(null);
   const $hoveredSegment: WritableSignal<SegmentIndicator | null> = signal<SegmentIndicator | null>(
     null,
   );
@@ -398,38 +464,63 @@ function createMockHoverService(): HoverService & {
   const mocks = {
     setHoveredPoint: vi.fn((id: PointId | null) => {
       _hoveredPoint = id;
-      if (id !== null) _hoveredSegment = null;
+      if (id !== null) {
+        _hoveredAnchor = null;
+        _hoveredSegment = null;
+      }
       $hoveredPoint.set(id);
+      $hoveredAnchor.set(_hoveredAnchor);
+      $hoveredSegment.set(_hoveredSegment);
+    }),
+    setHoveredAnchor: vi.fn((id: AnchorId | null) => {
+      _hoveredAnchor = id;
+      if (id !== null) {
+        _hoveredPoint = null;
+        _hoveredSegment = null;
+      }
+      $hoveredAnchor.set(id);
+      $hoveredPoint.set(_hoveredPoint);
       $hoveredSegment.set(_hoveredSegment);
     }),
     setHoveredSegment: vi.fn((indicator: SegmentIndicator | null) => {
       _hoveredSegment = indicator;
-      if (indicator !== null) _hoveredPoint = null;
+      if (indicator !== null) {
+        _hoveredPoint = null;
+        _hoveredAnchor = null;
+      }
       $hoveredSegment.set(indicator);
       $hoveredPoint.set(_hoveredPoint);
+      $hoveredAnchor.set(_hoveredAnchor);
     }),
     setHoveredBoundingBoxHandle: vi.fn((handle: BoundingBoxHitResult) => {
       _hoveredBoundingBoxHandle = handle;
     }),
     clearAll: vi.fn(() => {
       _hoveredPoint = null;
+      _hoveredAnchor = null;
       _hoveredSegment = null;
       _hoveredBoundingBoxHandle = null;
       $hoveredPoint.set(null);
+      $hoveredAnchor.set(null);
       $hoveredSegment.set(null);
     }),
   };
 
   return {
     getHoveredPoint: () => _hoveredPoint,
+    getHoveredAnchor: () => _hoveredAnchor,
     getHoveredSegment: () => _hoveredSegment,
     getHoveredBoundingBoxHandle: () => _hoveredBoundingBoxHandle,
     setHoveredPoint: mocks.setHoveredPoint,
+    setHoveredAnchor: mocks.setHoveredAnchor,
     setHoveredSegment: mocks.setHoveredSegment,
     setHoveredBoundingBoxHandle: mocks.setHoveredBoundingBoxHandle,
     clearAll: mocks.clearAll,
     get _hoveredPoint() {
       return _hoveredPoint;
+    },
+    get _hoveredAnchor() {
+      return _hoveredAnchor;
     },
     get _hoveredSegment() {
       return _hoveredSegment;
@@ -439,6 +530,9 @@ function createMockHoverService(): HoverService & {
     },
     get hoveredPointId() {
       return $hoveredPoint;
+    },
+    get hoveredAnchorId() {
+      return $hoveredAnchor;
     },
     get hoveredSegmentId() {
       return $hoveredSegment;
@@ -498,6 +592,12 @@ function createMockEditService(
     setPointPositions: vi.fn((moves: Array<{ id: PointId; x: number; y: number }>) =>
       fontEngine.editing.setPointPositions(moves),
     ),
+    setAnchorPositions: vi.fn((moves: Array<{ id: AnchorId; x: number; y: number }>) =>
+      fontEngine.editing.setAnchorPositions(moves),
+    ),
+    moveAnchors: vi.fn((ids: AnchorId[], dx: number, dy: number) =>
+      fontEngine.editing.moveAnchors(ids, { x: dx, y: dy }),
+    ),
     applySmartEdits: vi.fn((ids: readonly PointId[], dx: number, dy: number) =>
       fontEngine.editing.applySmartEdits(new Set(ids), dx, dy),
     ),
@@ -529,6 +629,8 @@ function createMockEditService(
     movePoints: mocks.movePoints,
     movePointTo: mocks.movePointTo,
     setPointPositions: mocks.setPointPositions,
+    setAnchorPositions: mocks.setAnchorPositions,
+    moveAnchors: mocks.moveAnchors,
     applySmartEdits: mocks.applySmartEdits,
     removePoints: mocks.removePoints,
     addContour: mocks.addContour,
@@ -731,6 +833,19 @@ function createMockHitTestService(
     return null;
   };
 
+  const getAnchorAt = (pos: Point2D) => {
+    const snapshot = fontEngine.$glyph.value;
+    if (!snapshot) return null;
+
+    for (const anchor of snapshot.anchors) {
+      const dist = Math.sqrt((anchor.x - pos.x) ** 2 + (anchor.y - pos.y) ** 2);
+      if (dist < hitRadius) {
+        return anchor as { id: AnchorId; name: string | null; x: number; y: number };
+      }
+    }
+    return null;
+  };
+
   const getSegmentAt = (pos: Point2D): SegmentHitResult | null => {
     const snapshot = fontEngine.$glyph.value;
     if (!snapshot) return null;
@@ -843,6 +958,9 @@ function createMockHitTestService(
     const middle = getMiddlePointAt(pos);
     if (middle) return middle;
 
+    const anchor = getAnchorAt(pos);
+    if (anchor) return { type: "anchor", anchorId: anchor.id };
+
     const point = getPointAt(pos);
     if (point) return { type: "point", point, pointId: point.id };
 
@@ -860,12 +978,14 @@ function createMockHitTestService(
   };
 
   const getPointAtCoords = (coords: Coordinates) => getPointAt(coords.scene);
+  const getAnchorAtCoords = (coords: Coordinates) => getAnchorAt(coords.scene);
   const getSegmentAtCoords = (coords: Coordinates) => getSegmentAt(coords.scene);
   const getContourEndpointAtCoords = (coords: Coordinates) => getContourEndpointAt(coords.scene);
   const getMiddlePointAtCoords = (coords: Coordinates) => getMiddlePointAt(coords.scene);
 
   const mocks = {
     getNodeAt: vi.fn(getNodeAt),
+    getAnchorAt: vi.fn(getAnchorAtCoords),
     getPointAt: vi.fn(getPointAtCoords),
     getSegmentAt: vi.fn(getSegmentAtCoords),
     getContourEndpointAt: vi.fn(getContourEndpointAtCoords),
@@ -878,6 +998,7 @@ function createMockHitTestService(
 
   return {
     getNodeAt: mocks.getNodeAt,
+    getAnchorAt: mocks.getAnchorAt,
     getPointAt: mocks.getPointAt,
     getSegmentAt: mocks.getSegmentAt,
     getContourEndpointAt: mocks.getContourEndpointAt,
@@ -1013,7 +1134,10 @@ export function createMockToolContext(): MockToolContext {
     metaKey: false,
   });
   const $isHoveringNode = computed(
-    () => hover.hoveredPointId.value !== null || hover.hoveredSegmentId.value !== null,
+    () =>
+      hover.hoveredPointId.value !== null ||
+      hover.hoveredAnchorId.value !== null ||
+      hover.hoveredSegmentId.value !== null,
   );
   const $snapPreferences = signal<SnapPreferences>({
     enabled: true,
@@ -1098,8 +1222,10 @@ export function createMockToolContext(): MockToolContext {
     zone,
     tools,
     getSelectedPoints: () => [...selection.getSelectedPoints()],
+    getSelectedAnchors: () => [...selection.getSelectedAnchors()],
     getSelectedSegments: () => [...selection.getSelectedSegments()],
     getHoveredPoint: () => hover.getHoveredPoint(),
+    getHoveredAnchor: () => hover.getHoveredAnchor(),
     getHoveredSegment: () => hover.getHoveredSegment(),
     getCursorValue: () => cursor.get(),
     get hitRadius() {
@@ -1140,13 +1266,18 @@ export function createMockToolContext(): MockToolContext {
       $activeToolState.value = state;
     },
     selectPoints: (ids: readonly PointId[]) => selection.selectPoints(ids),
+    selectAnchors: (ids: readonly AnchorId[]) => selection.selectAnchors(ids),
     clearSelection: () => selection.clear(),
     setSelectionMode: (mode: SelectionMode) => selection.setMode(mode),
     getSelectionMode: () => selection.getMode(),
     addPointToSelection: (id: PointId) => selection.addPoint(id),
+    addAnchorToSelection: (id: AnchorId) => selection.addAnchor(id),
     removePointFromSelection: (id: PointId) => selection.removePoint(id),
+    removeAnchorFromSelection: (id: AnchorId) => selection.removeAnchor(id),
     togglePointSelection: (id: PointId) => selection.togglePoint(id),
+    toggleAnchorSelection: (id: AnchorId) => selection.toggleAnchor(id),
     isPointSelected: (id: PointId) => selection.isPointSelected(id),
+    isAnchorSelected: (id: AnchorId) => selection.isAnchorSelected(id),
     selectSegments: (ids: readonly SegmentId[]) => selection.selectSegments(ids),
     addSegmentToSelection: (id: SegmentId) => selection.addSegment(id),
     removeSegmentFromSelection: (id: SegmentId) => selection.removeSegment(id),
@@ -1159,6 +1290,9 @@ export function createMockToolContext(): MockToolContext {
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setPointPositions: (moves: Array<{ id: PointId; x: number; y: number }>) =>
       edit.setPointPositions(moves),
+    setAnchorPositions: (moves: Array<{ id: AnchorId; x: number; y: number }>) =>
+      edit.setAnchorPositions(moves),
+    moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
     applySmartEdits: (ids: readonly PointId[], dx: number, dy: number) =>
       edit.applySmartEdits(ids, dx, dy),
     toggleSmooth: (id: PointId) => edit.toggleSmooth(id),
@@ -1177,6 +1311,7 @@ export function createMockToolContext(): MockToolContext {
     setMarqueePreviewRect: (_rect: Rect2D | null) => {},
     isPointInMarqueePreview: (_pointId: PointId) => false,
     getNodeAt: (coords: Coordinates) => hitTest.getNodeAt(coords),
+    getAnchorAt: (coords: Coordinates) => hitTest.getAnchorAt(coords),
     getPointAt: (coords: Coordinates) => hitTest.getPointAt(coords),
     getSegmentAt: (coords: Coordinates) => hitTest.getSegmentAt(coords),
     getContourEndpointAt: (coords: Coordinates) => hitTest.getContourEndpointAt(coords),
@@ -1197,6 +1332,9 @@ export function createMockToolContext(): MockToolContext {
     getHoveredBoundingBoxHandle: () => $hoveredBoundingBoxHandle.peek(),
     get hoveredPointId() {
       return hover.hoveredPointId;
+    },
+    get hoveredAnchorId() {
+      return hover.hoveredAnchorId;
     },
     get hoveredSegmentId() {
       return hover.hoveredSegmentId;

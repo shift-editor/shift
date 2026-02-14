@@ -144,6 +144,9 @@ export class DrawAPI {
       case "corner":
         this.#drawCornerHandle(point, style);
         break;
+      case "anchor":
+        this.#drawDiamondHandle(point, style);
+        break;
       case "control":
         this.#drawCircleHandle(point, style);
         break;
@@ -178,7 +181,6 @@ export class DrawAPI {
   #drawCircleHandle(point: Point2D, style: BaseHandleStyle): void {
     // For control/smooth handles, style.size IS the radius (not diameter)
     const radiusUpm = this.#toUpm(style.size);
-    console.log("size", style);
 
     this.#renderer.save();
     this.#renderer.lineWidth = this.#toUpm(style.lineWidth);
@@ -194,6 +196,47 @@ export class DrawAPI {
       this.#renderer.strokeStyle = style.overlayColor;
       this.#renderer.strokeCircle(point.x, point.y, radiusUpm);
       this.#renderer.fillCircle(point.x, point.y, radiusUpm);
+    }
+
+    this.#renderer.restore();
+  }
+
+  #drawDiamondHandle(point: Point2D, style: BaseHandleStyle): void {
+    const sizeUpm = this.#toUpm(style.size);
+    const half = sizeUpm / 2;
+
+    const points = [
+      { x: point.x, y: point.y - half },
+      { x: point.x + half, y: point.y },
+      { x: point.x, y: point.y + half },
+      { x: point.x - half, y: point.y },
+    ];
+
+    this.#renderer.save();
+    this.#renderer.lineWidth = this.#toUpm(style.lineWidth);
+    this.#renderer.fillStyle = style.fillStyle;
+    this.#renderer.strokeStyle = style.strokeStyle;
+
+    this.#renderer.beginPath();
+    this.#renderer.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      this.#renderer.lineTo(points[i].x, points[i].y);
+    }
+    this.#renderer.closePath();
+    this.#renderer.stroke();
+    this.#renderer.fill();
+
+    if (style.overlayColor) {
+      this.#renderer.fillStyle = style.overlayColor;
+      this.#renderer.strokeStyle = style.overlayColor;
+      this.#renderer.beginPath();
+      this.#renderer.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        this.#renderer.lineTo(points[i].x, points[i].y);
+      }
+      this.#renderer.closePath();
+      this.#renderer.stroke();
+      this.#renderer.fill();
     }
 
     this.#renderer.restore();

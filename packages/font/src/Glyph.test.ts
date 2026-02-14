@@ -23,6 +23,8 @@ function makeGlyph(contours: Contour[]): Glyph {
     xAdvance: 500,
     contours,
     activeContourId: null,
+    anchors: [],
+    compositeContours: [],
   };
 }
 

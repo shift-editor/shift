@@ -18,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GENERATED_DIR = path.join(__dirname, "../packages/types/src/generated");
 
 const FILE_IMPORTS: Record<string, string[]> = {
+  "AnchorSnapshot.ts": ["AnchorId"],
   "PointSnapshot.ts": ["PointId"],
   "ContourSnapshot.ts": ["ContourId"],
   "GlyphSnapshot.ts": ["ContourId"],

@@ -1,9 +1,9 @@
-import type { GlyphSnapshot, PointId, ContourId, Point2D } from "@shift/types";
+import type { GlyphSnapshot, PointId, ContourId, Point2D, AnchorId } from "@shift/types";
 import { applyRules, applyMovesToGlyph } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
-import type { FontEngineAPI, PointMove } from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 
@@ -17,7 +17,29 @@ export interface EditingEngineDeps {
   getSnapshot(): GlyphSnapshot;
   restoreSnapshot(snapshot: GlyphSnapshot): void;
   setPointPositions(moves: PointMove[]): boolean;
+  setAnchorPositions(moves: AnchorMove[]): boolean;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult;
+}
+
+function applyAnchorMovesToGlyph(
+  glyph: GlyphSnapshot,
+  moves: Array<{ id: AnchorId; x: number; y: number }>,
+): GlyphSnapshot {
+  if (moves.length === 0) return glyph;
+
+  const moveById = new Map<string, { x: number; y: number }>();
+  for (const move of moves) {
+    moveById.set(move.id, { x: move.x, y: move.y });
+  }
+
+  return {
+    ...glyph,
+    anchors: glyph.anchors.map((anchor) => {
+      const move = moveById.get(anchor.id);
+      if (!move) return anchor;
+      return { ...anchor, x: move.x, y: move.y };
+    }),
+  };
 }
 
 /**
@@ -40,7 +62,13 @@ export class EditingManager {
     if (!raw.success) {
       throw new NativeOperationError(raw.error ?? "Unknown native error");
     }
-    return { snapshot: raw.snapshot, affectedPointIds: raw.affectedPointIds };
+    if (!raw.snapshot) {
+      throw new NativeOperationError("Native operation succeeded but returned no snapshot");
+    }
+    return {
+      snapshot: raw.snapshot as GlyphSnapshot,
+      affectedPointIds: raw.affectedPointIds,
+    };
   }
 
   #dispatch(json: string): PointId[] {
@@ -82,6 +110,11 @@ export class EditingManager {
   movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
     if (pointIds.length === 0) return [];
     return this.#dispatch(this.#engine.raw.movePoints(pointIds, delta.x, delta.y));
+  }
+
+  moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
+    if (anchorIds.length === 0) return;
+    this.#dispatchVoid(this.#engine.raw.moveAnchors(anchorIds, delta.x, delta.y));
   }
 
   movePointTo(pointId: PointId, x: number, y: number): void {
@@ -217,6 +250,20 @@ export class EditingManager {
     this.#engine.emitGlyph(updatedGlyph);
 
     this.#engine.setPointPositions(moves);
+  }
+
+  /** Batch-sets absolute anchor positions. Applies optimistically to the signal, then syncs to native. */
+  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void {
+    if (!this.#engine.hasSession()) return;
+    if (moves.length === 0) return;
+
+    const glyph = this.#engine.getGlyph();
+    if (!glyph) return;
+
+    const updatedGlyph = applyAnchorMovesToGlyph(glyph, moves);
+    this.#engine.emitGlyph(updatedGlyph);
+
+    this.#engine.setAnchorPositions(moves);
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */
