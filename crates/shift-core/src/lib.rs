@@ -1,6 +1,8 @@
 pub mod binary;
+pub mod composite;
 pub mod constants;
 pub mod curve;
+pub mod dependency_graph;
 pub mod edit_session;
 pub mod font_loader;
 pub mod snapshot;
@@ -8,7 +10,7 @@ pub mod vec2;
 
 pub use shift_ir::{
     Anchor, AnchorId, Contour, ContourId, CurveSegment, CurveSegmentIter, Font, FontMetadata,
-    FontMetrics, Glyph, GlyphLayer, GlyphName, LayerId, Point, PointId, PointType,
+    FontMetrics, Glyph, GlyphLayer, GlyphName, LayerId, Point, PointId, PointType, Transform,
 };
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};

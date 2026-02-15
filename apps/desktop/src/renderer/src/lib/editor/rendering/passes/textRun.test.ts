@@ -104,7 +104,6 @@ describe("textRun pass", () => {
     const state = createState({ hoveredIndex: 0 });
     const liveGlyph = {
       unicode: 65,
-      x: 100,
       contours: [
         {
           id: 1,
@@ -116,6 +115,7 @@ describe("textRun pass", () => {
           ],
         },
       ],
+      compositeContours: [],
     };
 
     renderTextRun(rc, state, metrics, liveGlyph);
@@ -123,6 +123,62 @@ describe("textRun pass", () => {
     expect(ctx.beginPath).toHaveBeenCalled();
     expect(ctx.stroke).toHaveBeenCalled();
     expect(ctx.strokePath).not.toHaveBeenCalled();
+  });
+
+  it("renders live glyph when only composite contours are present", () => {
+    const state = createState();
+    const liveGlyph = {
+      unicode: 65,
+      contours: [],
+      compositeContours: [
+        {
+          closed: true,
+          points: [
+            { x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+          ],
+        },
+      ],
+    };
+
+    renderTextRun(rc, state, metrics, liveGlyph);
+
+    expect(ctx.fill).toHaveBeenCalledTimes(1);
+    expect(ctx.fillPath).not.toHaveBeenCalled();
+  });
+
+  it("renders both live base and composite contours", () => {
+    const state = createState();
+    const liveGlyph = {
+      unicode: 65,
+      contours: [
+        {
+          id: 1,
+          closed: true,
+          points: [
+            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+          ],
+        },
+      ],
+      compositeContours: [
+        {
+          closed: true,
+          points: [
+            { x: 200, y: 0, pointType: "onCurve" as const, smooth: false },
+            { x: 300, y: 0, pointType: "onCurve" as const, smooth: false },
+            { x: 300, y: 100, pointType: "onCurve" as const, smooth: false },
+          ],
+        },
+      ],
+    };
+
+    renderTextRun(rc, state, metrics, liveGlyph);
+
+    expect(ctx.beginPath).toHaveBeenCalledTimes(1);
+    expect(ctx.fill).toHaveBeenCalledTimes(1);
   });
 
   it("renders all same-unicode slots with live contours", () => {
@@ -159,7 +215,6 @@ describe("textRun pass", () => {
     });
     const liveGlyph = {
       unicode: 65,
-      x: 100,
       contours: [
         {
           id: 1,
@@ -171,6 +226,7 @@ describe("textRun pass", () => {
           ],
         },
       ],
+      compositeContours: [],
     };
 
     renderTextRun(rc, state, metrics, liveGlyph);
@@ -206,7 +262,6 @@ describe("textRun pass", () => {
     });
     const liveGlyph = {
       unicode: 65,
-      x: 100,
       contours: [
         {
           id: 1,
@@ -218,6 +273,7 @@ describe("textRun pass", () => {
           ],
         },
       ],
+      compositeContours: [],
     };
 
     renderTextRun(rc, state, metrics, liveGlyph);
@@ -261,7 +317,6 @@ describe("textRun pass", () => {
     });
     const liveGlyph = {
       unicode: 65,
-      x: 600,
       contours: [
         {
           id: 1,
@@ -273,6 +328,7 @@ describe("textRun pass", () => {
           ],
         },
       ],
+      compositeContours: [],
     };
 
     renderTextRun(rc, state, metrics, liveGlyph);

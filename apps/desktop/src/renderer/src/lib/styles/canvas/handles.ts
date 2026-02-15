@@ -35,7 +35,7 @@ export type HandleStylesMap = {
 };
 
 export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
-  const { cyan, gray, green } = theme.canvas;
+  const { cyan, gray, green, purple } = theme.canvas;
   const white = theme.ui.bg.surface;
   const hoverOverlay = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 
@@ -105,7 +105,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: cyan,
+        strokeStyle: purple,
         fillStyle: white,
         dashPattern: [],
       },
@@ -113,7 +113,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         size: 6,
         lineWidth: 1,
         antiAlias: false,
-        strokeStyle: cyan,
+        strokeStyle: purple,
         fillStyle: white,
         dashPattern: [],
         overlayColor: hoverOverlay(0.75),
@@ -123,7 +123,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
         lineWidth: 2,
         antiAlias: false,
         strokeStyle: white,
-        fillStyle: cyan,
+        fillStyle: purple,
         dashPattern: [],
       },
     },

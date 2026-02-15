@@ -229,19 +229,7 @@ function executeMoveSelectionDelta(
   }
 
   if (anchorIds.length > 0) {
-    const glyph = editor.glyph.peek();
-    if (!glyph) return;
-
-    const selected = new Set(anchorIds);
-    const moves = glyph.anchors
-      .filter((anchor) => selected.has(anchor.id))
-      .map((anchor) => ({
-        id: anchor.id,
-        x: anchor.x + delta.x,
-        y: anchor.y + delta.y,
-      }));
-
-    editor.setAnchorPositions(moves);
+    editor.moveAnchors(anchorIds, delta);
   }
 }
 

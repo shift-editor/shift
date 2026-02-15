@@ -90,6 +90,10 @@ export class MockFontEngine implements FontEngineAPI {
     return Array.from({ length: 256 }, (_, i) => i);
   }
 
+  getDependentUnicodes(_unicode: number): number[] {
+    return [];
+  }
+
   getGlyphSvgPath(_unicode: number): string | null {
     return null;
   }

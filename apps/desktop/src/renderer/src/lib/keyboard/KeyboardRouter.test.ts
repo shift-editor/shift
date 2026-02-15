@@ -50,6 +50,9 @@ describe("KeyboardRouter", () => {
       returnFromTemporaryTool: vi.fn(),
       isPreviewMode: vi.fn(() => false),
       setPreviewMode: vi.fn(),
+      insertTextCodepoint: vi.fn(),
+      recomputeTextRun: vi.fn(),
+      getTextRunCodepoints: vi.fn(() => []),
     };
 
     toolManager = {
@@ -159,15 +162,28 @@ describe("KeyboardRouter", () => {
     expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps global command shortcuts in text mode", () => {
+  it("routes paste to text handler in text mode instead of global paste", () => {
     activeTool = "text";
     const e = createKeyboardEvent({ key: "v", metaKey: true });
 
     const handled = router.handleKeyDown(e);
 
     expect(handled).toBe(true);
-    expect(editor.paste).toHaveBeenCalledTimes(1);
+    expect(editor.paste).not.toHaveBeenCalled();
     expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
+    expect(e.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes copy to text handler in text mode instead of global copy", () => {
+    activeTool = "text";
+    const e = createKeyboardEvent({ key: "c", metaKey: true });
+
+    const handled = router.handleKeyDown(e);
+
+    expect(handled).toBe(true);
+    expect(editor.copy).not.toHaveBeenCalled();
+    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
+    expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
   it("inserts space in text mode instead of activating temporary hand", () => {

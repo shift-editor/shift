@@ -172,6 +172,18 @@ impl Transform {
         }
     }
 
+    /// Compose transforms as `self ∘ other` (apply `other`, then `self`).
+    pub fn compose(self, other: Self) -> Self {
+        Self {
+            xx: self.xx * other.xx + self.yx * other.xy,
+            xy: self.xy * other.xx + self.yy * other.xy,
+            yx: self.xx * other.yx + self.yx * other.yy,
+            yy: self.xy * other.yx + self.yy * other.yy,
+            dx: self.xx * other.dx + self.yx * other.dy + self.dx,
+            dy: self.xy * other.dx + self.yy * other.dy + self.dy,
+        }
+    }
+
     pub fn is_identity(&self) -> bool {
         (self.xx - 1.0).abs() < f64::EPSILON
             && self.xy.abs() < f64::EPSILON
@@ -265,6 +277,17 @@ mod tests {
         let (x, y) = t.transform_point(10.0, 20.0);
         assert_eq!(x, 20.0);
         assert_eq!(y, 60.0);
+    }
+
+    #[test]
+    fn transform_compose_order() {
+        let translate = Transform::translate(10.0, 20.0);
+        let scale = Transform::scale(2.0, 3.0);
+        let composed = translate.compose(scale);
+        let (x, y) = composed.transform_point(4.0, 5.0);
+
+        assert_eq!(x, 18.0);
+        assert_eq!(y, 35.0);
     }
 
     #[test]

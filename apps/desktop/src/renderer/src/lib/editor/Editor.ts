@@ -37,6 +37,7 @@ import type { Coordinates } from "@/types/coordinates";
 import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { glyphDataStore } from "@/store/GlyphDataStore";
+import { getGlyphInfo } from "@/store/glyphInfo";
 import { CommandHistory } from "../commands";
 import {
   RotatePointsCommand,
@@ -138,6 +139,7 @@ export class Editor implements ShiftEditor {
   #$glyph: ComputedSignal<Glyph | null>;
   #fontManager: FontManager;
   #staticEffect: Effect;
+  #textRunGlyphRefreshEffect: Effect;
   #overlayEffect: Effect;
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
@@ -291,6 +293,41 @@ export class Editor implements ShiftEditor {
       this.$staticState.value;
       this.#textRunManager.state.value;
       this.#renderer.requestStaticRedraw();
+    });
+
+    this.#textRunGlyphRefreshEffect = effect(() => {
+      const glyph = this.#$glyph.value;
+      if (!glyph) return;
+
+      const textRun = this.#textRunManager.state.peek();
+      if (!textRun) return;
+
+      const glyphInfo = getGlyphInfo();
+      const unicodes = new Set<number>();
+      for (const slot of textRun.layout.slots) {
+        unicodes.add(slot.unicode);
+      }
+      unicodes.add(glyph.unicode);
+
+      const nativeDependents = this.#fontEngine.info.getDependentUnicodes(glyph.unicode);
+      for (const unicode of nativeDependents) {
+        unicodes.add(unicode);
+      }
+
+      if (nativeDependents.length === 0) {
+        // Fallback from Unicode decomposition graph when native dependency data is unavailable.
+        for (const unicode of glyphInfo.getUsedBy(glyph.unicode)) {
+          if (glyphDataStore.hasGlyph(unicode)) {
+            unicodes.add(unicode);
+          }
+        }
+      }
+
+      for (const unicode of unicodes) {
+        glyphDataStore.invalidateGlyph(unicode);
+      }
+
+      this.#textRunManager.recompute(this.#fontManager);
     });
 
     this.#overlayEffect = effect(() => {
@@ -802,6 +839,10 @@ export class Editor implements ShiftEditor {
 
   public insertTextCodepoint(codepoint: number): void {
     this.#textRunManager.buffer.insert(codepoint);
+  }
+
+  public getTextRunCodepoints(): number[] {
+    return this.#textRunManager.buffer.getText();
   }
 
   public deleteTextCodepoint(): boolean {
@@ -1688,6 +1729,7 @@ export class Editor implements ShiftEditor {
 
   public destroy() {
     this.#staticEffect.dispose();
+    this.#textRunGlyphRefreshEffect.dispose();
     this.#overlayEffect.dispose();
     this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();

@@ -2,12 +2,17 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_core::{
-  curve::segment_bounds,
+  composite::{
+    flatten_component_contours_for_layer as flatten_component_contours, layer_bbox,
+    layer_complexity, layer_to_svg_path, preferred_layer_for_glyph, resolved_to_render_contours,
+    GlyphLayerProvider,
+  },
+  dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot, RenderPointSnapshot},
-  AnchorId, ContourId, CurveSegment, CurveSegmentIter, Font, FontWriter, Glyph, GlyphLayer,
-  LayerId, PasteContour, Point, PointId, PointType, UfoWriter,
+  snapshot::{CommandResult, GlyphSnapshot},
+  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, PointId,
+  PointType, UfoWriter,
 };
 use std::collections::HashSet;
 
@@ -33,181 +38,36 @@ macro_rules! parse_or_err {
   };
 }
 
-#[derive(Clone)]
-struct ResolvedContour {
-  points: Vec<Point>,
-  closed: bool,
+/// Node-side layer provider that gives precedence to the active edit session.
+///
+/// This lets composite resolution observe unsaved in-session edits while still
+/// falling back to persisted font layers for other glyphs.
+struct EngineLayerProvider<'a> {
+  font: &'a Font,
+  current_edit_session: Option<&'a EditSession>,
+  editing_glyph_name: Option<&'a str>,
 }
 
-#[derive(Clone, Copy)]
-struct AffineMatrix {
-  xx: f64,
-  xy: f64,
-  yx: f64,
-  yy: f64,
-  dx: f64,
-  dy: f64,
-}
-
-impl AffineMatrix {
-  fn from_values(xx: f64, xy: f64, yx: f64, yy: f64, dx: f64, dy: f64) -> Self {
-    Self {
-      xx,
-      xy,
-      yx,
-      yy,
-      dx,
-      dy,
-    }
-  }
-
-  /// Compose transforms as `self ∘ other` (apply `other`, then `self`).
-  fn multiply(self, other: Self) -> Self {
-    Self {
-      xx: self.xx * other.xx + self.yx * other.xy,
-      xy: self.xy * other.xx + self.yy * other.xy,
-      yx: self.xx * other.yx + self.yx * other.yy,
-      yy: self.xy * other.yx + self.yy * other.yy,
-      dx: self.xx * other.dx + self.yx * other.dy + self.dx,
-      dy: self.xy * other.dx + self.yy * other.dy + self.dy,
-    }
-  }
-
-  fn transform_point(self, x: f64, y: f64) -> (f64, f64) {
-    (
-      self.xx * x + self.yx * y + self.dx,
-      self.xy * x + self.yy * y + self.dy,
-    )
-  }
-}
-
-fn layer_complexity(layer: &GlyphLayer) -> usize {
-  layer.contours().len() + layer.components().len()
-}
-
-fn layer_to_svg_path(layer: &GlyphLayer, component_contours: &[ResolvedContour]) -> String {
-  let mut parts: Vec<String> = Vec::new();
-  for contour in layer.contours_iter() {
-    let d = contour_to_svg_d(contour.points(), contour.is_closed());
-    if !d.is_empty() {
-      parts.push(d);
-    }
-  }
-  for contour in component_contours {
-    let d = contour_to_svg_d(&contour.points, contour.closed);
-    if !d.is_empty() {
-      parts.push(d);
-    }
-  }
-  parts.join(" ")
-}
-
-fn accumulate_contour_bbox(
-  points: &[Point],
-  closed: bool,
-  min_x: &mut f64,
-  min_y: &mut f64,
-  max_x: &mut f64,
-  max_y: &mut f64,
-  any: &mut bool,
-) {
-  for segment in CurveSegmentIter::new(points, closed) {
-    let (sx, sy, ex, ey) = segment_bounds(&segment);
-    *min_x = min_x.min(sx);
-    *min_y = min_y.min(sy);
-    *max_x = max_x.max(ex);
-    *max_y = max_y.max(ey);
-    *any = true;
-  }
-}
-
-fn layer_bbox(
-  layer: &GlyphLayer,
-  component_contours: &[ResolvedContour],
-) -> Option<(f64, f64, f64, f64)> {
-  let mut min_x = f64::MAX;
-  let mut min_y = f64::MAX;
-  let mut max_x = f64::MIN;
-  let mut max_y = f64::MIN;
-  let mut any = false;
-
-  for contour in layer.contours_iter() {
-    accumulate_contour_bbox(
-      contour.points(),
-      contour.is_closed(),
-      &mut min_x,
-      &mut min_y,
-      &mut max_x,
-      &mut max_y,
-      &mut any,
-    );
-  }
-
-  for contour in component_contours {
-    accumulate_contour_bbox(
-      &contour.points,
-      contour.closed,
-      &mut min_x,
-      &mut min_y,
-      &mut max_x,
-      &mut max_y,
-      &mut any,
-    );
-  }
-
-  if any {
-    Some((min_x, min_y, max_x, max_y))
-  } else {
-    None
-  }
-}
-
-fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
-  if points.len() < 2 {
-    return String::new();
-  }
-
-  let mut out = Vec::new();
-  let mut first = true;
-
-  for seg in CurveSegmentIter::new(points, closed) {
-    match seg {
-      CurveSegment::Line(p1, p2) => {
-        if first {
-          out.push(format!("M {} {}", p1.x(), p1.y()));
-          first = false;
-        }
-        out.push(format!("L {} {}", p2.x(), p2.y()));
-      }
-      CurveSegment::Quad(p1, cp, p2) => {
-        if first {
-          out.push(format!("M {} {}", p1.x(), p1.y()));
-          first = false;
-        }
-        out.push(format!("Q {} {} {} {}", cp.x(), cp.y(), p2.x(), p2.y()));
-      }
-      CurveSegment::Cubic(p1, cp1, cp2, p2) => {
-        if first {
-          out.push(format!("M {} {}", p1.x(), p1.y()));
-          first = false;
-        }
-        out.push(format!(
-          "C {} {} {} {} {} {}",
-          cp1.x(),
-          cp1.y(),
-          cp2.x(),
-          cp2.y(),
-          p2.x(),
-          p2.y()
-        ));
+impl GlyphLayerProvider for EngineLayerProvider<'_> {
+  /// Resolves a glyph layer using session-first semantics.
+  fn glyph_layer(&self, glyph_name: &str) -> Option<&GlyphLayer> {
+    if let (Some(session), Some(editing_glyph_name)) =
+      (self.current_edit_session, self.editing_glyph_name)
+    {
+      if editing_glyph_name == glyph_name {
+        return Some(session.layer());
       }
     }
-  }
 
-  if closed && !out.is_empty() {
-    out.push("Z".to_string());
+    self
+      .font
+      .glyph(glyph_name)
+      .and_then(preferred_layer_for_glyph)
   }
-  out.join(" ")
+}
+
+fn parse_ids<T: std::str::FromStr>(ids: &[String]) -> Vec<T> {
+  ids.iter().filter_map(|id| id.parse::<T>().ok()).collect()
 }
 
 pub struct SaveFontTask {
@@ -237,6 +97,7 @@ pub struct FontEngine {
   editing_glyph: Option<Glyph>,
   editing_layer_id: Option<LayerId>,
   font: Font,
+  dependency_graph: DependencyGraph,
 }
 
 impl Default for FontEngine {
@@ -255,6 +116,7 @@ impl FontEngine {
       editing_glyph: None,
       editing_layer_id: None,
       font: Font::default(),
+      dependency_graph: DependencyGraph::default(),
     }
   }
 
@@ -264,6 +126,7 @@ impl FontEngine {
       .font_loader
       .read_font(&path)
       .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to load font: {e}")))?;
+    self.dependency_graph = DependencyGraph::rebuild(&self.font);
     Ok(())
   }
 
@@ -318,11 +181,37 @@ impl FontEngine {
     }
   }
 
-  fn preferred_layer_for_glyph(glyph: &Glyph) -> Option<&GlyphLayer> {
-    glyph
-      .layers()
-      .values()
-      .max_by_key(|layer| layer_complexity(layer))
+  fn layer_provider(&self) -> EngineLayerProvider<'_> {
+    EngineLayerProvider {
+      font: &self.font,
+      current_edit_session: self.current_edit_session.as_ref(),
+      editing_glyph_name: self.editing_glyph.as_ref().map(|glyph| glyph.name()),
+    }
+  }
+
+  fn glyph_name_for_unicode(&self, unicode: u32) -> Option<String> {
+    if let Some(session) = &self.current_edit_session {
+      if session.unicode() == unicode {
+        return Some(session.glyph_name().to_string());
+      }
+    }
+
+    self
+      .font
+      .glyph_by_unicode(unicode)
+      .map(|glyph| glyph.name().to_string())
+  }
+
+  fn collect_unicodes_for_glyph_name(&self, glyph_name: &str, out: &mut HashSet<u32>) {
+    if let Some(session) = &self.current_edit_session {
+      if session.glyph_name() == glyph_name {
+        out.insert(session.unicode());
+      }
+    }
+
+    if let Some(glyph) = self.font.glyph(glyph_name) {
+      out.extend(glyph.unicodes().iter().copied());
+    }
   }
 
   fn editing_target_for_unicode(&self, unicode: u32) -> Option<(&str, &GlyphLayer)> {
@@ -341,7 +230,7 @@ impl FontEngine {
     }
 
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = Self::preferred_layer_for_glyph(glyph)?;
+    let layer = preferred_layer_for_glyph(glyph)?;
     composite_debug!(
       "editing_target_for_unicode U+{:04X}: from font glyph='{}' (contours={}, components={}, anchors={})",
       unicode,
@@ -363,141 +252,21 @@ impl FontEngine {
     self
       .font
       .glyph(glyph_name)
-      .and_then(Self::preferred_layer_for_glyph)
-  }
-
-  fn transform_contour_points(
-    contour: &shift_core::Contour,
-    transform: AffineMatrix,
-  ) -> ResolvedContour {
-    let points = contour
-      .points()
-      .iter()
-      .map(|point| {
-        let (x, y) = transform.transform_point(point.x(), point.y());
-        Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-      })
-      .collect();
-
-    ResolvedContour {
-      points,
-      closed: contour.is_closed(),
-    }
-  }
-
-  fn flatten_component_named(
-    &self,
-    glyph_name: &str,
-    transform: AffineMatrix,
-    visiting: &mut HashSet<String>,
-    out: &mut Vec<ResolvedContour>,
-  ) {
-    // Cycles are skipped branch-locally so non-cyclic components still render.
-    if !visiting.insert(glyph_name.to_string()) {
-      composite_debug!(
-        "cycle detected while flattening '{}'; skipping branch",
-        glyph_name
-      );
-      return;
-    }
-
-    if let Some(layer) = self.glyph_layer_by_name(glyph_name) {
-      composite_debug!(
-        "flatten '{}' (contours={}, components={})",
-        glyph_name,
-        layer.contours().len(),
-        layer.components().len()
-      );
-      for contour in layer.contours_iter() {
-        out.push(Self::transform_contour_points(contour, transform));
-      }
-
-      for component in layer.components_iter() {
-        let matrix = component.matrix();
-        let component_transform = AffineMatrix::from_values(
-          matrix.xx, matrix.xy, matrix.yx, matrix.yy, matrix.dx, matrix.dy,
-        );
-        self.flatten_component_named(
-          component.base_glyph(),
-          transform.multiply(component_transform),
-          visiting,
-          out,
-        );
-      }
-    } else {
-      composite_debug!("missing glyph/layer for component '{}'", glyph_name);
-    }
-
-    visiting.remove(glyph_name);
+      .and_then(preferred_layer_for_glyph)
   }
 
   fn flatten_component_contours_for_layer(
     &self,
     layer: &GlyphLayer,
     root_glyph_name: &str,
-  ) -> Vec<ResolvedContour> {
-    composite_debug!(
-      "begin flatten root='{}' root_contours={} root_components={}",
-      root_glyph_name,
-      layer.contours().len(),
-      layer.components().len()
-    );
-    let mut out = Vec::new();
-    let mut visiting = HashSet::new();
-    visiting.insert(root_glyph_name.to_string());
-
-    for component in layer.components_iter() {
-      composite_debug!(
-        "root '{}' component base='{}' matrix=({}, {}, {}, {}, {}, {})",
-        root_glyph_name,
-        component.base_glyph(),
-        component.matrix().xx,
-        component.matrix().xy,
-        component.matrix().yx,
-        component.matrix().yy,
-        component.matrix().dx,
-        component.matrix().dy
-      );
-      let matrix = component.matrix();
-      let component_transform = AffineMatrix::from_values(
-        matrix.xx, matrix.xy, matrix.yx, matrix.yy, matrix.dx, matrix.dy,
-      );
-      self.flatten_component_named(
-        component.base_glyph(),
-        component_transform,
-        &mut visiting,
-        &mut out,
-      );
-    }
-
-    composite_debug!(
-      "flatten result root='{}' flattened_contours={}",
-      root_glyph_name,
-      out.len()
-    );
-    out
-  }
-
-  fn resolved_to_render_contours(resolved: &[ResolvedContour]) -> Vec<RenderContourSnapshot> {
-    resolved
-      .iter()
-      .map(|contour| RenderContourSnapshot {
-        points: contour
-          .points
-          .iter()
-          .map(|point| RenderPointSnapshot {
-            x: point.x(),
-            y: point.y(),
-            point_type: point.point_type().into(),
-            smooth: point.is_smooth(),
-          })
-          .collect(),
-        closed: contour.closed,
-      })
-      .collect()
+  ) -> Vec<shift_core::composite::ResolvedContour> {
+    let provider = self.layer_provider();
+    flatten_component_contours(&provider, layer, root_glyph_name)
   }
 
   fn enrich_snapshot_with_composites(&self, snapshot: &mut GlyphSnapshot) {
+    // Re-resolve composite geometry from the best available layer view
+    // (session-first, then persisted font).
     let maybe_layer = if let Some(session) = &self.current_edit_session {
       if session.unicode() == snapshot.unicode && session.glyph_name() == snapshot.name {
         Some(session.layer())
@@ -519,7 +288,7 @@ impl FontEngine {
     };
 
     let resolved = self.flatten_component_contours_for_layer(layer, &snapshot.name);
-    snapshot.composite_contours = Self::resolved_to_render_contours(&resolved);
+    snapshot.composite_contours = resolved_to_render_contours(&resolved);
     composite_debug!(
       "snapshot '{}' U+{:04X}: contours={} anchors={} composite_contours={}",
       snapshot.name,
@@ -564,6 +333,26 @@ impl FontEngine {
     unicodes
   }
 
+  #[napi]
+  /// Returns all Unicode codepoints whose glyphs depend on `unicode` via
+  /// component relationships (transitively).
+  pub fn get_dependent_unicodes(&self, unicode: u32) -> Vec<u32> {
+    let Some(glyph_name) = self.glyph_name_for_unicode(unicode) else {
+      return Vec::new();
+    };
+
+    let dependent_names = self.dependency_graph.dependents_recursive(&glyph_name);
+    let mut unicodes = HashSet::new();
+
+    for dependent_name in dependent_names {
+      self.collect_unicodes_for_glyph_name(&dependent_name, &mut unicodes);
+    }
+
+    let mut sorted: Vec<u32> = unicodes.into_iter().collect();
+    sorted.sort_unstable();
+    sorted
+  }
+
   fn editing_layer_for(&self, unicode: u32) -> Option<&GlyphLayer> {
     if let Some(session) = &self.current_edit_session {
       if session.unicode() == unicode {
@@ -571,10 +360,12 @@ impl FontEngine {
       }
     }
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    Self::preferred_layer_for_glyph(glyph)
+    preferred_layer_for_glyph(glyph)
   }
 
   #[napi]
+  /// Returns SVG path data for the glyph, including resolved component
+  /// contours from composite dependencies.
   pub fn get_glyph_svg_path(&self, unicode: u32) -> Option<String> {
     let (glyph_name, layer) = self.editing_target_for_unicode(unicode)?;
     let component_contours = self.flatten_component_contours_for_layer(layer, glyph_name);
@@ -609,6 +400,8 @@ impl FontEngine {
   }
 
   #[napi]
+  /// Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
+  /// including resolved component contours.
   pub fn get_glyph_bbox(&self, unicode: u32) -> Option<Vec<f64>> {
     let (glyph_name, layer) = self.editing_target_for_unicode(unicode)?;
     let component_contours = self.flatten_component_contours_for_layer(layer, glyph_name);
@@ -694,54 +487,54 @@ impl FontEngine {
       .ok_or(Error::new(Status::GenericFailure, "No edit session active"))
   }
 
-  fn command(&mut self, f: impl FnOnce(&mut EditSession) -> Vec<PointId>) -> Result<String> {
-    let mut result = {
+  fn serialize_enriched_result(&self, mut result: CommandResult) -> String {
+    self.enrich_command_result_with_composites(&mut result);
+    to_json(&result)
+  }
+
+  fn with_command_result(
+    &mut self,
+    build: impl FnOnce(&mut EditSession) -> CommandResult,
+  ) -> Result<String> {
+    let result = {
       let session = self.get_edit_session()?;
+      build(session)
+    };
+    Ok(self.serialize_enriched_result(result))
+  }
+
+  fn command(&mut self, f: impl FnOnce(&mut EditSession) -> Vec<PointId>) -> Result<String> {
+    self.with_command_result(|session| {
       let ids = f(session);
       CommandResult::success(session, ids)
-    };
-    self.enrich_command_result_with_composites(&mut result);
-    Ok(to_json(&result))
+    })
   }
 
   fn command_simple(&mut self, f: impl FnOnce(&mut EditSession)) -> Result<String> {
-    let mut result = {
-      let session = self.get_edit_session()?;
+    self.with_command_result(|session| {
       f(session);
       CommandResult::success_simple(session)
-    };
-    self.enrich_command_result_with_composites(&mut result);
-    Ok(to_json(&result))
+    })
   }
 
   fn command_try(
     &mut self,
     f: impl FnOnce(&mut EditSession) -> std::result::Result<Vec<PointId>, String>,
   ) -> Result<String> {
-    let mut result = {
-      let session = self.get_edit_session()?;
-      match f(session) {
-        Ok(ids) => CommandResult::success(session, ids),
-        Err(e) => CommandResult::error(e),
-      }
-    };
-    self.enrich_command_result_with_composites(&mut result);
-    Ok(to_json(&result))
+    self.with_command_result(|session| match f(session) {
+      Ok(ids) => CommandResult::success(session, ids),
+      Err(e) => CommandResult::error(e),
+    })
   }
 
   fn command_try_simple(
     &mut self,
     f: impl FnOnce(&mut EditSession) -> std::result::Result<(), String>,
   ) -> Result<String> {
-    let mut result = {
-      let session = self.get_edit_session()?;
-      match f(session) {
-        Ok(()) => CommandResult::success_simple(session),
-        Err(e) => CommandResult::error(e),
-      }
-    };
-    self.enrich_command_result_with_composites(&mut result);
-    Ok(to_json(&result))
+    self.with_command_result(|session| match f(session) {
+      Ok(()) => CommandResult::success_simple(session),
+      Err(e) => CommandResult::error(e),
+    })
   }
 
   #[napi]
@@ -764,6 +557,7 @@ impl FontEngine {
     let layer = session.into_layer();
     glyph.set_layer(layer_id, layer);
     self.font.put_glyph(glyph);
+    self.dependency_graph = DependencyGraph::rebuild(&self.font);
 
     Ok(())
   }
@@ -876,7 +670,7 @@ impl FontEngine {
 
   #[napi]
   pub fn close_contour(&mut self) -> Result<String> {
-    let mut result = {
+    let result = {
       let session = self.get_edit_session()?;
 
       let contour_id = match session.active_contour_id() {
@@ -890,8 +684,7 @@ impl FontEngine {
       }
     };
 
-    self.enrich_command_result_with_composites(&mut result);
-    Ok(to_json(&result))
+    Ok(self.serialize_enriched_result(result))
   }
 
   #[napi]
@@ -908,10 +701,7 @@ impl FontEngine {
 
   #[napi]
   pub fn move_points(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
-    let parsed_ids: Vec<PointId> = point_ids
-      .iter()
-      .filter_map(|id_str| id_str.parse::<PointId>().ok())
-      .collect();
+    let parsed_ids: Vec<PointId> = parse_ids(&point_ids);
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
       return Ok(to_json(&CommandResult::error(
@@ -924,10 +714,7 @@ impl FontEngine {
 
   #[napi]
   pub fn move_anchors(&mut self, anchor_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
-    let parsed_ids: Vec<AnchorId> = anchor_ids
-      .iter()
-      .filter_map(|id_str| id_str.parse::<AnchorId>().ok())
-      .collect();
+    let parsed_ids: Vec<AnchorId> = parse_ids(&anchor_ids);
 
     if parsed_ids.is_empty() && !anchor_ids.is_empty() {
       return Ok(to_json(&CommandResult::error(
@@ -942,10 +729,7 @@ impl FontEngine {
 
   #[napi]
   pub fn remove_points(&mut self, point_ids: Vec<String>) -> Result<String> {
-    let parsed_ids: Vec<PointId> = point_ids
-      .iter()
-      .filter_map(|id_str| id_str.parse::<PointId>().ok())
-      .collect();
+    let parsed_ids: Vec<PointId> = parse_ids(&point_ids);
 
     if parsed_ids.is_empty() && !point_ids.is_empty() {
       return Ok(to_json(&CommandResult::error(
@@ -1184,6 +968,25 @@ mod tests {
     let path = path.unwrap();
     assert!(!path.is_empty());
     assert!(path.starts_with("M "));
+  }
+
+  #[test]
+  fn test_get_dependent_unicodes_includes_aacute_for_a() {
+    let ufo_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    if !ufo_path.exists() {
+      return;
+    }
+    let path_str = ufo_path.to_str().unwrap();
+    let mut engine = FontEngine::new();
+    engine.load_font(path_str.to_string()).unwrap();
+    engine.start_edit_session(65).unwrap();
+
+    let dependents = engine.get_dependent_unicodes(65);
+    assert!(
+      dependents.contains(&0x00C1),
+      "Expected U+00C1 (Aacute) to depend on U+0041 (A), got {dependents:?}"
+    );
   }
 
   #[test]

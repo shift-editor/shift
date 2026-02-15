@@ -23,6 +23,7 @@ export interface FontEngineAPI {
   getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): number[];
+  getDependentUnicodes(unicode: number): number[];
   getGlyphSvgPath(unicode: number): string | null;
   getGlyphAdvance(unicode: number): number | null;
   getGlyphBbox(unicode: number): [number, number, number, number] | null;

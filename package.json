@@ -14,7 +14,7 @@
     "glyph-info:repl": "pnpm --filter @shift/glyph-info repl",
     "test": "turbo run test",
     "test:native": "pnpm --filter shift-node run test",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "pnpm run generate:types && turbo run typecheck",
     "lint": "turbo run lint",
     "lint:check": "turbo run lint:check",
     "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\" \"packages/**/*.{js,jsx,ts,tsx,css,md,json}\"",

@@ -11,6 +11,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
     {
       id: "global.copy",
       preventDefault: true,
+      when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
       run: (ctx) => {
         ctx.editor.copy();
@@ -20,6 +21,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
     {
       id: "global.cut",
       preventDefault: true,
+      when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "x", primaryModifier: true }),
       run: (ctx) => {
         ctx.editor.cut();
@@ -29,6 +31,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
     {
       id: "global.paste",
       preventDefault: true,
+      when: (ctx) => ctx.activeTool !== "text",
       match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
       run: (ctx) => {
         ctx.editor.paste();
@@ -58,6 +61,39 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
 
 export function createTextKeyDownBindings(): KeyBinding[] {
   return [
+    {
+      id: "text.paste",
+      preventDefault: true,
+      when: (ctx) => ctx.activeTool === "text",
+      match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
+      run: (ctx) => {
+        navigator.clipboard?.readText().then((text) => {
+          for (const char of text) {
+            const codepoint = char.codePointAt(0);
+            if (codepoint !== undefined) {
+              ctx.editor.insertTextCodepoint(codepoint);
+            }
+          }
+          ctx.editor.recomputeTextRun();
+          ctx.editor.requestRedraw();
+        });
+        return true;
+      },
+    },
+    {
+      id: "text.copy",
+      preventDefault: true,
+      when: (ctx) => ctx.activeTool === "text",
+      match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
+      run: (ctx) => {
+        const codepoints = ctx.editor.getTextRunCodepoints();
+        if (codepoints.length > 0) {
+          const text = String.fromCodePoint(...codepoints);
+          navigator.clipboard?.writeText(text);
+        }
+        return true;
+      },
+    },
     {
       id: "text.capture",
       preventDefault: true,

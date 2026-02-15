@@ -193,6 +193,7 @@ export interface TextRunAccess {
   resetTextRunEditingContext(): void;
   setTextRunHovered(index: number | null): void;
   insertTextCodepoint(codepoint: number): void;
+  getTextRunCodepoints(): number[];
   deleteTextCodepoint(): boolean;
   moveTextCursorLeft(): boolean;
   moveTextCursorRight(): boolean;

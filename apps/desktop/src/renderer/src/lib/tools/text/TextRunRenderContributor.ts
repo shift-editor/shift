@@ -14,10 +14,13 @@ export const textRunRenderContributor: ToolRenderContributor = {
     const metrics = editor.font.getMetrics();
     const glyph = editor.glyph.peek();
     const activeUnicode = editor.getActiveGlyphUnicode();
-    const drawOffset = editor.getDrawOffset();
     const liveGlyph =
       glyph && activeUnicode !== null
-        ? { unicode: activeUnicode, x: drawOffset.x, contours: glyph.contours }
+        ? {
+            unicode: activeUnicode,
+            contours: glyph.contours,
+            compositeContours: glyph.compositeContours,
+          }
         : null;
 
     renderTextRun(

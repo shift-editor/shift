@@ -88,6 +88,10 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     return this.#raw.getGlyphUnicodes();
   }
 
+  getDependentUnicodes(unicode: number): number[] {
+    return this.#raw.getDependentUnicodes(unicode);
+  }
+
   getGlyphSvgPath(unicode: number): string | null {
     return this.#raw.getGlyphSvgPath(unicode);
   }

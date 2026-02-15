@@ -164,5 +164,6 @@ Return JSON string to JavaScript
 ## Related Systems
 
 - [shift-core](../../shift-core/docs/DOCS.md) - Underlying Rust implementation
+- [Composite Anchors and Dependency Graph](../../shift-core/docs/composite-anchors-and-dependency-graph.md) - Detailed anchor/offset and dependency-graph behavior used by FontEngine
 - [preload](../../../src/preload/docs/DOCS.md) - Electron bridge exposing this module
 - [engine](../../../src/renderer/src/engine/docs/DOCS.md) - TypeScript wrapper layer

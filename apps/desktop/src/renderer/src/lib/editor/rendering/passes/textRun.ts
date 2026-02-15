@@ -9,7 +9,7 @@ import type { FontMetrics } from "@shift/types";
 import type { RenderContext } from "./types";
 import type { TextRunState } from "../../managers/TextRunManager";
 import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
-import type { Contour } from "@shift/types";
+import type { Contour, RenderContour } from "@shift/types";
 import { buildContourPath } from "../render";
 
 const CURSOR_COLOR = "#0C92F4";
@@ -21,6 +21,7 @@ const HOVER_OUTLINE_WIDTH_PX = 3;
 interface LiveGlyphRenderData {
   unicode: number;
   contours: readonly Contour[];
+  compositeContours: readonly RenderContour[];
 }
 
 export function renderTextRun(
@@ -49,6 +50,9 @@ export function renderTextRun(
       for (const contour of liveGlyph.contours) {
         buildContourPath(ctx, contour);
       }
+      for (const contour of liveGlyph.compositeContours) {
+        buildContourPath(ctx, contour);
+      }
       ctx.fill();
     } else if (slot.svgPath) {
       const path = GlyphRenderCache.get(slot.unicode, slot.svgPath);
@@ -73,6 +77,9 @@ export function renderTextRun(
       if (shouldUseLiveGlyph) {
         ctx.beginPath();
         for (const contour of liveGlyph!.contours) {
+          buildContourPath(ctx, contour);
+        }
+        for (const contour of liveGlyph!.compositeContours) {
           buildContourPath(ctx, contour);
         }
         ctx.stroke();
@@ -117,6 +124,6 @@ function isLiveGlyphSlot(
     liveGlyph !== null &&
     liveGlyph !== undefined &&
     liveGlyph.unicode === slot.unicode &&
-    liveGlyph.contours.length > 0
+    liveGlyph.contours.length + liveGlyph.compositeContours.length > 0
   );
 }

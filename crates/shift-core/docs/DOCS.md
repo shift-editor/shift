@@ -63,11 +63,11 @@ font.put_glyph(glyph);                       // Return glyph
 
 Rules detect point topology and apply constraints automatically:
 
-| Pattern | Rule | Action |
-|---------|------|--------|
-| `[X@][CS]H` | MoveRightHandle | Right handle moves with anchor |
-| `H[CS][X@]` | MoveLeftHandle | Left handle moves with anchor |
-| `H[CS]H` | MoveBothHandles | Both handles move together |
+| Pattern          | Rule                  | Action                                   |
+| ---------------- | --------------------- | ---------------------------------------- |
+| `[X@][CS]H`      | MoveRightHandle       | Right handle moves with anchor           |
+| `H[CS][X@]`      | MoveLeftHandle        | Left handle moves with anchor            |
+| `H[CS]H`         | MoveBothHandles       | Both handles move together               |
 | `HS[HC][@X][@X]` | MaintainTangencyRight | Opposite handle maintains 180° alignment |
 
 Pattern tokens: `N`=boundary, `C`=corner, `S`=smooth, `H`=handle, `@`=selected, `X`=any
@@ -89,6 +89,7 @@ GlyphSnapshot {
 ## API Reference
 
 ### Core Types
+
 - `Font` - Container for glyphs with metadata and metrics
 - `Glyph` - Single glyph with contours
 - `Contour` - Closed/open path of points
@@ -96,11 +97,13 @@ GlyphSnapshot {
 - `PointId`, `ContourId` - Unique entity identifiers
 
 ### Edit Operations
+
 - `EditSession` - Mutable glyph editing context
 - `apply_edits()` - Move points with automatic rule application
 - `PatternMatcher` - Rule detection and matching
 
 ### Font Loading
+
 - `FontLoader` - Pluggable format adapter system
 - `BytesFontAdaptor` - TTF/OTF loading via skrifa
 - `UfoFontAdaptor` - UFO format loading via norad
@@ -108,12 +111,14 @@ GlyphSnapshot {
 ## Usage Examples
 
 ### Loading a Font
+
 ```rust
 let loader = FontLoader::new();
 let font = loader.read_font("path/to/font.ufo")?;
 ```
 
 ### Editing a Glyph
+
 ```rust
 let glyph = font.take_glyph(0x0041); // 'A'
 let mut session = EditSession::new(glyph);
@@ -149,3 +154,7 @@ apply_edits(session, selected, dx, dy)
 
 - [shift-node](../../shift-node/docs/DOCS.md) - NAPI bindings exposing this crate to JavaScript
 - [packages/types](../../../packages/types/docs/DOCS.md) - Generated TypeScript types from this crate
+
+## Deep Dives
+
+- [Composite Anchors and Dependency Graph](./composite-anchors-and-dependency-graph.md) - Anchor offset resolution, component flattening, and dependency traversal semantics

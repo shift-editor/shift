@@ -24,8 +24,21 @@ export declare class FontEngine {
   getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): Array<number>;
+  /**
+   * Returns all Unicode codepoints whose glyphs depend on `unicode` via
+   * component relationships (transitively).
+   */
+  getDependentUnicodes(unicode: number): Array<number>;
+  /**
+   * Returns SVG path data for the glyph, including resolved component
+   * contours from composite dependencies.
+   */
   getGlyphSvgPath(unicode: number): string | null;
   getGlyphAdvance(unicode: number): number | null;
+  /**
+   * Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
+   * including resolved component contours.
+   */
   getGlyphBbox(unicode: number): Array<number> | null;
   startEditSession(unicode: number): void;
   endEditSession(): void;

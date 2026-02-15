@@ -1365,6 +1365,7 @@ export function createMockToolContext(): MockToolContext {
     resetTextRunEditingContext: () => textRunManager.resetEditingContext(),
     setTextRunHovered: (index: number | null) => textRunManager.setHovered(index),
     insertTextCodepoint: (codepoint: number) => textRunManager.buffer.insert(codepoint),
+    getTextRunCodepoints: () => textRunManager.buffer.getText(),
     deleteTextCodepoint: () => textRunManager.buffer.delete(),
     moveTextCursorLeft: () => textRunManager.buffer.moveLeft(),
     moveTextCursorRight: () => textRunManager.buffer.moveRight(),

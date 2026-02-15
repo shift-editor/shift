@@ -7,6 +7,7 @@ export interface Info {
   getMetrics(): FontMetrics;
   getGlyphCount(): number;
   getGlyphUnicodes(): number[];
+  getDependentUnicodes(unicode: number): number[];
   getGlyphSvgPath(unicode: number): string | null;
   getGlyphAdvance(unicode: number): number | null;
   getGlyphBbox(unicode: number): Bounds | null;
@@ -34,6 +35,10 @@ export class InfoManager {
 
   getGlyphUnicodes(): number[] {
     return this.#engine.getGlyphUnicodes();
+  }
+
+  getDependentUnicodes(unicode: number): number[] {
+    return this.#engine.getDependentUnicodes(unicode);
   }
 
   getGlyphSvgPath(unicode: number): string | null {
