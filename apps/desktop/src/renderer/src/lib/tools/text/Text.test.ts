@@ -15,9 +15,9 @@ describe("Text tool", () => {
 
   it("moves cursor to end when activating with an existing run", () => {
     const buffer = ctx.textRunManager.buffer;
-    buffer.insert(65);
-    buffer.insert(66);
-    buffer.insert(67);
+    buffer.insert({ glyphName: "A", unicode: 65 });
+    buffer.insert({ glyphName: "B", unicode: 66 });
+    buffer.insert({ glyphName: "C", unicode: 67 });
     buffer.moveTo(0);
 
     sim.setReady();
@@ -49,15 +49,15 @@ describe("Text tool", () => {
     expect(ctx.setActiveTool).toHaveBeenCalledWith("select");
     expect(ctx.getDrawOffset()).toEqual({ x: 120, y: 0 });
     expect(runState?.editingIndex).toBe(0);
-    expect(runState?.editingUnicode).toBe(65);
+    expect(runState?.editingGlyph?.unicode).toBe(65);
   });
 
   it("restores previous editable slot when leaving text mode directly", () => {
     const buffer = ctx.textRunManager.buffer;
-    buffer.insert(65);
-    buffer.insert(66);
+    buffer.insert({ glyphName: "A", unicode: 65 });
+    buffer.insert({ glyphName: "B", unicode: 66 });
     ctx.textRunManager.recompute(ctx.font, 40);
-    ctx.textRunManager.setEditingSlot(1, 66);
+    ctx.textRunManager.setEditingSlot(1, { glyphName: "B", unicode: 66 });
     ctx.setDrawOffset({ x: 40, y: 0 });
 
     sim.setReady();
@@ -66,6 +66,6 @@ describe("Text tool", () => {
     const runState = ctx.textRunManager.state.peek();
     expect(ctx.getDrawOffset()).toEqual({ x: 40, y: 0 });
     expect(runState?.editingIndex).toBe(1);
-    expect(runState?.editingUnicode).toBe(66);
+    expect(runState?.editingGlyph?.unicode).toBe(66);
   });
 });

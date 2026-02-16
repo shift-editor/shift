@@ -5,10 +5,12 @@ import { TextRunModulePayloadSchema } from "@shift/validation";
 export const textRunModule: PersistenceModule<TextRunModulePayload> = {
   id: "text-run",
   scope: "document",
-  version: 1,
-  capture: ({ editor }) => ({
-    runsByGlyph: editor.exportTextRuns(),
-  }),
+  version: 2,
+  capture: ({ editor }) => {
+    return {
+      runsByGlyph: editor.exportTextRuns(),
+    };
+  },
   hydrate: ({ editor }, payload) => {
     editor.hydrateTextRuns(payload.runsByGlyph);
   },

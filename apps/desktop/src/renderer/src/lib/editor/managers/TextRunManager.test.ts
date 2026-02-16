@@ -38,43 +38,48 @@ const font: Font = {
 describe("TextRunManager", () => {
   it("keeps text runs isolated per owner glyph", () => {
     const manager = new TextRunManager();
+    const glyphA = { glyphName: "A", unicode: 65 } as const;
+    const glyphB = { glyphName: "B", unicode: 66 } as const;
 
-    manager.setOwnerGlyph(65);
-    manager.ensureSeeded(65);
-    manager.buffer.insert(66);
+    manager.setOwnerGlyph(glyphA);
+    manager.ensureSeeded(glyphA);
+    manager.buffer.insert(glyphB);
     manager.recompute(font, 10);
     expect(manager.state.peek()?.layout.slots.map((slot) => slot.unicode)).toEqual([65, 66]);
 
-    manager.setOwnerGlyph(66);
-    manager.ensureSeeded(66);
+    manager.setOwnerGlyph(glyphB);
+    manager.ensureSeeded(glyphB);
     manager.recompute(font, 30);
     expect(manager.state.peek()?.layout.slots.map((slot) => slot.unicode)).toEqual([66]);
 
-    manager.setOwnerGlyph(65);
+    manager.setOwnerGlyph(glyphA);
     manager.recompute(font);
     expect(manager.state.peek()?.layout.slots.map((slot) => slot.unicode)).toEqual([65, 66]);
 
-    expect(Object.keys(manager.exportRuns()).sort()).toEqual(["65", "66"]);
+    expect(Object.keys(manager.exportRuns()).sort()).toEqual(["A", "B"]);
   });
 
   it("hydrates run map and resolves state from current owner glyph", () => {
     const manager = new TextRunManager();
+    const glyphB = { glyphName: "B", unicode: 66 } as const;
+    const glyphA = { glyphName: "A", unicode: 65 } as const;
+    const glyphC = { glyphName: "C", unicode: 67 } as const;
 
-    manager.setOwnerGlyph(66);
+    manager.setOwnerGlyph(glyphB);
     manager.hydrateRuns({
-      "65": {
-        codepoints: [65],
+      A: {
+        glyphs: [glyphA],
         cursorPosition: 1,
         originX: 10,
         editingIndex: null,
-        editingUnicode: null,
+        editingGlyph: null,
       },
-      "66": {
-        codepoints: [66, 67],
+      B: {
+        glyphs: [glyphB, glyphC],
         cursorPosition: 2,
         originX: 20,
         editingIndex: null,
-        editingUnicode: null,
+        editingGlyph: null,
       },
     });
     manager.recompute(font);

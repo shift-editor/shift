@@ -28,7 +28,7 @@ describe("CutCommand", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 
@@ -135,7 +135,7 @@ describe("PasteCommand", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 
@@ -221,7 +221,7 @@ describe("Cut + Paste integration", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 

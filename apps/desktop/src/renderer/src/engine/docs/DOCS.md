@@ -54,7 +54,7 @@ effect(() => {
 });
 
 // Manager access
-engine.session.startEditSession(65);
+engine.session.startEditSession({ glyphName: "A", unicode: 65 });
 engine.editing.addPoint({ id: "" as PointId, x: 100, y: 200, pointType: "onCurve", smooth: false });
 ```
 
@@ -119,7 +119,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ### SessionManager
 
-- `startEditSession(unicode): void`
+- `startEditSession(glyph): void`
 - `endEditSession(): void`
 - `isActive(): boolean`
 
@@ -148,7 +148,7 @@ const engine = createFontEngine();
 
 // Load and start editing
 engine.io.loadFont("/path/to/font.ufo");
-engine.session.startEditSession(65);
+engine.session.startEditSession({ glyphName: "A", unicode: 65 });
 
 // React to changes
 effect(() => {

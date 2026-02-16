@@ -20,14 +20,14 @@ export interface Guides {
 }
 
 /** Builds guide positions from the active glyph's advance width and the font's vertical metrics. */
-export function getGuides(glyph: Glyph, metrics: FontMetrics): Guides {
+export function getGuides(glyph: Glyph, metrics: FontMetrics, xAdvanceOverride?: number): Guides {
   return {
     ascender: { y: metrics.ascender },
     capHeight: { y: metrics.capHeight ?? 0 },
     xHeight: { y: metrics.xHeight ?? 0 },
     baseline: { y: 0 },
     descender: { y: metrics.descender },
-    xAdvance: glyph.xAdvance,
+    xAdvance: xAdvanceOverride ?? glyph.xAdvance,
   };
 }
 

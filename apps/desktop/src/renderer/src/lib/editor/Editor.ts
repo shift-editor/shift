@@ -90,8 +90,12 @@ import { SnapManager } from "./managers/SnapManager";
 import { FontManager } from "./managers/FontManager";
 import { TextRunManager } from "./managers/TextRunManager";
 import type { PersistedTextRun, TextRunState } from "./managers/TextRunManager";
+import type { GlyphRef } from "@/lib/tools/text/layout";
+import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
+import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
+import { fallbackGlyphNameForUnicode, glyphRefFromUnicode } from "@/lib/utils/unicode";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -146,6 +150,7 @@ export class Editor implements ShiftEditor {
   #clipboard: ClipboardManager;
   #textRunManager: TextRunManager;
   #mainGlyphUnicode: number | null = null;
+  #$glyphFinderOpen: WritableSignal<boolean>;
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
@@ -181,8 +186,11 @@ export class Editor implements ShiftEditor {
     this.#fontManager = new FontManager({
       getMetrics: () => this.#fontEngine.info.getMetrics(),
       getMetadata: () => this.#fontEngine.info.getMetadata(),
+      getSvgPathByName: (glyphName) => glyphDataStore.getSvgPathByName(glyphName),
       getSvgPath: (unicode) => glyphDataStore.getSvgPath(unicode),
+      getAdvanceByName: (glyphName) => glyphDataStore.getAdvanceByName(glyphName),
       getAdvance: (unicode) => glyphDataStore.getAdvance(unicode),
+      getBboxByName: (glyphName) => glyphDataStore.getBboxByName(glyphName),
       getBbox: (unicode) => glyphDataStore.getBbox(unicode),
     });
     this.#commandHistory = new CommandHistory(
@@ -218,6 +226,8 @@ export class Editor implements ShiftEditor {
       document: new Map<string, unknown>(),
     };
     this.#toolStateVersion = signal(0);
+
+    this.#$glyphFinderOpen = signal(false);
 
     this.#selection = new SelectionManager();
     this.#hover = new HoverManager();
@@ -304,14 +314,23 @@ export class Editor implements ShiftEditor {
 
       const glyphInfo = getGlyphInfo();
       const unicodes = new Set<number>();
+      const glyphNames = new Set<string>();
       for (const slot of textRun.layout.slots) {
-        unicodes.add(slot.unicode);
+        if (slot.glyph.unicode !== null) {
+          unicodes.add(slot.glyph.unicode);
+        }
+        glyphNames.add(slot.glyph.glyphName);
       }
       unicodes.add(glyph.unicode);
+      glyphNames.add(glyph.name);
 
-      const nativeDependents = this.#fontEngine.info.getDependentUnicodes(glyph.unicode);
+      const nativeDependents = this.#fontEngine.info.getDependentUnicodesByName(glyph.name);
       for (const unicode of nativeDependents) {
         unicodes.add(unicode);
+        const glyphName = this.#fontEngine.info.getGlyphNameForUnicode(unicode);
+        if (glyphName) {
+          glyphNames.add(glyphName);
+        }
       }
 
       if (nativeDependents.length === 0) {
@@ -325,6 +344,9 @@ export class Editor implements ShiftEditor {
 
       for (const unicode of unicodes) {
         glyphDataStore.invalidateGlyph(unicode);
+      }
+      for (const glyphName of glyphNames) {
+        glyphDataStore.invalidateGlyphByName(glyphName);
       }
 
       this.#textRunManager.recompute(this.#fontManager);
@@ -785,18 +807,16 @@ export class Editor implements ShiftEditor {
     this.#renderer.setInteractiveContext(context);
   }
 
-  /**
-   * Opens a glyph for editing by its Unicode codepoint.
-   * Starts a session in the font engine and adds an initial empty contour.
-   */
-  public startEditSession(unicode: number): void {
-    const currentUnicode = this.#fontEngine.session.getEditingUnicode();
-    if (currentUnicode === unicode) {
+  /** Opens a glyph for editing by canonical glyph reference. */
+  public startEditSession(glyph: GlyphRef): void {
+    const glyphName = glyph.glyphName;
+    const currentGlyphName = this.#fontEngine.session.getEditingGlyphName();
+    if (currentGlyphName === glyphName) {
       this.#textRunManager.recompute(this.#fontManager);
       return;
     }
 
-    this.#fontEngine.session.startEditSession(unicode);
+    this.#fontEngine.session.startEditSession(glyph);
     this.#fontEngine.editing.addContour();
     this.#textRunManager.recompute(this.#fontManager);
   }
@@ -817,16 +837,16 @@ export class Editor implements ShiftEditor {
     return this.#textRunManager.buffer.length;
   }
 
-  public ensureTextRunSeed(unicode: number | null): void {
-    this.#textRunManager.ensureSeeded(unicode);
+  public ensureTextRunSeed(glyph: GlyphRef | null): void {
+    this.#textRunManager.ensureSeeded(glyph);
   }
 
   public setTextRunCursorVisible(visible: boolean): void {
     this.#textRunManager.setCursorVisible(visible);
   }
 
-  public setTextRunEditingSlot(index: number | null, unicode?: number | null): void {
-    this.#textRunManager.setEditingSlot(index, unicode);
+  public setTextRunEditingSlot(index: number | null, glyph?: GlyphRef | null): void {
+    this.#textRunManager.setEditingSlot(index, glyph);
   }
 
   public resetTextRunEditingContext(): void {
@@ -837,12 +857,36 @@ export class Editor implements ShiftEditor {
     this.#textRunManager.setHovered(index);
   }
 
+  public setTextRunInspectionSlot(index: number | null): void {
+    this.#textRunManager.setInspectionSlot(index);
+  }
+
+  public setTextRunInspectionComponent(index: number | null): void {
+    this.#textRunManager.setInspectionHoveredComponent(index);
+  }
+
+  public clearTextRunInspection(): void {
+    this.#textRunManager.clearInspection();
+  }
+
   public insertTextCodepoint(codepoint: number): void {
-    this.#textRunManager.buffer.insert(codepoint);
+    const glyphName = this.#fontEngine.info.getGlyphNameForUnicode(codepoint);
+    if (!glyphName) return;
+    this.#textRunManager.buffer.insert({
+      glyphName,
+      unicode: codepoint,
+    });
+  }
+
+  public insertTextGlyphAt(index: number, glyph: GlyphRef): void {
+    this.#textRunManager.insertGlyphAt(index, glyph);
   }
 
   public getTextRunCodepoints(): number[] {
-    return this.#textRunManager.buffer.getText();
+    return this.#textRunManager.buffer
+      .getText()
+      .map((ref) => ref.unicode)
+      .filter((unicode): unicode is number => unicode !== null);
   }
 
   public deleteTextCodepoint(): boolean {
@@ -868,6 +912,10 @@ export class Editor implements ShiftEditor {
   public shouldRenderEditableGlyph(): boolean {
     const state = this.#textRunManager.state.peek();
     return !state || state.editingIndex !== null;
+  }
+
+  public getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
+    return this.#fontEngine.info.getGlyphCompositeComponents(glyphName);
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -934,9 +982,23 @@ export class Editor implements ShiftEditor {
     return this.#fontEngine.session.getEditingUnicode();
   }
 
+  public getActiveGlyphName(): string | null {
+    return this.#fontEngine.session.getEditingGlyphName();
+  }
+
+  public getActiveGlyphRef(): GlyphRef | null {
+    const glyphName = this.getActiveGlyphName();
+    if (!glyphName) return null;
+    return {
+      glyphName,
+      unicode: this.getActiveGlyphUnicode(),
+    };
+  }
+
   public setMainGlyphUnicode(unicode: number | null): void {
     this.#mainGlyphUnicode = unicode;
-    this.#textRunManager.setOwnerGlyph(unicode);
+    const glyphRef = unicode === null ? null : glyphRefFromUnicode(unicode, this.#fontEngine.info);
+    this.#textRunManager.setOwnerGlyph(glyphRef);
     this.#textRunManager.recompute(this.#fontManager);
   }
 
@@ -988,6 +1050,18 @@ export class Editor implements ShiftEditor {
     this.#zone = zone;
   }
 
+  public get glyphFinderOpen(): Signal<boolean> {
+    return this.#$glyphFinderOpen;
+  }
+
+  public openGlyphFinder(): void {
+    this.#$glyphFinderOpen.set(true);
+  }
+
+  public closeGlyphFinder(): void {
+    this.#$glyphFinderOpen.set(false);
+  }
+
   public get isInPreview(): boolean {
     return this.#isInPreview;
   }
@@ -1018,6 +1092,15 @@ export class Editor implements ShiftEditor {
 
   public get xAdvance(): number {
     return this.glyph.value?.xAdvance ?? 0;
+  }
+
+  public getVisualGlyphAdvance(glyph: Glyph): number {
+    if (glyph.xAdvance > 0) return glyph.xAdvance;
+    const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
+    if (!isLikelyNonSpacingGlyphRef(glyph.name, unicode)) {
+      return glyph.xAdvance;
+    }
+    return 600;
   }
 
   public setXAdvance(width: number): void {
@@ -1162,7 +1245,11 @@ export class Editor implements ShiftEditor {
     this.#commandHistory.clear();
     this.#textRunManager.clearAll();
     this.setMainGlyphUnicode(65);
-    this.startEditSession(65);
+    const glyphName =
+      this.#fontEngine.info.getGlyphNameForUnicode(65) ?? fallbackGlyphNameForUnicode(65);
+    const glyphRef = { glyphName, unicode: 65 };
+    this.startEditSession(glyphRef);
+    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
   }
 
   public async saveFontAsync(filePath: string): Promise<void> {
@@ -1707,6 +1794,10 @@ export class Editor implements ShiftEditor {
     return this.#drawOffset.value;
   }
 
+  public setDrawOffsetForGlyph(offset: Point2D, glyph: GlyphRef | null): void {
+    this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyph));
+  }
+
   public setDrawOffset(offset: Point2D): void {
     this.#drawOffset.set(offset);
   }
@@ -1738,6 +1829,57 @@ export class Editor implements ShiftEditor {
 
   #toolStateKey(toolId: string, key: string): string {
     return `${toolId}:${key}`;
+  }
+
+  #resolveEditorPlacementOffset(offset: Point2D, glyph: GlyphRef | null): Point2D {
+    if (!glyph || !isLikelyNonSpacingGlyphRef(glyph.glyphName, glyph.unicode)) {
+      return offset;
+    }
+
+    const current = this.#$glyph.peek();
+    if (!current || current.name !== glyph.glyphName) {
+      return offset;
+    }
+
+    const metrics = this.#fontManager.getMetrics();
+    const targetX = 300;
+    const targetYForAnchorName = (anchorName: string): number => {
+      switch (anchorName) {
+        case "top":
+          return metrics.capHeight ?? metrics.ascender;
+        case "bottom":
+        case "ogonek":
+          return 0;
+        case "center":
+        default:
+          return (metrics.ascender + metrics.descender) / 2;
+      }
+    };
+
+    const attachingAnchor = current.anchors.find((anchor) => {
+      const name = anchor.name ?? "";
+      return name.startsWith("_") && name.length > 1;
+    });
+
+    if (attachingAnchor) {
+      const targetName = attachingAnchor.name!.slice(1);
+      return {
+        x: offset.x + (targetX - attachingAnchor.x),
+        y: offset.y + (targetYForAnchorName(targetName) - attachingAnchor.y),
+      };
+    }
+
+    const bounds = this.#fontManager.getBboxByName?.(glyph.glyphName);
+    if (!bounds) {
+      return offset;
+    }
+
+    const centerX = (bounds.min.x + bounds.max.x) / 2;
+    const centerY = (bounds.min.y + bounds.max.y) / 2;
+    return {
+      x: offset.x + (targetX - centerX),
+      y: offset.y + ((metrics.ascender + metrics.descender) / 2 - centerY),
+    };
   }
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {

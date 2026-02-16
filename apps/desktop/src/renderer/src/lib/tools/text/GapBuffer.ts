@@ -5,25 +5,25 @@
  * and deletions at the cursor are O(1); moving the cursor shifts elements
  * across the gap boundary.
  */
-export class GapBuffer {
-  #buf: number[];
+export class GapBuffer<T> {
+  #buf: Array<T | undefined>;
   #gapStart: number;
   #gapEnd: number;
 
   private constructor(capacity: number) {
-    this.#buf = Array.from<number>({ length: capacity });
+    this.#buf = Array.from<T | undefined>({ length: capacity });
     this.#gapStart = 0;
     this.#gapEnd = capacity;
   }
 
-  static create(capacity = 64): GapBuffer {
-    return new GapBuffer(capacity);
+  static create<T>(capacity = 64): GapBuffer<T> {
+    return new GapBuffer<T>(capacity);
   }
 
-  static from(codepoints: number[], cursor?: number): GapBuffer {
-    const gap = new GapBuffer(codepoints.length + 16);
-    for (const cp of codepoints) {
-      gap.insert(cp);
+  static from<T>(items: T[], cursor?: number): GapBuffer<T> {
+    const gap = new GapBuffer<T>(items.length + 16);
+    for (const item of items) {
+      gap.insert(item);
     }
     if (cursor !== undefined) {
       gap.moveTo(cursor);
@@ -39,11 +39,11 @@ export class GapBuffer {
     return this.#buf.length - (this.#gapEnd - this.#gapStart);
   }
 
-  insert(codepoint: number): void {
+  insert(item: T): void {
     if (this.#gapStart === this.#gapEnd) {
       this.#grow();
     }
-    this.#buf[this.#gapStart] = codepoint;
+    this.#buf[this.#gapStart] = item;
     this.#gapStart++;
   }
 
@@ -57,14 +57,14 @@ export class GapBuffer {
   moveLeft(): boolean {
     if (this.#gapStart === 0) return false;
     this.#gapEnd--;
-    this.#buf[this.#gapEnd] = this.#buf[this.#gapStart - 1];
+    this.#buf[this.#gapEnd] = this.#buf[this.#gapStart - 1] as T;
     this.#gapStart--;
     return true;
   }
 
   moveRight(): boolean {
     if (this.#gapEnd === this.#buf.length) return false;
-    this.#buf[this.#gapStart] = this.#buf[this.#gapEnd];
+    this.#buf[this.#gapStart] = this.#buf[this.#gapEnd] as T;
     this.#gapStart++;
     this.#gapEnd++;
     return true;
@@ -84,13 +84,13 @@ export class GapBuffer {
   }
 
   /** Return the compacted array of codepoints (no gap). */
-  getText(): number[] {
-    const result: number[] = [];
+  getText(): T[] {
+    const result: T[] = [];
     for (let i = 0; i < this.#gapStart; i++) {
-      result.push(this.#buf[i]);
+      result.push(this.#buf[i] as T);
     }
     for (let i = this.#gapEnd; i < this.#buf.length; i++) {
-      result.push(this.#buf[i]);
+      result.push(this.#buf[i] as T);
     }
     return result;
   }
@@ -102,7 +102,7 @@ export class GapBuffer {
 
   #grow(): void {
     const newCapacity = this.#buf.length * 2;
-    const newBuf = Array.from<number>({ length: newCapacity });
+    const newBuf = Array.from<T | undefined>({ length: newCapacity });
     const tailLen = this.#buf.length - this.#gapEnd;
 
     // Copy before gap

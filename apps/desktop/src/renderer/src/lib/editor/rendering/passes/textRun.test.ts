@@ -52,24 +52,33 @@ const metrics: FontMetrics = {
   underlineThickness: null,
 };
 
+function createSlot(
+  unicode: number,
+  x: number,
+  advance = 500,
+  svgPath = "M0 0L100 0L100 100L0 100Z",
+) {
+  return {
+    glyph: { glyphName: `uni${unicode.toString(16).toUpperCase()}`, unicode },
+    unicode,
+    x,
+    advance,
+    bounds: null,
+    svgPath,
+    selected: false,
+  };
+}
+
 function createState(overrides: Partial<TextRunState> = {}): TextRunState {
   return {
     layout: {
-      slots: [
-        {
-          unicode: 65,
-          x: 100,
-          advance: 500,
-          bounds: null,
-          svgPath: "M0 0L100 0L100 100L0 100Z",
-          selected: false,
-        },
-      ],
+      slots: [createSlot(65, 100)],
       totalAdvance: 500,
     },
     editingIndex: null,
-    editingUnicode: null,
+    editingGlyph: null,
     hoveredIndex: null,
+    compositeInspection: null,
     cursorX: null,
     ...overrides,
   };
@@ -103,6 +112,7 @@ describe("textRun pass", () => {
   it("strokes hovered live glyph outline via renderer path pipeline", () => {
     const state = createState({ hoveredIndex: 0 });
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [
         {
@@ -128,6 +138,7 @@ describe("textRun pass", () => {
   it("renders live glyph when only composite contours are present", () => {
     const state = createState();
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [],
       compositeContours: [
@@ -151,6 +162,7 @@ describe("textRun pass", () => {
   it("renders both live base and composite contours", () => {
     const state = createState();
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [
         {
@@ -185,35 +197,15 @@ describe("textRun pass", () => {
     const state = createState({
       layout: {
         slots: [
-          {
-            unicode: 65,
-            x: 100,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-          {
-            unicode: 66,
-            x: 600,
-            advance: 450,
-            bounds: null,
-            svgPath: "M0 0L90 0L90 90L0 90Z",
-            selected: false,
-          },
-          {
-            unicode: 65,
-            x: 1050,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
+          createSlot(65, 100),
+          createSlot(66, 600, 450, "M0 0L90 0L90 90L0 90Z"),
+          createSlot(65, 1050),
         ],
         totalAdvance: 1450,
       },
     });
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [
         {
@@ -239,28 +231,12 @@ describe("textRun pass", () => {
     const state = createState({
       hoveredIndex: 1,
       layout: {
-        slots: [
-          {
-            unicode: 65,
-            x: 100,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-          {
-            unicode: 65,
-            x: 700,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-        ],
+        slots: [createSlot(65, 100), createSlot(65, 700)],
         totalAdvance: 1000,
       },
     });
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [
         {
@@ -286,36 +262,12 @@ describe("textRun pass", () => {
     const state = createState({
       editingIndex: 1,
       layout: {
-        slots: [
-          {
-            unicode: 65,
-            x: 100,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-          {
-            unicode: 65,
-            x: 600,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-          {
-            unicode: 65,
-            x: 1100,
-            advance: 500,
-            bounds: null,
-            svgPath: "M0 0L100 0L100 100L0 100Z",
-            selected: false,
-          },
-        ],
+        slots: [createSlot(65, 100), createSlot(65, 600), createSlot(65, 1100)],
         totalAdvance: 1500,
       },
     });
     const liveGlyph = {
+      glyphName: "uni41",
       unicode: 65,
       contours: [
         {

@@ -4,6 +4,7 @@ import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import { hitTestTextSlot } from "../../text/layout";
+import { resolveComponentAtPoint } from "../compositeHitTest";
 
 /**
  * Updates hover indicator on text run glyphs during pointer movement.
@@ -34,6 +35,22 @@ export class TextRunHoverBehavior implements SelectBehavior {
     });
 
     editor.setTextRunHovered(hitIndex);
+    const inspection = textRunState.compositeInspection;
+    if (!inspection || hitIndex !== inspection.slotIndex) {
+      editor.setTextRunInspectionComponent(null);
+      return null;
+    }
+
+    const slot = textRunState.layout.slots[inspection.slotIndex];
+    if (!slot) {
+      editor.setTextRunInspectionComponent(null);
+      return null;
+    }
+
+    const composite = editor.getGlyphCompositeComponents(slot.glyph.glyphName);
+    const localPoint = { x: event.point.x - slot.x, y: event.point.y };
+    const hitComponent = resolveComponentAtPoint(composite, localPoint);
+    editor.setTextRunInspectionComponent(hitComponent?.index ?? null);
 
     // Return null to let other behaviors also process this event
     return null;

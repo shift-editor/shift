@@ -1,17 +1,19 @@
 import type { GlyphSnapshot } from "@shift/types";
+import type { GlyphRef } from "@/lib/tools/text/layout";
 
 /** Low-level session lifecycle primitives that {@link SessionManager} orchestrates. */
 export interface Session {
-  startEditSession(unicode: number): void;
+  startEditSessionByName(glyphName: string): void;
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
+  getEditingGlyphName(): string | null;
   getSnapshot(): GlyphSnapshot;
   emitGlyph(glyph: GlyphSnapshot | null): void;
 }
 
 /**
- * One glyph at a time: a session binds the native engine to a single glyph by unicode.
+ * One glyph at a time: a session binds the native engine to a single glyph.
  * Starting a new session automatically ends the previous one; ending clears the glyph signal.
  */
 export class SessionManager {
@@ -22,17 +24,16 @@ export class SessionManager {
   }
 
   /** No-op if the same glyph is already active; ends the previous session if a different glyph is active. */
-  startEditSession(unicode: number): void {
+  startEditSession(target: GlyphRef): void {
     if (this.isActive()) {
-      const currentUnicode = this.getEditingUnicode();
-      if (currentUnicode === unicode) {
+      const currentName = this.getEditingGlyphName();
+      if (currentName === target.glyphName) {
         return;
       }
       this.endEditSession();
     }
 
-    this.#engine.startEditSession(unicode);
-
+    this.#engine.startEditSessionByName(target.glyphName);
     const glyph = this.getGlyph();
     this.#engine.emitGlyph(glyph);
   }
@@ -48,6 +49,10 @@ export class SessionManager {
 
   getEditingUnicode(): number | null {
     return this.#engine.getEditingUnicode();
+  }
+
+  getEditingGlyphName(): string | null {
+    return this.#engine.getEditingGlyphName();
   }
 
   getGlyph(): GlyphSnapshot | null {

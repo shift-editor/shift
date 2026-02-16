@@ -101,6 +101,8 @@ npm/
 *.settings.local.json*
 
 .plans/
+.tweets/
+.bugs/
 
 # Generated Glyph Info resources
 packages/glyph-info/resources/*.json

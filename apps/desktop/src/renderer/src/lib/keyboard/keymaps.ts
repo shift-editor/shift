@@ -192,6 +192,15 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         return true;
       },
     },
+    {
+      id: "canvas.glyphFinder",
+      preventDefault: true,
+      match: (event) => matchChord(event, { key: "f", primaryModifier: true }),
+      run: (ctx) => {
+        ctx.editor.openGlyphFinder();
+        return true;
+      },
+    },
   ];
 }
 

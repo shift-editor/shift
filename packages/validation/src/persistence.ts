@@ -1,11 +1,16 @@
 import { z } from "zod";
 
+export const GlyphRefSchema = z.object({
+  glyphName: z.string().min(1),
+  unicode: z.number().int().nonnegative().nullable(),
+});
+
 export const PersistedTextRunSchema = z.object({
-  codepoints: z.array(z.number().int().nonnegative()),
+  glyphs: z.array(GlyphRefSchema),
   cursorPosition: z.number().int().nonnegative(),
   originX: z.number().finite(),
   editingIndex: z.number().int().nonnegative().nullable(),
-  editingUnicode: z.number().int().nonnegative().nullable(),
+  editingGlyph: GlyphRefSchema.nullable(),
 });
 
 export const TextRunModulePayloadSchema = z.object({

@@ -1,5 +1,28 @@
 import type { ToolRenderContributor } from "../core/ToolRenderContributor";
 import { renderTextRun } from "@/lib/editor/rendering/passes/textRun";
+import type { CompositeInspectionRenderData } from "@/lib/editor/rendering/passes/textRun";
+import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
+import type { EditorAPI } from "../core/EditorAPI";
+
+function resolveCompositeInspection(
+  editor: EditorAPI,
+  textRunState: TextRunState,
+): CompositeInspectionRenderData | null {
+  const inspection = textRunState.compositeInspection;
+  if (!inspection) return null;
+
+  const slot = textRunState.layout.slots[inspection.slotIndex];
+  if (!slot) return null;
+
+  const composite = editor.getGlyphCompositeComponents(slot.glyph.glyphName);
+  if (!composite || composite.components.length === 0) return null;
+
+  return {
+    slotIndex: inspection.slotIndex,
+    hoveredComponentIndex: inspection.hoveredComponentIndex,
+    components: composite.components,
+  };
+}
 
 export const textRunRenderContributor: ToolRenderContributor = {
   id: "text-run",
@@ -13,11 +36,11 @@ export const textRunRenderContributor: ToolRenderContributor = {
 
     const metrics = editor.font.getMetrics();
     const glyph = editor.glyph.peek();
-    const activeUnicode = editor.getActiveGlyphUnicode();
+    const activeGlyphName = editor.getActiveGlyphName();
     const liveGlyph =
-      glyph && activeUnicode !== null
+      glyph && activeGlyphName
         ? {
-            unicode: activeUnicode,
+            glyphName: activeGlyphName,
             contours: glyph.contours,
             compositeContours: glyph.compositeContours,
           }
@@ -31,6 +54,7 @@ export const textRunRenderContributor: ToolRenderContributor = {
       textRunState,
       metrics,
       liveGlyph,
+      resolveCompositeInspection(editor, textRunState),
     );
   },
 };

@@ -11,6 +11,8 @@ import {
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
 import { pointInRect } from "./utils";
 import type { LineSegment } from "@/types/segments";
+import type { GlyphRef } from "../text/layout";
+import { resolveComponentAtPoint } from "./compositeHitTest";
 
 export type SelectAction =
   | { type: "selectPoint"; pointId: PointId; additive: boolean }
@@ -45,7 +47,8 @@ export type SelectAction =
   | { type: "selectPoints"; pointIds: PointId[] }
   | { type: "upgradeLineToCubic"; segment: LineSegment }
   | { type: "selectContour"; contourId: ContourId; additive: boolean }
-  | { type: "editTextRunSlot"; index: number };
+  | { type: "editTextRunSlot"; index: number; point: Point2D }
+  | { type: "clearTextRunCompositeInspection" };
 
 export function executeAction(action: SelectAction, editor: EditorAPI): void {
   switch (action.type) {
@@ -136,7 +139,11 @@ export function executeAction(action: SelectAction, editor: EditorAPI): void {
       break;
 
     case "editTextRunSlot":
-      executeEditTextRunSlot(action.index, editor);
+      executeEditTextRunSlot(action.index, action.point, editor);
+      break;
+
+    case "clearTextRunCompositeInspection":
+      editor.clearTextRunInspection();
       break;
   }
 }
@@ -286,15 +293,58 @@ function executeSelectContour(contourId: ContourId, additive: boolean, editor: E
   editor.selectPoints(pointIds);
 }
 
-function executeEditTextRunSlot(index: number, editor: EditorAPI): void {
+function executeEditTextRunSlot(index: number, point: Point2D, editor: EditorAPI): void {
   const textRunState = editor.getTextRunState();
   if (!textRunState) return;
 
   const slot = textRunState.layout.slots[index];
   if (!slot) return;
 
-  editor.startEditSession(slot.unicode);
-  editor.setDrawOffset({ x: slot.x, y: 0 });
+  const composite = editor.getGlyphCompositeComponents(slot.glyph.glyphName);
+  const isComposite = !!composite && composite.components.length > 0;
+  const isInspected = textRunState.compositeInspection?.slotIndex === index;
+
+  if (isComposite && !isInspected) {
+    editor.setTextRunInspectionSlot(index);
+    editor.setTextRunInspectionComponent(null);
+    editor.setTextRunEditingSlot(null);
+    return;
+  }
+
+  const localPoint = { x: point.x - slot.x, y: point.y };
+  const hit = resolveComponentAtPoint(composite, localPoint);
+  const hitComponent = hit?.component ?? null;
+
+  if (hitComponent) {
+    const insertedGlyph: GlyphRef = {
+      glyphName: hitComponent.componentGlyphName,
+      unicode: hitComponent.sourceUnicodes[0] ?? null,
+    };
+
+    const insertedIndex = index + 1;
+    editor.insertTextGlyphAt(insertedIndex, insertedGlyph);
+    editor.recomputeTextRun();
+
+    const nextState = editor.getTextRunState();
+    const insertedSlot = nextState?.layout.slots[insertedIndex];
+    const slotX = insertedSlot?.x ?? slot.x;
+
+    editor.startEditSession(insertedGlyph);
+    editor.setDrawOffsetForGlyph({ x: slotX, y: 0 }, insertedGlyph);
+    editor.setPreviewMode(false);
+    editor.setTextRunEditingSlot(insertedIndex, insertedGlyph);
+    editor.clearTextRunInspection();
+    return;
+  }
+
+  if (isComposite) {
+    editor.setTextRunInspectionComponent(null);
+    return;
+  }
+
+  editor.startEditSession(slot.glyph);
+  editor.setDrawOffsetForGlyph({ x: slot.x, y: 0 }, slot.glyph);
   editor.setPreviewMode(false);
-  editor.setTextRunEditingSlot(index, slot.unicode);
+  editor.setTextRunEditingSlot(index, slot.glyph);
+  editor.clearTextRunInspection();
 }

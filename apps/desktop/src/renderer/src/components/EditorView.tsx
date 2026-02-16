@@ -30,14 +30,17 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   }, [editor]);
 
   useEffect(() => {
-    // Parse glyphId as hex (e.g., "0041" for 'A')
     const parsed = Number.parseInt(glyphId, 16);
     const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
+    const glyphName =
+      editor.fontEngine.info.getGlyphNameForUnicode(unicode) ??
+      `uni${unicode.toString(16).toUpperCase()}`;
+    const glyphRef = { glyphName, unicode };
 
     const initEditor = () => {
       editor.setMainGlyphUnicode(unicode);
-      // Start Rust edit session for this glyph
-      editor.startEditSession(unicode);
+      editor.startEditSession(glyphRef);
+      editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
 
       // Update viewport with actual font metrics (UPM, descender, guides)
       editor.updateMetricsFromFont();

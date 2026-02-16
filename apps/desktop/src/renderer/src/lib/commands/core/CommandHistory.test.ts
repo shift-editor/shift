@@ -25,7 +25,7 @@ describe("CommandHistory", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 
@@ -170,7 +170,7 @@ describe("batching", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 
@@ -324,7 +324,7 @@ describe("onDirty callback", () => {
         onDirtyCalled++;
       },
     });
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 
@@ -391,7 +391,7 @@ describe("Command integration with history", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession(65);
+    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.editing.addContour();
   });
 

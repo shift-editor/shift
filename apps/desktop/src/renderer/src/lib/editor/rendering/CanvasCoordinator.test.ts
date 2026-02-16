@@ -99,6 +99,7 @@ function createContext(
     }),
     screenToUpmDistance: (px) => px,
     projectSceneToScreen,
+    getVisualGlyphAdvance: (glyph) => glyph.xAdvance,
     getDebugOverlays: () => ({
       tightBounds: false,
       hitRadii: false,

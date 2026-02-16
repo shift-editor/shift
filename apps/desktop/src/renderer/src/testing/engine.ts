@@ -215,7 +215,7 @@ export function createTestSnapshot(config: TestSnapshotConfig = {}): GlyphSnapsh
  * Starts an edit session and creates all contours/points from the snapshot.
  */
 export function populateEngine(engine: FontEngine, snapshot: GlyphSnapshot): void {
-  engine.session.startEditSession(snapshot.unicode);
+  engine.session.startEditSession({ glyphName: snapshot.name, unicode: snapshot.unicode });
 
   for (const contour of snapshot.contours) {
     engine.editing.addContour();

@@ -13,6 +13,7 @@ function createKeyboardEvent(options: Partial<KeyboardEvent> = {}): KeyboardEven
     altKey: options.altKey ?? false,
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
+    target: options.target ?? null,
   } as KeyboardEvent;
 }
 
@@ -221,5 +222,17 @@ describe("KeyboardRouter", () => {
 
     expect(handled).toBe(true);
     expect(toolManager.handleKeyDown).toHaveBeenCalledWith(e);
+  });
+
+  it("does not intercept shortcuts when an editable input has focus", () => {
+    const input = { tagName: "INPUT" } as unknown as EventTarget;
+    const e = createKeyboardEvent({ key: "a", metaKey: true, target: input });
+
+    const handled = router.handleKeyDown(e);
+
+    expect(handled).toBe(false);
+    expect(editor.selectAll).not.toHaveBeenCalled();
+    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
+    expect(e.preventDefault).not.toHaveBeenCalled();
   });
 });

@@ -1,16 +1,16 @@
 export class GlyphRenderCache {
-  static #cache = new Map<number, Path2D>();
+  static #cache = new Map<string | number, Path2D>();
 
-  static get(unicode: number, svgPath: string): Path2D {
-    let cached = this.#cache.get(unicode);
+  static get(key: string | number, svgPath: string): Path2D {
+    let cached = this.#cache.get(key);
     if (cached) return cached;
     cached = new Path2D(svgPath);
-    this.#cache.set(unicode, cached);
+    this.#cache.set(key, cached);
     return cached;
   }
 
-  static delete(unicode: number): void {
-    this.#cache.delete(unicode);
+  static delete(key: string | number): void {
+    this.#cache.delete(key);
   }
 
   static clear(): void {

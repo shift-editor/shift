@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { cn, Input } from "@shift/ui";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
+import { useFocusZone } from "@/context/FocusZoneContext";
 
 export interface EditableSidebarInputHandle {
   setValue: (value: number) => void;
@@ -8,6 +9,7 @@ export interface EditableSidebarInputHandle {
 
 interface EditableSidebarInputProps {
   label?: string | React.ReactNode;
+  labelPosition?: "left" | "right";
   className?: string;
   value?: number;
   icon?: React.ReactNode;
@@ -19,7 +21,7 @@ interface EditableSidebarInputProps {
 }
 
 const parseNumericValue = (input: string): number | null => {
-  const cleaned = input.replace(/[^0-9.\-]/g, "");
+  const cleaned = input.replace(/[^0-9.-]/g, "");
   const parsed = parseFloat(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
 };
@@ -31,6 +33,7 @@ export const EditableSidebarInput = forwardRef<
   (
     {
       label,
+      labelPosition,
       className,
       value,
       icon,
@@ -42,6 +45,7 @@ export const EditableSidebarInput = forwardRef<
     },
     ref,
   ) => {
+    const { lockToZone, unlock } = useFocusZone();
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
     const [displayValue, setDisplayValue] = useState(value ?? defaultValue);
@@ -68,21 +72,24 @@ export const EditableSidebarInput = forwardRef<
 
     const handleFocus = useCallback(() => {
       if (disabled) return;
+      lockToZone("sidebar");
       setIsEditing(true);
       setEditValue(String(displayValue));
-    }, [disabled, displayValue]);
+    }, [disabled, displayValue, lockToZone]);
 
     const handleBlur = useCallback(() => {
+      unlock();
       setIsEditing(false);
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
       displayValueRef.current = numericValue;
       setDisplayValue(numericValue);
       onValueChange?.(numericValue);
-    }, [editValue, defaultValue, onValueChange]);
+    }, [editValue, defaultValue, onValueChange, unlock]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (!inputRef.current) return;
+        e.nativeEvent.stopImmediatePropagation();
 
         if (e.key === "Enter") {
           inputRef.current.blur();
@@ -129,11 +136,17 @@ export const EditableSidebarInput = forwardRef<
       <Input
         ref={inputRef}
         label={label}
+        labelPosition={labelPosition}
         value={isEditing ? editValue : `${displayValue}${suffix}`}
         icon={icon}
         iconPosition={iconPosition}
         readOnly={!isEditing}
-        className={cn("w-full bg-[#f3f3f3]", label && "pl-6", className)}
+        className={cn(
+          "w-full bg-[#f3f3f3]",
+          label && labelPosition !== "right" && "pl-6",
+          label && labelPosition === "right" && "pr-6",
+          className,
+        )}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}

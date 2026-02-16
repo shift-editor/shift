@@ -11,4 +11,16 @@ export {
   ToastClose,
   useToastManager,
 } from "./components/toast";
+export {
+  Dialog,
+  DialogBackdrop,
+  DialogPortal,
+  DialogPopup,
+  DialogTitle,
+  DialogClose,
+  type DialogProps,
+  type DialogBackdropProps,
+  type DialogPopupProps,
+  type DialogTitleProps,
+} from "./components/dialog";
 export { cn } from "./lib/utils";

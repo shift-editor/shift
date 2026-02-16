@@ -1,51 +1,35 @@
 import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
-import { GapBuffer } from "@/lib/tools/text/GapBuffer";
-import { computeTextLayout, type TextLayout } from "@/lib/tools/text/layout";
+import { computeTextLayout, type TextLayout, type GlyphRef } from "@/lib/tools/text/layout";
 import type { Font } from "../Font";
+import {
+  createTextRunEntry,
+  DEFAULT_TEXT_RUN_KEY,
+  hydrateTextRuns,
+  serializeTextRuns,
+  type PersistedTextRun,
+  type TextRunEntry,
+} from "./textRunPersistence";
+export type { PersistedTextRun } from "./textRunPersistence";
+
+export interface TextRunCompositeInspection {
+  slotIndex: number;
+  hoveredComponentIndex: number | null;
+}
 
 /**
  * State of the text run, consumed by the text run render pass.
- *
- * - `layout` — slot positions computed from the gap buffer contents.
- * - `editingIndex` — the slot index of the glyph being edited in-place
- *   (skipped during text run rendering, rendered by the normal glyph pipeline).
- * - `editingUnicode` — unicode of the in-place glyph.
- * - `hoveredIndex` — hover highlight index (select mode).
- * - `cursorX` — horizontal cursor position in UPM; null when cursor hidden.
  */
 export interface TextRunState {
   layout: TextLayout;
   editingIndex: number | null;
-  editingUnicode: number | null;
+  editingGlyph: GlyphRef | null;
   hoveredIndex: number | null;
+  compositeInspection: TextRunCompositeInspection | null;
   cursorX: number | null;
-}
-
-export interface PersistedTextRun {
-  codepoints: number[];
-  cursorPosition: number;
-  originX: number;
-  editingIndex: number | null;
-  editingUnicode: number | null;
-}
-
-const DEFAULT_RUN_KEY = "__default__";
-
-interface TextRunEntry {
-  buffer: GapBuffer;
-  originX: number;
-  cursorVisible: boolean;
-  editingIndex: number | null;
-  editingUnicode: number | null;
-  hoveredIndex: number | null;
 }
 
 /**
  * Persistent text run state that survives tool switches.
- *
- * Owns the {@link GapBuffer} and exposes computed text run state as a
- * reactive signal for rendering. Lives on the Editor so that switching
- * between text/select/pen tools preserves the typed text.
  */
 export class TextRunManager {
   #$state: WritableSignal<TextRunState | null>;
@@ -56,38 +40,35 @@ export class TextRunManager {
   constructor() {
     this.#$state = signal<TextRunState | null>(null);
     this.#runs = new Map();
-    this.#activeKey = DEFAULT_RUN_KEY;
+    this.#activeKey = DEFAULT_TEXT_RUN_KEY;
   }
 
   get state(): Signal<TextRunState | null> {
     return this.#$state;
   }
 
-  get buffer(): GapBuffer {
+  get buffer(): TextRunEntry["buffer"] {
     return this.#activeRun().buffer;
   }
 
-  setOwnerGlyph(unicode: number | null): void {
-    const nextKey = this.#glyphKey(unicode);
+  setOwnerGlyph(glyph: GlyphRef | null): void {
+    const nextKey = this.#glyphKey(glyph);
     if (nextKey === this.#activeKey) return;
 
     this.#activeKey = nextKey;
     const run = this.#activeRun();
     run.hoveredIndex = null;
+    run.inspectionSlotIndex = null;
+    run.inspectionHoveredComponentIndex = null;
 
-    if (this.#font) {
-      this.recompute(this.#font);
+    if (!this.#font) {
+      this.#$state.set(null);
       return;
     }
 
-    this.#$state.set(null);
+    this.recompute(this.#font);
   }
 
-  /**
-   * Rebuild layout and cursor position from the current buffer contents.
-   * @param font — font data for computing advances and SVG paths.
-   * @param originX — optional new horizontal origin in UPM for the text run baseline.
-   */
   recompute(font: Font, originX?: number): void {
     this.#font = font;
     const run = this.#activeRun();
@@ -95,91 +76,114 @@ export class TextRunManager {
       run.originX = originX;
     }
 
-    const codepoints = run.buffer.getText();
+    const glyphs = run.buffer.getText();
     const layout =
-      codepoints.length > 0
-        ? computeTextLayout(codepoints, { x: run.originX, y: 0 }, font)
+      glyphs.length > 0
+        ? computeTextLayout(glyphs, { x: run.originX, y: 0 }, font)
         : { slots: [], totalAdvance: 0 };
 
-    // If buffer is empty and cursor isn't visible, clear state entirely
-    if (codepoints.length === 0 && !run.cursorVisible) {
+    if (glyphs.length === 0 && !run.cursorVisible) {
       this.#$state.set(null);
       return;
-    }
-
-    const cursorPos = run.buffer.cursorPosition;
-
-    let cursorX: number | null = null;
-    if (run.cursorVisible) {
-      if (cursorPos === 0) {
-        cursorX = run.originX;
-      } else if (cursorPos <= layout.slots.length) {
-        const prevSlot = layout.slots[cursorPos - 1];
-        cursorX = prevSlot.x + prevSlot.advance;
-      } else {
-        cursorX = run.originX + layout.totalAdvance;
-      }
     }
 
     this.#$state.set({
       layout,
       editingIndex: run.editingIndex,
-      editingUnicode: run.editingUnicode,
+      editingGlyph: run.editingGlyph,
       hoveredIndex: run.hoveredIndex,
-      cursorX,
+      compositeInspection: toCompositeInspection(run),
+      cursorX: this.#computeCursorX(run, layout),
     });
   }
 
   setHovered(index: number | null): void {
     const run = this.#activeRun();
     run.hoveredIndex = index;
-    const current = this.#$state.peek();
-    if (!current) return;
-    this.#$state.set({ ...current, hoveredIndex: index });
+    if (run.inspectionSlotIndex !== index) {
+      run.inspectionHoveredComponentIndex = null;
+    }
+    this.#syncState((current) => ({
+      ...current,
+      hoveredIndex: index,
+      compositeInspection: toCompositeInspection(run),
+    }));
+  }
+
+  setInspectionSlot(index: number | null): void {
+    const run = this.#activeRun();
+    run.inspectionSlotIndex = index;
+    run.inspectionHoveredComponentIndex = null;
+    this.#syncState((current) => ({
+      ...current,
+      compositeInspection: toCompositeInspection(run),
+    }));
+  }
+
+  setInspectionHoveredComponent(index: number | null): void {
+    const run = this.#activeRun();
+    run.inspectionHoveredComponentIndex = run.inspectionSlotIndex === null ? null : index;
+    this.#syncState((current) => ({
+      ...current,
+      compositeInspection: toCompositeInspection(run),
+    }));
+  }
+
+  clearInspection(): void {
+    const run = this.#activeRun();
+    run.inspectionSlotIndex = null;
+    run.inspectionHoveredComponentIndex = null;
+    this.#syncState((current) => ({
+      ...current,
+      compositeInspection: null,
+    }));
   }
 
   setCursorVisible(visible: boolean): void {
     const run = this.#activeRun();
     run.cursorVisible = visible;
-    const current = this.#$state.peek();
-    if (!current) return;
     if (!visible) {
-      this.#$state.set({ ...current, cursorX: null });
+      this.#syncState((current) => ({ ...current, cursorX: null }));
     }
   }
 
-  setEditingSlot(index: number | null, unicode?: number | null): void {
+  setEditingSlot(index: number | null, glyph: GlyphRef | null = null): void {
     const run = this.#activeRun();
     run.editingIndex = index;
-    run.editingUnicode = unicode ?? null;
-    const current = this.#$state.peek();
-    if (!current) return;
-    this.#$state.set({
+    run.editingGlyph = glyph;
+    this.#syncState((current) => ({
       ...current,
       editingIndex: index,
-      editingUnicode: run.editingUnicode,
-    });
+      editingGlyph: glyph,
+    }));
   }
 
   resetEditingContext(): void {
     const run = this.#activeRun();
     run.editingIndex = null;
-    run.editingUnicode = null;
+    run.editingGlyph = null;
     run.hoveredIndex = null;
-    const current = this.#$state.peek();
-    if (!current) return;
-    this.#$state.set({
+    run.inspectionSlotIndex = null;
+    run.inspectionHoveredComponentIndex = null;
+    this.#syncState((current) => ({
       ...current,
       editingIndex: null,
-      editingUnicode: null,
+      editingGlyph: null,
       hoveredIndex: null,
-    });
+      compositeInspection: null,
+    }));
   }
 
-  ensureSeeded(unicode: number | null): void {
+  ensureSeeded(glyph: GlyphRef | null): void {
     const run = this.#activeRun();
-    if (unicode === null || run.buffer.length > 0) return;
-    run.buffer.insert(unicode);
+    if (run.buffer.length > 0 || glyph === null) return;
+    run.buffer.insert(glyph);
+  }
+
+  insertGlyphAt(index: number, glyph: GlyphRef): void {
+    const run = this.#activeRun();
+    run.buffer.moveTo(index);
+    run.buffer.insert(glyph);
   }
 
   clear(): void {
@@ -187,8 +191,10 @@ export class TextRunManager {
     run.buffer.clear();
     run.originX = 0;
     run.editingIndex = null;
-    run.editingUnicode = null;
+    run.editingGlyph = null;
     run.hoveredIndex = null;
+    run.inspectionSlotIndex = null;
+    run.inspectionHoveredComponentIndex = null;
     run.cursorVisible = false;
     this.#$state.set(null);
   }
@@ -199,66 +205,67 @@ export class TextRunManager {
   }
 
   exportRuns(): Record<string, PersistedTextRun> {
-    const out: Record<string, PersistedTextRun> = {};
-    for (const [key, run] of this.#runs.entries()) {
-      if (key === DEFAULT_RUN_KEY || run.buffer.length === 0) continue;
-      out[key] = {
-        codepoints: run.buffer.getText(),
-        cursorPosition: run.buffer.cursorPosition,
-        originX: run.originX,
-        editingIndex: run.editingIndex,
-        editingUnicode: run.editingUnicode,
-      };
-    }
-    return out;
+    return serializeTextRuns(this.#runs, DEFAULT_TEXT_RUN_KEY);
   }
 
   hydrateRuns(next: Record<string, PersistedTextRun>): void {
-    this.#runs.clear();
-
-    for (const [glyphKey, run] of Object.entries(next)) {
-      this.#runs.set(glyphKey, {
-        buffer: GapBuffer.from(run.codepoints ?? [], run.cursorPosition),
-        originX: Number.isFinite(run.originX) ? run.originX : 0,
-        cursorVisible: false,
-        editingIndex: run.editingIndex ?? null,
-        editingUnicode: run.editingUnicode ?? null,
-        hoveredIndex: null,
-      });
-    }
-
+    this.#runs = hydrateTextRuns(next);
     if (!this.#runs.has(this.#activeKey)) {
-      this.#runs.set(this.#activeKey, this.#createRun());
+      this.#runs.set(this.#activeKey, createTextRunEntry());
     }
 
-    if (this.#font) {
-      this.recompute(this.#font);
+    if (!this.#font) {
+      this.#$state.set(null);
       return;
     }
-    this.#$state.set(null);
+
+    this.recompute(this.#font);
   }
 
-  #glyphKey(unicode: number | null): string {
-    if (unicode === null) return DEFAULT_RUN_KEY;
-    return String(unicode);
+  #syncState(update: (current: TextRunState) => TextRunState): void {
+    const current = this.#$state.peek();
+    if (!current) return;
+    this.#$state.set(update(current));
+  }
+
+  #computeCursorX(run: TextRunEntry, layout: TextLayout): number | null {
+    if (!run.cursorVisible) return null;
+
+    const cursorPos = run.buffer.cursorPosition;
+    if (cursorPos === 0) {
+      return run.originX;
+    }
+
+    if (cursorPos <= layout.slots.length) {
+      const prevSlot = layout.slots[cursorPos - 1];
+      return prevSlot.x + prevSlot.advance;
+    }
+
+    return run.originX + layout.totalAdvance;
+  }
+
+  #glyphKey(glyph: GlyphRef | null): string {
+    if (!glyph) return DEFAULT_TEXT_RUN_KEY;
+    return glyph.glyphName;
   }
 
   #activeRun(): TextRunEntry {
     let run = this.#runs.get(this.#activeKey);
     if (run) return run;
-    run = this.#createRun();
+
+    run = createTextRunEntry();
     this.#runs.set(this.#activeKey, run);
     return run;
   }
+}
 
-  #createRun(): TextRunEntry {
-    return {
-      buffer: GapBuffer.create(),
-      originX: 0,
-      cursorVisible: false,
-      editingIndex: null,
-      editingUnicode: null,
-      hoveredIndex: null,
-    };
+function toCompositeInspection(run: TextRunEntry): TextRunCompositeInspection | null {
+  if (run.inspectionSlotIndex === null) {
+    return null;
   }
+
+  return {
+    slotIndex: run.inspectionSlotIndex,
+    hoveredComponentIndex: run.inspectionHoveredComponentIndex,
+  };
 }

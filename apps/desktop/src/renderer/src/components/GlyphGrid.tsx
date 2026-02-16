@@ -43,6 +43,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { codepointToHex } from "@/lib/utils/unicode";
 import { useSignalState } from "@/lib/reactive";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
 import { getGlyphInfo } from "@/store/glyphInfo";
@@ -62,10 +63,6 @@ function computeLayout(width: number) {
   const columns = Math.max(1, Math.floor(availableWidth / (NOMINAL_CELL_WIDTH + GAP)));
   const cellWidth = (availableWidth - (columns - 1) * GAP) / columns;
   return { columns, cellWidth };
-}
-
-function unicodeToHex(unicode: number): string {
-  return unicode.toString(16).padStart(4, "0").toUpperCase();
 }
 
 export const GlyphGrid = memo(function GlyphGrid() {
@@ -118,7 +115,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const handleCellClick = useCallback(
     (unicode: number) => {
-      navigate(`/editor/${unicodeToHex(unicode)}`);
+      navigate(`/editor/${codepointToHex(unicode)}`);
     },
     [navigate],
   );

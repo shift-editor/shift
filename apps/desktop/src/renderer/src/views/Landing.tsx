@@ -4,6 +4,7 @@ import { glyphDataStore } from "@/store/GlyphDataStore";
 import { documentPersistence } from "@/persistence";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
+import { glyphRefFromUnicode } from "@/lib/utils/unicode";
 
 export const Landing = () => {
   const navigate = useNavigate();
@@ -23,8 +24,10 @@ export const Landing = () => {
 
   const handleNewFont = () => {
     const editor = getEditor();
+    const glyphRef = glyphRefFromUnicode(65, editor.fontEngine.info);
     editor.setMainGlyphUnicode(65);
-    editor.startEditSession(65);
+    editor.startEditSession(glyphRef);
+    editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
     glyphDataStore.onFontUnloaded();
     setFilePath(null);
     clearDirty();

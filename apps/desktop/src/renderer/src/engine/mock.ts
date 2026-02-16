@@ -90,7 +90,21 @@ export class MockFontEngine implements FontEngineAPI {
     return Array.from({ length: 256 }, (_, i) => i);
   }
 
+  getGlyphNameForUnicode(unicode: number): string | null {
+    if (!Number.isFinite(unicode) || unicode < 0) return null;
+    return String.fromCodePoint(unicode);
+  }
+
+  getGlyphUnicodesForName(glyphName: string): number[] {
+    if (glyphName.length !== 1) return [];
+    return [glyphName.codePointAt(0)!];
+  }
+
   getDependentUnicodes(_unicode: number): number[] {
+    return [];
+  }
+
+  getDependentUnicodesByName(_glyphName: string): number[] {
     return [];
   }
 
@@ -98,7 +112,15 @@ export class MockFontEngine implements FontEngineAPI {
     return null;
   }
 
+  getGlyphSvgPathByName(_glyphName: string): string | null {
+    return null;
+  }
+
   getGlyphAdvance(_unicode: number): number | null {
+    return 500;
+  }
+
+  getGlyphAdvanceByName(_glyphName: string): number | null {
     return 500;
   }
 
@@ -106,10 +128,31 @@ export class MockFontEngine implements FontEngineAPI {
     return null;
   }
 
+  getGlyphBboxByName(_glyphName: string): [number, number, number, number] | null {
+    return null;
+  }
+
+  getGlyphCompositeComponents(_glyphName: string): string | null {
+    return JSON.stringify({ glyphName: _glyphName, components: [] });
+  }
+
   startEditSession(unicode: number): void {
     this.#snapshot = {
       unicode,
       name: String.fromCodePoint(unicode),
+      xAdvance: 500,
+      contours: [],
+      anchors: [],
+      compositeContours: [],
+      activeContourId: null as ContourId | null,
+    };
+  }
+
+  startEditSessionByName(glyphName: string): void {
+    const unicode = glyphName.length === 1 ? (glyphName.codePointAt(0) ?? 0) : 0;
+    this.#snapshot = {
+      unicode,
+      name: glyphName,
       xAdvance: 500,
       contours: [],
       anchors: [],
@@ -128,6 +171,10 @@ export class MockFontEngine implements FontEngineAPI {
 
   getEditingUnicode(): number | null {
     return this.#snapshot?.unicode ?? null;
+  }
+
+  getEditingGlyphName(): string | null {
+    return this.#snapshot?.name ?? null;
   }
 
   getSnapshotData(): string {

@@ -3,12 +3,14 @@ import type { TextAction, TextBehavior, TextState } from "./types";
 import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
 import { TypingBehavior } from "./behaviors/TypingBehaviour";
+import type { GlyphRef } from "./layout";
 
 interface ResumeEditContext {
   drawOffset: Point2D;
   editingIndex: number | null;
-  editingUnicode: number | null;
+  editingGlyph: GlyphRef | null;
   activeUnicode: number | null;
+  activeGlyphName: string | null;
 }
 
 class TextTool extends BaseTool<TextState, TextAction> {
@@ -31,14 +33,18 @@ class TextTool extends BaseTool<TextState, TextAction> {
     const hasExistingRun = this.editor.getTextRunLength() > 0;
     const drawOffset = this.editor.getDrawOffset();
     const activeUnicode = this.editor.getActiveGlyphUnicode();
+    const activeGlyphName = this.editor.getActiveGlyphName();
+    const activeGlyph =
+      activeGlyphName !== null ? { glyphName: activeGlyphName, unicode: activeUnicode } : null;
     this.#resumeContext = {
       drawOffset: { x: drawOffset.x, y: drawOffset.y },
       editingIndex: previous?.editingIndex ?? null,
-      editingUnicode: previous?.editingUnicode ?? null,
+      editingGlyph: previous?.editingGlyph ?? null,
       activeUnicode,
+      activeGlyphName,
     };
 
-    this.editor.ensureTextRunSeed(activeUnicode);
+    this.editor.ensureTextRunSeed(activeGlyph);
     this.#pendingOriginX = hasExistingRun ? null : drawOffset.x;
     this.editor.moveTextCursorToEnd();
 
@@ -96,13 +102,13 @@ class TextTool extends BaseTool<TextState, TextAction> {
     this.editor.setDrawOffset(this.#resumeContext.drawOffset);
     const restored = this.#resolveEditingSlot();
     if (restored) {
-      this.editor.setTextRunEditingSlot(restored.index, restored.unicode);
+      this.editor.setTextRunEditingSlot(restored.index, restored.glyph);
       return;
     }
     this.editor.resetTextRunEditingContext();
   }
 
-  #resolveEditingSlot(): { index: number; unicode: number } | null {
+  #resolveEditingSlot(): { index: number; glyph: GlyphRef } | null {
     const resume = this.#resumeContext;
     const textRunState = this.editor.getTextRunState();
     if (!resume || !textRunState) return null;
@@ -115,7 +121,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
       if (slot) {
         return {
           index: resume.editingIndex,
-          unicode: resume.editingUnicode ?? slot.unicode,
+          glyph: resume.editingGlyph ?? slot.glyph,
         };
       }
     }
@@ -124,13 +130,17 @@ class TextTool extends BaseTool<TextState, TextAction> {
     let nearestDistance = Number.POSITIVE_INFINITY;
     for (let i = 0; i < slots.length; i++) {
       const slot = slots[i];
-      if (resume.activeUnicode !== null && slot.unicode !== resume.activeUnicode) {
+      if (
+        resume.activeGlyphName !== null &&
+        slot.glyph.glyphName !== resume.activeGlyphName &&
+        (resume.activeUnicode === null || slot.glyph.unicode !== resume.activeUnicode)
+      ) {
         continue;
       }
 
       const distance = Math.abs(slot.x - resume.drawOffset.x);
       if (distance < 0.001) {
-        return { index: i, unicode: slot.unicode };
+        return { index: i, glyph: slot.glyph };
       }
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -141,7 +151,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
     if (nearestIndex !== null) {
       return {
         index: nearestIndex,
-        unicode: slots[nearestIndex].unicode,
+        glyph: slots[nearestIndex].glyph,
       };
     }
 

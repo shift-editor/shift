@@ -1,13 +1,16 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { Toolbar } from "@/components/Toolbar";
 import { Sidebar } from "@/components/sidebar";
+import { GlyphFinder } from "@/components/GlyphFinder";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
+import { useSignalState } from "@/lib/reactive";
 import { KeyboardRouter } from "@/lib/keyboard";
 
+import { codepointToHex } from "@/lib/utils/unicode";
 import { EditorView } from "../components/EditorView";
 
 interface EditorProps {
@@ -17,13 +20,41 @@ interface EditorProps {
 export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
   const { glyphId: glyphIdParam } = useParams();
   const glyphId = glyphIdProp ?? glyphIdParam;
-  const { activeZone, focusLock } = useFocusZone();
+  const { activeZone } = useFocusZone();
+  const navigate = useNavigate();
+  const editor = getEditor();
+  const glyphFinderOpen = useSignalState(editor.glyphFinderOpen);
+
+  const handleGlyphFinderOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        editor.openGlyphFinder();
+      } else {
+        editor.closeGlyphFinder();
+      }
+    },
+    [editor],
+  );
+
+  const handleGlyphFinderSelect = useCallback(
+    (codepoint: number) => {
+      if (editor.toolManager.activeToolId === "text") {
+        editor.insertTextCodepoint(codepoint);
+        editor.recomputeTextRun();
+        editor.requestRedraw();
+      } else {
+        navigate(`/editor/${codepointToHex(codepoint)}`);
+      }
+      editor.closeGlyphFinder();
+    },
+    [editor, navigate],
+  );
 
   useEffect(() => {
     const editor = getEditor();
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(() => ({
-      canvasActive: activeZone === "canvas" || focusLock || toolManager.isDragging,
+      canvasActive: activeZone === "canvas" || toolManager.isDragging,
       activeTool: editor.getActiveTool(),
       editor,
       toolManager,
@@ -44,7 +75,7 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId, activeZone, focusLock]);
+  }, [glyphId, activeZone]);
 
   useEffect(() => {
     const editor = getEditor();
@@ -81,6 +112,11 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
           <Sidebar />
         </ZoneContainer>
       </div>
+      <GlyphFinder
+        open={glyphFinderOpen}
+        onOpenChange={handleGlyphFinderOpenChange}
+        onSelect={handleGlyphFinderSelect}
+      />
     </div>
   );
 };

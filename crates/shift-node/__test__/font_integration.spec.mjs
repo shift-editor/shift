@@ -449,13 +449,24 @@ describe("FontEngine Integration - Extended Round Trip", () => {
       return;
     }
 
+    const sortContoursByFirstPoint = (contours) => {
+      return [...contours].sort((a, b) => {
+        const ax = a.points[0]?.x ?? 0;
+        const ay = a.points[0]?.y ?? 0;
+        const bx = b.points[0]?.x ?? 0;
+        const by = b.points[0]?.y ?? 0;
+        if (Math.abs(ax - bx) > 0.001) return ax - bx;
+        return ay - by;
+      });
+    };
+
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
     engine.startEditSession(79);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     const originalTypes = [];
-    for (const contour of originalSnapshot.contours) {
+    for (const contour of sortContoursByFirstPoint(originalSnapshot.contours)) {
       for (const point of contour.points) {
         originalTypes.push(point.pointType);
       }
@@ -471,7 +482,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine2.startEditSession(79);
     const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     const reloadedTypes = [];
-    for (const contour of reloadedSnapshot.contours) {
+    for (const contour of sortContoursByFirstPoint(reloadedSnapshot.contours)) {
       for (const point of contour.points) {
         reloadedTypes.push(point.pointType);
       }

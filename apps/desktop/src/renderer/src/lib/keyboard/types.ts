@@ -24,6 +24,7 @@ export interface KeyboardEditorActions {
   insertTextCodepoint(codepoint: number): void;
   recomputeTextRun(): void;
   getTextRunCodepoints(): number[];
+  openGlyphFinder(): void;
 }
 
 export interface KeyboardToolManagerActions {

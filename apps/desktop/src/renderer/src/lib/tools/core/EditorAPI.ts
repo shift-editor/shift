@@ -46,6 +46,8 @@ import type {
 import type { Font } from "@/lib/editor/Font";
 import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { Coordinates } from "@/types/coordinates";
+import type { GlyphRef } from "../text/layout";
+import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 
 /**
  * Coordinate-space conversions and viewport state.
@@ -169,10 +171,12 @@ export interface Editing {
   getActiveContourId(): ContourId | null;
   clearActiveContour(): void;
   setActiveContour(id: ContourId): void;
-  /** Open a glyph for editing by its Unicode codepoint. */
-  startEditSession(unicode: number): void;
+  /** Open a glyph for editing by canonical glyph reference. */
+  startEditSession(glyph: GlyphRef): void;
   /** Return the unicode codepoint of the glyph currently being edited, or null. */
   getActiveGlyphUnicode(): number | null;
+  /** Return the glyph name currently being edited, or null. */
+  getActiveGlyphName(): string | null;
   /** Set/get the main glyph selected from the grid/route. */
   setMainGlyphUnicode(unicode: number | null): void;
   getMainGlyphUnicode(): number | null;
@@ -187,12 +191,16 @@ export interface Editing {
 export interface TextRunAccess {
   getTextRunState(): TextRunState | null;
   getTextRunLength(): number;
-  ensureTextRunSeed(unicode: number | null): void;
+  ensureTextRunSeed(glyph: GlyphRef | null): void;
   setTextRunCursorVisible(visible: boolean): void;
-  setTextRunEditingSlot(index: number | null, unicode?: number | null): void;
+  setTextRunEditingSlot(index: number | null, glyph?: GlyphRef | null): void;
   resetTextRunEditingContext(): void;
   setTextRunHovered(index: number | null): void;
+  setTextRunInspectionSlot(index: number | null): void;
+  setTextRunInspectionComponent(index: number | null): void;
+  clearTextRunInspection(): void;
   insertTextCodepoint(codepoint: number): void;
+  insertTextGlyphAt(index: number, glyph: GlyphRef): void;
   getTextRunCodepoints(): number[];
   deleteTextCodepoint(): boolean;
   moveTextCursorLeft(): boolean;
@@ -200,6 +208,7 @@ export interface TextRunAccess {
   moveTextCursorToEnd(): void;
   recomputeTextRun(originX?: number): void;
   shouldRenderEditableGlyph(): boolean;
+  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
 }
 
 export type ToolStateScope = "app" | "document";
@@ -265,6 +274,8 @@ export interface VisualState {
   /** Cumulative translation offset applied during drag operations (UPM space). Reset to zero on drag end. */
   getDrawOffset(): Point2D;
   setDrawOffset(offset: Point2D): void;
+  /** Set draw offset and apply editor-only glyph placement adjustments for the target glyph. */
+  setDrawOffsetForGlyph(offset: Point2D, glyph: GlyphRef | null): void;
   requestStaticRedraw(): void;
   requestRedraw(): void;
   updateHover(coords: Coordinates): void;

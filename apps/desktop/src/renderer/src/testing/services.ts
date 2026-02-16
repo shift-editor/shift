@@ -80,6 +80,7 @@ export interface ToolMouseEvent {
 import { FontEngine, MockFontEngine } from "@/engine";
 import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
+import { glyphRefFromUnicode } from "@/lib/utils/unicode";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -1058,7 +1059,7 @@ function createMockCommandHistory(
 
 export function createMockToolContext(): MockToolContext {
   const fontEngine = new FontEngine(new MockFontEngine());
-  fontEngine.session.startEditSession(65);
+  fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
   fontEngine.editing.addContour();
 
   const screen = createMockScreenService();
@@ -1087,7 +1088,10 @@ export function createMockToolContext(): MockToolContext {
 
   const textRunManager = new TextRunManager();
   let mainGlyphUnicode: number | null = 65;
-  textRunManager.setOwnerGlyph(mainGlyphUnicode);
+  textRunManager.setOwnerGlyph({
+    glyphName: fontEngine.info.getGlyphNameForUnicode(mainGlyphUnicode) ?? "A",
+    unicode: mainGlyphUnicode,
+  });
 
   const font = {
     getMetrics: () => ({
@@ -1358,14 +1362,29 @@ export function createMockToolContext(): MockToolContext {
     textRunManager,
     getTextRunState: () => textRunManager.state.peek(),
     getTextRunLength: () => textRunManager.buffer.length,
-    ensureTextRunSeed: (unicode: number | null) => textRunManager.ensureSeeded(unicode),
+    ensureTextRunSeed: (glyph: { glyphName: string; unicode: number | null } | null) =>
+      textRunManager.ensureSeeded(glyph),
     setTextRunCursorVisible: (visible: boolean) => textRunManager.setCursorVisible(visible),
-    setTextRunEditingSlot: (index: number | null, unicode?: number | null) =>
-      textRunManager.setEditingSlot(index, unicode),
+    setTextRunEditingSlot: (
+      index: number | null,
+      glyph?: { glyphName: string; unicode: number | null } | null,
+    ) => textRunManager.setEditingSlot(index, glyph),
     resetTextRunEditingContext: () => textRunManager.resetEditingContext(),
     setTextRunHovered: (index: number | null) => textRunManager.setHovered(index),
-    insertTextCodepoint: (codepoint: number) => textRunManager.buffer.insert(codepoint),
-    getTextRunCodepoints: () => textRunManager.buffer.getText(),
+    setTextRunInspectionSlot: (index: number | null) => textRunManager.setInspectionSlot(index),
+    setTextRunInspectionComponent: (index: number | null) =>
+      textRunManager.setInspectionHoveredComponent(index),
+    clearTextRunInspection: () => textRunManager.clearInspection(),
+    insertTextCodepoint: (codepoint: number) => {
+      textRunManager.buffer.insert(glyphRefFromUnicode(codepoint, fontEngine.info));
+    },
+    insertTextGlyphAt: (index: number, glyph: { glyphName: string; unicode: number | null }) =>
+      textRunManager.insertGlyphAt(index, glyph),
+    getTextRunCodepoints: () =>
+      textRunManager.buffer
+        .getText()
+        .map((glyph) => glyph.unicode)
+        .filter((unicode): unicode is number => unicode !== null),
     deleteTextCodepoint: () => textRunManager.buffer.delete(),
     moveTextCursorLeft: () => textRunManager.buffer.moveLeft(),
     moveTextCursorRight: () => textRunManager.buffer.moveRight(),
@@ -1383,20 +1402,29 @@ export function createMockToolContext(): MockToolContext {
     deleteToolState: (scope: "app" | "document", toolId: string, key: string) => {
       toolState[scope].delete(`${toolId}:${key}`);
     },
-    startEditSession: vi.fn((unicode: number) => {
-      fontEngine.session.startEditSession(unicode);
+    startEditSession: vi.fn((glyph: { glyphName: string; unicode: number | null }) => {
+      fontEngine.session.startEditSession(glyph);
       fontEngine.editing.addContour();
       textRunManager.recompute(font);
     }),
     getActiveGlyphUnicode: vi.fn(() => fontEngine.session.getEditingUnicode()),
+    getActiveGlyphName: vi.fn(() => fontEngine.session.getEditingGlyphName()),
     setMainGlyphUnicode: (unicode: number | null) => {
       mainGlyphUnicode = unicode;
-      textRunManager.setOwnerGlyph(unicode);
+      const glyphRef = unicode === null ? null : glyphRefFromUnicode(unicode, fontEngine.info);
+      textRunManager.setOwnerGlyph(glyphRef);
       textRunManager.recompute(font);
     },
     getMainGlyphUnicode: () => mainGlyphUnicode,
+    getGlyphCompositeComponents: vi.fn((_glyphName: string) => null),
     setActiveTool: vi.fn(),
     clearHover: () => hoverProxy.clearAll(),
+    setDrawOffsetForGlyph: (
+      offset: Point2D,
+      _glyph: { glyphName: string; unicode: number | null } | null,
+    ) => {
+      drawOffset = { x: offset.x, y: offset.y };
+    },
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
     returnFromTemporaryTool: () => tools.returnFromTemporary(),

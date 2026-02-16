@@ -40,11 +40,14 @@ describe("persistence schemas", () => {
               payload: {
                 runsByGlyph: {
                   "65": {
-                    codepoints: [65, 66],
+                    glyphs: [
+                      { glyphName: "A", unicode: 65 },
+                      { glyphName: "B", unicode: 66 },
+                    ],
                     cursorPosition: 2,
                     originX: 100,
                     editingIndex: null,
-                    editingUnicode: null,
+                    editingGlyph: null,
                   },
                 },
               },
@@ -62,11 +65,11 @@ describe("persistence schemas", () => {
     const result = TextRunModulePayloadSchema.safeParse({
       runsByGlyph: {
         "65": {
-          codepoints: [65],
+          glyphs: [{ glyphName: "A", unicode: 65 }],
           cursorPosition: "1",
           originX: 0,
           editingIndex: null,
-          editingUnicode: null,
+          editingGlyph: null,
         },
       },
     });

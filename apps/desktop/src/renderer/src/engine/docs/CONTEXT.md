@@ -161,7 +161,7 @@ export function hasNative(): boolean {
 | EditingManager | movePoints(ids, delta)            | PointId[]                                |
 | EditingManager | removePoints(ids)                 | void                                     |
 | EditingManager | applySmartEdits(selected, dx, dy) | PointId[]                                |
-| SessionManager | startEditSession(unicode)         | void                                     |
+| SessionManager | startEditSession(glyph)           | void                                     |
 | SessionManager | endEditSession()                  | void                                     |
 | SessionManager | isActive()                        | boolean                                  |
 | InfoManager    | getMetadata()                     | FontMetadata                             |
@@ -188,7 +188,7 @@ effect(() => {
 
 ```typescript
 engine.io.loadFont("/path/to/font.ufo");
-engine.session.startEditSession(65);
+engine.session.startEditSession({ glyphName: "A", unicode: 65 });
 
 const contourId = engine.editing.addContour();
 const p1 = engine.editing.addPoint({

@@ -7,6 +7,19 @@ import {
 import { normalizeKeyboardEvent } from "./normalize";
 import type { KeyBinding, KeyContext } from "./types";
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== "object") return false;
+  const element = target as {
+    isContentEditable?: boolean;
+    tagName?: string;
+    closest?: (selector: string) => unknown;
+  };
+  if (element.isContentEditable === true) return true;
+  const tag = (element.tagName ?? "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return !!element.closest?.('[contenteditable="true"], input, textarea, select');
+}
+
 export class KeyboardRouter {
   #getContext: () => KeyContext;
   #globalKeyDown: KeyBinding[];
@@ -28,6 +41,10 @@ export class KeyboardRouter {
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
+    if (isEditableTarget(e.target)) {
+      return false;
+    }
+
     const ctx = this.#getContext();
 
     if (this.#runBindings(this.#globalKeyDown, ctx, e)) {
@@ -50,6 +67,10 @@ export class KeyboardRouter {
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
+    if (isEditableTarget(e.target)) {
+      return false;
+    }
+
     const ctx = this.#getContext();
 
     if (this.#runBindings(this.#globalKeyUp, ctx, e)) {

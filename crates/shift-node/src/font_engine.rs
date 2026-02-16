@@ -4,13 +4,13 @@ use napi_derive::napi;
 use shift_core::{
   composite::{
     flatten_component_contours_for_layer as flatten_component_contours, layer_bbox,
-    layer_complexity, layer_to_svg_path, preferred_layer_for_glyph, resolved_to_render_contours,
-    GlyphLayerProvider,
+    layer_complexity, layer_to_svg_path, preferred_layer_for_glyph,
+    resolve_component_instances_for_layer, resolved_to_render_contours, GlyphLayerProvider,
   },
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphSnapshot},
+  snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
   AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, PointId,
   PointType, UfoWriter,
 };
@@ -242,6 +242,18 @@ impl FontEngine {
     Some((glyph.name(), layer))
   }
 
+  fn editing_target_for_name(&self, glyph_name: &str) -> Option<(&str, &GlyphLayer)> {
+    if let Some(session) = &self.current_edit_session {
+      if session.glyph_name() == glyph_name {
+        return Some((session.glyph_name(), session.layer()));
+      }
+    }
+
+    let glyph = self.font.glyph(glyph_name)?;
+    let layer = preferred_layer_for_glyph(glyph)?;
+    Some((glyph.name(), layer))
+  }
+
   fn glyph_layer_by_name(&self, glyph_name: &str) -> Option<&GlyphLayer> {
     if let (Some(session), Some(glyph)) = (&self.current_edit_session, &self.editing_glyph) {
       if glyph.name() == glyph_name {
@@ -262,6 +274,15 @@ impl FontEngine {
   ) -> Vec<shift_core::composite::ResolvedContour> {
     let provider = self.layer_provider();
     flatten_component_contours(&provider, layer, root_glyph_name)
+  }
+
+  fn resolve_component_instances_for_layer(
+    &self,
+    layer: &GlyphLayer,
+    root_glyph_name: &str,
+  ) -> Vec<shift_core::composite::ResolvedComponentInstance> {
+    let provider = self.layer_provider();
+    resolve_component_instances_for_layer(&provider, layer, root_glyph_name)
   }
 
   fn enrich_snapshot_with_composites(&self, snapshot: &mut GlyphSnapshot) {
@@ -334,6 +355,28 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn get_glyph_name_for_unicode(&self, unicode: u32) -> Option<String> {
+    self.glyph_name_for_unicode(unicode)
+  }
+
+  #[napi]
+  pub fn get_glyph_unicodes_for_name(&self, glyph_name: String) -> Vec<u32> {
+    if let Some(session) = &self.current_edit_session {
+      if session.glyph_name() == glyph_name {
+        if let Some(glyph) = self.editing_glyph.as_ref() {
+          return glyph.unicodes().to_vec();
+        }
+      }
+    }
+
+    self
+      .font
+      .glyph(&glyph_name)
+      .map(|glyph| glyph.unicodes().to_vec())
+      .unwrap_or_default()
+  }
+
+  #[napi]
   /// Returns all Unicode codepoints whose glyphs depend on `unicode` via
   /// component relationships (transitively).
   pub fn get_dependent_unicodes(&self, unicode: u32) -> Vec<u32> {
@@ -341,6 +384,20 @@ impl FontEngine {
       return Vec::new();
     };
 
+    let dependent_names = self.dependency_graph.dependents_recursive(&glyph_name);
+    let mut unicodes = HashSet::new();
+
+    for dependent_name in dependent_names {
+      self.collect_unicodes_for_glyph_name(&dependent_name, &mut unicodes);
+    }
+
+    let mut sorted: Vec<u32> = unicodes.into_iter().collect();
+    sorted.sort_unstable();
+    sorted
+  }
+
+  #[napi]
+  pub fn get_dependent_unicodes_by_name(&self, glyph_name: String) -> Vec<u32> {
     let dependent_names = self.dependency_graph.dependents_recursive(&glyph_name);
     let mut unicodes = HashSet::new();
 
@@ -394,8 +451,25 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn get_glyph_svg_path_by_name(&self, glyph_name: String) -> Option<String> {
+    let (resolved_name, layer) = self.editing_target_for_name(&glyph_name)?;
+    let component_contours = self.flatten_component_contours_for_layer(layer, resolved_name);
+    let path = layer_to_svg_path(layer, &component_contours);
+    if path.is_empty() {
+      return None;
+    }
+    Some(path)
+  }
+
+  #[napi]
   pub fn get_glyph_advance(&self, unicode: u32) -> Option<f64> {
     let layer = self.editing_layer_for(unicode)?;
+    Some(layer.width())
+  }
+
+  #[napi]
+  pub fn get_glyph_advance_by_name(&self, glyph_name: String) -> Option<f64> {
+    let (_, layer) = self.editing_target_for_name(&glyph_name)?;
     Some(layer.width())
   }
 
@@ -419,12 +493,62 @@ impl FontEngine {
     bbox.map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 
+  #[napi]
+  pub fn get_glyph_bbox_by_name(&self, glyph_name: String) -> Option<Vec<f64>> {
+    let (resolved_name, layer) = self.editing_target_for_name(&glyph_name)?;
+    let component_contours = self.flatten_component_contours_for_layer(layer, resolved_name);
+    let bbox = layer_bbox(layer, &component_contours);
+    bbox.map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
+  }
+
+  #[napi]
+  pub fn get_glyph_composite_components(&self, glyph_name: String) -> Option<String> {
+    let (resolved_name, layer) = self.editing_target_for_name(&glyph_name)?;
+    let instances = self.resolve_component_instances_for_layer(layer, resolved_name);
+
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompositeComponentPayload {
+      component_glyph_name: String,
+      source_unicodes: Vec<u32>,
+      contours: Vec<RenderContourSnapshot>,
+    }
+
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompositeComponentsPayload {
+      glyph_name: String,
+      components: Vec<CompositeComponentPayload>,
+    }
+
+    let components = instances
+      .into_iter()
+      .map(|instance| CompositeComponentPayload {
+        source_unicodes: self
+          .font
+          .glyph(&instance.component_glyph_name)
+          .map(|glyph| glyph.unicodes().to_vec())
+          .unwrap_or_default(),
+        component_glyph_name: instance.component_glyph_name,
+        contours: resolved_to_render_contours(&instance.contours),
+      })
+      .collect();
+
+    Some(to_json(&CompositeComponentsPayload {
+      glyph_name: resolved_name.to_string(),
+      components,
+    }))
+  }
+
   // ═══════════════════════════════════════════════════════════
   // EDIT SESSIONS
   // ═══════════════════════════════════════════════════════════
 
-  #[napi]
-  pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
+  fn start_edit_session_for_name(
+    &mut self,
+    glyph_name: &str,
+    unicode_override: Option<u32>,
+  ) -> Result<()> {
     if self.current_edit_session.is_some() {
       return Err(Error::new(
         Status::GenericFailure,
@@ -432,28 +556,21 @@ impl FontEngine {
       ));
     }
 
-    let glyph_name = self
-      .font
-      .glyph_by_unicode(unicode)
-      .map(|g| g.name().to_string());
-
-    let mut glyph = if let Some(name) = &glyph_name {
-      self
-        .font
-        .take_glyph(name)
-        .unwrap_or_else(|| Glyph::with_unicode(name.clone(), unicode))
+    let mut glyph = if let Some(existing) = self.font.take_glyph(glyph_name) {
+      existing
     } else {
-      let name = char::from_u32(unicode)
-        .map(|c| c.to_string())
-        .unwrap_or_else(|| format!("uni{unicode:04X}"));
-      Glyph::with_unicode(name, unicode)
+      Glyph::new(glyph_name.to_string())
     };
 
+    let primary_unicode = unicode_override
+      .or_else(|| glyph.primary_unicode())
+      .unwrap_or(0);
+
     composite_debug!(
-      "start_edit_session U+{:04X}: glyph='{}' layers={}",
-      unicode,
+      "start_edit_session '{}': layers={} primary_unicode={}",
       glyph.name(),
-      glyph.layers().len()
+      glyph.layers().len(),
+      primary_unicode
     );
     let (layer_id, layer) = glyph
       .layers()
@@ -463,21 +580,26 @@ impl FontEngine {
       .and_then(|id| glyph.remove_layer(id).map(|l| (id, l)))
       .unwrap_or_else(|| (self.font.default_layer_id(), GlyphLayer::with_width(500.0)));
 
-    composite_debug!(
-      "start_edit_session selected layer {} -> contours={} components={} anchors={}",
-      layer_id,
-      layer.contours().len(),
-      layer.components().len(),
-      layer.anchors().len()
-    );
-
-    let edit_session = EditSession::new(glyph.name().to_string(), unicode, layer);
+    let edit_session = EditSession::new(glyph.name().to_string(), primary_unicode, layer);
 
     self.current_edit_session = Some(edit_session);
     self.editing_glyph = Some(glyph);
     self.editing_layer_id = Some(layer_id);
 
     Ok(())
+  }
+
+  #[napi]
+  pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
+    let glyph_name = self
+      .glyph_name_for_unicode(unicode)
+      .unwrap_or_else(|| format!("uni{unicode:04X}"));
+    self.start_edit_session_for_name(&glyph_name, Some(unicode))
+  }
+
+  #[napi]
+  pub fn start_edit_session_by_name(&mut self, glyph_name: String) -> Result<()> {
+    self.start_edit_session_for_name(&glyph_name, None)
   }
 
   fn get_edit_session(&mut self) -> Result<&mut EditSession> {
@@ -570,6 +692,14 @@ impl FontEngine {
   #[napi]
   pub fn get_editing_unicode(&self) -> Option<u32> {
     self.current_edit_session.as_ref().map(|s| s.unicode())
+  }
+
+  #[napi]
+  pub fn get_editing_glyph_name(&self) -> Option<String> {
+    self
+      .current_edit_session
+      .as_ref()
+      .map(|s| s.glyph_name().to_string())
   }
 
   pub fn add_empty_contour(&mut self) -> Result<String> {
@@ -805,7 +935,7 @@ impl FontEngine {
   /// Returns true on success, false if no edit session is active.
   /// Does NOT return a snapshot — use get_snapshot_data() when needed.
   #[napi]
-  pub fn set_point_positions(&mut self, moves: Vec<JSPointMove>) -> Result<bool> {
+  pub fn set_point_positions(&mut self, moves: Vec<JsPointMove>) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
@@ -823,7 +953,7 @@ impl FontEngine {
   /// Returns true on success, false if no edit session is active.
   /// Does NOT return a snapshot — use get_snapshot_data() when needed.
   #[napi]
-  pub fn set_anchor_positions(&mut self, moves: Vec<JSAnchorMove>) -> Result<bool> {
+  pub fn set_anchor_positions(&mut self, moves: Vec<JsAnchorMove>) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
@@ -861,7 +991,7 @@ impl FontEngine {
 
 /// Input type for set_point_positions - a single point move
 #[napi(object)]
-pub struct JSPointMove {
+pub struct JsPointMove {
   pub id: String,
   pub x: f64,
   pub y: f64,
@@ -869,7 +999,7 @@ pub struct JSPointMove {
 
 /// Input type for set_anchor_positions - a single anchor move
 #[napi(object)]
-pub struct JSAnchorMove {
+pub struct JsAnchorMove {
   pub id: String,
   pub x: f64,
   pub y: f64,

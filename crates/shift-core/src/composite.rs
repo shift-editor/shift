@@ -20,6 +20,7 @@ use crate::snapshot::{RenderContourSnapshot, RenderPointSnapshot};
 use crate::{
     Contour, CurveSegment, CurveSegmentIter, Font, Glyph, GlyphLayer, Point, PointId, Transform,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Layer lookup abstraction used by the composite resolver.
@@ -54,7 +55,7 @@ impl GlyphLayerProvider for FontLayerProvider<'_> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResolvedContour {
     /// Resolved contour points after all component transforms/offsets.
     ///
@@ -65,11 +66,23 @@ pub struct ResolvedContour {
     pub closed: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResolvedComponentInstance {
+    pub component_glyph_name: String,
+    pub contours: Vec<ResolvedContour>,
+}
+
 #[derive(Clone)]
 struct PlacedAnchor {
     name: String,
     x: f64,
     y: f64,
+}
+
+#[derive(Clone)]
+struct AnchorOffset {
+    dx: f64,
+    dy: f64,
 }
 
 /// Heuristic complexity score used to choose a "primary" layer for rendering.
@@ -111,7 +124,7 @@ fn anchor_offset_for_component(
     component_layer: &GlyphLayer,
     component_transform: Transform,
     placed_anchors: &[PlacedAnchor],
-) -> Option<(f64, f64)> {
+) -> Option<AnchorOffset> {
     // Primary mark attachment:
     // `_top` in the component attaches to the most recently placed `top`.
     for anchor in component_layer.anchors_iter() {
@@ -130,7 +143,10 @@ fn anchor_offset_for_component(
         };
 
         let (ax, ay) = component_transform.transform_point(anchor.x(), anchor.y());
-        return Some((base_anchor.x - ax, base_anchor.y - ay));
+        return Some(AnchorOffset {
+            dx: base_anchor.x - ax,
+            dy: base_anchor.y - ay,
+        });
     }
 
     None
@@ -178,13 +194,16 @@ fn resolve_component_transform(
         return explicit_transform;
     };
 
-    let Some((dx, dy)) =
+    let Some(offset) =
         anchor_offset_for_component(component_layer, explicit_transform, placed_anchors)
     else {
         return explicit_transform;
     };
 
-    compose_transform(Transform::translate(dx, dy), explicit_transform)
+    compose_transform(
+        Transform::translate(offset.dx, offset.dy),
+        explicit_transform,
+    )
 }
 
 /// Recursively flattens contours for a glyph name into `out`.
@@ -250,6 +269,23 @@ pub fn flatten_component_contours_for_layer(
     layer: &GlyphLayer,
     root_glyph_name: &str,
 ) -> Vec<ResolvedContour> {
+    resolve_component_instances_for_layer(provider, layer, root_glyph_name)
+        .into_iter()
+        .flat_map(|instance| instance.contours)
+        .collect()
+}
+
+/// Resolves root-level component instances with provenance data.
+///
+/// Each returned instance corresponds to a direct component of `layer` and
+/// contains:
+/// - the component glyph name,
+/// - flattened contours for that component branch (including nested components),
+pub fn resolve_component_instances_for_layer(
+    provider: &impl GlyphLayerProvider,
+    layer: &GlyphLayer,
+    root_glyph_name: &str,
+) -> Vec<ResolvedComponentInstance> {
     let mut out = Vec::new();
     let mut visiting = HashSet::new();
     visiting.insert(root_glyph_name.to_string());
@@ -271,13 +307,19 @@ pub fn flatten_component_contours_for_layer(
             append_component_anchors(component_layer, component_transform, &mut placed_anchors);
         }
 
+        let mut contours = Vec::new();
         flatten_component_named(
             provider,
             component.base_glyph(),
             component_transform,
             &mut visiting,
-            &mut out,
+            &mut contours,
         );
+
+        out.push(ResolvedComponentInstance {
+            component_glyph_name: component.base_glyph().to_string(),
+            contours,
+        });
     }
 
     out

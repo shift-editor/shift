@@ -24,26 +24,35 @@ export declare class FontEngine {
   getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): Array<number>;
+  getGlyphNameForUnicode(unicode: number): string | null;
+  getGlyphUnicodesForName(glyphName: string): Array<number>;
   /**
    * Returns all Unicode codepoints whose glyphs depend on `unicode` via
    * component relationships (transitively).
    */
   getDependentUnicodes(unicode: number): Array<number>;
+  getDependentUnicodesByName(glyphName: string): Array<number>;
   /**
    * Returns SVG path data for the glyph, including resolved component
    * contours from composite dependencies.
    */
   getGlyphSvgPath(unicode: number): string | null;
+  getGlyphSvgPathByName(glyphName: string): string | null;
   getGlyphAdvance(unicode: number): number | null;
+  getGlyphAdvanceByName(glyphName: string): number | null;
   /**
    * Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
    * including resolved component contours.
    */
   getGlyphBbox(unicode: number): Array<number> | null;
+  getGlyphBboxByName(glyphName: string): Array<number> | null;
+  getGlyphCompositeComponents(glyphName: string): string | null;
   startEditSession(unicode: number): void;
+  startEditSessionByName(glyphName: string): void;
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
+  getEditingGlyphName(): string | null;
   getActiveContourId(): string | null;
   setXAdvance(width: number): string;
   setActiveContour(contourId: string): string;
@@ -79,12 +88,12 @@ export declare class FontEngine {
    * Returns true on success, false if no edit session is active.
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
-  setPointPositions(moves: Array<JSPointMove>): boolean;
+  setPointPositions(moves: Array<JsPointMove>): boolean;
   /**
    * Set anchor positions directly — fire-and-forget for drag operations.
    * Returns true on success, false if no edit session is active.
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
-  setAnchorPositions(moves: Array<JSAnchorMove>): boolean;
+  setAnchorPositions(moves: Array<JsAnchorMove>): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }

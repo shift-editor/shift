@@ -1,4 +1,4 @@
-import type { ContourId } from "@shift/types";
+import type { ContourId, RenderContourSnapshot } from "@shift/types";
 
 export interface PointMove {
   id: string;
@@ -12,6 +12,17 @@ export interface AnchorMove {
   y: number;
 }
 
+export interface CompositeComponentPayload {
+  componentGlyphName: string;
+  sourceUnicodes: number[];
+  contours: RenderContourSnapshot[];
+}
+
+export interface CompositeComponentsPayload {
+  glyphName: string;
+  components: CompositeComponentPayload[];
+}
+
 export interface FontEngineAPI {
   // ── Font I/O ──
   loadFont(path: string): void;
@@ -23,16 +34,25 @@ export interface FontEngineAPI {
   getMetrics(): string;
   getGlyphCount(): number;
   getGlyphUnicodes(): number[];
+  getGlyphNameForUnicode(unicode: number): string | null;
+  getGlyphUnicodesForName(glyphName: string): number[];
   getDependentUnicodes(unicode: number): number[];
+  getDependentUnicodesByName(glyphName: string): number[];
   getGlyphSvgPath(unicode: number): string | null;
+  getGlyphSvgPathByName(glyphName: string): string | null;
   getGlyphAdvance(unicode: number): number | null;
+  getGlyphAdvanceByName(glyphName: string): number | null;
   getGlyphBbox(unicode: number): [number, number, number, number] | null;
+  getGlyphBboxByName(glyphName: string): [number, number, number, number] | null;
+  getGlyphCompositeComponents(glyphName: string): string | null;
 
   // ── Session Lifecycle ──
   startEditSession(unicode: number): void;
+  startEditSessionByName(glyphName: string): void;
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
+  getEditingGlyphName(): string | null;
   getSnapshotData(): string;
 
   // ── Contour Operations ──

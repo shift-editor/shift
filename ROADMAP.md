@@ -260,7 +260,7 @@
 - [x] Visual indicator: empty vs. has content
 - [ ] Grid zoom (cell size slider)
 - [ ] List view alternative
-- [ ] Search by glyph name, unicode, or character
+- [x] Search by glyph name, unicode, or character
 - [ ] Filter: show only empty / filled / charset subset
 - [ ] Multi-select glyphs in grid
 - [ ] Right-click context menu

@@ -7,6 +7,7 @@ import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./GlyphSection";
+import { AnchorSection } from "./AnchorSection";
 
 export const Sidebar = () => {
   const editor = getEditor();
@@ -14,12 +15,16 @@ export const Sidebar = () => {
   const zoom = useSignalState(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
 
-  const [hasSelection, setHasSelection] = useState(false);
+  const [hasPointSelection, setHasPointSelection] = useState(false);
+  const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
 
   useSignalEffect(() => {
     const pointIds = editor.selectedPointIds.value;
-    const next = pointIds.size > 0;
-    setHasSelection((prev) => (prev === next ? prev : next));
+    const anchorIds = editor.selectedAnchorIds.value;
+    const nextPoints = pointIds.size > 0;
+    const nextAnchors = anchorIds.size > 0;
+    setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
+    setHasAnchorSelection((prev) => (prev === nextAnchors ? prev : nextAnchors));
   });
 
   return (
@@ -36,10 +41,15 @@ export const Sidebar = () => {
           <GlyphSection />
         </div>
         <Separator />
-        {hasSelection && (
+        {hasPointSelection && (
           <div className="px-3 py-3 flex flex-col gap-4">
             <TransformSection />
             <ScaleSection />
+          </div>
+        )}
+        {!hasPointSelection && hasAnchorSelection && (
+          <div className="px-3 py-3 flex flex-col gap-4">
+            <AnchorSection />
           </div>
         )}
       </TransformOriginProvider>

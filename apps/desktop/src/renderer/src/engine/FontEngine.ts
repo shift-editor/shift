@@ -7,6 +7,7 @@ import { SessionManager, type Session } from "./session";
 import { InfoManager, type Info } from "./info";
 import { IOManager, type IO } from "./io";
 import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
+import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { PasteResult } from "@/types/engine";
 import { Bounds } from "@shift/geo";
 
@@ -88,16 +89,36 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     return this.#raw.getGlyphUnicodes();
   }
 
+  getGlyphNameForUnicode(unicode: number): string | null {
+    return this.#raw.getGlyphNameForUnicode(unicode);
+  }
+
+  getGlyphUnicodesForName(glyphName: string): number[] {
+    return this.#raw.getGlyphUnicodesForName(glyphName);
+  }
+
   getDependentUnicodes(unicode: number): number[] {
     return this.#raw.getDependentUnicodes(unicode);
+  }
+
+  getDependentUnicodesByName(glyphName: string): number[] {
+    return this.#raw.getDependentUnicodesByName(glyphName);
   }
 
   getGlyphSvgPath(unicode: number): string | null {
     return this.#raw.getGlyphSvgPath(unicode);
   }
 
+  getGlyphSvgPathByName(glyphName: string): string | null {
+    return this.#raw.getGlyphSvgPathByName(glyphName);
+  }
+
   getGlyphAdvance(unicode: number): number | null {
     return this.#raw.getGlyphAdvance(unicode);
+  }
+
+  getGlyphAdvanceByName(glyphName: string): number | null {
+    return this.#raw.getGlyphAdvanceByName(glyphName);
   }
 
   getGlyphBbox(unicode: number): Bounds | null {
@@ -107,8 +128,24 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     return Bounds.create({ x: bbox[0], y: bbox[1] }, { x: bbox[2], y: bbox[3] });
   }
 
+  getGlyphBboxByName(glyphName: string): Bounds | null {
+    const bbox = this.#raw.getGlyphBboxByName(glyphName);
+    if (!bbox) return null;
+    return Bounds.create({ x: bbox[0], y: bbox[1] }, { x: bbox[2], y: bbox[3] });
+  }
+
+  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
+    const payload = this.#raw.getGlyphCompositeComponents(glyphName);
+    if (!payload) return null;
+    return JSON.parse(payload) as CompositeComponentsPayload;
+  }
+
   startEditSession(unicode: number): void {
     this.#raw.startEditSession(unicode);
+  }
+
+  startEditSessionByName(glyphName: string): void {
+    this.#raw.startEditSessionByName(glyphName);
   }
 
   endEditSession(): void {
@@ -121,6 +158,10 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
 
   getEditingUnicode(): number | null {
     return this.#raw.getEditingUnicode();
+  }
+
+  getEditingGlyphName(): string | null {
+    return this.#raw.getEditingGlyphName();
   }
 
   getActiveContourId(): ContourId | null {

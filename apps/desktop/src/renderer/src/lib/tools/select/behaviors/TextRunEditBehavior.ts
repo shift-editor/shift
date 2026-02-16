@@ -23,7 +23,17 @@ export class TextRunEditBehavior implements SelectBehavior {
   ): TransitionResult<SelectState, SelectAction> | null {
     if (event.type !== "doubleClick") return null;
 
-    const textRunState = editor.getTextRunState();
+    let textRunState = editor.getTextRunState();
+    if (!textRunState) {
+      const activeName = editor.getActiveGlyphName();
+      if (!activeName) return null;
+      editor.ensureTextRunSeed({
+        glyphName: activeName,
+        unicode: editor.getActiveGlyphUnicode(),
+      });
+      editor.recomputeTextRun(editor.getDrawOffset().x);
+      textRunState = editor.getTextRunState();
+    }
     if (!textRunState) return null;
 
     const metrics = editor.font.getMetrics();
@@ -32,11 +42,19 @@ export class TextRunEditBehavior implements SelectBehavior {
       includeFill: true,
       requireShape: true,
     });
-    if (hitIndex === null) return null;
+    if (hitIndex === null) {
+      if (textRunState.compositeInspection !== null) {
+        return {
+          state: { ...state },
+          action: { type: "clearTextRunCompositeInspection" },
+        };
+      }
+      return null;
+    }
 
     return {
       state: { ...state },
-      action: { type: "editTextRunSlot", index: hitIndex },
+      action: { type: "editTextRunSlot", index: hitIndex, point: event.point },
     };
   }
 }
