@@ -58,6 +58,10 @@ const SCROLL_PADDING = 4;
 const ROW_PADDING_X = 4;
 const OVERSCAN = 5;
 
+interface GlyphGridProps {
+  unicodes?: number[];
+}
+
 function computeLayout(width: number) {
   const availableWidth = width - SCROLL_PADDING - ROW_PADDING_X;
   const columns = Math.max(1, Math.floor(availableWidth / (NOMINAL_CELL_WIDTH + GAP)));
@@ -65,18 +69,19 @@ function computeLayout(width: number) {
   return { columns, cellWidth };
 }
 
-export const GlyphGrid = memo(function GlyphGrid() {
+export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: GlyphGridProps) {
   const navigate = useNavigate();
   const fontLoaded = useSignalState(glyphDataStore.fontLoaded);
   const fontUnicodes = useSignalState(glyphDataStore.fontUnicodes);
   const fontMetrics = useSignalState(glyphDataStore.fontMetrics);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const unicodes = useMemo(
+  const fallbackUnicodes = useMemo(
     () =>
       fontLoaded ? fontUnicodes : Object.values(ADOBE_LATIN_1).map((g) => parseInt(g.unicode, 16)),
     [fontLoaded, fontUnicodes],
   );
+  const unicodes = unicodesProp ?? fallbackUnicodes;
 
   // Sizing: useVirtualizer only virtualizes rows (vertical); it does not provide container width.
   // We need container width to compute columns and cell width so rows don't overflow. ResizeObserver
@@ -123,57 +128,63 @@ export const GlyphGrid = memo(function GlyphGrid() {
   return (
     <section
       ref={scrollContainerRef}
-      className="h-full w-full overflow-y-auto overflow-x-hidden p-5"
+      className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden p-5"
     >
-      <div
-        style={{
-          height: virtualizer.getTotalSize(),
-          width: "100%",
-          position: "relative",
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const startIndex = virtualRow.index * columns;
-          const rowUnicodes = unicodes.slice(startIndex, startIndex + columns);
-          return (
-            <div
-              key={virtualRow.key}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-              className="flex gap-2 px-4"
-            >
-              {rowUnicodes.map((unicode) => (
-                <div
-                  key={unicode}
-                  className="flex min-w-0 flex-col items-center gap-2 overflow-hidden"
-                  style={{ minHeight: CELL_HEIGHT + 20, width: cellWidth, maxWidth: cellWidth }}
-                >
-                  <Button
-                    variant="ghost"
-                    className="w-full min-w-0 overflow-hidden"
-                    style={{ height: CELL_HEIGHT }}
-                    onClick={() => handleCellClick(unicode)}
+      {unicodes.length === 0 ? (
+        <div className="flex h-full items-center justify-center px-4 text-sm text-muted">
+          No glyphs match this filter.
+        </div>
+      ) : (
+        <div
+          style={{
+            height: virtualizer.getTotalSize(),
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const startIndex = virtualRow.index * columns;
+            const rowUnicodes = unicodes.slice(startIndex, startIndex + columns);
+            return (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+                className="flex gap-2 px-4"
+              >
+                {rowUnicodes.map((unicode) => (
+                  <div
+                    key={unicode}
+                    className="flex min-w-0 flex-col items-center gap-2 overflow-hidden"
+                    style={{ minHeight: CELL_HEIGHT + 20, width: cellWidth, maxWidth: cellWidth }}
                   >
-                    <GlyphPreview
-                      unicode={unicode}
-                      height={CELL_HEIGHT}
-                      fontMetrics={fontMetrics}
-                    />
-                  </Button>
-                  <span className="w-full truncate text-center text-xs text-muted-foreground">
-                    {glyphInfo.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+                    <Button
+                      variant="ghost"
+                      className="w-full min-w-0 overflow-hidden"
+                      style={{ height: CELL_HEIGHT }}
+                      onClick={() => handleCellClick(unicode)}
+                    >
+                      <GlyphPreview
+                        unicode={unicode}
+                        height={CELL_HEIGHT}
+                        fontMetrics={fontMetrics}
+                      />
+                    </Button>
+                    <span className="w-full truncate text-center text-xs text-muted-foreground">
+                      {glyphInfo.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 });

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
 import type { MenuManager } from "./MenuManager";
+import { extractFirstFontPath, normalizeFontPath } from "./openFontPath";
 import * as ipc from "../../shared/ipc/main";
 
 export class AppLifecycle {
@@ -10,6 +11,8 @@ export class AppLifecycle {
   private windowManager: WindowManager;
   private menuManager: MenuManager;
   private isQuitting = false;
+  private pendingExternalOpenPaths: string[] = [];
+  private processingExternalOpenPath = false;
 
   constructor(
     documentState: DocumentState,
@@ -26,6 +29,17 @@ export class AppLifecycle {
     this.registerIpcHandlers();
   }
 
+  public handleLaunchArgs(argv: readonly string[]): void {
+    const filePath = extractFirstFontPath(argv);
+    if (!filePath) return;
+    this.enqueueExternalOpenPath(filePath);
+  }
+
+  public handleSecondInstance(argv: readonly string[]): void {
+    this.focusWindow();
+    this.handleLaunchArgs(argv);
+  }
+
   private registerAppEvents() {
     app.on("ready", () => {
       this.menuManager.create();
@@ -33,6 +47,7 @@ export class AppLifecycle {
       this.setupDockIcon();
       this.registerDevShortcuts();
       this.registerDevToolsListeners();
+      this.processPendingExternalOpenPaths();
     });
 
     app.on("window-all-closed", () => {
@@ -44,7 +59,15 @@ export class AppLifecycle {
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         this.windowManager.create();
+        this.registerDevShortcuts();
+        this.registerDevToolsListeners();
       }
+      this.processPendingExternalOpenPaths();
+    });
+
+    app.on("open-file", (event, filePath) => {
+      event.preventDefault();
+      this.enqueueExternalOpenPath(filePath);
     });
 
     app.on("before-quit", async (event) => {
@@ -105,6 +128,72 @@ export class AppLifecycle {
     window.webContents.on("devtools-closed", () => {
       ipc.send(window.webContents, "devtools-toggled");
     });
+  }
+
+  private focusWindow(): void {
+    const window = this.windowManager.getWindow();
+    if (!window) return;
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.focus();
+  }
+
+  private enqueueExternalOpenPath(filePath: string): void {
+    const normalizedPath = normalizeFontPath(filePath);
+    if (!normalizedPath) return;
+    this.pendingExternalOpenPaths.push(normalizedPath);
+    this.processPendingExternalOpenPaths();
+  }
+
+  private processPendingExternalOpenPaths(): void {
+    if (this.processingExternalOpenPath) return;
+    if (this.pendingExternalOpenPaths.length === 0) return;
+    if (!app.isReady()) return;
+
+    let window = this.windowManager.getWindow();
+    if (!window) {
+      window = this.windowManager.create();
+      this.registerDevShortcuts();
+      this.registerDevToolsListeners();
+    }
+    if (!window) return;
+
+    if (window.webContents.isLoadingMainFrame()) {
+      window.webContents.once("did-finish-load", () => this.processPendingExternalOpenPaths());
+      return;
+    }
+
+    const filePath = this.pendingExternalOpenPaths.shift();
+    if (!filePath) return;
+
+    this.processingExternalOpenPath = true;
+    void this.openExternalFont(filePath)
+      .catch((error) => {
+        console.error("Failed to open external font:", error);
+      })
+      .finally(() => {
+        this.processingExternalOpenPath = false;
+        this.processPendingExternalOpenPaths();
+      });
+  }
+
+  private async openExternalFont(filePath: string): Promise<void> {
+    const window = this.windowManager.getWindow();
+    if (!window) {
+      this.pendingExternalOpenPaths.unshift(filePath);
+      return;
+    }
+
+    this.focusWindow();
+
+    if (this.documentState.isDirty()) {
+      const shouldOpen = await this.documentState.confirmClose();
+      if (!shouldOpen) return;
+    }
+
+    this.documentState.setFilePath(filePath);
+    ipc.send(window.webContents, "external:open-font", filePath);
   }
 
   private registerIpcHandlers() {

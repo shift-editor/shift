@@ -44,6 +44,7 @@ const electronAPI: ElectronAPI = {
 
   // Events
   onMenuOpenFont: on("menu:open-font"),
+  onExternalOpenFont: on("external:open-font"),
   onMenuSaveFont: on("menu:save-font"),
   onMenuUndo: on("menu:undo"),
   onMenuRedo: on("menu:redo"),

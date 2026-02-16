@@ -8,7 +8,13 @@ import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 import type { ToolRenderContext, ToolRenderLayer } from "@/lib/tools/core/ToolRenderContributor";
 
-import { DEFAULT_STYLES, GUIDE_STYLES, SNAP_INDICATOR_CROSS_SIZE_PX } from "@/lib/styles/style";
+import {
+  DEFAULT_STYLES,
+  GUIDE_STYLES,
+  SNAP_INDICATOR_CROSS_SIZE_PX,
+  resolveDrawStyle,
+  type DrawStyle,
+} from "@/lib/styles/style";
 
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
@@ -199,8 +205,12 @@ export class CanvasCoordinator {
     ctx.translate(x, y);
   }
 
-  #lineWidthUpm(screenPixels = SCREEN_LINE_WIDTH): number {
+  #pxToUpm(screenPixels = SCREEN_LINE_WIDTH): number {
     return this.#ctx.screenToUpmDistance(screenPixels);
+  }
+
+  #applyStyle(ctx: IRenderer, style: DrawStyle): void {
+    ctx.setStyle(resolveDrawStyle(style, (px) => this.#pxToUpm(px)));
   }
 
   #createToolRenderContext(context: {
@@ -209,7 +219,9 @@ export class CanvasCoordinator {
   }): Omit<ToolRenderContext, "editor"> {
     return {
       ...context,
-      lineWidthUpm: (px?: number) => this.#lineWidthUpm(px),
+      pxToUpm: (px?: number) => this.#pxToUpm(px),
+      applyStyle: (renderer, style) =>
+        renderer.setStyle(resolveDrawStyle(style, (px) => this.#pxToUpm(px))),
       projectGlyphLocalToScreen: (point) => this.#projectGlyphLocalToScreen(point.x, point.y),
     };
   }
@@ -243,7 +255,11 @@ export class CanvasCoordinator {
     ctx.save();
     this.#applyTransforms(ctx);
 
-    const rc = { ctx, lineWidthUpm: (px?: number) => this.#lineWidthUpm(px) };
+    const rc = {
+      ctx,
+      pxToUpm: (px?: number) => this.#pxToUpm(px),
+      applyStyle: (style: DrawStyle) => this.#applyStyle(ctx, style),
+    };
     const crossHalf = this.#ctx.screenToUpmDistance(SNAP_INDICATOR_CROSS_SIZE_PX);
     renderSnapIndicators(rc, indicator, crossHalf);
 
@@ -259,7 +275,11 @@ export class CanvasCoordinator {
     const previewMode = this.#ctx.isPreviewMode();
     const handlesVisible = this.#ctx.isHandlesVisible();
 
-    const rc = { ctx, lineWidthUpm: (px?: number) => this.#lineWidthUpm(px) };
+    const rc = {
+      ctx,
+      pxToUpm: (px?: number) => this.#pxToUpm(px),
+      applyStyle: (style: DrawStyle) => this.#applyStyle(ctx, style),
+    };
 
     ctx.clear();
 
@@ -279,20 +299,14 @@ export class CanvasCoordinator {
     this.#applyTransforms(ctx);
 
     if (glyph && shouldRenderEditableGlyph) {
-      const guides = getGuides(
-        glyph,
-        this.#ctx.font.getMetrics(),
-        this.#ctx.getVisualGlyphAdvance(glyph),
-      );
-      ctx.setStyle(GUIDE_STYLES);
-      ctx.lineWidth = this.#lineWidthUpm(GUIDE_STYLES.lineWidth);
+      const guides = getGuides(this.#ctx.getVisualGlyphAdvance(glyph), this.#ctx.font.getMetrics());
+      rc.applyStyle(GUIDE_STYLES);
 
       if (!previewMode) {
         renderGuides(ctx, guides);
       }
 
-      ctx.setStyle(DEFAULT_STYLES);
-      ctx.lineWidth = this.#lineWidthUpm(DEFAULT_STYLES.lineWidth);
+      rc.applyStyle(DEFAULT_STYLES);
       const hasClosed = renderGlyphOutline(ctx, glyph);
 
       if (hasClosed && previewMode) {

@@ -5,15 +5,16 @@
  * Uses immediate mode rendering - no path caching.
  */
 
-import { DEFAULT_STYLES, DrawStyle } from "@/lib/styles/style";
+import { DEFAULT_STYLES } from "@/lib/styles/style";
+import type { ResolvedDrawStyle } from "@/lib/styles/style";
 import { getEditor } from "@/store/store";
 import { IGraphicContext, IRenderer, IPath } from "@/types/graphics";
 
 export class Canvas2DRenderer implements IRenderer {
   #ctx: Canvas2DContext;
   #renderCtx: CanvasRenderingContext2D;
-  #currentStyle: DrawStyle = { ...DEFAULT_STYLES };
-  #styleStack: DrawStyle[] = [];
+  #currentStyle: ResolvedDrawStyle = { ...DEFAULT_STYLES };
+  #styleStack: ResolvedDrawStyle[] = [];
   #path: Path2D;
 
   public constructor(ctx: Canvas2DContext) {
@@ -30,7 +31,7 @@ export class Canvas2DRenderer implements IRenderer {
     return this.#renderCtx;
   }
 
-  public setStyle(style: DrawStyle): void {
+  public setStyle(style: ResolvedDrawStyle): void {
     this.#currentStyle = { ...style };
     this.strokeStyle = style.strokeStyle;
     this.fillStyle = style.fillStyle;

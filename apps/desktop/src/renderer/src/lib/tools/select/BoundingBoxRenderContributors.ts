@@ -7,7 +7,7 @@ export const selectionBoundingRectContributor: ToolRenderContributor = {
   id: "selection-bounding-rect",
   layer: "static-scene-before-handles",
   visibility: "always",
-  render({ editor, draw, lineWidthUpm }) {
+  render({ editor, draw, pxToUpm, applyStyle }) {
     if (!draw) return;
     if (editor.isPreviewMode()) return;
     if (!editor.shouldRenderEditableGlyph()) return;
@@ -21,9 +21,15 @@ export const selectionBoundingRectContributor: ToolRenderContributor = {
     const offset = editor.getDrawOffset();
     renderer.save();
     renderer.translate(offset.x, offset.y);
-    renderer.setStyle(BOUNDING_RECTANGLE_STYLES);
-    renderer.lineWidth = lineWidthUpm(BOUNDING_RECTANGLE_STYLES.lineWidth);
-    renderBoundingRect({ ctx: renderer, lineWidthUpm }, rect);
+    applyStyle(renderer, BOUNDING_RECTANGLE_STYLES);
+    renderBoundingRect(
+      {
+        ctx: renderer,
+        pxToUpm,
+        applyStyle: (style) => applyStyle(renderer, style),
+      },
+      rect,
+    );
     renderer.restore();
   },
 };

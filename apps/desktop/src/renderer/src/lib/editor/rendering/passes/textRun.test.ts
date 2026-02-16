@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { IRenderer } from "@/types/graphics";
 import type { FontMetrics } from "@shift/types";
+import { resolveDrawStyle } from "@/lib/styles/style";
 import { renderTextRun } from "./textRun";
 import type { RenderContext } from "./types";
 import type { TextRunState } from "../../managers/TextRunManager";
@@ -85,10 +86,14 @@ function createState(overrides: Partial<TextRunState> = {}): TextRunState {
 }
 
 function createRenderContext(ctx: IRenderer): RenderContext {
-  return {
+  const rc: RenderContext = {
     ctx,
-    lineWidthUpm: (px = 1) => px,
+    pxToUpm: (px = 1) => px,
+    applyStyle: (style) => {
+      ctx.setStyle(resolveDrawStyle(style, (px) => rc.pxToUpm(px)));
+    },
   };
+  return rc;
 }
 
 describe("textRun pass", () => {

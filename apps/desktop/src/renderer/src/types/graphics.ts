@@ -1,4 +1,4 @@
-import type { DrawStyle } from "@/lib/styles/style";
+import type { ResolvedDrawStyle } from "@/lib/styles/style";
 
 /**
  * Discriminated union of drawing instructions that describe a path.
@@ -50,7 +50,7 @@ export interface IRenderer {
   antiAlias: boolean;
   dashPattern: number[];
 
-  setStyle(style: DrawStyle): void;
+  setStyle(style: ResolvedDrawStyle): void;
 
   drawLine(x0: number, y0: number, x1: number, y1: number): void;
   fillRect(x: number, y: number, width: number, height: number): void;

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderBoundingRect, renderBoundingBoxHandles } from "./boundingBox";
 import type { IRenderer } from "@/types/graphics";
 import type { Rect2D } from "@shift/types";
+import { resolveDrawStyle } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 
 function createMockRenderer(): IRenderer {
@@ -41,10 +42,14 @@ function createMockRenderer(): IRenderer {
 }
 
 function createRenderContext(ctx: IRenderer): RenderContext {
-  return {
+  const rc: RenderContext = {
     ctx,
-    lineWidthUpm: (px?: number) => px ?? 1,
+    pxToUpm: (px?: number) => px ?? 1,
+    applyStyle: (style) => {
+      ctx.setStyle(resolveDrawStyle(style, (px) => rc.pxToUpm(px)));
+    },
   };
+  return rc;
 }
 
 const testRect: Rect2D = {

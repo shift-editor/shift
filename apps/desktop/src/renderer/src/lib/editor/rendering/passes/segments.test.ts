@@ -5,7 +5,7 @@ import type { IRenderer } from "@/types/graphics";
 import type { Glyph, Contour } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import { Segment } from "@/lib/geo/Segment";
-import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE } from "@/lib/styles/style";
+import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE, resolveDrawStyle } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 
 function createMockRenderer(): IRenderer {
@@ -44,10 +44,14 @@ function createMockRenderer(): IRenderer {
 }
 
 function createRenderContext(ctx: IRenderer): RenderContext {
-  return {
+  const rc: RenderContext = {
     ctx,
-    lineWidthUpm: (px?: number) => px ?? 1,
+    pxToUpm: (px?: number) => px ?? 1,
+    applyStyle: (style) => {
+      ctx.setStyle(resolveDrawStyle(style, (px) => rc.pxToUpm(px)));
+    },
   };
+  return rc;
 }
 
 function createTriangleContour(): Contour {
@@ -156,18 +160,18 @@ describe("segments", () => {
       expect(ctx.stroke).toHaveBeenCalledTimes(1);
     });
 
-    it("sets lineWidth from style through lineWidthUpm", () => {
+    it("sets lineWidth from style through pxToUpm", () => {
       const glyph = createTriangleGlyph();
       const contour = glyph.contours[0];
       const segmentIds = getSegmentIds(contour);
       const hoveredId = segmentIds[0];
 
-      const lineWidthUpmSpy = vi.fn((px?: number) => (px ?? 1) * 2);
-      rc.lineWidthUpm = lineWidthUpmSpy;
+      const pxToUpmSpy = vi.fn((px?: number) => (px ?? 1) * 2);
+      rc.pxToUpm = pxToUpmSpy;
 
       renderSegmentHighlights(rc, glyph, hoveredId, () => false);
 
-      expect(lineWidthUpmSpy).toHaveBeenCalledWith(SEGMENT_HOVER_STYLE.lineWidth);
+      expect(pxToUpmSpy).toHaveBeenCalledWith(SEGMENT_HOVER_STYLE.lineWidth);
     });
   });
 });

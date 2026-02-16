@@ -10,7 +10,7 @@
 
 import type { IRenderer } from "@/types/graphics";
 import type { Rect2D } from "@shift/types";
-import { BOUNDING_BOX_HANDLE_STYLES } from "@/lib/styles/style";
+import { BOUNDING_BOX_HANDLE_STYLES, resolveDrawStyle } from "@/lib/styles/style";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import { getHandlePositions, type HandlePositions } from "@/lib/tools/select/boundingBoxHitTest";
 import type { RenderContext } from "./types";
@@ -45,7 +45,7 @@ function drawHandles(
   _hoveredHandle?: BoundingBoxHitResult,
 ): void {
   const styles = BOUNDING_BOX_HANDLE_STYLES.handle;
-  ctx.setStyle(styles);
+  ctx.setStyle(resolveDrawStyle(styles, (px) => px));
 
   const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
 

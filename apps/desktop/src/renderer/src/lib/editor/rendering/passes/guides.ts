@@ -7,7 +7,7 @@
  */
 
 import type { IRenderer } from "@/types/graphics";
-import type { Glyph, FontMetrics } from "@shift/types";
+import type { FontMetrics } from "@shift/types";
 
 /** Horizontal and vertical guide positions derived from font metrics and glyph advance width. */
 export interface Guides {
@@ -19,15 +19,15 @@ export interface Guides {
   descender: { y: number };
 }
 
-/** Builds guide positions from the active glyph's advance width and the font's vertical metrics. */
-export function getGuides(glyph: Glyph, metrics: FontMetrics, xAdvanceOverride?: number): Guides {
+/** Builds guide positions from advance width and the font's vertical metrics. */
+export function getGuides(xAdvance: number, metrics: FontMetrics): Guides {
   return {
     ascender: { y: metrics.ascender },
     capHeight: { y: metrics.capHeight ?? 0 },
     xHeight: { y: metrics.xHeight ?? 0 },
     baseline: { y: 0 },
     descender: { y: metrics.descender },
-    xAdvance: xAdvanceOverride ?? glyph.xAdvance,
+    xAdvance,
   };
 }
 

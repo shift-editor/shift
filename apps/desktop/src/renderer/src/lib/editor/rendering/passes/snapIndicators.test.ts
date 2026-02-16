@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { renderSnapIndicators, collectLineEndpoints } from "./snapIndicators";
 import type { IRenderer } from "@/types/graphics";
+import { resolveDrawStyle } from "@/lib/styles/style";
 import type { SnapIndicator } from "../../snapping/types";
 import type { RenderContext } from "./types";
 
@@ -41,10 +42,14 @@ function createMockRenderer(): IRenderer {
 }
 
 function createRenderContext(ctx: IRenderer): RenderContext {
-  return {
+  const rc: RenderContext = {
     ctx,
-    lineWidthUpm: (px?: number) => px ?? 1,
+    pxToUpm: (px?: number) => px ?? 1,
+    applyStyle: (style) => {
+      ctx.setStyle(resolveDrawStyle(style, (px) => rc.pxToUpm(px)));
+    },
   };
+  return rc;
 }
 
 describe("snapIndicators", () => {
@@ -150,19 +155,21 @@ describe("snapIndicators", () => {
       expect(drawLineCalls).toContainEqual([0 - 5, 100 + 5, 0 + 5, 100 - 5]);
     });
 
-    it("sets strokeStyle to snap indicator style", () => {
+    it("applies snap indicator style", () => {
       renderSnapIndicators(rc, indicator, 5);
 
-      expect(ctx.strokeStyle).toBe("#ff3b30");
+      expect(ctx.setStyle).toHaveBeenCalledWith(
+        expect.objectContaining({ strokeStyle: "#ff3b30" }),
+      );
     });
 
-    it("sets lineWidth through lineWidthUpm", () => {
-      const lineWidthUpmSpy = vi.fn((px?: number) => (px ?? 1) * 3);
-      rc.lineWidthUpm = lineWidthUpmSpy;
+    it("sets lineWidth through pxToUpm", () => {
+      const pxToUpmSpy = vi.fn((px?: number) => (px ?? 1) * 3);
+      rc.pxToUpm = pxToUpmSpy;
 
       renderSnapIndicators(rc, indicator, 5);
 
-      expect(lineWidthUpmSpy).toHaveBeenCalled();
+      expect(pxToUpmSpy).toHaveBeenCalled();
     });
 
     it("uses explicit markers when provided in indicator", () => {

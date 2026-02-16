@@ -4,11 +4,21 @@ import { AppLifecycle, DocumentState, MenuManager, WindowManager } from "./manag
 
 if (started) {
   app.quit();
+} else {
+  const hasSingleInstanceLock = app.requestSingleInstanceLock();
+  if (!hasSingleInstanceLock) {
+    app.quit();
+  } else {
+    const documentState = new DocumentState();
+    const windowManager = new WindowManager(documentState);
+    const menuManager = new MenuManager(documentState, windowManager);
+    const appLifecycle = new AppLifecycle(documentState, windowManager, menuManager);
+
+    app.on("second-instance", (_event, argv) => {
+      appLifecycle.handleSecondInstance(argv);
+    });
+
+    appLifecycle.handleLaunchArgs(process.argv);
+    appLifecycle.initialize();
+  }
 }
-
-const documentState = new DocumentState();
-const windowManager = new WindowManager(documentState);
-const menuManager = new MenuManager(documentState, windowManager);
-const appLifecycle = new AppLifecycle(documentState, windowManager, menuManager);
-
-appLifecycle.initialize();

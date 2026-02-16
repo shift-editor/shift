@@ -1,9 +1,17 @@
 import { lightTheme } from "./theme";
-import { getCanvasStyles, DrawStyle, HandleStyles, HandleStylesMap } from "./canvas";
+import { getCanvasStyles, resolveDrawStyle } from "./canvas";
+import type { DrawStyle, HandleStyles, HandleStylesMap, ResolvedDrawStyle } from "./canvas";
 import type { BoundingBoxHandleStyles } from "./canvas/boundingBox";
-import { BaseHandleStyle } from "./canvas/handles";
+import type { BaseHandleStyle } from "./canvas/handles";
 
-export type { DrawStyle, HandleStyles, HandleStylesMap, BoundingBoxHandleStyles };
+export type {
+  DrawStyle,
+  HandleStyles,
+  HandleStylesMap,
+  BoundingBoxHandleStyles,
+  ResolvedDrawStyle,
+};
+export { resolveDrawStyle };
 
 export interface HandleDimensions {
   size: number;

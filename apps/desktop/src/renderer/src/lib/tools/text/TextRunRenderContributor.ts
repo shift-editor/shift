@@ -28,7 +28,7 @@ export const textRunRenderContributor: ToolRenderContributor = {
   id: "text-run",
   layer: "static-scene-before-handles",
   visibility: "always",
-  render({ editor, draw, lineWidthUpm }) {
+  render({ editor, draw, pxToUpm, applyStyle }) {
     if (!draw) return;
 
     const textRunState = editor.getTextRunState();
@@ -49,7 +49,8 @@ export const textRunRenderContributor: ToolRenderContributor = {
     renderTextRun(
       {
         ctx: draw.renderer,
-        lineWidthUpm,
+        pxToUpm,
+        applyStyle: (style) => applyStyle(draw.renderer, style),
       },
       textRunState,
       metrics,

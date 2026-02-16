@@ -26,7 +26,7 @@ export function renderDebugTightBounds(
     const height = bounds.max.y - bounds.min.y;
 
     rc.ctx.strokeStyle = COLOR_TIGHT_BOUNDS;
-    rc.ctx.lineWidth = rc.lineWidthUpm();
+    rc.ctx.lineWidth = rc.pxToUpm();
     rc.ctx.strokeRect(bounds.min.x, bounds.min.y, width, height);
     return;
   }
@@ -34,7 +34,7 @@ export function renderDebugTightBounds(
 
 export function renderDebugHitRadii(rc: RenderContext, glyph: Glyph, hitRadiusUpm: number): void {
   rc.ctx.strokeStyle = COLOR_HIT_RADII;
-  rc.ctx.lineWidth = rc.lineWidthUpm();
+  rc.ctx.lineWidth = rc.pxToUpm();
 
   for (const { point } of Glyphs.points(glyph)) {
     rc.ctx.strokeCircle(point.x, point.y, hitRadiusUpm);
@@ -43,7 +43,7 @@ export function renderDebugHitRadii(rc: RenderContext, glyph: Glyph, hitRadiusUp
 
 export function renderDebugSegmentBounds(rc: RenderContext, glyph: Glyph): void {
   rc.ctx.strokeStyle = COLOR_SEGMENT_BOUNDS;
-  rc.ctx.lineWidth = rc.lineWidthUpm();
+  rc.ctx.lineWidth = rc.pxToUpm();
 
   for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
     const bounds = Segment.bounds(segment);
@@ -65,6 +65,6 @@ export function renderDebugGlyphBbox(rc: RenderContext, glyph: Glyph): void {
   const height = bbox.max.y - bbox.min.y;
 
   rc.ctx.strokeStyle = COLOR_GLYPH_BBOX;
-  rc.ctx.lineWidth = rc.lineWidthUpm();
+  rc.ctx.lineWidth = rc.pxToUpm();
   rc.ctx.strokeRect(bbox.min.x, bbox.min.y, width, height);
 }

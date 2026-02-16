@@ -33,8 +33,7 @@ export function renderSegmentHighlights(
     if (!isHovered && !selected) continue;
 
     const style = selected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
-    rc.ctx.setStyle(style);
-    rc.ctx.lineWidth = rc.lineWidthUpm(style.lineWidth);
+    rc.applyStyle(style);
 
     drawSegmentCurve(rc.ctx, segment);
   }

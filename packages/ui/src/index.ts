@@ -23,4 +23,12 @@ export {
   type DialogPopupProps,
   type DialogTitleProps,
 } from "./components/dialog";
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsiblePanel,
+  type CollapsibleProps,
+  type CollapsibleTriggerProps,
+  type CollapsiblePanelProps,
+} from "./components/collapsible";
 export { cn } from "./lib/utils";

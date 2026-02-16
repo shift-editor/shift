@@ -20,8 +20,7 @@ export function renderSnapIndicators(
   indicator: SnapIndicator,
   crossHalf: number,
 ): void {
-  rc.ctx.strokeStyle = SNAP_INDICATOR_STYLE.strokeStyle;
-  rc.ctx.lineWidth = rc.lineWidthUpm(SNAP_INDICATOR_STYLE.lineWidth);
+  rc.applyStyle(SNAP_INDICATOR_STYLE);
 
   for (const line of indicator.lines) {
     rc.ctx.drawLine(line.from.x, line.from.y, line.to.x, line.to.y);

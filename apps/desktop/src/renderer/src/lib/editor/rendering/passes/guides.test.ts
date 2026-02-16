@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { renderGuides, getGuides, type Guides } from "./guides";
 import type { IRenderer } from "@/types/graphics";
-import type { Glyph, FontMetrics } from "@shift/types";
+import type { FontMetrics } from "@shift/types";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -56,8 +56,7 @@ describe("guides", () => {
   });
 
   describe("getGuides", () => {
-    it("returns correct guide structure from glyph and metrics", () => {
-      const glyph: Glyph = { name: "A", contours: [], xAdvance: 600 };
+    it("returns correct guide structure from xAdvance and metrics", () => {
       const metrics: FontMetrics = {
         unitsPerEm: 1000,
         ascender: 800,
@@ -70,7 +69,7 @@ describe("guides", () => {
         underlineThickness: null,
       };
 
-      const result = getGuides(glyph, metrics);
+      const result = getGuides(600, metrics);
 
       expect(result).toEqual({
         ascender: { y: 800 },
@@ -83,7 +82,6 @@ describe("guides", () => {
     });
 
     it("defaults capHeight and xHeight to 0 when null", () => {
-      const glyph: Glyph = { name: "A", contours: [], xAdvance: 500 };
       const metrics: FontMetrics = {
         unitsPerEm: 1000,
         ascender: 800,
@@ -96,14 +94,13 @@ describe("guides", () => {
         underlineThickness: null,
       };
 
-      const result = getGuides(glyph, metrics);
+      const result = getGuides(500, metrics);
 
       expect(result.capHeight).toEqual({ y: 0 });
       expect(result.xHeight).toEqual({ y: 0 });
     });
 
-    it("uses glyph xAdvance for xAdvance", () => {
-      const glyph: Glyph = { name: "B", contours: [], xAdvance: 750 };
+    it("uses provided xAdvance for xAdvance", () => {
       const metrics: FontMetrics = {
         unitsPerEm: 1000,
         ascender: 800,
@@ -116,7 +113,7 @@ describe("guides", () => {
         underlineThickness: null,
       };
 
-      const result = getGuides(glyph, metrics);
+      const result = getGuides(750, metrics);
 
       expect(result.xAdvance).toBe(750);
     });
