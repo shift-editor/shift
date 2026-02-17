@@ -3,6 +3,7 @@
 
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
 const { FontEngine } = require("shift-node");
+const os = require("os");
 import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
 import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
 import type { ElectronAPI } from "../shared/ipc/electronAPI";
@@ -57,6 +58,9 @@ const electronAPI: ElectronAPI = {
   onDebugPanel: on("debug:panel"),
   onDebugDumpSnapshot: on("debug:dump-snapshot"),
   onDebugOverlays: on("debug:overlays"),
+
+  // System
+  homePath: os.homedir() as string,
 
   // Clipboard (direct, no IPC)
   clipboardReadText: (): string => clipboard.readText(),

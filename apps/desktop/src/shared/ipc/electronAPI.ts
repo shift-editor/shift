@@ -44,6 +44,9 @@ export interface ElectronAPI {
   onDebugDumpSnapshot: EventListener<"debug:dump-snapshot">;
   onDebugOverlays: EventListener<"debug:overlays">;
 
+  // System
+  homePath: string;
+
   // Clipboard (direct, no IPC)
   clipboardReadText: () => string;
   clipboardWriteText: (text: string) => void;

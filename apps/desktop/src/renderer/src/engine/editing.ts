@@ -174,6 +174,10 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.setXAdvance(width));
   }
 
+  translateLayer(dx: number, dy: number): void {
+    this.#dispatchVoid(this.#engine.raw.translateLayer(dx, dy));
+  }
+
   setActiveContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#engine.raw.setActiveContour(contourId));
   }

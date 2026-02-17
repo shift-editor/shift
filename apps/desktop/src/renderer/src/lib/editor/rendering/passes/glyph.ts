@@ -7,18 +7,8 @@
 
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph } from "@shift/types";
+import { iterateRenderableContours } from "@shift/font";
 import { buildContourPath } from "../render";
-
-type RenderableContour = Parameters<typeof buildContourPath>[1];
-
-function* iterateRenderableContours(glyph: Glyph): Iterable<RenderableContour> {
-  for (const contour of glyph.contours) {
-    yield contour;
-  }
-  for (const contour of glyph.compositeContours ?? []) {
-    yield contour;
-  }
-}
 
 /**
  * Strokes every contour of the glyph.

@@ -55,6 +55,7 @@ export declare class FontEngine {
   getEditingGlyphName(): string | null;
   getActiveContourId(): string | null;
   setXAdvance(width: number): string;
+  translateLayer(dx: number, dy: number): string;
   setActiveContour(contourId: string): string;
   clearActiveContour(): string;
   getSnapshotData(): string;

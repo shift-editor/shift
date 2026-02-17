@@ -139,10 +139,13 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 ### Package vs App Code
 
 - Geometry utilities (Vec2, Curve, Polygon) → import from `@shift/geo`
+- Glyph-domain geometry (contour traversal, segment parsing, tight/x bounds) → import from `@shift/font`
 - Core types (Point2D, Rect2D, PointId, ContourId) → import from `@shift/types`
 - Snapshot utilities (findPointInSnapshot, etc.) → import from `@/lib/utils/snapshot`
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
+- Do not synthesize fake point IDs for geometry-only operations
+- Canonical glyph geometry APIs: `iterateRenderableContours`, `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
 
 ### Import Conventions
 

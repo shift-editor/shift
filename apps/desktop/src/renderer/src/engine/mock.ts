@@ -227,6 +227,31 @@ export class MockFontEngine implements FontEngineAPI {
     });
   }
 
+  translateLayer(dx: number, dy: number): string {
+    return this.#withSession((snap) => {
+      for (const contour of snap.contours) {
+        for (const point of contour.points) {
+          point.x += dx;
+          point.y += dy;
+        }
+      }
+
+      for (const anchor of snap.anchors) {
+        anchor.x += dx;
+        anchor.y += dy;
+      }
+
+      for (const contour of snap.compositeContours) {
+        for (const point of contour.points) {
+          point.x += dx;
+          point.y += dy;
+        }
+      }
+
+      return this.#makeResult(true, []);
+    });
+  }
+
   setActiveContour(contourId: string): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 

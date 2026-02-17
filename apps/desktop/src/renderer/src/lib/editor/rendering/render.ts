@@ -5,10 +5,10 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type { Contour, Glyph, Point, PointType } from "@shift/types";
+import type { Contour, Glyph } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { Polygon } from "@shift/geo";
-import { Segment } from "@/lib/geo/Segment";
+import { iterateRenderableContours, parseContourSegments, type ContourLike } from "@shift/font";
 
 export interface Guides {
   xAdvance: number;
@@ -19,48 +19,13 @@ export interface Guides {
   descender: { y: number };
 }
 
-type RenderPathPoint = {
-  readonly x: number;
-  readonly y: number;
-  readonly pointType: PointType;
-  readonly smooth: boolean;
-  readonly id?: unknown;
-};
-
-type RenderPathContour = {
-  readonly points: readonly RenderPathPoint[];
-  readonly closed: boolean;
-};
-
-function* iterateRenderContours(glyph: Glyph): Iterable<RenderPathContour> {
-  for (const contour of glyph.contours) {
-    yield contour;
-  }
-  for (const contour of glyph.compositeContours ?? []) {
-    yield contour;
-  }
-}
-
-function normalizeSegmentPoints(points: readonly RenderPathPoint[]): Point[] {
-  return points.map((point, index) => {
-    const id = (point.id ?? `render-${index}`) as Point["id"];
-    return {
-      id,
-      x: point.x,
-      y: point.y,
-      pointType: point.pointType,
-      smooth: point.smooth,
-    } as Point;
-  });
-}
-
 /**
  * Traces the contour's segments into the current path without stroking or filling.
  * Returns `true` if the contour is closed (caller can decide to fill).
  */
-export function buildContourPath(ctx: IRenderer, contour: RenderPathContour): boolean {
+export function buildContourPath(ctx: IRenderer, contour: ContourLike): boolean {
   if (contour.points.length < 2) return false;
-  const segments = Segment.parse(normalizeSegmentPoints(contour.points), contour.closed);
+  const segments = parseContourSegments(contour);
   if (segments.length === 0) return false;
   ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
 
@@ -102,7 +67,7 @@ export function renderGlyph(ctx: IRenderer, glyph: Glyph): boolean {
   let hasClosed = false;
 
   ctx.beginPath();
-  for (const contour of iterateRenderContours(glyph)) {
+  for (const contour of iterateRenderableContours(glyph)) {
     const isClosed = buildContourPath(ctx, contour);
     if (isClosed) hasClosed = true;
   }

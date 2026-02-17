@@ -11,7 +11,7 @@ interface EditableSidebarInputProps {
   label?: string | React.ReactNode;
   labelPosition?: "left" | "right";
   className?: string;
-  value?: number;
+  value?: number | null;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
   onValueChange?: (value: number) => void;
@@ -46,17 +46,16 @@ export const EditableSidebarInput = forwardRef<
     ref,
   ) => {
     const { lockToZone, unlock } = useFocusZone();
+    const initialValue = value === undefined ? defaultValue : value;
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
-    const [displayValue, setDisplayValue] = useState(value ?? defaultValue);
+    const [displayValue, setDisplayValue] = useState<number | null>(initialValue);
     const inputRef = useRef<HTMLInputElement>(null);
-    const displayValueRef = useRef(value ?? defaultValue);
 
     useImperativeHandle(
       ref,
       () => ({
         setValue: (v: number) => {
-          displayValueRef.current = v;
           setDisplayValue(v);
         },
       }),
@@ -65,7 +64,6 @@ export const EditableSidebarInput = forwardRef<
 
     useEffect(() => {
       if (!isEditing && value !== undefined) {
-        displayValueRef.current = value;
         setDisplayValue(value);
       }
     }, [value, isEditing]);
@@ -74,14 +72,13 @@ export const EditableSidebarInput = forwardRef<
       if (disabled) return;
       lockToZone("sidebar");
       setIsEditing(true);
-      setEditValue(String(displayValue));
+      setEditValue(displayValue === null ? "" : String(displayValue));
     }, [disabled, displayValue, lockToZone]);
 
     const handleBlur = useCallback(() => {
       unlock();
       setIsEditing(false);
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
-      displayValueRef.current = numericValue;
       setDisplayValue(numericValue);
       onValueChange?.(numericValue);
     }, [editValue, defaultValue, onValueChange, unlock]);
@@ -101,7 +98,7 @@ export const EditableSidebarInput = forwardRef<
         }
 
         if (e.key === "Escape") {
-          setEditValue(String(displayValue));
+          setEditValue(displayValue === null ? "" : String(displayValue));
           setIsEditing(false);
           inputRef.current.blur();
           return;
@@ -137,7 +134,7 @@ export const EditableSidebarInput = forwardRef<
         ref={inputRef}
         label={label}
         labelPosition={labelPosition}
-        value={isEditing ? editValue : `${displayValue}${suffix}`}
+        value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
         icon={icon}
         iconPosition={iconPosition}
         readOnly={!isEditing}

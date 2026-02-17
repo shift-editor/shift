@@ -24,6 +24,8 @@ export {
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
+  SetLeftSidebearingCommand,
+  SetRightSidebearingCommand,
 } from "./primitives";
 
 // Clipboard commands

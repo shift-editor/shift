@@ -5,20 +5,25 @@ import { documentPersistence } from "@/persistence";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 import { glyphRefFromUnicode } from "@/lib/utils/unicode";
+import { RecentFiles } from "./RecentFiles";
 
 export const Landing = () => {
   const navigate = useNavigate();
 
+  const openFont = (filePath: string) => {
+    const editor = getEditor();
+    editor.loadFont(filePath);
+    editor.updateMetricsFromFont();
+    setFilePath(filePath);
+    clearDirty();
+    documentPersistence.openDocument(filePath);
+    navigate("/home");
+  };
+
   const handleLoadFont = async () => {
     const filePath = await window.electronAPI?.openFontDialog();
     if (filePath) {
-      const editor = getEditor();
-      editor.loadFont(filePath);
-      editor.updateMetricsFromFont();
-      setFilePath(filePath);
-      clearDirty();
-      documentPersistence.openDocument(filePath);
-      navigate("/home");
+      openFont(filePath);
     }
   };
 
@@ -51,6 +56,7 @@ export const Landing = () => {
           New font
         </Button>
       </div>
+      <RecentFiles onOpenFile={openFont} />
     </section>
   );
 };

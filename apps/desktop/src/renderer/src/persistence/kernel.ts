@@ -136,6 +136,22 @@ export class DocumentStatePersistence {
     this.flush();
   }
 
+  getRecentDocuments(): { name: string; path: string }[] {
+    const state = this.#editor ? this.#state : this.readState();
+    return state.registry.lruDocIds
+      .slice(0, 10)
+      .map((docId) => state.registry.docIdToPath[docId])
+      .filter((p): p is string => !!p)
+      .map((p) => ({
+        name:
+          p
+            .split("/")
+            .pop()
+            ?.replace(/\.(otf|ttf|woff2?)$/i, "") ?? p,
+        path: p,
+      }));
+  }
+
   dispose(): void {
     this.flushNow();
     this.disposeWatchers();

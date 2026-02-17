@@ -67,6 +67,7 @@ export interface FontEngineAPI {
 
   // ── Glyph Properties ──
   setXAdvance(width: number): string;
+  translateLayer(dx: number, dy: number): string;
 
   // ── Point Operations ──
   addPoint(x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string;

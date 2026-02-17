@@ -51,6 +51,36 @@ impl EditSession {
         self.layer.set_width(width);
     }
 
+    /// Translate all editable glyph geometry in the active layer.
+    ///
+    /// This moves contour points, anchors, and component transforms.
+    /// Glyph advance width is intentionally left unchanged.
+    pub fn translate_layer(&mut self, dx: f64, dy: f64) {
+        let contour_ids: Vec<_> = self.layer.contours().keys().cloned().collect();
+        for contour_id in contour_ids {
+            if let Some(contour) = self.layer.contour_mut(contour_id) {
+                for point in contour.points_mut() {
+                    point.translate(dx, dy);
+                }
+            }
+        }
+
+        let anchor_ids: Vec<_> = self
+            .layer
+            .anchors_iter()
+            .map(|anchor| anchor.id())
+            .collect();
+        self.layer.move_anchors(&anchor_ids, dx, dy);
+
+        let component_ids: Vec<_> = self.layer.components().keys().cloned().collect();
+        for component_id in component_ids {
+            if let Some(mut component) = self.layer.remove_component(component_id) {
+                component.translate(dx, dy);
+                self.layer.add_component(component);
+            }
+        }
+    }
+
     pub fn set_active_contour(&mut self, contour_id: ContourId) {
         self.active_contour_id = Some(contour_id);
     }
@@ -424,6 +454,7 @@ pub struct PasteResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shift_ir::Component;
 
     fn create_session() -> EditSession {
         EditSession::new("test".to_string(), 65, GlyphLayer::with_width(500.0))
@@ -592,6 +623,49 @@ mod tests {
 
         assert_eq!(c1.get_point(p1).unwrap().x(), 5.0);
         assert_eq!(c2.get_point(p2).unwrap().x(), 55.0);
+    }
+
+    #[test]
+    fn translate_layer_moves_points_and_anchors_without_changing_width() {
+        let mut session = create_session();
+        let original_width = session.width();
+        let contour_id = session.add_empty_contour();
+        let point_id = session
+            .add_point(10.0, 20.0, PointType::OnCurve, false)
+            .unwrap();
+        let anchor_id =
+            session
+                .layer_mut()
+                .add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
+
+        session.translate_layer(5.0, -3.0);
+
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        assert_eq!(point.x(), 15.0);
+        assert_eq!(point.y(), 17.0);
+        assert_eq!(anchor.x(), 35.0);
+        assert_eq!(anchor.y(), 37.0);
+        assert_eq!(session.width(), original_width);
+    }
+
+    #[test]
+    fn translate_layer_moves_component_transforms() {
+        let mut session = create_session();
+        let component_id = session
+            .layer_mut()
+            .add_component(Component::new("base".to_string()));
+
+        session.translate_layer(12.0, -7.0);
+
+        let component = session.layer().component(component_id).unwrap();
+        let matrix = component.matrix();
+        assert_eq!(matrix.dx, 12.0);
+        assert_eq!(matrix.dy, -7.0);
     }
 
     #[test]

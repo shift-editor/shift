@@ -38,7 +38,7 @@ import { ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { glyphDataStore } from "@/store/GlyphDataStore";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import { CommandHistory } from "../commands";
+import { CommandHistory, SetLeftSidebearingCommand, SetRightSidebearingCommand } from "../commands";
 import {
   RotatePointsCommand,
   ScalePointsCommand,
@@ -96,6 +96,7 @@ import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { fallbackGlyphNameForUnicode, glyphRefFromUnicode } from "@/lib/utils/unicode";
+import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -1107,6 +1108,44 @@ export class Editor implements ShiftEditor {
     this.beginPreview();
     this.#fontEngine.editing.setXAdvance(width);
     this.commitPreview("Set X Advance");
+  }
+
+  public setLeftSidebearing(value: number): void {
+    const glyph = this.#$glyph.value;
+    if (!glyph) return;
+
+    const sidebearings = deriveGlyphSidebearings(glyph);
+    if (sidebearings.lsb === null) return;
+
+    const current = roundSidebearing(sidebearings.lsb);
+    const target = roundSidebearing(value);
+    const delta = target - current;
+    if (delta === 0) return;
+
+    const beforeXAdvance = glyph.xAdvance;
+    const afterXAdvance = beforeXAdvance + delta;
+
+    this.#commandHistory.execute(
+      new SetLeftSidebearingCommand(beforeXAdvance, afterXAdvance, delta),
+    );
+  }
+
+  public setRightSidebearing(value: number): void {
+    const glyph = this.#$glyph.value;
+    if (!glyph) return;
+
+    const sidebearings = deriveGlyphSidebearings(glyph);
+    if (sidebearings.rsb === null) return;
+
+    const current = roundSidebearing(sidebearings.rsb);
+    const target = roundSidebearing(value);
+    const delta = target - current;
+    if (delta === 0) return;
+
+    const beforeXAdvance = glyph.xAdvance;
+    const afterXAdvance = beforeXAdvance + delta;
+
+    this.#commandHistory.execute(new SetRightSidebearingCommand(beforeXAdvance, afterXAdvance));
   }
 
   public updateMetricsFromFont(): void {

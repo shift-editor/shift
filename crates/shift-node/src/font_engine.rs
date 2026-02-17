@@ -720,6 +720,11 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn translate_layer(&mut self, dx: f64, dy: f64) -> Result<String> {
+    self.command_simple(|s| s.translate_layer(dx, dy))
+  }
+
+  #[napi]
   pub fn set_active_contour(&mut self, contour_id: String) -> Result<String> {
     let cid = parse_or_err!(contour_id, ContourId, "contour ID");
     self.command_simple(|s| s.set_active_contour(cid))
