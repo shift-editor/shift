@@ -28,7 +28,7 @@ export const DialogPopup = React.forwardRef<HTMLDivElement, DialogPopupProps>(
     <BaseDialog.Popup
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-lg border bg-surface shadow-lg",
+        "fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-md bg-surface shadow-sm",
         className,
       )}
       {...props}

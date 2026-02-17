@@ -32,3 +32,4 @@ export {
   type CollapsiblePanelProps,
 } from "./components/collapsible";
 export { cn } from "./lib/utils";
+export { Search } from "lucide-react";

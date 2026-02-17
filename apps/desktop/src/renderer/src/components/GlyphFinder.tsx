@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Dialog, DialogBackdrop, DialogPortal, DialogPopup, Input } from "@shift/ui";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPortal,
+  DialogPopup,
+  Input,
+  Search,
+  Separator,
+} from "@shift/ui";
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import type { SearchResult } from "@shift/glyph-info";
@@ -105,48 +113,66 @@ export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) 
     });
   };
 
+  const selectedColour = (index: number) =>
+    index === selectedIndex ? "bg-accent/10 text-accent" : "text-primary hover:bg-muted/10";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal>
       <DialogPortal>
         <DialogBackdrop />
-        <DialogPopup>
-          <div className="p-3" onKeyDown={handleKeyDown} onKeyUp={stopPropagation}>
+        <DialogPopup
+          initialFocus={false}
+          finalFocus={false}
+          className="max-w-[300px] shadow-sm bg-panel"
+        >
+          <div className="px-1 py-1.5" onKeyDown={handleKeyDown} onKeyUp={stopPropagation}>
             <Input
               ref={inputRef}
-              autoFocus
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search glyphs by name, unicode, category..."
-              className="h-8 text-xs"
+              placeholder="Search "
+              className="h-8 pl-8 bg-transparent text-sm focus:ring-0 focus:ring-transparent focus:outline-none"
+              icon={<Search className="w-4 h-4 text-muted" />}
+              iconPosition="left"
             />
             {results.length > 0 && (
-              <div ref={listRef} role="listbox" className="mt-2 max-h-80 overflow-y-auto">
-                {results.map((result, index) => (
-                  <div
-                    key={result.codepoint}
-                    role="option"
-                    aria-selected={index === selectedIndex}
-                    className={`flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-xs ${
-                      index === selectedIndex
-                        ? "bg-accent/10 text-accent"
-                        : "text-primary hover:bg-muted/10"
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.nativeEvent.stopImmediatePropagation();
-                      commitSelection(result.codepoint);
-                    }}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    <span className="w-6 text-center text-base">{glyphChar(result.codepoint)}</span>
-                    <span className="font-medium">{result.glyphName ?? "—"}</span>
-                    <span className="text-muted truncate">{result.unicodeName ?? ""}</span>
-                    <span className="ml-auto font-mono text-[10px] text-muted">
-                      {formatCodepointAsUPlus(result.codepoint)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <>
+                <Separator className="my-2" />
+                <div
+                  ref={listRef}
+                  role="listbox"
+                  className="mt-2 max-h-80 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  {results.map((result, index) => (
+                    <div
+                      key={result.codepoint}
+                      role="option"
+                      aria-selected={index === selectedIndex}
+                      className={`flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-xs ${selectedColour(index)}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.nativeEvent.stopImmediatePropagation();
+                        commitSelection(result.codepoint);
+                      }}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="w-12 text-[40px] text-center text-base">
+                          {glyphChar(result.codepoint)}
+                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium font-sans text-sm">
+                            {result.glyphName ?? "—"}
+                          </span>
+                          <span className="font-sans text-xs">
+                            {formatCodepointAsUPlus(result.codepoint)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {query.trim() !== "" && results.length === 0 && (
               <p className="mt-2 px-2 text-xs text-muted">No results found.</p>
