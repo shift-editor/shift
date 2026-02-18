@@ -9,6 +9,9 @@ describe("openFontPath", () => {
       expect(isSupportedFontPath("/tmp/font.ttf")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.otf")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.OTF")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.glyphs")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.glyphspackage")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.GLYPHSPACKAGE")).toBe(true);
     });
 
     it("rejects unsupported extensions", () => {

@@ -1391,6 +1391,7 @@ name = "shift-backends"
 version = "0.1.0"
 dependencies = [
  "fontc",
+ "glyphs-reader",
  "norad 0.16.0",
  "plist",
  "shift-ir",

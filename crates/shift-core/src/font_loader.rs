@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::binary::BytesFontAdaptor;
+use shift_backends::glyphs::GlyphsReader;
 use shift_backends::ufo::UfoReader;
 use shift_backends::FontReader;
 use shift_ir::Font;
@@ -9,6 +10,7 @@ use shift_ir::Font;
 #[derive(Hash, Eq, PartialEq)]
 pub enum FontFormat {
     Ufo,
+    Glyphs,
     Ttf,
     Otf,
 }
@@ -19,6 +21,7 @@ pub trait FontAdaptor {
 }
 
 struct UfoFontAdaptor;
+struct GlyphsFontAdaptor;
 
 impl FontAdaptor for UfoFontAdaptor {
     fn read_font(&self, path: &str) -> Result<Font, String> {
@@ -29,6 +32,16 @@ impl FontAdaptor for UfoFontAdaptor {
         use shift_backends::ufo::UfoWriter;
         use shift_backends::FontWriter;
         UfoWriter::new().save(font, path)
+    }
+}
+
+impl FontAdaptor for GlyphsFontAdaptor {
+    fn read_font(&self, path: &str) -> Result<Font, String> {
+        GlyphsReader::new().load(path)
+    }
+
+    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
+        Err("Glyphs writing is not supported; save as .ufo instead".to_string())
     }
 }
 
@@ -43,8 +56,10 @@ impl Default for FontLoader {
 }
 
 fn format_from_extension(ext: &str) -> Result<FontFormat, String> {
-    match ext {
+    match ext.to_ascii_lowercase().as_str() {
         "ufo" => Ok(FontFormat::Ufo),
+        "glyphs" => Ok(FontFormat::Glyphs),
+        "glyphspackage" => Ok(FontFormat::Glyphs),
         "ttf" => Ok(FontFormat::Ttf),
         "otf" => Ok(FontFormat::Otf),
         _ => Err(format!("Unsupported font format: {ext}")),
@@ -62,6 +77,7 @@ impl FontLoader {
     pub fn new() -> Self {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
+        adaptors.insert(FontFormat::Glyphs, Box::new(GlyphsFontAdaptor));
         adaptors.insert(FontFormat::Ttf, Box::new(BytesFontAdaptor));
         adaptors.insert(FontFormat::Otf, Box::new(BytesFontAdaptor));
 
@@ -95,5 +111,32 @@ impl FontLoader {
 
         let adaptor = self.adaptors.get(&format).expect("all formats registered");
         adaptor.write_font(font, path.to_str().unwrap())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_from_extension, FontFormat};
+
+    #[test]
+    fn supports_glyphs_extensions() {
+        assert!(matches!(
+            format_from_extension("glyphs"),
+            Ok(FontFormat::Glyphs)
+        ));
+        assert!(matches!(
+            format_from_extension("glyphspackage"),
+            Ok(FontFormat::Glyphs)
+        ));
+    }
+
+    #[test]
+    fn extension_matching_is_case_insensitive() {
+        assert!(matches!(format_from_extension("UFO"), Ok(FontFormat::Ufo)));
+        assert!(matches!(
+            format_from_extension("GLYPHS"),
+            Ok(FontFormat::Glyphs)
+        ));
+        assert!(matches!(format_from_extension("OTF"), Ok(FontFormat::Otf)));
     }
 }

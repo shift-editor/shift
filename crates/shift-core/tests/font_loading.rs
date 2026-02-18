@@ -30,6 +30,10 @@ fn mutatorsans_otf_path() -> PathBuf {
     fixtures_path().join("fonts/mutatorsans/MutatorSans.otf")
 }
 
+fn homenaje_glyphs_path() -> PathBuf {
+    fixtures_path().join("fonts/Homenaje.glyphs")
+}
+
 #[test]
 fn test_load_mutatorsans_ufo() {
     let ufo_path = mutatorsans_ufo_path();
@@ -175,6 +179,82 @@ fn test_load_mutatorsans_otf() {
         .expect("Failed to load OTF font");
 
     assert!(font.glyph_count() > 0, "OTF should have glyphs");
+}
+
+#[test]
+fn test_load_homenaje_glyphs_file() {
+    let glyphs_path = homenaje_glyphs_path();
+    if !glyphs_path.exists() {
+        return;
+    }
+
+    let loader = FontLoader::new();
+    let font = loader
+        .read_font(glyphs_path.to_str().unwrap())
+        .expect("Failed to load Homenaje .glyphs font");
+
+    assert_eq!(font.metadata().family_name.as_deref(), Some("Homenaje"));
+    assert_eq!(font.metadata().version_major, Some(1));
+    assert_eq!(font.metadata().version_minor, Some(100));
+    assert_eq!(font.metrics().units_per_em, 1000.0);
+    assert_eq!(font.metrics().ascender, 700.0);
+    assert_eq!(font.metrics().descender, -160.0);
+    assert_eq!(font.metrics().cap_height, Some(700.0));
+    assert_eq!(font.metrics().x_height, Some(520.0));
+    assert!(
+        font.glyph_count() >= 300,
+        "Homenaje should have a substantial glyph set"
+    );
+
+    let fea = font
+        .features()
+        .fea_source()
+        .expect("Homenaje should have feature source");
+    assert!(fea.contains("feature locl"));
+    assert!(fea.contains("feature frac"));
+    assert!(fea.contains("feature ordn"));
+
+    assert_eq!(
+        font.kerning()
+            .get_kerning(&"A".to_string(), &"V".to_string()),
+        Some(-55.0)
+    );
+    assert_eq!(
+        font.kerning()
+            .get_kerning(&"V".to_string(), &"a".to_string()),
+        Some(-65.0)
+    );
+}
+
+#[test]
+fn test_homenaje_glyph_components_and_anchors() {
+    let glyphs_path = homenaje_glyphs_path();
+    if !glyphs_path.exists() {
+        return;
+    }
+
+    let loader = FontLoader::new();
+    let font = loader.read_font(glyphs_path.to_str().unwrap()).unwrap();
+
+    let aacute = font.glyph("Aacute").expect("Glyph 'Aacute' should exist");
+    let aacute_layer = get_main_layer(aacute).expect("Aacute should have a layer");
+    let component_bases: Vec<_> = aacute_layer
+        .components_iter()
+        .map(|c| c.base_glyph().to_string())
+        .collect();
+    assert_eq!(aacute_layer.components().len(), 2);
+    assert!(component_bases.contains(&"A".to_string()));
+    assert!(component_bases.contains(&"acute".to_string()));
+
+    let u = font.glyph("u").expect("Glyph 'u' should exist");
+    let u_layer = get_main_layer(u).expect("u should have a layer");
+    let anchor_names: Vec<_> = u_layer
+        .anchors_iter()
+        .filter_map(|a| a.name().map(str::to_string))
+        .collect();
+    assert!(anchor_names.contains(&"top".to_string()));
+    assert!(anchor_names.contains(&"bottom".to_string()));
+    assert!(anchor_names.contains(&"ogonek".to_string()));
 }
 
 #[test]
