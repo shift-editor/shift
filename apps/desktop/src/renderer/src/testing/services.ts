@@ -26,6 +26,7 @@ import type {
   DragSnapSessionConfig,
   RotateSnapSession,
 } from "@/lib/editor/snapping/types";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 /** For tests: build Coordinates with the same point in all three spaces. */
 export function makeTestCoordinates(p: Point2D): Coordinates {
@@ -149,8 +150,7 @@ interface EditService {
   ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
-  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
-  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void;
+  setNodePositions(updates: NodePositionUpdateList): void;
   moveAnchors(ids: AnchorId[], dx: number, dy: number): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
@@ -590,11 +590,8 @@ function createMockEditService(
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
       fontEngine.editing.movePointTo(id, x, y),
     ),
-    setPointPositions: vi.fn((moves: Array<{ id: PointId; x: number; y: number }>) =>
-      fontEngine.editing.setPointPositions(moves),
-    ),
-    setAnchorPositions: vi.fn((moves: Array<{ id: AnchorId; x: number; y: number }>) =>
-      fontEngine.editing.setAnchorPositions(moves),
+    setNodePositions: vi.fn((updates: NodePositionUpdateList) =>
+      fontEngine.editing.setNodePositions(updates),
     ),
     moveAnchors: vi.fn((ids: AnchorId[], dx: number, dy: number) =>
       fontEngine.editing.moveAnchors(ids, { x: dx, y: dy }),
@@ -629,8 +626,7 @@ function createMockEditService(
     addPointToContour: mocks.addPointToContour,
     movePoints: mocks.movePoints,
     movePointTo: mocks.movePointTo,
-    setPointPositions: mocks.setPointPositions,
-    setAnchorPositions: mocks.setAnchorPositions,
+    setNodePositions: mocks.setNodePositions,
     moveAnchors: mocks.moveAnchors,
     applySmartEdits: mocks.applySmartEdits,
     removePoints: mocks.removePoints,
@@ -1292,10 +1288,7 @@ export function createMockToolContext(): MockToolContext {
     addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
-    setPointPositions: (moves: Array<{ id: PointId; x: number; y: number }>) =>
-      edit.setPointPositions(moves),
-    setAnchorPositions: (moves: Array<{ id: AnchorId; x: number; y: number }>) =>
-      edit.setAnchorPositions(moves),
+    setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
     moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
     applySmartEdits: (ids: readonly PointId[], dx: number, dy: number) =>
       edit.applySmartEdits(ids, dx, dy),

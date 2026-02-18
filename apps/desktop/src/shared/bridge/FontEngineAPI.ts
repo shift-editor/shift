@@ -1,12 +1,12 @@
 import type { ContourId, RenderContourSnapshot } from "@shift/types";
 
-export interface PointMove {
+export interface PointPositionUpdate {
   id: string;
   x: number;
   y: number;
 }
 
-export interface AnchorMove {
+export interface AnchorPositionUpdate {
   id: string;
   x: number;
   y: number;
@@ -94,8 +94,8 @@ export interface FontEngineAPI {
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
 
   // ── Drag Operations ──
-  setPointPositions(moves: PointMove[]): boolean;
-  setAnchorPositions(moves: AnchorMove[]): boolean;
+  setPointPositions(updates: PointPositionUpdate[]): boolean;
+  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }
 

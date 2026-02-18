@@ -1,4 +1,8 @@
-import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
+import type {
+  FontEngineAPI,
+  PointPositionUpdate,
+  AnchorPositionUpdate,
+} from "@shared/bridge/FontEngineAPI";
 import type {
   PointType,
   CommandResult,
@@ -397,28 +401,28 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, [pointId as PointId]);
   }
 
-  setPointPositions(moves: PointMove[]): boolean {
+  setPointPositions(updates: PointPositionUpdate[]): boolean {
     if (!this.#snapshot) return false;
 
-    for (const move of moves) {
-      const found = this.#findPoint(move.id);
+    for (const update of updates) {
+      const found = this.#findPoint(update.id);
       if (found) {
-        found.point.x = move.x;
-        found.point.y = move.y;
+        found.point.x = update.x;
+        found.point.y = update.y;
       }
     }
 
     return true;
   }
 
-  setAnchorPositions(moves: AnchorMove[]): boolean {
+  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean {
     if (!this.#snapshot) return false;
 
-    for (const move of moves) {
-      const found = this.#findAnchor(move.id);
+    for (const update of updates) {
+      const found = this.#findAnchor(update.id);
       if (found) {
-        found.x = move.x;
-        found.y = move.y;
+        found.x = update.x;
+        found.y = update.y;
       }
     }
 

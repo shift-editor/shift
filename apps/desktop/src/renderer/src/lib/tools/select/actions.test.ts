@@ -9,7 +9,7 @@ describe("select actions", () => {
     const anchorId = asAnchorId("a-missing");
 
     ctx.mocks.edit.mocks.moveAnchors.mockClear();
-    ctx.mocks.edit.mocks.setAnchorPositions.mockClear();
+    ctx.mocks.edit.mocks.setNodePositions.mockClear();
 
     executeAction(
       {
@@ -22,7 +22,7 @@ describe("select actions", () => {
     );
 
     expect(ctx.mocks.edit.moveAnchors).toHaveBeenCalledWith([anchorId], 25, -10);
-    expect(ctx.mocks.edit.setAnchorPositions).not.toHaveBeenCalled();
+    expect(ctx.mocks.edit.setNodePositions).not.toHaveBeenCalled();
   });
 
   it("arms composite slot on first double-click edit action", () => {

@@ -7,7 +7,7 @@ export {
   parseContourSegments,
   segmentToCurve,
   type SegmentPointGeometry,
-  type ContourLike,
+  type SegmentContourLike,
   type SegmentGeometry,
   type LineSegmentGeometry,
   type QuadSegmentGeometry,

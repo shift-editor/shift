@@ -224,6 +224,9 @@ importers:
 
   packages/rules:
     dependencies:
+      '@shift/font':
+        specifier: workspace:*
+        version: link:../font
       '@shift/geo':
         specifier: workspace:*
         version: link:../geo

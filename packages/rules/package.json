@@ -18,6 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@shift/font": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/types": "workspace:*"
   },

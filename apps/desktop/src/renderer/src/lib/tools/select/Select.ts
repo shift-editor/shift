@@ -41,10 +41,10 @@ export class Select extends BaseTool<SelectState, SelectAction> {
   readonly id: ToolName = "select";
 
   readonly behaviors: SelectBehavior[] = [
+    new ToggleSmoothBehavior(),
     new TextRunHoverBehavior(),
     new TextRunEditBehavior(),
     new DoubleClickSelectContourBehavior(),
-    new ToggleSmoothBehavior(),
     new UpgradeSegmentBehavior(),
     new SelectionBehavior(),
     new NudgeBehavior(),

@@ -6,7 +6,11 @@ import { EditingManager, type EditingEngineDeps } from "./editing";
 import { SessionManager, type Session } from "./session";
 import { InfoManager, type Info } from "./info";
 import { IOManager, type IO } from "./io";
-import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
+import type {
+  FontEngineAPI,
+  PointPositionUpdate,
+  AnchorPositionUpdate,
+} from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { PasteResult } from "@/types/engine";
 import { Bounds } from "@shift/geo";
@@ -179,12 +183,12 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     }
   }
 
-  setPointPositions(moves: PointMove[]): boolean {
-    return this.#raw.setPointPositions(moves);
+  setPointPositions(updates: PointPositionUpdate[]): boolean {
+    return this.#raw.setPointPositions(updates);
   }
 
-  setAnchorPositions(moves: AnchorMove[]): boolean {
-    return this.#raw.setAnchorPositions(moves);
+  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean {
+    return this.#raw.setAnchorPositions(updates);
   }
 
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {

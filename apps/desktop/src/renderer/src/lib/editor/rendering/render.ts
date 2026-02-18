@@ -8,7 +8,11 @@
 import type { Contour, Glyph } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
 import { Polygon } from "@shift/geo";
-import { iterateRenderableContours, parseContourSegments, type ContourLike } from "@shift/font";
+import {
+  iterateRenderableContours,
+  parseContourSegments,
+  type SegmentContourLike,
+} from "@shift/font";
 
 export interface Guides {
   xAdvance: number;
@@ -23,7 +27,7 @@ export interface Guides {
  * Traces the contour's segments into the current path without stroking or filling.
  * Returns `true` if the contour is closed (caller can decide to fill).
  */
-export function buildContourPath(ctx: IRenderer, contour: ContourLike): boolean {
+export function buildContourPath(ctx: IRenderer, contour: SegmentContourLike): boolean {
   if (contour.points.length < 2) return false;
   const segments = parseContourSegments(contour);
   if (segments.length === 0) return false;

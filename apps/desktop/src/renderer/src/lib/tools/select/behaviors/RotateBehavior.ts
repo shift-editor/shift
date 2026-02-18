@@ -74,12 +74,12 @@ export class RotateBehavior implements SelectBehavior {
 
       const currentAngle = state.rotate.startAngle + deltaAngle;
 
-      const moves: Array<{ id: PointId; x: number; y: number }> = [];
+      const updates: Array<{ nodeType: "point"; id: PointId; x: number; y: number }> = [];
       for (const [id, initialPos] of state.rotate.initialPositions) {
         const rotated = Vec2.rotateAround(initialPos, state.rotate.center, deltaAngle);
-        moves.push({ id, x: rotated.x, y: rotated.y });
+        updates.push({ nodeType: "point", id, x: rotated.x, y: rotated.y });
       }
-      editor.setPointPositions(moves);
+      editor.setNodePositions(updates);
 
       return {
         state: {

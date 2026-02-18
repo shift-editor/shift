@@ -2,7 +2,8 @@
  * Pattern Matcher - Matches point patterns against rules
  */
 
-import type { PointId, PointSnapshot, ContourSnapshot } from "@shift/types";
+import { Contours } from "@shift/font";
+import type { PointId, PointSnapshot } from "@shift/types";
 import type { MatchedRule, RuleId } from "./types";
 import { TOKEN_NO_POINT, TOKEN_CORNER, TOKEN_HANDLE, TOKEN_SMOOTH, TOKEN_SELECTED } from "./parser";
 import { getRuleTable } from "./rules";
@@ -58,13 +59,6 @@ function buildPattern(
 }
 
 /**
- * Find the index of a point in a contour
- */
-function findPointIndex(contour: ContourSnapshot, pointId: PointId): number {
-  return contour.points.findIndex((p) => p.id === pointId);
-}
-
-/**
  * Compute affected point IDs based on rule type
  */
 function computeAffectedPoints(
@@ -114,21 +108,30 @@ function computeAffectedPoints(
           affected.push(points[pointIndex + 2].id); // opposite handle
         }
       }
+
+    case "maintainCollinearity":
+      {
+        // TODO: Implement maintain collinearity
+      }
       break;
   }
 
   return affected;
 }
 
+type ContourMatchInput = {
+  readonly points: readonly PointSnapshot[];
+};
+
 /**
  * Match a rule for a selected point in a contour
  */
 export function matchRule(
-  contour: ContourSnapshot,
+  contour: ContourMatchInput,
   pointId: PointId,
   selectedIds: ReadonlySet<PointId>,
 ): MatchedRule | null {
-  const pointIndex = findPointIndex(contour, pointId);
+  const pointIndex = Contours.findPointIndex(contour, pointId);
   if (pointIndex === -1) {
     return null;
   }
@@ -154,36 +157,5 @@ export function matchRule(
     }
   }
 
-  return null;
-}
-
-/**
- * Find contour containing a point
- */
-export function findPointContour(
-  contours: readonly ContourSnapshot[],
-  pointId: PointId,
-): ContourSnapshot | null {
-  for (const contour of contours) {
-    if (contour.points.some((p) => p.id === pointId)) {
-      return contour;
-    }
-  }
-  return null;
-}
-
-/**
- * Get a point from contours by ID
- */
-export function getPoint(
-  contours: readonly ContourSnapshot[],
-  pointId: PointId,
-): PointSnapshot | null {
-  for (const contour of contours) {
-    const point = contour.points.find((p) => p.id === pointId);
-    if (point) {
-      return point;
-    }
-  }
   return null;
 }

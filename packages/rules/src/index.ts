@@ -7,27 +7,18 @@
  *
  * @example
  * ```ts
- * import { applyRules, applyMovesToGlyph } from '@shift/rules';
+ * import { applyRules } from '@shift/rules';
  *
  * // During drag: compute all moves including rule-affected points
  * const { moves, matchedRules } = applyRules(glyph, selectedIds, dx, dy);
- *
- * // Apply moves to get updated glyph
- * const updatedGlyph = applyMovesToGlyph(glyph, moves);
  * ```
  */
 
 // Types
-export type { RuleId, MatchedRule, PointMove, RulesResult, Rule } from "./types";
+export type { RuleId, MatchedRule, PointMove, RulesResult } from "./types";
 
 // Pattern matching
-export { matchRule, findPointContour, getPoint } from "./matcher";
+export { matchRule } from "./matcher";
 
 // Rule application
-export { applyRules, applyMovesToGlyph } from "./actions";
-
-// Parser (for testing/debugging)
-export { expandPattern } from "./parser";
-
-// Rules table (for testing/debugging)
-export { buildRuleTable, getRuleTable } from "./rules";
+export { applyRules } from "./actions";

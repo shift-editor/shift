@@ -48,6 +48,7 @@ import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 /**
  * Coordinate-space conversions and viewport state.
@@ -161,8 +162,7 @@ export interface Editing {
   movePointTo(id: PointId, x: number, y: number): void;
   /** Translate points by a delta, adjusting adjacent off-curve handles to preserve tangent continuity. Returns all affected IDs (including handles). */
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
-  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void;
-  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void;
+  setNodePositions(updates: NodePositionUpdateList): void;
   moveAnchors(ids: AnchorId[], delta: Point2D): void;
   toggleSmooth(id: PointId): void;
   duplicateSelection(): PointId[];

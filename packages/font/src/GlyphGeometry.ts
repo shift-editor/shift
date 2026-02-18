@@ -9,7 +9,7 @@ export interface SegmentPointGeometry {
   readonly id?: Point["id"];
 }
 
-export interface ContourLike {
+export interface SegmentContourLike {
   readonly points: readonly SegmentPointGeometry[];
   readonly closed: boolean;
 }
@@ -51,7 +51,7 @@ function isOffCurve(point: SegmentPointGeometry): boolean {
   return point.pointType === "offCurve";
 }
 
-export function* iterateRenderableContours(glyph: Glyph): Iterable<ContourLike> {
+export function* iterateRenderableContours(glyph: Glyph): Iterable<SegmentContourLike> {
   for (const contour of glyph.contours ?? []) {
     yield contour;
   }
@@ -60,7 +60,7 @@ export function* iterateRenderableContours(glyph: Glyph): Iterable<ContourLike> 
   }
 }
 
-export function parseContourSegments(contour: ContourLike): SegmentGeometry[] {
+export function parseContourSegments(contour: SegmentContourLike): SegmentGeometry[] {
   const { points, closed } = contour;
   if (points.length < 2) {
     return [];

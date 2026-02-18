@@ -97,6 +97,7 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { fallbackGlyphNameForUnicode, glyphRefFromUnicode } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -1535,12 +1536,8 @@ export class Editor implements ShiftEditor {
     return this.#fontEngine.editing.applySmartEdits(new Set(ids), dx, dy);
   }
 
-  public setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
-    this.#fontEngine.editing.setPointPositions(moves);
-  }
-
-  public setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void {
-    this.#fontEngine.editing.setAnchorPositions(moves);
+  public setNodePositions(updates: NodePositionUpdateList): void {
+    this.#fontEngine.editing.setNodePositions(updates);
   }
 
   public removePoints(ids: PointId[]): void {

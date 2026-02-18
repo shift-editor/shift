@@ -63,15 +63,15 @@ export class ResizeBehavior implements SelectBehavior {
         uniformScale,
       );
 
-      const moves: Array<{ id: PointId; x: number; y: number }> = [];
+      const updates: Array<{ nodeType: "point"; id: PointId; x: number; y: number }> = [];
       for (const [id, initialPos] of state.resize.initialPositions) {
         const anchor = state.resize.anchorPoint;
         const offset = Vec2.sub(initialPos, anchor);
         const scaled = Vec2.mul(offset, { x: sx, y: sy });
         const newPos = Vec2.add(anchor, scaled);
-        moves.push({ id, x: newPos.x, y: newPos.y });
+        updates.push({ nodeType: "point", id, x: newPos.x, y: newPos.y });
       }
-      editor.setPointPositions(moves);
+      editor.setNodePositions(updates);
 
       return {
         state: {

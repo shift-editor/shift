@@ -5,7 +5,7 @@ import {
   deriveGlyphXBounds,
   iterateRenderableContours,
   parseContourSegments,
-  type ContourLike,
+  type SegmentContourLike,
 } from "./GlyphGeometry";
 
 function makePoint(
@@ -86,7 +86,7 @@ describe("parseContourSegments", () => {
   });
 
   it("works when contour points have no IDs", () => {
-    const contour: ContourLike = {
+    const contour: SegmentContourLike = {
       closed: false,
       points: [
         { x: 0, y: 0, pointType: "onCurve", smooth: false },

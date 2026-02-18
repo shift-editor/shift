@@ -2,10 +2,11 @@
  * Rule Actions - Apply matched rules to compute point positions
  */
 
+import { Glyphs } from "@shift/font";
 import { Vec2 } from "@shift/geo";
-import type { PointId, ContourSnapshot, GlyphSnapshot } from "@shift/types";
+import type { PointId, GlyphSnapshot, Point2D } from "@shift/types";
 import type { MatchedRule, PointMove, RulesResult } from "./types";
-import { matchRule, findPointContour, getPoint } from "./matcher";
+import { matchRule } from "./matcher";
 
 const EPSILON = 1e-10;
 
@@ -16,14 +17,13 @@ const EPSILON = 1e-10;
  * a straight line through the anchor point, preserving its magnitude.
  */
 function maintainTangency(
-  contours: readonly ContourSnapshot[],
+  glyph: GlyphSnapshot,
   anchorId: PointId,
-  _movedHandleId: PointId,
   oppositeHandleId: PointId,
-  newMovedPos: { x: number; y: number },
+  newMovedPos: Point2D,
 ): PointMove | null {
-  const anchor = getPoint(contours, anchorId);
-  const opposite = getPoint(contours, oppositeHandleId);
+  const anchor = Glyphs.findPoint(glyph, anchorId)?.point;
+  const opposite = Glyphs.findPoint(glyph, oppositeHandleId)?.point;
 
   if (!anchor || !opposite) {
     return null;
@@ -57,7 +57,7 @@ function maintainTangency(
  * Apply a matched rule and compute the resulting point moves
  */
 function applyRule(
-  contours: readonly ContourSnapshot[],
+  glyph: GlyphSnapshot,
   rule: MatchedRule,
   selectedMoves: Map<PointId, PointMove>,
   dx: number,
@@ -71,7 +71,7 @@ function applyRule(
     case "moveBothHandles": {
       // Move handles by the same delta as the anchor
       for (const handleId of rule.affectedPointIds) {
-        const handle = getPoint(contours, handleId);
+        const handle = Glyphs.findPoint(glyph, handleId)?.point;
         if (handle) {
           moves.push({
             id: handleId,
@@ -90,20 +90,14 @@ function applyRule(
         const oppositeHandleId = rule.affectedPointIds[1];
 
         // Get the new position of the moved handle
-        const movedHandle = getPoint(contours, rule.pointId);
+        const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;
         if (movedHandle) {
           const newMovedPos = selectedMoves.get(rule.pointId) ?? {
             x: movedHandle.x + dx,
             y: movedHandle.y + dy,
           };
 
-          const tangencyMove = maintainTangency(
-            contours,
-            anchorId,
-            rule.pointId,
-            oppositeHandleId,
-            newMovedPos,
-          );
+          const tangencyMove = maintainTangency(glyph, anchorId, oppositeHandleId, newMovedPos);
 
           if (tangencyMove) {
             moves.push(tangencyMove);
@@ -120,26 +114,23 @@ function applyRule(
         const oppositeHandleId = rule.affectedPointIds[1];
 
         // Get the new position of the moved handle
-        const movedHandle = getPoint(contours, rule.pointId);
+        const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;
         if (movedHandle) {
           const newMovedPos = selectedMoves.get(rule.pointId) ?? {
             x: movedHandle.x + dx,
             y: movedHandle.y + dy,
           };
 
-          const tangencyMove = maintainTangency(
-            contours,
-            anchorId,
-            rule.pointId,
-            oppositeHandleId,
-            newMovedPos,
-          );
+          const tangencyMove = maintainTangency(glyph, anchorId, oppositeHandleId, newMovedPos);
 
           if (tangencyMove) {
             moves.push(tangencyMove);
           }
         }
       }
+      break;
+    }
+    case "maintainCollinearity": {
       break;
     }
   }
@@ -162,14 +153,14 @@ export function applyRules(
   dx: number,
   dy: number,
 ): RulesResult {
-  const contours = glyph.contours;
   const matchedRules: MatchedRule[] = [];
   const allMoves = new Map<PointId, PointMove>();
 
   // First: compute moves for all selected points
   for (const pointId of selectedIds) {
-    const point = getPoint(contours, pointId);
-    if (point) {
+    const found = Glyphs.findPoint(glyph, pointId);
+    if (found) {
+      const { point } = found;
       allMoves.set(pointId, {
         id: pointId,
         x: point.x + dx,
@@ -180,10 +171,10 @@ export function applyRules(
 
   // Second: match rules for each selected point
   for (const pointId of selectedIds) {
-    const contour = findPointContour(contours, pointId);
-    if (!contour) continue;
+    const pointInContour = Glyphs.findPoint(glyph, pointId);
+    if (!pointInContour) continue;
 
-    const rule = matchRule(contour, pointId, selectedIds);
+    const rule = matchRule(pointInContour.contour, pointId, selectedIds);
     if (rule) {
       matchedRules.push(rule);
     }
@@ -191,7 +182,7 @@ export function applyRules(
 
   // Third: apply rules to compute additional moves
   for (const rule of matchedRules) {
-    const ruleMoves = applyRule(contours, rule, allMoves, dx, dy);
+    const ruleMoves = applyRule(glyph, rule, allMoves, dx, dy);
     for (const move of ruleMoves) {
       // Don't override selected point moves
       if (!selectedIds.has(move.id)) {
@@ -203,37 +194,5 @@ export function applyRules(
   return {
     moves: Array.from(allMoves.values()),
     matchedRules,
-  };
-}
-
-/**
- * Apply moves to a glyph snapshot (creates a new snapshot)
- *
- * @param glyph - Original glyph snapshot
- * @param moves - Point moves to apply
- * @returns New glyph snapshot with moves applied
- */
-export function applyMovesToGlyph(glyph: GlyphSnapshot, moves: PointMove[]): GlyphSnapshot {
-  // Create a lookup for fast move access
-  const moveMap = new Map<PointId, PointMove>();
-  for (const move of moves) {
-    moveMap.set(move.id, move);
-  }
-
-  // Create new contours with updated points
-  const newContours = glyph.contours.map((contour) => ({
-    ...contour,
-    points: contour.points.map((point) => {
-      const move = moveMap.get(point.id);
-      if (move) {
-        return { ...point, x: move.x, y: move.y };
-      }
-      return point;
-    }),
-  }));
-
-  return {
-    ...glyph,
-    contours: newContours,
   };
 }

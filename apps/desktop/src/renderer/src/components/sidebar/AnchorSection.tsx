@@ -42,7 +42,7 @@ export const AnchorSection = () => {
     if (!singleAnchorId) return;
     const nextX = axis === "x" ? value : anchorX;
     const nextY = axis === "y" ? value : anchorY;
-    editor.setAnchorPositions([{ id: singleAnchorId, x: nextX, y: nextY }]);
+    editor.setNodePositions([{ nodeType: "anchor", id: singleAnchorId, x: nextX, y: nextY }]);
     editor.requestRedraw();
   };
 

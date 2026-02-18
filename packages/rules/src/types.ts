@@ -8,7 +8,8 @@ export type RuleId =
   | "moveLeftHandle"
   | "moveBothHandles"
   | "maintainTangencyRight"
-  | "maintainTangencyLeft";
+  | "maintainTangencyLeft"
+  | "maintainCollinearity";
 
 /**
  * A matched rule with affected points

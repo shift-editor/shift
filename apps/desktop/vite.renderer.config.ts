@@ -37,11 +37,19 @@ export default defineConfig(async () => {
         "@shift/types": path.resolve(packagesDir, "types/src/index.ts"),
         "@shift/font": path.resolve(packagesDir, "font/src/index.ts"),
         "@shift/glyph-info": path.resolve(packagesDir, "glyph-info/src/index.ts"),
+        "@shift/rules": path.resolve(packagesDir, "rules/src/index.ts"),
       },
     },
     optimizeDeps: {
       include: ["use-sync-external-store/shim", "use-sync-external-store/shim/with-selector"],
-      exclude: ["@shift/ui", "@shift/geo", "@shift/types", "@shift/font", "@shift/glyph-info"],
+      exclude: [
+        "@shift/ui",
+        "@shift/geo",
+        "@shift/types",
+        "@shift/font",
+        "@shift/glyph-info",
+        "@shift/rules",
+      ],
     },
   };
 });

@@ -22,6 +22,14 @@
 
 import type { Point, Contour, PointId } from "@shift/types";
 
+type PointCollection<TPoint> = {
+  readonly points: readonly TPoint[];
+};
+
+type PointIdCarrier = {
+  readonly id: PointId;
+};
+
 export interface PointWithNeighbors {
   prev: Point | null;
   current: Point;
@@ -89,7 +97,10 @@ export const Contours = {
   /**
    * Find a point by its ID within a contour
    */
-  findPointById(contour: Contour, id: PointId): Point | null {
+  findPointById<TPoint extends PointIdCarrier>(
+    contour: PointCollection<TPoint>,
+    id: PointId,
+  ): TPoint | null {
     return contour.points.find((p) => p.id === id) ?? null;
   },
 
@@ -97,7 +108,10 @@ export const Contours = {
    * Find the index of a point by its ID within a contour
    * Returns -1 if not found
    */
-  findPointIndex(contour: Contour, id: PointId): number {
+  findPointIndex<TPoint extends PointIdCarrier>(
+    contour: PointCollection<TPoint>,
+    id: PointId,
+  ): number {
     return contour.points.findIndex((p) => p.id === id);
   },
 

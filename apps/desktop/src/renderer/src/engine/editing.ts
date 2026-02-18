@@ -1,11 +1,16 @@
 import type { GlyphSnapshot, PointId, ContourId, Point2D, AnchorId } from "@shift/types";
-import { applyRules, applyMovesToGlyph } from "@shift/rules";
+import { applyRules } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
-import type { FontEngineAPI, PointMove, AnchorMove } from "@shared/bridge/FontEngineAPI";
+import type {
+  FontEngineAPI,
+  PointPositionUpdate,
+  AnchorPositionUpdate,
+} from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
+import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 
 /** Raw NAPI surface that {@link EditingManager} wraps. Provides bridge access, session guards, glyph read/write, and low-level mutation primitives. */
 export interface EditingEngineDeps {
@@ -16,30 +21,9 @@ export interface EditingEngineDeps {
   getActiveContourId(): ContourId | null;
   getSnapshot(): GlyphSnapshot;
   restoreSnapshot(snapshot: GlyphSnapshot): void;
-  setPointPositions(moves: PointMove[]): boolean;
-  setAnchorPositions(moves: AnchorMove[]): boolean;
+  setPointPositions(updates: PointPositionUpdate[]): boolean;
+  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult;
-}
-
-function applyAnchorMovesToGlyph(
-  glyph: GlyphSnapshot,
-  moves: Array<{ id: AnchorId; x: number; y: number }>,
-): GlyphSnapshot {
-  if (moves.length === 0) return glyph;
-
-  const moveById = new Map<string, { x: number; y: number }>();
-  for (const move of moves) {
-    moveById.set(move.id, { x: move.x, y: move.y });
-  }
-
-  return {
-    ...glyph,
-    anchors: glyph.anchors.map((anchor) => {
-      const move = moveById.get(anchor.id);
-      if (!move) return anchor;
-      return { ...anchor, x: move.x, y: move.y };
-    }),
-  };
 }
 
 /**
@@ -82,6 +66,51 @@ export class EditingManager {
     this.#requireSession();
     const response = this.#execute(json);
     this.#engine.emitGlyph(response.snapshot);
+  }
+
+  #applyNodePositionUpdatesToGlyph(
+    glyph: GlyphSnapshot,
+    updates: NodePositionUpdateList,
+  ): GlyphSnapshot {
+    if (updates.length === 0) return glyph;
+
+    const pointUpdatesById = new Map<PointId, { x: number; y: number }>();
+    const anchorUpdatesById = new Map<AnchorId, { x: number; y: number }>();
+
+    for (const update of updates) {
+      if (update.nodeType === "point") {
+        pointUpdatesById.set(update.id, { x: update.x, y: update.y });
+      } else {
+        anchorUpdatesById.set(update.id, { x: update.x, y: update.y });
+      }
+    }
+
+    if (pointUpdatesById.size === 0 && anchorUpdatesById.size === 0) {
+      return glyph;
+    }
+
+    return {
+      ...glyph,
+      contours:
+        pointUpdatesById.size === 0
+          ? glyph.contours
+          : glyph.contours.map((contour) => ({
+              ...contour,
+              points: contour.points.map((point) => {
+                const update = pointUpdatesById.get(point.id);
+                if (!update) return point;
+                return { ...point, x: update.x, y: update.y };
+              }),
+            })),
+      anchors:
+        anchorUpdatesById.size === 0
+          ? glyph.anchors
+          : glyph.anchors.map((anchor) => {
+              const update = anchorUpdatesById.get(anchor.id);
+              if (!update) return anchor;
+              return { ...anchor, x: update.x, y: update.y };
+            }),
+    };
   }
 
   addPoint(edit: PointEdit): PointId {
@@ -229,45 +258,45 @@ export class EditingManager {
     const { moves } = applyRules(glyph, selectedPoints, dx, dy);
     if (moves.length === 0) return [];
 
-    const updatedGlyph = applyMovesToGlyph(glyph, moves);
-    this.#engine.emitGlyph(updatedGlyph);
-
-    const nativeMoves: PointMove[] = moves.map((m) => ({
-      id: m.id,
-      x: m.x,
-      y: m.y,
+    const updates: NodePositionUpdate[] = moves.map((move) => ({
+      nodeType: "point",
+      id: move.id,
+      x: move.x,
+      y: move.y,
     }));
-    this.#engine.setPointPositions(nativeMoves);
+    this.setNodePositions(updates);
 
     return moves.map((m) => m.id);
   }
 
-  /** Batch-sets absolute positions. Applies optimistically to the signal, then syncs to native. */
-  setPointPositions(moves: Array<{ id: PointId; x: number; y: number }>): void {
+  /** Batch-sets absolute node positions. Applies optimistically to the signal, then syncs to native. */
+  setNodePositions(updates: NodePositionUpdateList): void {
     if (!this.#engine.hasSession()) return;
-    if (moves.length === 0) return;
+    if (updates.length === 0) return;
 
     const glyph = this.#engine.getGlyph();
     if (!glyph) return;
 
-    const updatedGlyph = applyMovesToGlyph(glyph, moves);
+    const updatedGlyph = this.#applyNodePositionUpdatesToGlyph(glyph, updates);
     this.#engine.emitGlyph(updatedGlyph);
 
-    this.#engine.setPointPositions(moves);
-  }
+    const pointUpdates: PointPositionUpdate[] = [];
+    const anchorUpdates: AnchorPositionUpdate[] = [];
 
-  /** Batch-sets absolute anchor positions. Applies optimistically to the signal, then syncs to native. */
-  setAnchorPositions(moves: Array<{ id: AnchorId; x: number; y: number }>): void {
-    if (!this.#engine.hasSession()) return;
-    if (moves.length === 0) return;
+    for (const update of updates) {
+      if (update.nodeType === "point") {
+        pointUpdates.push({ id: update.id, x: update.x, y: update.y });
+      } else {
+        anchorUpdates.push({ id: update.id, x: update.x, y: update.y });
+      }
+    }
 
-    const glyph = this.#engine.getGlyph();
-    if (!glyph) return;
-
-    const updatedGlyph = applyAnchorMovesToGlyph(glyph, moves);
-    this.#engine.emitGlyph(updatedGlyph);
-
-    this.#engine.setAnchorPositions(moves);
+    if (pointUpdates.length > 0) {
+      this.#engine.setPointPositions(pointUpdates);
+    }
+    if (anchorUpdates.length > 0) {
+      this.#engine.setAnchorPositions(anchorUpdates);
+    }
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */

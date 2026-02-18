@@ -39,6 +39,11 @@ const RULE_TEMPLATES: Rule[] = [
     patternTemplate: "[@X]HS",
     description: "maintain tangency through the anchor point with the opposite handle",
   },
+  {
+    id: "maintainCollinearity",
+    patternTemplate: "SHH",
+    description: "maintain collinearity through the corner, smooth and handle point",
+  },
 ];
 
 /**

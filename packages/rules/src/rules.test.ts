@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import { expandPattern } from "./parser";
 import { buildRuleTable } from "./rules";
 import { matchRule } from "./matcher";
-import { applyRules, applyMovesToGlyph } from "./actions";
+import { applyRules } from "./actions";
 import type { ContourSnapshot, GlyphSnapshot, PointSnapshot } from "@shift/types";
 import type { PointId, ContourId } from "@shift/types";
+import type { PointMove } from "./types";
 
 // Helper to create test points
 function createPoint(
@@ -46,6 +47,25 @@ function createGlyph(contours: ContourSnapshot[]): GlyphSnapshot {
     anchors: [],
     compositeContours: [],
     activeContourId: null,
+  };
+}
+
+function applyPointMovesToGlyph(glyph: GlyphSnapshot, moves: PointMove[]): GlyphSnapshot {
+  const moveMap = new Map<PointId, PointMove>();
+  for (const move of moves) {
+    moveMap.set(move.id, move);
+  }
+
+  return {
+    ...glyph,
+    contours: glyph.contours.map((contour) => ({
+      ...contour,
+      points: contour.points.map((point) => {
+        const move = moveMap.get(point.id);
+        if (!move) return point;
+        return { ...point, x: move.x, y: move.y };
+      }),
+    })),
   };
 }
 
@@ -223,7 +243,7 @@ describe("Rule Application", () => {
     const selected = new Set(["smooth" as PointId]);
 
     const { moves } = applyRules(glyph, selected, 10, 10);
-    const newGlyph = applyMovesToGlyph(glyph, moves);
+    const newGlyph = applyPointMovesToGlyph(glyph, moves);
 
     // Find the smooth point in the new glyph
     const smoothPoint = newGlyph.contours[0].points.find((p) => p.id === "smooth");
@@ -249,7 +269,7 @@ describe("Rule Application", () => {
     expect(handle1Move).toBeDefined();
 
     // Apply and check tangency is maintained
-    const newGlyph = applyMovesToGlyph(glyph, moves);
+    const newGlyph = applyPointMovesToGlyph(glyph, moves);
     const smooth = newGlyph.contours[0].points.find((p) => p.id === "smooth")!;
     const h1 = newGlyph.contours[0].points.find((p) => p.id === "handle1")!;
     const h2 = newGlyph.contours[0].points.find((p) => p.id === "handle2")!;
