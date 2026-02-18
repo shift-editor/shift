@@ -82,6 +82,7 @@ import { FontEngine, MockFontEngine } from "@/engine";
 import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 import { glyphRefFromUnicode } from "@/lib/utils/unicode";
+import { getGlyphInfo } from "@/store/glyphInfo";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -1055,6 +1056,12 @@ function createMockCommandHistory(
 
 export function createMockToolContext(): MockToolContext {
   const fontEngine = new FontEngine(new MockFontEngine());
+  const glyphInfo = getGlyphInfo();
+  const glyphNameResolverDeps = {
+    getExistingGlyphNameForUnicode: (unicode: number) =>
+      fontEngine.info.getGlyphNameForUnicode(unicode),
+    getMappedGlyphName: (unicode: number) => glyphInfo.getGlyphName(unicode),
+  };
   fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
   fontEngine.editing.addContour();
 
@@ -1369,7 +1376,7 @@ export function createMockToolContext(): MockToolContext {
       textRunManager.setInspectionHoveredComponent(index),
     clearTextRunInspection: () => textRunManager.clearInspection(),
     insertTextCodepoint: (codepoint: number) => {
-      textRunManager.buffer.insert(glyphRefFromUnicode(codepoint, fontEngine.info));
+      textRunManager.buffer.insert(glyphRefFromUnicode(codepoint, glyphNameResolverDeps));
     },
     insertTextGlyphAt: (index: number, glyph: { glyphName: string; unicode: number | null }) =>
       textRunManager.insertGlyphAt(index, glyph),
@@ -1404,7 +1411,8 @@ export function createMockToolContext(): MockToolContext {
     getActiveGlyphName: vi.fn(() => fontEngine.session.getEditingGlyphName()),
     setMainGlyphUnicode: (unicode: number | null) => {
       mainGlyphUnicode = unicode;
-      const glyphRef = unicode === null ? null : glyphRefFromUnicode(unicode, fontEngine.info);
+      const glyphRef =
+        unicode === null ? null : glyphRefFromUnicode(unicode, glyphNameResolverDeps);
       textRunManager.setOwnerGlyph(glyphRef);
       textRunManager.recompute(font);
     },

@@ -75,6 +75,13 @@ pub struct SaveFontTask {
   path: String,
 }
 
+#[napi(object)]
+pub struct JsGlyphRef {
+  #[napi(js_name = "glyphName")]
+  pub glyph_name: String,
+  pub unicode: Option<u32>,
+}
+
 impl Task for SaveFontTask {
   type Output = ();
   type JsValue = ();
@@ -565,6 +572,9 @@ impl FontEngine {
     let primary_unicode = unicode_override
       .or_else(|| glyph.primary_unicode())
       .unwrap_or(0);
+    if primary_unicode != 0 {
+      glyph.add_unicode(primary_unicode);
+    }
 
     composite_debug!(
       "start_edit_session '{}': layers={} primary_unicode={}",
@@ -590,16 +600,8 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn start_edit_session(&mut self, unicode: u32) -> Result<()> {
-    let glyph_name = self
-      .glyph_name_for_unicode(unicode)
-      .unwrap_or_else(|| format!("uni{unicode:04X}"));
-    self.start_edit_session_for_name(&glyph_name, Some(unicode))
-  }
-
-  #[napi]
-  pub fn start_edit_session_by_name(&mut self, glyph_name: String) -> Result<()> {
-    self.start_edit_session_for_name(&glyph_name, None)
+  pub fn start_edit_session(&mut self, glyph_ref: JsGlyphRef) -> Result<()> {
+    self.start_edit_session_for_name(&glyph_ref.glyph_name, glyph_ref.unicode)
   }
 
   fn get_edit_session(&mut self) -> Result<&mut EditSession> {
@@ -676,8 +678,12 @@ impl FontEngine {
       "No layer ID stored for session",
     ))?;
 
+    let session_unicode = session.unicode();
     let layer = session.into_layer();
     glyph.set_layer(layer_id, layer);
+    if session_unicode != 0 {
+      glyph.add_unicode(session_unicode);
+    }
     self.font.put_glyph(glyph);
     self.dependency_graph = DependencyGraph::rebuild(&self.font);
 
@@ -991,7 +997,7 @@ impl FontEngine {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LIGHTWEIGHT NATIVE TYPES FOR DRAG OPERATIONS
+// LIGHTWEIGHT NATIVE TYPES FOR EDIT/DRAG OPERATIONS
 // ═══════════════════════════════════════════════════════════
 
 /// Input type for set_point_positions - a single point move
@@ -1034,21 +1040,52 @@ mod tests {
   fn test_start_and_end_session() {
     let mut engine = FontEngine::new();
 
-    engine.start_edit_session(65).unwrap();
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
     assert!(engine.has_edit_session());
     assert_eq!(engine.get_editing_unicode(), Some(65));
 
     engine.end_edit_session().unwrap();
     assert!(!engine.has_edit_session());
     assert_eq!(engine.get_editing_unicode(), None);
+    assert_eq!(engine.get_glyph_name_for_unicode(65), Some("A".to_string()));
+  }
+
+  #[test]
+  fn test_start_session_preserves_unicode_mapping() {
+    let mut engine = FontEngine::new();
+
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
+    assert_eq!(engine.get_editing_unicode(), Some(65));
+    assert_eq!(engine.get_editing_glyph_name(), Some("A".to_string()));
+
+    engine.end_edit_session().unwrap();
+    assert_eq!(engine.get_glyph_name_for_unicode(65), Some("A".to_string()));
   }
 
   #[test]
   fn test_cannot_start_second_session() {
     let mut engine = FontEngine::new();
 
-    engine.start_edit_session(65).unwrap();
-    let result = engine.start_edit_session(66);
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
+    let result = engine.start_edit_session(JsGlyphRef {
+      glyph_name: "B".to_string(),
+      unicode: Some(66),
+    });
 
     assert!(result.is_err());
   }
@@ -1056,7 +1093,12 @@ mod tests {
   #[test]
   fn test_add_contour() {
     let mut engine = FontEngine::new();
-    engine.start_edit_session(65).unwrap();
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
 
     let contour_id = engine.add_empty_contour().unwrap();
     assert!(!contour_id.is_empty());
@@ -1115,7 +1157,12 @@ mod tests {
     let path_str = ufo_path.to_str().unwrap();
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
-    engine.start_edit_session(65).unwrap();
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
 
     let dependents = engine.get_dependent_unicodes(65);
     assert!(
@@ -1155,7 +1202,12 @@ mod tests {
     let path_str = ufo_path.to_str().unwrap();
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
-    engine.start_edit_session(0x00C1).unwrap();
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "Aacute".to_string(),
+        unicode: Some(0x00C1),
+      })
+      .unwrap();
 
     let snapshot_json = engine.get_snapshot_data().unwrap();
     let snapshot: GlyphSnapshot = serde_json::from_str(&snapshot_json).unwrap();

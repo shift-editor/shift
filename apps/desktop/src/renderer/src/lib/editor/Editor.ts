@@ -34,7 +34,7 @@ import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
-import { ViewportManager } from "./managers";
+import { GlyphNamingService, ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { glyphDataStore } from "@/store/GlyphDataStore";
 import { getGlyphInfo } from "@/store/glyphInfo";
@@ -95,7 +95,6 @@ import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
-import { fallbackGlyphNameForUnicode, glyphRefFromUnicode } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
@@ -142,6 +141,7 @@ export class Editor implements ShiftEditor {
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #fontEngine: FontEngine;
+  #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
   #fontManager: FontManager;
   #staticEffect: Effect;
@@ -184,6 +184,12 @@ export class Editor implements ShiftEditor {
   constructor() {
     this.#viewport = new ViewportManager();
     this.#fontEngine = new FontEngine();
+    const glyphInfo = getGlyphInfo();
+    this.#glyphNaming = new GlyphNamingService({
+      getExistingGlyphNameForUnicode: (unicode) =>
+        this.#fontEngine.info.getGlyphNameForUnicode(unicode),
+      getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
+    });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
     this.#fontManager = new FontManager({
       getMetrics: () => this.#fontEngine.info.getMetrics(),
@@ -997,9 +1003,13 @@ export class Editor implements ShiftEditor {
     };
   }
 
+  public glyphRefFromUnicode(unicode: number): GlyphRef {
+    return this.#glyphNaming.glyphRefFromUnicode(unicode);
+  }
+
   public setMainGlyphUnicode(unicode: number | null): void {
     this.#mainGlyphUnicode = unicode;
-    const glyphRef = unicode === null ? null : glyphRefFromUnicode(unicode, this.#fontEngine.info);
+    const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
     this.#textRunManager.setOwnerGlyph(glyphRef);
     this.#textRunManager.recompute(this.#fontManager);
   }
@@ -1285,9 +1295,7 @@ export class Editor implements ShiftEditor {
     this.#commandHistory.clear();
     this.#textRunManager.clearAll();
     this.setMainGlyphUnicode(65);
-    const glyphName =
-      this.#fontEngine.info.getGlyphNameForUnicode(65) ?? fallbackGlyphNameForUnicode(65);
-    const glyphRef = { glyphName, unicode: 65 };
+    const glyphRef = this.glyphRefFromUnicode(65);
     this.startEditSession(glyphRef);
     this.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
   }

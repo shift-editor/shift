@@ -18,13 +18,28 @@ export function fallbackGlyphNameForUnicode(unicode: number): string {
   return `uni${codepointToHex(unicode)}`;
 }
 
-interface GlyphNameLookup {
-  getGlyphNameForUnicode(unicode: number): string | null;
+export interface GlyphNameResolverDeps {
+  getExistingGlyphNameForUnicode(unicode: number): string | null;
+  getMappedGlyphName(unicode: number): string | null;
 }
 
-export function glyphRefFromUnicode(unicode: number, lookup?: GlyphNameLookup): GlyphRef {
+export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameResolverDeps): string {
+  const existingName = deps.getExistingGlyphNameForUnicode(unicode);
+  if (existingName) {
+    return existingName;
+  }
+
+  const mappedName = deps.getMappedGlyphName(unicode);
+  if (mappedName) {
+    return mappedName;
+  }
+
+  return fallbackGlyphNameForUnicode(unicode);
+}
+
+export function glyphRefFromUnicode(unicode: number, deps: GlyphNameResolverDeps): GlyphRef {
   return {
-    glyphName: lookup?.getGlyphNameForUnicode(unicode) ?? fallbackGlyphNameForUnicode(unicode),
+    glyphName: resolveGlyphNameFromUnicode(unicode, deps),
     unicode,
   };
 }

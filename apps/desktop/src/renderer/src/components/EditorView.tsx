@@ -32,10 +32,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   useEffect(() => {
     const parsed = Number.parseInt(glyphId, 16);
     const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
-    const glyphName =
-      editor.fontEngine.info.getGlyphNameForUnicode(unicode) ??
-      `uni${unicode.toString(16).toUpperCase()}`;
-    const glyphRef = { glyphName, unicode };
+    const glyphRef = editor.glyphRefFromUnicode(unicode);
 
     const initEditor = () => {
       editor.setMainGlyphUnicode(unicode);

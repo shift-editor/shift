@@ -14,6 +14,7 @@ import type {
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { PasteResult } from "@/types/engine";
 import { Bounds } from "@shift/geo";
+import type { GlyphRef } from "@/lib/tools/text/layout";
 
 /**
  * Facade over the four engine managers ({@link EditingManager}, {@link SessionManager},
@@ -144,12 +145,8 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     return JSON.parse(payload) as CompositeComponentsPayload;
   }
 
-  startEditSession(unicode: number): void {
-    this.#raw.startEditSession(unicode);
-  }
-
-  startEditSessionByName(glyphName: string): void {
-    this.#raw.startEditSessionByName(glyphName);
+  startEditSession(glyphRef: GlyphRef): void {
+    this.#raw.startEditSession(glyphRef);
   }
 
   endEditSession(): void {

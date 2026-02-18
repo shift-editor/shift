@@ -23,6 +23,11 @@ export interface CompositeComponentsPayload {
   components: CompositeComponentPayload[];
 }
 
+export interface GlyphRef {
+  glyphName: string;
+  unicode?: number | null;
+}
+
 export interface FontEngineAPI {
   // ── Font I/O ──
   loadFont(path: string): void;
@@ -47,8 +52,7 @@ export interface FontEngineAPI {
   getGlyphCompositeComponents(glyphName: string): string | null;
 
   // ── Session Lifecycle ──
-  startEditSession(unicode: number): void;
-  startEditSessionByName(glyphName: string): void;
+  startEditSession(glyphRef: GlyphRef): void;
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;

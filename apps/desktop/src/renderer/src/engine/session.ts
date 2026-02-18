@@ -3,7 +3,7 @@ import type { GlyphRef } from "@/lib/tools/text/layout";
 
 /** Low-level session lifecycle primitives that {@link SessionManager} orchestrates. */
 export interface Session {
-  startEditSessionByName(glyphName: string): void;
+  startEditSession(glyph: GlyphRef): void;
   endEditSession(): void;
   hasEditSession(): boolean;
   getEditingUnicode(): number | null;
@@ -33,7 +33,7 @@ export class SessionManager {
       this.endEditSession();
     }
 
-    this.#engine.startEditSessionByName(target.glyphName);
+    this.#engine.startEditSession(target);
     const glyph = this.getGlyph();
     this.#engine.emitGlyph(glyph);
   }

@@ -2,6 +2,7 @@ import type {
   FontEngineAPI,
   PointPositionUpdate,
   AnchorPositionUpdate,
+  GlyphRef,
 } from "@shared/bridge/FontEngineAPI";
 import type {
   PointType,
@@ -140,22 +141,12 @@ export class MockFontEngine implements FontEngineAPI {
     return JSON.stringify({ glyphName: _glyphName, components: [] });
   }
 
-  startEditSession(unicode: number): void {
+  startEditSession(glyphRef: GlyphRef): void {
+    const { glyphName } = glyphRef;
+    const resolvedUnicode =
+      glyphRef.unicode ?? (glyphName.length === 1 ? (glyphName.codePointAt(0) ?? 0) : 0);
     this.#snapshot = {
-      unicode,
-      name: String.fromCodePoint(unicode),
-      xAdvance: 500,
-      contours: [],
-      anchors: [],
-      compositeContours: [],
-      activeContourId: null as ContourId | null,
-    };
-  }
-
-  startEditSessionByName(glyphName: string): void {
-    const unicode = glyphName.length === 1 ? (glyphName.codePointAt(0) ?? 0) : 0;
-    this.#snapshot = {
-      unicode,
+      unicode: resolvedUnicode,
       name: glyphName,
       xAdvance: 500,
       contours: [],

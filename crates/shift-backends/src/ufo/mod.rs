@@ -109,4 +109,65 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn writer_rounds_coordinates_and_skips_empty_contours() {
+        let mut font = Font::new();
+        let default_layer_id = font.default_layer_id();
+
+        let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
+        let mut layer = GlyphLayer::with_width(500.4);
+
+        let mut contour = Contour::new();
+        contour.add_point(
+            115.29469168717605,
+            452.51873449628556,
+            PointType::OnCurve,
+            false,
+        );
+        contour.add_point(
+            163.40714583709172,
+            370.72756244142886,
+            PointType::OffCurve,
+            false,
+        );
+        contour.add_point(
+            259.6320541369231,
+            207.14521833171557,
+            PointType::OnCurve,
+            true,
+        );
+        contour.close();
+        layer.add_contour(contour);
+        layer.add_contour(Contour::new());
+
+        glyph.set_layer(default_layer_id, layer);
+        font.insert_glyph(glyph);
+
+        let temp_dir = std::env::temp_dir().join("shift_test_ufo_writer_format");
+        let ufo_path = temp_dir.join("writer_format.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        let expected_glif_filename = norad::user_name_to_file_name("A", "", ".glif", |_| true);
+        let glif_path = ufo_path.join("glyphs").join(expected_glif_filename);
+        let glif = fs::read_to_string(glif_path).unwrap();
+        let contents = fs::read_to_string(ufo_path.join("glyphs/contents.plist")).unwrap();
+
+        assert!(contents.contains("<key>A</key>"));
+        assert!(contents.contains("<string>A_.glif</string>"));
+        assert!(glif.contains("<unicode hex=\"0041\"/>"));
+        assert!(glif.contains("<advance width=\"500\"/>"));
+        assert!(glif.contains("<glyph name=\"A\""));
+        assert!(glif.contains("x=\"115\""));
+        assert!(glif.contains("y=\"453\""));
+        assert!(!glif.contains("115.29469168717605"));
+        assert_eq!(glif.matches("<contour>").count(), 1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

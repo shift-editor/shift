@@ -13,6 +13,13 @@ const FIXTURES_PATH = join(__dirname, "..", "..", "..", "fixtures");
 const MUTATORSANS_UFO = join(FIXTURES_PATH, "fonts/mutatorsans/MutatorSansLightCondensed.ufo");
 const MUTATORSANS_TTF = join(FIXTURES_PATH, "fonts/mutatorsans/MutatorSans.ttf");
 
+function startEditSessionByUnicode(engine, unicode) {
+  const glyphName =
+    engine.getGlyphNameForUnicode(unicode) ??
+    `uni${unicode.toString(16).toUpperCase().padStart(4, "0")}`;
+  engine.startEditSession({ glyphName, unicode });
+}
+
 describe("FontEngine Integration - UFO Loading", () => {
   it("loads MutatorSans UFO successfully", () => {
     if (!existsSync(MUTATORSANS_UFO)) {
@@ -97,7 +104,7 @@ describe("FontEngine Integration - Edit Session", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     expect(engine.hasEditSession()).toBe(true);
 
     const snapshot = JSON.parse(engine.getSnapshotData());
@@ -125,7 +132,7 @@ describe("FontEngine Integration - Edit Session", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     const snapshot = JSON.parse(engine.getSnapshotData());
 
     expect(snapshot.name).toBe("A");
@@ -196,7 +203,7 @@ describe("FontEngine Integration - Round Trip", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
@@ -206,7 +213,7 @@ describe("FontEngine Integration - Round Trip", () => {
     const engine2 = new FontEngine();
     engine2.loadFont(outputPath);
 
-    engine2.startEditSession(65);
+    startEditSessionByUnicode(engine2, 65);
     const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     engine2.endEditSession();
 
@@ -242,7 +249,7 @@ describe("FontEngine Integration - TTF Loading", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_TTF);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     expect(engine.hasEditSession()).toBe(true);
 
     const snapshot = JSON.parse(engine.getSnapshotData());
@@ -259,7 +266,7 @@ describe("FontEngine Integration - TTF Loading", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_TTF);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     const snapshot = JSON.parse(engine.getSnapshotData());
 
     expect(snapshot.contours.length).toBeGreaterThan(0);
@@ -283,7 +290,7 @@ describe("FontEngine Integration - Composite Glyphs", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(193);
+    startEditSessionByUnicode(engine, 193);
     expect(engine.hasEditSession()).toBe(true);
 
     const snapshot = JSON.parse(engine.getSnapshotData());
@@ -303,7 +310,7 @@ describe("FontEngine Integration - Point Types", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(79);
+    startEditSessionByUnicode(engine, 79);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
@@ -329,7 +336,7 @@ describe("FontEngine Integration - Point Types", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(79);
+    startEditSessionByUnicode(engine, 79);
     const snapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
@@ -351,7 +358,7 @@ describe("FontEngine Integration - Point Types", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     engine.endEditSession();
 
@@ -402,7 +409,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(65);
+    startEditSessionByUnicode(engine, 65);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     const originalPoints = [];
     for (const contour of originalSnapshot.contours) {
@@ -418,7 +425,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     const engine2 = new FontEngine();
     engine2.loadFont(outputPath);
 
-    engine2.startEditSession(65);
+    startEditSessionByUnicode(engine2, 65);
     const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     const reloadedPoints = [];
     for (const contour of reloadedSnapshot.contours) {
@@ -463,7 +470,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_UFO);
 
-    engine.startEditSession(79);
+    startEditSessionByUnicode(engine, 79);
     const originalSnapshot = JSON.parse(engine.getSnapshotData());
     const originalTypes = [];
     for (const contour of sortContoursByFirstPoint(originalSnapshot.contours)) {
@@ -479,7 +486,7 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     const engine2 = new FontEngine();
     engine2.loadFont(outputPath);
 
-    engine2.startEditSession(79);
+    startEditSessionByUnicode(engine2, 79);
     const reloadedSnapshot = JSON.parse(engine2.getSnapshotData());
     const reloadedTypes = [];
     for (const contour of sortContoursByFirstPoint(reloadedSnapshot.contours)) {

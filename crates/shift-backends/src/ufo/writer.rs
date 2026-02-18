@@ -7,6 +7,16 @@ use std::path::Path;
 
 pub struct UfoWriter;
 
+trait UfoRound {
+    fn ufo_round(self) -> f64;
+}
+
+impl UfoRound for f64 {
+    fn ufo_round(self) -> f64 {
+        self.round()
+    }
+}
+
 impl UfoWriter {
     pub fn new() -> Self {
         Self
@@ -52,8 +62,8 @@ impl UfoWriter {
             .enumerate()
             .map(|(i, p)| {
                 norad::ContourPoint::new(
-                    p.x(),
-                    p.y(),
+                    p.x().ufo_round(),
+                    p.y().ufo_round(),
                     Self::convert_point_type(p, i, contour.points(), contour.is_closed()),
                     p.is_smooth(),
                     None,
@@ -74,8 +84,8 @@ impl UfoWriter {
                 xy_scale: matrix.xy,
                 yx_scale: matrix.yx,
                 y_scale: matrix.yy,
-                x_offset: matrix.dx,
-                y_offset: matrix.dy,
+                x_offset: matrix.dx.ufo_round(),
+                y_offset: matrix.dy.ufo_round(),
             },
             None,
         )
@@ -83,8 +93,8 @@ impl UfoWriter {
 
     fn convert_anchor(anchor: &shift_ir::Anchor) -> norad::Anchor {
         norad::Anchor::new(
-            anchor.x(),
-            anchor.y(),
+            anchor.x().ufo_round(),
+            anchor.y().ufo_round(),
             anchor.name().map(|name| Name::new(name).unwrap()),
             None,
             None,
@@ -93,14 +103,18 @@ impl UfoWriter {
 
     fn convert_guideline(guideline: &Guideline) -> norad::Guideline {
         let line = match (guideline.x(), guideline.y(), guideline.angle()) {
-            (None, Some(y), None) => Line::Horizontal(y),
-            (Some(x), None, None) => Line::Vertical(x),
+            (None, Some(y), None) => Line::Horizontal(y.ufo_round()),
+            (Some(x), None, None) => Line::Vertical(x.ufo_round()),
             (Some(x), Some(y), Some(angle)) => Line::Angle {
-                x,
-                y,
+                x: x.ufo_round(),
+                y: y.ufo_round(),
                 degrees: angle,
             },
-            (Some(x), Some(y), None) => Line::Angle { x, y, degrees: 0.0 },
+            (Some(x), Some(y), None) => Line::Angle {
+                x: x.ufo_round(),
+                y: y.ufo_round(),
+                degrees: 0.0,
+            },
             _ => Line::Horizontal(0.0),
         };
 
@@ -143,8 +157,8 @@ impl UfoWriter {
     fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> NoradGlyph {
         let mut norad_glyph = NoradGlyph::new(glyph.name());
 
-        norad_glyph.width = layer.width();
-        norad_glyph.height = layer.height().unwrap_or(0.0);
+        norad_glyph.width = layer.width().ufo_round();
+        norad_glyph.height = layer.height().unwrap_or(0.0).ufo_round();
 
         for codepoint in glyph.unicodes() {
             if let Some(c) = char::from_u32(*codepoint) {
@@ -153,6 +167,9 @@ impl UfoWriter {
         }
 
         for contour in layer.contours_iter() {
+            if contour.is_empty() {
+                continue;
+            }
             norad_glyph.contours.push(Self::convert_contour(contour));
         }
 
