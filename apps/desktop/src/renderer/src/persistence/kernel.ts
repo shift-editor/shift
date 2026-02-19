@@ -79,6 +79,10 @@ export class DocumentStatePersistence {
     target.set(module.id, module);
   }
 
+  getState(): PersistedRoot {
+    return this.#editor ? this.#state : this.readState();
+  }
+
   openDocument(filePath: string): void {
     if (!this.#editor) return;
     this.flushNow();
@@ -136,20 +140,38 @@ export class DocumentStatePersistence {
     this.flush();
   }
 
-  getRecentDocuments(): { name: string; path: string }[] {
-    const state = this.#editor ? this.#state : this.readState();
-    return state.registry.lruDocIds
-      .slice(0, 10)
-      .map((docId) => state.registry.docIdToPath[docId])
-      .filter((p): p is string => !!p)
-      .map((p) => ({
-        name:
-          p
-            .split("/")
-            .pop()
-            ?.replace(/\.(otf|ttf|woff2?)$/i, "") ?? p,
-        path: p,
-      }));
+  async prunePaths(paths: Set<string>): Promise<void> {
+    const state = this.getState();
+    for (const p of paths) {
+      const docId = state.registry.pathToDocId[p];
+      if (!docId) continue;
+      state.registry.lruDocIds = state.registry.lruDocIds.filter((id) => id !== docId);
+      delete state.registry.docIdToPath[docId];
+      delete state.documents[docId];
+      delete state.registry.pathToDocId[p];
+    }
+    this.writeState(state);
+  }
+
+  async getRecentDocuments(): Promise<{ name: string; path: string }[]> {
+    const state = this.getState();
+
+    const paths = new Set(
+      state.registry.lruDocIds.slice(0, 10).map((docId) => state.registry.docIdToPath[docId]),
+    );
+
+    if (paths.size === 0) return [];
+
+    const documents = Array.from(paths).map((p) => ({
+      name:
+        p
+          .split("/")
+          .pop()
+          ?.replace(/\.(otf|ttf|ufo|glyphs|woff2?)$/i, "") ?? p,
+      path: p,
+    }));
+
+    return documents;
   }
 
   dispose(): void {

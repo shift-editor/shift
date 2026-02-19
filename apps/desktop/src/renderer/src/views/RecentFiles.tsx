@@ -1,14 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { documentPersistence } from "@/persistence";
-import {
-  Button,
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogPopup,
-  DialogPortal,
-  DialogTitle,
-} from "@shift/ui";
+import { Button } from "@shift/ui";
 
 const VISIBLE_COUNT = 5;
 
@@ -28,15 +20,16 @@ function FileRow({
   onOpenFile: (path: string) => void;
 }) {
   return (
-    <button
+    <Button
       onClick={() => onOpenFile(file.path)}
-      className="hover:bg-hover flex items-center justify-between rounded px-2 py-1 text-left"
+      variant="ghost"
+      className="hover:bg-hover px-0.5 py-0.5 h-fit flex items-center justify-between rounded text-left"
     >
-      <span className="text-primary truncate text-xs">{file.name}</span>
-      <span className="text-secondary ml-4 max-w-[140px] shrink-0 truncate text-xs">
+      <span className="text-primary truncate text-sm">{file.name}</span>
+      <span className="text-secondary ml-4 max-w-[140px] shrink-0 truncate text-sm">
         {shortenPath(file.path)}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -45,57 +38,33 @@ interface RecentFilesProps {
 }
 
 export const RecentFiles = ({ onOpenFile }: RecentFilesProps) => {
-  const recentFiles = documentPersistence.getRecentDocuments();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<{ name: string; path: string }[]>([]);
+
+  useEffect(() => {
+    const fetchRecentFiles = async () => {
+      const documents = await documentPersistence.getRecentDocuments();
+      if (window.electronAPI) {
+        const exists = await window.electronAPI.pathsExist(documents.map((d) => d.path));
+        const prune = documents.filter((_, i) => !exists[i]);
+        await documentPersistence.prunePaths(new Set(prune.map((d) => d.path)));
+      }
+
+      setRecentFiles(documents);
+    };
+
+    fetchRecentFiles();
+  }, []);
 
   if (recentFiles.length === 0) return null;
-  console.log(recentFiles);
 
   const visibleFiles = recentFiles.slice(0, VISIBLE_COUNT);
-  const hasMore = recentFiles.length > VISIBLE_COUNT;
 
   return (
-    <div className="flex w-72 flex-col gap-1">
-      <span className="text-secondary text-xs font-medium">Recent files</span>
+    <div className="flex w-90 flex-col gap-[1px]">
+      <span className="text-sm font-medium">Recent files</span>
       {visibleFiles.map((file) => (
         <FileRow key={file.path} file={file} onOpenFile={onOpenFile} />
       ))}
-      {hasMore && (
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <Button variant="ghost" size="sm" onClick={() => setDialogOpen(true)}>
-            Show all ({recentFiles.length})
-          </Button>
-          <DialogPortal>
-            <DialogBackdrop />
-            <DialogPopup className="max-h-[60vh] overflow-y-auto p-4">
-              <DialogTitle className="text-primary mb-3 text-sm font-medium">
-                Recent files
-              </DialogTitle>
-              <div className="flex flex-col gap-1">
-                {recentFiles.map((file) => (
-                  <FileRow
-                    key={file.path}
-                    file={file}
-                    onOpenFile={(path) => {
-                      setDialogOpen(false);
-                      onOpenFile(path);
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="mt-3 flex justify-end">
-                <DialogClose
-                  render={(props) => (
-                    <Button {...props} variant="ghost" size="sm">
-                      Close
-                    </Button>
-                  )}
-                />
-              </div>
-            </DialogPopup>
-          </DialogPortal>
-        </Dialog>
-      )}
     </div>
   );
 };

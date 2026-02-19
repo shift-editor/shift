@@ -42,6 +42,7 @@ const electronAPI: ElectronAPI = {
   setDocumentFilePath: invoke("document:setFilePath"),
   saveCompleted: invoke("document:saveCompleted"),
   getDebugState: invoke("debug:getState"),
+  pathsExist: invoke("fs:pathsExist"),
 
   // Events
   onMenuOpenFont: on("menu:open-font"),

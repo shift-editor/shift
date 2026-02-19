@@ -48,6 +48,7 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
         filePath,
         fileName: getFileNameFromPath(filePath),
       });
+      window.electronAPI?.setDocumentFilePath(filePath);
     },
     setDirty: (dirty: boolean) => {
       set({ isDirty: dirty });

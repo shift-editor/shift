@@ -125,7 +125,6 @@ export class MenuManager {
                 ],
               });
               if (!result.canceled && result.filePaths[0]) {
-                this.documentState.setFilePath(result.filePaths[0]);
                 if (webContents) {
                   ipc.send(webContents, "menu:open-font", result.filePaths[0]);
                 }

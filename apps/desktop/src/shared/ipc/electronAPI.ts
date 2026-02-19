@@ -27,6 +27,7 @@ export interface ElectronAPI {
   setDocumentFilePath: CommandInvoker<"document:setFilePath">;
   saveCompleted: CommandInvoker<"document:saveCompleted">;
   getDebugState: CommandInvoker<"debug:getState">;
+  pathsExist: CommandInvoker<"fs:pathsExist">;
 
   // Events
   onMenuOpenFont: EventListener<"menu:open-font">;

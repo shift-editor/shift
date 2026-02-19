@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, dialog } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
@@ -192,7 +193,6 @@ export class AppLifecycle {
       if (!shouldOpen) return;
     }
 
-    this.documentState.setFilePath(filePath);
     ipc.send(window.webContents, "external:open-font", filePath);
   }
 
@@ -211,10 +211,23 @@ export class AppLifecycle {
         filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage"] }],
       });
       if (!result.canceled && result.filePaths[0]) {
-        this.documentState.setFilePath(result.filePaths[0]);
         return result.filePaths[0];
       }
       return null;
+    });
+
+    ipc.handle(ipcMain, "fs:pathsExist", async (_event, paths: string[]) => {
+      const results = await Promise.all(
+        paths.map(async (filePath) => {
+          try {
+            await fs.promises.access(filePath, fs.constants.F_OK);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      return results;
     });
   }
 }

@@ -31,4 +31,5 @@ export type IpcCommands = {
   "document:setDirty": (dirty: boolean) => void;
   "document:setFilePath": (filePath: string | null) => void;
   "document:saveCompleted": (filePath: string) => void;
+  "fs:pathsExist": (paths: string[]) => boolean[];
 };
