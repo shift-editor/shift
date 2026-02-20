@@ -7,6 +7,9 @@ import type { CommandContext } from "../core";
  * (e.g. complex multi-step operations). Execute and redo restore the "after"
  * snapshot; undo restores the "before" snapshot. The label is caller-provided
  * so the undo history displays meaningful operation names.
+ *
+ * Implements the Command interface (name, execute, undo, redo).
+ * @knipclassignore
  */
 export class SnapshotCommand {
   readonly name: string;

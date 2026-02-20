@@ -64,6 +64,10 @@ export interface ViewportTransform {
  * Dependency interface that the {@link CanvasCoordinator} uses to read editor state
  * each frame. Keeps the coordinator decoupled from concrete Editor/ToolManager
  * implementations -- callers wire up callbacks at construction time.
+ *
+ * This contract is intentionally consumed indirectly by the renderer; concrete
+ * implementations may require explicit dead-code suppression on members that are
+ * only referenced through this interface.
  */
 export interface CanvasCoordinatorContext {
   /** Sidebearing offset applied before glyph rendering, in UPM units. */

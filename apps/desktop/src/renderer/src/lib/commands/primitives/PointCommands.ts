@@ -81,55 +81,6 @@ export class MovePointsCommand extends BaseCommand<void> {
 }
 
 /**
- * Moves a single point to an absolute position. Captures the original position
- * on first execute for undo. Prefer {@link MovePointsCommand} for delta-based
- * batch moves; use this when exact placement matters (e.g. snapping).
- */
-export class MovePointToCommand extends BaseCommand<void> {
-  readonly name = "Move Point";
-
-  #pointId: PointId;
-  #x: number;
-  #y: number;
-
-  // Stored for undo
-  #originalX: number | null = null;
-  #originalY: number | null = null;
-
-  constructor(pointId: PointId, x: number, y: number) {
-    super();
-    this.#pointId = pointId;
-    this.#x = x;
-    this.#y = y;
-  }
-
-  execute(ctx: CommandContext): void {
-    if (!ctx.glyph) return;
-
-    for (const contour of ctx.glyph.contours) {
-      const point = contour.points.find((p) => p.id === this.#pointId);
-      if (point) {
-        this.#originalX = point.x;
-        this.#originalY = point.y;
-        break;
-      }
-    }
-
-    ctx.fontEngine.editing.movePointTo(this.#pointId, this.#x, this.#y);
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#originalX !== null && this.#originalY !== null) {
-      ctx.fontEngine.editing.movePointTo(this.#pointId, this.#originalX, this.#originalY);
-    }
-  }
-
-  redo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.movePointTo(this.#pointId, this.#x, this.#y);
-  }
-}
-
-/**
  * Deletes one or more points from the glyph. Snapshots each removed point's
  * contour, position, type, and smoothness so undo can re-add them in order.
  */

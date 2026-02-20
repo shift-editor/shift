@@ -35,6 +35,7 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
   abstract readonly behaviors: Behavior<S, ToolEvent, A>[];
   readonly $cursor: ComputedSignal<CursorType>;
   state: S;
+  /** @knipclassignore */
   settings: Settings;
   protected editor: EditorAPI;
 
@@ -148,10 +149,6 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
     return handled;
   }
 
-  isInState<T extends S["type"]>(...types: T[]): boolean {
-    return (types as string[]).includes(this.state.type);
-  }
-
   getState(): S {
     return this.state;
   }
@@ -167,17 +164,5 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
       this.editor.commands.cancelBatch();
       throw err;
     }
-  }
-
-  protected beginPreview(): void {
-    this.editor.beginPreview();
-  }
-
-  protected commitPreview(label: string): void {
-    this.editor.commitPreview(label);
-  }
-
-  protected cancelPreview(): void {
-    this.editor.cancelPreview();
   }
 }

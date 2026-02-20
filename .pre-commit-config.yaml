@@ -56,6 +56,13 @@ repos:
         types_or: [ts, tsx]
         pass_filenames: false
 
+      - id: deadcode
+        name: deadcode (strict)
+        entry: pnpm deadcode:strict
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+
       - id: vitest
         name: vitest
         entry: pnpm test

@@ -21,7 +21,11 @@ export interface Info {
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
 }
 
-/** Thin pass-through so consumers can depend on `engine.info` without accessing editing or session capabilities. */
+/**
+ * Thin pass-through so consumers can depend on `engine.info` without accessing editing or session capabilities.
+ * All methods implement the `Info` interface and are consumed via `FontEngine.info`.
+ * @knipclassignore
+ */
 export class InfoManager {
   #engine: Info;
 

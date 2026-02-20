@@ -50,7 +50,6 @@ export {
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
-  TransformMatrixCommand,
   MoveSelectionToCommand,
   AlignPointsCommand,
   DistributePointsCommand,

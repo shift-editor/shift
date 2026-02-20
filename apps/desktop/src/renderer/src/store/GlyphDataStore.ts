@@ -131,10 +131,6 @@ export class GlyphDataStore {
     return this.#fontUnicodes.peek().includes(unicode);
   }
 
-  hasCachedPath(unicode: number): boolean {
-    return this.#cache.get(unicode)?.svgPath !== undefined;
-  }
-
   invalidateGlyph(unicode: number): void {
     this.#cache.delete(unicode);
     GlyphRenderCache.delete(unicode);
@@ -162,15 +158,6 @@ export class GlyphDataStore {
     if (!v) {
       v = signal(DEFAULT_VERSION);
       this.#glyphVersions.set(unicode, v);
-    }
-    return v;
-  }
-
-  getGlyphVersionByName(glyphName: string): Signal<number> {
-    let v = this.#glyphVersionsByName.get(glyphName);
-    if (!v) {
-      v = signal(DEFAULT_VERSION);
-      this.#glyphVersionsByName.set(glyphName, v);
     }
     return v;
   }

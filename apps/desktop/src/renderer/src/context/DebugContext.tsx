@@ -111,14 +111,6 @@ export function DebugProvider({ children }: DebugProviderProps) {
   );
 }
 
-export function useDebug(): DebugContextValue {
-  const context = useContext(DebugContext);
-  if (!context) {
-    throw new Error("useDebug must be used within a DebugProvider (dev mode only)");
-  }
-  return context;
-}
-
 export function useDebugSafe(): DebugContextValue | null {
   return useContext(DebugContext);
 }

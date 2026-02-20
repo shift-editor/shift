@@ -119,6 +119,10 @@ export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
  * 3. Register tools via `registerTool()`.
  * 4. Call `setActiveTool()` to begin interaction.
  * 5. Call `destroy()` on teardown to dispose effects and the renderer.
+ *
+ * Most members satisfy `EditorAPI`, `CanvasCoordinatorContext`, or the
+ * `ShiftEditor` composite type and are consumed through those interfaces.
+ * @knipclassignore
  */
 export class Editor implements ShiftEditor {
   private $previewMode: WritableSignal<boolean>;
@@ -452,14 +456,17 @@ export class Editor implements ShiftEditor {
     return this.#toolManager;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public renderTool(draw: DrawAPI): void {
     this.#toolManager.render(draw);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public renderToolBelowHandles(draw: DrawAPI): void {
     this.#toolManager.renderBelowHandles(draw);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public renderToolContributors(
     layer: ToolRenderLayer,
     context: Omit<ToolRenderContext, "editor">,
@@ -543,6 +550,7 @@ export class Editor implements ShiftEditor {
     this.#selection.toggleSegmentInSelection(segmentId);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public isSegmentSelected(segmentId: SegmentId): boolean {
     return this.#selection.isSegmentSelected(segmentId);
   }
@@ -699,6 +707,7 @@ export class Editor implements ShiftEditor {
     this.#snapIndicator.set(indicator);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getSnapIndicator(): SnapIndicator | null {
     return this.#snapIndicator.peek();
   }
@@ -711,6 +720,7 @@ export class Editor implements ShiftEditor {
     return this.#toolStateVersion;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getDebugOverlays(): DebugOverlays {
     return this.#debugOverlays.value;
   }
@@ -771,6 +781,7 @@ export class Editor implements ShiftEditor {
     return this.$previewMode;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public isPreviewMode(): boolean {
     return this.$previewMode.peek();
   }
@@ -795,6 +806,7 @@ export class Editor implements ShiftEditor {
     return this.$handlesVisible;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public isHandlesVisible(): boolean {
     return this.$handlesVisible.peek();
   }
@@ -917,6 +929,7 @@ export class Editor implements ShiftEditor {
     this.#textRunManager.recompute(this.#fontManager, originX);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public shouldRenderEditableGlyph(): boolean {
     const state = this.#textRunManager.state.peek();
     return !state || state.editingIndex !== null;
@@ -1106,6 +1119,7 @@ export class Editor implements ShiftEditor {
     return this.glyph.value?.xAdvance ?? 0;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getVisualGlyphAdvance(glyph: Glyph): number {
     if (glyph.xAdvance > 0) return glyph.xAdvance;
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
@@ -1208,10 +1222,12 @@ export class Editor implements ShiftEditor {
     return this.#viewport.hitRadius;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public screenToUpmDistance(pixels: number): number {
     return this.#viewport.screenToUpmDistance(pixels);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getViewportTransform(): ViewportTransform {
     return {
       zoom: this.#viewport.zoomLevel,
@@ -1225,6 +1241,7 @@ export class Editor implements ShiftEditor {
     };
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public projectSceneToScreen(x: number, y: number): Point2D {
     return this.#viewport.projectSceneToScreen(x, y);
   }
@@ -1269,10 +1286,12 @@ export class Editor implements ShiftEditor {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getHandleState(pointId: PointId): HandleState {
     return this.getPointVisualState(pointId);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getAnchorHandleState(anchorId: AnchorId): HandleState {
     return this.getAnchorVisualState(anchorId);
   }
@@ -1358,6 +1377,8 @@ export class Editor implements ShiftEditor {
    * While in preview, tools can mutate the glyph freely. Call `commitPreview()`
    * to record the changes as a single undoable command, or `cancelPreview()`
    * to restore the snapshot. No-op if already in preview.
+   *
+   * @knipclassignore Consumed through the Commands interface contract.
    */
   public beginPreview(): void {
     if (this.#isInPreview) return;
@@ -1365,6 +1386,7 @@ export class Editor implements ShiftEditor {
     this.#isInPreview = true;
   }
 
+  /** @knipclassignore Consumed through the Commands interface contract. */
   public cancelPreview(): void {
     if (!this.#isInPreview || !this.#previewSnapshot) return;
 
@@ -1373,6 +1395,7 @@ export class Editor implements ShiftEditor {
     this.#isInPreview = false;
   }
 
+  /** @knipclassignore Consumed through the Commands interface contract. */
   public commitPreview(label: string): void {
     if (!this.#isInPreview || !this.#previewSnapshot) return;
 
@@ -1834,6 +1857,7 @@ export class Editor implements ShiftEditor {
     return null;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getDrawOffset(): Point2D {
     return this.#drawOffset.value;
   }
@@ -1842,6 +1866,7 @@ export class Editor implements ShiftEditor {
     this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyph));
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public setDrawOffset(offset: Point2D): void {
     this.#drawOffset.set(offset);
   }

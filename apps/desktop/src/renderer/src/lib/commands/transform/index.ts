@@ -2,7 +2,6 @@ export {
   RotatePointsCommand,
   ScalePointsCommand,
   ReflectPointsCommand,
-  TransformMatrixCommand,
   MoveSelectionToCommand,
 } from "./TransformCommands";
 

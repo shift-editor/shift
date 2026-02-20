@@ -1,4 +1,4 @@
-export { FontEngine, createFontEngine } from "./FontEngine";
+export { FontEngine } from "./FontEngine";
 
 export { EditingManager } from "./editing";
 export type { EditingEngineDeps } from "./editing";
@@ -12,7 +12,7 @@ export type { IO as IOEngineDeps } from "./io";
 
 export { FontEngineError, NoEditSessionError, NativeOperationError } from "./errors";
 
-export { MockFontEngine, createMockNative } from "./mock";
+export { MockFontEngine } from "./mock";
 
 export type { FontEngineAPI, NativeFontEngine } from "./native";
 export { getNative, hasNative } from "./native";

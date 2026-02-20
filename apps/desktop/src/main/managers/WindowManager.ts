@@ -89,12 +89,6 @@ export class WindowManager {
     this.window.setDocumentEdited(dirty);
   }
 
-  destroy() {
-    this.documentState.stopAutosave();
-    this.window?.destroy();
-    this.window = null;
-  }
-
   private registerIpcHandlers() {
     ipc.handle(ipcMain, "window:close", () => {
       this.window?.close();

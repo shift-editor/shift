@@ -257,8 +257,3 @@ export function hitTestTextCaret(
 
   return slots.length;
 }
-
-/**
- * Backward-compatible alias. Prefer `hitTestTextCaret` or `hitTestTextSlot`.
- */
-export const hitTestLayout = hitTestTextCaret;

@@ -53,4 +53,5 @@ const config: ForgeConfig = {
   ],
 };
 
+/** @public */
 export default config;

@@ -39,4 +39,3 @@ export {
 } from "./StateDiagram";
 export { createBehavior, type Behavior, type TransitionResult } from "./Behavior";
 export { stateDiagramToMermaid } from "./stateDiagramToMermaid";
-export { renderStateDiagram } from "./renderStateDiagram";

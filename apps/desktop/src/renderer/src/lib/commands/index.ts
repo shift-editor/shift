@@ -12,11 +12,9 @@ export {
 export {
   AddPointCommand,
   MovePointsCommand,
-  MovePointToCommand,
   RemovePointsCommand,
   InsertPointCommand,
   AddBezierAnchorCommand,
-  TogglePointSmoothCommand,
   CloseContourCommand,
   AddContourCommand,
   SetActiveContourCommand,
@@ -32,9 +30,4 @@ export {
 export { CutCommand, PasteCommand } from "./clipboard";
 
 // Transform commands
-export {
-  RotatePointsCommand,
-  ScalePointsCommand,
-  ReflectPointsCommand,
-  TransformMatrixCommand,
-} from "./transform";
+export { RotatePointsCommand, ScalePointsCommand, ReflectPointsCommand } from "./transform";

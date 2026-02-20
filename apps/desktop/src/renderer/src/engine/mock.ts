@@ -19,6 +19,7 @@ export class MockFontEngine implements FontEngineAPI {
   // Note: also satisfies EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
   // when wrapped by FontEngine (used via managers in tests)
   #snapshot: GlyphSnapshot | null = null;
+  /** @knipclassignore */
   #nextId = 1;
 
   #generateId(): string {
@@ -484,8 +485,4 @@ export class MockFontEngine implements FontEngineAPI {
     };
     return JSON.stringify(result);
   }
-}
-
-export function createMockNative(): FontEngineAPI {
-  return new MockFontEngine();
 }

@@ -1,6 +1,6 @@
 import type { GlyphSnapshot, FontMetadata, FontMetrics, ContourId } from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
-import { getNative, hasNative } from "./native";
+import { getNative } from "./native";
 import { NativeOperationError } from "./errors";
 import { EditingManager, type EditingEngineDeps } from "./editing";
 import { SessionManager, type Session } from "./session";
@@ -197,14 +197,4 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
       error: raw.error,
     };
   }
-}
-
-/** Creates a FontEngine backed by the native NAPI bridge. Throws if unavailable (tests should pass a mock to the constructor instead). */
-export function createFontEngine(): FontEngine {
-  if (hasNative()) {
-    return new FontEngine();
-  }
-
-  console.warn("Native FontEngine not available, using mock implementation");
-  throw new Error("MockFontEngine not yet implemented");
 }

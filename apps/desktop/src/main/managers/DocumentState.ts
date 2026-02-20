@@ -136,10 +136,4 @@ export class DocumentState {
       this.autosaveIntervalId = null;
     }
   }
-
-  reset() {
-    this.dirty = false;
-    this.filePath = null;
-    this.stopAutosave();
-  }
 }

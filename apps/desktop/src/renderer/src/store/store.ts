@@ -66,6 +66,3 @@ const AppState = create<AppState>()(createStore);
 export const getEditor = () => AppState.getState().editor;
 export const setFilePath = (path: string | null) => AppState.getState().setFilePath(path);
 export const clearDirty = () => AppState.getState().clearDirty();
-export const markDirty = () => AppState.getState().markDirty();
-
-export default AppState;

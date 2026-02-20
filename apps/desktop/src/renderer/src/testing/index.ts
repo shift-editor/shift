@@ -40,23 +40,10 @@
 
 export {
   // FontEngine factories
-  TestFontEngine,
-  createTestFontEngine,
   createMockFontEngine,
 
   // Mock editing operations
   createMockEditing,
-
-  // Snapshot creation
-  createTestSnapshot,
-  populateEngine,
-  type TestSnapshotConfig,
-  type TestContourConfig,
-  type TestPointConfig,
-
-  // Snapshot queries
-  findPointAt,
-  findPointById,
   getAllPoints,
   getPointCount,
   getContourCount,
@@ -67,20 +54,6 @@ export {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { createMockCommandContext, type MockToolContextOptions } from "./context";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// EVENT UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-
-export {
-  // Event factories
-  createMouseEvent,
-  createKeyboardEvent,
-
-  // Interaction helpers
-  simulateClick,
-  simulateDrag,
-} from "./events";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TOOL CONTEXT UTILITIES

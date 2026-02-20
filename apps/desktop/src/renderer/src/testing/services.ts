@@ -1585,11 +1585,4 @@ export class ToolEventSimulator {
       metaKey: options?.metaKey ?? false,
     });
   }
-
-  keyUp(key: string): void {
-    this.tool.handleEvent({
-      type: "keyUp",
-      key,
-    });
-  }
 }

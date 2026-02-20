@@ -5,23 +5,13 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type { Contour, Glyph } from "@shift/types";
+import type { Glyph } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
-import { Polygon } from "@shift/geo";
 import {
   iterateRenderableContours,
   parseContourSegments,
   type SegmentContourLike,
 } from "@shift/font";
-
-export interface Guides {
-  xAdvance: number;
-  ascender: { y: number };
-  capHeight: { y: number };
-  xHeight: { y: number };
-  baseline: { y: number };
-  descender: { y: number };
-}
 
 /**
  * Traces the contour's segments into the current path without stroking or filling.
@@ -78,34 +68,4 @@ export function renderGlyph(ctx: IRenderer, glyph: Glyph): boolean {
   ctx.stroke();
 
   return hasClosed;
-}
-
-export function renderGuides(ctx: IRenderer, guides: Guides): void {
-  ctx.beginPath();
-
-  for (const y of [
-    guides.ascender.y,
-    guides.capHeight.y,
-    guides.xHeight.y,
-    guides.baseline.y,
-    guides.descender.y,
-  ]) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(guides.xAdvance, y);
-  }
-
-  ctx.moveTo(0, guides.descender.y);
-  ctx.lineTo(0, guides.ascender.y);
-  ctx.moveTo(guides.xAdvance, guides.descender.y);
-  ctx.lineTo(guides.xAdvance, guides.ascender.y);
-
-  ctx.stroke();
-}
-
-/**
- * Tests contour winding direction. Clockwise contours define filled regions
- * under the non-zero fill rule; counter-clockwise contours define holes.
- */
-export function isContourClockwise(contour: Contour): boolean {
-  return Polygon.isClockwise(contour.points);
 }

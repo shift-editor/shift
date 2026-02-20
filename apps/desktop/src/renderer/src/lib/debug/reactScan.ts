@@ -69,7 +69,7 @@ export async function enableReactScan(): Promise<void> {
     try {
       await waitForReactScan();
       scriptLoaded = true;
-    } catch (e) {
+    } catch {
       return;
     }
   }
@@ -85,8 +85,4 @@ export function disableReactScan(): void {
 
   applyOptions({ enabled: false, showToolbar: false });
   isEnabled = false;
-}
-
-export function isReactScanEnabled(): boolean {
-  return isEnabled;
 }

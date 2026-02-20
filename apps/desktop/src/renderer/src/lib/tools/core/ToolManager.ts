@@ -246,6 +246,7 @@ export class ToolManager implements ToolSwitchHandler {
     }
   }
 
+  /** @knipclassignore */
   reset(): void {
     this.gesture.reset();
     if (this.overrideTool) {
@@ -309,14 +310,5 @@ export class ToolManager implements ToolSwitchHandler {
         visit(toolId, contributor);
       }
     }
-  }
-
-  destroy(): void {
-    if (this.frameId) {
-      cancelAnimationFrame(this.frameId);
-      this.frameId = null;
-    }
-    this.pendingPointerMove = null;
-    this.lastScreenPoint = null;
   }
 }

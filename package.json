@@ -17,6 +17,11 @@
     "typecheck": "pnpm run generate:types && turbo run typecheck",
     "lint": "turbo run lint",
     "lint:check": "turbo run lint:check",
+    "deadcode": "knip --workspace apps/desktop --workspace \"packages/*\" --include files,exports",
+    "deadcode:class": "knip -c knip.class.json --workspace apps/desktop --workspace \"packages/*\" --include classMembers --exclude files,dependencies,unlisted,unresolved,exports,nsExports,types,nsTypes,enumMembers,duplicates,catalog",
+    "deadcode:strict": "pnpm deadcode && pnpm deadcode:class",
+    "deadcode:fix": "knip -c knip.fix.json --workspace apps/desktop --workspace \"packages/*\" --fix --allow-remove-files",
+    "check": "pnpm lint:check && pnpm typecheck && pnpm deadcode:strict && pnpm test",
     "format": "prettier --write \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\" \"packages/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "format:check": "prettier --check \"apps/**/*.{js,jsx,ts,tsx,css,md,json}\" \"packages/**/*.{js,jsx,ts,tsx,css,md,json}\"",
     "clean": "rm -rf apps/*/.vite apps/*/out apps/*/node_modules/.vite packages/*/node_modules/.vite node_modules .turbo && cargo clean",
@@ -34,7 +39,9 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "knip": "^5.84.1",
     "prettier": "^3.4.2",
+    "ts-morph": "^27.0.2",
     "tsx": "^4.7.0",
     "turbo": "^2.7.5",
     "typescript": "^5.5.4"

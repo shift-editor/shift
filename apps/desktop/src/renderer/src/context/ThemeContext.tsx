@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useEffect, useState, ReactNode } from "react";
 import { ThemeTokens, lightTheme, applyThemeToCss } from "@/lib/styles/theme";
 
 import type { ThemeName } from "@shared/ipc/types";
@@ -81,12 +81,4 @@ export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProvide
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme(): ThemeContextValue {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
 }

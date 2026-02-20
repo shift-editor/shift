@@ -37,7 +37,6 @@ export class ViewportManager {
   private readonly $descender: WritableSignal<number>;
 
   #canvasRect: Rect2D;
-  #dpr: number;
 
   #mouseX: number;
   #mouseY: number;
@@ -54,8 +53,6 @@ export class ViewportManager {
     this.$panY = signal(0);
     this.$upm = signal(1000);
     this.$descender = signal(-200);
-
-    this.#dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
     this.#mouseX = 0;
     this.#mouseY = 0;
@@ -99,18 +96,22 @@ export class ViewportManager {
     this.$screenToUpmMatrix.invalidate();
   }
 
+  /** @knipclassignore */
   get upm(): number {
     return this.$upm.value;
   }
 
+  /** @knipclassignore */
   set upm(value: number) {
     this.$upm.value = value;
   }
 
+  /** @knipclassignore */
   get descender(): number {
     return this.$descender.value;
   }
 
+  /** @knipclassignore */
   set descender(value: number) {
     this.$descender.value = value;
   }
@@ -126,24 +127,12 @@ export class ViewportManager {
     return availableHeight / this.$upm.value;
   }
 
-  get deviceWidth(): number {
-    return this.#canvasRect.width * this.#dpr;
-  }
-
-  get deviceHeight(): number {
-    return this.#canvasRect.height * this.#dpr;
-  }
-
   get logicalWidth(): number {
     return this.#canvasRect.width;
   }
 
   get logicalHeight(): number {
     return this.#canvasRect.height;
-  }
-
-  get dpr(): number {
-    return this.#dpr;
   }
 
   public get zoom(): Signal<number> {

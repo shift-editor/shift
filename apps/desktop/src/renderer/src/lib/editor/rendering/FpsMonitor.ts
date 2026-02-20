@@ -62,8 +62,4 @@ export class FpsMonitor {
 
     this.#rafId = requestAnimationFrame(this.#tick);
   };
-
-  get isRunning(): boolean {
-    return this.#running;
-  }
 }

@@ -145,45 +145,6 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
 }
 
 /**
- * Toggles a point's smooth flag, switching between a sharp corner and a
- * smooth tangent-continuous joint. Currently a stub pending FontEngine API
- * support; captures the original state for eventual undo.
- */
-export class TogglePointSmoothCommand extends BaseCommand<void> {
-  readonly name = "Toggle Point Smooth";
-
-  #pointId: PointId;
-  #_wasSmooth: boolean | null = null;
-
-  constructor(pointId: PointId) {
-    super();
-    this.#pointId = pointId;
-  }
-
-  execute(ctx: CommandContext): void {
-    // Find current smooth state
-    if (ctx.glyph) {
-      for (const contour of ctx.glyph.contours) {
-        const point = contour.points.find((p) => p.id === this.#pointId);
-        if (point) {
-          this.#_wasSmooth = point.smooth;
-          break;
-        }
-      }
-    }
-
-    console.warn("TogglePointSmoothCommand: FontEngine.toggleSmooth not yet implemented");
-  }
-
-  undo(_ctx: CommandContext): void {
-    // Restore original smooth state
-    // TODO: Implement when FontEngine API is available
-    // Will use this.#_wasSmooth to restore the original state
-    void this.#_wasSmooth;
-  }
-}
-
-/**
  * Closes the active contour, connecting the last point back to the first.
  * No-ops if the contour is already closed. Undo reopens the contour only
  * if this command actually closed it.

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "include": ["files", "exports"],
+  "entry": [],
+  "project": [],
+  "ignore": ["apps/desktop/src/renderer/src/testing/setup.ts"],
+  "includeEntryExports": true,
+  "ignoreWorkspaces": ["crates/shift-node"],
+  "ignoreExportsUsedInFile": true,
+  "tags": ["-lintignore"],
+  "workspaces": {
+    "apps/desktop": {
+      "entry": [
+        "src/main/main.ts",
+        "src/preload/preload.ts",
+        "src/renderer/renderer.ts",
+        "forge.config.ts",
+        "vitest.config.ts",
+        "vite.main.config.ts",
+        "vite.preload.config.ts",
+        "vite.renderer.config.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "*.config.ts", "!src/**/*.d.ts"]
+    },
+    "packages/font": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/geo": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/glyph-info": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/rules": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/types": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/ui": {
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/validation": {
+      "project": ["src/**/*.ts"]
+    }
+  }
+}

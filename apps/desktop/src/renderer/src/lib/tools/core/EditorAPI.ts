@@ -11,6 +11,11 @@
  * The composite type also exposes `font` ({@link Font}) and `glyph`
  * (reactive signal) directly, since nearly every tool requires them.
  *
+ * Notes for dead-code tooling:
+ * members in this contract are often used through interface slices and
+ * manager wiring. Implementations may need explicit `@knipclassignore`
+ * comments on concrete class members when usage is indirect.
+ *
  * @module
  */
 import type {

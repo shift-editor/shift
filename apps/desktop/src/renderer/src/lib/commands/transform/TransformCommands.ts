@@ -1,5 +1,5 @@
 import type { Point2D, PointId } from "@shift/types";
-import { Vec2, type MatModel } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
@@ -126,28 +126,6 @@ export class ReflectPointsCommand extends BaseTransformCommand {
 
   protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
     return Transform.reflectPoints(points, this.#axis, this.#origin);
-  }
-}
-
-/**
- * Applies an arbitrary 2x3 affine matrix to selected points around an origin.
- * Use this for compound transforms (e.g. skew) that don't map to a dedicated
- * command.
- */
-export class TransformMatrixCommand extends BaseTransformCommand {
-  readonly name = "Transform Points";
-
-  #matrix: MatModel;
-  #origin: Point2D;
-
-  constructor(pointIds: PointId[], matrix: MatModel, origin: Point2D) {
-    super(pointIds);
-    this.#matrix = { ...matrix };
-    this.#origin = origin;
-  }
-
-  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
-    return Transform.applyMatrix(points, this.#matrix, this.#origin);
   }
 }
 

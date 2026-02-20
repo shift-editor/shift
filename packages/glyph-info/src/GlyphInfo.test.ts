@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GlyphInfo } from "./GlyphInfo.js";
 import { defaultResources } from "./resources.js";
-import type { GlyphData, SearchResult } from "./types.js";
 
 let db: GlyphInfo;
 
