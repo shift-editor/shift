@@ -173,6 +173,7 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.removePoints(pointIds));
   }
 
+  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#engine.raw.insertPointBefore(
@@ -214,6 +215,7 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.setXAdvance(width));
   }
 
+  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#engine.raw.translateLayer(dx, dy));
   }
@@ -231,10 +233,12 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.reverseContour(contourId));
   }
 
+  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
   removeContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#engine.raw.removeContour(contourId));
   }
 
+  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
   openContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#engine.raw.openContour(contourId));
   }
