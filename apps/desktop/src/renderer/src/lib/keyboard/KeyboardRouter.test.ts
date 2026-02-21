@@ -45,6 +45,12 @@ describe("KeyboardRouter", () => {
     activeTool = "select";
     canvasActive = true;
 
+    Object.defineProperty(globalThis, "navigator", {
+      value: { clipboard: { readText: vi.fn(() => Promise.resolve("")) } },
+      writable: true,
+      configurable: true,
+    });
+
     editor = {
       zoomIn: vi.fn(),
       zoomOut: vi.fn(),

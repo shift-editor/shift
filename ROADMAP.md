@@ -616,7 +616,7 @@
 
 **Release Infrastructure**
 
-- [ ] GitHub Actions CI/CD
+- [x] GitHub Actions CI/CD
 - [ ] Automated changelog
 - [ ] Version bumping workflow
 - [ ] Crash reporting

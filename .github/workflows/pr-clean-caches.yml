@@ -1,0 +1,35 @@
+name: Clean PR Caches
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  cleanup:
+    name: Clean Branch Caches
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Delete caches for closed PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          echo "Cleaning caches for branch: $BRANCH"
+          CACHE_KEYS=$(gh cache list --branch "$BRANCH" --json key --jq '.[].key')
+          if [ -z "$CACHE_KEYS" ]; then
+            echo "No caches found for branch $BRANCH"
+            exit 0
+          fi
+          for key in $CACHE_KEYS; do
+            echo "Deleting cache: $key"
+            gh cache delete "$key" || true
+          done
+          echo "Done."

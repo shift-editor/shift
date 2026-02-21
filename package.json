@@ -20,7 +20,7 @@
     "test:typecheck": "tsc --noEmit -p apps/desktop/tsconfig.testing.json",
     "test:perf": "echo 'Performance lane is scheduled-only and will be expanded with benchmarks.'",
     "test:playwright": "echo 'Playwright lane is intentionally deferred in this phase. Add specs under apps/desktop/e2e when ready.'",
-    "test:ci": "pnpm test:lint && pnpm test:typecheck && pnpm test:unit && pnpm test:integration",
+    "test:ci": "pnpm test:lint && pnpm format:check && pnpm test:typecheck && pnpm test:unit && pnpm test:native && cargo test --workspace && pnpm deadcode:strict",
     "test:native": "pnpm --filter shift-node run test",
     "typecheck": "pnpm run generate:types && turbo run typecheck",
     "lint": "turbo run lint",

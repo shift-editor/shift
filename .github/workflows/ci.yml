@@ -7,112 +7,294 @@ on:
       - main
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  RUSTFLAGS: "-D warnings"
+
 jobs:
-  typecheck:
-    name: Test Typecheck
+  # ---------------------------------------------------------------------------
+  # Gate: detect which parts of the monorepo changed
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      typescript: ${{ steps.filter.outputs.typescript }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+            typescript:
+              - 'apps/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'tsconfig*.json'
+              - 'turbo.json'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+  # ---------------------------------------------------------------------------
+  # TypeScript jobs (no submodules needed)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
+    needs: detect-changes
+    if: needs.detect-changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Lint (oxlint)
+        run: pnpm test:lint
+      - name: Format check (prettier)
+        run: pnpm format:check
 
-      - name: Test typecheck
+  typecheck:
+    name: Typecheck
+    needs: detect-changes
+    if: needs.detect-changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Typecheck
         run: pnpm test:typecheck
 
-      - name: Test lint safety
-        run: pnpm test:lint
-
-  unit:
+  unit-test:
     name: Unit Tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - run: pnpm install --frozen-lockfile --prefer-offline
       - name: Run unit tests
         run: pnpm test:unit
 
-  integration:
-    name: Integration Tests
+  deadcode:
+    name: Dead Code
+    needs: detect-changes
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Dead code check (knip)
+        run: pnpm deadcode:strict
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  # ---------------------------------------------------------------------------
+  # Rust jobs (submodules needed for test fixtures)
+  # ---------------------------------------------------------------------------
+  rust-fmt:
+    name: Rust Format
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  rust-clippy:
+    name: Rust Clippy
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: shift-clippy
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  rust-test:
+    name: Rust Tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: shift-rust-test
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+
+  integration:
+    name: Integration Tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: shift-integration
+
+      - run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Build native module
         run: pnpm build:native
 
-      - name: Run integration tests
-        run: pnpm test:integration
+      - name: Run shift-node tests
+        run: pnpm test:native
 
-  playwright_exploratory:
-    name: Playwright Exploratory (Optional)
+  # ---------------------------------------------------------------------------
+  # Optional / manual jobs
+  # ---------------------------------------------------------------------------
+  playwright:
+    name: Playwright (Manual)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run deferred Playwright lane
+      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Run Playwright tests
         run: pnpm test:playwright
+
+  # ---------------------------------------------------------------------------
+  # Gate: all required checks must pass
+  # ---------------------------------------------------------------------------
+  ci-passed:
+    name: CI Passed
+    if: always()
+    needs:
+      - detect-changes
+      - lint
+      - typecheck
+      - unit-test
+      - deadcode
+      - rust-fmt
+      - rust-clippy
+      - rust-test
+      - integration
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check required jobs
+        run: |
+          echo "Results: ${{ toJSON(needs.*.result) }}"
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All required checks passed."
