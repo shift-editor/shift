@@ -12,7 +12,7 @@ use skrifa::{
     FontRef, MetadataProvider,
 };
 
-pub fn load_font(font_bytes: &[u8]) -> Result<FontRef, String> {
+pub fn load_font(font_bytes: &[u8]) -> Result<FontRef<'_>, String> {
     FontRef::new(font_bytes).map_err(|e| format!("Failed to load font: {e}"))
 }
 
@@ -119,7 +119,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
     }
 }
 
-fn font_from_skrifa(font: &FontRef) -> Font {
+fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     let outlines = font.outline_glyphs();
     let char_map = font.charmap();
 
