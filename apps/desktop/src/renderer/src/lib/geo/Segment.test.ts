@@ -7,6 +7,8 @@ import type {
   CubicSegment,
   Segment as SegmentType,
 } from "@/types/segments";
+import { asContourId, asPointId } from "@shift/types";
+import { expectAt } from "@/testing";
 
 const makeSegmentPoint = (
   id: string,
@@ -14,12 +16,27 @@ const makeSegmentPoint = (
   y: number,
   pointType: "onCurve" | "offCurve" = "onCurve",
 ) => ({
-  id,
+  id: asPointId(id),
   x,
   y,
   pointType,
   smooth: false,
 });
+
+function expectLineSegment(segment: SegmentType): LineSegment {
+  expect(segment.type).toBe("line");
+  return segment as LineSegment;
+}
+
+function expectQuadSegment(segment: SegmentType): QuadSegment {
+  expect(segment.type).toBe("quad");
+  return segment as QuadSegment;
+}
+
+function expectCubicSegment(segment: SegmentType): CubicSegment {
+  expect(segment.type).toBe("cubic");
+  return segment as CubicSegment;
+}
 
 describe("Segment", () => {
   describe("id", () => {
@@ -274,7 +291,7 @@ describe("Segment", () => {
       const points = [makeSegmentPoint("p1", 0, 0), makeSegmentPoint("p2", 100, 100)];
       const segments = Segment.parse(points, false);
       expect(segments).toHaveLength(1);
-      expect(segments[0].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("line");
     });
 
     it("should parse quadratic curve (onCurve, offCurve, onCurve)", () => {
@@ -285,7 +302,7 @@ describe("Segment", () => {
       ];
       const segments = Segment.parse(points, false);
       expect(segments).toHaveLength(1);
-      expect(segments[0].type).toBe("quad");
+      expect(expectAt(segments, 0).type).toBe("quad");
     });
 
     it("should parse cubic curve (onCurve, offCurve, offCurve, onCurve)", () => {
@@ -297,7 +314,7 @@ describe("Segment", () => {
       ];
       const segments = Segment.parse(points, false);
       expect(segments).toHaveLength(1);
-      expect(segments[0].type).toBe("cubic");
+      expect(expectAt(segments, 0).type).toBe("cubic");
     });
 
     it("should parse closed contour with trailing offCurve points as cubic wrap-around", () => {
@@ -321,29 +338,29 @@ describe("Segment", () => {
 
       expect(segments.length).toBe(5);
 
-      expect(segments[0].type).toBe("cubic");
-      expect((segments[0] as any).points.anchor1.id).toBe("p1");
-      expect((segments[0] as any).points.control1.id).toBe("c1");
-      expect((segments[0] as any).points.control2.id).toBe("c2");
-      expect((segments[0] as any).points.anchor2.id).toBe("p2");
+      const first = expectCubicSegment(expectAt(segments, 0));
+      expect(first.points.anchor1.id).toBe("p1");
+      expect(first.points.control1.id).toBe("c1");
+      expect(first.points.control2.id).toBe("c2");
+      expect(first.points.anchor2.id).toBe("p2");
 
-      expect(segments[1].type).toBe("cubic");
-      expect((segments[1] as any).points.anchor1.id).toBe("p2");
-      expect((segments[1] as any).points.anchor2.id).toBe("p3");
+      const second = expectCubicSegment(expectAt(segments, 1));
+      expect(second.points.anchor1.id).toBe("p2");
+      expect(second.points.anchor2.id).toBe("p3");
 
-      expect(segments[2].type).toBe("cubic");
-      expect((segments[2] as any).points.anchor1.id).toBe("p3");
-      expect((segments[2] as any).points.anchor2.id).toBe("p4");
+      const third = expectCubicSegment(expectAt(segments, 2));
+      expect(third.points.anchor1.id).toBe("p3");
+      expect(third.points.anchor2.id).toBe("p4");
 
-      expect(segments[3].type).toBe("line");
-      expect((segments[3] as any).points.anchor1.id).toBe("p4");
-      expect((segments[3] as any).points.anchor2.id).toBe("p5");
+      const fourth = expectLineSegment(expectAt(segments, 3));
+      expect(fourth.points.anchor1.id).toBe("p4");
+      expect(fourth.points.anchor2.id).toBe("p5");
 
-      expect(segments[4].type).toBe("cubic");
-      expect((segments[4] as any).points.anchor1.id).toBe("p5");
-      expect((segments[4] as any).points.control1.id).toBe("c7");
-      expect((segments[4] as any).points.control2.id).toBe("c8");
-      expect((segments[4] as any).points.anchor2.id).toBe("p1");
+      const fifth = expectCubicSegment(expectAt(segments, 4));
+      expect(fifth.points.anchor1.id).toBe("p5");
+      expect(fifth.points.control1.id).toBe("c7");
+      expect(fifth.points.control2.id).toBe("c8");
+      expect(fifth.points.anchor2.id).toBe("p1");
     });
 
     it("should handle closed contour with quad wrap-around", () => {
@@ -356,11 +373,11 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(2);
-      expect(segments[0].type).toBe("line");
-      expect(segments[1].type).toBe("quad");
-      expect((segments[1] as any).points.anchor1.id).toBe("p2");
-      expect((segments[1] as any).points.control.id).toBe("c1");
-      expect((segments[1] as any).points.anchor2.id).toBe("p1");
+      expectLineSegment(expectAt(segments, 0));
+      const wrap = expectQuadSegment(expectAt(segments, 1));
+      expect(wrap.points.anchor1.id).toBe("p2");
+      expect(wrap.points.control.id).toBe("c1");
+      expect(wrap.points.anchor2.id).toBe("p1");
     });
 
     it("should handle closed contour with line wrap-around", () => {
@@ -373,11 +390,11 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(3);
-      expect(segments[0].type).toBe("line");
-      expect(segments[1].type).toBe("line");
-      expect(segments[2].type).toBe("line");
-      expect((segments[2] as any).points.anchor1.id).toBe("p3");
-      expect((segments[2] as any).points.anchor2.id).toBe("p1");
+      expectLineSegment(expectAt(segments, 0));
+      expectLineSegment(expectAt(segments, 1));
+      const wrap = expectLineSegment(expectAt(segments, 2));
+      expect(wrap.points.anchor1.id).toBe("p3");
+      expect(wrap.points.anchor2.id).toBe("p1");
     });
 
     it("should parse mixed line and cubic segments", () => {
@@ -391,8 +408,8 @@ describe("Segment", () => {
       const segments = Segment.parse(points, false);
 
       expect(segments).toHaveLength(2);
-      expect(segments[0].type).toBe("line");
-      expect(segments[1].type).toBe("cubic");
+      expect(expectAt(segments, 0).type).toBe("line");
+      expect(expectAt(segments, 1).type).toBe("cubic");
     });
 
     it("should parse multiple consecutive line segments", () => {
@@ -418,7 +435,7 @@ describe("Segment", () => {
       const segments = Segment.parse(points, false);
 
       expect(segments).toHaveLength(1);
-      expect(segments[0].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("line");
     });
 
     it("should parse alternating line and quad segments", () => {
@@ -433,9 +450,9 @@ describe("Segment", () => {
       const segments = Segment.parse(points, false);
 
       expect(segments).toHaveLength(3);
-      expect(segments[0].type).toBe("quad");
-      expect(segments[1].type).toBe("line");
-      expect(segments[2].type).toBe("quad");
+      expect(expectAt(segments, 0).type).toBe("quad");
+      expect(expectAt(segments, 1).type).toBe("line");
+      expect(expectAt(segments, 2).type).toBe("quad");
     });
 
     it("should handle closed triangle (three onCurve points)", () => {
@@ -448,12 +465,15 @@ describe("Segment", () => {
 
       expect(segments).toHaveLength(3);
       expect(segments.every((s) => s.type === "line")).toBe(true);
-      expect((segments[0] as any).points.anchor1.id).toBe("p1");
-      expect((segments[0] as any).points.anchor2.id).toBe("p2");
-      expect((segments[1] as any).points.anchor1.id).toBe("p2");
-      expect((segments[1] as any).points.anchor2.id).toBe("p3");
-      expect((segments[2] as any).points.anchor1.id).toBe("p3");
-      expect((segments[2] as any).points.anchor2.id).toBe("p1");
+      const first = expectLineSegment(expectAt(segments, 0));
+      const second = expectLineSegment(expectAt(segments, 1));
+      const third = expectLineSegment(expectAt(segments, 2));
+      expect(first.points.anchor1.id).toBe("p1");
+      expect(first.points.anchor2.id).toBe("p2");
+      expect(second.points.anchor1.id).toBe("p2");
+      expect(second.points.anchor2.id).toBe("p3");
+      expect(third.points.anchor1.id).toBe("p3");
+      expect(third.points.anchor2.id).toBe("p1");
     });
 
     it("should handle closed rectangle (four onCurve points)", () => {
@@ -488,10 +508,11 @@ describe("Segment", () => {
 
       expect(segments).toHaveLength(4);
       expect(segments.every((s) => s.type === "cubic")).toBe(true);
-      expect((segments[3] as any).points.anchor1.id).toBe("p4");
-      expect((segments[3] as any).points.control1.id).toBe("c7");
-      expect((segments[3] as any).points.control2.id).toBe("c8");
-      expect((segments[3] as any).points.anchor2.id).toBe("p1");
+      const wrap = expectCubicSegment(expectAt(segments, 3));
+      expect(wrap.points.anchor1.id).toBe("p4");
+      expect(wrap.points.control1.id).toBe("c7");
+      expect(wrap.points.control2.id).toBe("c8");
+      expect(wrap.points.anchor2.id).toBe("p1");
     });
 
     it("should handle closed contour starting with cubic then line", () => {
@@ -505,9 +526,9 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(3);
-      expect(segments[0].type).toBe("cubic");
-      expect(segments[1].type).toBe("line");
-      expect(segments[2].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("cubic");
+      expect(expectAt(segments, 1).type).toBe("line");
+      expect(expectAt(segments, 2).type).toBe("line");
     });
 
     it("should parse two points as single line for open contour", () => {
@@ -515,7 +536,7 @@ describe("Segment", () => {
       const segments = Segment.parse(points, false);
 
       expect(segments).toHaveLength(1);
-      expect(segments[0].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("line");
     });
 
     it("should parse two points as single line segment for closed contour", () => {
@@ -523,10 +544,10 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(2);
-      expect(segments[0].type).toBe("line");
-      expect(segments[1].type).toBe("line");
-      expect((segments[1] as any).points.anchor1.id).toBe("p2");
-      expect((segments[1] as any).points.anchor2.id).toBe("p1");
+      expectLineSegment(expectAt(segments, 0));
+      const wrap = expectLineSegment(expectAt(segments, 1));
+      expect(wrap.points.anchor1.id).toBe("p2");
+      expect(wrap.points.anchor2.id).toBe("p1");
     });
 
     it("should handle single quad in closed contour", () => {
@@ -538,8 +559,8 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(2);
-      expect(segments[0].type).toBe("quad");
-      expect(segments[1].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("quad");
+      expect(expectAt(segments, 1).type).toBe("line");
     });
 
     it("should handle single cubic in closed contour", () => {
@@ -552,8 +573,8 @@ describe("Segment", () => {
       const segments = Segment.parse(points, true);
 
       expect(segments).toHaveLength(2);
-      expect(segments[0].type).toBe("cubic");
-      expect(segments[1].type).toBe("line");
+      expect(expectAt(segments, 0).type).toBe("cubic");
+      expect(expectAt(segments, 1).type).toBe("line");
     });
   });
 
@@ -561,7 +582,7 @@ describe("Segment", () => {
     it("yields all segments across multiple contours", () => {
       const contours = [
         {
-          id: "c1",
+          id: asContourId("c1"),
           points: [
             makeSegmentPoint("p1", 0, 0),
             makeSegmentPoint("p2", 100, 0),
@@ -570,7 +591,7 @@ describe("Segment", () => {
           closed: false,
         },
         {
-          id: "c2",
+          id: asContourId("c2"),
           points: [makeSegmentPoint("p4", 200, 0), makeSegmentPoint("p5", 300, 0)],
           closed: false,
         },
@@ -578,12 +599,12 @@ describe("Segment", () => {
       const result = [...Segment.iterateGlyph(contours)];
 
       expect(result).toHaveLength(3);
-      expect(result[0].contourId).toBe("c1");
-      expect(result[0].segment.type).toBe("line");
-      expect(result[1].contourId).toBe("c1");
-      expect(result[1].segment.type).toBe("line");
-      expect(result[2].contourId).toBe("c2");
-      expect(result[2].segment.type).toBe("line");
+      expect(expectAt(result, 0).contourId).toBe("c1");
+      expect(expectAt(result, 0).segment.type).toBe("line");
+      expect(expectAt(result, 1).contourId).toBe("c1");
+      expect(expectAt(result, 1).segment.type).toBe("line");
+      expect(expectAt(result, 2).contourId).toBe("c2");
+      expect(expectAt(result, 2).segment.type).toBe("line");
     });
 
     it("yields nothing for empty contours array", () => {
@@ -592,7 +613,9 @@ describe("Segment", () => {
     });
 
     it("yields nothing for contours with fewer than 2 points", () => {
-      const contours = [{ id: "c1", points: [makeSegmentPoint("p1", 0, 0)], closed: false }];
+      const contours = [
+        { id: asContourId("c1"), points: [makeSegmentPoint("p1", 0, 0)], closed: false },
+      ];
       const result = [...Segment.iterateGlyph(contours)];
       expect(result).toHaveLength(0);
     });
@@ -600,7 +623,7 @@ describe("Segment", () => {
     it("handles closed contour wrap-around segments", () => {
       const contours = [
         {
-          id: "c1",
+          id: asContourId("c1"),
           points: [
             makeSegmentPoint("p1", 0, 0),
             makeSegmentPoint("p2", 100, 0),

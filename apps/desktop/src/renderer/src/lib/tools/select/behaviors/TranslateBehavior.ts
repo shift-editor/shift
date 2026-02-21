@@ -53,7 +53,7 @@ export class TranslateBehavior implements SelectBehavior {
   private transitionTranslating(
     state: SelectState & { type: "translating" },
     event: ToolEvent,
-    _editor: EditorAPI,
+    editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       let newLastPos = event.point;
@@ -61,7 +61,7 @@ export class TranslateBehavior implements SelectBehavior {
       if (this.#snap) {
         const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
         newLastPos = result.point;
-        _editor.setSnapIndicator(result.indicator);
+        editor.setSnapIndicator(result.indicator);
       }
 
       const delta = Vec2.sub(newLastPos, state.translate.lastPos);
@@ -85,23 +85,19 @@ export class TranslateBehavior implements SelectBehavior {
 
     if (event.type === "dragEnd") {
       const { totalDelta, draggedPointIds, draggedAnchorIds } = state.translate;
-      const hasMoved =
-        (totalDelta.x !== 0 || totalDelta.y !== 0) &&
-        (draggedPointIds.length > 0 || draggedAnchorIds.length > 0);
+      const nothingDragged = draggedPointIds.length === 0 && draggedAnchorIds.length === 0;
+      const noMovement = totalDelta.x === 0 && totalDelta.y === 0;
+
+      if (nothingDragged || noMovement) {
+        return { state: { type: "selected" }, action: { type: "cancelPreview" } };
+      }
 
       return {
         state: { type: "selected" },
-        action: hasMoved
-          ? {
-              type: "commitPreview",
-              label:
-                draggedPointIds.length > 0 && draggedAnchorIds.length > 0
-                  ? "Move Selection"
-                  : draggedAnchorIds.length > 0
-                    ? "Move Anchors"
-                    : "Move Points",
-            }
-          : { type: "cancelPreview" },
+        action: {
+          type: "commitPreview",
+          label: this.resolveMoveLabel(draggedPointIds.length, draggedAnchorIds.length),
+        },
       };
     }
 
@@ -126,13 +122,34 @@ export class TranslateBehavior implements SelectBehavior {
 
     if (anchorId !== null) {
       const isSelected = state.type === "selected" && editor.isAnchorSelected(anchorId);
-      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [];
-      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [anchorId];
-      const snapAnchorPointId = draggedPointIds[0] ?? null;
-      const anchorPos = snapAnchorPointId
-        ? this.startSnap(editor, snapAnchorPointId, event.point, draggedPointIds)
-        : event.point;
 
+      if (!isSelected) {
+        const draggedPointIds: PointId[] = [];
+        const draggedAnchorIds = [anchorId];
+        let anchorPos = event.point;
+        return {
+          state: {
+            type: "translating",
+            translate: {
+              anchorPointId: null,
+              startPos: event.point,
+              lastPos: anchorPos,
+              totalDelta: { x: 0, y: 0 },
+              draggedPointIds,
+              draggedAnchorIds,
+            },
+          },
+          action: { type: "selectAnchor", anchorId, additive: false },
+        };
+      }
+
+      const draggedPointIds = editor.getSelectedPoints();
+      const draggedAnchorIds = editor.getSelectedAnchors();
+      const snapAnchorPointId = draggedPointIds[0] ?? null;
+      let anchorPos = event.point;
+      if (snapAnchorPointId !== null) {
+        anchorPos = this.startSnap(editor, snapAnchorPointId, event.point, draggedPointIds);
+      }
       return {
         state: {
           type: "translating",
@@ -145,7 +162,6 @@ export class TranslateBehavior implements SelectBehavior {
             draggedAnchorIds,
           },
         },
-        action: isSelected ? undefined : { type: "selectAnchor", anchorId, additive: false },
       };
     }
 
@@ -157,11 +173,11 @@ export class TranslateBehavior implements SelectBehavior {
         if (result) return result;
       }
 
-      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : [pointId];
-      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [];
+      const draggedPointIds = isSelected ? editor.getSelectedPoints() : [pointId];
+      const draggedAnchorIds = isSelected ? editor.getSelectedAnchors() : [];
       const anchorPos = this.startSnap(editor, pointId, event.point, draggedPointIds);
 
-      return {
+      const result: TransitionResult<SelectState, SelectAction> = {
         state: {
           type: "translating",
           translate: {
@@ -173,8 +189,11 @@ export class TranslateBehavior implements SelectBehavior {
             draggedAnchorIds,
           },
         },
-        action: isSelected ? undefined : { type: "selectPoint", pointId, additive: false },
       };
+      if (!isSelected) {
+        result.action = { type: "selectPoint", pointId, additive: false };
+      }
+      return result;
     }
 
     if (isSegmentHit(hit)) {
@@ -186,14 +205,14 @@ export class TranslateBehavior implements SelectBehavior {
         if (result) return result;
       }
 
-      const draggedPointIds = isSelected ? [...editor.getSelectedPoints()] : pointIds;
-      const draggedAnchorIds = isSelected ? [...editor.getSelectedAnchors()] : [];
+      const draggedPointIds = isSelected ? editor.getSelectedPoints() : pointIds;
+      const draggedAnchorIds = isSelected ? editor.getSelectedAnchors() : [];
       const anchorPointId = draggedPointIds[0];
       if (!anchorPointId) return null;
 
       const anchorPos = this.startSnap(editor, anchorPointId, event.point, draggedPointIds);
 
-      return {
+      const result: TransitionResult<SelectState, SelectAction> = {
         state: {
           type: "translating",
           translate: {
@@ -205,14 +224,11 @@ export class TranslateBehavior implements SelectBehavior {
             draggedAnchorIds,
           },
         },
-        action: isSelected
-          ? undefined
-          : {
-              type: "selectSegment",
-              segmentId: hit.segmentId,
-              additive: false,
-            },
       };
+      if (!isSelected) {
+        result.action = { type: "selectSegment", segmentId: hit.segmentId, additive: false };
+      }
+      return result;
     }
 
     return null;
@@ -263,5 +279,15 @@ export class TranslateBehavior implements SelectBehavior {
   private clearSnap(): void {
     if (this.#snap) this.#snap.clear();
     this.#snap = null;
+  }
+
+  private resolveMoveLabel(draggedPointCount: number, draggedAnchorCount: number): string {
+    if (draggedPointCount > 0 && draggedAnchorCount > 0) {
+      return "Move Selection";
+    }
+    if (draggedAnchorCount > 0) {
+      return "Move Anchors";
+    }
+    return "Move Points";
   }
 }

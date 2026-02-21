@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { asContourId } from "@shift/types";
 import type { Glyph, Point, PointId, RenderContour } from "@shift/types";
 import {
   deriveGlyphTightBounds,
@@ -42,7 +43,7 @@ function makeGlyph(input: {
 describe("iterateRenderableContours", () => {
   it("includes normal and composite contours", () => {
     const glyph = makeGlyph({
-      contours: [{ id: "c1" as any, closed: true, points: [makePoint("p1", 0, 0)] }],
+      contours: [{ id: asContourId("c1"), closed: true, points: [makePoint("p1", 0, 0)] }],
       compositeContours: [
         {
           closed: false,
@@ -112,7 +113,7 @@ describe("glyph bounds derivation", () => {
     const glyph = makeGlyph({
       contours: [
         {
-          id: "c1" as any,
+          id: asContourId("c1"),
           closed: true,
           points: [
             makePoint("p1", 10, 20),
@@ -152,7 +153,7 @@ describe("glyph bounds derivation", () => {
     const glyph = makeGlyph({
       contours: [
         {
-          id: "c1" as any,
+          id: asContourId("c1"),
           closed: false,
           points: [
             makePoint("p1", 0, 0, "onCurve"),

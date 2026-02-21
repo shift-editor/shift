@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderGlyphOutline, renderGlyphFilled } from "./glyph";
 import type { IRenderer } from "@/types/graphics";
 import type { Contour, Glyph } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -41,23 +42,23 @@ function createMockRenderer(): IRenderer {
 
 function createClosedTriangleContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("triangle"),
     closed: true,
     points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-      { id: 3, x: 50, y: 100, pointType: "onCurve", smooth: false },
+      { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p3"), x: 50, y: 100, pointType: "onCurve", smooth: false },
     ],
   };
 }
 
 function createOpenContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("line"),
     closed: false,
     points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 100, pointType: "onCurve", smooth: false },
+      { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p2"), x: 100, y: 100, pointType: "onCurve", smooth: false },
     ],
   };
 }
@@ -67,27 +68,31 @@ function createGlyphWithHole(): Glyph {
     name: "O",
     contours: [
       {
-        id: 0,
+        id: asContourId("outer"),
         closed: true,
         points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-          { id: 3, x: 100, y: 100, pointType: "onCurve", smooth: false },
-          { id: 4, x: 0, y: 100, pointType: "onCurve", smooth: false },
+          { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+          { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve", smooth: false },
+          { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve", smooth: false },
+          { id: asPointId("p4"), x: 0, y: 100, pointType: "onCurve", smooth: false },
         ],
       },
       {
-        id: 1,
+        id: asContourId("inner"),
         closed: true,
         points: [
-          { id: 5, x: 25, y: 25, pointType: "onCurve", smooth: false },
-          { id: 6, x: 25, y: 75, pointType: "onCurve", smooth: false },
-          { id: 7, x: 75, y: 75, pointType: "onCurve", smooth: false },
-          { id: 8, x: 75, y: 25, pointType: "onCurve", smooth: false },
+          { id: asPointId("p5"), x: 25, y: 25, pointType: "onCurve", smooth: false },
+          { id: asPointId("p6"), x: 25, y: 75, pointType: "onCurve", smooth: false },
+          { id: asPointId("p7"), x: 75, y: 75, pointType: "onCurve", smooth: false },
+          { id: asPointId("p8"), x: 75, y: 25, pointType: "onCurve", smooth: false },
         ],
       },
     ],
     xAdvance: 120,
+    unicode: 79,
+    anchors: [],
+    compositeContours: [],
+    activeContourId: asContourId("outer"),
   };
 }
 
@@ -104,6 +109,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphOutline(ctx, glyph);
@@ -132,6 +141,10 @@ describe("glyph", () => {
         name: "line",
         contours: [createOpenContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("line"),
       };
 
       const result = renderGlyphOutline(ctx, glyph);
@@ -144,6 +157,10 @@ describe("glyph", () => {
         name: "mix",
         contours: [createClosedTriangleContour(), createOpenContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       const result = renderGlyphOutline(ctx, glyph);
@@ -162,6 +179,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphOutline(ctx, glyph);
@@ -171,7 +192,15 @@ describe("glyph", () => {
     });
 
     it("returns false for empty glyph with no contours", () => {
-      const glyph: Glyph = { name: "empty", contours: [], xAdvance: 0 };
+      const glyph: Glyph = {
+        name: "empty",
+        contours: [],
+        xAdvance: 0,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: null,
+      };
       const result = renderGlyphOutline(ctx, glyph);
 
       expect(result).toBe(false);
@@ -184,6 +213,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphFilled(ctx, glyph);
@@ -196,6 +229,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphFilled(ctx, glyph);
@@ -222,6 +259,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphFilled(ctx, glyph);
@@ -235,6 +276,10 @@ describe("glyph", () => {
         name: "A",
         contours: [createClosedTriangleContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
       };
 
       renderGlyphFilled(ctx, glyph);

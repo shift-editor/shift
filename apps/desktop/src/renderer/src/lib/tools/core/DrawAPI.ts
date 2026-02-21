@@ -105,16 +105,18 @@ export class DrawAPI {
 
   path(points: Point2D[], closed = false, style?: ShapeStyle): void {
     if (points.length < 2) return;
+    const firstPoint = points[0];
+    if (!firstPoint) return;
 
     this.#renderer.save();
     this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
     this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
 
     this.#renderer.beginPath();
-    this.#renderer.moveTo(points[0].x, points[0].y);
+    this.#renderer.moveTo(firstPoint.x, firstPoint.y);
 
-    for (let i = 1; i < points.length; i++) {
-      this.#renderer.lineTo(points[i].x, points[i].y);
+    for (const point of points.slice(1)) {
+      this.#renderer.lineTo(point.x, point.y);
     }
 
     if (closed) {
@@ -218,9 +220,14 @@ export class DrawAPI {
     this.#renderer.strokeStyle = style.strokeStyle;
 
     this.#renderer.beginPath();
-    this.#renderer.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      this.#renderer.lineTo(points[i].x, points[i].y);
+    const [first, ...rest] = points;
+    if (!first) {
+      this.#renderer.restore();
+      return;
+    }
+    this.#renderer.moveTo(first.x, first.y);
+    for (const point of rest) {
+      this.#renderer.lineTo(point.x, point.y);
     }
     this.#renderer.closePath();
     this.#renderer.stroke();
@@ -230,9 +237,9 @@ export class DrawAPI {
       this.#renderer.fillStyle = style.overlayColor;
       this.#renderer.strokeStyle = style.overlayColor;
       this.#renderer.beginPath();
-      this.#renderer.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        this.#renderer.lineTo(points[i].x, points[i].y);
+      this.#renderer.moveTo(first.x, first.y);
+      for (const point of rest) {
+        this.#renderer.lineTo(point.x, point.y);
       }
       this.#renderer.closePath();
       this.#renderer.stroke();

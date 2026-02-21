@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildContourPath, renderGlyph } from "./render";
 import type { IRenderer } from "@/types/graphics";
 import type { Contour, Glyph } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -34,29 +35,30 @@ function createMockRenderer(): IRenderer {
     strokePath: vi.fn(),
     scale: vi.fn(),
     translate: vi.fn(),
+    rotate: vi.fn(),
     transform: vi.fn(),
   };
 }
 
 function createClosedTriangleContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("triangle"),
     closed: true,
     points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-      { id: 3, x: 50, y: 100, pointType: "onCurve", smooth: false },
+      { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p3"), x: 50, y: 100, pointType: "onCurve", smooth: false },
     ],
   };
 }
 
 function createOpenContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("line"),
     closed: false,
     points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 100, pointType: "onCurve", smooth: false },
+      { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p2"), x: 100, y: 100, pointType: "onCurve", smooth: false },
     ],
   };
 }
@@ -66,27 +68,31 @@ function createGlyphWithHole(): Glyph {
     name: "O",
     contours: [
       {
-        id: 0,
+        id: asContourId("outer"),
         closed: true,
         points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-          { id: 3, x: 100, y: 100, pointType: "onCurve", smooth: false },
-          { id: 4, x: 0, y: 100, pointType: "onCurve", smooth: false },
+          { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+          { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve", smooth: false },
+          { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve", smooth: false },
+          { id: asPointId("p4"), x: 0, y: 100, pointType: "onCurve", smooth: false },
         ],
       },
       {
-        id: 1,
+        id: asContourId("inner"),
         closed: true,
         points: [
-          { id: 5, x: 25, y: 25, pointType: "onCurve", smooth: false },
-          { id: 6, x: 25, y: 75, pointType: "onCurve", smooth: false },
-          { id: 7, x: 75, y: 75, pointType: "onCurve", smooth: false },
-          { id: 8, x: 75, y: 25, pointType: "onCurve", smooth: false },
+          { id: asPointId("p5"), x: 25, y: 25, pointType: "onCurve", smooth: false },
+          { id: asPointId("p6"), x: 25, y: 75, pointType: "onCurve", smooth: false },
+          { id: asPointId("p7"), x: 75, y: 75, pointType: "onCurve", smooth: false },
+          { id: asPointId("p8"), x: 75, y: 25, pointType: "onCurve", smooth: false },
         ],
       },
     ],
     xAdvance: 120,
+    unicode: 79,
+    anchors: [],
+    compositeContours: [],
+    activeContourId: asContourId("outer"),
   };
 }
 
@@ -150,9 +156,9 @@ describe("render", () => {
 
     it("returns false for degenerate contours (< 2 points)", () => {
       const contour: Contour = {
-        id: 0,
+        id: asContourId("degenerate"),
         closed: true,
-        points: [{ id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false }],
+        points: [{ id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false }],
       };
       const result = buildContourPath(ctx, contour);
 
@@ -203,6 +209,10 @@ describe("render", () => {
         name: "line",
         contours: [createOpenContour()],
         xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("line"),
       };
       const result = renderGlyph(ctx, glyph);
 

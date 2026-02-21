@@ -49,7 +49,9 @@ export class FpsMonitor {
     if (!this.#running) return;
 
     const oneSecondAgo = timestamp - 1000;
-    while (this.#timestamps.length > 0 && this.#timestamps[0] <= oneSecondAgo) {
+    while (this.#timestamps.length > 0) {
+      const oldest = this.#timestamps[0];
+      if (oldest === undefined || oldest > oneSecondAgo) break;
       this.#timestamps.shift();
     }
 

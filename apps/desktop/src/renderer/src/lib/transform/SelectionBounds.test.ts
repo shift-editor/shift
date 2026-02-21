@@ -2,41 +2,39 @@ import { describe, it, expect } from "vitest";
 import { getSegmentAwareBounds } from "./SelectionBounds";
 import { Bounds } from "@shift/geo";
 import type { GlyphSnapshot } from "@shift/types";
-import { asPointId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 
 function makePoint(id: string, x: number, y: number, type: "onCurve" | "offCurve" = "onCurve") {
-  return { id, x, y, pointType: type, smooth: false };
+  return { id: asPointId(id), x, y, pointType: type, smooth: false };
+}
+
+function makeSnapshot(points: ReturnType<typeof makePoint>[]): GlyphSnapshot {
+  return {
+    unicode: 65,
+    name: "A",
+    xAdvance: 500,
+    contours: [
+      {
+        id: asContourId("c1"),
+        points,
+        closed: false,
+      },
+    ],
+    anchors: [],
+    compositeContours: [],
+    activeContourId: asContourId("c1"),
+  };
 }
 
 describe("getSegmentAwareBounds", () => {
   it("returns null for empty selection", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [makePoint("p1", 0, 0), makePoint("p2", 100, 100)],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([makePoint("p1", 0, 0), makePoint("p2", 100, 100)]);
     const result = getSegmentAwareBounds(snapshot, []);
     expect(result).toBeNull();
   });
 
   it("calculates bounds for line segment (same as point AABB)", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [makePoint("p1", 0, 0), makePoint("p2", 100, 50)],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([makePoint("p1", 0, 0), makePoint("p2", 100, 50)]);
     const selectedPoints = [asPointId("p1"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
@@ -48,21 +46,11 @@ describe("getSegmentAwareBounds", () => {
   });
 
   it("calculates segment-aware bounds for quadratic curve with vertical bulge", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [
-            makePoint("p1", 0, 0),
-            makePoint("ctrl", 50, 200, "offCurve"),
-            makePoint("p2", 100, 0),
-          ],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([
+      makePoint("p1", 0, 0),
+      makePoint("ctrl", 50, 200, "offCurve"),
+      makePoint("p2", 100, 0),
+    ]);
     const selectedPoints = [asPointId("p1"), asPointId("ctrl"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
@@ -74,22 +62,12 @@ describe("getSegmentAwareBounds", () => {
   });
 
   it("calculates segment-aware bounds for cubic S-curve", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [
-            makePoint("p1", 0, 50),
-            makePoint("ctrl1", 0, 150, "offCurve"),
-            makePoint("ctrl2", 100, -50, "offCurve"),
-            makePoint("p2", 100, 50),
-          ],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([
+      makePoint("p1", 0, 50),
+      makePoint("ctrl1", 0, 150, "offCurve"),
+      makePoint("ctrl2", 100, -50, "offCurve"),
+      makePoint("p2", 100, 50),
+    ]);
     const selectedPoints = [
       asPointId("p1"),
       asPointId("ctrl1"),
@@ -106,21 +84,11 @@ describe("getSegmentAwareBounds", () => {
   });
 
   it("uses point bounds for partially selected curves", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [
-            makePoint("p1", 0, 0),
-            makePoint("ctrl", 50, 200, "offCurve"),
-            makePoint("p2", 100, 0),
-          ],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([
+      makePoint("p1", 0, 0),
+      makePoint("ctrl", 50, 200, "offCurve"),
+      makePoint("p2", 100, 0),
+    ]);
     const selectedPoints = [asPointId("p1"), asPointId("ctrl")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
@@ -129,17 +97,7 @@ describe("getSegmentAwareBounds", () => {
   });
 
   it("returns null when selected points don't exist in snapshot", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [makePoint("p1", 0, 0)],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([makePoint("p1", 0, 0)]);
     const selectedPoints = [asPointId("nonexistent")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 
@@ -147,17 +105,7 @@ describe("getSegmentAwareBounds", () => {
   });
 
   it("calculates center correctly", () => {
-    const snapshot: GlyphSnapshot = {
-      contours: [
-        {
-          id: "c1",
-          points: [makePoint("p1", 0, 0), makePoint("p2", 100, 100)],
-          closed: false,
-        },
-      ],
-      width: 500,
-      activeContourId: "c1",
-    };
+    const snapshot = makeSnapshot([makePoint("p1", 0, 0), makePoint("p2", 100, 100)]);
     const selectedPoints = [asPointId("p1"), asPointId("p2")];
     const result = getSegmentAwareBounds(snapshot, selectedPoints);
 

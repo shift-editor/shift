@@ -55,7 +55,7 @@ export class Select extends BaseTool<SelectState, SelectAction> {
     new MarqueeBehavior(),
   ];
 
-  getCursor(state: SelectState): CursorType {
+  override getCursor(state: SelectState): CursorType {
     if (state.type === "translating") return { type: "move" };
     if (state.type === "resizing") return edgeToCursor(state.resize.edge);
     if (state.type === "rotating") {
@@ -79,15 +79,15 @@ export class Select extends BaseTool<SelectState, SelectAction> {
     return { type: "idle" };
   }
 
-  activate(): void {
+  override activate(): void {
     this.state = { type: "ready" };
   }
 
-  deactivate(): void {
+  override deactivate(): void {
     this.state = { type: "idle" };
   }
 
-  protected preTransition(state: SelectState, event: ToolEvent) {
+  protected override preTransition(state: SelectState, event: ToolEvent) {
     if (event.type === "selectionChanged") {
       const hasSelection = this.editor.hasSelection();
       if (hasSelection && state.type === "ready") {
@@ -101,11 +101,11 @@ export class Select extends BaseTool<SelectState, SelectAction> {
     return null;
   }
 
-  protected executeAction(action: SelectAction): void {
+  protected override executeAction(action: SelectAction): void {
     executeAction(action, this.editor);
   }
 
-  render(draw: DrawAPI): void {
+  override render(draw: DrawAPI): void {
     if (this.state.type !== "selecting") return;
     const rect = normalizeRect(this.state.selection.startPos, this.state.selection.currentPos);
     draw.rect(

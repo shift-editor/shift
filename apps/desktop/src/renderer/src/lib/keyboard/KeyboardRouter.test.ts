@@ -3,8 +3,23 @@ import { KeyboardRouter } from "./KeyboardRouter";
 import type { KeyboardEditorActions, KeyboardToolManagerActions } from "./types";
 import type { ToolName } from "@/lib/tools/core";
 
-function createKeyboardEvent(options: Partial<KeyboardEvent> = {}): KeyboardEvent {
-  return {
+type KeyboardEventOptions = Partial<
+  Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
+>;
+
+function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent {
+  const event: Pick<
+    KeyboardEvent,
+    | "key"
+    | "code"
+    | "metaKey"
+    | "ctrlKey"
+    | "shiftKey"
+    | "altKey"
+    | "preventDefault"
+    | "stopPropagation"
+    | "target"
+  > = {
     key: options.key ?? "",
     code: options.code ?? "",
     metaKey: options.metaKey ?? false,
@@ -14,7 +29,9 @@ function createKeyboardEvent(options: Partial<KeyboardEvent> = {}): KeyboardEven
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
     target: options.target ?? null,
-  } as KeyboardEvent;
+  };
+
+  return event as KeyboardEvent;
 }
 
 describe("KeyboardRouter", () => {
@@ -51,6 +68,7 @@ describe("KeyboardRouter", () => {
       returnFromTemporaryTool: vi.fn(),
       isPreviewMode: vi.fn(() => false),
       setPreviewMode: vi.fn(),
+      openGlyphFinder: vi.fn(),
       insertTextCodepoint: vi.fn(),
       recomputeTextRun: vi.fn(),
       getTextRunCodepoints: vi.fn(() => []),
@@ -225,7 +243,7 @@ describe("KeyboardRouter", () => {
   });
 
   it("does not intercept shortcuts when an editable input has focus", () => {
-    const input = { tagName: "INPUT" } as unknown as EventTarget;
+    const input = { tagName: "INPUT" } as EventTarget & { tagName: string };
     const e = createKeyboardEvent({ key: "a", metaKey: true, target: input });
 
     const handled = router.handleKeyDown(e);

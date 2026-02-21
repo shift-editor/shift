@@ -10,15 +10,46 @@
  * - Clear separation between UI interaction and data mutation
  */
 
-import type { FontEngine } from "@/engine/FontEngine";
+import type { EditingManager } from "@/engine/editing";
+import type { Signal } from "@/lib/reactive/signal";
 import type { GlyphSnapshot } from "@shift/types";
+
+type CommandEditingMethods =
+  | "addPoint"
+  | "addPointToContour"
+  | "insertPointBefore"
+  | "movePoints"
+  | "movePointTo"
+  | "removePoints"
+  | "addContour"
+  | "removeContour"
+  | "closeContour"
+  | "openContour"
+  | "getActiveContourId"
+  | "setActiveContour"
+  | "reverseContour"
+  | "setXAdvance"
+  | "translateLayer"
+  | "restoreSnapshot"
+  | "pasteContours";
+
+/**
+ * Minimal editing surface required by command execution.
+ * Derived from the production EditingManager type.
+ */
+export type CommandEditingAPI = Pick<EditingManager, CommandEditingMethods>;
+
+export interface CommandFontEngine {
+  readonly editing: CommandEditingAPI;
+  readonly $glyph: Signal<GlyphSnapshot | null>;
+}
 
 /**
  * Context available to commands during execution.
  */
 export interface CommandContext {
   /** The font engine for performing mutations */
-  readonly fontEngine: FontEngine;
+  readonly fontEngine: CommandFontEngine;
   /** Current glyph data (read-only view of state) */
   readonly glyph: GlyphSnapshot | null;
 }
@@ -93,8 +124,8 @@ export class CompositeCommand implements Command<void> {
 
   undo(ctx: CommandContext): void {
     // Undo in reverse order
-    for (let i = this.#commands.length - 1; i >= 0; i--) {
-      this.#commands[i].undo(ctx);
+    for (const cmd of [...this.#commands].reverse()) {
+      cmd.undo(ctx);
     }
   }
 

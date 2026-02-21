@@ -1,4 +1,5 @@
-import type { Glyph, Point, PointId } from "@shift/types";
+import type { Contour, Glyph, Point, PointId } from "@shift/types";
+import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { SegmentId } from "@/types/indicator";
 import type { ClipboardContent, ContourContent, PointContent } from "./types";
@@ -44,12 +45,10 @@ export class ContentResolver {
   ): Map<string, { indices: Set<number>; contourIdx: number }> {
     const groups = new Map<string, { indices: Set<number>; contourIdx: number }>();
 
-    for (let contourIdx = 0; contourIdx < glyph.contours.length; contourIdx++) {
-      const contour = glyph.contours[contourIdx];
+    for (const [contourIdx, contour] of glyph.contours.entries()) {
       const indices = new Set<number>();
 
-      for (let pointIdx = 0; pointIdx < contour.points.length; pointIdx++) {
-        const point = contour.points[pointIdx];
+      for (const [pointIdx, point] of contour.points.entries()) {
         if (pointIds.has(point.id)) {
           indices.add(pointIdx);
         }
@@ -71,6 +70,9 @@ export class ContentResolver {
 
     for (const [, { indices, contourIdx }] of groups) {
       const contour = glyph.contours[contourIdx];
+      if (!contour) {
+        continue;
+      }
       const isFullContour = indices.size === contour.points.length;
 
       if (isFullContour) {
@@ -79,7 +81,7 @@ export class ContentResolver {
           closed: contour.closed,
         });
       } else {
-        const expandedPoints = this.#expandPartialSelection(contour.points, indices);
+        const expandedPoints = this.#expandPartialSelection(contour, indices);
         if (!Validate.hasValidAnchor(expandedPoints)) {
           continue;
         }
@@ -93,57 +95,62 @@ export class ContentResolver {
     return contours;
   }
 
-  #expandPartialSelection(
-    points: readonly Point[],
-    selectedIndices: Set<number>,
-  ): readonly Point[] {
+  #expandPartialSelection(contour: Contour, selectedIndices: Set<number>): readonly Point[] {
     if (selectedIndices.size === 0) return [];
 
     const expanded = new Set<number>(selectedIndices);
 
     for (const idx of selectedIndices) {
-      const point = points[idx];
+      const point = Contours.at(contour, idx, false);
+      if (!point) {
+        continue;
+      }
       if (Validate.isOnCurve(point)) {
-        this.#expandContextForOnCurve(points, idx, expanded);
+        this.#expandContextForOnCurve(contour, idx, expanded);
       } else {
-        this.#expandContextForOffCurve(points, idx, expanded);
+        this.#expandContextForOffCurve(contour, idx, expanded);
       }
     }
 
     const sortedIndices = [...expanded].sort((a, b) => a - b);
-    return sortedIndices.map((idx) => points[idx]);
+    const expandedPoints: Point[] = [];
+    for (const idx of sortedIndices) {
+      const point = Contours.at(contour, idx, false);
+      if (point) {
+        expandedPoints.push(point);
+      }
+    }
+    return expandedPoints;
   }
 
-  #expandContextForOnCurve(points: readonly Point[], idx: number, expanded: Set<number>): void {
-    const prevIdx = idx > 0 ? idx - 1 : null;
-    const nextIdx = idx < points.length - 1 ? idx + 1 : null;
-
-    if (prevIdx !== null && Validate.isOffCurve(points[prevIdx])) {
-      expanded.add(prevIdx);
-      const prevPrevIdx = prevIdx > 0 ? prevIdx - 1 : null;
-      if (prevPrevIdx !== null && Validate.isOffCurve(points[prevPrevIdx])) {
-        expanded.add(prevPrevIdx);
+  #expandContextForOnCurve(contour: Contour, idx: number, expanded: Set<number>): void {
+    const prev = Contours.at(contour, idx - 1, false);
+    if (prev && Validate.isOffCurve(prev)) {
+      expanded.add(idx - 1);
+      const prevPrev = Contours.at(contour, idx - 2, false);
+      if (prevPrev && Validate.isOffCurve(prevPrev)) {
+        expanded.add(idx - 2);
       }
     }
 
-    if (nextIdx !== null && Validate.isOffCurve(points[nextIdx])) {
-      expanded.add(nextIdx);
-      const nextNextIdx = nextIdx < points.length - 1 ? nextIdx + 1 : null;
-      if (nextNextIdx !== null && Validate.isOffCurve(points[nextNextIdx])) {
-        expanded.add(nextNextIdx);
+    const next = Contours.at(contour, idx + 1, false);
+    if (next && Validate.isOffCurve(next)) {
+      expanded.add(idx + 1);
+      const nextNext = Contours.at(contour, idx + 2, false);
+      if (nextNext && Validate.isOffCurve(nextNext)) {
+        expanded.add(idx + 2);
       }
     }
   }
 
-  #expandContextForOffCurve(points: readonly Point[], idx: number, expanded: Set<number>): void {
-    const prevIdx = idx > 0 ? idx - 1 : null;
-    const nextIdx = idx < points.length - 1 ? idx + 1 : null;
-
-    if (prevIdx !== null) {
-      expanded.add(prevIdx);
+  #expandContextForOffCurve(contour: Contour, idx: number, expanded: Set<number>): void {
+    const prev = Contours.at(contour, idx - 1, false);
+    if (prev) {
+      expanded.add(idx - 1);
     }
-    if (nextIdx !== null) {
-      expanded.add(nextIdx);
+    const next = Contours.at(contour, idx + 1, false);
+    if (next) {
+      expanded.add(idx + 1);
     }
   }
 

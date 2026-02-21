@@ -13,6 +13,13 @@
     "generate:glyph-info": "pnpm --filter @shift/glyph-info generate",
     "glyph-info:repl": "pnpm --filter @shift/glyph-info repl",
     "test": "turbo run test",
+    "test:unit": "pnpm turbo run test --filter='!shift-node'",
+    "test:integration": "pnpm --filter shift-node run test && cargo test -p shift-core --test font_loading --test round_trip",
+    "test:lint": "pnpm --filter @shift/desktop run lint:check",
+    "test:typecheck": "tsc --noEmit -p apps/desktop/tsconfig.testing.json",
+    "test:perf": "echo 'Performance lane is scheduled-only and will be expanded with benchmarks.'",
+    "test:playwright": "echo 'Playwright lane is intentionally deferred in this phase. Add specs under apps/desktop/e2e when ready.'",
+    "test:ci": "pnpm test:lint && pnpm test:typecheck && pnpm test:unit && pnpm test:integration",
     "test:native": "pnpm --filter shift-node run test",
     "typecheck": "pnpm run generate:types && turbo run typecheck",
     "lint": "turbo run lint",
@@ -48,12 +55,17 @@
   },
   "pnpm": {
     "overrides": {
-      "tar": ">=7.5.3",
-      "qs": ">=6.14.1",
+      "tar": ">=7.5.8",
+      "qs": ">=6.14.2",
       "glob": ">=10.5.0",
       "esbuild": ">=0.25.0",
       "js-yaml": ">=4.1.1",
-      "tmp": ">=0.2.4"
+      "tmp": ">=0.2.4",
+      "minimatch": ">=10.2.1",
+      "fast-xml-parser": ">=5.3.6",
+      "beautiful-mermaid": ">=0.1.3",
+      "@isaacs/brace-expansion": ">=5.0.1",
+      "lodash": ">=4.17.23"
     }
   },
   "packageManager": "pnpm@9.0.0"

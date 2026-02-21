@@ -54,10 +54,14 @@ function parseSet(pattern: string, startIndex: number): { chars: string[]; endIn
   let i = startIndex + 1; // Skip opening bracket
 
   while (i < pattern.length && pattern[i] !== TOKEN_SET_END) {
-    if (pattern[i] === TOKEN_ANY) {
+    const token = pattern[i];
+    if (!token) {
+      break;
+    }
+    if (token === TOKEN_ANY) {
       chars.push(...ALL_POINT_TOKENS);
     } else {
-      chars.push(pattern[i]);
+      chars.push(token);
     }
     i++;
   }
@@ -79,6 +83,9 @@ export function expandPattern(pattern: string): string[] {
 
   while (i < pattern.length) {
     const ch = pattern[i];
+    if (!ch) {
+      break;
+    }
 
     if (ch === TOKEN_SET_START) {
       const { chars, endIndex } = parseSet(pattern, i);

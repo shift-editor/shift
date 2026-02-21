@@ -136,6 +136,9 @@ export class HoverManager {
 
   #getPointIdsFromSegmentId(segmentId: SegmentId): Set<PointId> {
     const [id1, id2] = segmentId.split(":");
+    if (!id1 || !id2) {
+      return new Set<PointId>();
+    }
     return new Set([asPointId(id1), asPointId(id2)]);
   }
 }

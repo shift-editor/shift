@@ -21,7 +21,9 @@ export function buildContourPath(ctx: IRenderer, contour: SegmentContourLike): b
   if (contour.points.length < 2) return false;
   const segments = parseContourSegments(contour);
   if (segments.length === 0) return false;
-  ctx.moveTo(segments[0].points.anchor1.x, segments[0].points.anchor1.y);
+  const firstSegment = segments[0];
+  if (!firstSegment) return false;
+  ctx.moveTo(firstSegment.points.anchor1.x, firstSegment.points.anchor1.y);
 
   for (const segment of segments) {
     switch (segment.type) {

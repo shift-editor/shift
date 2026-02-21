@@ -1,8 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { AddPointCommand, MovePointsCommand, RemovePointsCommand } from "./PointCommands";
-import { asPointId } from "@shift/types";
-import type { PointId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
+import type { GlyphSnapshot, PointId } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
+
+function createSnapshot(overrides: Partial<GlyphSnapshot>): GlyphSnapshot {
+  return {
+    unicode: 65,
+    name: "A",
+    xAdvance: 500,
+    contours: [],
+    anchors: [],
+    compositeContours: [],
+    activeContourId: null,
+    ...overrides,
+  };
+}
 
 describe("AddPointCommand", () => {
   it("should add a point at specified coordinates", () => {
@@ -140,20 +153,20 @@ describe("RemovePointsCommand", () => {
   });
 
   it("should store point data for undo when snapshot available", () => {
-    const snapshot = {
+    const snapshot = createSnapshot({
       contours: [
         {
-          id: "contour-1",
+          id: asContourId("contour-1"),
           points: [
             {
-              id: "p1",
+              id: asPointId("p1"),
               x: 100,
               y: 200,
               pointType: "onCurve" as const,
               smooth: false,
             },
             {
-              id: "p2",
+              id: asPointId("p2"),
               x: 150,
               y: 250,
               pointType: "offCurve" as const,
@@ -163,8 +176,8 @@ describe("RemovePointsCommand", () => {
           closed: false,
         },
       ],
-      activeContourId: "contour-1",
-    };
+      activeContourId: asContourId("contour-1"),
+    });
     const ctx = createMockCommandContext(snapshot);
     const cmd = new RemovePointsCommand([asPointId("p1")]);
 

@@ -1,28 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { RotatePointsCommand, ScalePointsCommand, ReflectPointsCommand } from "./TransformCommands";
-import { asPointId } from "@shift/types";
-import { createMockCommandContext } from "@/testing";
+import { asContourId, asPointId } from "@shift/types";
+import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
+import { createMockCommandContext, expectAt } from "@/testing";
 
 describe("RotatePointsCommand", () => {
-  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
-    contours: [
-      {
-        id: "contour-1",
-        points: points.map((p) => ({
-          id: p.id,
-          x: p.x,
-          y: p.y,
-          pointType: "onCurve" as const,
-          smooth: false,
-        })),
-        closed: false,
-      },
-    ],
-    activeContourId: "contour-1",
-    name: "A",
-    xAdvance: 500,
-    unicode: 65,
-  });
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) =>
+    createSnapshot(points);
 
   it("should rotate points around origin", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 1, y: 0 }]);
@@ -77,8 +61,8 @@ describe("RotatePointsCommand", () => {
     cmd.redo(ctx);
 
     // Last call should be the rotated position again
-    const calls = (ctx.fontEngine.editing.movePointTo as any).mock.calls;
-    const lastCall = calls[calls.length - 1];
+    const calls = vi.mocked(ctx.fontEngine.editing.movePointTo).mock.calls;
+    const lastCall = expectAt(calls, calls.length - 1);
     expect(lastCall[0]).toBe("p1");
     expect(lastCall[1]).toBeCloseTo(0, 5);
     expect(lastCall[2]).toBeCloseTo(1, 5);
@@ -91,25 +75,8 @@ describe("RotatePointsCommand", () => {
 });
 
 describe("ScalePointsCommand", () => {
-  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
-    contours: [
-      {
-        id: "contour-1",
-        points: points.map((p) => ({
-          id: p.id,
-          x: p.x,
-          y: p.y,
-          pointType: "onCurve" as const,
-          smooth: false,
-        })),
-        closed: false,
-      },
-    ],
-    activeContourId: "contour-1",
-    name: "A",
-    xAdvance: 500,
-    unicode: 65,
-  });
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) =>
+    createSnapshot(points);
 
   it("should scale points from origin", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);
@@ -157,26 +124,34 @@ describe("ScalePointsCommand", () => {
   });
 });
 
-describe("ReflectPointsCommand", () => {
-  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) => ({
+function createSnapshot(points: Array<{ id: string; x: number; y: number }>): GlyphSnapshot {
+  const contourId = asContourId("contour-1");
+  return {
+    unicode: 65,
+    name: "A",
+    xAdvance: 500,
     contours: [
       {
-        id: "contour-1",
-        points: points.map((p) => ({
-          id: p.id,
+        id: contourId,
+        points: points.map<PointSnapshot>((p) => ({
+          id: asPointId(p.id),
           x: p.x,
           y: p.y,
-          pointType: "onCurve" as const,
+          pointType: "onCurve",
           smooth: false,
         })),
         closed: false,
       },
     ],
-    activeContourId: "contour-1",
-    name: "A",
-    xAdvance: 500,
-    unicode: 65,
-  });
+    anchors: [],
+    compositeContours: [],
+    activeContourId: contourId,
+  };
+}
+
+describe("ReflectPointsCommand", () => {
+  const createSnapshotWithPoints = (points: Array<{ id: string; x: number; y: number }>) =>
+    createSnapshot(points);
 
   it("should reflect points horizontally", () => {
     const snapshot = createSnapshotWithPoints([{ id: "p1", x: 10, y: 20 }]);

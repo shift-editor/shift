@@ -1,15 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { asAnchorId } from "@shift/types";
-import { createMockToolContext } from "@/testing";
+import { createTestEditor, expectDefined } from "@/testing";
 import { executeAction } from "./actions";
 
 describe("select actions", () => {
   it("moves anchors through moveAnchors during drag deltas", () => {
-    const ctx = createMockToolContext();
+    const ctx = createTestEditor();
     const anchorId = asAnchorId("a-missing");
 
-    ctx.mocks.edit.mocks.moveAnchors.mockClear();
-    ctx.mocks.edit.mocks.setNodePositions.mockClear();
+    expectDefined(ctx.mocks.edit.mocks.moveAnchors, "edit.moveAnchors mock").mockClear();
+    expectDefined(ctx.mocks.edit.mocks.setNodePositions, "edit.setNodePositions mock").mockClear();
 
     executeAction(
       {
@@ -26,13 +26,11 @@ describe("select actions", () => {
   });
 
   it("arms composite slot on first double-click edit action", () => {
-    const ctx = createMockToolContext();
+    const ctx = createTestEditor();
     ctx.textRunManager.buffer.insert({ glyphName: "comp", unicode: 65 });
     ctx.recomputeTextRun(0);
 
-    (
-      ctx.getGlyphCompositeComponents as unknown as { mockReturnValue: (v: unknown) => void }
-    ).mockReturnValue({
+    vi.mocked(ctx.getGlyphCompositeComponents).mockReturnValue({
       glyphName: "comp",
       components: [
         {
@@ -60,14 +58,12 @@ describe("select actions", () => {
   });
 
   it("inserts component on second composite double-click action", () => {
-    const ctx = createMockToolContext();
+    const ctx = createTestEditor();
     ctx.textRunManager.buffer.insert({ glyphName: "comp", unicode: 65 });
     ctx.recomputeTextRun(0);
     ctx.setTextRunInspectionSlot(0);
 
-    (
-      ctx.getGlyphCompositeComponents as unknown as { mockReturnValue: (v: unknown) => void }
-    ).mockReturnValue({
+    vi.mocked(ctx.getGlyphCompositeComponents).mockReturnValue({
       glyphName: "comp",
       components: [
         {

@@ -39,7 +39,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"],
+      "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     }
   },

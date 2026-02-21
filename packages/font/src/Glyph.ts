@@ -32,7 +32,10 @@ export const Glyphs = {
     for (const contour of glyph.contours) {
       const index = contour.points.findIndex((p) => p.id === pointId);
       if (index !== -1) {
-        return { point: contour.points[index], contour, index };
+        const point = contour.points[index];
+        if (point) {
+          return { point, contour, index };
+        }
       }
     }
     return null;
@@ -45,8 +48,8 @@ export const Glyphs = {
   /** Lazily iterate every point in the glyph, yielding {@link PointInContour} tuples. */
   *points(glyph: Glyph): Generator<PointInContour> {
     for (const contour of glyph.contours) {
-      for (let i = 0; i < contour.points.length; i++) {
-        yield { point: contour.points[i], contour, index: i };
+      for (const [i, point] of contour.points.entries()) {
+        yield { point, contour, index: i };
       }
     }
   },

@@ -238,7 +238,9 @@ export class TextRunManager {
 
     if (cursorPos <= layout.slots.length) {
       const prevSlot = layout.slots[cursorPos - 1];
-      return prevSlot.x + prevSlot.advance;
+      if (prevSlot) {
+        return prevSlot.x + prevSlot.advance;
+      }
     }
 
     return run.originX + layout.totalAdvance;

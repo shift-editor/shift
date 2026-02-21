@@ -119,21 +119,28 @@ export class EditingManager {
     );
 
     const pointId = ids[0];
-    if (!pointId) {
-      const glyph = this.#engine.getGlyph()!;
-      const lastContour = glyph.contours[glyph.contours.length - 1];
-      const lastPoint = lastContour?.points[lastContour.points.length - 1];
-      return lastPoint.id;
+    if (pointId) {
+      return pointId;
     }
 
-    return pointId;
+    const glyph = this.#engine.getGlyph()!;
+    const lastContour = glyph.contours[glyph.contours.length - 1];
+    const lastPoint = lastContour?.points[lastContour.points.length - 1];
+    if (!lastPoint) {
+      throw new NativeOperationError("Native addPoint returned no point ID");
+    }
+    return lastPoint.id;
   }
 
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#engine.raw.addPointToContour(contourId, edit.x, edit.y, edit.pointType, edit.smooth),
     );
-    return ids[0];
+    const pointId = ids[0];
+    if (pointId) {
+      return pointId;
+    }
+    throw new NativeOperationError("Native addPointToContour returned no point ID");
   }
 
   movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
@@ -176,7 +183,11 @@ export class EditingManager {
         edit.smooth,
       ),
     );
-    return ids[0];
+    const pointId = ids[0];
+    if (pointId) {
+      return pointId;
+    }
+    throw new NativeOperationError("Native insertPointBefore returned no point ID");
   }
 
   toggleSmooth(pointId: PointId): void {

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Transform } from "./Transform";
 import { Bounds } from "@shift/geo";
 import { asPointId } from "@shift/types";
+import { expectAt } from "@/testing";
 
 describe("Transform", () => {
   // Helper to create test points
@@ -18,9 +19,9 @@ describe("Transform", () => {
 
       const result = Transform.rotatePoints(points, Math.PI / 2, origin);
 
-      expect(result[0].id).toBe("p1");
-      expect(result[0].x).toBeCloseTo(0);
-      expect(result[0].y).toBeCloseTo(1);
+      expect(expectAt(result, 0).id).toBe("p1");
+      expect(expectAt(result, 0).x).toBeCloseTo(0);
+      expect(expectAt(result, 0).y).toBeCloseTo(1);
     });
 
     it("rotates points 90° clockwise around origin", () => {
@@ -29,8 +30,8 @@ describe("Transform", () => {
 
       const result = Transform.rotatePoints(points, -Math.PI / 2, origin);
 
-      expect(result[0].x).toBeCloseTo(1);
-      expect(result[0].y).toBeCloseTo(0);
+      expect(expectAt(result, 0).x).toBeCloseTo(1);
+      expect(expectAt(result, 0).y).toBeCloseTo(0);
     });
 
     it("rotates points 180° around origin", () => {
@@ -39,8 +40,8 @@ describe("Transform", () => {
 
       const result = Transform.rotatePoints(points, Math.PI, origin);
 
-      expect(result[0].x).toBeCloseTo(-1);
-      expect(result[0].y).toBeCloseTo(-1);
+      expect(expectAt(result, 0).x).toBeCloseTo(-1);
+      expect(expectAt(result, 0).y).toBeCloseTo(-1);
     });
 
     it("rotates around a custom origin", () => {
@@ -49,8 +50,8 @@ describe("Transform", () => {
 
       const result = Transform.rotatePoints(points, Math.PI / 2, origin);
 
-      expect(result[0].x).toBeCloseTo(1);
-      expect(result[0].y).toBeCloseTo(1);
+      expect(expectAt(result, 0).x).toBeCloseTo(1);
+      expect(expectAt(result, 0).y).toBeCloseTo(1);
     });
 
     it("handles multiple points", () => {
@@ -60,8 +61,8 @@ describe("Transform", () => {
       const result = Transform.rotatePoints(points, Math.PI / 2, origin);
 
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe("p1");
-      expect(result[1].id).toBe("p2");
+      expect(expectAt(result, 0).id).toBe("p1");
+      expect(expectAt(result, 1).id).toBe("p2");
     });
 
     it("preserves original array (immutable)", () => {
@@ -70,8 +71,8 @@ describe("Transform", () => {
 
       Transform.rotatePoints(points, Math.PI / 2, origin);
 
-      expect(points[0].x).toBe(1);
-      expect(points[0].y).toBe(0);
+      expect(expectAt(points, 0).x).toBe(1);
+      expect(expectAt(points, 0).y).toBe(0);
     });
   });
 
@@ -82,8 +83,8 @@ describe("Transform", () => {
 
       const result = Transform.scalePoints(points, 2, 2, origin);
 
-      expect(result[0].x).toBe(4);
-      expect(result[0].y).toBe(6);
+      expect(expectAt(result, 0).x).toBe(4);
+      expect(expectAt(result, 0).y).toBe(6);
     });
 
     it("scales points non-uniformly", () => {
@@ -92,8 +93,8 @@ describe("Transform", () => {
 
       const result = Transform.scalePoints(points, 2, 3, origin);
 
-      expect(result[0].x).toBe(4);
-      expect(result[0].y).toBe(9);
+      expect(expectAt(result, 0).x).toBe(4);
+      expect(expectAt(result, 0).y).toBe(9);
     });
 
     it("scales from a custom origin", () => {
@@ -103,8 +104,8 @@ describe("Transform", () => {
       const result = Transform.scalePoints(points, 2, 2, origin);
 
       // (3-1)*2 + 1 = 5, (4-2)*2 + 2 = 6
-      expect(result[0].x).toBe(5);
-      expect(result[0].y).toBe(6);
+      expect(expectAt(result, 0).x).toBe(5);
+      expect(expectAt(result, 0).y).toBe(6);
     });
 
     it("handles scale factor of 0.5 (shrink)", () => {
@@ -113,8 +114,8 @@ describe("Transform", () => {
 
       const result = Transform.scalePoints(points, 0.5, 0.5, origin);
 
-      expect(result[0].x).toBe(2);
-      expect(result[0].y).toBe(3);
+      expect(expectAt(result, 0).x).toBe(2);
+      expect(expectAt(result, 0).y).toBe(3);
     });
 
     it("handles negative scale (mirror + scale)", () => {
@@ -123,8 +124,8 @@ describe("Transform", () => {
 
       const result = Transform.scalePoints(points, -1, -1, origin);
 
-      expect(result[0].x).toBe(-2);
-      expect(result[0].y).toBe(-3);
+      expect(expectAt(result, 0).x).toBe(-2);
+      expect(expectAt(result, 0).y).toBe(-3);
     });
   });
 
@@ -135,8 +136,8 @@ describe("Transform", () => {
 
       const result = Transform.reflectPoints(points, "horizontal", origin);
 
-      expect(result[0].x).toBe(2);
-      expect(result[0].y).toBe(-3);
+      expect(expectAt(result, 0).x).toBe(2);
+      expect(expectAt(result, 0).y).toBe(-3);
     });
 
     it("reflects vertically (flips X across Y axis)", () => {
@@ -145,8 +146,8 @@ describe("Transform", () => {
 
       const result = Transform.reflectPoints(points, "vertical", origin);
 
-      expect(result[0].x).toBe(-2);
-      expect(result[0].y).toBe(3);
+      expect(expectAt(result, 0).x).toBe(-2);
+      expect(expectAt(result, 0).y).toBe(3);
     });
 
     it("reflects horizontally around custom origin", () => {
@@ -156,8 +157,8 @@ describe("Transform", () => {
       const result = Transform.reflectPoints(points, "horizontal", origin);
 
       // y: 3 - (5-3) = 1
-      expect(result[0].x).toBe(2);
-      expect(result[0].y).toBe(1);
+      expect(expectAt(result, 0).x).toBe(2);
+      expect(expectAt(result, 0).y).toBe(1);
     });
 
     it("reflects vertically around custom origin", () => {
@@ -167,8 +168,8 @@ describe("Transform", () => {
       const result = Transform.reflectPoints(points, "vertical", origin);
 
       // x: 3 - (5-3) = 1
-      expect(result[0].x).toBe(1);
-      expect(result[0].y).toBe(3);
+      expect(expectAt(result, 0).x).toBe(1);
+      expect(expectAt(result, 0).y).toBe(3);
     });
 
     it("reflects across 45° diagonal axis", () => {
@@ -178,8 +179,8 @@ describe("Transform", () => {
       const result = Transform.reflectPoints(points, { angle: Math.PI / 4 }, origin);
 
       // Reflecting (1,0) across 45° line gives (0,1)
-      expect(result[0].x).toBeCloseTo(0);
-      expect(result[0].y).toBeCloseTo(1);
+      expect(expectAt(result, 0).x).toBeCloseTo(0);
+      expect(expectAt(result, 0).y).toBeCloseTo(1);
     });
 
     it("reflecting twice returns to original", () => {
@@ -189,8 +190,8 @@ describe("Transform", () => {
       const once = Transform.reflectPoints(points, "horizontal", origin);
       const twice = Transform.reflectPoints(once, "horizontal", origin);
 
-      expect(twice[0].x).toBeCloseTo(2);
-      expect(twice[0].y).toBeCloseTo(3);
+      expect(expectAt(twice, 0).x).toBeCloseTo(2);
+      expect(expectAt(twice, 0).y).toBeCloseTo(3);
     });
   });
 
@@ -248,41 +249,41 @@ describe("Transform", () => {
 
     it("rotate90CCW rotates 90° counter-clockwise", () => {
       const result = Transform.rotate90CCW(points, origin);
-      expect(result[0].x).toBeCloseTo(0);
-      expect(result[0].y).toBeCloseTo(1);
+      expect(expectAt(result, 0).x).toBeCloseTo(0);
+      expect(expectAt(result, 0).y).toBeCloseTo(1);
     });
 
     it("rotate90CW rotates 90° clockwise", () => {
       const result = Transform.rotate90CW(points, origin);
-      expect(result[0].x).toBeCloseTo(0);
-      expect(result[0].y).toBeCloseTo(-1);
+      expect(expectAt(result, 0).x).toBeCloseTo(0);
+      expect(expectAt(result, 0).y).toBeCloseTo(-1);
     });
 
     it("rotate180 rotates 180°", () => {
       const result = Transform.rotate180(points, origin);
-      expect(result[0].x).toBeCloseTo(-1);
-      expect(result[0].y).toBeCloseTo(0);
+      expect(expectAt(result, 0).x).toBeCloseTo(-1);
+      expect(expectAt(result, 0).y).toBeCloseTo(0);
     });
 
     it("scaleUniform scales equally in both directions", () => {
       const pts = [p("p1", 2, 3)];
       const result = Transform.scaleUniform(pts, 2, origin);
-      expect(result[0].x).toBe(4);
-      expect(result[0].y).toBe(6);
+      expect(expectAt(result, 0).x).toBe(4);
+      expect(expectAt(result, 0).y).toBe(6);
     });
 
     it("flipHorizontal mirrors across X axis", () => {
       const pts = [p("p1", 2, 3)];
       const result = Transform.flipHorizontal(pts, origin);
-      expect(result[0].x).toBe(2);
-      expect(result[0].y).toBe(-3);
+      expect(expectAt(result, 0).x).toBe(2);
+      expect(expectAt(result, 0).y).toBe(-3);
     });
 
     it("flipVertical mirrors across Y axis", () => {
       const pts = [p("p1", 2, 3)];
       const result = Transform.flipVertical(pts, origin);
-      expect(result[0].x).toBe(-2);
-      expect(result[0].y).toBe(3);
+      expect(expectAt(result, 0).x).toBe(-2);
+      expect(expectAt(result, 0).y).toBe(3);
     });
   });
 
@@ -293,8 +294,8 @@ describe("Transform", () => {
 
       const result = Transform.applyMatrix(points, identity);
 
-      expect(result[0].x).toBeCloseTo(5);
-      expect(result[0].y).toBeCloseTo(7);
+      expect(expectAt(result, 0).x).toBeCloseTo(5);
+      expect(expectAt(result, 0).y).toBeCloseTo(7);
     });
 
     it("applies scale matrix", () => {
@@ -303,8 +304,8 @@ describe("Transform", () => {
 
       const result = Transform.applyMatrix(points, scale2x);
 
-      expect(result[0].x).toBeCloseTo(4);
-      expect(result[0].y).toBeCloseTo(6);
+      expect(expectAt(result, 0).x).toBeCloseTo(4);
+      expect(expectAt(result, 0).y).toBeCloseTo(6);
     });
 
     it("applies matrix around custom origin", () => {
@@ -315,8 +316,8 @@ describe("Transform", () => {
       const result = Transform.applyMatrix(points, scale2x, origin);
 
       // (3-1)*2 + 1 = 5, (4-2)*2 + 2 = 6
-      expect(result[0].x).toBeCloseTo(5);
-      expect(result[0].y).toBeCloseTo(6);
+      expect(expectAt(result, 0).x).toBeCloseTo(5);
+      expect(expectAt(result, 0).y).toBeCloseTo(6);
     });
   });
 

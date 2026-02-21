@@ -16,15 +16,20 @@ const EMPTY_BOUNDS: Rect2D = {
 
 export class PayloadSerializer {
   serialize(content: ClipboardContent, sourceGlyph?: string): string {
+    const metadata: ClipboardPayload["metadata"] = {
+      bounds: this.calculateBounds(content),
+      timestamp: Date.now(),
+    };
+
+    if (sourceGlyph !== undefined) {
+      metadata.sourceGlyph = sourceGlyph;
+    }
+
     const payload: ClipboardPayload = {
       version: 1,
       format: "shift/glyph-data",
       content,
-      metadata: {
-        bounds: this.calculateBounds(content),
-        sourceGlyph,
-        timestamp: Date.now(),
-      },
+      metadata,
     };
     return JSON.stringify(payload);
   }

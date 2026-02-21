@@ -26,11 +26,15 @@ class ContractTestTool extends BaseTool<ContractState> {
     return { type: "idle" };
   }
 
-  activate(): void {
+  override activate(): void {
     this.state = { type: "ready" };
   }
 
-  protected onStateChange(prev: ContractState, next: ContractState, event: ToolEvent): void {
+  protected override onStateChange(
+    prev: ContractState,
+    next: ContractState,
+    event: ToolEvent,
+  ): void {
     this.onStateChangeSpy(prev, next, event);
   }
 }

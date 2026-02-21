@@ -7,8 +7,7 @@ export function resolveComponentAtPoint(
 ): { index: number; component: CompositeComponentsPayload["components"][number] } | null {
   if (!composite) return null;
 
-  for (let i = 0; i < composite.components.length; i++) {
-    const component = composite.components[i];
+  for (const [i, component] of composite.components.entries()) {
     if (isPointInComponentBounds(component.contours, localPoint)) {
       return { index: i, component };
     }

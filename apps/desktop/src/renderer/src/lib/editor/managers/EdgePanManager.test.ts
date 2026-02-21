@@ -20,14 +20,14 @@ describe("EdgePanManager", () => {
 
   it("calls handlePointerMove with force: true when ticking so tool feedback moves with pan", () => {
     const handlePointerMove = vi.fn();
-    const editor = {
+    const editor: ConstructorParameters<typeof EdgePanManager>[0] = {
       toolManager: { handlePointerMove, isDragging: true },
       pan: { x: 0, y: 0 },
       setPan: vi.fn(),
       requestRedraw: vi.fn(),
     };
 
-    const manager = new EdgePanManager(editor as any, { marginSize: 50 });
+    const manager = new EdgePanManager(editor, { marginSize: 50 });
     manager.update({ x: 10, y: 300 }, canvasBounds);
 
     expect(handlePointerMove).toHaveBeenCalledWith(

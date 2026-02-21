@@ -20,7 +20,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
   #resumeContext: ResumeEditContext | null = null;
   #pendingOriginX: number | null = null;
 
-  getCursor(_state: TextState): CursorType {
+  override getCursor(_state: TextState): CursorType {
     return { type: "text" };
   }
 
@@ -28,7 +28,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
     return { type: "idle" };
   }
 
-  activate(): void {
+  override activate(): void {
     const previous = this.editor.getTextRunState();
     const hasExistingRun = this.editor.getTextRunLength() > 0;
     const drawOffset = this.editor.getDrawOffset();
@@ -55,7 +55,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
     this.#recompute();
   }
 
-  deactivate(): void {
+  override deactivate(): void {
     this.editor.setTextRunCursorVisible(false);
     this.editor.setPreviewMode(false);
     this.#restoreEditingContext();
@@ -65,7 +65,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
     // Keep typed buffer/layout persisted across tool switches.
   }
 
-  protected executeAction(action: TextAction): void {
+  protected override executeAction(action: TextAction): void {
     switch (action.type) {
       case "insert":
         this.editor.insertTextCodepoint(action.codepoint);
@@ -128,8 +128,7 @@ class TextTool extends BaseTool<TextState, TextAction> {
 
     let nearestIndex: number | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < slots.length; i++) {
-      const slot = slots[i];
+    for (const [i, slot] of slots.entries()) {
       if (
         resume.activeGlyphName !== null &&
         slot.glyph.glyphName !== resume.activeGlyphName &&
@@ -149,9 +148,13 @@ class TextTool extends BaseTool<TextState, TextAction> {
     }
 
     if (nearestIndex !== null) {
+      const nearestSlot = slots[nearestIndex];
+      if (!nearestSlot) {
+        return null;
+      }
       return {
         index: nearestIndex,
-        glyph: slots[nearestIndex].glyph,
+        glyph: nearestSlot.glyph,
       };
     }
 

@@ -1,6 +1,5 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
-import type { Editor } from "../Editor";
 
 interface EdgePanConfig {
   marginSize: number;
@@ -12,6 +11,20 @@ const DEFAULT_CONFIG: EdgePanConfig = {
   maxSpeed: 15,
 };
 
+type EdgePanEditor = {
+  toolManager: {
+    isDragging: boolean;
+    handlePointerMove(
+      position: Point2D,
+      modifiers: { shiftKey: boolean; altKey: boolean },
+      options: { force: boolean },
+    ): void;
+  };
+  pan: Point2D;
+  setPan(x: number, y: number): void;
+  requestRedraw(): void;
+};
+
 export class EdgePanManager {
   private config: EdgePanConfig;
   private active = false;
@@ -20,7 +33,7 @@ export class EdgePanManager {
   private lastScreenPos: Point2D = Vec2.zero();
 
   constructor(
-    private editor: Editor,
+    private editor: EdgePanEditor,
     config: Partial<EdgePanConfig> = {},
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };

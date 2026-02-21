@@ -28,7 +28,8 @@ export const Validate = {
   countConsecutiveOffCurve(points: readonly PointLike[], startIndex: number): number {
     let count = 0;
     for (let i = startIndex; i < points.length; i++) {
-      if (points[i].pointType === "offCurve") {
+      const point = points[i];
+      if (point?.pointType === "offCurve") {
         count++;
       } else {
         break;
@@ -39,7 +40,8 @@ export const Validate = {
 
   findNextOnCurve(points: readonly PointLike[], startIndex: number): number | null {
     for (let i = startIndex; i < points.length; i++) {
-      if (points[i].pointType === "onCurve") {
+      const point = points[i];
+      if (point?.pointType === "onCurve") {
         return i;
       }
     }
@@ -47,27 +49,28 @@ export const Validate = {
   },
 
   matchesLinePattern(points: readonly PointLike[]): boolean {
-    return (
-      points.length === 2 && points[0].pointType === "onCurve" && points[1].pointType === "onCurve"
-    );
+    const [p0, p1] = points;
+    return points.length === 2 && p0?.pointType === "onCurve" && p1?.pointType === "onCurve";
   },
 
   matchesQuadPattern(points: readonly PointLike[]): boolean {
+    const [p0, p1, p2] = points;
     return (
       points.length === 3 &&
-      points[0].pointType === "onCurve" &&
-      points[1].pointType === "offCurve" &&
-      points[2].pointType === "onCurve"
+      p0?.pointType === "onCurve" &&
+      p1?.pointType === "offCurve" &&
+      p2?.pointType === "onCurve"
     );
   },
 
   matchesCubicPattern(points: readonly PointLike[]): boolean {
+    const [p0, p1, p2, p3] = points;
     return (
       points.length === 4 &&
-      points[0].pointType === "onCurve" &&
-      points[1].pointType === "offCurve" &&
-      points[2].pointType === "offCurve" &&
-      points[3].pointType === "onCurve"
+      p0?.pointType === "onCurve" &&
+      p1?.pointType === "offCurve" &&
+      p2?.pointType === "offCurve" &&
+      p3?.pointType === "onCurve"
     );
   },
 
@@ -76,27 +79,31 @@ export const Validate = {
       return Validate.fail(Validate.error("EMPTY_SEQUENCE", "Point sequence cannot be empty"));
     }
 
-    if (points[0].pointType !== "onCurve") {
+    const firstPoint = points[0];
+    if (!firstPoint || firstPoint.pointType !== "onCurve") {
       return Validate.fail(
         Validate.error(
           "MUST_START_WITH_ON_CURVE",
           "Point sequence must start with an onCurve point",
-          { index: 0, pointType: points[0].pointType },
+          { index: 0, pointType: firstPoint?.pointType },
         ),
       );
     }
 
-    if (points[points.length - 1].pointType !== "onCurve") {
+    const lastIndex = points.length - 1;
+    const lastPoint = points[lastIndex];
+    if (!lastPoint || lastPoint.pointType !== "onCurve") {
       return Validate.fail(
         Validate.error("MUST_END_WITH_ON_CURVE", "Point sequence must end with an onCurve point", {
-          index: points.length - 1,
-          pointType: points[points.length - 1].pointType,
+          index: lastIndex,
+          pointType: lastPoint?.pointType,
         }),
       );
     }
 
     for (let i = 0; i < points.length; i++) {
-      if (points[i].pointType === "offCurve") {
+      const point = points[i];
+      if (point?.pointType === "offCurve") {
         const consecutiveCount = Validate.countConsecutiveOffCurve(points, i);
         if (consecutiveCount > 2) {
           return Validate.fail(
@@ -130,16 +137,23 @@ export const Validate = {
     while (i < points.length - 1) {
       const current = points[i];
 
-      if (current.pointType !== "onCurve") {
+      if (!current || current.pointType !== "onCurve") {
         return Validate.fail(
           Validate.error("ORPHAN_OFF_CURVE", "offCurve point without preceding onCurve anchor", {
             index: i,
-            pointType: current.pointType,
+            pointType: current?.pointType,
           }),
         );
       }
 
       const next = points[i + 1];
+      if (!next) {
+        return Validate.fail(
+          Validate.error("INCOMPLETE_SEGMENT", "offCurve points without following onCurve anchor", {
+            index: i + 1,
+          }),
+        );
+      }
 
       if (next.pointType === "onCurve") {
         i += 1;
@@ -165,11 +179,14 @@ export const Validate = {
 
   isValidSequence(points: readonly PointLike[]): boolean {
     if (points.length === 0) return false;
-    if (points[0].pointType !== "onCurve") return false;
-    if (points[points.length - 1].pointType !== "onCurve") return false;
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    if (!firstPoint || firstPoint.pointType !== "onCurve") return false;
+    if (!lastPoint || lastPoint.pointType !== "onCurve") return false;
 
     for (let i = 0; i < points.length; i++) {
-      if (points[i].pointType === "offCurve") {
+      const point = points[i];
+      if (point?.pointType === "offCurve") {
         const count = Validate.countConsecutiveOffCurve(points, i);
         if (count > 2) return false;
         i += count - 1;
@@ -185,9 +202,11 @@ export const Validate = {
 
     let i = 0;
     while (i < points.length - 1) {
-      if (points[i].pointType !== "onCurve") return false;
+      const current = points[i];
+      if (!current || current.pointType !== "onCurve") return false;
 
       const next = points[i + 1];
+      if (!next) return false;
       if (next.pointType === "onCurve") {
         i += 1;
         continue;

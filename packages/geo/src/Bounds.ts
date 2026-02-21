@@ -41,13 +41,15 @@ export const Bounds = {
   fromPoints(points: readonly Point2D[]): Bounds | null {
     if (points.length === 0) return null;
 
-    let minX = points[0].x;
-    let minY = points[0].y;
-    let maxX = points[0].x;
-    let maxY = points[0].y;
+    const first = points[0];
+    if (!first) return null;
 
-    for (let i = 1; i < points.length; i++) {
-      const p = points[i];
+    let minX = first.x;
+    let minY = first.y;
+    let maxX = first.x;
+    let maxY = first.y;
+
+    for (const p of points.slice(1)) {
       if (p.x < minX) minX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.x > maxX) maxX = p.x;

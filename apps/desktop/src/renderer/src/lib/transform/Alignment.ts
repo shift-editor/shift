@@ -36,6 +36,9 @@ export const Alignment = {
 
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
+    if (!first || !last) {
+      return sorted;
+    }
     const totalSpan = type === "horizontal" ? last.x - first.x : last.y - first.y;
     const spacing = totalSpan / (sorted.length - 1);
 

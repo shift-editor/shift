@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { renderHandles } from "./handles";
-import type { IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Contour, PointId } from "@shift/types";
-import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
+import { DrawAPI } from "@/lib/tools/core/DrawAPI";
+import type { IRenderer, HandleState, ScreenConverter } from "@/types/graphics";
+import { asContourId, asPointId } from "@shift/types";
+import type { Glyph, Contour, PointId, PointSnapshot } from "@shift/types";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -40,60 +41,88 @@ function createMockRenderer(): IRenderer {
   };
 }
 
-function createMockDraw() {
+function createMockScreen(): ScreenConverter {
   return {
-    setStyle: vi.fn(),
-    line: vi.fn(),
-    handle: vi.fn(),
-    handleFirst: vi.fn(),
-    handleDirection: vi.fn(),
-    handleLast: vi.fn(),
-    renderer: createMockRenderer(),
-  } as unknown as DrawAPI;
+    toUpmDistance: vi.fn((pixels: number) => pixels),
+  };
+}
+
+function createDrawHarness() {
+  const draw = new DrawAPI(createMockRenderer(), createMockScreen());
+  return {
+    draw,
+    spies: {
+      setStyle: vi.spyOn(draw, "setStyle"),
+      line: vi.spyOn(draw, "line"),
+      handle: vi.spyOn(draw, "handle"),
+      handleFirst: vi.spyOn(draw, "handleFirst"),
+      handleDirection: vi.spyOn(draw, "handleDirection"),
+      handleLast: vi.spyOn(draw, "handleLast"),
+    },
+  };
+}
+
+function makePoint(
+  id: string,
+  x: number,
+  y: number,
+  pointType: PointSnapshot["pointType"] = "onCurve",
+  smooth = false,
+): PointSnapshot {
+  return {
+    id: asPointId(id),
+    x,
+    y,
+    pointType,
+    smooth,
+  };
 }
 
 function createClosedTriangleContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("triangle"),
     closed: true,
-    points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-      { id: 3, x: 50, y: 100, pointType: "onCurve", smooth: false },
-    ],
+    points: [makePoint("p1", 0, 0), makePoint("p2", 100, 0), makePoint("p3", 50, 100)],
+  };
+}
+
+function makeGlyph(name: string, contours: Contour[], xAdvance = 100): Glyph {
+  return {
+    unicode: 65,
+    name,
+    xAdvance,
+    contours,
+    anchors: [],
+    compositeContours: [],
+    activeContourId: contours[0]?.id ?? null,
   };
 }
 
 describe("handles", () => {
   let draw: DrawAPI;
+  let spies: ReturnType<typeof createDrawHarness>["spies"];
 
   beforeEach(() => {
-    draw = createMockDraw();
+    const harness = createDrawHarness();
+    draw = harness.draw;
+    spies = harness.spies;
   });
 
   describe("renderHandles", () => {
     it("calls setStyle with default styles", () => {
-      const glyph: Glyph = {
-        name: "A",
-        contours: [createClosedTriangleContour()],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("A", [createClosedTriangleContour()]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).setStyle).toHaveBeenCalled();
+      expect(spies.setStyle).toHaveBeenCalled();
     });
 
     it("first point of closed contour gets handleDirection", () => {
-      const glyph: Glyph = {
-        name: "A",
-        contours: [createClosedTriangleContour()],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("A", [createClosedTriangleContour()]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handleDirection).toHaveBeenCalledWith(
+      expect(spies.handleDirection).toHaveBeenCalledWith(
         { x: 0, y: 0 },
         expect.any(Number),
         "idle",
@@ -101,101 +130,69 @@ describe("handles", () => {
     });
 
     it("non-first on-curve points of closed contour get handle with corner", () => {
-      const glyph: Glyph = {
-        name: "A",
-        contours: [createClosedTriangleContour()],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("A", [createClosedTriangleContour()]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 100, y: 0 }, "corner", "idle");
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 50, y: 100 }, "corner", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 100, y: 0 }, "corner", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 50, y: 100 }, "corner", "idle");
     });
 
     it("calls getHandleState for each point", () => {
-      const glyph: Glyph = {
-        name: "A",
-        contours: [createClosedTriangleContour()],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("A", [createClosedTriangleContour()]);
       const getHandleState = vi.fn<(id: PointId) => HandleState>(() => "idle");
 
       renderHandles(draw, glyph, getHandleState);
 
       expect(getHandleState).toHaveBeenCalledTimes(3);
-      expect(getHandleState).toHaveBeenCalledWith(1);
-      expect(getHandleState).toHaveBeenCalledWith(2);
-      expect(getHandleState).toHaveBeenCalledWith(3);
+      expect(getHandleState).toHaveBeenCalledWith(asPointId("p1"));
+      expect(getHandleState).toHaveBeenCalledWith(asPointId("p2"));
+      expect(getHandleState).toHaveBeenCalledWith(asPointId("p3"));
     });
 
     it("passes handle state from getHandleState to draw methods", () => {
-      const glyph: Glyph = {
-        name: "A",
-        contours: [createClosedTriangleContour()],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("A", [createClosedTriangleContour()]);
       const getHandleState = vi.fn<(id: PointId) => HandleState>((id) => {
-        if (id === 1) return "selected";
-        if (id === 2) return "hovered";
+        if (id === asPointId("p1")) return "selected";
+        if (id === asPointId("p2")) return "hovered";
         return "idle";
       });
 
       renderHandles(draw, glyph, getHandleState);
 
-      expect((draw as any).handleDirection).toHaveBeenCalledWith(
+      expect(spies.handleDirection).toHaveBeenCalledWith(
         { x: 0, y: 0 },
         expect.any(Number),
         "selected",
       );
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 100, y: 0 }, "corner", "hovered");
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 50, y: 100 }, "corner", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 100, y: 0 }, "corner", "hovered");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 50, y: 100 }, "corner", "idle");
     });
 
     it("first point of open contour gets handleFirst", () => {
       const openContour: Contour = {
-        id: 0,
+        id: asContourId("line-1"),
         closed: false,
-        points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-          { id: 3, x: 200, y: 0, pointType: "onCurve", smooth: false },
-        ],
+        points: [makePoint("p1", 0, 0), makePoint("p2", 100, 0), makePoint("p3", 200, 0)],
       };
-      const glyph: Glyph = {
-        name: "line",
-        contours: [openContour],
-        xAdvance: 200,
-      };
+      const glyph = makeGlyph("line", [openContour], 200);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handleFirst).toHaveBeenCalledWith(
-        { x: 0, y: 0 },
-        expect.any(Number),
-        "idle",
-      );
+      expect(spies.handleFirst).toHaveBeenCalledWith({ x: 0, y: 0 }, expect.any(Number), "idle");
     });
 
     it("last point of open contour gets handleLast", () => {
       const openContour: Contour = {
-        id: 0,
+        id: asContourId("line-2"),
         closed: false,
-        points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-          { id: 3, x: 200, y: 0, pointType: "onCurve", smooth: false },
-        ],
+        points: [makePoint("p1", 0, 0), makePoint("p2", 100, 0), makePoint("p3", 200, 0)],
       };
-      const glyph: Glyph = {
-        name: "line",
-        contours: [openContour],
-        xAdvance: 200,
-      };
+      const glyph = makeGlyph("line", [openContour], 200);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handleLast).toHaveBeenCalledWith(
+      expect(spies.handleLast).toHaveBeenCalledWith(
         { anchor: { x: 200, y: 0 }, prev: { x: 100, y: 0 } },
         "idle",
       );
@@ -203,103 +200,83 @@ describe("handles", () => {
 
     it("draws control point lines for off-curve points", () => {
       const contourWithCubic: Contour = {
-        id: 0,
+        id: asContourId("cubic"),
         closed: true,
         points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 30, y: 50, pointType: "offCurve", smooth: false },
-          { id: 3, x: 70, y: 50, pointType: "offCurve", smooth: false },
-          { id: 4, x: 100, y: 0, pointType: "onCurve", smooth: false },
+          makePoint("p1", 0, 0),
+          makePoint("c1", 30, 50, "offCurve"),
+          makePoint("c2", 70, 50, "offCurve"),
+          makePoint("p2", 100, 0),
         ],
       };
-      const glyph: Glyph = {
-        name: "curve",
-        contours: [contourWithCubic],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("curve", [contourWithCubic]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).line).toHaveBeenCalled();
+      expect(spies.line).toHaveBeenCalled();
     });
 
     it("smooth on-curve points get handle with smooth type", () => {
       const contour: Contour = {
-        id: 0,
+        id: asContourId("smooth"),
         closed: true,
         points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 50, y: 50, pointType: "onCurve", smooth: true },
-          { id: 3, x: 100, y: 0, pointType: "onCurve", smooth: false },
+          makePoint("p1", 0, 0),
+          makePoint("p2", 50, 50, "onCurve", true),
+          makePoint("p3", 100, 0),
         ],
       };
-      const glyph: Glyph = {
-        name: "smooth",
-        contours: [contour],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("smooth", [contour]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "smooth", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "smooth", "idle");
     });
 
     it("off-curve points get handle with control type", () => {
       const contour: Contour = {
-        id: 0,
+        id: asContourId("quad"),
         closed: true,
         points: [
-          { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: 2, x: 50, y: 50, pointType: "offCurve", smooth: false },
-          { id: 3, x: 100, y: 0, pointType: "onCurve", smooth: false },
+          makePoint("p1", 0, 0),
+          makePoint("c1", 50, 50, "offCurve"),
+          makePoint("p2", 100, 0),
         ],
       };
-      const glyph: Glyph = {
-        name: "quad",
-        contours: [contour],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("quad", [contour]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "control", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "control", "idle");
     });
 
     it("single point contour gets handle with corner", () => {
       const contour: Contour = {
-        id: 0,
+        id: asContourId("dot"),
         closed: false,
-        points: [{ id: 1, x: 50, y: 50, pointType: "onCurve", smooth: false }],
+        points: [makePoint("p1", 50, 50)],
       };
-      const glyph: Glyph = {
-        name: "dot",
-        contours: [contour],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("dot", [contour]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "corner", "idle");
+      expect(spies.handle).toHaveBeenCalledWith({ x: 50, y: 50 }, "corner", "idle");
     });
 
     it("skips empty contours", () => {
       const emptyContour: Contour = {
-        id: 0,
+        id: asContourId("empty"),
         closed: true,
         points: [],
       };
-      const glyph: Glyph = {
-        name: "empty",
-        contours: [emptyContour],
-        xAdvance: 100,
-      };
+      const glyph = makeGlyph("empty", [emptyContour]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect((draw as any).handle).not.toHaveBeenCalled();
-      expect((draw as any).handleDirection).not.toHaveBeenCalled();
-      expect((draw as any).handleFirst).not.toHaveBeenCalled();
-      expect((draw as any).handleLast).not.toHaveBeenCalled();
+      expect(spies.handle).not.toHaveBeenCalled();
+      expect(spies.handleDirection).not.toHaveBeenCalled();
+      expect(spies.handleFirst).not.toHaveBeenCalled();
+      expect(spies.handleLast).not.toHaveBeenCalled();
     });
   });
 });

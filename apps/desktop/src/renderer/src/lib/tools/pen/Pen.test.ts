@@ -1,13 +1,61 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Pen } from ".";
+import { DrawAPI } from "@/lib/tools/core/DrawAPI";
+import type { IRenderer, ScreenConverter } from "@/types/graphics";
 import {
   getPointCount,
   getContourCount,
   createMockToolContext,
   createToolMouseEvent,
+  expectDefined,
   ToolEventSimulator,
   type MockToolContext,
 } from "@/testing";
+
+function createMockRenderer(): IRenderer {
+  return {
+    save: vi.fn(),
+    restore: vi.fn(),
+    clear: vi.fn(),
+    lineWidth: 1,
+    strokeStyle: "black",
+    fillStyle: "white",
+    antiAlias: false,
+    dashPattern: [],
+    setStyle: vi.fn(),
+    drawLine: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    fillCircle: vi.fn(),
+    strokeCircle: vi.fn(),
+    createPath: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    quadTo: vi.fn(),
+    cubicTo: vi.fn(),
+    arcTo: vi.fn(),
+    closePath: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    fillPath: vi.fn(),
+    strokePath: vi.fn(),
+    scale: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    transform: vi.fn(),
+  };
+}
+
+function createMockScreen(): ScreenConverter {
+  return {
+    toUpmDistance: vi.fn((pixels: number) => pixels),
+  };
+}
+
+function createMockDrawAPI(): DrawAPI {
+  return new DrawAPI(createMockRenderer(), createMockScreen());
+}
 
 describe("Pen tool", () => {
   let pen: Pen;
@@ -119,8 +167,8 @@ describe("Pen tool", () => {
       sim.onMouseUp(createToolMouseEvent(200, 200));
       expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(2);
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(102, 102));
 
@@ -164,7 +212,7 @@ describe("Pen tool", () => {
 
       expect(ctx.mocks.commands.mocks.endBatch).toHaveBeenCalled();
 
-      ctx.mocks.commands.mocks.execute.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
       sim.onMouseDown(createToolMouseEvent(200, 200));
       expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
       expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(2);
@@ -269,8 +317,8 @@ describe("Pen tool", () => {
       sim.onMouseDown(createToolMouseEvent(200, 200));
       sim.onMouseUp(createToolMouseEvent(200, 200));
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(105, 105));
 
@@ -283,8 +331,8 @@ describe("Pen tool", () => {
       sim.onMouseDown(createToolMouseEvent(200, 200));
       sim.onMouseUp(createToolMouseEvent(200, 200));
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(115, 115));
 
@@ -326,16 +374,12 @@ describe("Pen tool", () => {
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      const mockDrawAPI = {
-        line: vi.fn(),
-        handle: vi.fn(),
-        circle: vi.fn(),
-        renderer: {},
-      };
+      const draw = createMockDrawAPI();
+      const lineSpy = vi.spyOn(draw, "line");
 
-      pen.renderBelowHandles?.(mockDrawAPI as any);
+      pen.renderBelowHandles?.(draw);
 
-      expect(mockDrawAPI.line).toHaveBeenCalled();
+      expect(lineSpy).toHaveBeenCalled();
     });
   });
 
@@ -399,8 +443,8 @@ describe("Pen tool", () => {
 
       sim.cancel();
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(302, 302));
 
@@ -418,8 +462,8 @@ describe("Pen tool", () => {
 
       sim.cancel();
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(102, 102));
 
@@ -433,7 +477,7 @@ describe("Pen tool", () => {
       sim.onMouseDown(createToolMouseEvent(200, 200));
       sim.onMouseUp(createToolMouseEvent(200, 200));
 
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(202, 202));
 
@@ -454,8 +498,8 @@ describe("Pen tool", () => {
 
       sim.cancel();
 
-      ctx.mocks.commands.mocks.execute.mockClear();
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(202, 202));
 
@@ -473,7 +517,7 @@ describe("Pen tool", () => {
       sim.onMouseDown(createToolMouseEvent(400, 400));
       sim.onMouseUp(createToolMouseEvent(400, 400));
 
-      ctx.mocks.commands.mocks.beginBatch.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(202, 202));
 

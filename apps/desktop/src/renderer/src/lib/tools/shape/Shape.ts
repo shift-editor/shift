@@ -25,7 +25,7 @@ export class Shape extends BaseTool<ShapeState> {
     return { type: "idle" };
   }
 
-  protected onStateChange(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
+  protected override onStateChange(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
     if (prev.type === "dragging" && next.type === "ready") {
       if (event.type === "dragEnd") {
         this.commitRectangle(prev);
@@ -33,15 +33,15 @@ export class Shape extends BaseTool<ShapeState> {
     }
   }
 
-  activate(): void {
+  override activate(): void {
     this.state = { type: "ready" };
   }
 
-  deactivate(): void {
+  override deactivate(): void {
     this.state = { type: "idle" };
   }
 
-  render(draw: DrawAPI): void {
+  override render(draw: DrawAPI): void {
     if (this.state.type !== "dragging") return;
     const rect = this.getRect(this.state);
     if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;

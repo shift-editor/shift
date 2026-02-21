@@ -73,8 +73,9 @@ export const Contours = {
   lastOnCurvePoint(contour: Contour): Point | null {
     const { points } = contour;
     for (let i = points.length - 1; i >= 0; i--) {
-      if (points[i].pointType === "onCurve") {
-        return points[i];
+      const point = points[i];
+      if (point?.pointType === "onCurve") {
+        return point;
       }
     }
     return null;
@@ -149,10 +150,10 @@ export const Contours = {
    */
   at(contour: Contour, index: number, wrap = contour.closed): Point | null {
     const { points } = contour;
-    if (index >= 0 && index < points.length) return points[index];
+    if (index >= 0 && index < points.length) return points[index] ?? null;
     if (!wrap || points.length === 0) return null;
     const wrapped = ((index % points.length) + points.length) % points.length;
-    return points[wrapped];
+    return points[wrapped] ?? null;
   },
 
   /**
@@ -169,9 +170,13 @@ export const Contours = {
     const { points } = contour;
     const len = points.length;
     for (let i = 0; i < len; i++) {
+      const current = points[i];
+      if (!current) {
+        continue;
+      }
       yield {
         prev: Contours.at(contour, i - 1),
-        current: points[i],
+        current,
         next: Contours.at(contour, i + 1),
         index: i,
         isFirst: i === 0,

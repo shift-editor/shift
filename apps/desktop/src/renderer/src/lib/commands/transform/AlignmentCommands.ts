@@ -68,7 +68,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     const points: TransformablePoint[] = [];
     for (const [id, pos] of this.#originalPositions) {
       points.push({ id, x: pos.x, y: pos.y });
@@ -127,7 +127,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     const points: TransformablePoint[] = [];
     for (const [id, pos] of this.#originalPositions) {
       points.push({ id, x: pos.x, y: pos.y });

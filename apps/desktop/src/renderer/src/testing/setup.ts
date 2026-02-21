@@ -5,9 +5,10 @@
 // Path2D is a browser API used by GlyphRenderCache and Canvas2DRenderer.
 // Provide a minimal stub for tests.
 if (typeof globalThis.Path2D === "undefined") {
-  globalThis.Path2D = class Path2D {
+  const Path2DStub = class Path2D {
     constructor(_path?: string | Path2D) {
       // no-op stub
     }
-  } as any;
+  };
+  globalThis.Path2D = Path2DStub as unknown as typeof Path2D;
 }

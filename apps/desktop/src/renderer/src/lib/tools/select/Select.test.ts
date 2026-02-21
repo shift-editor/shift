@@ -5,7 +5,8 @@ import {
   createMockToolContext,
   createToolMouseEvent,
   ToolEventSimulator,
-  makeTestCoordinates,
+  expectAt,
+  expectDefined,
   type MockToolContext,
 } from "@/testing";
 import { asAnchorId, type PointId } from "@shift/types";
@@ -57,14 +58,13 @@ describe("Select tool", () => {
 
   describe("point selection", () => {
     beforeEach(() => {
-      ctx.edit.addPoint(100, 100, "onCurve", false);
-      ctx.edit.addPoint(200, 200, "onCurve", false);
+      (ctx.edit.addPoint(100, 100, "onCurve", false),
+        ctx.edit.addPoint(200, 200, "onCurve", false));
       ctx.edit.addPoint(300, 300, "onCurve", false);
     });
 
     it("should select point when clicking on it", () => {
-      const event = createToolMouseEvent(100, 100);
-      sim.onMouseDown(event);
+      sim.onMouseDown(createToolMouseEvent(100, 100));
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
     });
 
@@ -72,7 +72,10 @@ describe("Select tool", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
 
-      ctx.mocks.selection.mocks.selectPoints.mockClear();
+      expectDefined(
+        ctx.mocks.selection.mocks.selectPoints,
+        "selection.selectPoints mock",
+      ).mockClear();
       sim.onMouseDown(createToolMouseEvent(500, 500));
     });
 
@@ -80,7 +83,10 @@ describe("Select tool", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
 
-      ctx.mocks.selection.mocks.selectPoints.mockClear();
+      expectDefined(
+        ctx.mocks.selection.mocks.selectPoints,
+        "selection.selectPoints mock",
+      ).mockClear();
       sim.onMouseDown(createToolMouseEvent(200, 200));
 
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
@@ -90,7 +96,7 @@ describe("Select tool", () => {
       const id1 = ctx.edit.addPoint(100, 100, "onCurve", false);
       ctx.edit.addPoint(200, 200, "onCurve", false);
       ctx.selection.selectPoints([id1]);
-      ctx.mocks.selection.clear.mockClear();
+      expectDefined(ctx.mocks.selection.mocks.clear, "selection.clear mock").mockClear();
       sim.click(500, 500);
       expect(ctx.mocks.selection.clear).toHaveBeenCalled();
     });
@@ -99,23 +105,15 @@ describe("Select tool", () => {
   describe("toggle smooth", () => {
     it("should call toggleSmooth when double-clicking on-curve point", () => {
       const pointId = ctx.edit.addPoint(100, 100, "onCurve", false);
-      ctx.mocks.edit.toggleSmooth.mockClear();
-      select.handleEvent({
-        type: "doubleClick",
-        point: { x: 100, y: 100 },
-        coords: makeTestCoordinates({ x: 100, y: 100 }),
-      });
+      expectDefined(ctx.mocks.edit.mocks.toggleSmooth, "edit.toggleSmooth mock").mockClear();
+      sim.doubleClick(100, 100);
       expect(ctx.mocks.edit.toggleSmooth).toHaveBeenCalledWith(pointId);
     });
 
     it("should not call toggleSmooth when double-clicking empty space", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
-      ctx.mocks.edit.toggleSmooth.mockClear();
-      select.handleEvent({
-        type: "doubleClick",
-        point: { x: 500, y: 500 },
-        coords: makeTestCoordinates({ x: 500, y: 500 }),
-      });
+      expectDefined(ctx.mocks.edit.mocks.toggleSmooth, "edit.toggleSmooth mock").mockClear();
+      sim.doubleClick(500, 500);
       expect(ctx.mocks.edit.toggleSmooth).not.toHaveBeenCalled();
     });
   });
@@ -130,8 +128,8 @@ describe("Select tool", () => {
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
       const points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].x).toBe(150);
-      expect(points[0].y).toBe(150);
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(150);
     });
 
     it("should move point incrementally during drag", () => {
@@ -139,18 +137,18 @@ describe("Select tool", () => {
 
       sim.onMouseMove(createToolMouseEvent(110, 110));
       let points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].x).toBe(110);
-      expect(points[0].y).toBe(110);
+      expect(expectAt(points, 0).x).toBe(110);
+      expect(expectAt(points, 0).y).toBe(110);
 
       sim.onMouseMove(createToolMouseEvent(130, 130));
       points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].x).toBe(130);
-      expect(points[0].y).toBe(130);
+      expect(expectAt(points, 0).x).toBe(130);
+      expect(expectAt(points, 0).y).toBe(130);
     });
 
     it("should use applySmartEdits when dragging", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      ctx.mocks.edit.mocks.applySmartEdits.mockClear();
+      expectDefined(ctx.mocks.edit.mocks.applySmartEdits, "edit.applySmartEdits mock").mockClear();
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
@@ -159,7 +157,7 @@ describe("Select tool", () => {
 
     it("should call applySmartEdits with selected points and delta", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      ctx.mocks.edit.mocks.applySmartEdits.mockClear();
+      expectDefined(ctx.mocks.edit.mocks.applySmartEdits, "edit.applySmartEdits mock").mockClear();
 
       sim.onMouseMove(createToolMouseEvent(150, 160));
 
@@ -184,7 +182,7 @@ describe("Select tool", () => {
     it("should set mode to committed when selection rectangle is released", () => {
       sim.onMouseDown(createToolMouseEvent(50, 50));
       sim.onMouseMove(createToolMouseEvent(200, 200));
-      ctx.mocks.selection.mocks.setMode.mockClear();
+      expectDefined(ctx.mocks.selection.mocks.setMode, "selection.setMode mock").mockClear();
 
       sim.onMouseUp(createToolMouseEvent(200, 200));
       expect(ctx.mocks.selection.setMode).toHaveBeenCalledWith("committed");
@@ -202,7 +200,10 @@ describe("Select tool", () => {
     it("should select points within rectangle on drag end", () => {
       sim.onMouseDown(createToolMouseEvent(50, 50));
       sim.onMouseMove(createToolMouseEvent(120, 120));
-      ctx.mocks.selection.mocks.selectPoints.mockClear();
+      expectDefined(
+        ctx.mocks.selection.mocks.selectPoints,
+        "selection.selectPoints mock",
+      ).mockClear();
 
       sim.onMouseUp(createToolMouseEvent(120, 120));
       expect(ctx.mocks.selection.selectPoints).toHaveBeenCalled();
@@ -222,51 +223,51 @@ describe("Select tool", () => {
       sim.keyDown("ArrowRight");
 
       const points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].x).toBeGreaterThan(100);
+      expect(expectAt(points, 0).x).toBeGreaterThan(100);
     });
 
     it("should nudge point left with ArrowLeft", () => {
       sim.keyDown("ArrowLeft");
 
       const points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].x).toBeLessThan(100);
+      expect(expectAt(points, 0).x).toBeLessThan(100);
     });
 
     it("should nudge point up with ArrowUp", () => {
       sim.keyDown("ArrowUp");
 
       const points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].y).toBeGreaterThan(100);
+      expect(expectAt(points, 0).y).toBeGreaterThan(100);
     });
 
     it("should nudge point down with ArrowDown", () => {
       sim.keyDown("ArrowDown");
 
       const points = getAllPoints(ctx.edit.getGlyph());
-      expect(points[0].y).toBeLessThan(100);
+      expect(expectAt(points, 0).y).toBeLessThan(100);
     });
 
     it("should nudge by larger amount with shift key", () => {
-      const before = getAllPoints(ctx.edit.getGlyph())[0].x;
+      const before = expectAt(getAllPoints(ctx.edit.getGlyph()), 0).x;
 
       sim.keyDown("ArrowRight");
-      const afterSmall = getAllPoints(ctx.edit.getGlyph())[0].x;
+      const afterSmall = expectAt(getAllPoints(ctx.edit.getGlyph()), 0).x;
       const smallNudge = afterSmall - before;
 
       ctx.fontEngine.editing.movePoints([pointId], { x: -smallNudge, y: 0 });
 
       sim.keyDown("ArrowRight", { shiftKey: true });
-      const afterLarge = getAllPoints(ctx.edit.getGlyph())[0].x;
+      const afterLarge = expectAt(getAllPoints(ctx.edit.getGlyph()), 0).x;
       const largeNudge = afterLarge - before;
 
       expect(largeNudge).toBeGreaterThan(smallNudge);
     });
 
     it("should nudge by largest amount with meta key", () => {
-      const before = getAllPoints(ctx.edit.getGlyph())[0].x;
+      const before = expectAt(getAllPoints(ctx.edit.getGlyph()), 0).x;
 
       sim.keyDown("ArrowRight", { metaKey: true });
-      const after = getAllPoints(ctx.edit.getGlyph())[0].x;
+      const after = expectAt(getAllPoints(ctx.edit.getGlyph()), 0).x;
 
       expect(after - before).toBeGreaterThan(1);
     });
@@ -278,11 +279,11 @@ describe("Select tool", () => {
       newCtx.edit.addPoint(100, 100, "onCurve", false);
       newSim.setReady();
 
-      const before = getAllPoints(newCtx.edit.getGlyph())[0].x;
+      const before = expectAt(getAllPoints(newCtx.edit.getGlyph()), 0).x;
 
       newSim.keyDown("ArrowRight");
 
-      const after = getAllPoints(newCtx.edit.getGlyph())[0].x;
+      const after = expectAt(getAllPoints(newCtx.edit.getGlyph()), 0).x;
       expect(after).toBe(before);
     });
   });
@@ -304,7 +305,7 @@ describe("Select tool", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
-      ctx.mocks.commands.mocks.execute.mockClear();
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
 
       sim.keyDown("ArrowRight");
       expect(ctx.mocks.commands.execute).toHaveBeenCalled();
@@ -312,9 +313,13 @@ describe("Select tool", () => {
   });
 
   describe("segment selection", () => {
+    let ids: PointId[];
+
     beforeEach(() => {
-      ctx.edit.addPoint(100, 100, "onCurve", false);
-      ctx.edit.addPoint(200, 200, "onCurve", false);
+      ids = [
+        ctx.edit.addPoint(100, 100, "onCurve", false),
+        ctx.edit.addPoint(200, 200, "onCurve", false),
+      ];
     });
 
     it("should select segment when clicking on it", () => {
@@ -334,6 +339,14 @@ describe("Select tool", () => {
 
       expect(ctx.getSelectedAnchors()).toEqual([]);
       expect(select.getState().type).toBe("selected");
+    });
+
+    it("should select whole contour when double clicking on a segment", () => {
+      sim.doubleClick(150, 150);
+
+      const selectedPoints = ctx.getSelectedPoints();
+      expect(selectedPoints.length).toBe(2);
+      expect(selectedPoints).toEqual(ids);
     });
   });
 
@@ -392,7 +405,10 @@ describe("Select tool", () => {
       sim.onMouseUp(createToolMouseEvent(120, 120));
       expect(select.getState().type).toBe("selected");
 
-      ctx.mocks.hitTest.mocks.getSelectionBoundingRect.mockReturnValue({
+      expectDefined(
+        ctx.mocks.hitTest.mocks.getSelectionBoundingRect,
+        "hitTest.getSelectionBoundingRect mock",
+      ).mockReturnValue({
         left: 0,
         right: 100,
         top: 0,
@@ -415,26 +431,31 @@ describe("Select tool", () => {
       const executeCalls: number[] = [];
       let callOrder = 0;
 
-      ctx.mocks.preview.mocks.cancelPreview.mockImplementation(() => {
+      expectDefined(
+        ctx.mocks.preview.mocks.cancelPreview,
+        "preview.cancelPreview mock",
+      ).mockImplementation(() => {
         cancelCalls.push(callOrder++);
       });
-      ctx.mocks.commands.mocks.execute.mockImplementation((cmd: any) => {
-        executeCalls.push(callOrder++);
-        return cmd.execute?.({
-          fontEngine: ctx.fontEngine,
-          glyph: ctx.fontEngine.$glyph.value,
-        });
-      });
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
+        (cmd: { execute?: (ctx: unknown) => unknown }) => {
+          executeCalls.push(callOrder++);
+          return cmd.execute?.({
+            fontEngine: ctx.fontEngine,
+            glyph: ctx.fontEngine.$glyph.value,
+          });
+        },
+      );
 
       sim.onMouseUp(createToolMouseEvent(50, 50));
 
       expect(cancelCalls.length).toBeGreaterThan(0);
       expect(executeCalls.length).toBeGreaterThan(0);
-      expect(cancelCalls[0]).toBeLessThan(executeCalls[0]);
+      expect(expectAt(cancelCalls, 0)).toBeLessThan(expectAt(executeCalls, 0));
     });
 
     it("should begin preview when starting resize", () => {
-      ctx.mocks.preview.mocks.beginPreview.mockClear();
+      expectDefined(ctx.mocks.preview.mocks.beginPreview, "preview.beginPreview mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(110, 50));
 
@@ -458,7 +479,10 @@ describe("Select tool", () => {
     it("should cancel preview on resize dragCancel", () => {
       sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
-      ctx.mocks.preview.mocks.cancelPreview.mockClear();
+      expectDefined(
+        ctx.mocks.preview.mocks.cancelPreview,
+        "preview.cancelPreview mock",
+      ).mockClear();
 
       select.handleEvent({ type: "dragCancel" });
 

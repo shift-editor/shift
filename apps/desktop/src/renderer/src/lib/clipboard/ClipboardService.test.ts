@@ -73,7 +73,7 @@ describe("ClipboardService", () => {
       const result = await service.write(content, "A");
 
       expect(result).toBe(true);
-      expect(window.electronAPI.clipboardWriteText).toHaveBeenCalled();
+      expect(window.electronAPI!.clipboardWriteText).toHaveBeenCalled();
     });
   });
 
@@ -121,7 +121,7 @@ describe("ClipboardService", () => {
         },
       };
 
-      vi.mocked(window.electronAPI.clipboardReadText).mockReturnValue(
+      vi.mocked(window.electronAPI!.clipboardReadText).mockReturnValue(
         JSON.stringify(nativePayload),
       );
 
@@ -143,6 +143,8 @@ describe("ClipboardService", () => {
         name: "A",
         xAdvance: 500,
         contours: [],
+        anchors: [],
+        compositeContours: [],
         activeContourId: null,
       });
       vi.mocked(deps.getSelectedPointIds).mockReturnValue([]);

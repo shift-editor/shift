@@ -34,13 +34,13 @@ describe("SelectionManager", () => {
   describe("point selection", () => {
     it("should select a single point", () => {
       const pointId = asPointId("p1");
-      selection.selectPoints(new Set([pointId]));
+      selection.selectPoints([pointId]);
       expect(selection.selectedPointIds.peek().has(pointId)).toBe(true);
       expect(selection.selectedPointIds.peek().size).toBe(1);
     });
 
     it("should select multiple points", () => {
-      const pointIds = new Set([asPointId("p1"), asPointId("p2"), asPointId("p3")]);
+      const pointIds = [asPointId("p1"), asPointId("p2"), asPointId("p3")];
       selection.selectPoints(pointIds);
       expect(selection.selectedPointIds.peek().size).toBe(3);
       expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(true);
@@ -49,7 +49,7 @@ describe("SelectionManager", () => {
     });
 
     it("should add point to selection", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       selection.addPointToSelection(asPointId("p2"));
       expect(selection.selectedPointIds.peek().size).toBe(2);
       expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(true);
@@ -57,7 +57,7 @@ describe("SelectionManager", () => {
     });
 
     it("should remove point from selection", () => {
-      selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
+      selection.selectPoints([asPointId("p1"), asPointId("p2")]);
       selection.removePointFromSelection(asPointId("p1"));
       expect(selection.selectedPointIds.peek().size).toBe(1);
       expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(false);
@@ -65,27 +65,27 @@ describe("SelectionManager", () => {
     });
 
     it("should toggle point selection (add)", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       selection.togglePointSelection(asPointId("p2"));
       expect(selection.selectedPointIds.peek().size).toBe(2);
     });
 
     it("should toggle point selection (remove)", () => {
-      selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
+      selection.selectPoints([asPointId("p1"), asPointId("p2")]);
       selection.togglePointSelection(asPointId("p1"));
       expect(selection.selectedPointIds.peek().size).toBe(1);
       expect(selection.selectedPointIds.peek().has(asPointId("p1"))).toBe(false);
     });
 
     it("should check if point is selected", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       expect(selection.isPointSelected(asPointId("p1"))).toBe(true);
       expect(selection.isPointSelected(asPointId("p2"))).toBe(false);
     });
 
     it("should replace selection when selecting new point", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
-      selection.selectPoints(new Set([asPointId("p2")]));
+      selection.selectPoints([asPointId("p1")]);
+      selection.selectPoints([asPointId("p2")]);
       expect(selection.selectedPointIds.peek().size).toBe(1);
       expect(selection.selectedPointIds.peek().has(asPointId("p2"))).toBe(true);
     });
@@ -143,7 +143,7 @@ describe("SelectionManager", () => {
 
   describe("clear selection", () => {
     it("should clear point selection", () => {
-      selection.selectPoints(new Set([asPointId("p1"), asPointId("p2")]));
+      selection.selectPoints([asPointId("p1"), asPointId("p2")]);
       selection.clearSelection();
       expect(selection.selectedPointIds.peek().size).toBe(0);
     });
@@ -155,7 +155,7 @@ describe("SelectionManager", () => {
     });
 
     it("should clear both point and segment selection", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       selection.selectSegments(new Set([asSegmentId("p1:p2")]));
       selection.clearSelection();
       expect(selection.selectedPointIds.peek().size).toBe(0);
@@ -165,7 +165,7 @@ describe("SelectionManager", () => {
 
   describe("hasSelection", () => {
     it("should return true when points are selected", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       expect(selection.hasSelection()).toBe(true);
     });
 
@@ -175,7 +175,7 @@ describe("SelectionManager", () => {
     });
 
     it("should return false after clearing", () => {
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       selection.clearSelection();
       expect(selection.hasSelection()).toBe(false);
     });
@@ -215,7 +215,7 @@ describe("SelectionManager", () => {
 
     it("should update signal value when selecting points", () => {
       const signal = selection.selectedPointIds;
-      selection.selectPoints(new Set([asPointId("p1")]));
+      selection.selectPoints([asPointId("p1")]);
       expect(signal.value.has(asPointId("p1"))).toBe(true);
     });
   });

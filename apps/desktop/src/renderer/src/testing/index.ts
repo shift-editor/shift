@@ -59,14 +59,21 @@ export { createMockCommandContext, type MockToolContextOptions } from "./context
 // TOOL CONTEXT UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
 
+export { createMockToolContext, type MockToolContext } from "./services";
+
+export { createTestEditor, type TestEditor } from "./editor";
+
 export {
-  createMockToolContext,
-  createToolMouseEvent,
-  ToolEventSimulator,
   makeTestCoordinates,
   makeTestCoordinatesFromScene,
   makeTestCoordinatesFromGlyphLocal,
-  type MockToolContext,
+} from "./coordinates";
+
+export { expectDefined, expectAt } from "./asserts";
+
+export {
+  createToolMouseEvent,
+  ToolEventSimulator,
   type ToolMouseEvent,
   type ToolEventTarget,
-} from "./services";
+} from "./events";

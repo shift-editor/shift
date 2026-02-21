@@ -41,7 +41,7 @@ export class SvgImporter implements ClipboardImporter {
 
     const pathMatch = text.match(/d\s*=\s*["']([^"']+)["']/);
     if (pathMatch) {
-      return pathMatch[1];
+      return pathMatch.at(1) ?? null;
     }
 
     return null;
@@ -53,8 +53,10 @@ export class SvgImporter implements ClipboardImporter {
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(pathData)) !== null) {
-      const type = match[1];
-      const argsStr = match[2].trim();
+      const type = match.at(1);
+      if (!type) continue;
+
+      const argsStr = (match.at(2) ?? "").trim();
       const args = argsStr
         ? argsStr
             .replace(/,/g, " ")
@@ -79,6 +81,73 @@ export class SvgImporter implements ClipboardImporter {
     let lastControlX = 0;
     let lastControlY = 0;
 
+    const pairAt = (values: number[], idx: number): readonly [number, number] | null => {
+      const v0 = values[idx];
+      const v1 = values[idx + 1];
+      if (v0 === undefined || v1 === undefined) return null;
+      return [v0, v1];
+    };
+
+    const quadAt = (
+      values: number[],
+      idx: number,
+    ): readonly [number, number, number, number] | null => {
+      const v0 = values[idx];
+      const v1 = values[idx + 1];
+      const v2 = values[idx + 2];
+      const v3 = values[idx + 3];
+      if (v0 === undefined || v1 === undefined || v2 === undefined || v3 === undefined) return null;
+      return [v0, v1, v2, v3];
+    };
+
+    const sextetAt = (
+      values: number[],
+      idx: number,
+    ): readonly [number, number, number, number, number, number] | null => {
+      const v0 = values[idx];
+      const v1 = values[idx + 1];
+      const v2 = values[idx + 2];
+      const v3 = values[idx + 3];
+      const v4 = values[idx + 4];
+      const v5 = values[idx + 5];
+      if (
+        v0 === undefined ||
+        v1 === undefined ||
+        v2 === undefined ||
+        v3 === undefined ||
+        v4 === undefined ||
+        v5 === undefined
+      ) {
+        return null;
+      }
+      return [v0, v1, v2, v3, v4, v5];
+    };
+
+    const septetAt = (
+      values: number[],
+      idx: number,
+    ): readonly [number, number, number, number, number, number, number] | null => {
+      const v0 = values[idx];
+      const v1 = values[idx + 1];
+      const v2 = values[idx + 2];
+      const v3 = values[idx + 3];
+      const v4 = values[idx + 4];
+      const v5 = values[idx + 5];
+      const v6 = values[idx + 6];
+      if (
+        v0 === undefined ||
+        v1 === undefined ||
+        v2 === undefined ||
+        v3 === undefined ||
+        v4 === undefined ||
+        v5 === undefined ||
+        v6 === undefined
+      ) {
+        return null;
+      }
+      return [v0, v1, v2, v3, v4, v5, v6];
+    };
+
     const finishContour = (closed: boolean) => {
       if (currentContour.length > 0) {
         contours.push({ points: currentContour, closed });
@@ -102,18 +171,18 @@ export class SvgImporter implements ClipboardImporter {
         case "M": {
           finishContour(false);
           let idx = 0;
-          while (idx < args.length) {
-            const x = isRelative ? currentX + args[idx] : args[idx];
-            const y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
+          while (true) {
+            const pair = pairAt(args, idx);
+            if (!pair) break;
+
+            const [dx, dy] = pair;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
             if (idx === 0) {
               startX = x;
               startY = y;
             }
-            if (idx === 0 || currentContour.length === 0) {
-              addOnCurve(x, y);
-            } else {
-              addOnCurve(x, y);
-            }
+            addOnCurve(x, y);
             currentX = x;
             currentY = y;
             idx += 2;
@@ -123,9 +192,13 @@ export class SvgImporter implements ClipboardImporter {
 
         case "L": {
           let idx = 0;
-          while (idx < args.length) {
-            const x = isRelative ? currentX + args[idx] : args[idx];
-            const y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
+          while (true) {
+            const pair = pairAt(args, idx);
+            if (!pair) break;
+
+            const [dx, dy] = pair;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
             addOnCurve(x, y);
             currentX = x;
             currentY = y;
@@ -154,13 +227,17 @@ export class SvgImporter implements ClipboardImporter {
 
         case "C": {
           let idx = 0;
-          while (idx + 5 <= args.length) {
-            const c1x = isRelative ? currentX + args[idx] : args[idx];
-            const c1y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
-            const c2x = isRelative ? currentX + args[idx + 2] : args[idx + 2];
-            const c2y = isRelative ? currentY + args[idx + 3] : args[idx + 3];
-            const x = isRelative ? currentX + args[idx + 4] : args[idx + 4];
-            const y = isRelative ? currentY + args[idx + 5] : args[idx + 5];
+          while (true) {
+            const segment = sextetAt(args, idx);
+            if (!segment) break;
+
+            const [dc1x, dc1y, dc2x, dc2y, dx, dy] = segment;
+            const c1x = isRelative ? currentX + dc1x : dc1x;
+            const c1y = isRelative ? currentY + dc1y : dc1y;
+            const c2x = isRelative ? currentX + dc2x : dc2x;
+            const c2y = isRelative ? currentY + dc2y : dc2y;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
 
             addOffCurve(c1x, c1y);
             addOffCurve(c2x, c2y);
@@ -177,13 +254,17 @@ export class SvgImporter implements ClipboardImporter {
 
         case "S": {
           let idx = 0;
-          while (idx + 3 <= args.length) {
+          while (true) {
+            const segment = quadAt(args, idx);
+            if (!segment) break;
+
             const c1x = 2 * currentX - lastControlX;
             const c1y = 2 * currentY - lastControlY;
-            const c2x = isRelative ? currentX + args[idx] : args[idx];
-            const c2y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
-            const x = isRelative ? currentX + args[idx + 2] : args[idx + 2];
-            const y = isRelative ? currentY + args[idx + 3] : args[idx + 3];
+            const [dc2x, dc2y, dx, dy] = segment;
+            const c2x = isRelative ? currentX + dc2x : dc2x;
+            const c2y = isRelative ? currentY + dc2y : dc2y;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
 
             addOffCurve(c1x, c1y);
             addOffCurve(c2x, c2y);
@@ -200,11 +281,15 @@ export class SvgImporter implements ClipboardImporter {
 
         case "Q": {
           let idx = 0;
-          while (idx + 3 <= args.length) {
-            const cx = isRelative ? currentX + args[idx] : args[idx];
-            const cy = isRelative ? currentY + args[idx + 1] : args[idx + 1];
-            const x = isRelative ? currentX + args[idx + 2] : args[idx + 2];
-            const y = isRelative ? currentY + args[idx + 3] : args[idx + 3];
+          while (true) {
+            const segment = quadAt(args, idx);
+            if (!segment) break;
+
+            const [dcx, dcy, dx, dy] = segment;
+            const cx = isRelative ? currentX + dcx : dcx;
+            const cy = isRelative ? currentY + dcy : dcy;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
 
             addOffCurve(cx, cy);
             addOnCurve(x, y, true);
@@ -220,11 +305,15 @@ export class SvgImporter implements ClipboardImporter {
 
         case "T": {
           let idx = 0;
-          while (idx + 1 <= args.length) {
+          while (true) {
+            const pair = pairAt(args, idx);
+            if (!pair) break;
+
             const cx = 2 * currentX - lastControlX;
             const cy = 2 * currentY - lastControlY;
-            const x = isRelative ? currentX + args[idx] : args[idx];
-            const y = isRelative ? currentY + args[idx + 1] : args[idx + 1];
+            const [dx, dy] = pair;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
 
             addOffCurve(cx, cy);
             addOnCurve(x, y, true);
@@ -247,9 +336,13 @@ export class SvgImporter implements ClipboardImporter {
 
         case "A": {
           let idx = 0;
-          while (idx + 6 <= args.length) {
-            const x = isRelative ? currentX + args[idx + 5] : args[idx + 5];
-            const y = isRelative ? currentY + args[idx + 6] : args[idx + 6];
+          while (true) {
+            const segment = septetAt(args, idx);
+            if (!segment) break;
+
+            const [, , , , , dx, dy] = segment;
+            const x = isRelative ? currentX + dx : dx;
+            const y = isRelative ? currentY + dy : dy;
             addOnCurve(x, y);
             currentX = x;
             currentY = y;

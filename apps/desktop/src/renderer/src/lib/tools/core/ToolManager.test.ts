@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { FC, SVGProps } from "react";
 import { ToolManager } from "./ToolManager";
-import { createMockToolContext, type MockToolContext } from "@/testing";
+import { createTestEditor, expectDefined, type TestEditor } from "@/testing";
 import { Hand } from "../hand/Hand";
 import { Select } from "../select/Select";
 import { Pen } from "../pen/Pen";
@@ -11,8 +11,23 @@ import type { Modifiers } from "./GestureDetector";
 
 const MockIcon = (() => null) as FC<SVGProps<SVGSVGElement>>;
 
-function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {}): KeyboardEvent {
-  return {
+type KeyboardEventOptions = Partial<
+  Pick<KeyboardEvent, "code" | "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">
+>;
+
+function createKeyboardEvent(type: string, options: KeyboardEventOptions = {}): KeyboardEvent {
+  const event: Pick<
+    KeyboardEvent,
+    | "type"
+    | "code"
+    | "key"
+    | "metaKey"
+    | "ctrlKey"
+    | "shiftKey"
+    | "altKey"
+    | "preventDefault"
+    | "stopPropagation"
+  > = {
     type,
     code: options.code ?? "",
     key: options.key ?? "",
@@ -22,25 +37,22 @@ function createKeyboardEvent(type: string, options: Partial<KeyboardEvent> = {})
     altKey: options.altKey ?? false,
     preventDefault: () => {},
     stopPropagation: () => {},
-  } as KeyboardEvent;
+  };
+
+  return event as KeyboardEvent;
 }
 
 describe("ToolManager", () => {
   let toolManager: ToolManager;
-  let editor: MockToolContext & {
-    requestTemporaryTool(
-      toolId: ToolName,
-      options?: { onActivate?: () => void; onReturn?: () => void },
-    ): void;
-    returnFromTemporaryTool(): void;
-  };
+  let editor: TestEditor;
 
   beforeEach(() => {
-    const ctx = createMockToolContext();
-    editor = ctx as typeof editor;
-    toolManager = new ToolManager(editor as any);
-    editor.requestTemporaryTool = (toolId, options) =>
-      toolManager.requestTemporary(toolId, options);
+    editor = createTestEditor();
+    toolManager = new ToolManager(editor);
+    editor.requestTemporaryTool = (
+      toolId: ToolName,
+      options?: { onActivate?: () => void; onReturn?: () => void },
+    ) => toolManager.requestTemporary(toolId, options);
     editor.returnFromTemporaryTool = () => toolManager.returnFromTemporary();
     toolManager.register({
       id: "hand",
@@ -71,7 +83,10 @@ describe("ToolManager", () => {
   describe("keyboard delegation", () => {
     it("does not switch tools on space keydown by itself", () => {
       toolManager.activate("pen");
-      editor.mocks.render.setPreviewMode.mockClear();
+      expectDefined(
+        editor.mocks.render.mocks.setPreviewMode,
+        "render.setPreviewMode mock",
+      ).mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
 
@@ -90,7 +105,7 @@ describe("ToolManager", () => {
   describe("meta key behavior (zoom support)", () => {
     it("should NOT switch to select tool when meta key is pressed", () => {
       toolManager.activate("pen");
-      editor.mocks.cursor.set.mockClear();
+      expectDefined(editor.mocks.cursor.mocks.set, "cursor.set mock").mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
 

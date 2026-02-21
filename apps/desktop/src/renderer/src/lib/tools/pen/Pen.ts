@@ -33,7 +33,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
     new HandleBehavior(),
   ];
 
-  getCursor(state: PenState): CursorType {
+  override getCursor(state: PenState): CursorType {
     if (state.type !== "ready") return { type: "pen" };
 
     const pos = state.mousePos;
@@ -57,17 +57,17 @@ export class Pen extends BaseTool<PenState, PenAction> {
     return { type: "idle" };
   }
 
-  activate(): void {
+  override activate(): void {
     const pos = this.editor.sceneToGlyphLocal(this.editor.getMousePosition());
     this.state = { type: "ready", mousePos: pos };
     this.editor.clearActiveContour();
   }
 
-  deactivate(): void {
+  override deactivate(): void {
     this.state = this.initialState();
   }
 
-  protected preTransition(state: PenState, event: ToolEvent) {
+  protected override preTransition(state: PenState, event: ToolEvent) {
     if (state.type === "ready" && event.type === "pointerMove") {
       return {
         state: { type: "ready" as const, mousePos: event.coords.glyphLocal },
@@ -76,7 +76,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
     return null;
   }
 
-  protected executeAction(action: PenAction, prev: PenState): void {
+  protected override executeAction(action: PenAction, prev: PenState): void {
     switch (action.type) {
       case "close":
         this.batch("Close Contour", () => {
@@ -155,7 +155,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
     return { x: lastOnCurve.x, y: lastOnCurve.y };
   }
 
-  renderBelowHandles(draw: DrawAPI): void {
+  override renderBelowHandles(draw: DrawAPI): void {
     if (this.editor.getFocusZone() !== "canvas") return;
 
     if (this.state.type === "ready") {
@@ -183,7 +183,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
     }
   }
 
-  render(draw: DrawAPI): void {
+  override render(draw: DrawAPI): void {
     if (this.editor.getFocusZone() !== "canvas") return;
 
     if (this.state.type === "ready") {

@@ -20,7 +20,7 @@ export class SetRightSidebearingCommand extends BaseCommand<void> {
     ctx.fontEngine.editing.setXAdvance(this.#beforeXAdvance);
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     ctx.fontEngine.editing.setXAdvance(this.#afterXAdvance);
   }
 }
@@ -49,7 +49,7 @@ export class SetLeftSidebearingCommand extends BaseCommand<void> {
     ctx.fontEngine.editing.translateLayer(-this.#deltaX, 0);
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     ctx.fontEngine.editing.translateLayer(this.#deltaX, 0);
     ctx.fontEngine.editing.setXAdvance(this.#afterXAdvance);
   }

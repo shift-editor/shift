@@ -9,6 +9,7 @@ import { vi } from "vitest";
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { FontEngine, MockFontEngine } from "@/engine";
+import type { CommandEditingAPI } from "@/lib/commands/core/Command";
 
 /**
  * Create a mock FontEngine for testing.
@@ -45,7 +46,7 @@ export function createMockFontEngine(): FontEngine {
  * });
  * ```
  */
-export function createMockEditing() {
+export function createMockEditing(): CommandEditingAPI {
   let pointIdCounter = 0;
   let contourIdCounter = 0;
 
@@ -57,11 +58,21 @@ export function createMockEditing() {
     movePointTo: vi.fn(),
     setXAdvance: vi.fn(),
     translateLayer: vi.fn(),
-    setPointPositions: vi.fn(),
     removePoints: vi.fn(),
     addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
+    removeContour: vi.fn(),
     closeContour: vi.fn(),
+    openContour: vi.fn(),
     getActiveContourId: vi.fn().mockReturnValue(asContourId("contour-0")),
+    setActiveContour: vi.fn(),
+    reverseContour: vi.fn(),
+    restoreSnapshot: vi.fn(),
+    pasteContours: vi.fn().mockReturnValue({
+      success: true,
+      createdPointIds: [],
+      createdContourIds: [],
+      error: null,
+    }),
   };
 }
 

@@ -88,6 +88,9 @@ function applyRule(
       if (rule.affectedPointIds.length >= 2) {
         const anchorId = rule.affectedPointIds[0];
         const oppositeHandleId = rule.affectedPointIds[1];
+        if (!anchorId || !oppositeHandleId) {
+          break;
+        }
 
         // Get the new position of the moved handle
         const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;
@@ -112,6 +115,9 @@ function applyRule(
       if (rule.affectedPointIds.length >= 2) {
         const anchorId = rule.affectedPointIds[0];
         const oppositeHandleId = rule.affectedPointIds[1];
+        if (!anchorId || !oppositeHandleId) {
+          break;
+        }
 
         // Get the new position of the moved handle
         const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;

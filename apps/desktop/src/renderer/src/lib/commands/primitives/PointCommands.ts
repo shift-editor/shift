@@ -41,7 +41,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
     }
   }
 
-  redo(ctx: CommandContext): PointId {
+  override redo(ctx: CommandContext): PointId {
     return this.execute(ctx);
   }
 }
@@ -75,7 +75,7 @@ export class MovePointsCommand extends BaseCommand<void> {
     ctx.fontEngine.editing.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     this.execute(ctx);
   }
 }
@@ -137,7 +137,7 @@ export class RemovePointsCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     ctx.fontEngine.editing.removePoints(this.#pointIds);
   }
 }

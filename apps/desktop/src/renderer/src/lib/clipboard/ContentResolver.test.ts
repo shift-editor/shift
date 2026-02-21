@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { ContentResolver } from "./ContentResolver";
-import { asPointId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 import { asSegmentId } from "@/types/indicator";
 import type { GlyphSnapshot } from "@shift/types";
+import { expectAt, expectDefined } from "@/testing";
 
 function createSnapshot(config: {
   contours: Array<{
@@ -21,18 +22,20 @@ function createSnapshot(config: {
     unicode: 65,
     name: "A",
     xAdvance: 500,
-    activeContourId: config.contours[0]?.id ?? null,
+    activeContourId: config.contours[0] ? asContourId(config.contours[0].id) : null,
     contours: config.contours.map((c) => ({
-      id: c.id,
+      id: asContourId(c.id),
       closed: c.closed ?? false,
       points: c.points.map((p) => ({
-        id: p.id,
+        id: asPointId(p.id),
         x: p.x,
         y: p.y,
         pointType: p.pointType,
         smooth: p.smooth ?? false,
       })),
     })),
+    anchors: [],
+    compositeContours: [],
   };
 }
 
@@ -71,11 +74,12 @@ describe("ContentResolver", () => {
     });
 
     const result = resolver.resolve(snapshot, [asPointId("p1")], []);
+    const resolved = expectDefined(result, "resolved content");
+    const contour = expectAt(resolved.contours, 0);
 
-    expect(result).not.toBeNull();
-    expect(result!.contours).toHaveLength(1);
-    expect(result!.contours[0].points).toHaveLength(1);
-    expect(result!.contours[0].points[0]).toEqual({
+    expect(resolved.contours).toHaveLength(1);
+    expect(contour.points).toHaveLength(1);
+    expect(expectAt(contour.points, 0)).toEqual({
       x: 100,
       y: 200,
       pointType: "onCurve",
@@ -103,11 +107,12 @@ describe("ContentResolver", () => {
       [asPointId("p1"), asPointId("p2"), asPointId("p3")],
       [],
     );
+    const resolved = expectDefined(result, "resolved content");
+    const contour = expectAt(resolved.contours, 0);
 
-    expect(result).not.toBeNull();
-    expect(result!.contours).toHaveLength(1);
-    expect(result!.contours[0].points).toHaveLength(3);
-    expect(result!.contours[0].closed).toBe(true);
+    expect(resolved.contours).toHaveLength(1);
+    expect(contour.points).toHaveLength(3);
+    expect(contour.closed).toBe(true);
   });
 
   it("resolves partial contour as open", () => {
@@ -126,9 +131,9 @@ describe("ContentResolver", () => {
     });
 
     const result = resolver.resolve(snapshot, [asPointId("p1"), asPointId("p2")], []);
+    const resolved = expectDefined(result, "resolved content");
 
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].closed).toBe(false);
+    expect(expectAt(resolved.contours, 0).closed).toBe(false);
   });
 
   it("expands segments to point IDs", () => {
@@ -146,9 +151,9 @@ describe("ContentResolver", () => {
     });
 
     const result = resolver.resolve(snapshot, [], [asSegmentId("p1:p2")]);
+    const resolved = expectDefined(result, "resolved content");
 
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].points.length).toBeGreaterThanOrEqual(2);
+    expect(expectAt(resolved.contours, 0).points.length).toBeGreaterThanOrEqual(2);
   });
 
   it("includes control points for bezier curves", () => {
@@ -166,9 +171,9 @@ describe("ContentResolver", () => {
     });
 
     const result = resolver.resolve(snapshot, [asPointId("p1")], []);
+    const resolved = expectDefined(result, "resolved content");
+    const points = expectAt(resolved.contours, 0).points;
 
-    expect(result).not.toBeNull();
-    const points = result!.contours[0].points;
     const hasOffCurve = points.some((p) => p.pointType === "offCurve");
     expect(hasOffCurve).toBe(true);
   });
@@ -188,8 +193,8 @@ describe("ContentResolver", () => {
     });
 
     const result = resolver.resolve(snapshot, [asPointId("p1"), asPointId("p2")], []);
+    const resolved = expectDefined(result, "resolved content");
 
-    expect(result).not.toBeNull();
-    expect(result!.contours).toHaveLength(2);
+    expect(resolved.contours).toHaveLength(2);
   });
 });

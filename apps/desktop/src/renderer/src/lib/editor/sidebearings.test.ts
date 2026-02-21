@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { asContourId } from "@shift/types";
 import type { Glyph, Point, RenderContour } from "@shift/types";
 import { deriveGlyphSidebearings, deriveGlyphXBounds } from "./sidebearings";
 
@@ -44,7 +45,7 @@ describe("deriveGlyphXBounds", () => {
       xAdvance: 600,
       contours: [
         {
-          id: "c1" as any,
+          id: asContourId("c1"),
           closed: true,
           points: [
             makePoint("p1", 10, 0),
@@ -65,7 +66,7 @@ describe("deriveGlyphXBounds", () => {
       xAdvance: 600,
       contours: [
         {
-          id: "c1" as any,
+          id: asContourId("c1"),
           closed: false,
           points: [
             makePoint("p1", 0, 0, "onCurve"),
@@ -114,7 +115,7 @@ describe("deriveGlyphSidebearings", () => {
       xAdvance: 600,
       contours: [
         {
-          id: "c1" as any,
+          id: asContourId("c1"),
           closed: true,
           points: [
             makePoint("p1", 20, 0),

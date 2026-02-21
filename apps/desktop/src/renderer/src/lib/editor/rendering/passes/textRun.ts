@@ -54,10 +54,8 @@ export function renderTextRun(
   const { layout, editingIndex, hoveredIndex, cursorX } = textRun;
 
   // Draw filled glyph silhouettes
-  for (let i = 0; i < layout.slots.length; i++) {
+  for (const [i, slot] of layout.slots.entries()) {
     if (i === editingIndex) continue;
-
-    const slot = layout.slots[i];
 
     const shouldUseLiveGlyph = isLiveGlyphSlot(slot, liveGlyph);
 
@@ -96,12 +94,12 @@ export function renderTextRun(
       ctx.strokeStyle = HOVER_OUTLINE;
       ctx.lineWidth = lw;
 
-      if (shouldUseLiveGlyph) {
+      if (shouldUseLiveGlyph && liveGlyph) {
         ctx.beginPath();
-        for (const contour of liveGlyph!.contours) {
+        for (const contour of liveGlyph.contours) {
           buildContourPath(ctx, contour);
         }
-        for (const contour of liveGlyph!.compositeContours) {
+        for (const contour of liveGlyph.compositeContours) {
           buildContourPath(ctx, contour);
         }
         ctx.stroke();
@@ -158,9 +156,8 @@ function renderCompositeInspection(
     ctx.fillPath(path);
   }
 
-  for (let i = 0; i < inspection.components.length; i++) {
-    const component = inspection.components[i];
-    const palette = i % 2;
+  for (const [i, component] of inspection.components.entries()) {
+    const palette = i % 2 === 0 ? 0 : 1;
     ctx.fillStyle =
       inspection.hoveredComponentIndex === i
         ? COMPONENT_OVERLAY_HOVER_COLORS[palette]

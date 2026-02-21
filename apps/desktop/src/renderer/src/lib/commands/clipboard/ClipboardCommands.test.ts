@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "../core/CommandHistory";
 import { CutCommand, PasteCommand } from "./ClipboardCommands";
-import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
+import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { ClipboardContent } from "../../clipboard/types";
 import type { PointId } from "@shift/types";
 
@@ -53,7 +53,7 @@ describe("CutCommand", () => {
 
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
     const remaining = getAllPoints(fontEngine.$glyph.value);
-    expect(remaining[0].x).toBe(200);
+    expect(expectAt(remaining, 0).x).toBe(200);
   });
 
   it("should restore points on undo", () => {
@@ -71,8 +71,8 @@ describe("CutCommand", () => {
 
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
     const restored = getAllPoints(fontEngine.$glyph.value);
-    expect(restored[0].x).toBe(100);
-    expect(restored[0].y).toBe(100);
+    expect(expectAt(restored, 0).x).toBe(100);
+    expect(expectAt(restored, 0).y).toBe(100);
   });
 
   it("should remove same points on redo", () => {
@@ -119,7 +119,7 @@ describe("CutCommand", () => {
 
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
     const remaining = getAllPoints(fontEngine.$glyph.value);
-    expect(remaining[0].x).toBe(300);
+    expect(expectAt(remaining, 0).x).toBe(300);
   });
 
   it("should have the correct name", () => {
@@ -159,8 +159,8 @@ describe("PasteCommand", () => {
     history.execute(cmd);
 
     const points = getAllPoints(fontEngine.$glyph.value);
-    expect(points[0].x).toBe(120);
-    expect(points[0].y).toBe(80);
+    expect(expectAt(points, 0).x).toBe(120);
+    expect(expectAt(points, 0).y).toBe(80);
   });
 
   it("should remove points on undo", () => {
@@ -244,8 +244,8 @@ describe("Cut + Paste integration", () => {
     expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
     const points = getAllPoints(fontEngine.$glyph.value);
-    expect(points[0].x).toBe(120);
-    expect(points[0].y).toBe(120);
+    expect(expectAt(points, 0).x).toBe(120);
+    expect(expectAt(points, 0).y).toBe(120);
   });
 
   it("should undo cut and paste separately", () => {

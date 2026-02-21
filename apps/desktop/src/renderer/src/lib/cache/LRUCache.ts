@@ -1,7 +1,7 @@
 export class LRUCache<K, V> {
   #capacity: number;
   #cache: Map<K, V>;
-  #onEvict?: (key: K, value: V) => void;
+  #onEvict: ((key: K, value: V) => void) | undefined;
 
   constructor(options: { max: number; onEvict?: (key: K, value: V) => void }) {
     this.#capacity = options.max;

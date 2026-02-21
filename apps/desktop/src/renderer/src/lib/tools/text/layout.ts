@@ -197,8 +197,7 @@ export function hitTestTextSlot(
   const pathHitTester =
     options.pathHitTester === undefined ? getDefaultTextPathHitTester() : options.pathHitTester;
 
-  for (let i = 0; i < slots.length; i++) {
-    const slot = slots[i];
+  for (const [i, slot] of slots.entries()) {
     const withinAdvance = isWithinSlotAdvance(slot, i, slots.length, pos.x, outlineRadius);
 
     if (requireShape && slot.bounds) {
@@ -249,8 +248,7 @@ export function hitTestTextCaret(
   if (slots.length === 0) return null;
   if (!isWithinVerticalBounds(pos, metrics)) return null;
 
-  for (let i = 0; i < slots.length; i++) {
-    const slot = slots[i];
+  for (const [i, slot] of slots.entries()) {
     const midX = slot.x + slot.advance / 2;
     if (pos.x < midX) return i;
   }

@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": ["src/**/*.test.ts", "src/renderer/src/testing/**/*.ts"],
+      "rules": {
+        "typescript/no-explicit-any": "error"
+      }
+    }
+  ]
+}

@@ -51,7 +51,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
     }
   }
 
-  redo(ctx: CommandContext): PointId {
+  override redo(ctx: CommandContext): PointId {
     return this.execute(ctx);
   }
 }
@@ -127,7 +127,7 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
     }
   }
 
-  redo(ctx: CommandContext): PointId {
+  override redo(ctx: CommandContext): PointId {
     return this.execute(ctx);
   }
 
@@ -442,7 +442,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     }
   }
 
-  redo(ctx: CommandContext): PointId {
+  override redo(ctx: CommandContext): PointId {
     this.#insertedPointIds = [];
     this.#originalPositions.clear();
     this.#splitPointId = null;
@@ -508,7 +508,7 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     this.#control1Id = null;
     this.#control2Id = null;
     this.execute(ctx);

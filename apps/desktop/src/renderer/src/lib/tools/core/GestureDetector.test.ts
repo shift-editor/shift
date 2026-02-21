@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { GestureDetector } from "./GestureDetector";
-import { makeTestCoordinates } from "@/testing";
+import { expectAt, makeTestCoordinates } from "@/testing";
 
 function c(x: number, y: number) {
   return makeTestCoordinates({ x, y });
@@ -19,20 +19,20 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(100, 100), { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "click",
         point: { x: 100, y: 100 },
         shiftKey: false,
         altKey: false,
       });
-      expect((events[0] as { coords: unknown }).coords).toEqual(c(100, 100));
+      expect((expectAt(events, 0) as { coords: unknown }).coords).toEqual(c(100, 100));
     });
 
     it("preserves modifier keys in click event", () => {
       detector.pointerDown(c(100, 100), { x: 100, y: 100 }, { shiftKey: true, altKey: true });
       const events = detector.pointerUp(c(100, 100), { x: 100, y: 100 });
 
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "click",
         shiftKey: true,
         altKey: true,
@@ -45,7 +45,7 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(101, 101), { x: 101, y: 101 });
 
       expect(events).toHaveLength(1);
-      expect(events[0].type).toBe("click");
+      expect(expectAt(events, 0).type).toBe("click");
     });
   });
 
@@ -58,7 +58,7 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(100, 100), { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "doubleClick",
         point: { x: 100, y: 100 },
       });
@@ -72,7 +72,7 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(110, 110), { x: 110, y: 110 });
 
       expect(events).toHaveLength(1);
-      expect(events[0].type).toBe("click");
+      expect(expectAt(events, 0).type).toBe("click");
     });
 
     it("emits click instead of doubleClick if too slow", async () => {
@@ -87,7 +87,7 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(100, 100), { x: 100, y: 100 });
 
       expect(events).toHaveLength(1);
-      expect(events[0].type).toBe("click");
+      expect(expectAt(events, 0).type).toBe("click");
 
       vi.useRealTimers();
     });
@@ -103,7 +103,7 @@ describe("GestureDetector", () => {
       );
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "dragStart",
         point: { x: 100, y: 100 },
         screenPoint: { x: 100, y: 100 },
@@ -123,7 +123,7 @@ describe("GestureDetector", () => {
       );
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "drag",
         point: { x: 120, y: 110 },
         screenPoint: { x: 120, y: 110 },
@@ -142,7 +142,7 @@ describe("GestureDetector", () => {
       const events = detector.pointerUp(c(120, 110), { x: 120, y: 110 });
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "dragEnd",
         point: { x: 120, y: 110 },
         screenPoint: { x: 120, y: 110 },
@@ -179,7 +179,7 @@ describe("GestureDetector", () => {
         { shiftKey: false, altKey: false },
       );
       expect(events).toHaveLength(1);
-      expect(events[0].type).toBe("pointerMove");
+      expect(expectAt(events, 0).type).toBe("pointerMove");
     });
 
     it("resets double-click tracking", () => {
@@ -191,7 +191,7 @@ describe("GestureDetector", () => {
       detector.pointerDown(c(100, 100), { x: 100, y: 100 }, { shiftKey: false, altKey: false });
       const events = detector.pointerUp(c(100, 100), { x: 100, y: 100 });
 
-      expect(events[0].type).toBe("click");
+      expect(expectAt(events, 0).type).toBe("click");
     });
   });
 
@@ -203,11 +203,11 @@ describe("GestureDetector", () => {
         { shiftKey: false, altKey: false },
       );
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
+      expect(expectAt(events, 0)).toMatchObject({
         type: "pointerMove",
         point: { x: 100, y: 100 },
       });
-      expect((events[0] as { coords: unknown }).coords).toEqual(c(100, 100));
+      expect((expectAt(events, 0) as { coords: unknown }).coords).toEqual(c(100, 100));
     });
 
     it("returns empty array for pointerUp without pointerDown", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asPointId, type FontMetrics, type PointId } from "@shift/types";
+import { asContourId, asPointId, type FontMetrics } from "@shift/types";
 import { SnapManager } from "./SnapManager";
 
 describe("SnapManager", () => {
@@ -18,18 +18,22 @@ describe("SnapManager", () => {
   function createManager() {
     return new SnapManager({
       getGlyph: () => ({
+        unicode: 65,
         name: "A",
         xAdvance: 600,
         contours: [
           {
-            id: "c1",
+            id: asContourId("c1"),
             closed: false,
             points: [
-              { id: "p1" as PointId, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-              { id: "p2" as PointId, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+              { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+              { id: asPointId("p2"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
             ],
           },
         ],
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("c1"),
       }),
       getMetrics: () => metrics,
       getSnapPreferences: () => ({

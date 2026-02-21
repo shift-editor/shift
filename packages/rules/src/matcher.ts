@@ -71,31 +71,49 @@ function computeAffectedPoints(
   switch (ruleId) {
     case "moveRightHandle":
       if (pointIndex + 1 < points.length) {
-        affected.push(points[pointIndex + 1].id);
+        const rightHandle = points[pointIndex + 1];
+        if (rightHandle) {
+          affected.push(rightHandle.id);
+        }
       }
       break;
 
     case "moveLeftHandle":
       if (pointIndex > 0) {
-        affected.push(points[pointIndex - 1].id);
+        const leftHandle = points[pointIndex - 1];
+        if (leftHandle) {
+          affected.push(leftHandle.id);
+        }
       }
       break;
 
     case "moveBothHandles":
       if (pointIndex > 0) {
-        affected.push(points[pointIndex - 1].id);
+        const leftHandle = points[pointIndex - 1];
+        if (leftHandle) {
+          affected.push(leftHandle.id);
+        }
       }
       if (pointIndex + 1 < points.length) {
-        affected.push(points[pointIndex + 1].id);
+        const rightHandle = points[pointIndex + 1];
+        if (rightHandle) {
+          affected.push(rightHandle.id);
+        }
       }
       break;
 
     case "maintainTangencyRight":
       // Affected: anchor (index-1) and opposite handle (index-2)
       if (pointIndex > 0) {
-        affected.push(points[pointIndex - 1].id); // anchor
+        const anchor = points[pointIndex - 1];
+        if (anchor) {
+          affected.push(anchor.id); // anchor
+        }
         if (pointIndex > 1) {
-          affected.push(points[pointIndex - 2].id); // opposite handle
+          const oppositeHandle = points[pointIndex - 2];
+          if (oppositeHandle) {
+            affected.push(oppositeHandle.id); // opposite handle
+          }
         }
       }
       break;
@@ -103,9 +121,15 @@ function computeAffectedPoints(
     case "maintainTangencyLeft":
       // Affected: anchor (index+1) and opposite handle (index+2)
       if (pointIndex + 1 < points.length) {
-        affected.push(points[pointIndex + 1].id); // anchor
+        const anchor = points[pointIndex + 1];
+        if (anchor) {
+          affected.push(anchor.id); // anchor
+        }
         if (pointIndex + 2 < points.length) {
-          affected.push(points[pointIndex + 2].id); // opposite handle
+          const oppositeHandle = points[pointIndex + 2];
+          if (oppositeHandle) {
+            affected.push(oppositeHandle.id); // opposite handle
+          }
         }
       }
 

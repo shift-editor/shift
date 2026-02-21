@@ -24,12 +24,16 @@ export const Polygon = {
   signedArea(points: readonly Point2D[]): number {
     if (points.length < 3) return 0;
 
+    const first = points[0];
+    if (!first) return 0;
+
     let sum = 0;
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-      sum += (p2.x - p1.x) * (p2.y + p1.y);
+    let previous = first;
+    for (const current of points.slice(1)) {
+      sum += (current.x - previous.x) * (current.y + previous.y);
+      previous = current;
     }
+    sum += (first.x - previous.x) * (first.y + previous.y);
 
     return sum / 2;
   },
@@ -66,13 +70,15 @@ export const Polygon = {
   boundingRect(points: readonly Point2D[]): Rect2D | null {
     if (points.length === 0) return null;
 
-    let minX = points[0].x;
-    let minY = points[0].y;
-    let maxX = points[0].x;
-    let maxY = points[0].y;
+    const first = points[0];
+    if (!first) return null;
 
-    for (let i = 1; i < points.length; i++) {
-      const p = points[i];
+    let minX = first.x;
+    let minY = first.y;
+    let maxX = first.x;
+    let maxY = first.y;
+
+    for (const p of points.slice(1)) {
       if (p.x < minX) minX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.x > maxX) maxX = p.x;

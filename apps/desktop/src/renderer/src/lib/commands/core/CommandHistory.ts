@@ -36,7 +36,7 @@ export class CommandHistory {
   #fontEngine: FontEngine;
   #getSnapshot: () => GlyphSnapshot | null;
   #batch: BatchState | null = null;
-  #onDirty?: () => void;
+  #onDirty: (() => void) | undefined;
 
   // Reactive signals for UI binding
   readonly undoCount: WritableSignal<number>;
@@ -107,7 +107,9 @@ export class CommandHistory {
     }
 
     if (commands.length === 1) {
-      this.#addToUndoStack(commands[0]);
+      const firstCommand = commands[0];
+      if (!firstCommand) return;
+      this.#addToUndoStack(firstCommand);
     } else {
       this.#addToUndoStack(new CompositeCommand(name, commands));
     }

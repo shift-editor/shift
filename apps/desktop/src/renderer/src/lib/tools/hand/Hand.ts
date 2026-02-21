@@ -19,7 +19,7 @@ export class Hand extends BaseTool<HandState> {
 
   readonly behaviors: HandBehavior[] = [HandReadyBehavior, HandDraggingBehavior];
 
-  getCursor(state: HandState): CursorType {
+  override getCursor(state: HandState): CursorType {
     if (state.type === "dragging") return { type: "grabbing" };
     return { type: "grab" };
   }
@@ -28,11 +28,11 @@ export class Hand extends BaseTool<HandState> {
     return { type: "idle" };
   }
 
-  activate(): void {
+  override activate(): void {
     this.state = { type: "ready" };
   }
 
-  deactivate(): void {
+  override deactivate(): void {
     this.state = { type: "idle" };
   }
 }

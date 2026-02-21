@@ -30,7 +30,7 @@ export class CutCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     ctx.fontEngine.editing.removePoints(this.#pointIds);
   }
 }
@@ -77,7 +77,7 @@ export class PasteCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     if (this.#afterSnapshot) {
       ctx.fontEngine.editing.restoreSnapshot(this.#afterSnapshot);
     } else {

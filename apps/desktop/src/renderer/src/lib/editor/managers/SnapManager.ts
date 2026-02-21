@@ -63,10 +63,15 @@ export class SnapManager {
       createMetricsStep(),
       createAngleStep(),
     ];
-    const sources = this.getSnappableObjects({
+    const query: SnappableQuery = {
       include: ["points", "metrics"],
-      excludedPointIds: config.excludedPointIds,
-    });
+    };
+
+    if (config.excludedPointIds) {
+      query.excludedPointIds = config.excludedPointIds;
+    }
+
+    const sources = this.getSnappableObjects(query);
 
     const glyph = this.#deps.getGlyph();
     const anchorPosition = this.getAnchorPosition(glyph, config.anchorPointId, config.dragStart);
@@ -184,6 +189,7 @@ export class SnapManager {
       if (idx === -1) continue;
 
       const point = contour.points[idx];
+      if (!point) continue;
       if (Validate.isOnCurve(point)) {
         return fallback;
       }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { IRenderer } from "@/types/graphics";
 import type { FontMetrics } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
 import { resolveDrawStyle } from "@/lib/styles/style";
 import { renderTextRun } from "./textRun";
 import type { RenderContext } from "./types";
@@ -121,12 +122,12 @@ describe("textRun pass", () => {
       unicode: 65,
       contours: [
         {
-          id: 1,
+          id: asContourId("c1"),
           closed: true,
           points: [
-            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
           ],
         },
       ],
@@ -171,12 +172,12 @@ describe("textRun pass", () => {
       unicode: 65,
       contours: [
         {
-          id: 1,
+          id: asContourId("c1"),
           closed: true,
           points: [
-            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
           ],
         },
       ],
@@ -214,12 +215,12 @@ describe("textRun pass", () => {
       unicode: 65,
       contours: [
         {
-          id: 1,
+          id: asContourId("c1"),
           closed: true,
           points: [
-            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
           ],
         },
       ],
@@ -245,12 +246,12 @@ describe("textRun pass", () => {
       unicode: 65,
       contours: [
         {
-          id: 1,
+          id: asContourId("c1"),
           closed: true,
           points: [
-            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
           ],
         },
       ],
@@ -276,12 +277,12 @@ describe("textRun pass", () => {
       unicode: 65,
       contours: [
         {
-          id: 1,
+          id: asContourId("c1"),
           closed: true,
           points: [
-            { id: 1, x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 2, x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
-            { id: 3, x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve" as const, smooth: false },
+            { id: asPointId("p3"), x: 100, y: 100, pointType: "onCurve" as const, smooth: false },
           ],
         },
       ],

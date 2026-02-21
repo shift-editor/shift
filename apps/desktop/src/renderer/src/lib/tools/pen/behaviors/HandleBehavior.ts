@@ -78,16 +78,18 @@ export class HandleBehavior implements PenBehavior {
         }
 
         const handles = this.createHandles(state.anchor, snappedPos, editor);
+        const optionalSnappedPos = event.shiftKey ? { snappedPos } : {};
         return {
           state: {
             type: "dragging",
             anchor: state.anchor,
             handles,
             mousePos: localPoint,
-            snappedPos: event.shiftKey ? snappedPos : undefined,
+            ...optionalSnappedPos,
           },
         };
       }
+
       return { state };
     }
 
@@ -141,11 +143,12 @@ export class HandleBehavior implements PenBehavior {
       }
 
       this.updateHandles(state.anchor, state.handles, snappedPos, editor);
+      const optionalSnappedPos = event.shiftKey ? { snappedPos } : {};
       return {
         state: {
           ...state,
           mousePos: localPoint,
-          snappedPos: event.shiftKey ? snappedPos : undefined,
+          ...optionalSnappedPos,
         },
       };
     }

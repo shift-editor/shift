@@ -49,8 +49,8 @@ function drawHandles(
 
   const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
 
-  for (let i = 0; i < cornerKeys.length; i++) {
-    const pos = handles.corners[cornerKeys[i]];
+  for (const key of cornerKeys) {
+    const pos = handles.corners[key];
 
     ctx.strokeCircle(pos.x, pos.y, radius);
     ctx.fillCircle(pos.x, pos.y, radius);
@@ -58,8 +58,8 @@ function drawHandles(
 
   const midpointKeys = ["top", "bottom", "left", "right"] as const;
 
-  for (let i = 0; i < midpointKeys.length; i++) {
-    const pos = handles.midpoints[midpointKeys[i]];
+  for (const key of midpointKeys) {
+    const pos = handles.midpoints[key];
 
     ctx.strokeCircle(pos.x, pos.y, radius);
     ctx.fillCircle(pos.x, pos.y, radius);

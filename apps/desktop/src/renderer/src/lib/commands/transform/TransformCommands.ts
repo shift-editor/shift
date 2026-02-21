@@ -12,7 +12,7 @@ import { Glyphs } from "@shift/font";
  * implement `transformPoints`.
  */
 abstract class BaseTransformCommand extends BaseCommand<void> {
-  abstract readonly name: string;
+  abstract override readonly name: string;
 
   #pointIds: PointId[];
   #originalPositions: Map<PointId, Point2D> = new Map();
@@ -49,7 +49,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
     }
   }
 
-  redo(ctx: CommandContext): void {
+  override redo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
     const points: TransformablePoint[] = [];

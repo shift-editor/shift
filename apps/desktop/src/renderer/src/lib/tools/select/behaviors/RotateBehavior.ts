@@ -88,7 +88,7 @@ export class RotateBehavior implements SelectBehavior {
             ...state.rotate,
             lastPos: currentPos,
             currentAngle,
-            snappedAngle,
+            ...(snappedAngle !== undefined ? { snappedAngle } : {}),
           },
         },
       };

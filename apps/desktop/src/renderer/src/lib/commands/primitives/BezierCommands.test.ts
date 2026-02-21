@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   AddBezierAnchorCommand,
   CloseContourCommand,
@@ -6,8 +6,8 @@ import {
   NudgePointsCommand,
   SplitSegmentCommand,
 } from "./BezierCommands";
-import { asPointId } from "@shift/types";
-import type { PointId } from "@shift/types";
+import { asContourId, asPointId } from "@shift/types";
+import type { GlyphSnapshot, PointId } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
 
@@ -18,12 +18,25 @@ const makeSegmentPoint = (
   y: number,
   pointType: "onCurve" | "offCurve" = "onCurve",
 ) => ({
-  id,
+  id: asPointId(id),
   x,
   y,
   pointType,
   smooth: false,
 });
+
+function createSnapshot(overrides: Partial<GlyphSnapshot>): GlyphSnapshot {
+  return {
+    unicode: 65,
+    name: "A",
+    xAdvance: 500,
+    contours: [],
+    anchors: [],
+    compositeContours: [],
+    activeContourId: null,
+    ...overrides,
+  };
+}
 
 describe("AddBezierAnchorCommand", () => {
   it("should add three points: anchor, leading, and trailing", () => {
@@ -138,16 +151,16 @@ describe("CloseContourCommand", () => {
   });
 
   it("should not close if already closed", () => {
-    const snapshot = {
+    const snapshot = createSnapshot({
       contours: [
         {
-          id: "contour-0",
+          id: asContourId("contour-0"),
           points: [],
           closed: true, // Already closed
         },
       ],
-      activeContourId: "contour-0",
-    };
+      activeContourId: asContourId("contour-0"),
+    });
     const ctx = createMockCommandContext(snapshot);
     const cmd = new CloseContourCommand();
 
@@ -451,16 +464,16 @@ describe("SplitSegmentCommand", () => {
       ]);
 
       // Should restore both original control positions (after the removePoints call)
-      const movePointToCalls = (ctx.fontEngine.editing.movePointTo as any).mock.calls;
+      const movePointToCalls = vi.mocked(ctx.fontEngine.editing.movePointTo).mock.calls;
       const lastTwoCalls = movePointToCalls.slice(-2);
 
       // One of the last two calls should restore c1
       const c1Restored = lastTwoCalls.some(
-        (call: any[]) => call[0] === "c1" && call[1] === 25 && call[2] === 100,
+        (call) => call[0] === "c1" && call[1] === 25 && call[2] === 100,
       );
       // One of the last two calls should restore c2
       const c2Restored = lastTwoCalls.some(
-        (call: any[]) => call[0] === "c2" && call[1] === 75 && call[2] === 100,
+        (call) => call[0] === "c2" && call[1] === 75 && call[2] === 100,
       );
 
       expect(c1Restored).toBe(true);

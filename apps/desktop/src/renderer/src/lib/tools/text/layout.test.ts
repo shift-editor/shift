@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { Font } from "@/lib/editor/Font";
 import type { Bounds } from "@shift/geo";
 import { computeTextLayout, hitTestTextSlot, hitTestTextCaret, type GlyphRef } from "./layout";
+import { expectAt } from "@/testing";
 
 function createMockFont(
   advances: Record<number, number> = {},
@@ -67,12 +68,12 @@ describe("computeTextLayout", () => {
     const layout = computeTextLayout(toGlyphs([72, 101, 108]), { x: 100, y: 0 }, font);
 
     expect(layout.slots).toHaveLength(3);
-    expect(layout.slots[0].x).toBe(100);
-    expect(layout.slots[0].advance).toBe(600);
-    expect(layout.slots[1].x).toBe(700);
-    expect(layout.slots[1].advance).toBe(500);
-    expect(layout.slots[2].x).toBe(1200);
-    expect(layout.slots[2].advance).toBe(250);
+    expect(expectAt(layout.slots, 0).x).toBe(100);
+    expect(expectAt(layout.slots, 0).advance).toBe(600);
+    expect(expectAt(layout.slots, 1).x).toBe(700);
+    expect(expectAt(layout.slots, 1).advance).toBe(500);
+    expect(expectAt(layout.slots, 2).x).toBe(1200);
+    expect(expectAt(layout.slots, 2).advance).toBe(250);
     expect(layout.totalAdvance).toBe(1350);
   });
 
@@ -80,7 +81,7 @@ describe("computeTextLayout", () => {
     const font = createMockFont();
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
 
-    expect(layout.slots[0].advance).toBe(0);
+    expect(expectAt(layout.slots, 0).advance).toBe(0);
     expect(layout.totalAdvance).toBe(0);
   });
 
@@ -88,7 +89,7 @@ describe("computeTextLayout", () => {
     const font = createMockFont({ 65: 500 }, { 65: "M0 0L100 100" });
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
 
-    expect(layout.slots[0].svgPath).toBe("M0 0L100 100");
+    expect(expectAt(layout.slots, 0).svgPath).toBe("M0 0L100 100");
   });
 });
 

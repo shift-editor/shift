@@ -7,6 +7,8 @@ import type { SegmentId } from "@/types/indicator";
 import { Segment } from "@/lib/geo/Segment";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE, resolveDrawStyle } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
+import { asContourId, asPointId } from "@shift/types";
+import { expectAt } from "@/testing";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -56,12 +58,12 @@ function createRenderContext(ctx: IRenderer): RenderContext {
 
 function createTriangleContour(): Contour {
   return {
-    id: 0,
+    id: asContourId("triangle"),
     closed: true,
     points: [
-      { id: 1, x: 0, y: 0, pointType: "onCurve", smooth: false },
-      { id: 2, x: 100, y: 0, pointType: "onCurve", smooth: false },
-      { id: 3, x: 50, y: 100, pointType: "onCurve", smooth: false },
+      { id: asPointId("p1"), x: 0, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p2"), x: 100, y: 0, pointType: "onCurve", smooth: false },
+      { id: asPointId("p3"), x: 50, y: 100, pointType: "onCurve", smooth: false },
     ],
   };
 }
@@ -71,6 +73,10 @@ function createTriangleGlyph(): Glyph {
     name: "triangle",
     contours: [createTriangleContour()],
     xAdvance: 100,
+    unicode: 65,
+    anchors: [],
+    compositeContours: [],
+    activeContourId: asContourId("triangle"),
   };
 }
 
@@ -101,9 +107,9 @@ describe("segments", () => {
 
     it("highlights hovered segment with SEGMENT_HOVER_STYLE", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
-      const hoveredId = segmentIds[0];
+      const hoveredId = expectAt(segmentIds, 0);
 
       renderSegmentHighlights(rc, glyph, hoveredId, () => false);
 
@@ -114,9 +120,9 @@ describe("segments", () => {
 
     it("highlights selected segment with SEGMENT_SELECTED_STYLE", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
-      const targetId = segmentIds[0];
+      const targetId = expectAt(segmentIds, 0);
 
       renderSegmentHighlights(rc, glyph, null, (id) => id === targetId);
 
@@ -127,9 +133,9 @@ describe("segments", () => {
 
     it("selected style takes precedence over hovered", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
-      const targetId = segmentIds[0];
+      const targetId = expectAt(segmentIds, 0);
 
       renderSegmentHighlights(rc, glyph, targetId, (id) => id === targetId);
 
@@ -138,7 +144,7 @@ describe("segments", () => {
 
     it("draws multiple segments when multiple are selected", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
 
       renderSegmentHighlights(rc, glyph, null, (id) => segmentIds.includes(id));
@@ -150,9 +156,9 @@ describe("segments", () => {
 
     it("only draws the hovered segment, not others", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
-      const hoveredId = segmentIds[1];
+      const hoveredId = expectAt(segmentIds, 1);
 
       renderSegmentHighlights(rc, glyph, hoveredId, () => false);
 
@@ -162,9 +168,9 @@ describe("segments", () => {
 
     it("sets lineWidth from style through pxToUpm", () => {
       const glyph = createTriangleGlyph();
-      const contour = glyph.contours[0];
+      const contour = expectAt(glyph.contours, 0);
       const segmentIds = getSegmentIds(contour);
-      const hoveredId = segmentIds[0];
+      const hoveredId = expectAt(segmentIds, 0);
 
       const pxToUpmSpy = vi.fn((px?: number) => (px ?? 1) * 2);
       rc.pxToUpm = pxToUpmSpy;

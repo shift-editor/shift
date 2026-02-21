@@ -7,9 +7,10 @@ import type {
   Contour,
   Glyph,
   AnchorId,
+  PointType,
 } from "@shift/types";
 import type { EditorAPI, ActiveToolState } from "@/lib/tools/core";
-import type { ToolEvent, Modifiers } from "@/lib/tools/core/GestureDetector";
+import type { Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
 import type { ContourEndpointHit, HitResult } from "@/types/hitResult";
@@ -27,62 +28,13 @@ import type {
   RotateSnapSession,
 } from "@/lib/editor/snapping/types";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-
-/** For tests: build Coordinates with the same point in all three spaces. */
-export function makeTestCoordinates(p: Point2D): Coordinates {
-  return { screen: { ...p }, scene: { ...p }, glyphLocal: { ...p } };
-}
-
-/**
- * For tests: build Coordinates from scene space with an explicit draw offset.
- * Screen defaults to scene unless a custom screen point is provided.
- */
-export function makeTestCoordinatesFromScene(
-  scene: Point2D,
-  drawOffset: Point2D,
-  screen: Point2D = scene,
-): Coordinates {
-  return {
-    screen: { ...screen },
-    scene: { ...scene },
-    glyphLocal: {
-      x: scene.x - drawOffset.x,
-      y: scene.y - drawOffset.y,
-    },
-  };
-}
-
-/** For tests: build Coordinates from glyph-local space with an explicit draw offset. */
-export function makeTestCoordinatesFromGlyphLocal(
-  glyphLocal: Point2D,
-  drawOffset: Point2D,
-  screen?: Point2D,
-): Coordinates {
-  const scene = {
-    x: glyphLocal.x + drawOffset.x,
-    y: glyphLocal.y + drawOffset.y,
-  };
-  return {
-    screen: { ...(screen ?? scene) },
-    scene,
-    glyphLocal: { ...glyphLocal },
-  };
-}
-
-export interface ToolMouseEvent {
-  readonly screen: Point2D;
-  readonly upm: Point2D;
-  readonly shiftKey: boolean;
-  readonly ctrlKey: boolean;
-  readonly metaKey: boolean;
-  readonly altKey: boolean;
-  readonly button: number;
-}
+import type { ReflectAxis } from "@/types/transform";
 import { FontEngine, MockFontEngine } from "@/engine";
 import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
 import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
 import { glyphRefFromUnicode } from "@/lib/utils/unicode";
 import { getGlyphInfo } from "@/store/glyphInfo";
+import { makeTestCoordinatesFromScene, makeTestCoordinatesFromGlyphLocal } from "./coordinates";
 
 interface ScreenService {
   toUpmDistance(pixels: number): number;
@@ -141,12 +93,12 @@ interface EditService {
   getPointById(id: PointId): Point | null;
   getContourById(id: ContourId): Contour | null;
   getActiveContour(): Contour | null;
-  addPoint(x: number, y: number, type: any, smooth?: boolean): PointId;
+  addPoint(x: number, y: number, type: PointType, smooth?: boolean): PointId;
   addPointToContour(
     contourId: ContourId,
     x: number,
     y: number,
-    type: any,
+    type: PointType,
     smooth: boolean,
   ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
@@ -175,13 +127,13 @@ interface PreviewService {
 interface TransformService {
   rotate(angle: number, origin?: Point2D): void;
   scale(sx: number, sy?: number, origin?: Point2D): void;
-  reflect(axis: any, origin?: Point2D): void;
+  reflect(axis: ReflectAxis, origin?: Point2D): void;
   rotate90CCW(): void;
   rotate90CW(): void;
   rotate180(): void;
   flipHorizontal(): void;
   flipVertical(): void;
-  getSelectionBounds(): any | null;
+  getSelectionBounds(): Rect2D | null;
   getSelectionCenter(): Point2D | null;
 }
 
@@ -215,13 +167,13 @@ interface HitTestService {
     coords: Coordinates,
   ): { id: AnchorId; name: string | null; x: number; y: number } | null;
   getPointAt(coords: Coordinates): Point | null;
-  getSegmentAt(coords: Coordinates): any | null;
+  getSegmentAt(coords: Coordinates): SegmentHitResult | null;
   getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null;
-  getSelectionBoundingRect(): any | null;
+  getSelectionBoundingRect(): Rect2D | null;
   getAllPoints(): Point[];
-  getSegmentById(segmentId: SegmentId): any | null;
+  getSegmentById(segmentId: SegmentId): SegmentHitResult["segment"] | null;
   updateHover(coords: Coordinates): void;
-  getMiddlePointAt(coords: Coordinates): any | null;
+  getMiddlePointAt(coords: Coordinates): Extract<HitResult, { type: "middlePoint" }> | null;
 }
 
 interface ToolSwitchService {
@@ -252,6 +204,7 @@ export interface MockToolContext extends EditorAPI {
   getHoveredSegment(): SegmentIndicator | null;
   getCursorValue(): string;
   readonly screenMousePosition: Signal<Point2D>;
+  setCurrentModifiers(modifiers: Modifiers): void;
   getAllPoints(): Point[];
   addPoint(x: number, y: number, type: unknown, smooth?: boolean): PointId;
   mocks: {
@@ -572,11 +525,11 @@ function createMockEditService(
   };
 
   const mocks = {
-    addPoint: vi.fn((x: number, y: number, type: any, smooth = false) =>
+    addPoint: vi.fn((x: number, y: number, type: PointType, smooth = false) =>
       fontEngine.editing.addPoint({ id: "" as PointId, x, y, pointType: type, smooth }),
     ),
     addPointToContour: vi.fn(
-      (contourId: ContourId, x: number, y: number, type: any, smooth: boolean) =>
+      (contourId: ContourId, x: number, y: number, type: PointType, smooth: boolean) =>
         fontEngine.editing.addPointToContour(contourId, {
           id: "" as PointId,
           x,
@@ -870,6 +823,7 @@ function createMockHitTestService(
 
       const firstPoint = contour.points[0];
       const lastPoint = contour.points[contour.points.length - 1];
+      if (!firstPoint || !lastPoint) continue;
 
       const firstDist = Math.sqrt((firstPoint.x - pos.x) ** 2 + (firstPoint.y - pos.y) ** 2);
       if (firstDist < hitRadius) {
@@ -900,7 +854,7 @@ function createMockHitTestService(
     const snapshot = fontEngine.$glyph.value;
     if (!snapshot) return [];
 
-    const result: any[] = [];
+    const result: Point[] = [];
     for (const contour of snapshot.contours) {
       result.push(...contour.points);
     }
@@ -934,6 +888,7 @@ function createMockHitTestService(
 
       for (let i = 1; i < contour.points.length - 1; i++) {
         const point = contour.points[i];
+        if (!point) continue;
         const dist = Math.sqrt((point.x - pos.x) ** 2 + (point.y - pos.y) ** 2);
         if (dist < hitRadius) {
           return {
@@ -1015,7 +970,7 @@ function createMockCommandHistory(
   let _isBatching = false;
 
   const mocks = {
-    execute: vi.fn((cmd: any) =>
+    execute: vi.fn((cmd: { execute?: (ctx: unknown) => unknown }) =>
       cmd.execute?.({
         fontEngine,
         glyph: fontEngine.$glyph.value,
@@ -1292,7 +1247,7 @@ export function createMockToolContext(): MockToolContext {
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
     glyph: computed<Glyph | null>(() => edit.getGlyph() as Glyph | null),
     font,
-    addPoint: (x: number, y: number, type: any, smooth?: boolean) =>
+    addPoint: (x: number, y: number, type: PointType, smooth?: boolean) =>
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
@@ -1443,146 +1398,4 @@ export function createMockToolContext(): MockToolContext {
       commands,
     },
   };
-}
-
-export function createToolMouseEvent(
-  x: number,
-  y: number,
-  options?: {
-    shiftKey?: boolean;
-    ctrlKey?: boolean;
-    metaKey?: boolean;
-    altKey?: boolean;
-    button?: number;
-  },
-): ToolMouseEvent {
-  return {
-    screen: { x, y },
-    upm: { x, y },
-    shiftKey: options?.shiftKey ?? false,
-    ctrlKey: options?.ctrlKey ?? false,
-    metaKey: options?.metaKey ?? false,
-    altKey: options?.altKey ?? false,
-    button: options?.button ?? 0,
-  };
-}
-
-export interface ToolEventTarget {
-  handleEvent(event: ToolEvent): void;
-  activate?(): void;
-  deactivate?(): void;
-}
-
-export class ToolEventSimulator {
-  private mouseDown = false;
-  private downPoint: Point2D | null = null;
-  private downScreenPoint: Point2D | null = null;
-
-  constructor(private tool: ToolEventTarget) {}
-
-  setReady(): void {
-    this.tool.activate?.();
-  }
-
-  setIdle(): void {
-    this.tool.deactivate?.();
-  }
-
-  onMouseDown(event: ToolMouseEvent): void {
-    if (event.button !== 0) return;
-    this.mouseDown = true;
-    this.downPoint = event.upm;
-    this.downScreenPoint = event.screen;
-    const coords = makeTestCoordinates(event.upm);
-    this.tool.handleEvent({
-      type: "dragStart",
-      point: event.upm,
-      coords,
-      screenPoint: event.screen,
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-    });
-  }
-
-  onMouseMove(event: ToolMouseEvent): void {
-    const coords = makeTestCoordinates(event.upm);
-    if (this.mouseDown && this.downPoint && this.downScreenPoint) {
-      this.tool.handleEvent({
-        type: "drag",
-        point: event.upm,
-        coords,
-        screenPoint: event.screen,
-        origin: this.downPoint,
-        screenOrigin: this.downScreenPoint,
-        delta: {
-          x: event.upm.x - this.downPoint.x,
-          y: event.upm.y - this.downPoint.y,
-        },
-        screenDelta: {
-          x: event.screen.x - this.downScreenPoint.x,
-          y: event.screen.y - this.downScreenPoint.y,
-        },
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-      });
-    } else {
-      this.tool.handleEvent({
-        type: "pointerMove",
-        point: event.upm,
-        coords,
-      });
-    }
-  }
-
-  onMouseUp(event: ToolMouseEvent): void {
-    const coords = makeTestCoordinates(event.upm);
-    if (this.mouseDown && this.downPoint && this.downScreenPoint) {
-      this.tool.handleEvent({
-        type: "dragEnd",
-        point: event.upm,
-        coords,
-        screenPoint: event.screen,
-        origin: this.downPoint,
-        screenOrigin: this.downScreenPoint,
-      });
-    }
-    this.mouseDown = false;
-    this.downPoint = null;
-    this.downScreenPoint = null;
-  }
-
-  click(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): void {
-    const point = { x, y };
-    const coords = makeTestCoordinates(point);
-    this.tool.handleEvent({
-      type: "click",
-      point,
-      coords,
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-    });
-  }
-
-  cancel(): void {
-    this.tool.handleEvent({
-      type: "keyDown",
-      key: "Escape",
-      shiftKey: false,
-      altKey: false,
-      metaKey: false,
-    });
-  }
-
-  keyDown(
-    key: string,
-    options?: { shiftKey?: boolean; altKey?: boolean; metaKey?: boolean },
-  ): void {
-    this.tool.handleEvent({
-      type: "keyDown",
-      key,
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-      metaKey: options?.metaKey ?? false,
-    });
-  }
 }

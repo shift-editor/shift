@@ -282,8 +282,8 @@ export class MockFontEngine implements FontEngineAPI {
 
     this.#snapshot.contours.splice(index, 1);
     if (this.#snapshot.activeContourId === contourId) {
-      this.#snapshot.activeContourId =
-        this.#snapshot.contours.length > 0 ? this.#snapshot.contours[0].id : null;
+      const firstContour = this.#snapshot.contours[0];
+      this.#snapshot.activeContourId = firstContour ? firstContour.id : null;
     }
 
     return this.#makeResult(true, []);

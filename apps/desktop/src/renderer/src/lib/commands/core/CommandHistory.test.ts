@@ -15,7 +15,7 @@ import {
   RemovePointsCommand,
   NudgePointsCommand,
 } from "../primitives";
-import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
+import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { PointId } from "@shift/types";
 
 describe("CommandHistory", () => {
@@ -270,7 +270,7 @@ describe("batching", () => {
       // Move point directly
       fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
       const points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(150);
+      expect(expectAt(points, 0).x).toBe(150);
 
       // Record the move command (already executed)
       history.record(new MovePointsCommand([pointId], 50, 50));
@@ -280,7 +280,7 @@ describe("batching", () => {
       // Undo should reverse the already-executed move
       history.undo();
       const undonePoints = getAllPoints(fontEngine.$glyph.value);
-      expect(undonePoints[0].x).toBe(100);
+      expect(expectAt(undonePoints, 0).x).toBe(100);
     });
 
     it("should work within a batch", () => {
@@ -302,11 +302,11 @@ describe("batching", () => {
 
       expect(history.undoCount.value).toBe(1);
       const points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(130);
+      expect(expectAt(points, 0).x).toBe(130);
 
       history.undo();
       const undonePoints = getAllPoints(fontEngine.$glyph.value);
-      expect(undonePoints[0].x).toBe(100);
+      expect(expectAt(undonePoints, 0).x).toBe(100);
     });
   });
 });
@@ -406,20 +406,20 @@ describe("Command integration with history", () => {
         smooth: false,
       });
       const originalPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(originalPoints[0].x).toBe(100);
-      expect(originalPoints[0].y).toBe(200);
+      expect(expectAt(originalPoints, 0).x).toBe(100);
+      expect(expectAt(originalPoints, 0).y).toBe(200);
 
       // Move the point
       history.execute(new MovePointsCommand([pointId], 50, 50));
       const movedPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(movedPoints[0].x).toBe(150);
-      expect(movedPoints[0].y).toBe(250);
+      expect(expectAt(movedPoints, 0).x).toBe(150);
+      expect(expectAt(movedPoints, 0).y).toBe(250);
 
       // Undo the move
       history.undo();
       const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(restoredPoints[0].x).toBe(100);
-      expect(restoredPoints[0].y).toBe(200);
+      expect(expectAt(restoredPoints, 0).x).toBe(100);
+      expect(expectAt(restoredPoints, 0).y).toBe(200);
     });
   });
 
@@ -435,11 +435,11 @@ describe("Command integration with history", () => {
 
       history.execute(new NudgePointsCommand([pointId], 10, 0)); // Nudge right
       const nudgedPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(nudgedPoints[0].x).toBe(110);
+      expect(expectAt(nudgedPoints, 0).x).toBe(110);
 
       history.undo();
       const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(restoredPoints[0].x).toBe(100);
+      expect(expectAt(restoredPoints, 0).x).toBe(100);
     });
   });
 
@@ -461,8 +461,8 @@ describe("Command integration with history", () => {
       history.undo();
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
       const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(restoredPoints[0].x).toBe(100);
-      expect(restoredPoints[0].y).toBe(200);
+      expect(expectAt(restoredPoints, 0).x).toBe(100);
+      expect(expectAt(restoredPoints, 0).y).toBe(200);
     });
   });
 
@@ -481,20 +481,20 @@ describe("Command integration with history", () => {
       // Move point through history
       history.execute(new MovePointsCommand([pointId], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(150);
-      expect(points[0].y).toBe(250);
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(250);
 
       // Undo move
       history.undo();
       points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(100);
-      expect(points[0].y).toBe(200);
+      expect(expectAt(points, 0).x).toBe(100);
+      expect(expectAt(points, 0).y).toBe(200);
 
       // Redo move
       history.redo();
       points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(150);
-      expect(points[0].y).toBe(250);
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(250);
     });
 
     it("should handle add undo/redo", () => {
@@ -510,8 +510,8 @@ describe("Command integration with history", () => {
       history.redo();
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
       const points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(100);
-      expect(points[0].y).toBe(200);
+      expect(expectAt(points, 0).x).toBe(100);
+      expect(expectAt(points, 0).y).toBe(200);
     });
 
     it("should restore point at removed position when undoing remove", () => {
@@ -534,8 +534,8 @@ describe("Command integration with history", () => {
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
       const points = getAllPoints(fontEngine.$glyph.value);
       // Note: point is restored at 150,250 (where it was when removed)
-      expect(points[0].x).toBe(150);
-      expect(points[0].y).toBe(250);
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(250);
     });
 
     it("should handle multiple points with single command", () => {
@@ -557,18 +557,18 @@ describe("Command integration with history", () => {
       // Move both points together
       history.execute(new MovePointsCommand([p1, p2], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(150);
-      expect(points[0].y).toBe(150);
-      expect(points[1].x).toBe(250);
-      expect(points[1].y).toBe(250);
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(150);
+      expect(expectAt(points, 1).x).toBe(250);
+      expect(expectAt(points, 1).y).toBe(250);
 
       // Undo moves both back
       history.undo();
       points = getAllPoints(fontEngine.$glyph.value);
-      expect(points[0].x).toBe(100);
-      expect(points[0].y).toBe(100);
-      expect(points[1].x).toBe(200);
-      expect(points[1].y).toBe(200);
+      expect(expectAt(points, 0).x).toBe(100);
+      expect(expectAt(points, 0).y).toBe(100);
+      expect(expectAt(points, 1).x).toBe(200);
+      expect(expectAt(points, 1).y).toBe(200);
     });
   });
 });
