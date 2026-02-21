@@ -1,18 +1,13 @@
 use crate::entity::PointId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PointType {
+    #[default]
     OnCurve,
     OffCurve,
     QCurve,
-}
-
-impl Default for PointType {
-    fn default() -> Self {
-        Self::OnCurve
-    }
 }
 
 impl std::str::FromStr for PointType {

@@ -146,7 +146,7 @@ jobs:
         run: pnpm deadcode:strict
 
   # ---------------------------------------------------------------------------
-  # Rust jobs (submodules needed for test fixtures)
+  # Rust jobs (toolchain pinned via rust-toolchain.toml)
   # ---------------------------------------------------------------------------
   rust-fmt:
     name: Rust Format
@@ -160,15 +160,14 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      - name: Install toolchain
+        run: rustup show
 
       - name: Check formatting
         run: cargo fmt --all --check
 
-  rust-clippy:
-    name: Rust Clippy
+  rust-check:
+    name: Rust Clippy & Tests
     needs: detect-changes
     if: needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
@@ -180,38 +179,18 @@ jobs:
           fetch-depth: 1
           submodules: true
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      - name: Install toolchain
+        run: rustup show
 
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          shared-key: shift-clippy
+          shared-key: shift-rust
 
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-  rust-test:
-    name: Rust Tests
-    needs: detect-changes
-    if: needs.detect-changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          submodules: true
-
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          shared-key: shift-rust-test
-
-      - name: Run Rust tests
+      - name: Run tests
         run: cargo test --workspace
 
   integration:
@@ -233,7 +212,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install toolchain
+        run: rustup show
+
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -284,8 +265,7 @@ jobs:
       - unit-test
       - deadcode
       - rust-fmt
-      - rust-clippy
-      - rust-test
+      - rust-check
       - integration
     runs-on: ubuntu-latest
     permissions: {}
