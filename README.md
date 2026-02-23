@@ -3,7 +3,9 @@
     <img width=150 src="https://github.com/user-attachments/assets/521e2732-341d-441d-bb6d-bf7bcdccf764" />
     <h1 align="center"><b>Shift</b></h1>
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
-  <img width="2025" height="1140" alt="image" src="https://github.com/user-attachments/assets/6445f466-4652-4d30-90f7-6ea762041f98" />
+  <img width="1822" height="1185" alt="image" src="https://github.com/user-attachments/assets/ee1fc193-5f58-4589-9c99-91f7ad756f93" />
+
+
   </p>
 </div>
 
