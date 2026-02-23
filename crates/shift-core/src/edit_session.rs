@@ -1,6 +1,21 @@
 use crate::{
-    snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, PointId, PointType,
+    snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, GuidelineId,
+    PointId, PointType,
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeRef {
+    Point(PointId),
+    Anchor(AnchorId),
+    Guideline(GuidelineId),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NodePositionUpdate {
+    pub node: NodeRef,
+    pub x: f64,
+    pub y: f64,
+}
 
 pub struct EditSession {
     layer: GlyphLayer,
@@ -297,6 +312,47 @@ impl EditSession {
         self.layer.move_anchors(anchor_ids, dx, dy)
     }
 
+    pub fn move_nodes(&mut self, nodes: &[NodeRef], dx: f64, dy: f64) -> Vec<PointId> {
+        let mut point_ids = Vec::new();
+        let mut anchor_ids = Vec::new();
+
+        for node in nodes {
+            match node {
+                NodeRef::Point(point_id) => point_ids.push(*point_id),
+                NodeRef::Anchor(anchor_id) => anchor_ids.push(*anchor_id),
+                // Placeholder for guideline editing support.
+                NodeRef::Guideline(_guideline_id) => {}
+            }
+        }
+
+        let moved_points = self.move_points(&point_ids, dx, dy);
+        if !anchor_ids.is_empty() {
+            self.layer.move_anchors(&anchor_ids, dx, dy);
+        }
+        moved_points
+    }
+
+    pub fn set_node_positions(&mut self, updates: &[NodePositionUpdate]) -> bool {
+        let mut updated_any = false;
+        for update in updates {
+            match update.node {
+                NodeRef::Point(point_id) => {
+                    if self.set_point_position(point_id, update.x, update.y) {
+                        updated_any = true;
+                    }
+                }
+                NodeRef::Anchor(anchor_id) => {
+                    if self.set_anchor_position(anchor_id, update.x, update.y) {
+                        updated_any = true;
+                    }
+                }
+                // Placeholder for guideline editing support.
+                NodeRef::Guideline(_guideline_id) => {}
+            }
+        }
+        updated_any
+    }
+
     pub fn contour(&self, id: ContourId) -> Option<&Contour> {
         self.layer.contour(id)
     }
@@ -486,6 +542,79 @@ mod tests {
 
         assert!(session.active_contour_id().is_none());
         assert_eq!(session.contours_count(), 0);
+    }
+
+    #[test]
+    fn move_nodes_moves_points_and_anchors() {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour();
+
+        let point_id = session
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap();
+        let anchor_id =
+            session
+                .layer_mut()
+                .add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+
+        let moved_points = session.move_nodes(
+            &[NodeRef::Point(point_id), NodeRef::Anchor(anchor_id)],
+            5.0,
+            -10.0,
+        );
+
+        assert_eq!(moved_points, vec![point_id]);
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        assert_eq!(point.x(), 15.0);
+        assert_eq!(point.y(), 10.0);
+
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        assert_eq!(anchor.x(), 105.0);
+        assert_eq!(anchor.y(), 190.0);
+    }
+
+    #[test]
+    fn set_node_positions_sets_points_and_anchors() {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour();
+
+        let point_id = session
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap();
+        let anchor_id =
+            session
+                .layer_mut()
+                .add_anchor(Anchor::new(Some("bottom".to_string()), 100.0, 200.0));
+
+        let changed = session.set_node_positions(&[
+            NodePositionUpdate {
+                node: NodeRef::Point(point_id),
+                x: 300.0,
+                y: 400.0,
+            },
+            NodePositionUpdate {
+                node: NodeRef::Anchor(anchor_id),
+                x: 500.0,
+                y: 600.0,
+            },
+        ]);
+
+        assert!(changed);
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        assert_eq!(point.x(), 300.0);
+        assert_eq!(point.y(), 400.0);
+
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        assert_eq!(anchor.x(), 500.0);
+        assert_eq!(anchor.y(), 600.0);
     }
 
     #[test]

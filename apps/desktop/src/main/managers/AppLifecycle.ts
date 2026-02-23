@@ -43,8 +43,8 @@ export class AppLifecycle {
 
   private registerAppEvents() {
     app.on("ready", () => {
-      this.menuManager.create();
       this.windowManager.create();
+      this.menuManager.create();
       this.setupDockIcon();
       this.registerDevShortcuts();
       this.registerDevToolsListeners();

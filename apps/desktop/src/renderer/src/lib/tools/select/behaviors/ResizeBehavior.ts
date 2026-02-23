@@ -1,4 +1,4 @@
-import type { PointId, Point2D, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { EditorAPI } from "../../core/EditorAPI";
@@ -6,7 +6,8 @@ import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import type { BoundingRectEdge } from "../cursor";
-import { cacheSelectedPositions } from "../utils";
+import { cacheSelectedPositions, restoreCachedPointPositions } from "../utils";
+import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -35,15 +36,9 @@ export class ResizeBehavior implements SelectBehavior {
     return null;
   }
 
-  onTransition(prev: SelectState, next: SelectState, event: ToolEvent, editor: EditorAPI): void {
+  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
     if (prev.type !== "resizing" && next.type === "resizing") {
-      editor.beginPreview();
       editor.clearHover();
-    }
-    if (prev.type === "resizing" && next.type !== "resizing") {
-      if (event.type !== "dragEnd") {
-        editor.cancelPreview();
-      }
     }
   }
 
@@ -63,13 +58,13 @@ export class ResizeBehavior implements SelectBehavior {
         uniformScale,
       );
 
-      const updates: Array<{ nodeType: "point"; id: PointId; x: number; y: number }> = [];
+      const updates: NodePositionUpdate[] = [];
       for (const [id, initialPos] of state.resize.initialPositions) {
         const anchor = state.resize.anchorPoint;
         const offset = Vec2.sub(initialPos, anchor);
         const scaled = Vec2.mul(offset, { x: sx, y: sy });
         const newPos = Vec2.add(anchor, scaled);
-        updates.push({ nodeType: "point", id, x: newPos.x, y: newPos.y });
+        updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
       }
       editor.setNodePositions(updates);
 
@@ -86,13 +81,15 @@ export class ResizeBehavior implements SelectBehavior {
     }
 
     if (event.type === "dragEnd") {
+      const { edge, lastPos, anchorPoint, initialBounds, uniformScale } = state.resize;
       const { sx, sy } = this.calculateScaleFactors(
-        state.resize.edge,
-        state.resize.lastPos,
-        state.resize.anchorPoint,
-        state.resize.initialBounds,
-        state.resize.uniformScale,
+        edge,
+        lastPos,
+        anchorPoint,
+        initialBounds,
+        uniformScale,
       );
+      restoreCachedPointPositions(editor, state.resize.initialPositions);
 
       return {
         state: { type: "selected" },
@@ -107,9 +104,9 @@ export class ResizeBehavior implements SelectBehavior {
     }
 
     if (event.type === "dragCancel") {
+      restoreCachedPointPositions(editor, state.resize.initialPositions);
       return {
         state: { type: "selected" },
-        action: { type: "cancelPreview" },
       };
     }
 

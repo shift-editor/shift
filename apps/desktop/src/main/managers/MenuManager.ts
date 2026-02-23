@@ -2,6 +2,7 @@ import { Menu, dialog, nativeTheme, app } from "electron";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
 import type { ThemeName, DebugOverlays, DebugState } from "../../shared/ipc/types";
+import type { IpcEvents } from "../../shared/ipc/channels";
 import * as ipc from "../../shared/ipc/main";
 
 export class MenuManager {
@@ -32,31 +33,34 @@ export class MenuManager {
     return { ...this.debugState };
   }
 
+  private sendToRenderer<K extends keyof IpcEvents>(
+    channel: K,
+    ...args: Parameters<IpcEvents[K]>
+  ): void {
+    const webContents = this.windowManager.getWindow()?.webContents;
+    if (!webContents) return;
+    ipc.send(webContents, channel, ...args);
+  }
+
   private setDebugState<K extends keyof DebugState>(key: K, value: DebugState[K]) {
     this.debugState[key] = value;
-    const webContents = this.windowManager.getWindow()?.webContents;
-    if (webContents) {
-      switch (key) {
-        case "reactScanEnabled":
-          ipc.send(webContents, "debug:react-scan", value as boolean);
-          break;
-        case "debugPanelOpen":
-          ipc.send(webContents, "debug:panel", value as boolean);
-          break;
-        case "overlays":
-          ipc.send(webContents, "debug:overlays", value as DebugOverlays);
-          break;
-      }
+    switch (key) {
+      case "reactScanEnabled":
+        this.sendToRenderer("debug:react-scan", value as boolean);
+        break;
+      case "debugPanelOpen":
+        this.sendToRenderer("debug:panel", value as boolean);
+        break;
+      case "overlays":
+        this.sendToRenderer("debug:overlays", value as DebugOverlays);
+        break;
     }
     this.create();
   }
 
   private toggleOverlay(key: keyof DebugOverlays): void {
     this.debugState.overlays[key] = !this.debugState.overlays[key];
-    const webContents = this.windowManager.getWindow()?.webContents;
-    if (webContents) {
-      ipc.send(webContents, "debug:overlays", { ...this.debugState.overlays });
-    }
+    this.sendToRenderer("debug:overlays", { ...this.debugState.overlays });
     this.create();
   }
 
@@ -90,10 +94,7 @@ export class MenuManager {
 
   setTheme(theme: ThemeName) {
     this.currentTheme = theme;
-    const webContents = this.windowManager.getWindow()?.webContents;
-    if (webContents) {
-      ipc.send(webContents, "theme:set", theme);
-    }
+    this.sendToRenderer("theme:set", theme);
 
     if (theme === "system") {
       nativeTheme.themeSource = "system";
@@ -106,8 +107,6 @@ export class MenuManager {
 
   create() {
     const isMac = process.platform === "darwin";
-    const window = this.windowManager.getWindow();
-    const webContents = window?.webContents;
 
     const template: Electron.MenuItemConstructorOptions[] = [
       ...(isMac ? [{ role: "appMenu" as const }] : []),
@@ -125,9 +124,7 @@ export class MenuManager {
                 ],
               });
               if (!result.canceled && result.filePaths[0]) {
-                if (webContents) {
-                  ipc.send(webContents, "menu:open-font", result.filePaths[0]);
-                }
+                this.sendToRenderer("menu:open-font", result.filePaths[0]);
               }
             },
           },
@@ -153,14 +150,14 @@ export class MenuManager {
             label: "Undo",
             accelerator: "CmdOrCtrl+Z",
             click: () => {
-              if (webContents) ipc.send(webContents, "menu:undo");
+              this.sendToRenderer("menu:undo");
             },
           },
           {
             label: "Redo",
             accelerator: "CmdOrCtrl+Shift+Z",
             click: () => {
-              if (webContents) ipc.send(webContents, "menu:redo");
+              this.sendToRenderer("menu:redo");
             },
           },
           { type: "separator" },
@@ -171,15 +168,14 @@ export class MenuManager {
             label: "Delete",
             accelerator: "Backspace",
             click: () => {
-              if (webContents) ipc.send(webContents, "menu:delete");
+              this.sendToRenderer("menu:delete");
             },
           },
           { type: "separator" },
           {
             label: "Select All",
-            accelerator: "CmdOrCtrl+A",
             click: () => {
-              if (webContents) ipc.send(webContents, "menu:select-all");
+              this.sendToRenderer("menu:select-all");
             },
           },
         ],
@@ -278,7 +274,14 @@ export class MenuManager {
                   label: "Dump Glyph Snapshot",
                   accelerator: "CmdOrCtrl+Shift+D",
                   click: () => {
-                    if (webContents) ipc.send(webContents, "debug:dump-snapshot");
+                    this.sendToRenderer("debug:dump-snapshot");
+                  },
+                },
+                {
+                  label: "Dump Selection Patterns",
+                  accelerator: "CmdOrCtrl+Alt+D",
+                  click: () => {
+                    this.sendToRenderer("debug:dump-selection-patterns");
                   },
                 },
                 { type: "separator" as const },

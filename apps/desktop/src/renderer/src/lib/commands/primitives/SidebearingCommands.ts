@@ -1,5 +1,30 @@
 import { BaseCommand, type CommandContext } from "../core";
 
+export class SetXAdvanceCommand extends BaseCommand<void> {
+  readonly name = "Set X Advance";
+
+  readonly #beforeXAdvance: number;
+  readonly #afterXAdvance: number;
+
+  constructor(beforeXAdvance: number, afterXAdvance: number) {
+    super();
+    this.#beforeXAdvance = beforeXAdvance;
+    this.#afterXAdvance = afterXAdvance;
+  }
+
+  execute(ctx: CommandContext): void {
+    ctx.fontEngine.editing.setXAdvance(this.#afterXAdvance);
+  }
+
+  undo(ctx: CommandContext): void {
+    ctx.fontEngine.editing.setXAdvance(this.#beforeXAdvance);
+  }
+
+  override redo(ctx: CommandContext): void {
+    ctx.fontEngine.editing.setXAdvance(this.#afterXAdvance);
+  }
+}
+
 export class SetRightSidebearingCommand extends BaseCommand<void> {
   readonly name = "Set Right Sidebearing";
 

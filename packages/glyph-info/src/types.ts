@@ -1,13 +1,22 @@
-// TODO: Derive union types from GlyphData.xml categories once the set stabilizes.
-// e.g. GlyphCategory = "Letter" | "Symbol" | "Punctuation" | "Number" | "Separator" | "Mark"
-// e.g. GlyphSubCategory = "Currency" | "Math" | "Quote" | "Dash" | "Space" | "Parenthesis" | "Decimal Digit" | ...
-// e.g. GlyphScript = "latin" | "cyrillic" | "greek" | "arabic" | "hebrew" | ...
-// These could be auto-generated from the XML during the generate step.
+// TODO: Derive GlyphSubCategory and GlyphScript unions from GlyphData.xml during the generate step.
+
+/** Known Unicode general categories used for glyph classification. */
+export const GLYPH_CATEGORIES = [
+  "Letter",
+  "Mark",
+  "Number",
+  "Punctuation",
+  "Separator",
+  "Symbol",
+  "Other",
+] as const;
+
+export type GlyphCategory = (typeof GLYPH_CATEGORIES)[number];
 
 export interface GlyphData {
   codepoint: number;
   name: string;
-  category: string; // TODO: narrow to GlyphCategory union
+  category: GlyphCategory;
   subCategory: string | null; // TODO: narrow to GlyphSubCategory union
   script: string | null; // TODO: narrow to GlyphScript union
   production: string | null;
@@ -32,9 +41,47 @@ export interface SearchResult {
   codepoint: number;
   glyphName: string | null;
   unicodeName: string | null;
-  category: string | null;
+  category: GlyphCategory | null;
   subCategory: string | null;
   rank: number;
+}
+
+export interface GlyphCategoryOptions {
+  includeUnknown?: boolean;
+  unknownCategoryLabel?: string;
+  nullSubCategoryKey?: string;
+  nullSubCategoryLabel?: string;
+}
+
+export interface GlyphCodepointCategory {
+  category: GlyphCategory;
+  subCategoryKey: string;
+  subCategoryLabel: string;
+  isKnown: boolean;
+}
+
+export interface GlyphSubCategorySummary {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface GlyphCategorySummary {
+  category: GlyphCategory;
+  count: number;
+  subCategories: GlyphSubCategorySummary[];
+}
+
+export interface GlyphCodepointFilter {
+  category?: GlyphCategory | null;
+  subCategoryKey?: string | null;
+  query?: string;
+  searchLimit?: number;
+}
+
+export interface GlyphCategoryCatalog {
+  categories: GlyphCategorySummary[];
+  filter(filter?: GlyphCodepointFilter): number[];
 }
 
 export interface DecompositionData {

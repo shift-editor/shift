@@ -3,6 +3,7 @@ import svgr from "vite-plugin-svgr";
 import path from "path";
 
 const packagesDir = path.resolve(__dirname, "../../packages");
+const rulesSrcRoot = `${path.resolve(packagesDir, "rules", "src")}${path.sep}`;
 
 // https://vitejs.dev/config
 export default defineConfig(async () => {
@@ -29,6 +30,17 @@ export default defineConfig(async () => {
         },
       }),
       tsconfigPaths(),
+      {
+        name: "shift-rules-force-reload",
+        handleHotUpdate(ctx) {
+          const normalized = path.resolve(ctx.file);
+          if (normalized.startsWith(rulesSrcRoot)) {
+            ctx.server.ws.send({ type: "full-reload", path: "*" });
+            return [];
+          }
+          return undefined;
+        },
+      },
     ],
     resolve: {
       alias: {

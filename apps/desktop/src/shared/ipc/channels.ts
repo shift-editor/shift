@@ -15,6 +15,7 @@ export type IpcEvents = {
   "debug:react-scan": (enabled: boolean) => void;
   "debug:panel": (open: boolean) => void;
   "debug:dump-snapshot": () => void;
+  "debug:dump-selection-patterns": () => void;
   "debug:overlays": (overlays: DebugOverlays) => void;
 };
 

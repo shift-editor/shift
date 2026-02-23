@@ -1,12 +1,12 @@
 import GridSvg from "@assets/toolbar/grid.svg";
 import InfoSvg from "@assets/toolbar/info.svg";
-import type { Svg } from "@/types/common";
+import type { SVG } from "@/types/common";
 
 export interface NavRoute {
   id: string;
   path: string;
   description: string;
-  icon?: Svg;
+  icon?: SVG;
 }
 
 export const routes: NavRoute[] = [

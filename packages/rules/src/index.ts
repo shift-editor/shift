@@ -7,18 +7,35 @@
  *
  * @example
  * ```ts
- * import { applyRules } from '@shift/rules';
+ * import { constrainDrag } from '@shift/rules';
  *
  * // During drag: compute all moves including rule-affected points
- * const { moves, matchedRules } = applyRules(glyph, selectedIds, dx, dy);
+ * const patch = constrainDrag({
+ *   glyph,
+ *   selectedIds,
+ *   mousePosition: { x: dx, y: dy },
+ * });
  * ```
  */
 
 // Types
-export type { RuleId, MatchedRule, PointMove, RulesResult } from "./types";
+export type {
+  AffectedPointRole,
+  RuleId,
+  RuleAffectedRole,
+  RuleAffectedRolesById,
+  MatchedRule,
+  MatchedRuleById,
+  MatchedRuleAffected,
+  PatternProbe,
+  PointRuleDiagnostics,
+  SelectionRuleDiagnostics,
+  PointMove,
+  DragPatch,
+} from "./types";
 
 // Pattern matching
-export { matchRule } from "./matcher";
+export { pickRule, diagnoseSelectionPatterns } from "./matcher";
 
 // Rule application
-export { applyRules } from "./actions";
+export { constrainDrag } from "./actions";

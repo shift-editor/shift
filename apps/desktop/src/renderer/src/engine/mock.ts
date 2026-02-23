@@ -1,7 +1,7 @@
 import type {
   FontEngineAPI,
-  PointPositionUpdate,
-  AnchorPositionUpdate,
+  NodeRef,
+  NodePositionUpdate,
   GlyphRef,
 } from "@shared/bridge/FontEngineAPI";
 import type {
@@ -329,32 +329,42 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, [pointId]);
   }
 
-  movePoints(pointIds: string[], dx: number, dy: number): string {
+  moveNodes(nodes: NodeRef[], dx: number, dy: number): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
+    const pointIds = new Set<string>();
+    const anchorIds = new Set<string>();
+    for (const node of nodes) {
+      switch (node.kind) {
+        case "point":
+          pointIds.add(node.id);
+          break;
+        case "anchor":
+          anchorIds.add(node.id);
+          break;
+        case "guideline":
+          break;
+      }
+    }
     const moved: PointId[] = [];
     for (const contour of this.#snapshot.contours) {
       for (const point of contour.points) {
-        if (pointIds.includes(point.id)) {
+        if (pointIds.has(point.id)) {
           point.x += dx;
           point.y += dy;
           moved.push(point.id);
         }
       }
     }
-    return this.#makeResult(true, moved);
-  }
-
-  moveAnchors(anchorIds: string[], dx: number, dy: number): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
     for (const anchor of this.#snapshot.anchors) {
-      if (anchorIds.includes(anchor.id)) {
+      if (anchorIds.has(anchor.id)) {
         anchor.x += dx;
         anchor.y += dy;
       }
     }
-    return this.#makeResult(true, []);
+
+    return this.#makeResult(true, moved);
   }
 
   removePoints(pointIds: string[]): string {
@@ -393,28 +403,29 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, [pointId as PointId]);
   }
 
-  setPointPositions(updates: PointPositionUpdate[]): boolean {
+  setNodePositions(updates: NodePositionUpdate[]): boolean {
     if (!this.#snapshot) return false;
 
     for (const update of updates) {
-      const found = this.#findPoint(update.id);
-      if (found) {
-        found.point.x = update.x;
-        found.point.y = update.y;
-      }
-    }
-
-    return true;
-  }
-
-  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean {
-    if (!this.#snapshot) return false;
-
-    for (const update of updates) {
-      const found = this.#findAnchor(update.id);
-      if (found) {
-        found.x = update.x;
-        found.y = update.y;
+      switch (update.node.kind) {
+        case "point": {
+          const found = this.#findPoint(update.node.id);
+          if (found) {
+            found.point.x = update.x;
+            found.point.y = update.y;
+          }
+          break;
+        }
+        case "anchor": {
+          const found = this.#findAnchor(update.node.id);
+          if (found) {
+            found.x = update.x;
+            found.y = update.y;
+          }
+          break;
+        }
+        case "guideline":
+          break;
       }
     }
 

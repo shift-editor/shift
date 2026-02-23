@@ -30,7 +30,7 @@ import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Bounds, Polygon, Vec2 } from "@shift/geo";
-import { Contours, Glyphs } from "@shift/font";
+import { Contours, Glyphs, areGlyphSnapshotsEqual } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
@@ -38,7 +38,12 @@ import { GlyphNamingService, ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
 import { glyphDataStore } from "@/store/GlyphDataStore";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import { CommandHistory, SetLeftSidebearingCommand, SetRightSidebearingCommand } from "../commands";
+import {
+  CommandHistory,
+  SetLeftSidebearingCommand,
+  SetRightSidebearingCommand,
+  SetXAdvanceCommand,
+} from "../commands";
 import {
   RotatePointsCommand,
   ScalePointsCommand,
@@ -76,6 +81,7 @@ import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { EditorAPI } from "../tools/core/EditorAPI";
+import type { DragTarget, DragSession, DragUpdate } from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
@@ -96,9 +102,18 @@ import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import { constrainDrag } from "@shift/rules";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
+
+type DragContext = {
+  id: number;
+  baseGlyph: GlyphSnapshot;
+  target: DragTarget;
+  startPointer: Point2D;
+  currentPointer: Point2D;
+};
 
 /**
  * Central orchestrator for the glyph editing surface.
@@ -160,6 +175,8 @@ export class Editor implements ShiftEditor {
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
+  #activeDrag: DragContext | null = null;
+  #nextDragId = 1;
   #zone: FocusZone = "canvas";
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
@@ -712,6 +729,120 @@ export class Editor implements ShiftEditor {
     return this.#snapIndicator.peek();
   }
 
+  public beginDrag(target: DragTarget, startPointer: Point2D): DragSession {
+    if (this.#activeDrag) {
+      throw new Error("A drag session is already active");
+    }
+
+    if (!this.#fontEngine.$glyph.value) {
+      throw new Error("Cannot begin drag without an active glyph");
+    }
+
+    const context: DragContext = {
+      id: this.#nextDragId++,
+      baseGlyph: this.#fontEngine.getSnapshot(),
+      target: {
+        pointIds: [...target.pointIds],
+        anchorIds: [...target.anchorIds],
+      },
+      startPointer: startPointer,
+      currentPointer: startPointer,
+    };
+    this.#activeDrag = context;
+
+    return {
+      update: (input) => {
+        if (!this.#activeDrag) return;
+        if (this.#activeDrag.id !== context.id) return;
+
+        this.#updateDrag(context, input);
+      },
+      commit: () => {
+        if (!this.#activeDrag) return;
+        if (this.#activeDrag.id !== context.id) return;
+
+        this.#commitDrag(context);
+      },
+      cancel: () => {
+        if (!this.#activeDrag) return;
+        if (this.#activeDrag.id !== context.id) return;
+
+        this.#cancelDrag(context);
+      },
+    };
+  }
+
+  #updateDrag(context: DragContext, input: DragUpdate): void {
+    const mousePos = Vec2.sub(input.pointer, context.startPointer);
+    context.currentPointer = input.pointer;
+
+    this.#fontEngine.editing.restoreSnapshot(context.baseGlyph);
+
+    const allUpdates: NodePositionUpdate[] = [];
+
+    // Points via single-pass rules
+    if (context.target.pointIds.length > 0) {
+      const patch = constrainDrag({
+        glyph: context.baseGlyph,
+        selectedIds: new Set(context.target.pointIds),
+        mousePosition: mousePos,
+      });
+
+      for (const update of patch.pointUpdates) {
+        allUpdates.push({
+          node: { kind: "point", id: update.id },
+          ...update,
+        });
+      }
+    }
+
+    for (const anchorId of context.target.anchorIds) {
+      const anchor = context.baseGlyph.anchors.find((item) => item.id === anchorId);
+      if (!anchor) continue;
+
+      const newPos = Vec2.add(anchor, mousePos);
+      allUpdates.push({
+        node: { kind: "anchor", id: anchorId },
+        ...newPos,
+      });
+    }
+
+    if (allUpdates.length > 0) {
+      this.#fontEngine.editing.setNodePositions(allUpdates);
+    }
+  }
+
+  #commitDrag(context: DragContext): void {
+    const after = this.#fontEngine.$glyph.value;
+    if (after && !areGlyphSnapshotsEqual(context.baseGlyph, after)) {
+      this.#commandHistory.record(
+        new SnapshotCommand(this.#getDragCommitLabel(context.target), context.baseGlyph, after),
+      );
+    }
+
+    this.#clearActiveDrag(context);
+  }
+
+  #getDragCommitLabel(target: DragTarget): string {
+    if (target.pointIds.length > 0 && target.anchorIds.length > 0) {
+      return "Move Selection";
+    }
+    if (target.anchorIds.length > 0) {
+      return "Move Anchors";
+    }
+    return "Move Points";
+  }
+
+  #cancelDrag(context: DragContext): void {
+    this.#fontEngine.editing.restoreSnapshot(context.baseGlyph);
+    this.#clearActiveDrag(context);
+  }
+
+  #clearActiveDrag(context: DragContext): void {
+    if (this.#activeDrag?.id !== context.id) return;
+    this.#activeDrag = null;
+  }
+
   public get debugOverlays(): Signal<DebugOverlays> {
     return this.#debugOverlays;
   }
@@ -1092,6 +1223,10 @@ export class Editor implements ShiftEditor {
   }
 
   public undo() {
+    if (this.#activeDrag) {
+      this.#cancelDrag(this.#activeDrag);
+      return;
+    }
     if (this.#isInPreview) {
       this.cancelPreview();
       return;
@@ -1100,6 +1235,10 @@ export class Editor implements ShiftEditor {
   }
 
   public redo() {
+    if (this.#activeDrag) {
+      this.#cancelDrag(this.#activeDrag);
+      return;
+    }
     if (this.#isInPreview) {
       this.cancelPreview();
       return;
@@ -1130,9 +1269,11 @@ export class Editor implements ShiftEditor {
   }
 
   public setXAdvance(width: number): void {
-    this.beginPreview();
-    this.#fontEngine.editing.setXAdvance(width);
-    this.commitPreview("Set X Advance");
+    const glyph = this.#$glyph.value;
+    if (!glyph) return;
+    if (glyph.xAdvance === width) return;
+
+    this.#commandHistory.execute(new SetXAdvanceCommand(glyph.xAdvance, width));
   }
 
   public setLeftSidebearing(value: number): void {

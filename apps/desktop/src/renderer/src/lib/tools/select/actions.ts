@@ -2,6 +2,7 @@ import type { PointId, Point2D, Rect2D, ContourId, AnchorId } from "@shift/types
 import type { SegmentId } from "@/types/indicator";
 import type { SelectionMode } from "@/types/editor";
 import type { EditorAPI } from "@/lib/tools/core";
+import type { NodePositionUpdate } from "@/types/positionUpdate";
 import {
   NudgePointsCommand,
   ScalePointsCommand,
@@ -25,10 +26,6 @@ export type SelectAction =
   | { type: "clearSelection" }
   | { type: "clearAndStartMarquee" }
   | { type: "setSelectionMode"; mode: SelectionMode }
-  | { type: "beginPreview" }
-  | { type: "commitPreview"; label: string }
-  | { type: "cancelPreview" }
-  | { type: "moveSelectionDelta"; delta: Point2D; pointIds: PointId[]; anchorIds: AnchorId[] }
   | {
       type: "scalePoints";
       pointIds: PointId[];
@@ -41,6 +38,12 @@ export type SelectAction =
       pointIds: PointId[];
       angle: number;
       center: Point2D;
+    }
+  | {
+      type: "moveSelectionDelta";
+      delta: Point2D;
+      pointIds: PointId[];
+      anchorIds: AnchorId[];
     }
   | { type: "nudge"; dx: number; dy: number; pointIds: PointId[] }
   | { type: "toggleSmooth"; pointId: PointId }
@@ -93,28 +96,16 @@ export function executeAction(action: SelectAction, editor: EditorAPI): void {
       editor.setSelectionMode(action.mode);
       break;
 
-    case "beginPreview":
-      editor.beginPreview();
-      break;
-
-    case "commitPreview":
-      editor.commitPreview(action.label);
-      break;
-
-    case "cancelPreview":
-      editor.cancelPreview();
-      break;
-
-    case "moveSelectionDelta":
-      executeMoveSelectionDelta(action.delta, action.pointIds, action.anchorIds, editor);
-      break;
-
     case "scalePoints":
       executeScalePoints(action.pointIds, action.sx, action.sy, action.anchor, editor);
       break;
 
     case "rotatePoints":
       executeRotatePoints(action.pointIds, action.angle, action.center, editor);
+      break;
+
+    case "moveSelectionDelta":
+      executeMoveSelectionDelta(action.pointIds, action.anchorIds, action.delta, editor);
       break;
 
     case "nudge":
@@ -223,23 +214,6 @@ function executeSelectPointsInRect(rect: Rect2D, editor: EditorAPI): PointId[] {
   return pointIds;
 }
 
-function executeMoveSelectionDelta(
-  delta: Point2D,
-  pointIds: PointId[],
-  anchorIds: AnchorId[],
-  editor: EditorAPI,
-): void {
-  if (delta.x === 0 && delta.y === 0) return;
-
-  if (pointIds.length > 0) {
-    editor.applySmartEdits(pointIds, delta.x, delta.y);
-  }
-
-  if (anchorIds.length > 0) {
-    editor.moveAnchors(anchorIds, delta);
-  }
-}
-
 function executeScalePoints(
   pointIds: PointId[],
   sx: number,
@@ -247,7 +221,6 @@ function executeScalePoints(
   anchor: Point2D,
   editor: EditorAPI,
 ): void {
-  editor.cancelPreview();
   if (sx !== 1 || sy !== 1) {
     const cmd = new ScalePointsCommand(pointIds, sx, sy, anchor);
     editor.commands.execute(cmd);
@@ -260,10 +233,53 @@ function executeRotatePoints(
   center: Point2D,
   editor: EditorAPI,
 ): void {
-  editor.cancelPreview();
   if (angle !== 0) {
     const cmd = new RotatePointsCommand(pointIds, angle, center);
     editor.commands.execute(cmd);
+  }
+}
+
+function executeMoveSelectionDelta(
+  pointIds: PointId[],
+  anchorIds: AnchorId[],
+  delta: Point2D,
+  editor: EditorAPI,
+): void {
+  const updates: NodePositionUpdate[] = [];
+
+  if (pointIds.length > 0) {
+    const selectedPointIds = new Set(pointIds);
+    for (const point of editor.getAllPoints()) {
+      if (!selectedPointIds.has(point.id)) {
+        continue;
+      }
+      updates.push({
+        node: { kind: "point", id: point.id },
+        x: point.x + delta.x,
+        y: point.y + delta.y,
+      });
+    }
+  }
+
+  if (anchorIds.length > 0) {
+    const glyph = editor.glyph.peek();
+    if (glyph) {
+      const selectedAnchorIds = new Set(anchorIds);
+      for (const anchor of glyph.anchors) {
+        if (!selectedAnchorIds.has(anchor.id)) {
+          continue;
+        }
+        updates.push({
+          node: { kind: "anchor", id: anchor.id },
+          x: anchor.x + delta.x,
+          y: anchor.y + delta.y,
+        });
+      }
+    }
+  }
+
+  if (updates.length > 0) {
+    editor.setNodePositions(updates);
   }
 }
 

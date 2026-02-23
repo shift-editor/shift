@@ -146,22 +146,27 @@ describe("Select tool", () => {
       expect(expectAt(points, 0).y).toBe(130);
     });
 
-    it("should use applySmartEdits when dragging", () => {
+    it("should begin drag session when dragging", () => {
+      ctx.mocks.drag.mocks.beginDrag.mockClear();
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      expectDefined(ctx.mocks.edit.mocks.applySmartEdits, "edit.applySmartEdits mock").mockClear();
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalled();
+      expect(ctx.mocks.drag.mocks.beginDrag).toHaveBeenCalled();
     });
 
-    it("should call applySmartEdits with selected points and delta", () => {
+    it("should update drag session during drag", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      expectDefined(ctx.mocks.edit.mocks.applySmartEdits, "edit.applySmartEdits mock").mockClear();
+      ctx.mocks.drag.lastSession.update.mockClear();
 
       sim.onMouseMove(createToolMouseEvent(150, 160));
 
-      expect(ctx.mocks.edit.applySmartEdits).toHaveBeenCalledWith(expect.any(Array), 50, 60);
+      expect(ctx.mocks.drag.lastSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pointer: expect.any(Object),
+          modifiers: expect.any(Object),
+        }),
+      );
     });
   });
 
@@ -400,7 +405,7 @@ describe("Select tool", () => {
       ctx.edit.addPoint(100, 100, "onCurve", false);
       ctx.edit.addPoint(0, 100, "onCurve", false);
 
-      sim.onMouseDown(createToolMouseEvent(50, 50));
+      sim.onMouseDown(createToolMouseEvent(-10, -10));
       sim.onMouseMove(createToolMouseEvent(120, 120));
       sim.onMouseUp(createToolMouseEvent(120, 120));
       expect(select.getState().type).toBe("selected");
@@ -423,23 +428,15 @@ describe("Select tool", () => {
       });
     });
 
-    it("should cancel preview before executing scale command", () => {
+    it("should restore initial geometry before executing scale command", () => {
       sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
 
-      const cancelCalls: number[] = [];
-      const executeCalls: number[] = [];
-      let callOrder = 0;
-
-      expectDefined(
-        ctx.mocks.preview.mocks.cancelPreview,
-        "preview.cancelPreview mock",
-      ).mockImplementation(() => {
-        cancelCalls.push(callOrder++);
-      });
+      let rightmostBeforeExecute: number | null = null;
       expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
         (cmd: { execute?: (ctx: unknown) => unknown }) => {
-          executeCalls.push(callOrder++);
+          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
+          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
           return cmd.execute?.({
             fontEngine: ctx.fontEngine,
             glyph: ctx.fontEngine.$glyph.value,
@@ -449,17 +446,7 @@ describe("Select tool", () => {
 
       sim.onMouseUp(createToolMouseEvent(50, 50));
 
-      expect(cancelCalls.length).toBeGreaterThan(0);
-      expect(executeCalls.length).toBeGreaterThan(0);
-      expect(expectAt(cancelCalls, 0)).toBeLessThan(expectAt(executeCalls, 0));
-    });
-
-    it("should begin preview when starting resize", () => {
-      expectDefined(ctx.mocks.preview.mocks.beginPreview, "preview.beginPreview mock").mockClear();
-
-      sim.onMouseDown(createToolMouseEvent(110, 50));
-
-      expect(ctx.mocks.preview.beginPreview).toHaveBeenCalled();
+      expect(rightmostBeforeExecute).toBe(100);
     });
 
     it("should transition to resizing state when dragging from edge", () => {
@@ -476,17 +463,82 @@ describe("Select tool", () => {
       expect(select.getState().type).toBe("selected");
     });
 
-    it("should cancel preview on resize dragCancel", () => {
+    it("should restore geometry on resize dragCancel", () => {
       sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
-      expectDefined(
-        ctx.mocks.preview.mocks.cancelPreview,
-        "preview.cancelPreview mock",
-      ).mockClear();
+
+      let points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).toBe(50);
 
       select.handleEvent({ type: "dragCancel" });
 
-      expect(ctx.mocks.preview.cancelPreview).toHaveBeenCalled();
+      points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).toBe(100);
+    });
+  });
+
+  describe("rotate behavior", () => {
+    beforeEach(() => {
+      ctx.edit.addPoint(0, 0, "onCurve", false);
+      ctx.edit.addPoint(200, 0, "onCurve", false);
+      ctx.edit.addPoint(200, 100, "onCurve", false);
+      ctx.edit.addPoint(0, 100, "onCurve", false);
+
+      sim.onMouseDown(createToolMouseEvent(-10, -10));
+      sim.onMouseMove(createToolMouseEvent(210, 110));
+      sim.onMouseUp(createToolMouseEvent(210, 110));
+      expect(select.getState().type).toBe("selected");
+
+      expectDefined(
+        ctx.mocks.hitTest.mocks.getSelectionBoundingRect,
+        "hitTest.getSelectionBoundingRect mock",
+      ).mockReturnValue({
+        left: 0,
+        right: 200,
+        top: 0,
+        bottom: 100,
+        width: 200,
+        height: 100,
+      });
+
+      (ctx.hitTestBoundingBoxAt as ReturnType<typeof import("vitest").vi.fn>).mockReturnValue({
+        type: "rotate",
+        corner: "top-left",
+      });
+    });
+
+    it("should restore initial geometry before executing rotate command", () => {
+      sim.onMouseDown(createToolMouseEvent(-10, -10));
+      sim.onMouseMove(createToolMouseEvent(110, -10));
+
+      let rightmostBeforeExecute: number | null = null;
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
+        (cmd: { execute?: (ctx: unknown) => unknown }) => {
+          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
+          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
+          return cmd.execute?.({
+            fontEngine: ctx.fontEngine,
+            glyph: ctx.fontEngine.$glyph.value,
+          });
+        },
+      );
+
+      sim.onMouseUp(createToolMouseEvent(110, -10));
+
+      expect(rightmostBeforeExecute).toBe(200);
+    });
+
+    it("should restore geometry on rotate dragCancel", () => {
+      sim.onMouseDown(createToolMouseEvent(-10, -10));
+      sim.onMouseMove(createToolMouseEvent(110, -10));
+
+      let points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).not.toBe(200);
+
+      select.handleEvent({ type: "dragCancel" });
+
+      points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).toBe(200);
     });
   });
 });

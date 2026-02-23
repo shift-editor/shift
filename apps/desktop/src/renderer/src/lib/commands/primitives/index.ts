@@ -11,4 +11,8 @@ export {
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
 export { SnapshotCommand } from "./SnapshotCommand";
-export { SetLeftSidebearingCommand, SetRightSidebearingCommand } from "./SidebearingCommands";
+export {
+  SetXAdvanceCommand,
+  SetLeftSidebearingCommand,
+  SetRightSidebearingCommand,
+} from "./SidebearingCommands";

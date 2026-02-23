@@ -1,7 +1,7 @@
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
-import Glyph from "@/assets/sidebar/placeholder-glyph.svg";
+import Glyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { getGlyphInfo } from "@/store/glyphInfo";

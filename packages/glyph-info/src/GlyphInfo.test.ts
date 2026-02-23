@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GlyphInfo } from "./GlyphInfo.js";
+import type { GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
 
 let db: GlyphInfo;
@@ -166,7 +167,7 @@ describe("getGlyphsByCategory", () => {
   });
 
   it("returns empty array for non-existent category", () => {
-    expect(db.getGlyphsByCategory("NonExistent")).toEqual([]);
+    expect(db.getGlyphsByCategory("NonExistent" as GlyphCategory)).toEqual([]);
   });
 
   it("all returned glyphs match the requested category", () => {
@@ -454,6 +455,106 @@ describe("search", () => {
     expect(() => db.search('"')).not.toThrow();
     expect(() => db.search("(")).not.toThrow();
     expect(() => db.search(")")).not.toThrow();
+  });
+});
+
+describe("category helpers", () => {
+  it("resolves known codepoint category metadata", () => {
+    const result = db.getCategoryForCodepoint(0x24);
+    expect(result).toEqual({
+      category: "Symbol",
+      subCategoryKey: "Currency",
+      subCategoryLabel: "Currency",
+      isKnown: true,
+    });
+  });
+
+  it("resolves unknown codepoint using defaults", () => {
+    const result = db.getCategoryForCodepoint(0xfffe);
+    expect(result).toEqual({
+      category: "Other",
+      subCategoryKey: "__null_subcategory__",
+      subCategoryLabel: "General",
+      isKnown: false,
+    });
+  });
+
+  it("supports overriding fallback labels", () => {
+    const result = db.getCategoryForCodepoint(0xfffe, {
+      unknownCategoryLabel: "Unknown",
+      nullSubCategoryKey: "none",
+      nullSubCategoryLabel: "None",
+    });
+    expect(result).toEqual({
+      category: "Unknown",
+      subCategoryKey: "none",
+      subCategoryLabel: "None",
+      isKnown: false,
+    });
+  });
+
+  it("builds sorted category summaries with subcategory counts", () => {
+    const summaries = db.getCategorySummaries([0x24, 0x20, 0x30, 0xfffe]);
+    expect(summaries.map((summary) => summary.category)).toEqual([
+      "Number",
+      "Other",
+      "Separator",
+      "Symbol",
+    ]);
+
+    const symbolSummary = summaries.find((summary) => summary.category === "Symbol");
+    expect(symbolSummary).toBeDefined();
+    expect(symbolSummary!.count).toBe(1);
+    expect(symbolSummary!.subCategories).toEqual([
+      { key: "Currency", label: "Currency", count: 1 },
+    ]);
+  });
+
+  it("can exclude unknown codepoints from summaries", () => {
+    const summaries = db.getCategorySummaries([0x24, 0xfffe], { includeUnknown: false });
+    expect(summaries.map((summary) => summary.category)).toEqual(["Symbol"]);
+  });
+
+  it("filters by category and subcategory", () => {
+    const codepoints = [0x24, 0xa3, 0x20, 0x30, 0xfffe];
+    const categoryOnly = db.filterCodepoints(codepoints, { category: "Symbol" });
+    expect(categoryOnly).toEqual([0x24, 0xa3]);
+
+    const subCategory = db.filterCodepoints(codepoints, {
+      category: "Symbol",
+      subCategoryKey: "Currency",
+    });
+    expect(subCategory).toEqual([0x24, 0xa3]);
+  });
+
+  it("filters by full-text query while preserving input order", () => {
+    const codepoints = [0x41, 0x42, 0x24, 0x21];
+    const filtered = db.filterCodepoints(codepoints, { query: "exclam" });
+    expect(filtered).toEqual([0x21]);
+  });
+
+  it("returns empty list for subcategory without category", () => {
+    const codepoints = [0x24, 0x23, 0x20];
+    const filtered = db.filterCodepoints(codepoints, { subCategoryKey: "Currency" });
+    expect(filtered).toEqual([]);
+  });
+
+  it("can exclude unknown codepoints from filtering", () => {
+    const codepoints = [0x24, 0xfffe];
+    const filtered = db.filterCodepoints(codepoints, {}, { includeUnknown: false });
+    expect(filtered).toEqual([0x24]);
+  });
+
+  it("creates reusable catalogs with summaries and filtering", () => {
+    const catalog = db.createCategoryCatalog([0x24, 0xa3, 0x30, 0xfffe]);
+    expect(catalog.categories.map((summary) => summary.category)).toEqual([
+      "Number",
+      "Other",
+      "Symbol",
+    ]);
+
+    const symbolOnly = catalog.filter({ category: "Symbol" });
+    expect(symbolOnly).toEqual([0x24, 0xa3]);
   });
 });
 

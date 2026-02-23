@@ -4,139 +4,196 @@
 
 import { Glyphs } from "@shift/font";
 import { Vec2 } from "@shift/geo";
-import type { PointId, GlyphSnapshot, Point2D } from "@shift/types";
-import type { MatchedRule, PointMove, RulesResult } from "./types";
-import { matchRule } from "./matcher";
+import type { Point, PointId, GlyphSnapshot, Point2D } from "@shift/types";
+import type {
+  DragPatch,
+  MatchedRule,
+  MatchedRuleById,
+  PointMove,
+  RuleAffectedRole,
+  RuleId,
+} from "./types";
+import { pickRule } from "./matcher";
+import { maintainCollinearity, maintainTangency } from "./constraints";
 
-const EPSILON = 1e-10;
+function findPointById(glyph: GlyphSnapshot, pointId: PointId | undefined): Point | null {
+  if (!pointId) return null;
+  const found = Glyphs.findPoint(glyph, pointId);
+  if (!found) return null;
+  return found.point;
+}
 
-/**
- * Maintain tangency by rotating the opposite handle
- *
- * When a handle is moved, the opposite handle rotates to maintain
- * a straight line through the anchor point, preserving its magnitude.
- */
-function maintainTangency(
+function findAffectedPointByRole<Id extends RuleId, Role extends RuleAffectedRole<Id>>(
   glyph: GlyphSnapshot,
-  anchorId: PointId,
-  oppositeHandleId: PointId,
-  newMovedPos: Point2D,
-): PointMove | null {
-  const anchor = Glyphs.findPoint(glyph, anchorId)?.point;
-  const opposite = Glyphs.findPoint(glyph, oppositeHandleId)?.point;
+  rule: MatchedRuleById<Id>,
+  role: Role,
+): Point | null {
+  return findPointById(glyph, rule.affected[role]);
+}
 
-  if (!anchor || !opposite) {
-    return null;
-  }
-
-  // Calculate the magnitude of the opposite handle from anchor
-  const oppositeVec = Vec2.sub(opposite, anchor);
-  const oppositeMagnitude = Vec2.len(oppositeVec);
-
-  // Get direction from anchor to moved handle (new position)
-  const movedVec = Vec2.sub(newMovedPos, anchor);
-  const movedLen = Vec2.len(movedVec);
-
-  // If moved handle is at anchor, preserve opposite position
-  if (movedLen < EPSILON) {
-    return null;
-  }
-
-  // Normalize and flip direction for opposite handle
-  const normalized = Vec2.normalize(movedVec);
-  const newOppositePos = Vec2.add(anchor, Vec2.scale(normalized, -oppositeMagnitude));
-
-  return {
-    id: oppositeHandleId,
-    x: newOppositePos.x,
-    y: newOppositePos.y,
+function findAffectedPointsByRole<
+  Id extends RuleId,
+  const Roles extends readonly RuleAffectedRole<Id>[],
+>(
+  glyph: GlyphSnapshot,
+  rule: MatchedRuleById<Id>,
+  ...roles: Roles
+): { [K in keyof Roles]: Point | null } {
+  return roles.map((role) => findAffectedPointByRole(glyph, rule, role)) as {
+    [K in keyof Roles]: Point | null;
   };
+}
+
+function pushTranslatedMove(moves: PointMove[], point: Point | null, mousePos: Point2D): void {
+  if (!point) return;
+  moves.push({
+    id: point.id,
+    ...Vec2.add(point, mousePos),
+  });
 }
 
 /**
  * Apply a matched rule and compute the resulting point moves
  */
-function applyRule(
-  glyph: GlyphSnapshot,
-  rule: MatchedRule,
-  selectedMoves: Map<PointId, PointMove>,
-  dx: number,
-  dy: number,
-): PointMove[] {
+function applyRule(glyph: GlyphSnapshot, rule: MatchedRule, mousePos: Point2D): PointMove[] {
   const moves: PointMove[] = [];
 
   switch (rule.ruleId) {
-    case "moveRightHandle":
-    case "moveLeftHandle":
+    case "moveRightHandle": {
+      const rightHandle = findAffectedPointByRole(glyph, rule, "rightHandle");
+      pushTranslatedMove(moves, rightHandle, mousePos);
+      break;
+    }
+    case "moveLeftHandle": {
+      const leftHandle = findAffectedPointByRole(glyph, rule, "leftHandle");
+      pushTranslatedMove(moves, leftHandle, mousePos);
+      break;
+    }
     case "moveBothHandles": {
-      // Move handles by the same delta as the anchor
-      for (const handleId of rule.affectedPointIds) {
-        const handle = Glyphs.findPoint(glyph, handleId)?.point;
-        if (handle) {
-          moves.push({
-            id: handleId,
-            x: handle.x + dx,
-            y: handle.y + dy,
-          });
-        }
+      const leftHandle = findAffectedPointByRole(glyph, rule, "leftHandle");
+      const rightHandle = findAffectedPointByRole(glyph, rule, "rightHandle");
+      const seen = new Set<PointId>();
+      for (const handle of [leftHandle, rightHandle]) {
+        if (!handle || seen.has(handle.id)) continue;
+        seen.add(handle.id);
+        pushTranslatedMove(moves, handle, mousePos);
       }
       break;
     }
 
-    case "maintainTangencyRight": {
-      // affectedPointIds: [anchorId, oppositeHandleId]
-      if (rule.affectedPointIds.length >= 2) {
-        const anchorId = rule.affectedPointIds[0];
-        const oppositeHandleId = rule.affectedPointIds[1];
-        if (!anchorId || !oppositeHandleId) {
-          break;
-        }
-
-        // Get the new position of the moved handle
-        const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;
-        if (movedHandle) {
-          const newMovedPos = selectedMoves.get(rule.pointId) ?? {
-            x: movedHandle.x + dx,
-            y: movedHandle.y + dy,
-          };
-
-          const tangencyMove = maintainTangency(glyph, anchorId, oppositeHandleId, newMovedPos);
-
-          if (tangencyMove) {
-            moves.push(tangencyMove);
-          }
-        }
-      }
-      break;
-    }
-
+    case "maintainTangencyRight":
     case "maintainTangencyLeft": {
-      // affectedPointIds: [anchorId, oppositeHandleId]
-      if (rule.affectedPointIds.length >= 2) {
-        const anchorId = rule.affectedPointIds[0];
-        const oppositeHandleId = rule.affectedPointIds[1];
-        if (!anchorId || !oppositeHandleId) {
-          break;
-        }
+      const selectedHandle = findPointById(glyph, rule.pointId);
+      const [smooth, oppositeHandle] = findAffectedPointsByRole(
+        glyph,
+        rule,
+        "smooth",
+        "oppositeHandle",
+      );
+      if (!selectedHandle || !smooth || !oppositeHandle) break;
 
-        // Get the new position of the moved handle
-        const movedHandle = Glyphs.findPoint(glyph, rule.pointId)?.point;
-        if (movedHandle) {
-          const newMovedPos = selectedMoves.get(rule.pointId) ?? {
-            x: movedHandle.x + dx,
-            y: movedHandle.y + dy,
-          };
+      const newOppositePos = maintainTangency(selectedHandle, smooth, oppositeHandle, mousePos);
+      moves.push({
+        id: oppositeHandle.id,
+        ...newOppositePos,
+      });
 
-          const tangencyMove = maintainTangency(glyph, anchorId, oppositeHandleId, newMovedPos);
+      break;
+    }
+    case "maintainTangencyBoth": {
+      const selected = findPointById(glyph, rule.pointId);
+      if (!selected) break;
 
-          if (tangencyMove) {
-            moves.push(tangencyMove);
-          }
-        }
+      const [target, reference] = findAffectedPointsByRole(glyph, rule, "target", "reference");
+      if (target && reference) {
+        const newSmooth = Vec2.add(selected, mousePos);
+        const newDirection = Vec2.sub(reference, newSmooth);
+        const oppositeLen = Vec2.len(Vec2.sub(target, selected));
+
+        const newArmDir = Vec2.normalize(newDirection);
+        const newPos = Vec2.add(newSmooth, Vec2.scale(newArmDir, -oppositeLen));
+
+        moves.push({
+          id: target.id,
+          ...newPos,
+        });
+
+        break;
       }
+
+      const [leftHandle, leftSmooth, rightSmooth, rightHandle] = findAffectedPointsByRole(
+        glyph,
+        rule,
+        "leftHandle",
+        "leftSmooth",
+        "rightSmooth",
+        "rightHandle",
+      );
+      if (leftHandle && leftSmooth && rightSmooth && rightHandle) {
+        const tangentLeft = maintainTangency(selected, leftSmooth, leftHandle, mousePos);
+        const tangentRight = maintainTangency(selected, rightSmooth, rightHandle, mousePos);
+
+        moves.push({
+          id: leftHandle.id,
+          ...tangentLeft,
+        });
+        moves.push({
+          id: rightHandle.id,
+          ...tangentRight,
+        });
+
+        break;
+      }
+
+      const [otherSmooth, otherHandle, associatedHandle] = findAffectedPointsByRole(
+        glyph,
+        rule,
+        "otherSmooth",
+        "otherHandle",
+        "associatedHandle",
+      );
+      const selectedSmooth = findPointById(glyph, rule.pointId);
+      if (otherHandle && otherSmooth && associatedHandle && selectedSmooth) {
+        const newSmooth = Vec2.add(selectedSmooth, mousePos);
+        const newDirection = Vec2.sub(otherSmooth, newSmooth);
+        const newArmDir = Vec2.normalize(newDirection);
+
+        const assocatedHandleLen = Vec2.len(Vec2.sub(selectedSmooth, associatedHandle));
+        const otherHandleLen = Vec2.len(Vec2.sub(otherSmooth, otherHandle));
+
+        const newAssociatedHandlePos = Vec2.add(
+          newSmooth,
+          Vec2.scale(newArmDir, -assocatedHandleLen),
+        );
+        const newOtherHandlePos = Vec2.add(otherSmooth, Vec2.scale(newArmDir, otherHandleLen));
+
+        moves.push({
+          id: associatedHandle.id,
+          ...newAssociatedHandlePos,
+        });
+        moves.push({
+          id: otherHandle.id,
+          ...newOtherHandlePos,
+        });
+      }
+
       break;
     }
     case "maintainCollinearity": {
+      const handlePos = findPointById(glyph, rule.pointId);
+      const [smoothPos, endPos] = findAffectedPointsByRole(glyph, rule, "smooth", "end");
+      if (!handlePos || !smoothPos || !endPos) {
+        break;
+      }
+
+      const newPos = maintainCollinearity(smoothPos, endPos, handlePos, mousePos);
+      if (!newPos) break;
+
+      moves.push({
+        id: rule.pointId,
+        ...newPos,
+      });
+
       break;
     }
   }
@@ -145,60 +202,48 @@ function applyRule(
 }
 
 /**
- * Apply rules to a selection and compute all point moves
+ * Constrain a drag frame and compute absolute point positions.
  *
- * @param glyph - Current glyph snapshot
- * @param selectedIds - Set of selected point IDs
- * @param dx - Delta X to move
- * @param dy - Delta Y to move
- * @returns All point moves to apply and matched rules
+ * `glyph` is the **base** glyph (unchanged). The delta is applied internally.
  */
-export function applyRules(
-  glyph: GlyphSnapshot,
-  selectedIds: ReadonlySet<PointId>,
-  dx: number,
-  dy: number,
-): RulesResult {
-  const matchedRules: MatchedRule[] = [];
-  const allMoves = new Map<PointId, PointMove>();
+export interface ConstrainDragInput {
+  glyph: GlyphSnapshot;
+  selectedIds: ReadonlySet<PointId>;
+  mousePosition: Point2D;
+}
 
-  // First: compute moves for all selected points
+export function constrainDrag(input: ConstrainDragInput): DragPatch {
+  const { glyph, selectedIds, mousePosition } = input;
+
+  const selectedMoves = new Map<PointId, PointMove>();
+  const matched: MatchedRule[] = [];
+
   for (const pointId of selectedIds) {
     const found = Glyphs.findPoint(glyph, pointId);
-    if (found) {
-      const { point } = found;
-      allMoves.set(pointId, {
-        id: pointId,
-        x: point.x + dx,
-        y: point.y + dy,
-      });
-    }
+    if (!found) continue;
+
+    const { point, contour } = found;
+
+    const delta = Vec2.add(point, mousePosition);
+    selectedMoves.set(pointId, {
+      id: pointId,
+      ...delta,
+    });
+
+    const rule = pickRule(contour, pointId, selectedIds);
+    if (rule) matched.push(rule);
   }
 
-  // Second: match rules for each selected point
-  for (const pointId of selectedIds) {
-    const pointInContour = Glyphs.findPoint(glyph, pointId);
-    if (!pointInContour) continue;
-
-    const rule = matchRule(pointInContour.contour, pointId, selectedIds);
-    if (rule) {
-      matchedRules.push(rule);
-    }
-  }
-
-  // Third: apply rules to compute additional moves
-  for (const rule of matchedRules) {
-    const ruleMoves = applyRule(glyph, rule, allMoves, dx, dy);
-    for (const move of ruleMoves) {
-      // Don't override selected point moves
-      if (!selectedIds.has(move.id)) {
-        allMoves.set(move.id, move);
-      }
+  // Apply rules — rule moves override selected moves, and add non-selected moves
+  const pointMoves = new Map(selectedMoves);
+  for (const rule of matched) {
+    for (const move of applyRule(glyph, rule, mousePosition)) {
+      pointMoves.set(move.id, move);
     }
   }
 
   return {
-    moves: Array.from(allMoves.values()),
-    matchedRules,
+    pointUpdates: Array.from(pointMoves.values()),
+    matched,
   };
 }

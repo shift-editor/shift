@@ -1,13 +1,12 @@
 import type { ContourId, RenderContourSnapshot } from "@shift/types";
 
-export interface PointPositionUpdate {
+export interface NodeRef {
+  kind: "point" | "anchor" | "guideline";
   id: string;
-  x: number;
-  y: number;
 }
 
-export interface AnchorPositionUpdate {
-  id: string;
+export interface NodePositionUpdate {
+  node: NodeRef;
   x: number;
   y: number;
 }
@@ -89,8 +88,7 @@ export interface FontEngineAPI {
     pointType: "onCurve" | "offCurve",
     smooth: boolean,
   ): string;
-  movePoints(pointIds: string[], dx: number, dy: number): string;
-  moveAnchors(anchorIds: string[], dx: number, dy: number): string;
+  moveNodes(nodes: NodeRef[], dx: number, dy: number): string;
   removePoints(pointIds: string[]): string;
   toggleSmooth(pointId: string): string;
 
@@ -98,8 +96,7 @@ export interface FontEngineAPI {
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
 
   // ── Drag Operations ──
-  setPointPositions(updates: PointPositionUpdate[]): boolean;
-  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean;
+  setNodePositions(updates: NodePositionUpdate[]): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }
 

@@ -3,11 +3,11 @@ import { FC } from "react";
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
 import { useSignalState } from "@/lib/reactive";
 import { getEditor } from "@/store/store";
-import { Svg } from "@/types/common";
+import { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
 
 interface ToolbarIconProps {
-  Icon: Svg;
+  Icon: SVG;
   name: ToolName;
   tooltip: string;
   activeTool: ToolName;

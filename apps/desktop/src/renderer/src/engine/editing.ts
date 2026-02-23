@@ -1,16 +1,15 @@
 import type { GlyphSnapshot, PointId, ContourId, Point2D, AnchorId } from "@shift/types";
-import { applyRules } from "@shift/rules";
+import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type {
   FontEngineAPI,
-  PointPositionUpdate,
-  AnchorPositionUpdate,
+  NodePositionUpdate as BridgeNodePositionUpdate,
 } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
-import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 /** Raw NAPI surface that {@link EditingManager} wraps. Provides bridge access, session guards, glyph read/write, and low-level mutation primitives. */
 export interface EditingEngineDeps {
@@ -21,8 +20,7 @@ export interface EditingEngineDeps {
   getActiveContourId(): ContourId | null;
   getSnapshot(): GlyphSnapshot;
   restoreSnapshot(snapshot: GlyphSnapshot): void;
-  setPointPositions(updates: PointPositionUpdate[]): boolean;
-  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean;
+  setNodePositions(updates: BridgeNodePositionUpdate[]): boolean;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult;
 }
 
@@ -78,10 +76,16 @@ export class EditingManager {
     const anchorUpdatesById = new Map<AnchorId, { x: number; y: number }>();
 
     for (const update of updates) {
-      if (update.nodeType === "point") {
-        pointUpdatesById.set(update.id, { x: update.x, y: update.y });
-      } else {
-        anchorUpdatesById.set(update.id, { x: update.x, y: update.y });
+      switch (update.node.kind) {
+        case "point":
+          pointUpdatesById.set(update.node.id, { x: update.x, y: update.y });
+          break;
+        case "anchor":
+          anchorUpdatesById.set(update.node.id, { x: update.x, y: update.y });
+          break;
+        case "guideline":
+          // Guideline updates are reserved for a later pass.
+          break;
       }
     }
 
@@ -145,12 +149,24 @@ export class EditingManager {
 
   movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
     if (pointIds.length === 0) return [];
-    return this.#dispatch(this.#engine.raw.movePoints(pointIds, delta.x, delta.y));
+    return this.#dispatch(
+      this.#engine.raw.moveNodes(
+        pointIds.map((id) => ({ kind: "point", id })),
+        delta.x,
+        delta.y,
+      ),
+    );
   }
 
   moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
     if (anchorIds.length === 0) return;
-    this.#dispatchVoid(this.#engine.raw.moveAnchors(anchorIds, delta.x, delta.y));
+    this.#dispatchVoid(
+      this.#engine.raw.moveNodes(
+        anchorIds.map((id) => ({ kind: "anchor", id })),
+        delta.x,
+        delta.y,
+      ),
+    );
   }
 
   movePointTo(pointId: PointId, x: number, y: number): void {
@@ -270,18 +286,22 @@ export class EditingManager {
     const glyph = this.#engine.getGlyph();
     if (!glyph) return [];
 
-    const { moves } = applyRules(glyph, selectedPoints, dx, dy);
-    if (moves.length === 0) return [];
+    const patch = constrainDrag({
+      glyph,
+      selectedIds: selectedPoints,
+      mousePosition: { x: dx, y: dy },
+    });
 
-    const updates: NodePositionUpdate[] = moves.map((move) => ({
-      nodeType: "point",
-      id: move.id,
-      x: move.x,
-      y: move.y,
+    const updates: NodePositionUpdateList = patch.pointUpdates.map((update) => ({
+      node: { kind: "point", id: update.id },
+      x: update.x,
+      y: update.y,
     }));
-    this.setNodePositions(updates);
+    if (updates.length > 0) {
+      this.setNodePositions(updates);
+    }
 
-    return moves.map((m) => m.id);
+    return patch.pointUpdates.map((u) => u.id);
   }
 
   /** Batch-sets absolute node positions. Applies optimistically to the signal, then syncs to native. */
@@ -295,23 +315,12 @@ export class EditingManager {
     const updatedGlyph = this.#applyNodePositionUpdatesToGlyph(glyph, updates);
     this.#engine.emitGlyph(updatedGlyph);
 
-    const pointUpdates: PointPositionUpdate[] = [];
-    const anchorUpdates: AnchorPositionUpdate[] = [];
-
-    for (const update of updates) {
-      if (update.nodeType === "point") {
-        pointUpdates.push({ id: update.id, x: update.x, y: update.y });
-      } else {
-        anchorUpdates.push({ id: update.id, x: update.x, y: update.y });
-      }
-    }
-
-    if (pointUpdates.length > 0) {
-      this.#engine.setPointPositions(pointUpdates);
-    }
-    if (anchorUpdates.length > 0) {
-      this.#engine.setAnchorPositions(anchorUpdates);
-    }
+    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
+      node: { kind: update.node.kind, id: update.node.id },
+      x: update.x,
+      y: update.y,
+    }));
+    this.#engine.setNodePositions(nativeUpdates);
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */

@@ -58,6 +58,7 @@ const electronAPI: ElectronAPI = {
   onDebugReactScan: on("debug:react-scan"),
   onDebugPanel: on("debug:panel"),
   onDebugDumpSnapshot: on("debug:dump-snapshot"),
+  onDebugDumpSelectionPatterns: on("debug:dump-selection-patterns"),
   onDebugOverlays: on("debug:overlays"),
 
   // System

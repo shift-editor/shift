@@ -10,10 +10,11 @@ pub mod vec2;
 
 pub use shift_ir::{
     Anchor, AnchorId, Contour, ContourId, CurveSegment, CurveSegmentIter, Font, FontMetadata,
-    FontMetrics, Glyph, GlyphLayer, GlyphName, LayerId, Point, PointId, PointType, Transform,
+    FontMetrics, Glyph, GlyphLayer, GlyphName, GuidelineId, LayerId, Point, PointId, PointType,
+    Transform,
 };
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};
 pub use shift_backends::{FontBackend, FontReader, FontWriter};
 
-pub use edit_session::{PasteContour, PastePoint, PasteResult};
+pub use edit_session::{NodePositionUpdate, NodeRef, PasteContour, PastePoint, PasteResult};

@@ -7,7 +7,7 @@ import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { Bounds } from "@shift/geo";
-import ScaleIcon from "@/assets/sidebar/scale.svg";
+import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 
 export const ScaleSection = () => {
   const editor = getEditor();
@@ -20,17 +20,26 @@ export const ScaleSection = () => {
     editor.glyph.value;
     editor.selectedPointIds.value;
 
+    if (!widthRef.current || !heightRef.current) return;
+
     const bounds = editor.getSelectionBounds();
-    widthRef.current?.setValue(bounds ? Math.round(Bounds.width(bounds)) : 0);
-    heightRef.current?.setValue(bounds ? Math.round(Bounds.height(bounds)) : 0);
+    if (!bounds) return;
+
+    const width = Bounds.width(bounds);
+    const height = Bounds.height(bounds);
+
+    widthRef.current.setValue(Math.round(width));
+    heightRef.current.setValue(Math.round(height));
   });
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
       const bounds = editor.getSelectionBounds();
       if (!bounds) return;
+
       const current = dimension === "width" ? Bounds.width(bounds) : Bounds.height(bounds);
       if (current === 0) return;
+
       const factor = value / current;
       const anchorPoint = anchorToPoint(anchor, bounds);
       editor.scaleSelection(factor, factor, anchorPoint);
@@ -42,6 +51,7 @@ export const ScaleSection = () => {
     (scale: number) => {
       const bounds = editor.getSelectionBounds();
       if (!bounds) return;
+
       const anchorPoint = anchorToPoint(anchor, bounds);
       editor.scaleSelection(scale, scale, anchorPoint);
     },
@@ -70,10 +80,10 @@ export const ScaleSection = () => {
         <div className="flex flex-col gap-2">
           <div className="text-xs text-secondary">Scale</div>
           <EditableSidebarInput
-            className="max-w-18"
+            className="max-w-18 pl-7"
             value={1}
             suffix="x"
-            icon={<ScaleIcon className="w-4 h-4" />}
+            icon={<ScaleIcon className="w-3.5 h-3.5" />}
             iconPosition="left"
             onValueChange={handleScaleChange}
           />

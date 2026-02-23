@@ -3,7 +3,7 @@ import { useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Toolbar } from "@/components/Toolbar";
-import { Sidebar } from "@/components/sidebar";
+import { Sidebar } from "@/components/sidebar-right";
 import { GlyphFinder } from "@/components/GlyphFinder";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -93,7 +93,6 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
     const unsubscribeDelete = onMenuDelete(() => {
       editor.deleteSelectedPoints();
     });
-
     return () => {
       unsubscribeUndo();
       unsubscribeRedo();

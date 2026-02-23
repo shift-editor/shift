@@ -9,7 +9,13 @@ import type {
   AnchorId,
   PointType,
 } from "@shift/types";
-import type { EditorAPI, ActiveToolState } from "@/lib/tools/core";
+import type {
+  EditorAPI,
+  ActiveToolState,
+  DragTarget,
+  DragUpdate,
+  DragSession,
+} from "@/lib/tools/core";
 import type { Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
@@ -27,7 +33,7 @@ import type {
   DragSnapSessionConfig,
   RotateSnapSession,
 } from "@/lib/editor/snapping/types";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 import type { ReflectAxis } from "@/types/transform";
 import { FontEngine, MockFontEngine } from "@/engine";
 import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
@@ -119,9 +125,25 @@ interface EditService {
 interface PreviewService {
   beginPreview(): void;
   cancelPreview(): void;
+  resetPreviewToStart(): void;
   commitPreview(label: string): void;
   isInPreview(): boolean;
   getPreviewSnapshot(): GlyphSnapshot | null;
+}
+
+interface DragService {
+  beginDrag(target: DragTarget, startPointer: Point2D): DragSession;
+  lastSession: {
+    update: ReturnType<typeof vi.fn>;
+    commit: ReturnType<typeof vi.fn>;
+    cancel: ReturnType<typeof vi.fn>;
+  };
+  mocks: {
+    beginDrag: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    commit: ReturnType<typeof vi.fn>;
+    cancel: ReturnType<typeof vi.fn>;
+  };
 }
 
 interface TransformService {
@@ -190,6 +212,7 @@ export interface MockToolContext extends EditorAPI {
     setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
   };
   readonly edit: ReturnType<typeof createMockEditService>;
+  readonly drag: ReturnType<typeof createMockDragService>;
   readonly preview: ReturnType<typeof createMockPreviewService>;
   readonly transform: ReturnType<typeof createMockTransformService>;
   readonly cursor: ReturnType<typeof createMockCursorService>;
@@ -212,6 +235,7 @@ export interface MockToolContext extends EditorAPI {
     selection: ReturnType<typeof createMockSelectionService>;
     hover: ReturnType<typeof createMockHoverService>;
     edit: ReturnType<typeof createMockEditService>;
+    drag: ReturnType<typeof createMockDragService>;
     preview: ReturnType<typeof createMockPreviewService>;
     transform: ReturnType<typeof createMockTransformService>;
     cursor: ReturnType<typeof createMockCursorService>;
@@ -595,6 +619,89 @@ function createMockEditService(
   };
 }
 
+function createMockDragService(fontEngine: FontEngine): DragService {
+  type ActiveDrag = {
+    target: DragTarget;
+    startPointer: Point2D;
+    baseGlyph: GlyphSnapshot;
+  };
+
+  let activeDrag: ActiveDrag | null = null;
+
+  const update = vi.fn((input: DragUpdate) => {
+    if (!activeDrag) return;
+    const drag = activeDrag;
+
+    const fromStart = {
+      x: input.pointer.x - drag.startPointer.x,
+      y: input.pointer.y - drag.startPointer.y,
+    };
+
+    fontEngine.editing.restoreSnapshot(drag.baseGlyph);
+
+    if (drag.target.pointIds.length > 0) {
+      fontEngine.editing.applySmartEdits(new Set(drag.target.pointIds), fromStart.x, fromStart.y);
+    }
+
+    const anchorUpdates: NodePositionUpdate[] = [];
+    for (const anchorId of drag.target.anchorIds) {
+      const anchor = drag.baseGlyph.anchors.find((item) => item.id === anchorId);
+      if (!anchor) continue;
+      anchorUpdates.push({
+        node: { kind: "anchor", id: anchorId },
+        x: anchor.x + fromStart.x,
+        y: anchor.y + fromStart.y,
+      });
+    }
+    if (anchorUpdates.length > 0) {
+      fontEngine.editing.setNodePositions(anchorUpdates);
+    }
+  });
+
+  const commit = vi.fn(() => {
+    activeDrag = null;
+  });
+
+  const cancel = vi.fn(() => {
+    if (activeDrag) {
+      fontEngine.editing.restoreSnapshot(activeDrag.baseGlyph);
+    }
+    activeDrag = null;
+  });
+
+  const beginDrag = vi.fn((target: DragTarget, startPointer: Point2D): DragSession => {
+    activeDrag = {
+      target: {
+        pointIds: [...target.pointIds],
+        anchorIds: [...target.anchorIds],
+      },
+      startPointer: { x: startPointer.x, y: startPointer.y },
+      baseGlyph: fontEngine.getSnapshot(),
+    };
+
+    return {
+      update,
+      commit,
+      cancel,
+    };
+  });
+
+  return {
+    beginDrag,
+    lastSession: {
+      update,
+      commit,
+      cancel,
+    },
+    mocks: {
+      beginDrag,
+      update,
+      commit,
+      cancel,
+    },
+  };
+}
+
 function createMockPreviewService(fontEngine: FontEngine): PreviewService & {
   _previewSnapshot: GlyphSnapshot | null;
   _isInPreview: boolean;
@@ -617,6 +724,11 @@ function createMockPreviewService(fontEngine: FontEngine): PreviewService & {
       _previewSnapshot = null;
       _isInPreview = false;
     }),
+    resetPreviewToStart: vi.fn(() => {
+      if (_isInPreview && _previewSnapshot) {
+        fontEngine.editing.restoreSnapshot(_previewSnapshot);
+      }
+    }),
     commitPreview: vi.fn(() => {
       _previewSnapshot = null;
       _isInPreview = false;
@@ -628,6 +740,7 @@ function createMockPreviewService(fontEngine: FontEngine): PreviewService & {
   return {
     beginPreview: mocks.beginPreview,
     cancelPreview: mocks.cancelPreview,
+    resetPreviewToStart: mocks.resetPreviewToStart,
     commitPreview: mocks.commitPreview,
     isInPreview: mocks.isInPreview,
     getPreviewSnapshot: mocks.getPreviewSnapshot,
@@ -1032,6 +1145,7 @@ export function createMockToolContext(): MockToolContext {
     },
   };
   const edit = createMockEditService(fontEngine);
+  const drag = createMockDragService(fontEngine);
   const preview = createMockPreviewService(fontEngine);
   const transform = createMockTransformService();
   const cursor = createMockCursorService();
@@ -1174,6 +1288,7 @@ export function createMockToolContext(): MockToolContext {
     selection,
     hover: hoverProxy,
     edit,
+    drag,
     preview,
     transform,
     cursor,
@@ -1252,13 +1367,12 @@ export function createMockToolContext(): MockToolContext {
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
     moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
-    applySmartEdits: (ids: readonly PointId[], dx: number, dy: number) =>
-      edit.applySmartEdits(ids, dx, dy),
     toggleSmooth: (id: PointId) => edit.toggleSmooth(id),
     getActiveContourId: () => edit.getActiveContourId(),
     getActiveContour: () => edit.getActiveContour(),
     setActiveContour: (id: ContourId) => edit.setActiveContour(id),
     clearActiveContour: () => edit.clearActiveContour(),
+    beginDrag: (target: DragTarget, startPointer: Point2D) => drag.beginDrag(target, startPointer),
     beginPreview: () => preview.beginPreview(),
     cancelPreview: () => preview.cancelPreview(),
     commitPreview: (label: string) => preview.commitPreview(label),
@@ -1389,6 +1503,7 @@ export function createMockToolContext(): MockToolContext {
       selection,
       hover: hoverProxy,
       edit,
+      drag,
       preview,
       transform,
       cursor,

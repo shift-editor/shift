@@ -205,6 +205,14 @@ export const Vec2 = {
   },
 
   /**
+   * Unit vector in the direction of v (same as normalize).
+   * Returns zero vector if input has zero length.
+   */
+  unit(v: Point2D): Point2D {
+    return Vec2.normalize(v);
+  },
+
+  /**
    * Set the length of a vector while preserving direction.
    */
   setLen(v: Point2D, length: number): Point2D {

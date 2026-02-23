@@ -11,8 +11,8 @@ use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
-  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, LayerId, PasteContour, PointId,
-  PointType, UfoWriter,
+  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
+  NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
 
@@ -68,6 +68,15 @@ impl GlyphLayerProvider for EngineLayerProvider<'_> {
 
 fn parse_ids<T: std::str::FromStr>(ids: &[String]) -> Vec<T> {
   ids.iter().filter_map(|id| id.parse::<T>().ok()).collect()
+}
+
+fn parse_node_ref(node: &JsNodeRef) -> Option<NodeRef> {
+  match node.kind.as_str() {
+    "point" => node.id.parse::<PointId>().ok().map(NodeRef::Point),
+    "anchor" => node.id.parse::<AnchorId>().ok().map(NodeRef::Anchor),
+    "guideline" => node.id.parse::<GuidelineId>().ok().map(NodeRef::Guideline),
+    _ => None,
+  }
 }
 
 pub struct SaveFontTask {
@@ -841,31 +850,14 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn move_points(&mut self, point_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
-    let parsed_ids: Vec<PointId> = parse_ids(&point_ids);
+  pub fn move_nodes(&mut self, nodes: Vec<JsNodeRef>, dx: f64, dy: f64) -> Result<String> {
+    let parsed_nodes: Vec<NodeRef> = nodes.iter().filter_map(parse_node_ref).collect();
 
-    if parsed_ids.is_empty() && !point_ids.is_empty() {
-      return Ok(to_json(&CommandResult::error(
-        "No valid point IDs provided",
-      )));
+    if parsed_nodes.is_empty() && !nodes.is_empty() {
+      return Ok(to_json(&CommandResult::error("No valid node IDs provided")));
     }
 
-    self.command(|s| s.move_points(&parsed_ids, dx, dy))
-  }
-
-  #[napi]
-  pub fn move_anchors(&mut self, anchor_ids: Vec<String>, dx: f64, dy: f64) -> Result<String> {
-    let parsed_ids: Vec<AnchorId> = parse_ids(&anchor_ids);
-
-    if parsed_ids.is_empty() && !anchor_ids.is_empty() {
-      return Ok(to_json(&CommandResult::error(
-        "No valid anchor IDs provided",
-      )));
-    }
-
-    self.command_simple(|s| {
-      s.move_anchors(&parsed_ids, dx, dy);
-    })
+    self.command(|s| s.move_nodes(&parsed_nodes, dx, dy))
   }
 
   #[napi]
@@ -942,40 +934,58 @@ impl FontEngine {
   // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
   // ═══════════════════════════════════════════════════════════
 
-  /// Set point positions directly — fire-and-forget for drag operations.
+  /// Set node positions directly — fire-and-forget for drag operations.
   /// Returns true on success, false if no edit session is active.
   /// Does NOT return a snapshot — use get_snapshot_data() when needed.
+  #[napi]
+  pub fn set_node_positions(&mut self, moves: Vec<JsNodePositionUpdate>) -> Result<bool> {
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
+    };
+
+    let mut updates = Vec::new();
+    for m in moves {
+      let Some(node) = parse_node_ref(&m.node) else {
+        continue;
+      };
+
+      updates.push(NodePositionUpdate {
+        node,
+        x: m.x,
+        y: m.y,
+      });
+    }
+
+    if updates.is_empty() {
+      return Ok(true);
+    }
+
+    Ok(session.set_node_positions(&updates))
+  }
+
+  // Backward-compatible wrapper for already-generated callers inside the app bundle.
   #[napi]
   pub fn set_point_positions(&mut self, moves: Vec<JsPointMove>) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
 
+    let mut updates = Vec::new();
     for m in moves {
       if let Ok(point_id) = m.id.parse::<PointId>() {
-        session.set_point_position(point_id, m.x, m.y);
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Point(point_id),
+          x: m.x,
+          y: m.y,
+        });
       }
     }
 
-    Ok(true)
-  }
-
-  /// Set anchor positions directly — fire-and-forget for drag operations.
-  /// Returns true on success, false if no edit session is active.
-  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
-  #[napi]
-  pub fn set_anchor_positions(&mut self, moves: Vec<JsAnchorMove>) -> Result<bool> {
-    let Some(session) = self.current_edit_session.as_mut() else {
-      return Ok(false);
-    };
-
-    for m in moves {
-      if let Ok(anchor_id) = m.id.parse::<AnchorId>() {
-        session.set_anchor_position(anchor_id, m.x, m.y);
-      }
+    if updates.is_empty() {
+      return Ok(true);
     }
 
-    Ok(true)
+    Ok(session.set_node_positions(&updates))
   }
 
   #[napi]
@@ -1000,17 +1010,24 @@ impl FontEngine {
 // LIGHTWEIGHT NATIVE TYPES FOR EDIT/DRAG OPERATIONS
 // ═══════════════════════════════════════════════════════════
 
-/// Input type for set_point_positions - a single point move
+/// Tagged node reference for node-based drag/edit operations.
 #[napi(object)]
-pub struct JsPointMove {
+pub struct JsNodeRef {
+  pub kind: String,
   pub id: String,
+}
+
+/// Input type for set_node_positions - a single node move.
+#[napi(object)]
+pub struct JsNodePositionUpdate {
+  pub node: JsNodeRef,
   pub x: f64,
   pub y: f64,
 }
 
-/// Input type for set_anchor_positions - a single anchor move
+/// Input type for set_point_positions - a single point move.
 #[napi(object)]
-pub struct JsAnchorMove {
+pub struct JsPointMove {
   pub id: String,
   pub x: f64,
   pub y: f64,

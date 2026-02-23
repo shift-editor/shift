@@ -1,7 +1,16 @@
-import { useState } from "react";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger, Input, Separator, cn } from "@shift/ui";
-
-const UNCATEGORIZED_SUBCATEGORY = "General";
+import type { GlyphCategory } from "@shift/glyph-info";
+import {
+  Button,
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+  Input,
+  Search,
+  Separator,
+} from "@shift/ui";
+import AllIcon from "@/assets/sidebar-left/all.svg";
+import { Category } from "./sidebar-left/Category";
+import { SubCategory } from "./sidebar-left/SubCategory";
 
 export interface GlyphSubCategoryNode {
   key: string;
@@ -10,171 +19,95 @@ export interface GlyphSubCategoryNode {
 }
 
 export interface GlyphCategoryNode {
-  category: string;
+  category: GlyphCategory;
   count: number;
   subCategories: GlyphSubCategoryNode[];
 }
 
 interface GlyphGridSidebarProps {
-  query: string;
-  onQueryChange: (nextQuery: string) => void;
-  categories: GlyphCategoryNode[];
-  selectedCategory: string | null;
-  selectedSubCategoryKey: string | null;
-  totalCount: number;
-  filteredCount: number;
-  onSelectAll: () => void;
-  onSelectCategory: (category: string) => void;
-  onSelectSubCategory: (category: string, subCategoryKey: string) => void;
+  query: {
+    query: string;
+    onQueryChange: (nextQuery: string) => void;
+  };
+  categories: {
+    collection: GlyphCategoryNode[];
+    selectedCategory: GlyphCategory | null;
+    selectedSubCategoryKey: string | null;
+  };
+  counts: {
+    totalCount: number;
+    filteredCount: number;
+  };
+  select: {
+    onSelectAll: () => void;
+    onSelectCategory: (category: GlyphCategory) => void;
+    onSelectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  };
 }
 
-export const GlyphGridSidebar = ({
-  query,
-  onQueryChange,
-  categories,
-  selectedCategory,
-  selectedSubCategoryKey,
-  totalCount,
-  filteredCount,
-  onSelectAll,
-  onSelectCategory,
-  onSelectSubCategory,
-}: GlyphGridSidebarProps) => {
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = (category: string, open: boolean) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (open) {
-        next.add(category);
-      } else {
-        next.delete(category);
-      }
-      return next;
-    });
-  };
-
+export const GlyphGridSidebar = ({ query, categories, counts, select }: GlyphGridSidebarProps) => {
   return (
     <aside className="flex h-full w-[260px] flex-col border-r border-line-subtle bg-panel">
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-ui font-medium text-primary">Glyphs</span>
-        <span className="text-[11px] text-muted">
-          {filteredCount}/{totalCount}
-        </span>
-      </div>
       <Separator />
       <div className="px-3 py-2">
         <Input
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
+          value={query.query}
+          onChange={(e) => query.onQueryChange(e.target.value)}
           placeholder="Search glyphs..."
-          className="h-8 text-xs"
+          className="h-8 text-sm bg-input"
+          icon={<Search className="w-3 h-3 text-muted" />}
+          iconPosition="left"
         />
       </div>
       <Separator />
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        <button
-          type="button"
-          className={cn(
-            "mb-1 flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs",
-            selectedCategory === null
-              ? "bg-accent/10 font-medium text-accent"
-              : "text-primary hover:bg-hover",
-          )}
-          onClick={onSelectAll}
-        >
-          <span>All glyphs</span>
-          <span className="text-muted">{totalCount}</span>
-        </button>
+        <div className="flex items-center justify-between font-sans mb-2">
+          <span className="text-sm ">Glyphs</span>
+          <span className="text-xs">{`${counts.filteredCount}/${counts.totalCount}`}</span>
+        </div>
 
-        {categories.map((categoryNode) => {
-          const hasSubCategories = categoryNode.subCategories.length > 0;
-          const isCategorySelected =
-            selectedCategory === categoryNode.category && selectedSubCategoryKey === null;
-          const isOpen = expandedCategories.has(categoryNode.category);
+        <div className="w-full">
+          <Button
+            className="w-full justify-start"
+            variant="ghost"
+            size="sm"
+            onClick={select.onSelectAll}
+            data-active={
+              categories.selectedCategory === null && categories.selectedSubCategoryKey === null
+            }
+          >
+            <AllIcon className="w-4 h-4" />
+            <span className="text-sm">All</span>
+          </Button>
+        </div>
 
-          if (!hasSubCategories) {
-            return (
-              <button
-                key={categoryNode.category}
-                type="button"
-                className={cn(
-                  "mb-1 flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs",
-                  isCategorySelected
-                    ? "bg-accent/10 font-medium text-accent"
-                    : "text-primary hover:bg-hover",
-                )}
-                onClick={() => onSelectCategory(categoryNode.category)}
-              >
-                <span>{categoryNode.category}</span>
-                <span className="text-muted">{categoryNode.count}</span>
-              </button>
-            );
-          }
-
-          return (
-            <Collapsible
-              key={categoryNode.category}
-              open={isOpen}
-              onOpenChange={(open) => toggleExpanded(categoryNode.category, open)}
-              className="mb-1"
-            >
-              <div className="flex items-center gap-1">
-                <CollapsibleTrigger
-                  aria-label={`Toggle ${categoryNode.category}`}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-hover"
-                >
-                  <span
-                    className={cn(
-                      "inline-block text-[10px] transition-transform",
-                      isOpen && "rotate-90",
-                    )}
-                  >
-                    {">"}
-                  </span>
-                </CollapsibleTrigger>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex flex-1 items-center justify-between rounded px-2 py-1 text-left text-xs",
-                    isCategorySelected
-                      ? "bg-accent/10 font-medium text-accent"
-                      : "text-primary hover:bg-hover",
-                  )}
-                  onClick={() => onSelectCategory(categoryNode.category)}
-                >
-                  <span>{categoryNode.category}</span>
-                  <span className="text-muted">{categoryNode.count}</span>
-                </button>
-              </div>
-
-              <CollapsiblePanel className="ml-7 mt-0.5 flex flex-col gap-0.5">
-                {categoryNode.subCategories.map((subCategory) => {
-                  const isSubCategorySelected =
-                    selectedCategory === categoryNode.category &&
-                    selectedSubCategoryKey === subCategory.key;
-
-                  return (
-                    <button
-                      key={`${categoryNode.category}:${subCategory.key}`}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs",
-                        isSubCategorySelected
-                          ? "bg-accent/10 font-medium text-accent"
-                          : "text-primary hover:bg-hover",
-                      )}
-                      onClick={() => onSelectSubCategory(categoryNode.category, subCategory.key)}
-                    >
-                      <span>{subCategory.label || UNCATEGORIZED_SUBCATEGORY}</span>
-                      <span className="text-muted">{subCategory.count}</span>
-                    </button>
-                  );
-                })}
+        {categories.collection.map((categoryNode) => (
+          <div key={categoryNode.category} className="mt-1">
+            <Collapsible>
+              <CollapsibleTrigger className="group w-full">
+                <Category
+                  category={categoryNode.category}
+                  selectedCategory={categories.selectedCategory}
+                  onSelectCategory={select.onSelectCategory}
+                />
+              </CollapsibleTrigger>
+              <CollapsiblePanel>
+                <div className="ml-3">
+                  {categoryNode.subCategories.map((subCategory) => (
+                    <SubCategory
+                      key={subCategory.key}
+                      category={categoryNode.category}
+                      subCategory={subCategory.label}
+                      selectedCategory={categories.selectedCategory}
+                      selectedSubCategoryKey={categories.selectedSubCategoryKey}
+                      onSelectSubCategory={select.onSelectSubCategory}
+                    />
+                  ))}
+                </div>
               </CollapsiblePanel>
             </Collapsible>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </aside>
   );

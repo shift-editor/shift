@@ -4,9 +4,14 @@ import { createTestEditor, expectDefined } from "@/testing";
 import { executeAction } from "./actions";
 
 describe("select actions", () => {
-  it("moves anchors through moveAnchors during drag deltas", () => {
+  it("moves anchors through setNodePositions during drag deltas", () => {
     const ctx = createTestEditor();
-    const anchorId = asAnchorId("a-missing");
+    const anchorId = asAnchorId("a-1");
+    const glyph = expectDefined(ctx.fontEngine.$glyph.peek(), "glyph");
+    ctx.fontEngine.emitGlyph({
+      ...glyph,
+      anchors: [...glyph.anchors, { id: anchorId, name: null, x: 10, y: 20 }],
+    });
 
     expectDefined(ctx.mocks.edit.mocks.moveAnchors, "edit.moveAnchors mock").mockClear();
     expectDefined(ctx.mocks.edit.mocks.setNodePositions, "edit.setNodePositions mock").mockClear();
@@ -21,8 +26,10 @@ describe("select actions", () => {
       ctx,
     );
 
-    expect(ctx.mocks.edit.moveAnchors).toHaveBeenCalledWith([anchorId], 25, -10);
-    expect(ctx.mocks.edit.setNodePositions).not.toHaveBeenCalled();
+    expect(ctx.mocks.edit.setNodePositions).toHaveBeenCalledWith([
+      { node: { kind: "anchor", id: anchorId }, x: 35, y: 10 },
+    ]);
+    expect(ctx.mocks.edit.moveAnchors).not.toHaveBeenCalled();
   });
 
   it("arms composite slot on first double-click edit action", () => {

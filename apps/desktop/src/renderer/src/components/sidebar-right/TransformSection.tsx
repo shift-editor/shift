@@ -7,18 +7,18 @@ import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
 
-import RotateIcon from "@/assets/sidebar/rotate.svg";
-import RotateCwIcon from "@/assets/sidebar/rotate-cw.svg";
-import FlipHIcon from "@/assets/sidebar/flip-h.svg";
-import FlipVIcon from "@/assets/sidebar/flip-v.svg";
-import AlignLeftIcon from "@/assets/sidebar/align-left.svg";
-import AlignCenterHIcon from "@/assets/sidebar/align-center-h.svg";
-import AlignRightIcon from "@/assets/sidebar/align-right.svg";
-import AlignTopIcon from "@/assets/sidebar/align-top.svg";
-import AlignCenterVIcon from "@/assets/sidebar/align-center-v.svg";
-import AlignBottomIcon from "@/assets/sidebar/align-bottom.svg";
-import DistributeHorizontalIcon from "@/assets/sidebar/distribute-h.svg";
-import DistributeVerticalIcon from "@/assets/sidebar/distribute-v.svg";
+import RotateIcon from "@/assets/sidebar-right/rotate.svg";
+import RotateCwIcon from "@/assets/sidebar-right/rotate-cw.svg";
+import FlipHIcon from "@/assets/sidebar-right/flip-h.svg";
+import FlipVIcon from "@/assets/sidebar-right/flip-v.svg";
+import AlignLeftIcon from "@/assets/sidebar-right/align-left.svg";
+import AlignCenterHIcon from "@/assets/sidebar-right/align-center-h.svg";
+import AlignRightIcon from "@/assets/sidebar-right/align-right.svg";
+import AlignTopIcon from "@/assets/sidebar-right/align-top.svg";
+import AlignCenterVIcon from "@/assets/sidebar-right/align-center-v.svg";
+import AlignBottomIcon from "@/assets/sidebar-right/align-bottom.svg";
+import DistributeHorizontalIcon from "@/assets/sidebar-right/distribute-h.svg";
+import DistributeVerticalIcon from "@/assets/sidebar-right/distribute-v.svg";
 
 import { AlignmentType, DistributeType } from "@/lib/transform/types";
 

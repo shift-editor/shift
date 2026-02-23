@@ -43,6 +43,7 @@ export interface ElectronAPI {
   onDebugReactScan: EventListener<"debug:react-scan">;
   onDebugPanel: EventListener<"debug:panel">;
   onDebugDumpSnapshot: EventListener<"debug:dump-snapshot">;
+  onDebugDumpSelectionPatterns: EventListener<"debug:dump-selection-patterns">;
   onDebugOverlays: EventListener<"debug:overlays">;
 
   // System

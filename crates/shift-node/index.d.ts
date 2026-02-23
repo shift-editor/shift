@@ -7,14 +7,19 @@ export interface JsGlyphRef {
   glyphName: string;
   unicode?: number;
 }
-/** Input type for set_point_positions - a single point move */
-export interface JsPointMove {
+/** Tagged node reference for node-based drag/edit operations. */
+export interface JsNodeRef {
+  kind: string;
   id: string;
+}
+/** Input type for set_node_positions - a single node move. */
+export interface JsNodePositionUpdate {
+  node: JsNodeRef;
   x: number;
   y: number;
 }
-/** Input type for set_anchor_positions - a single anchor move */
-export interface JsAnchorMove {
+/** Input type for set_point_positions - a single point move. */
+export interface JsPointMove {
   id: string;
   x: number;
   y: number;
@@ -81,23 +86,17 @@ export declare class FontEngine {
   closeContour(): string;
   openContour(contourId: string): string;
   reverseContour(contourId: string): string;
-  movePoints(pointIds: Array<string>, dx: number, dy: number): string;
-  moveAnchors(anchorIds: Array<string>, dx: number, dy: number): string;
+  moveNodes(nodes: Array<JsNodeRef>, dx: number, dy: number): string;
   removePoints(pointIds: Array<string>): string;
   toggleSmooth(pointId: string): string;
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
   removeContour(contourId: string): string;
   /**
-   * Set point positions directly — fire-and-forget for drag operations.
+   * Set node positions directly — fire-and-forget for drag operations.
    * Returns true on success, false if no edit session is active.
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
+  setNodePositions(moves: Array<JsNodePositionUpdate>): boolean;
   setPointPositions(moves: Array<JsPointMove>): boolean;
-  /**
-   * Set anchor positions directly — fire-and-forget for drag operations.
-   * Returns true on success, false if no edit session is active.
-   * Does NOT return a snapshot — use get_snapshot_data() when needed.
-   */
-  setAnchorPositions(moves: Array<JsAnchorMove>): boolean;
   restoreSnapshot(snapshotJson: string): boolean;
 }

@@ -4,6 +4,7 @@ import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
 import type { SelectAction } from "./actions";
+import type { DragSession } from "../core/EditorAPI";
 
 /** Tracks the start and current positions of a marquee drag. */
 export interface SelectionData {
@@ -13,8 +14,7 @@ export interface SelectionData {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
-  anchorPointId: PointId | null;
-  startPos: Point2D;
+  session: DragSession;
   lastPos: Point2D;
   totalDelta: Point2D;
   draggedPointIds: PointId[];

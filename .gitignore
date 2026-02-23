@@ -103,6 +103,7 @@ npm/
 .plans/
 .tweets/
 .bugs/
+.summary
 .bin
 
 # Generated Glyph Info resources

@@ -22,6 +22,11 @@ export const selectionBoundingRectContributor: ToolRenderContributor = {
     renderer.save();
     renderer.translate(offset.x, offset.y);
     applyStyle(renderer, BOUNDING_RECTANGLE_STYLES);
+    if (renderer.dashPattern.length > 0) {
+      // Dash patterns are already zoom-aware in pxToUpm conversion.
+      // Counteract renderer-level dash normalization to keep visual spacing stable.
+      renderer.dashPattern = renderer.dashPattern.map((dash) => dash * zoom);
+    }
     renderBoundingRect(
       {
         ctx: renderer,

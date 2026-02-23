@@ -8,8 +8,7 @@ import { InfoManager, type Info } from "./info";
 import { IOManager, type IO } from "./io";
 import type {
   FontEngineAPI,
-  PointPositionUpdate,
-  AnchorPositionUpdate,
+  NodePositionUpdate as BridgeNodePositionUpdate,
 } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { PasteResult } from "@/types/engine";
@@ -180,12 +179,8 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     }
   }
 
-  setPointPositions(updates: PointPositionUpdate[]): boolean {
-    return this.#raw.setPointPositions(updates);
-  }
-
-  setAnchorPositions(updates: AnchorPositionUpdate[]): boolean {
-    return this.#raw.setAnchorPositions(updates);
+  setNodePositions(updates: BridgeNodePositionUpdate[]): boolean {
+    return this.#raw.setNodePositions(updates);
   }
 
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): PasteResult {

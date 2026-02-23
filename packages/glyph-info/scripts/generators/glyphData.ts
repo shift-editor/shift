@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { XMLParser } from "fast-xml-parser";
-import type { GlyphData } from "../../src/types.js";
+import type { GlyphCategory, GlyphData } from "../../src/types.js";
 
 interface XmlGlyph {
   unicode?: string;
@@ -35,7 +35,7 @@ export function generateGlyphData(xmlPath: string, outputPath: string): number {
     results.push({
       codepoint,
       name: g.name,
-      category: g.category,
+      category: g.category as GlyphCategory,
       subCategory: g.subCategory ?? null,
       script: g.script ?? null,
       production: g.production ?? null,

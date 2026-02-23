@@ -18,10 +18,14 @@ export type {
 } from "./ToolRenderContributor";
 export type {
   EditorAPI,
+  DragTarget,
+  DragUpdate,
+  DragSession,
   Viewport,
   Selection,
   HitTesting,
   Snapping,
+  Dragging,
   Editing,
   Commands,
   ToolLifecycle,
