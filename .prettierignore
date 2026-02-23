@@ -6,4 +6,6 @@ out
 *.min.css
 pnpm-lock.yaml
 packages/types/src/generated
+crates/shift-node/index.js
+crates/shift-node/index.d.ts
 **/vendor

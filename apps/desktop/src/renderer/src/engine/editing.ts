@@ -227,6 +227,7 @@ export class EditingManager {
     return this.#engine.getActiveContourId();
   }
 
+  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#engine.raw.setXAdvance(width));
   }

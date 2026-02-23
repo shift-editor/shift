@@ -68,7 +68,7 @@ export const selectionBoundingHandleContributor: ToolRenderContributor = {
         right: bottomRight.x,
         bottom: bottomRight.y,
       },
-      hoveredHandle: hoveredHandle ?? undefined,
+      ...(hoveredHandle ? { hoveredHandle } : {}),
     });
   },
 };

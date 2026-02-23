@@ -157,7 +157,7 @@ export class TranslateBehavior implements SelectBehavior {
 
       return {
         state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-        action: isSelected ? undefined : { type: "selectPoint", pointId, additive: false },
+        ...(isSelected ? {} : { action: { type: "selectPoint", pointId, additive: false } }),
       };
     }
 
@@ -179,13 +179,15 @@ export class TranslateBehavior implements SelectBehavior {
 
       return {
         state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-        action: isSelected
-          ? undefined
+        ...(isSelected
+          ? {}
           : {
-              type: "selectSegment",
-              segmentId: hit.segmentId,
-              additive: false,
-            },
+              action: {
+                type: "selectSegment",
+                segmentId: hit.segmentId,
+                additive: false,
+              },
+            }),
       };
     }
 
