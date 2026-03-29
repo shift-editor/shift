@@ -1,6 +1,7 @@
 # shift-node - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: NAPI bindings exposing shift-core to Node.js/Electron
 - **Language**: Rust (NAPI-RS)
 - **Key Files**: `font_engine.rs`, `types.rs`, `index.d.ts`
@@ -8,6 +9,7 @@
 - **Dependents**: Preload script, renderer engine layer
 
 ## File Structure
+
 ```
 crates/shift-node/
 ├── Cargo.toml          # Dependencies, cdylib target
@@ -24,6 +26,7 @@ crates/shift-node/
 ## Core Abstractions
 
 ### FontEngine (font_engine.rs:23-30)
+
 ```rust
 #[napi]
 pub struct FontEngine {
@@ -35,6 +38,7 @@ pub struct FontEngine {
 ```
 
 ### JS Native Types (types.rs)
+
 ```rust
 #[napi(object)]
 pub struct JSFontMetrics {
@@ -56,6 +60,7 @@ pub struct JSGlyphSnapshot {
 ```
 
 ### PointTypeJS (types.rs)
+
 ```rust
 #[napi]
 pub enum PointTypeJS {
@@ -67,6 +72,7 @@ pub enum PointTypeJS {
 ## Key Patterns
 
 ### JSON Result Pattern
+
 ```rust
 // All mutations return JSON CommandResult
 pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> String {
@@ -78,6 +84,7 @@ pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) ->
 ```
 
 ### Native Object Pattern
+
 ```rust
 // Efficient reads via native NAPI objects
 #[napi]
@@ -89,6 +96,7 @@ pub fn get_snapshot_data(&self) -> Result<JSGlyphSnapshot> {
 ```
 
 ### ID String Conversion
+
 ```rust
 // Rust → JS: ID to string
 point_id.raw().to_string()
@@ -100,37 +108,39 @@ let point_id = PointId::from_raw(raw);
 
 ## API Surface
 
-| Method | Return | Purpose |
-|--------|--------|---------|
-| `new()` | `FontEngine` | Create instance |
-| `loadFont(path)` | `void` | Load font file |
-| `startEditSession(unicode)` | `void` | Begin editing |
-| `endEditSession()` | `void` | End editing |
-| `hasEditSession()` | `boolean` | Check session |
-| `getSnapshot()` | `string \| null` | JSON snapshot |
-| `getSnapshotData()` | `JSGlyphSnapshot` | Native snapshot |
-| `addPoint(x, y, type, smooth)` | `string` | JSON result |
-| `movePoints(ids, dx, dy)` | `string` | JSON result |
-| `applyEditsUnified(ids, dx, dy)` | `string` | JSON with rules |
+| Method                           | Return            | Purpose         |
+| -------------------------------- | ----------------- | --------------- |
+| `new()`                          | `FontEngine`      | Create instance |
+| `loadFont(path)`                 | `void`            | Load font file  |
+| `startEditSession(unicode)`      | `void`            | Begin editing   |
+| `endEditSession()`               | `void`            | End editing     |
+| `hasEditSession()`               | `boolean`         | Check session   |
+| `getSnapshot()`                  | `string \| null`  | JSON snapshot   |
+| `getSnapshotData()`              | `JSGlyphSnapshot` | Native snapshot |
+| `addPoint(x, y, type, smooth)`   | `string`          | JSON result     |
+| `movePoints(ids, dx, dy)`        | `string`          | JSON result     |
+| `applyEditsUnified(ids, dx, dy)` | `string`          | JSON with rules |
 
 ## Common Operations
 
 ### Session workflow
+
 ```typescript
 const engine = new FontEngine();
-engine.loadFont('/path/to/font.ufo');
+engine.loadFont("/path/to/font.ufo");
 engine.startEditSession(65);
 
 // Get native snapshot (efficient)
 const snapshot = engine.getSnapshotData();
 
 // Mutate and get JSON result
-const result = JSON.parse(engine.addPoint(100, 200, 'onCurve', false));
+const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
 
 engine.endEditSession();
 ```
 
 ### Parse CommandResult
+
 ```typescript
 interface CommandResult {
   success: boolean;
@@ -141,13 +151,14 @@ interface CommandResult {
   canRedo: boolean;
 }
 
-const result: CommandResult = JSON.parse(engine.movePoints(['id1'], 10, 5));
+const result: CommandResult = JSON.parse(engine.movePoints(["id1"], 10, 5));
 if (!result.success) throw new Error(result.error);
 ```
 
 ### Unified edit with rules
+
 ```typescript
-const result = JSON.parse(engine.applyEditsUnified(['point-id'], 50, 0));
+const result = JSON.parse(engine.applyEditsUnified(["point-id"], 50, 0));
 // result.matchedRules contains applied pattern rules
 // result.affectedPointIds includes handle points moved by rules
 ```

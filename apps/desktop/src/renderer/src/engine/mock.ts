@@ -21,6 +21,8 @@ export class MockFontEngine implements FontEngineAPI {
   #snapshot: GlyphSnapshot | null = null;
   /** @knipclassignore */
   #nextId = 1;
+  #preparedMovePointIds: string[] = [];
+  #preparedMoveAnchorIds: string[] = [];
 
   #generateId(): string {
     return String(this.#nextId++);
@@ -159,6 +161,7 @@ export class MockFontEngine implements FontEngineAPI {
 
   endEditSession(): void {
     this.#snapshot = null;
+    this.clearPreparedMoveLight();
   }
 
   hasEditSession(): boolean {
@@ -365,6 +368,100 @@ export class MockFontEngine implements FontEngineAPI {
     }
 
     return this.#makeResult(true, moved);
+  }
+
+  moveNodesLight(nodes: NodeRef[], dx: number, dy: number): boolean {
+    if (!this.#snapshot) return false;
+    let movedAny = false;
+
+    const pointIds = new Set<string>();
+    const anchorIds = new Set<string>();
+    for (const node of nodes) {
+      switch (node.kind) {
+        case "point":
+          pointIds.add(node.id);
+          break;
+        case "anchor":
+          anchorIds.add(node.id);
+          break;
+        case "guideline":
+          break;
+      }
+    }
+
+    for (const contour of this.#snapshot.contours) {
+      for (const point of contour.points) {
+        if (pointIds.has(point.id)) {
+          point.x += dx;
+          point.y += dy;
+          movedAny = true;
+        }
+      }
+    }
+
+    for (const anchor of this.#snapshot.anchors) {
+      if (anchorIds.has(anchor.id)) {
+        anchor.x += dx;
+        anchor.y += dy;
+        movedAny = true;
+      }
+    }
+
+    return movedAny || nodes.length === 0;
+  }
+
+  movePointsAndAnchorsLight(
+    pointIds: string[],
+    anchorIds: string[],
+    dx: number,
+    dy: number,
+  ): boolean {
+    if (!this.#snapshot) return false;
+    let movedAny = false;
+
+    const pointIdSet = new Set(pointIds);
+    const anchorIdSet = new Set(anchorIds);
+
+    for (const contour of this.#snapshot.contours) {
+      for (const point of contour.points) {
+        if (pointIdSet.has(point.id)) {
+          point.x += dx;
+          point.y += dy;
+          movedAny = true;
+        }
+      }
+    }
+
+    for (const anchor of this.#snapshot.anchors) {
+      if (anchorIdSet.has(anchor.id)) {
+        anchor.x += dx;
+        anchor.y += dy;
+        movedAny = true;
+      }
+    }
+
+    return movedAny || (pointIds.length === 0 && anchorIds.length === 0);
+  }
+
+  prepareMoveNodesLight(pointIds: string[], anchorIds: string[]): boolean {
+    if (!this.#snapshot) return false;
+    this.#preparedMovePointIds = [...pointIds];
+    this.#preparedMoveAnchorIds = [...anchorIds];
+    return true;
+  }
+
+  movePreparedNodesLight(dx: number, dy: number): boolean {
+    return this.movePointsAndAnchorsLight(
+      this.#preparedMovePointIds,
+      this.#preparedMoveAnchorIds,
+      dx,
+      dy,
+    );
+  }
+
+  clearPreparedMoveLight(): void {
+    this.#preparedMovePointIds = [];
+    this.#preparedMoveAnchorIds = [];
   }
 
   removePoints(pointIds: string[]): string {

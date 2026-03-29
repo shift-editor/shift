@@ -11,6 +11,7 @@ export class HoverManager {
   private $hoveredAnchorId: WritableSignal<AnchorId | null>;
   private $hoveredSegmentId: WritableSignal<SegmentIndicator | null>;
   private $hoveredBoundingBoxHandle: WritableSignal<BoundingBoxHitResult>;
+  #hoveredSegmentPointIds: ReadonlySet<PointId> = new Set();
 
   constructor() {
     this.$hoveredPointId = signal<PointId | null>(null);
@@ -48,6 +49,7 @@ export class HoverManager {
     if (pointId !== null) {
       this.$hoveredAnchorId.set(null);
       this.$hoveredSegmentId.set(null);
+      this.#hoveredSegmentPointIds = new Set();
     }
   }
 
@@ -56,11 +58,14 @@ export class HoverManager {
     if (anchorId !== null) {
       this.$hoveredPointId.set(null);
       this.$hoveredSegmentId.set(null);
+      this.#hoveredSegmentPointIds = new Set();
     }
   }
 
   setHoveredSegment(indicator: SegmentIndicator | null): void {
     this.$hoveredSegmentId.set(indicator);
+    this.#hoveredSegmentPointIds =
+      indicator === null ? new Set() : this.#getPointIdsFromSegmentId(indicator.segmentId);
     if (indicator !== null) {
       this.$hoveredPointId.set(null);
     }
@@ -101,22 +106,19 @@ export class HoverManager {
     this.$hoveredAnchorId.set(null);
     this.$hoveredSegmentId.set(null);
     this.$hoveredBoundingBoxHandle.set(null);
+    this.#hoveredSegmentPointIds = new Set();
   }
 
   getPointVisualState(pointId: PointId, isPointSelected: (id: PointId) => boolean): VisualState {
     if (isPointSelected(pointId)) {
       return "selected";
     }
-    if (this.$hoveredPointId.value === pointId) {
+    if (this.$hoveredPointId.peek() === pointId) {
       return "hovered";
     }
 
-    const hoveredSegment = this.$hoveredSegmentId.value;
-    if (hoveredSegment) {
-      const segmentPointIds = this.#getPointIdsFromSegmentId(hoveredSegment.segmentId);
-      if (segmentPointIds.has(pointId)) {
-        return "hovered";
-      }
+    if (this.#hoveredSegmentPointIds.has(pointId)) {
+      return "hovered";
     }
     return "idle";
   }
@@ -128,7 +130,7 @@ export class HoverManager {
     if (isSegmentSelected(segmentId)) {
       return "selected";
     }
-    if (this.$hoveredSegmentId.value?.segmentId === segmentId) {
+    if (this.$hoveredSegmentId.peek()?.segmentId === segmentId) {
       return "hovered";
     }
     return "idle";

@@ -98,12 +98,12 @@ describe("getHandlePositions", () => {
 });
 
 describe("isBoundingBoxVisibleAtZoom", () => {
-  it("returns false at the minimum zoom threshold", () => {
-    expect(isBoundingBoxVisibleAtZoom(BOUNDING_BOX_MIN_VISIBLE_ZOOM)).toBe(false);
+  it("returns true at the minimum zoom threshold", () => {
+    expect(isBoundingBoxVisibleAtZoom(BOUNDING_BOX_MIN_VISIBLE_ZOOM)).toBe(true);
   });
 
-  it("returns false below the minimum zoom threshold", () => {
-    expect(isBoundingBoxVisibleAtZoom(0.1)).toBe(false);
+  it("returns true below the minimum zoom threshold", () => {
+    expect(isBoundingBoxVisibleAtZoom(0.1)).toBe(true);
   });
 
   it("returns true above the minimum zoom threshold", () => {

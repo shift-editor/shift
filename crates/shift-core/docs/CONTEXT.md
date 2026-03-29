@@ -1,6 +1,7 @@
 # shift-core - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Core Rust library for font data structures and editing logic
 - **Language**: Rust
 - **Key Files**: `edit_session.rs`, `snapshot.rs`, `pattern/rules.rs`, `entity.rs`, `edit_ops.rs`
@@ -8,6 +9,7 @@
 - **Dependents**: shift-node (NAPI bridge)
 
 ## File Structure
+
 ```
 src/
 ├── lib.rs              # Crate root, module exports
@@ -35,6 +37,7 @@ src/
 ## Core Abstractions
 
 ### EntityId (entity.rs:15-30)
+
 ```rust
 struct Id(u64)                    // Atomic counter value
 struct EntityId { id: Id, parent: Id }
@@ -42,6 +45,7 @@ macro entity_id!(ContourId, PointId)  // Generates wrapper types
 ```
 
 ### Point (point.rs:10-20)
+
 ```rust
 pub struct Point {
     _id: PointId,
@@ -52,6 +56,7 @@ pub struct Point {
 ```
 
 ### EditSession (edit_session.rs:10-15)
+
 ```rust
 pub struct EditSession {
     glyph: Glyph,
@@ -60,6 +65,7 @@ pub struct EditSession {
 ```
 
 ### GlyphSnapshot (snapshot.rs:30-40)
+
 ```rust
 #[derive(Serialize, TS)]
 pub struct GlyphSnapshot {
@@ -72,6 +78,7 @@ pub struct GlyphSnapshot {
 ```
 
 ### PatternMatcher (pattern/matcher.rs:15-25)
+
 ```rust
 pub struct PatternMatcher {
     rule_table: HashMap<String, Rule>,
@@ -84,6 +91,7 @@ impl PatternMatcher {
 ## Key Patterns
 
 ### Glyph Ownership Transfer
+
 ```rust
 // Font owns glyphs; take/put for editing
 let glyph = font.take_glyph(unicode);  // Removes from font
@@ -94,6 +102,7 @@ font.put_glyph(glyph);                  // Returns to font
 ```
 
 ### Pattern Template Expansion
+
 ```rust
 // Pattern templates expand to concrete patterns
 "[CS]H" → ["CH", "SH"]
@@ -102,6 +111,7 @@ font.put_glyph(glyph);                  // Returns to font
 ```
 
 ### Rule Application Flow
+
 ```rust
 apply_edits(session, selected, dx, dy)
   → move_points(selected, dx, dy)
@@ -116,22 +126,23 @@ apply_edits(session, selected, dx, dy)
 
 ## API Surface
 
-| Function/Method | File | Signature |
-|----------------|------|-----------|
-| `EditSession::new` | edit_session.rs | `fn new(glyph: Glyph) -> Self` |
-| `EditSession::add_point` | edit_session.rs | `fn add_point(&mut self, x, y, type, smooth) -> PointId` |
-| `EditSession::move_point` | edit_session.rs | `fn move_point(&mut self, id, dx, dy)` |
-| `EditSession::into_glyph` | edit_session.rs | `fn into_glyph(self) -> Glyph` |
-| `apply_edits` | edit_ops.rs | `fn apply_edits(session, selected, dx, dy) -> EditResult` |
-| `PatternMatcher::match_rule` | pattern/matcher.rs | `fn match_rule(&self, contour, point_id, selected) -> Option<MatchedRule>` |
-| `GlyphSnapshot::from_edit_session` | snapshot.rs | `fn from_edit_session(session: &EditSession) -> Self` |
-| `Font::take_glyph` | font.rs | `fn take_glyph(&mut self, unicode: u32) -> Option<Glyph>` |
-| `Font::put_glyph` | font.rs | `fn put_glyph(&mut self, glyph: Glyph)` |
-| `FontLoader::read_font` | font_loader.rs | `fn read_font(&self, path: &str) -> Result<Font>` |
+| Function/Method                    | File               | Signature                                                                  |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `EditSession::new`                 | edit_session.rs    | `fn new(glyph: Glyph) -> Self`                                             |
+| `EditSession::add_point`           | edit_session.rs    | `fn add_point(&mut self, x, y, type, smooth) -> PointId`                   |
+| `EditSession::move_point`          | edit_session.rs    | `fn move_point(&mut self, id, dx, dy)`                                     |
+| `EditSession::into_glyph`          | edit_session.rs    | `fn into_glyph(self) -> Glyph`                                             |
+| `apply_edits`                      | edit_ops.rs        | `fn apply_edits(session, selected, dx, dy) -> EditResult`                  |
+| `PatternMatcher::match_rule`       | pattern/matcher.rs | `fn match_rule(&self, contour, point_id, selected) -> Option<MatchedRule>` |
+| `GlyphSnapshot::from_edit_session` | snapshot.rs        | `fn from_edit_session(session: &EditSession) -> Self`                      |
+| `Font::take_glyph`                 | font.rs            | `fn take_glyph(&mut self, unicode: u32) -> Option<Glyph>`                  |
+| `Font::put_glyph`                  | font.rs            | `fn put_glyph(&mut self, glyph: Glyph)`                                    |
+| `FontLoader::read_font`            | font_loader.rs     | `fn read_font(&self, path: &str) -> Result<Font>`                          |
 
 ## Common Operations
 
 ### Create and populate contour
+
 ```rust
 let mut session = EditSession::new(glyph);
 let cid = session.add_empty_contour();
@@ -142,6 +153,7 @@ session.close_contour(cid);
 ```
 
 ### Move with automatic rule application
+
 ```rust
 let selected: HashSet<PointId> = [p3].into_iter().collect();
 let result = apply_edits(&mut session, &selected, 10.0, 5.0);
@@ -149,6 +161,7 @@ let result = apply_edits(&mut session, &selected, 10.0, 5.0);
 ```
 
 ### Serialize for TypeScript
+
 ```rust
 let snapshot = GlyphSnapshot::from_edit_session(&session);
 let json = serde_json::to_string(&snapshot)?;

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderSegmentHighlights } from "./segments";
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph, Contour } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
+import type { Segment as SegmentType } from "@/types/segments";
 import { Segment } from "@/lib/geo/Segment";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE, resolveDrawStyle } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
@@ -80,9 +80,8 @@ function createTriangleGlyph(): Glyph {
   };
 }
 
-function getSegmentIds(contour: Contour): SegmentId[] {
-  const segments = Segment.parse(contour.points, contour.closed);
-  return segments.map((s) => Segment.id(s));
+function getSegments(contour: Contour): SegmentType[] {
+  return Segment.parse(contour.points, contour.closed);
 }
 
 describe("segments", () => {
@@ -96,9 +95,7 @@ describe("segments", () => {
 
   describe("renderSegmentHighlights", () => {
     it("does nothing if no hovered or selected segments", () => {
-      const glyph = createTriangleGlyph();
-
-      renderSegmentHighlights(rc, glyph, null, () => false);
+      renderSegmentHighlights(rc, null, []);
 
       expect(ctx.setStyle).not.toHaveBeenCalled();
       expect(ctx.beginPath).not.toHaveBeenCalled();
@@ -108,10 +105,10 @@ describe("segments", () => {
     it("highlights hovered segment with SEGMENT_HOVER_STYLE", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
-      const hoveredId = expectAt(segmentIds, 0);
+      const segments = getSegments(contour);
+      const hoveredSegment = expectAt(segments, 0);
 
-      renderSegmentHighlights(rc, glyph, hoveredId, () => false);
+      renderSegmentHighlights(rc, hoveredSegment, []);
 
       expect(ctx.setStyle).toHaveBeenCalledWith(SEGMENT_HOVER_STYLE);
       expect(ctx.beginPath).toHaveBeenCalledTimes(1);
@@ -121,10 +118,10 @@ describe("segments", () => {
     it("highlights selected segment with SEGMENT_SELECTED_STYLE", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
-      const targetId = expectAt(segmentIds, 0);
+      const segments = getSegments(contour);
+      const targetSegment = expectAt(segments, 0);
 
-      renderSegmentHighlights(rc, glyph, null, (id) => id === targetId);
+      renderSegmentHighlights(rc, null, [targetSegment]);
 
       expect(ctx.setStyle).toHaveBeenCalledWith(SEGMENT_SELECTED_STYLE);
       expect(ctx.beginPath).toHaveBeenCalledTimes(1);
@@ -134,10 +131,10 @@ describe("segments", () => {
     it("selected style takes precedence over hovered", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
-      const targetId = expectAt(segmentIds, 0);
+      const segments = getSegments(contour);
+      const targetSegment = expectAt(segments, 0);
 
-      renderSegmentHighlights(rc, glyph, targetId, (id) => id === targetId);
+      renderSegmentHighlights(rc, targetSegment, [targetSegment]);
 
       expect(ctx.setStyle).toHaveBeenCalledWith(SEGMENT_SELECTED_STYLE);
     });
@@ -145,22 +142,22 @@ describe("segments", () => {
     it("draws multiple segments when multiple are selected", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
+      const segments = getSegments(contour);
 
-      renderSegmentHighlights(rc, glyph, null, (id) => segmentIds.includes(id));
+      renderSegmentHighlights(rc, null, segments);
 
-      expect(ctx.setStyle).toHaveBeenCalledTimes(3);
-      expect(ctx.beginPath).toHaveBeenCalledTimes(3);
-      expect(ctx.stroke).toHaveBeenCalledTimes(3);
+      expect(ctx.setStyle).toHaveBeenCalledTimes(1);
+      expect(ctx.beginPath).toHaveBeenCalledTimes(1);
+      expect(ctx.stroke).toHaveBeenCalledTimes(1);
     });
 
     it("only draws the hovered segment, not others", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
-      const hoveredId = expectAt(segmentIds, 1);
+      const segments = getSegments(contour);
+      const hoveredSegment = expectAt(segments, 1);
 
-      renderSegmentHighlights(rc, glyph, hoveredId, () => false);
+      renderSegmentHighlights(rc, hoveredSegment, []);
 
       expect(ctx.beginPath).toHaveBeenCalledTimes(1);
       expect(ctx.stroke).toHaveBeenCalledTimes(1);
@@ -169,13 +166,13 @@ describe("segments", () => {
     it("sets lineWidth from style through pxToUpm", () => {
       const glyph = createTriangleGlyph();
       const contour = expectAt(glyph.contours, 0);
-      const segmentIds = getSegmentIds(contour);
-      const hoveredId = expectAt(segmentIds, 0);
+      const segments = getSegments(contour);
+      const hoveredSegment = expectAt(segments, 0);
 
       const pxToUpmSpy = vi.fn((px?: number) => (px ?? 1) * 2);
       rc.pxToUpm = pxToUpmSpy;
 
-      renderSegmentHighlights(rc, glyph, hoveredId, () => false);
+      renderSegmentHighlights(rc, hoveredSegment, []);
 
       expect(pxToUpmSpy).toHaveBeenCalledWith(SEGMENT_HOVER_STYLE.lineWidth);
     });

@@ -4,6 +4,7 @@ import type { IGraphicContext, IRenderer } from "../../../types/graphics";
 import type { Point2D } from "@shift/types";
 import type { Font } from "../Font";
 import { CanvasCoordinator, type CanvasCoordinatorContext } from "./CanvasCoordinator";
+import type { Segment as SegmentType } from "@/types/segments";
 
 function createMockRenderer(): IRenderer {
   return {
@@ -93,8 +94,11 @@ function createContext(
     font,
     isPreviewMode: () => false,
     isHandlesVisible: () => true,
+    isGpuHandlesEnabled: () => true,
     getHoveredSegmentId: () => null,
     isSegmentSelected: () => false,
+    getSelectedSegmentIds: () => new Set(),
+    getSegmentById: (_segmentId): SegmentType | null => null,
     getHandleState: () => "idle",
     getAnchorHandleState: () => "idle",
     getSnapIndicator: () => null,
@@ -129,13 +133,13 @@ describe("CanvasCoordinator", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
     const renderToolContributors = vi.fn((layer, context) => {
-      if (layer !== "static-screen-after-handles") return;
+      if (layer !== "overlay-screen") return;
       context.projectGlyphLocalToScreen({ x: 10, y: 60 });
       context.projectGlyphLocalToScreen({ x: 110, y: 20 });
     });
     const context = createContext({ x: 600, y: 25 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
-    coordinator.setStaticContext(createGraphicContext(renderer));
+    coordinator.setOverlayContext(createGraphicContext(renderer));
 
     coordinator.requestImmediateRedraw();
 
@@ -148,13 +152,13 @@ describe("CanvasCoordinator", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
     const renderToolContributors = vi.fn((layer, context) => {
-      if (layer !== "static-screen-after-handles") return;
+      if (layer !== "overlay-screen") return;
       context.projectGlyphLocalToScreen({ x: 10, y: 60 });
       context.projectGlyphLocalToScreen({ x: 110, y: 20 });
     });
     const context = createContext({ x: 0, y: 0 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
-    coordinator.setStaticContext(createGraphicContext(renderer));
+    coordinator.setOverlayContext(createGraphicContext(renderer));
 
     coordinator.requestImmediateRedraw();
 
@@ -169,7 +173,7 @@ describe("CanvasCoordinator", () => {
     const renderToolContributors = vi.fn();
     const context = createContext({ x: 350, y: 40 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);
-    coordinator.setStaticContext(createGraphicContext(renderer));
+    coordinator.setOverlayContext(createGraphicContext(renderer));
 
     coordinator.requestImmediateRedraw();
 

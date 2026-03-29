@@ -182,6 +182,13 @@ export interface Snapping {
 export interface Editing {
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
+  previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void;
+  commitPreviewNodePositions(
+    label: string,
+    baseGlyph: Glyph,
+    updates: NodePositionUpdateList,
+  ): void;
+  restorePreviewGlyph(snapshot: Glyph): void;
   moveAnchors(ids: AnchorId[], delta: Point2D): void;
   toggleSmooth(id: PointId): void;
   duplicateSelection(): PointId[];

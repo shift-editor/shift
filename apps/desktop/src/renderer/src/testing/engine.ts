@@ -56,6 +56,7 @@ export function createMockEditing(): CommandEditingAPI {
     insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
+    setNodePositions: vi.fn(),
     setXAdvance: vi.fn(),
     translateLayer: vi.fn(),
     removePoints: vi.fn(),

@@ -84,7 +84,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
             altKey: e.altKey,
             metaKey: e.metaKey,
           },
-          { force: true },
+          { force: true, skipHover: true },
         );
         editor.requestRedraw();
       }

@@ -3,6 +3,7 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
 import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 /**
  * Inserts a point into an existing contour immediately before a reference point.
@@ -374,7 +375,9 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.fontEngine.editing.movePointTo(controlId, cA.x, cA.y);
+    ctx.fontEngine.editing.setNodePositions([
+      { node: { kind: "point", id: controlId }, x: cA.x, y: cA.y },
+    ]);
 
     return this.#splitPointId;
   }
@@ -426,8 +429,10 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.fontEngine.editing.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.fontEngine.editing.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.fontEngine.editing.setNodePositions([
+      { node: { kind: "point", id: control1Id }, x: c0A.x, y: c0A.y },
+      { node: { kind: "point", id: control2Id }, x: c1B.x, y: c1B.y },
+    ]);
 
     return this.#splitPointId;
   }
@@ -437,8 +442,16 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       ctx.fontEngine.editing.removePoints(this.#insertedPointIds);
     }
 
+    const updates: NodePositionUpdate[] = [];
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(pointId, pos.x, pos.y);
+      updates.push({
+        node: { kind: "point", id: pointId },
+        x: pos.x,
+        y: pos.y,
+      });
+    }
+    if (updates.length > 0) {
+      ctx.fontEngine.editing.setNodePositions(updates);
     }
   }
 

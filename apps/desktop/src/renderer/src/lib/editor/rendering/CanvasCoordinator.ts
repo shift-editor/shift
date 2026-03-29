@@ -3,6 +3,7 @@ import type { Glyph, Point2D, PointId, AnchorId } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
+import type { Segment as SegmentType } from "@/types/segments";
 import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
@@ -20,6 +21,7 @@ import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
 import { SCREEN_HIT_RADIUS, SCREEN_LINE_WIDTH } from "./constants";
 import { DrawAPI as DrawAPIClass } from "@/lib/tools/core/DrawAPI";
+import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 
 import {
   renderGuides,
@@ -28,6 +30,7 @@ import {
   renderGlyphFilled,
   renderSegmentHighlights,
   renderHandles,
+  renderHandleControlLines,
   renderAnchors,
   renderSnapIndicators,
   renderDebugTightBounds,
@@ -35,6 +38,9 @@ import {
   renderDebugSegmentBounds,
   renderDebugGlyphBbox,
 } from "./passes";
+import { buildPackedGpuHandleInstances } from "./gpu/handleInstances";
+
+const HANDLE_CULL_MARGIN_PX = 64;
 
 /**
  * Parameters that position and scale the UPM coordinate system onto the screen.
@@ -78,8 +84,11 @@ export interface CanvasCoordinatorContext {
   /** When true, renders filled glyph silhouette without guides or handles. */
   isPreviewMode(): boolean;
   isHandlesVisible(): boolean;
+  isGpuHandlesEnabled(): boolean;
   getHoveredSegmentId(): SegmentId | null;
   isSegmentSelected(segmentId: SegmentId): boolean;
+  getSelectedSegmentIds(): ReadonlySet<SegmentId>;
+  getSegmentById(segmentId: SegmentId): SegmentType | null;
   getHandleState(pointId: PointId): HandleState;
   getAnchorHandleState(anchorId: AnchorId): HandleState;
   getSnapIndicator(): SnapIndicator | null;
@@ -117,6 +126,7 @@ export interface CanvasCoordinatorContext {
  */
 export class CanvasCoordinator {
   #staticContext: IGraphicContext | null = null;
+  #gpuHandleContext: ReglHandleContext | null = null;
   #overlayContext: IGraphicContext | null = null;
   #interactiveContext: IGraphicContext | null = null;
   #staticDraw: DrawAPIClass | null = null;
@@ -126,6 +136,8 @@ export class CanvasCoordinator {
   #interactiveFrameHandler: FrameHandler;
   #fpsMonitor: FpsMonitor;
   #ctx: CanvasCoordinatorContext;
+  #packedGpuHandleInstances: Float32Array | null = null;
+  #hasLoggedVisiblePointCount = false;
 
   constructor(ctx: CanvasCoordinatorContext) {
     this.#ctx = ctx;
@@ -150,6 +162,10 @@ export class CanvasCoordinator {
 
   setOverlayContext(context: IGraphicContext): void {
     this.#overlayContext = context;
+  }
+
+  setGpuHandleContext(context: ReglHandleContext): void {
+    this.#gpuHandleContext = context;
   }
 
   setInteractiveContext(context: IGraphicContext): void {
@@ -220,6 +236,12 @@ export class CanvasCoordinator {
   #createToolRenderContext(context: {
     draw?: DrawAPI;
     renderer?: IRenderer;
+    visibleSceneBounds?: {
+      minX: number;
+      maxX: number;
+      minY: number;
+      maxY: number;
+    };
   }): Omit<ToolRenderContext, "editor"> {
     return {
       ...context,
@@ -253,6 +275,21 @@ export class CanvasCoordinator {
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
 
+    if (
+      !this.#ctx.isPreviewMode() &&
+      this.#ctx.isHandlesVisible() &&
+      this.#ctx.shouldRenderEditableGlyph()
+    ) {
+      ctx.save();
+      this.#ctx.renderToolContributors(
+        "overlay-screen",
+        this.#createToolRenderContext({
+          renderer: ctx,
+        }),
+      );
+      ctx.restore();
+    }
+
     const indicator = this.#ctx.getSnapIndicator();
     if (!indicator) return;
 
@@ -278,6 +315,9 @@ export class CanvasCoordinator {
     const glyph = this.#ctx.glyph.peek();
     const previewMode = this.#ctx.isPreviewMode();
     const handlesVisible = this.#ctx.isHandlesVisible();
+    const viewport = this.#ctx.getViewportTransform();
+    const drawOffset = this.#ctx.getDrawOffset();
+    const visibleSceneBounds = this.#getVisibleSceneBounds(viewport);
 
     const rc = {
       ctx,
@@ -293,11 +333,16 @@ export class CanvasCoordinator {
       "static-scene-before-handles",
       this.#createToolRenderContext({
         draw,
+        visibleSceneBounds,
       }),
     );
     ctx.restore();
 
     const shouldRenderEditableGlyph = this.#ctx.shouldRenderEditableGlyph();
+    if (!this.#hasLoggedVisiblePointCount && glyph && shouldRenderEditableGlyph) {
+      console.log(`[CanvasCoordinator] Total glyph points: ${this.#countGlyphPoints(glyph)}`);
+      this.#hasLoggedVisiblePointCount = true;
+    }
 
     ctx.save();
     this.#applyTransforms(ctx);
@@ -311,17 +356,24 @@ export class CanvasCoordinator {
       }
 
       rc.applyStyle(DEFAULT_STYLES);
-      const hasClosed = renderGlyphOutline(ctx, glyph);
+      const hasClosed = renderGlyphOutline(ctx, glyph, visibleSceneBounds, drawOffset);
 
       if (hasClosed && previewMode) {
-        renderGlyphFilled(ctx, glyph);
+        renderGlyphFilled(ctx, glyph, visibleSceneBounds, drawOffset);
       }
     }
 
     if (!previewMode && glyph && shouldRenderEditableGlyph) {
-      renderSegmentHighlights(rc, glyph, this.#ctx.getHoveredSegmentId(), (id) =>
-        this.#ctx.isSegmentSelected(id),
-      );
+      const hoveredSegmentId = this.#ctx.getHoveredSegmentId();
+      const hoveredSegment = hoveredSegmentId ? this.#ctx.getSegmentById(hoveredSegmentId) : null;
+      const selectedSegments: SegmentType[] = [];
+      for (const selectedSegmentId of this.#ctx.getSelectedSegmentIds()) {
+        const segment = this.#ctx.getSegmentById(selectedSegmentId);
+        if (segment) {
+          selectedSegments.push(segment);
+        }
+      }
+      renderSegmentHighlights(rc, hoveredSegment, selectedSegments);
     }
 
     if (!previewMode && glyph && shouldRenderEditableGlyph) {
@@ -345,22 +397,44 @@ export class CanvasCoordinator {
     }
 
     if (!previewMode && handlesVisible && glyph && shouldRenderEditableGlyph) {
-      renderHandles(draw, glyph, (id) => this.#ctx.getHandleState(id));
-      renderAnchors(draw, glyph, (id) => this.#ctx.getAnchorHandleState(id));
-    }
-
-    ctx.restore();
-    ctx.save();
-    if (!previewMode && handlesVisible && shouldRenderEditableGlyph) {
-      this.#ctx.renderToolContributors(
-        "static-screen-after-handles",
-        this.#createToolRenderContext({
-          renderer: ctx,
-        }),
+      renderHandleControlLines(draw, glyph, (from, to) =>
+        this.#isSceneSegmentVisible(from, to, visibleSceneBounds, drawOffset),
       );
+      const renderedOnGpu = this.#drawGpuHandles(glyph);
+      if (!renderedOnGpu) {
+        renderHandles(draw, glyph, (id) => this.#ctx.getHandleState(id));
+      }
+      renderAnchors(draw, glyph, (id) => this.#ctx.getAnchorHandleState(id));
+    } else {
+      this.#gpuHandleContext?.clear();
     }
 
     ctx.restore();
+  }
+
+  #drawGpuHandles(glyph: Glyph): boolean {
+    if (!this.#ctx.isGpuHandlesEnabled()) return false;
+    if (!this.#gpuHandleContext?.isAvailable()) return false;
+
+    const viewport = this.#ctx.getViewportTransform();
+    const drawOffset = this.#ctx.getDrawOffset();
+    const { packedInstances, instanceCount } = buildPackedGpuHandleInstances(
+      glyph,
+      (id) => this.#ctx.getHandleState(id),
+      viewport,
+      drawOffset,
+      this.#packedGpuHandleInstances,
+    );
+    this.#packedGpuHandleInstances = packedInstances;
+
+    return this.#gpuHandleContext.draw({
+      packedInstances,
+      instanceCount,
+      viewport,
+      drawOffset,
+      logicalWidth: viewport.centre.x * 2,
+      logicalHeight: viewport.logicalHeight,
+    });
   }
 
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {
@@ -368,8 +442,63 @@ export class CanvasCoordinator {
     return this.#ctx.projectSceneToScreen(x + offset.x, y + offset.y);
   }
 
+  #getVisibleSceneBounds(viewport: ViewportTransform): {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+  } {
+    const logicalWidth = viewport.centre.x * 2;
+    const viewTranslateX = viewport.panX + viewport.centre.x * (1 - viewport.zoom);
+    const viewTranslateY = viewport.panY + viewport.centre.y * (1 - viewport.zoom);
+    const baselineY =
+      viewport.logicalHeight - viewport.padding - viewport.descender * viewport.upmScale;
+    const zoomedScale = viewport.upmScale * viewport.zoom;
+    const minScreenX = -HANDLE_CULL_MARGIN_PX;
+    const maxScreenX = logicalWidth + HANDLE_CULL_MARGIN_PX;
+    const minScreenY = -HANDLE_CULL_MARGIN_PX;
+    const maxScreenY = viewport.logicalHeight + HANDLE_CULL_MARGIN_PX;
+
+    const minX = (minScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
+    const maxX = (maxScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
+    const maxY = (baselineY * viewport.zoom + viewTranslateY - minScreenY) / zoomedScale;
+    const minY = (baselineY * viewport.zoom + viewTranslateY - maxScreenY) / zoomedScale;
+
+    return { minX, maxX, minY, maxY };
+  }
+
+  #isSceneSegmentVisible(
+    from: Point2D,
+    to: Point2D,
+    visibleSceneBounds: { minX: number; maxX: number; minY: number; maxY: number },
+    drawOffset: Point2D,
+  ): boolean {
+    const minX = Math.min(from.x, to.x) + drawOffset.x;
+    const maxX = Math.max(from.x, to.x) + drawOffset.x;
+    const minY = Math.min(from.y, to.y) + drawOffset.y;
+    const maxY = Math.max(from.y, to.y) + drawOffset.y;
+
+    return !(
+      maxX < visibleSceneBounds.minX ||
+      minX > visibleSceneBounds.maxX ||
+      maxY < visibleSceneBounds.minY ||
+      minY > visibleSceneBounds.maxY
+    );
+  }
+
+  #countGlyphPoints(glyph: Glyph): number {
+    let count = 0;
+    for (const contour of glyph.contours) {
+      for (const _point of contour.points) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   destroy(): void {
     this.#staticContext?.destroy();
+    this.#gpuHandleContext?.destroy();
     this.#overlayContext?.destroy();
     this.#interactiveContext?.destroy();
   }

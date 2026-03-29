@@ -7,8 +7,7 @@
  */
 
 import type { IRenderer } from "@/types/graphics";
-import type { Glyph } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
+import type { Segment as SegmentType } from "@/types/segments";
 import { Segment } from "@/lib/geo/Segment";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
@@ -19,39 +18,32 @@ import type { RenderContext } from "./types";
  */
 export function renderSegmentHighlights(
   rc: RenderContext,
-  glyph: Glyph,
-  hoveredId: SegmentId | null,
-  isSelected: (segmentId: SegmentId) => boolean,
+  hoveredSegment: SegmentType | null,
+  selectedSegments: readonly SegmentType[],
 ): void {
-  if (!hoveredId && !hasAnySelectedSegment(glyph, isSelected)) return;
+  if (!hoveredSegment && selectedSegments.length === 0) return;
 
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    const segmentId = Segment.id(segment);
-    const isHovered = hoveredId === segmentId;
-    const selected = isSelected(segmentId);
-
-    if (!isHovered && !selected) continue;
-
-    const style = selected ? SEGMENT_SELECTED_STYLE : SEGMENT_HOVER_STYLE;
-    rc.applyStyle(style);
-
-    drawSegmentCurve(rc.ctx, segment);
+  if (selectedSegments.length > 0) {
+    rc.applyStyle(SEGMENT_SELECTED_STYLE);
+    rc.ctx.beginPath();
+    for (const segment of selectedSegments) {
+      appendSegmentCurve(rc.ctx, segment);
+    }
+    rc.ctx.stroke();
+  }
+  if (
+    hoveredSegment &&
+    !selectedSegments.some((segment) => Segment.id(segment) === Segment.id(hoveredSegment))
+  ) {
+    rc.applyStyle(SEGMENT_HOVER_STYLE);
+    rc.ctx.beginPath();
+    appendSegmentCurve(rc.ctx, hoveredSegment);
+    rc.ctx.stroke();
   }
 }
 
-function hasAnySelectedSegment(
-  glyph: Glyph,
-  isSelected: (segmentId: SegmentId) => boolean,
-): boolean {
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    if (isSelected(Segment.id(segment))) return true;
-  }
-  return false;
-}
-
-function drawSegmentCurve(ctx: IRenderer, segment: ReturnType<typeof Segment.parse>[number]): void {
+function appendSegmentCurve(ctx: IRenderer, segment: SegmentType): void {
   const curve = Segment.toCurve(segment);
-  ctx.beginPath();
   ctx.moveTo(curve.p0.x, curve.p0.y);
 
   switch (curve.type) {
@@ -65,6 +57,4 @@ function drawSegmentCurve(ctx: IRenderer, segment: ReturnType<typeof Segment.par
       ctx.cubicTo(curve.c0.x, curve.c0.y, curve.c1.x, curve.c1.y, curve.p1.x, curve.p1.y);
       break;
   }
-
-  ctx.stroke();
 }

@@ -1,4 +1,3 @@
-import { Vec2 } from "@shift/geo";
 import type { AnchorId, Point2D, PointId } from "@shift/types";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { DragTarget, EditorAPI } from "../../core/EditorAPI";
@@ -65,24 +64,21 @@ export class TranslateBehavior implements SelectBehavior {
         editor.setSnapIndicator(result.indicator);
       }
 
-      const delta = Vec2.sub(newLastPos, state.translate.lastPos);
-      const totalDelta = Vec2.add(state.translate.totalDelta, delta);
+      const deltaX = newLastPos.x - state.translate.lastPos.x;
+      const deltaY = newLastPos.y - state.translate.lastPos.y;
 
       state.translate.session.update({
         pointer: newLastPos,
         modifiers: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: false },
       });
 
-      return {
-        state: {
-          type: "translating",
-          translate: {
-            ...state.translate,
-            lastPos: { x: newLastPos.x, y: newLastPos.y },
-            totalDelta,
-          },
-        },
+      state.translate.lastPos = { x: newLastPos.x, y: newLastPos.y };
+      state.translate.totalDelta = {
+        x: state.translate.totalDelta.x + deltaX,
+        y: state.translate.totalDelta.y + deltaY,
       };
+
+      return { state };
     }
 
     if (event.type === "dragEnd") {

@@ -1,6 +1,7 @@
 # shift-backends - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Font format backends for reading and writing various font formats
 - **Language**: Rust
 - **Key Files**: `traits.rs`, `ufo/mod.rs`, `ufo/reader.rs`, `ufo/writer.rs`
@@ -8,6 +9,7 @@
 - **Dependents**: shift-core, shift-node
 
 ## File Structure
+
 ```
 src/
 ├── lib.rs              # Crate root, exports traits and ufo module
@@ -21,6 +23,7 @@ src/
 ## Core Abstractions
 
 ### FontReader Trait (traits.rs:3-17)
+
 ```rust
 pub trait FontReader: Send + Sync {
     fn load(&self, path: &str) -> Result<Font, String>;
@@ -33,6 +36,7 @@ pub trait FontReader: Send + Sync {
 ```
 
 ### FontWriter Trait (traits.rs:19-21)
+
 ```rust
 pub trait FontWriter: Send + Sync {
     fn save(&self, font: &Font, path: &str) -> Result<(), String>;
@@ -40,6 +44,7 @@ pub trait FontWriter: Send + Sync {
 ```
 
 ### FontBackend Trait (traits.rs:23-25)
+
 ```rust
 // Combines reader and writer
 pub trait FontBackend: FontReader + FontWriter {}
@@ -47,6 +52,7 @@ impl<T: FontReader + FontWriter> FontBackend for T {}
 ```
 
 ### UfoBackend (ufo/mod.rs:10-22)
+
 ```rust
 pub struct UfoBackend;
 
@@ -64,6 +70,7 @@ impl FontWriter for UfoBackend {
 ```
 
 ### UfoReader (ufo/reader.rs:10-15)
+
 ```rust
 pub struct UfoReader;
 
@@ -75,6 +82,7 @@ impl FontReader for UfoReader {
 ```
 
 ### UfoWriter (ufo/writer.rs:9-14)
+
 ```rust
 pub struct UfoWriter;
 
@@ -88,6 +96,7 @@ impl FontWriter for UfoWriter {
 ## Key Patterns
 
 ### Trait-Based Backend System
+
 ```rust
 // Any backend can be used through trait objects
 fn process_font<B: FontBackend>(backend: &B, path: &str) -> Result<Font, String> {
@@ -99,6 +108,7 @@ fn process_font<B: FontBackend>(backend: &B, path: &str) -> Result<Font, String>
 ```
 
 ### Norad Conversion (reader)
+
 ```rust
 // Convert norad types to shift-ir types
 fn convert_point_type(typ: &norad::PointType) -> PointType {
@@ -113,6 +123,7 @@ fn convert_point_type(typ: &norad::PointType) -> PointType {
 ```
 
 ### Norad Conversion (writer)
+
 ```rust
 // Convert shift-ir types to norad types
 fn convert_point_type(point: &Point, index: usize, points: &[Point], closed: bool) -> norad::PointType {
@@ -129,6 +140,7 @@ fn convert_point_type(point: &Point, index: usize, points: &[Point], closed: boo
 ```
 
 ### Layer Handling
+
 ```rust
 // Reader: norad layers → shift-ir layers
 for layer in norad_font.layers.iter() {
@@ -150,35 +162,37 @@ for (layer_id, layer) in font.layers() {
 
 ## API Surface
 
-| Function/Method | File | Signature |
-|----------------|------|-----------|
-| `FontReader::load` | traits.rs | `fn load(&self, path: &str) -> Result<Font, String>` |
-| `FontWriter::save` | traits.rs | `fn save(&self, font: &Font, path: &str) -> Result<(), String>` |
-| `UfoReader::new` | ufo/reader.rs | `fn new() -> Self` |
-| `UfoWriter::new` | ufo/writer.rs | `fn new() -> Self` |
-| `UfoBackend` | ufo/mod.rs | Unit struct implementing FontBackend |
+| Function/Method    | File          | Signature                                                       |
+| ------------------ | ------------- | --------------------------------------------------------------- |
+| `FontReader::load` | traits.rs     | `fn load(&self, path: &str) -> Result<Font, String>`            |
+| `FontWriter::save` | traits.rs     | `fn save(&self, font: &Font, path: &str) -> Result<(), String>` |
+| `UfoReader::new`   | ufo/reader.rs | `fn new() -> Self`                                              |
+| `UfoWriter::new`   | ufo/writer.rs | `fn new() -> Self`                                              |
+| `UfoBackend`       | ufo/mod.rs    | Unit struct implementing FontBackend                            |
 
 ## Conversion Tables
 
 ### norad → shift-ir
-| norad Type | shift-ir Type |
-|------------|---------------|
-| `norad::Font` | `Font` |
-| `norad::Glyph` | `Glyph` + `GlyphLayer` |
-| `norad::Contour` | `Contour` |
-| `norad::ContourPoint` | `Point` |
-| `norad::Component` | `Component` |
-| `norad::Anchor` | `Anchor` |
-| `norad::Guideline` | `Guideline` |
-| `plist::Dictionary` | `LibData` |
-| `plist::Value` | `LibValue` |
+
+| norad Type            | shift-ir Type          |
+| --------------------- | ---------------------- |
+| `norad::Font`         | `Font`                 |
+| `norad::Glyph`        | `Glyph` + `GlyphLayer` |
+| `norad::Contour`      | `Contour`              |
+| `norad::ContourPoint` | `Point`                |
+| `norad::Component`    | `Component`            |
+| `norad::Anchor`       | `Anchor`               |
+| `norad::Guideline`    | `Guideline`            |
+| `plist::Dictionary`   | `LibData`              |
+| `plist::Value`        | `LibValue`             |
 
 ### Kerning Handling
-| norad | shift-ir |
-|-------|----------|
+
+| norad                             | shift-ir               |
+| --------------------------------- | ---------------------- |
 | `norad::Groups["public.kern1.*"]` | `KerningData::groups1` |
 | `norad::Groups["public.kern2.*"]` | `KerningData::groups2` |
-| `norad::Kerning` | `Vec<KerningPair>` |
+| `norad::Kerning`                  | `Vec<KerningPair>`     |
 
 ## Constraints and Invariants
 

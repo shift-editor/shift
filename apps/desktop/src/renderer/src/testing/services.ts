@@ -1278,6 +1278,42 @@ export function createMockToolContext(): MockToolContext {
     };
   }
 
+  function previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void {
+    if (updates.length === 0) {
+      fontEngine.emitGlyph(baseGlyph as GlyphSnapshot);
+      return;
+    }
+
+    const pointUpdates = new Map<string, { x: number; y: number }>();
+    const anchorUpdates = new Map<string, { x: number; y: number }>();
+
+    for (const update of updates) {
+      switch (update.node.kind) {
+        case "point":
+          pointUpdates.set(update.node.id, { x: update.x, y: update.y });
+          break;
+        case "anchor":
+          anchorUpdates.set(update.node.id, { x: update.x, y: update.y });
+          break;
+      }
+    }
+
+    fontEngine.emitGlyph({
+      ...baseGlyph,
+      contours: baseGlyph.contours.map((contour) => ({
+        ...contour,
+        points: contour.points.map((point) => {
+          const next = pointUpdates.get(point.id);
+          return next ? { ...point, x: next.x, y: next.y } : point;
+        }),
+      })),
+      anchors: baseGlyph.anchors.map((anchor) => {
+        const next = anchorUpdates.get(anchor.id);
+        return next ? { ...anchor, x: next.x, y: next.y } : anchor;
+      }),
+    } as GlyphSnapshot);
+  }
+
   return {
     getDrawOffset: vi.fn(() => drawOffset),
     setDrawOffset: vi.fn((offset: Point2D) => {
@@ -1366,6 +1402,13 @@ export function createMockToolContext(): MockToolContext {
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
+    previewNodePositions,
+    commitPreviewNodePositions: (
+      _label: string,
+      _baseGlyph: Glyph,
+      updates: NodePositionUpdateList,
+    ) => edit.setNodePositions(updates),
+    restorePreviewGlyph: (snapshot: Glyph) => fontEngine.emitGlyph(snapshot as GlyphSnapshot),
     moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
     toggleSmooth: (id: PointId) => edit.toggleSmooth(id),
     getActiveContourId: () => edit.getActiveContourId(),

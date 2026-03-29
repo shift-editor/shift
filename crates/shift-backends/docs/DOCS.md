@@ -7,9 +7,11 @@ Font format backends for reading and writing various font formats.
 shift-backends provides a trait-based abstraction for font I/O operations. It decouples shift-core from specific file formats, allowing the editor to work with UFO, TTF, OTF, and potentially other formats through a unified interface.
 
 Currently implements:
+
 - **UFO**: Full read/write support via `norad`
 
 Planned:
+
 - **TTF/OTF**: Read via `skrifa`, compile via `fontc`
 
 ## Architecture
@@ -31,7 +33,7 @@ UFO Backend
 1. **Trait-Based**: Backends implement traits, enabling polymorphism
 2. **Format-Agnostic IR**: Backends convert to/from shift-ir types
 3. **Send + Sync**: All backends must be thread-safe
-4. **String Errors**: Simple error handling via Result<_, String>
+4. **String Errors**: Simple error handling via Result<\_, String>
 5. **Stateless**: Reader/Writer structs have no internal state
 
 ## Key Concepts
@@ -87,6 +89,7 @@ let font = reader.load("/path/to/font.ufo")?;
 ```
 
 The reader handles:
+
 - Font metadata (family name, style, version, etc.)
 - Font metrics (UPM, ascender, descender, etc.)
 - All layers (default and named layers)
@@ -128,15 +131,16 @@ backend.save(&font, "/path/to/font.ufo")?;
 
 ### Point Types
 
-| norad | shift-ir | Notes |
-|-------|----------|-------|
-| `Move` | `OnCurve` | First point of open contour |
-| `Line` | `OnCurve` | Straight line segment |
-| `Curve` | `OnCurve` | End of cubic bezier |
-| `OffCurve` | `OffCurve` | Cubic bezier handle |
-| `QCurve` | `QCurve` | Quadratic curve point |
+| norad      | shift-ir   | Notes                       |
+| ---------- | ---------- | --------------------------- |
+| `Move`     | `OnCurve`  | First point of open contour |
+| `Line`     | `OnCurve`  | Straight line segment       |
+| `Curve`    | `OnCurve`  | End of cubic bezier         |
+| `OffCurve` | `OffCurve` | Cubic bezier handle         |
+| `QCurve`   | `QCurve`   | Quadratic curve point       |
 
 When writing, the OnCurve type is disambiguated based on context:
+
 - First point of open contour → `Move`
 - Point following OffCurve → `Curve`
 - Otherwise → `Line`
@@ -144,6 +148,7 @@ When writing, the OnCurve type is disambiguated based on context:
 ### Kerning
 
 Groups are identified by naming convention:
+
 - `public.kern1.*` → First side (left) kerning groups
 - `public.kern2.*` → Second side (right) kerning groups
 

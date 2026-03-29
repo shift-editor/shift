@@ -10,10 +10,11 @@ import type { RenderContext } from "./types";
 import type { TextRunState } from "../../managers/TextRunManager";
 import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import type { Contour, RenderContour } from "@shift/types";
-import { buildContourPath } from "../render";
+import { buildContourPath, getCachedContourPath } from "../render";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import { getGuides, renderGuides } from ".";
 import { GUIDE_STYLES } from "@/lib/styles/style";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
@@ -31,8 +32,8 @@ const COMPONENT_OVERLAY_HOVER_COLORS = [
 ] as const;
 
 interface LiveGlyphRenderData {
-  glyphName?: string;
-  unicode?: number;
+  name: string;
+  unicode: number | null;
   contours: readonly Contour[];
   compositeContours: readonly RenderContour[];
 }
@@ -49,6 +50,7 @@ export function renderTextRun(
   metrics: FontMetrics,
   liveGlyph?: LiveGlyphRenderData | null,
   inspection?: CompositeInspectionRenderData | null,
+  visibleSceneBounds?: { minX: number; maxX: number; minY: number; maxY: number },
 ): void {
   const { ctx, pxToUpm } = rc;
   const { layout, editingIndex, hoveredIndex, cursorX } = textRun;
@@ -58,20 +60,16 @@ export function renderTextRun(
     if (i === editingIndex) continue;
 
     const shouldUseLiveGlyph = isLiveGlyphSlot(slot, liveGlyph);
+    if (!isSlotVisible(slot, metrics, visibleSceneBounds, shouldUseLiveGlyph ? liveGlyph : null)) {
+      continue;
+    }
 
     ctx.save();
     ctx.translate(slot.x, 0);
     ctx.fillStyle = "black";
 
     if (shouldUseLiveGlyph && liveGlyph) {
-      ctx.beginPath();
-      for (const contour of liveGlyph.contours) {
-        buildContourPath(ctx, contour);
-      }
-      for (const contour of liveGlyph.compositeContours) {
-        buildContourPath(ctx, contour);
-      }
-      ctx.fill();
+      ctx.fillPath(getCachedLiveGlyphPath(liveGlyph).path);
     } else if (slot.svgPath) {
       const path = GlyphRenderCache.get(slot.glyph.glyphName, slot.svgPath);
       ctx.fillPath(path);
@@ -87,6 +85,11 @@ export function renderTextRun(
     const slot = layout.slots[hoveredIndex];
     if (slot) {
       const shouldUseLiveGlyph = isLiveGlyphSlot(slot, liveGlyph);
+      if (
+        !isSlotVisible(slot, metrics, visibleSceneBounds, shouldUseLiveGlyph ? liveGlyph : null)
+      ) {
+        return;
+      }
       const lw = pxToUpm(HOVER_OUTLINE_WIDTH_PX);
 
       ctx.save();
@@ -95,14 +98,7 @@ export function renderTextRun(
       ctx.lineWidth = lw;
 
       if (shouldUseLiveGlyph && liveGlyph) {
-        ctx.beginPath();
-        for (const contour of liveGlyph.contours) {
-          buildContourPath(ctx, contour);
-        }
-        for (const contour of liveGlyph.compositeContours) {
-          buildContourPath(ctx, contour);
-        }
-        ctx.stroke();
+        ctx.strokePath(getCachedLiveGlyphPath(liveGlyph).path);
       } else if (slot.svgPath) {
         const path = GlyphRenderCache.get(slot.glyph.glyphName, slot.svgPath);
         ctx.strokePath(path);
@@ -145,6 +141,7 @@ function renderCompositeInspection(
   if (!inspection) return;
   const slot = layout.slots[inspection.slotIndex];
   if (!slot) return;
+  if (!isSlotVisible(slot, metrics, undefined, null)) return;
   const { ctx, applyStyle } = rc;
 
   ctx.save();
@@ -181,12 +178,74 @@ function isLiveGlyphSlot(
   liveGlyph?: LiveGlyphRenderData | null,
 ): boolean {
   const slotGlyphName = slot.glyph.glyphName;
-  const liveUnicode = (liveGlyph as { unicode?: number } | null | undefined)?.unicode;
+  const liveUnicode = liveGlyph?.unicode;
   return (
     liveGlyph !== null &&
     liveGlyph !== undefined &&
-    (liveGlyph.glyphName === slotGlyphName ||
+    (liveGlyph.name === slotGlyphName ||
       (typeof liveUnicode === "number" && slot.unicode !== null && slot.unicode === liveUnicode)) &&
     liveGlyph.contours.length + liveGlyph.compositeContours.length > 0
+  );
+}
+
+const liveGlyphPathCache = new WeakMap<
+  LiveGlyphRenderData,
+  {
+    path: Path2D;
+    bounds: BoundsType | null;
+  }
+>();
+
+function getCachedLiveGlyphPath(liveGlyph: LiveGlyphRenderData): {
+  path: Path2D;
+  bounds: BoundsType | null;
+} {
+  const cached = liveGlyphPathCache.get(liveGlyph);
+  if (cached) return cached;
+
+  const path = new Path2D();
+  const bounds: Array<BoundsType | null> = [];
+
+  for (const contour of liveGlyph.contours) {
+    const contourPath = getCachedContourPath(contour);
+    path.addPath(contourPath.path);
+    bounds.push(contourPath.bounds);
+  }
+
+  for (const contour of liveGlyph.compositeContours) {
+    const contourPath = getCachedContourPath(contour);
+    path.addPath(contourPath.path);
+    bounds.push(contourPath.bounds);
+  }
+
+  const result = {
+    path,
+    bounds: Bounds.unionAll(bounds),
+  };
+  liveGlyphPathCache.set(liveGlyph, result);
+  return result;
+}
+
+function isSlotVisible(
+  slot: TextRunState["layout"]["slots"][number],
+  metrics: FontMetrics,
+  visibleSceneBounds?: { minX: number; maxX: number; minY: number; maxY: number },
+  liveGlyph?: LiveGlyphRenderData | null,
+): boolean {
+  if (!visibleSceneBounds) return true;
+
+  const liveBounds = liveGlyph ? getCachedLiveGlyphPath(liveGlyph).bounds : null;
+  const bounds = liveBounds ?? slot.bounds;
+
+  const minX = slot.x + (bounds?.min.x ?? 0);
+  const maxX = slot.x + (bounds?.max.x ?? Math.max(slot.advance, 0));
+  const minY = bounds?.min.y ?? metrics.descender;
+  const maxY = bounds?.max.y ?? metrics.ascender;
+
+  return !(
+    maxX < visibleSceneBounds.minX ||
+    minX > visibleSceneBounds.maxX ||
+    maxY < visibleSceneBounds.minY ||
+    minY > visibleSceneBounds.maxY
   );
 }

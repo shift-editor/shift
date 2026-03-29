@@ -560,6 +560,25 @@ describe("Rule Application", () => {
     expect(cornerMove?.y).toBe(20);
   });
 
+  it("skips rule matching for isolated corner-only translations", () => {
+    const glyph = createGlyph([
+      createContour("corners-only", [
+        createPoint("corner1", 0, 0, "onCurve", false),
+        createPoint("corner2", 100, 0, "onCurve", false),
+        createPoint("corner3", 200, 50, "onCurve", false),
+      ]),
+    ]);
+    const selected = new Set(["corner1" as PointId, "corner2" as PointId]);
+
+    const { pointUpdates: moves, matched } = runConstrainDrag(glyph, selected, 15, -5);
+
+    expect(matched).toEqual([]);
+    expect(moves).toEqual([
+      { id: "corner1", x: 15, y: -5 },
+      { id: "corner2", x: 115, y: -5 },
+    ]);
+  });
+
   it("includes handle moves when moving smooth anchor", () => {
     const glyph = createTestGlyph();
     const selected = new Set(["smooth" as PointId]);

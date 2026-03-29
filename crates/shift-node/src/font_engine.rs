@@ -112,6 +112,8 @@ pub struct FontEngine {
   current_edit_session: Option<EditSession>,
   editing_glyph: Option<Glyph>,
   editing_layer_id: Option<LayerId>,
+  prepared_move_point_ids: Vec<PointId>,
+  prepared_move_anchor_ids: Vec<AnchorId>,
   font: Font,
   dependency_graph: DependencyGraph,
 }
@@ -131,6 +133,8 @@ impl FontEngine {
       current_edit_session: None,
       editing_glyph: None,
       editing_layer_id: None,
+      prepared_move_point_ids: Vec::new(),
+      prepared_move_anchor_ids: Vec::new(),
       font: Font::default(),
       dependency_graph: DependencyGraph::default(),
     }
@@ -604,6 +608,7 @@ impl FontEngine {
     self.current_edit_session = Some(edit_session);
     self.editing_glyph = Some(glyph);
     self.editing_layer_id = Some(layer_id);
+    self.clear_prepared_move_light();
 
     Ok(())
   }
@@ -695,6 +700,7 @@ impl FontEngine {
     }
     self.font.put_glyph(glyph);
     self.dependency_graph = DependencyGraph::rebuild(&self.font);
+    self.clear_prepared_move_light();
 
     Ok(())
   }
@@ -858,6 +864,114 @@ impl FontEngine {
     }
 
     self.command(|s| s.move_nodes(&parsed_nodes, dx, dy))
+  }
+
+  /// Move nodes directly — fire-and-forget for drag commit operations.
+  /// Returns true on success, false if no edit session is active.
+  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
+  #[napi(js_name = "moveNodesLight")]
+  pub fn move_nodes_light(&mut self, nodes: Vec<JsNodeRef>, dx: f64, dy: f64) -> Result<bool> {
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
+    };
+
+    let parsed_nodes: Vec<NodeRef> = nodes.iter().filter_map(parse_node_ref).collect();
+
+    if parsed_nodes.is_empty() {
+      return Ok(nodes.is_empty());
+    }
+
+    session.move_nodes(&parsed_nodes, dx, dy);
+    Ok(true)
+  }
+
+  /// Move points and anchors directly with compact ID arrays.
+  /// Returns true on success, false if no edit session is active.
+  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
+  #[napi(js_name = "movePointsAndAnchorsLight")]
+  pub fn move_points_and_anchors_light(
+    &mut self,
+    point_ids: Vec<String>,
+    anchor_ids: Vec<String>,
+    dx: f64,
+    dy: f64,
+  ) -> Result<bool> {
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
+    };
+
+    let parsed_point_ids: Vec<PointId> = parse_ids(&point_ids);
+    let parsed_anchor_ids: Vec<AnchorId> = parse_ids(&anchor_ids);
+
+    if parsed_point_ids.is_empty()
+      && parsed_anchor_ids.is_empty()
+      && (!point_ids.is_empty() || !anchor_ids.is_empty())
+    {
+      return Ok(false);
+    }
+
+    if !parsed_point_ids.is_empty() {
+      session.move_points(&parsed_point_ids, dx, dy);
+    }
+    if !parsed_anchor_ids.is_empty() {
+      session.layer_mut().move_anchors(&parsed_anchor_ids, dx, dy);
+    }
+
+    Ok(true)
+  }
+
+  /// Parse and store point/anchor ids once for a later direct move call.
+  /// Returns true on success, false if no edit session is active or no ids could be parsed.
+  #[napi(js_name = "prepareMoveNodesLight")]
+  pub fn prepare_move_nodes_light(
+    &mut self,
+    point_ids: Vec<String>,
+    anchor_ids: Vec<String>,
+  ) -> Result<bool> {
+    if self.current_edit_session.is_none() {
+      return Ok(false);
+    }
+
+    let parsed_point_ids: Vec<PointId> = parse_ids(&point_ids);
+    let parsed_anchor_ids: Vec<AnchorId> = parse_ids(&anchor_ids);
+
+    if parsed_point_ids.is_empty()
+      && parsed_anchor_ids.is_empty()
+      && (!point_ids.is_empty() || !anchor_ids.is_empty())
+    {
+      return Ok(false);
+    }
+
+    self.prepared_move_point_ids = parsed_point_ids;
+    self.prepared_move_anchor_ids = parsed_anchor_ids;
+
+    Ok(true)
+  }
+
+  /// Move the last prepared point/anchor set directly.
+  /// Returns true on success, false if no edit session is active.
+  #[napi(js_name = "movePreparedNodesLight")]
+  pub fn move_prepared_nodes_light(&mut self, dx: f64, dy: f64) -> Result<bool> {
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
+    };
+
+    if !self.prepared_move_point_ids.is_empty() {
+      session.move_points(&self.prepared_move_point_ids, dx, dy);
+    }
+    if !self.prepared_move_anchor_ids.is_empty() {
+      session
+        .layer_mut()
+        .move_anchors(&self.prepared_move_anchor_ids, dx, dy);
+    }
+
+    Ok(true)
+  }
+
+  #[napi(js_name = "clearPreparedMoveLight")]
+  pub fn clear_prepared_move_light(&mut self) {
+    self.prepared_move_point_ids.clear();
+    self.prepared_move_anchor_ids.clear();
   }
 
   #[napi]
@@ -1207,6 +1321,46 @@ mod tests {
     assert_eq!(b.len(), 4);
     assert!(b[0] < b[2], "min_x < max_x");
     assert!(b[1] < b[3], "min_y < max_y");
+  }
+
+  #[test]
+  fn test_prepare_and_move_prepared_nodes_light() {
+    let mut engine = FontEngine::new();
+    engine
+      .start_edit_session(JsGlyphRef {
+        glyph_name: "A".to_string(),
+        unicode: Some(65),
+      })
+      .unwrap();
+
+    engine.add_empty_contour().unwrap();
+    let result_json = engine
+      .add_point(0.0, 0.0, "onCurve".to_string(), false)
+      .unwrap();
+    let result: CommandResult = serde_json::from_str(&result_json).unwrap();
+    let point_id = result
+      .affected_point_ids
+      .expect("affected point ids")
+      .first()
+      .expect("point id")
+      .to_string();
+
+    assert!(engine
+      .prepare_move_nodes_light(vec![point_id.clone()], vec![])
+      .unwrap());
+    assert!(engine.move_prepared_nodes_light(12.0, 34.0).unwrap());
+
+    let snapshot_json = engine.get_snapshot_data().unwrap();
+    let snapshot: GlyphSnapshot = serde_json::from_str(&snapshot_json).unwrap();
+    let moved = snapshot
+      .contours
+      .iter()
+      .flat_map(|contour| contour.points.iter())
+      .find(|point| point.id == point_id)
+      .expect("moved point");
+
+    assert_eq!(moved.x, 12.0);
+    assert_eq!(moved.y, 34.0);
   }
 
   #[test]

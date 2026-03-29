@@ -5,12 +5,8 @@
     <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
   <img width="1822" height="1185" alt="image" src="https://github.com/user-attachments/assets/ee1fc193-5f58-4589-9c99-91f7ad756f93" />
 
-
   </p>
 </div>
-
-
-
 
 ## Why Shift?
 

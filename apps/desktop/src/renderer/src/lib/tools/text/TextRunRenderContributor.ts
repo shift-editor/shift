@@ -28,7 +28,7 @@ export const textRunRenderContributor: ToolRenderContributor = {
   id: "text-run",
   layer: "static-scene-before-handles",
   visibility: "always",
-  render({ editor, draw, pxToUpm, applyStyle }) {
+  render({ editor, draw, pxToUpm, applyStyle, visibleSceneBounds }) {
     if (!draw) return;
 
     const textRunState = editor.getTextRunState();
@@ -40,7 +40,8 @@ export const textRunRenderContributor: ToolRenderContributor = {
     const liveGlyph =
       glyph && activeGlyphName
         ? {
-            glyphName: activeGlyphName,
+            name: activeGlyphName,
+            unicode: editor.getActiveGlyphUnicode(),
             contours: glyph.contours,
             compositeContours: glyph.compositeContours,
           }
@@ -56,6 +57,7 @@ export const textRunRenderContributor: ToolRenderContributor = {
       metrics,
       liveGlyph,
       resolveCompositeInspection(editor, textRunState),
+      visibleSceneBounds,
     );
   },
 };

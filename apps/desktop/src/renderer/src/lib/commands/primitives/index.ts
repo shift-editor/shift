@@ -11,6 +11,7 @@ export {
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
 export { SnapshotCommand } from "./SnapshotCommand";
+export { SetNodePositionsCommand } from "./SetNodePositionsCommand";
 export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,

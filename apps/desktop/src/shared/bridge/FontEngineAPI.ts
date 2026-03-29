@@ -89,6 +89,16 @@ export interface FontEngineAPI {
     smooth: boolean,
   ): string;
   moveNodes(nodes: NodeRef[], dx: number, dy: number): string;
+  moveNodesLight?(nodes: NodeRef[], dx: number, dy: number): boolean;
+  movePointsAndAnchorsLight?(
+    pointIds: string[],
+    anchorIds: string[],
+    dx: number,
+    dy: number,
+  ): boolean;
+  prepareMoveNodesLight?(pointIds: string[], anchorIds: string[]): boolean;
+  movePreparedNodesLight?(dx: number, dy: number): boolean;
+  clearPreparedMoveLight?(): void;
   removePoints(pointIds: string[]): string;
   toggleSmooth(pointId: string): string;
 

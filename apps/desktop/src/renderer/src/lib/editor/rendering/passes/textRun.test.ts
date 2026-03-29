@@ -118,7 +118,7 @@ describe("textRun pass", () => {
   it("strokes hovered live glyph outline via renderer path pipeline", () => {
     const state = createState({ hoveredIndex: 0 });
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [
         {
@@ -136,15 +136,15 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.beginPath).toHaveBeenCalled();
-    expect(ctx.stroke).toHaveBeenCalled();
-    expect(ctx.strokePath).not.toHaveBeenCalled();
+    expect(ctx.strokePath).toHaveBeenCalledTimes(1);
+    expect(ctx.beginPath).not.toHaveBeenCalled();
+    expect(ctx.stroke).not.toHaveBeenCalled();
   });
 
   it("renders live glyph when only composite contours are present", () => {
     const state = createState();
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [],
       compositeContours: [
@@ -161,14 +161,14 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.fill).toHaveBeenCalledTimes(1);
-    expect(ctx.fillPath).not.toHaveBeenCalled();
+    expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 
   it("renders both live base and composite contours", () => {
     const state = createState();
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [
         {
@@ -195,8 +195,9 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.beginPath).toHaveBeenCalledTimes(1);
-    expect(ctx.fill).toHaveBeenCalledTimes(1);
+    expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+    expect(ctx.beginPath).not.toHaveBeenCalled();
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 
   it("renders all same-unicode slots with live contours", () => {
@@ -211,7 +212,7 @@ describe("textRun pass", () => {
       },
     });
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [
         {
@@ -229,8 +230,8 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.fill).toHaveBeenCalledTimes(2);
-    expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+    expect(ctx.fillPath).toHaveBeenCalledTimes(3);
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 
   it("uses live hover stroke for duplicate unicode at a different x", () => {
@@ -242,7 +243,7 @@ describe("textRun pass", () => {
       },
     });
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [
         {
@@ -260,8 +261,8 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.stroke).toHaveBeenCalled();
-    expect(ctx.strokePath).not.toHaveBeenCalled();
+    expect(ctx.strokePath).toHaveBeenCalledTimes(1);
+    expect(ctx.stroke).not.toHaveBeenCalled();
   });
 
   it("keeps skipping the edited slot while updating other matching duplicates live", () => {
@@ -273,7 +274,7 @@ describe("textRun pass", () => {
       },
     });
     const liveGlyph = {
-      glyphName: "uni41",
+      name: "uni41",
       unicode: 65,
       contours: [
         {
@@ -291,7 +292,7 @@ describe("textRun pass", () => {
 
     renderTextRun(rc, state, metrics, liveGlyph);
 
-    expect(ctx.fill).toHaveBeenCalledTimes(2);
-    expect(ctx.fillPath).not.toHaveBeenCalled();
+    expect(ctx.fillPath).toHaveBeenCalledTimes(2);
+    expect(ctx.fill).not.toHaveBeenCalled();
   });
 });

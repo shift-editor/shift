@@ -15,10 +15,7 @@ const fs = require("fs");
 const path = require("path");
 
 const NAPI_TYPES_PATH = path.join(__dirname, "../crates/shift-node/index.d.ts");
-const ELECTRON_TYPES_PATH = path.join(
-  __dirname,
-  "../src/renderer/src/types/electron.d.ts"
-);
+const ELECTRON_TYPES_PATH = path.join(__dirname, "../src/renderer/src/types/electron.d.ts");
 
 function extractNAPITypes() {
   const content = fs.readFileSync(NAPI_TYPES_PATH, "utf8");

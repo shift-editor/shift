@@ -1,5 +1,6 @@
 import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
+import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type {
   CursorType,
   SnapPreferences,
@@ -29,7 +30,7 @@ import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from 
 import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
-import { Bounds, Polygon, Vec2 } from "@shift/geo";
+import { Bounds, Vec2 } from "@shift/geo";
 import { Contours, Glyphs, areGlyphSnapshotsEqual } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
@@ -42,6 +43,7 @@ import {
   CommandHistory,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
+  SetNodePositionsCommand,
   SetXAdvanceCommand,
 } from "../commands";
 import {
@@ -69,7 +71,7 @@ import { ContentResolver } from "../clipboard";
 import { ClipboardManager } from "./managers/ClipboardManager";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
-import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "../tools/select/boundingBoxHitTest";
+import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
 import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import {
@@ -103,7 +105,11 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
-import { constrainDrag } from "@shift/rules";
+import {
+  constrainPreparedDrag,
+  prepareConstrainDrag,
+  type PreparedConstrainDrag,
+} from "@shift/rules";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -111,9 +117,24 @@ type DragContext = {
   id: number;
   baseGlyph: GlyphSnapshot;
   target: DragTarget;
+  selectedPointIds: ReadonlySet<PointId>;
+  preparedConstrainDrag: PreparedConstrainDrag | null;
+  preparedNativeMove: boolean;
   startPointer: Point2D;
   currentPointer: Point2D;
+  currentDelta: Point2D;
+  latestUpdates: NodePositionUpdate[];
+  baseSidebearings: { lsb: number | null; rsb: number | null };
 };
+
+type SidebarGlyphInfo = {
+  unicode: number;
+  xAdvance: number;
+  lsb: number | null;
+  rsb: number | null;
+};
+
+type SidebarSelectionBounds = Bounds | null;
 
 /**
  * Central orchestrator for the glyph editing surface.
@@ -142,6 +163,7 @@ type DragContext = {
 export class Editor implements ShiftEditor {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
+  private $gpuHandlesEnabled: WritableSignal<boolean>;
 
   #selection: SelectionManager;
   #hover: HoverManager;
@@ -162,6 +184,9 @@ export class Editor implements ShiftEditor {
   #fontEngine: FontEngine;
   #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
+  #$sidebarGlyph: ComputedSignal<Glyph | null>;
+  #$sidebarGlyphInfo: ComputedSignal<SidebarGlyphInfo | null>;
+  #$sidebarSelectionBounds: ComputedSignal<SidebarSelectionBounds>;
   #fontManager: FontManager;
   #staticEffect: Effect;
   #textRunGlyphRefreshEffect: Effect;
@@ -181,6 +206,9 @@ export class Editor implements ShiftEditor {
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
   #drawOffset: WritableSignal<Point2D>;
+  #frozenSidebarGlyph: WritableSignal<Glyph | null>;
+  #sidebarGlyphInfoOverride: WritableSignal<SidebarGlyphInfo | null>;
+  #sidebarSelectionBoundsOverride: WritableSignal<SidebarSelectionBounds>;
   $renderState: ComputedSignal<RenderState>;
   $staticState: ComputedSignal<StaticRenderState>;
   $overlayState: ComputedSignal<OverlayRenderState>;
@@ -191,11 +219,31 @@ export class Editor implements ShiftEditor {
   #snapPreferences: WritableSignal<SnapPreferences>;
   #snapIndicator: WritableSignal<SnapIndicator | null>;
   #debugOverlays: WritableSignal<DebugOverlays>;
+  #deferTextRunGlyphRefresh: WritableSignal<boolean>;
   #toolState: {
     app: Map<string, unknown>;
     document: Map<string, unknown>;
   };
   #toolStateVersion: WritableSignal<number>;
+  #selectionBoundsCache: {
+    glyph: Glyph | null;
+    selectedPointIds: ReadonlySet<PointId>;
+    selectionMode: SelectionMode;
+    rect: Rect2D | null;
+  } | null = null;
+  #segmentAwareSelectionBoundsCache: {
+    glyph: Glyph | null;
+    selectedPointIds: ReadonlySet<PointId>;
+    bounds: Bounds | null;
+  } | null = null;
+  #segmentIndexCache: {
+    glyph: Glyph | null;
+    segmentsById: ReadonlyMap<SegmentId, SegmentHitResult["segment"]>;
+  } | null = null;
+  #pointLocationCache: {
+    glyph: Glyph | null;
+    locations: ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }>;
+  } | null = null;
 
   /**
    * Initializes all subsystems, wires signal dependencies, and sets up
@@ -212,6 +260,34 @@ export class Editor implements ShiftEditor {
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
+    this.#frozenSidebarGlyph = signal<Glyph | null>(null);
+    this.#sidebarGlyphInfoOverride = signal<SidebarGlyphInfo | null>(null);
+    this.#sidebarSelectionBoundsOverride = signal<SidebarSelectionBounds>(null);
+    this.#$sidebarGlyph = computed<Glyph | null>(() => {
+      const frozenGlyph = this.#frozenSidebarGlyph.value;
+      if (frozenGlyph) return frozenGlyph;
+      return this.#$glyph.value;
+    });
+    this.#$sidebarGlyphInfo = computed<SidebarGlyphInfo | null>(() => {
+      const override = this.#sidebarGlyphInfoOverride.value;
+      if (override) return override;
+
+      const glyph = this.#$glyph.value;
+      if (!glyph) return null;
+
+      const sidebearings = deriveGlyphSidebearings(glyph);
+      return {
+        unicode: glyph.unicode,
+        xAdvance: glyph.xAdvance,
+        lsb: sidebearings.lsb,
+        rsb: sidebearings.rsb,
+      };
+    });
+    this.#$sidebarSelectionBounds = computed<SidebarSelectionBounds>(() => {
+      const override = this.#sidebarSelectionBoundsOverride.value;
+      if (override) return override;
+      return this.getSelectionBounds();
+    });
     this.#fontManager = new FontManager({
       getMetrics: () => this.#fontEngine.info.getMetrics(),
       getMetadata: () => this.#fontEngine.info.getMetadata(),
@@ -230,6 +306,8 @@ export class Editor implements ShiftEditor {
     this.$previewMode = signal(false);
     this.$cursor = signal("default");
     this.$handlesVisible = signal(true);
+    this.$gpuHandlesEnabled = signal(true);
+    this.#deferTextRunGlyphRefresh = signal(false);
     this.#currentModifiers = signal<Modifiers>({
       shiftKey: false,
       altKey: false,
@@ -312,6 +390,7 @@ export class Editor implements ShiftEditor {
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
       hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
       debugOverlays: this.#debugOverlays.value,
+      gpuHandlesEnabled: this.$gpuHandlesEnabled.value,
     }));
 
     this.$overlayState = computed<OverlayRenderState>(() => ({
@@ -321,6 +400,9 @@ export class Editor implements ShiftEditor {
       hoveredPointId: this.#hover.hoveredPointId.value,
       hoveredAnchorId: this.#hover.hoveredAnchorId.value,
       hoveredSegmentId: this.#hover.hoveredSegmentId.value,
+      hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
+      previewMode: this.$previewMode.value,
+      handlesVisible: this.$handlesVisible.value,
       snapIndicator: this.#snapIndicator.value,
     }));
 
@@ -337,6 +419,8 @@ export class Editor implements ShiftEditor {
     this.#textRunGlyphRefreshEffect = effect(() => {
       const glyph = this.#$glyph.value;
       if (!glyph) return;
+
+      if (this.#deferTextRunGlyphRefresh.value) return;
 
       const textRun = this.#textRunManager.state.peek();
       if (!textRun) return;
@@ -572,6 +656,11 @@ export class Editor implements ShiftEditor {
     return this.#selection.isSegmentSelected(segmentId);
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  public getSelectedSegmentIds(): ReadonlySet<SegmentId> {
+    return this.#selection.selectedSegmentIds.peek();
+  }
+
   public clearSelection(): void {
     this.#selection.clearSelection();
   }
@@ -643,8 +732,6 @@ export class Editor implements ShiftEditor {
   }
 
   public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
-    if (!isBoundingBoxVisibleAtZoom(this.getZoom())) return null;
-
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
@@ -734,21 +821,38 @@ export class Editor implements ShiftEditor {
       throw new Error("A drag session is already active");
     }
 
-    if (!this.#fontEngine.$glyph.value) {
+    const currentGlyph = this.#fontEngine.$glyph.peek();
+    if (!currentGlyph) {
       throw new Error("Cannot begin drag without an active glyph");
     }
 
     const context: DragContext = {
       id: this.#nextDragId++,
-      baseGlyph: this.#fontEngine.getSnapshot(),
+      baseGlyph: currentGlyph,
       target: {
         pointIds: [...target.pointIds],
         anchorIds: [...target.anchorIds],
       },
+      selectedPointIds: new Set(target.pointIds),
+      preparedConstrainDrag:
+        target.pointIds.length > 0
+          ? prepareConstrainDrag(currentGlyph, new Set(target.pointIds))
+          : null,
+      preparedNativeMove: false,
       startPointer: startPointer,
       currentPointer: startPointer,
+      currentDelta: { x: 0, y: 0 },
+      latestUpdates: [],
+      baseSidebearings: { lsb: null, rsb: null },
     };
+    context.preparedNativeMove = this.#fontEngine.editing.prepareMoveNodes(
+      context.target.pointIds,
+      context.target.anchorIds,
+    );
+    context.baseSidebearings = deriveGlyphSidebearings(context.baseGlyph);
     this.#activeDrag = context;
+    this.#frozenSidebarGlyph.set(this.#$glyph.peek());
+    this.#deferTextRunGlyphRefresh.set(true);
 
     return {
       update: (input) => {
@@ -775,17 +879,14 @@ export class Editor implements ShiftEditor {
   #updateDrag(context: DragContext, input: DragUpdate): void {
     const mousePos = Vec2.sub(input.pointer, context.startPointer);
     context.currentPointer = input.pointer;
-
-    this.#fontEngine.editing.restoreSnapshot(context.baseGlyph);
+    context.currentDelta = mousePos;
 
     const allUpdates: NodePositionUpdate[] = [];
 
     // Points via single-pass rules
-    if (context.target.pointIds.length > 0) {
-      const patch = constrainDrag({
-        glyph: context.baseGlyph,
-        selectedIds: new Set(context.target.pointIds),
-        mousePosition: mousePos,
+    if (context.preparedConstrainDrag) {
+      const patch = constrainPreparedDrag(context.preparedConstrainDrag, mousePos, {
+        includeMatchedRules: false,
       });
 
       for (const update of patch.pointUpdates) {
@@ -807,19 +908,44 @@ export class Editor implements ShiftEditor {
       });
     }
 
-    if (allUpdates.length > 0) {
-      this.#fontEngine.editing.setNodePositions(allUpdates);
-    }
+    context.latestUpdates = allUpdates;
+    this.previewNodePositions(context.baseGlyph, allUpdates);
+    this.#updateSidebarGlyphInfoDuringDrag(context);
   }
 
   #commitDrag(context: DragContext): void {
     const after = this.#fontEngine.$glyph.value;
     if (after && !areGlyphSnapshotsEqual(context.baseGlyph, after)) {
+      const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
+      if (uniformDeltaCommit) {
+        const committedPreparedMove =
+          context.preparedNativeMove &&
+          this.#fontEngine.editing.movePreparedNodes(uniformDeltaCommit.delta);
+        if (!committedPreparedMove) {
+          this.#fontEngine.editing.syncMoveNodes(
+            context.target.pointIds,
+            context.target.anchorIds,
+            uniformDeltaCommit.delta,
+          );
+        }
+      } else {
+        this.#fontEngine.editing.syncNodePositions(context.latestUpdates);
+      }
+
       this.#commandHistory.record(
-        new SnapshotCommand(this.#getDragCommitLabel(context.target), context.baseGlyph, after),
+        SetNodePositionsCommand.fromBaseGlyphAndUpdates(
+          this.#getDragCommitLabel(context.target),
+          context.baseGlyph,
+          context.latestUpdates,
+        ) ??
+          new SnapshotCommand(this.#getDragCommitLabel(context.target), context.baseGlyph, after),
       );
     }
 
+    this.#deferTextRunGlyphRefresh.set(false);
+    this.#frozenSidebarGlyph.set(null);
+    this.#sidebarGlyphInfoOverride.set(null);
+    this.#sidebarSelectionBoundsOverride.set(null);
     this.#clearActiveDrag(context);
   }
 
@@ -833,13 +959,55 @@ export class Editor implements ShiftEditor {
     return "Move Points";
   }
 
+  #updateSidebarGlyphInfoDuringDrag(context: DragContext): void {
+    if (context.target.anchorIds.length > 0 || context.target.pointIds.length === 0) {
+      this.#sidebarGlyphInfoOverride.set(null);
+      return;
+    }
+
+    const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
+    if (!uniformDeltaCommit) {
+      this.#sidebarGlyphInfoOverride.set(null);
+      return;
+    }
+
+    this.#sidebarGlyphInfoOverride.set({
+      unicode: context.baseGlyph.unicode,
+      xAdvance: context.baseGlyph.xAdvance,
+      lsb:
+        context.baseSidebearings.lsb === null
+          ? null
+          : context.baseSidebearings.lsb + uniformDeltaCommit.delta.x,
+      rsb:
+        context.baseSidebearings.rsb === null
+          ? null
+          : context.baseSidebearings.rsb - uniformDeltaCommit.delta.x,
+    });
+  }
+
+  #getSimpleDragCommitDelta(context: DragContext): { delta: Point2D } | null {
+    if (context.latestUpdates.length === 0) return null;
+    if (context.preparedConstrainDrag?.matchedRules.length) return null;
+
+    const { x, y } = context.currentDelta;
+    if (x === 0 && y === 0) return null;
+    return { delta: { x, y } };
+  }
+
   #cancelDrag(context: DragContext): void {
-    this.#fontEngine.editing.restoreSnapshot(context.baseGlyph);
+    this.restorePreviewGlyph(context.baseGlyph);
+    this.#deferTextRunGlyphRefresh.set(false);
+    this.#frozenSidebarGlyph.set(null);
+    this.#sidebarGlyphInfoOverride.set(null);
+    this.#sidebarSelectionBoundsOverride.set(null);
     this.#clearActiveDrag(context);
   }
 
   #clearActiveDrag(context: DragContext): void {
     if (this.#activeDrag?.id !== context.id) return;
+    if (context.preparedNativeMove) {
+      this.#fontEngine.editing.clearPreparedMove();
+    }
     this.#activeDrag = null;
   }
 
@@ -946,6 +1114,19 @@ export class Editor implements ShiftEditor {
     this.$handlesVisible.set(visible);
   }
 
+  public get gpuHandlesEnabled(): Signal<boolean> {
+    return this.$gpuHandlesEnabled;
+  }
+
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  public isGpuHandlesEnabled(): boolean {
+    return this.$gpuHandlesEnabled.peek();
+  }
+
+  public setGpuHandlesEnabled(enabled: boolean): void {
+    this.$gpuHandlesEnabled.set(enabled);
+  }
+
   public setStaticContext(context: IGraphicContext) {
     this.#renderer.setStaticContext(context);
   }
@@ -956,6 +1137,10 @@ export class Editor implements ShiftEditor {
 
   public setInteractiveContext(context: IGraphicContext) {
     this.#renderer.setInteractiveContext(context);
+  }
+
+  public setGpuHandleContext(context: ReglHandleContext) {
+    this.#renderer.setGpuHandleContext(context);
   }
 
   /** Opens a glyph for editing by canonical glyph reference. */
@@ -1128,6 +1313,18 @@ export class Editor implements ShiftEditor {
 
   public get glyph(): Signal<Glyph | null> {
     return this.#$glyph;
+  }
+
+  public get sidebarGlyph(): Signal<Glyph | null> {
+    return this.#$sidebarGlyph;
+  }
+
+  public get sidebarGlyphInfo(): Signal<SidebarGlyphInfo | null> {
+    return this.#$sidebarGlyphInfo;
+  }
+
+  public get sidebarSelectionBounds(): Signal<SidebarSelectionBounds> {
+    return this.#$sidebarSelectionBounds;
   }
 
   public getActiveGlyphUnicode(): number | null {
@@ -1553,9 +1750,26 @@ export class Editor implements ShiftEditor {
   }
 
   public getSelectionBounds(): Bounds | null {
-    const snapshot = this.#fontEngine.$glyph.value;
-    if (!snapshot) return null;
-    return getSegmentAwareBounds(snapshot, this.getSelectedPoints());
+    const glyph = this.#$glyph.value;
+    const selectedPointIds = this.#selection.selectedPointIds.peek();
+
+    const cached = this.#segmentAwareSelectionBoundsCache;
+    if (cached && cached.glyph === glyph && cached.selectedPointIds === selectedPointIds) {
+      return cached.bounds;
+    }
+
+    const bounds =
+      glyph && selectedPointIds.size > 0
+        ? getSegmentAwareBounds(glyph as GlyphSnapshot, Array.from(selectedPointIds))
+        : null;
+
+    this.#segmentAwareSelectionBoundsCache = {
+      glyph,
+      selectedPointIds,
+      bounds,
+    };
+
+    return bounds;
   }
 
   public getSelectionCenter(): Point2D | null {
@@ -1710,6 +1924,144 @@ export class Editor implements ShiftEditor {
 
   public setNodePositions(updates: NodePositionUpdateList): void {
     this.#fontEngine.editing.setNodePositions(updates);
+  }
+
+  public previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void {
+    const baseSnapshot = baseGlyph as GlyphSnapshot;
+    this.#deferTextRunGlyphRefresh.set(true);
+
+    if (updates.length === 0) {
+      this.#sidebarSelectionBoundsOverride.set(null);
+      this.#fontEngine.emitGlyph(baseSnapshot);
+      return;
+    }
+
+    const pointLocations = this.#getPointLocations(baseSnapshot);
+    const pointUpdatesByContour = new Map<
+      number,
+      Array<{ pointIndex: number; x: number; y: number }>
+    >();
+    const anchorUpdates = new Map<string, { x: number; y: number }>();
+
+    for (const update of updates) {
+      switch (update.node.kind) {
+        case "point": {
+          const location = pointLocations.get(update.node.id);
+          if (!location) break;
+          const contourUpdates = pointUpdatesByContour.get(location.contourIndex) ?? [];
+          contourUpdates.push({
+            pointIndex: location.pointIndex,
+            x: update.x,
+            y: update.y,
+          });
+          pointUpdatesByContour.set(location.contourIndex, contourUpdates);
+          break;
+        }
+        case "anchor":
+          anchorUpdates.set(update.node.id, { x: update.x, y: update.y });
+          break;
+      }
+    }
+
+    const contours =
+      pointUpdatesByContour.size === 0
+        ? baseSnapshot.contours
+        : (() => {
+            const nextContours = [...baseSnapshot.contours];
+            for (const [contourIndex, contourUpdates] of pointUpdatesByContour) {
+              const contour = baseSnapshot.contours[contourIndex];
+              if (!contour) continue;
+              const points = [...contour.points];
+              for (const contourUpdate of contourUpdates) {
+                const point = points[contourUpdate.pointIndex];
+                if (!point) continue;
+                points[contourUpdate.pointIndex] = {
+                  ...point,
+                  x: contourUpdate.x,
+                  y: contourUpdate.y,
+                };
+              }
+              nextContours[contourIndex] = { ...contour, points };
+            }
+            return nextContours;
+          })();
+
+    const anchors =
+      anchorUpdates.size === 0
+        ? baseSnapshot.anchors
+        : baseSnapshot.anchors.map((anchor) => {
+            const next = anchorUpdates.get(anchor.id);
+            if (!next) return anchor;
+            return { ...anchor, x: next.x, y: next.y };
+          });
+
+    this.#sidebarSelectionBoundsOverride.set(this.#buildSidebarSelectionBoundsOverride(updates));
+    this.#fontEngine.emitGlyph({
+      ...baseSnapshot,
+      contours,
+      anchors,
+    } as GlyphSnapshot);
+  }
+
+  public commitPreviewNodePositions(
+    label: string,
+    baseGlyph: Glyph,
+    updates: NodePositionUpdateList,
+  ): void {
+    const baseSnapshot = baseGlyph as GlyphSnapshot;
+    const after = this.#fontEngine.$glyph.value as GlyphSnapshot | null;
+    if (!after || areGlyphSnapshotsEqual(baseSnapshot, after)) {
+      this.#deferTextRunGlyphRefresh.set(false);
+      this.#sidebarSelectionBoundsOverride.set(null);
+      return;
+    }
+
+    this.#sidebarSelectionBoundsOverride.set(null);
+    this.#fontEngine.editing.syncNodePositions(updates);
+    this.#deferTextRunGlyphRefresh.set(false);
+    this.#commandHistory.record(
+      SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, baseSnapshot, updates) ??
+        new SnapshotCommand(label, baseSnapshot, after),
+    );
+  }
+
+  #getPointLocations(
+    glyph: Glyph,
+  ): ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }> {
+    const cached = this.#pointLocationCache;
+    if (cached && cached.glyph === glyph) {
+      return cached.locations;
+    }
+
+    const locations = new Map<PointId, { contourIndex: number; pointIndex: number }>();
+    for (let contourIndex = 0; contourIndex < glyph.contours.length; contourIndex += 1) {
+      const contour = glyph.contours[contourIndex];
+      if (!contour) continue;
+      for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex += 1) {
+        const point = contour.points[pointIndex];
+        if (!point) continue;
+        locations.set(point.id, { contourIndex, pointIndex });
+      }
+    }
+
+    this.#pointLocationCache = { glyph, locations };
+    return locations;
+  }
+
+  #buildSidebarSelectionBoundsOverride(updates: NodePositionUpdateList): SidebarSelectionBounds {
+    const points: Point2D[] = [];
+    for (const update of updates) {
+      if (update.node.kind !== "point") continue;
+      points.push({ x: update.x, y: update.y });
+    }
+    if (points.length === 0) return null;
+    return Bounds.fromPoints(points);
+  }
+
+  public restorePreviewGlyph(snapshot: Glyph): void {
+    this.#deferTextRunGlyphRefresh.set(false);
+    this.#sidebarSelectionBoundsOverride.set(null);
+    this.#fontEngine.emitGlyph(snapshot as GlyphSnapshot);
   }
 
   public removePoints(ids: PointId[]): void {
@@ -1868,18 +2220,62 @@ export class Editor implements ShiftEditor {
    * selection is still in preview mode.
    */
   public getSelectionBoundingRect(): Rect2D | null {
-    const selectedPoints = this.getSelectedPoints();
-    if (selectedPoints.length <= 1) return null;
+    const glyph = this.#$glyph.value;
+    const selectedPointIds = this.#selection.selectedPointIds.peek();
+    const selectionMode = this.#selection.selectionMode.peek();
 
-    if (this.getSelectionMode() !== "committed") return null;
+    const cached = this.#selectionBoundsCache;
+    if (
+      cached &&
+      cached.glyph === glyph &&
+      cached.selectedPointIds === selectedPointIds &&
+      cached.selectionMode === selectionMode
+    ) {
+      return cached.rect;
+    }
 
-    const points = selectedPoints
-      .map((id) => this.getPointById(id))
-      .filter((p): p is Point => p !== null);
+    let rect: Rect2D | null = null;
 
-    if (points.length === 0) return null;
+    if (glyph && selectionMode === "committed" && selectedPointIds.size > 1) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let count = 0;
 
-    return Polygon.boundingRect(points);
+      for (const contour of glyph.contours) {
+        for (const point of contour.points) {
+          if (!selectedPointIds.has(point.id)) continue;
+          count += 1;
+          if (point.x < minX) minX = point.x;
+          if (point.y < minY) minY = point.y;
+          if (point.x > maxX) maxX = point.x;
+          if (point.y > maxY) maxY = point.y;
+        }
+      }
+
+      if (count > 1) {
+        rect = {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          left: minX,
+          top: minY,
+          right: maxX,
+          bottom: maxY,
+        };
+      }
+    }
+
+    this.#selectionBoundsCache = {
+      glyph,
+      selectedPointIds,
+      selectionMode,
+      rect,
+    };
+
+    return rect;
   }
 
   /**
@@ -1958,13 +2354,7 @@ export class Editor implements ShiftEditor {
   public getSegmentById(segmentId: SegmentId) {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
-
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      if (Segment.id(segment) === segmentId) {
-        return segment;
-      }
-    }
-    return null;
+    return this.#getSegmentIndex(glyph).get(segmentId) ?? null;
   }
 
   /**
@@ -2039,6 +2429,25 @@ export class Editor implements ShiftEditor {
 
   #toolStateKey(toolId: string, key: string): string {
     return `${toolId}:${key}`;
+  }
+
+  #getSegmentIndex(glyph: Glyph): ReadonlyMap<SegmentId, SegmentHitResult["segment"]> {
+    const cached = this.#segmentIndexCache;
+    if (cached?.glyph === glyph) {
+      return cached.segmentsById;
+    }
+
+    const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
+    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+      segmentsById.set(Segment.id(segment), segment);
+    }
+
+    this.#segmentIndexCache = {
+      glyph,
+      segmentsById,
+    };
+
+    return segmentsById;
   }
 
   #resolveEditorPlacementOffset(offset: Point2D, glyph: GlyphRef | null): Point2D {

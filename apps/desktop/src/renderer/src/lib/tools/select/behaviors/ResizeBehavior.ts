@@ -6,7 +6,7 @@ import type { TransitionResult } from "../../core/Behavior";
 import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import type { BoundingRectEdge } from "../cursor";
-import { cacheSelectedPositions, restoreCachedPointPositions } from "../utils";
+import { cacheSelectedPositions } from "../utils";
 import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectBehavior {
@@ -66,18 +66,12 @@ export class ResizeBehavior implements SelectBehavior {
         const newPos = Vec2.add(anchor, scaled);
         updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
       }
-      editor.setNodePositions(updates);
+      editor.previewNodePositions(state.resize.baseGlyph, updates);
+      state.resize.lastPos = currentPos;
+      state.resize.uniformScale = uniformScale;
+      state.resize.latestUpdates = updates;
 
-      return {
-        state: {
-          type: "resizing",
-          resize: {
-            ...state.resize,
-            lastPos: currentPos,
-            uniformScale,
-          },
-        },
-      };
+      return { state };
     }
 
     if (event.type === "dragEnd") {
@@ -89,22 +83,21 @@ export class ResizeBehavior implements SelectBehavior {
         initialBounds,
         uniformScale,
       );
-      restoreCachedPointPositions(editor, state.resize.initialPositions);
+      if (sx !== 1 || sy !== 1) {
+        editor.commitPreviewNodePositions(
+          "Scale Points",
+          state.resize.baseGlyph,
+          state.resize.latestUpdates,
+        );
+      }
 
       return {
         state: { type: "selected" },
-        action: {
-          type: "scalePoints",
-          pointIds: state.resize.draggedPointIds,
-          sx,
-          sy,
-          anchor: state.resize.anchorPoint,
-        },
       };
     }
 
     if (event.type === "dragCancel") {
-      restoreCachedPointPositions(editor, state.resize.initialPositions);
+      editor.restorePreviewGlyph(state.resize.baseGlyph);
       return {
         state: { type: "selected" },
       };
@@ -124,8 +117,9 @@ export class ResizeBehavior implements SelectBehavior {
     const bbHit = editor.hitTestBoundingBoxAt(event.coords);
     const edge: BoundingRectEdge = bbHit?.type === "resize" ? bbHit.edge : null;
     const bounds = editor.getSelectionBoundingRect();
+    const baseGlyph = editor.glyph.peek();
 
-    if (!edge || !bounds) return null;
+    if (!edge || !bounds || !baseGlyph) return null;
 
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
@@ -136,6 +130,7 @@ export class ResizeBehavior implements SelectBehavior {
       state: {
         type: "resizing",
         resize: {
+          baseGlyph,
           edge,
           startPos: localPoint,
           lastPos: localPoint,
@@ -144,6 +139,7 @@ export class ResizeBehavior implements SelectBehavior {
           draggedPointIds,
           initialPositions,
           uniformScale: false,
+          latestUpdates: [],
         },
       },
     };

@@ -6,7 +6,7 @@ import type { DrawStyle } from "@/lib/styles/style";
 
 export type ToolRenderLayer =
   | "static-scene-before-handles"
-  | "static-screen-after-handles"
+  | "overlay-screen"
   | "interactive-scene";
 
 export type ToolRenderVisibility = "always" | "active-only";
@@ -18,6 +18,12 @@ export interface ToolRenderContext {
   readonly pxToUpm: (pixels?: number) => number;
   readonly applyStyle: (renderer: IRenderer, style: DrawStyle) => void;
   readonly projectGlyphLocalToScreen: (point: Point2D) => Point2D;
+  readonly visibleSceneBounds?: {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+  };
 }
 
 export interface ToolRenderContributor {

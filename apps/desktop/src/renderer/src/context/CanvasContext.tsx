@@ -1,6 +1,7 @@
 import { createContext, useEffect, useRef } from "react";
 
 import { Canvas2DContext } from "@/lib/graphics/backends/Canvas2DRenderer";
+import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import { getEditor } from "@/store/store";
 import { CanvasRef } from "@/types/graphics";
 
@@ -8,18 +9,21 @@ interface CanvasContext {
   interactiveCanvasRef: CanvasRef;
   overlayCanvasRef: CanvasRef;
   staticCanvasRef: CanvasRef;
+  gpuHandlesCanvasRef: CanvasRef;
 }
 
 export const CanvasContext = createContext<CanvasContext>({
   interactiveCanvasRef: { current: null },
   overlayCanvasRef: { current: null },
   staticCanvasRef: { current: null },
+  gpuHandlesCanvasRef: { current: null },
 });
 
 export const CanvasContextProvider = ({ children }: { children: React.ReactNode }) => {
   const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement>(null);
+  const gpuHandlesCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const initCanvas = (canvas: HTMLCanvasElement) => {
@@ -34,23 +38,29 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       interactiveCanvas,
       overlayCanvas,
       staticCanvas,
+      gpuHandlesCanvas,
     }: {
       interactiveCanvas: HTMLCanvasElement;
       overlayCanvas: HTMLCanvasElement;
       staticCanvas: HTMLCanvasElement;
+      gpuHandlesCanvas: HTMLCanvasElement;
     }) => {
       const interactiveContext = initCanvas(interactiveCanvas);
       const overlayContext = initCanvas(overlayCanvas);
       const staticContext = initCanvas(staticCanvas);
+      const gpuHandleContext = new ReglHandleContext();
+      gpuHandleContext.resizeCanvas(gpuHandlesCanvas);
 
       editor.setInteractiveContext(interactiveContext);
       editor.setOverlayContext(overlayContext);
       editor.setStaticContext(staticContext);
+      editor.setGpuHandleContext(gpuHandleContext);
 
       const resizeCanvases = () => {
         interactiveContext.resizeCanvas(interactiveCanvas);
         overlayContext.resizeCanvas(overlayCanvas);
         staticContext.resizeCanvas(staticCanvas);
+        gpuHandleContext.resizeCanvas(gpuHandlesCanvas);
         editor.requestImmediateRedraw();
       };
 
@@ -63,6 +73,8 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
             overlayContext.resizeCanvas(canvas);
           } else if (canvas === staticCanvas) {
             staticContext.resizeCanvas(canvas);
+          } else if (canvas === gpuHandlesCanvas) {
+            gpuHandleContext.resizeCanvas(canvas);
           }
         }
         editor.requestImmediateRedraw();
@@ -73,6 +85,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       observer.observe(interactiveCanvas);
       observer.observe(overlayCanvas);
       observer.observe(staticCanvas);
+      observer.observe(gpuHandlesCanvas);
 
       const unsubscribeZoom = window.electronAPI?.onUiZoomChanged(() => {
         requestAnimationFrame(() => {
@@ -86,7 +99,12 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       };
     };
 
-    if (!interactiveCanvasRef.current || !overlayCanvasRef.current || !staticCanvasRef.current) {
+    if (
+      !interactiveCanvasRef.current ||
+      !overlayCanvasRef.current ||
+      !staticCanvasRef.current ||
+      !gpuHandlesCanvasRef.current
+    ) {
       return undefined;
     }
 
@@ -94,6 +112,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       interactiveCanvas: interactiveCanvasRef.current,
       overlayCanvas: overlayCanvasRef.current,
       staticCanvas: staticCanvasRef.current,
+      gpuHandlesCanvas: gpuHandlesCanvasRef.current,
     });
 
     return cleanup;
@@ -105,6 +124,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
         interactiveCanvasRef,
         overlayCanvasRef,
         staticCanvasRef,
+        gpuHandlesCanvasRef,
       }}
     >
       {children}

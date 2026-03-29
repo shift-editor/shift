@@ -38,4 +38,5 @@ export type {
 export { pickRule, diagnoseSelectionPatterns } from "./matcher";
 
 // Rule application
-export { constrainDrag } from "./actions";
+export { constrainDrag, constrainPreparedDrag, prepareConstrainDrag } from "./actions";
+export type { PreparedConstrainDrag } from "./actions";

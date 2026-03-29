@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { renderHandles } from "./handles";
+import { renderHandleControlLines, renderHandles } from "./handles";
 import { DrawAPI } from "@/lib/tools/core/DrawAPI";
 import type { IRenderer, HandleState, ScreenConverter } from "@/types/graphics";
 import { asContourId, asPointId } from "@shift/types";
@@ -109,12 +109,12 @@ describe("handles", () => {
   });
 
   describe("renderHandles", () => {
-    it("calls setStyle with default styles", () => {
+    it("does not touch draw styles directly while rendering handles", () => {
       const glyph = makeGlyph("A", [createClosedTriangleContour()]);
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect(spies.setStyle).toHaveBeenCalled();
+      expect(spies.setStyle).not.toHaveBeenCalled();
     });
 
     it("first point of closed contour gets handleDirection", () => {
@@ -198,7 +198,7 @@ describe("handles", () => {
       );
     });
 
-    it("draws control point lines for off-curve points", () => {
+    it("does not draw control point lines in the handle shape pass", () => {
       const contourWithCubic: Contour = {
         id: asContourId("cubic"),
         closed: true,
@@ -213,7 +213,7 @@ describe("handles", () => {
 
       renderHandles(draw, glyph, () => "idle");
 
-      expect(spies.line).toHaveBeenCalled();
+      expect(spies.line).not.toHaveBeenCalled();
     });
 
     it("smooth on-curve points get handle with smooth type", () => {
@@ -277,6 +277,30 @@ describe("handles", () => {
       expect(spies.handleDirection).not.toHaveBeenCalled();
       expect(spies.handleFirst).not.toHaveBeenCalled();
       expect(spies.handleLast).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("renderHandleControlLines", () => {
+    it("sets default styles and strokes batched control lines for off-curve points", () => {
+      const contourWithCubic: Contour = {
+        id: asContourId("cubic-lines"),
+        closed: true,
+        points: [
+          makePoint("p1", 0, 0),
+          makePoint("c1", 30, 50, "offCurve"),
+          makePoint("c2", 70, 50, "offCurve"),
+          makePoint("p2", 100, 0),
+        ],
+      };
+      const glyph = makeGlyph("curve", [contourWithCubic]);
+
+      renderHandleControlLines(draw, glyph);
+
+      expect(spies.setStyle).toHaveBeenCalled();
+      expect(draw.renderer.beginPath).toHaveBeenCalledTimes(1);
+      expect(draw.renderer.moveTo).toHaveBeenCalled();
+      expect(draw.renderer.lineTo).toHaveBeenCalled();
+      expect(draw.renderer.stroke).toHaveBeenCalledTimes(1);
     });
   });
 });

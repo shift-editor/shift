@@ -34,6 +34,7 @@ export interface StaticRenderState {
   hoveredSegmentId: SegmentIndicator | null;
   hoveredBoundingBoxHandle: BoundingBoxHitResult;
   debugOverlays: DebugOverlays;
+  gpuHandlesEnabled: boolean;
 }
 
 export interface OverlayRenderState {
@@ -43,6 +44,9 @@ export interface OverlayRenderState {
   hoveredPointId: PointId | null;
   hoveredAnchorId: AnchorId | null;
   hoveredSegmentId: SegmentIndicator | null;
+  hoveredBoundingBoxHandle: BoundingBoxHitResult;
+  previewMode: boolean;
+  handlesVisible: boolean;
   snapIndicator: SnapIndicator | null;
 }
 

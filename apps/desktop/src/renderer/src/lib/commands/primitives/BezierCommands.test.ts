@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   AddBezierAnchorCommand,
   CloseContourCommand,
@@ -331,12 +331,13 @@ describe("SplitSegmentCommand", () => {
       );
 
       // Should move original control to cA position
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledTimes(1);
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c1",
-        expect.any(Number),
-        expect.any(Number),
-      );
+      expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+        {
+          node: { kind: "point", id: "c1" },
+          x: expect.any(Number),
+          y: expect.any(Number),
+        },
+      ]);
     });
 
     it("should restore original control position on undo", () => {
@@ -358,11 +359,9 @@ describe("SplitSegmentCommand", () => {
       expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(["point-1", "point-2"]);
 
       // Should restore original control position
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
-        "c1",
-        50, // original x
-        100, // original y
-      );
+      expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenLastCalledWith([
+        { node: { kind: "point", id: "c1" }, x: 50, y: 100 },
+      ]);
     });
   });
 
@@ -407,17 +406,10 @@ describe("SplitSegmentCommand", () => {
       );
 
       // Should move both existing controls
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledTimes(2);
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c1",
-        expect.any(Number),
-        expect.any(Number),
-      );
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c2",
-        expect.any(Number),
-        expect.any(Number),
-      );
+      expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+        { node: { kind: "point", id: "c1" }, x: expect.any(Number), y: expect.any(Number) },
+        { node: { kind: "point", id: "c2" }, x: expect.any(Number), y: expect.any(Number) },
+      ]);
     });
 
     it("should return the mid point ID as splitPointId", () => {
@@ -464,20 +456,10 @@ describe("SplitSegmentCommand", () => {
       ]);
 
       // Should restore both original control positions (after the removePoints call)
-      const movePointToCalls = vi.mocked(ctx.fontEngine.editing.movePointTo).mock.calls;
-      const lastTwoCalls = movePointToCalls.slice(-2);
-
-      // One of the last two calls should restore c1
-      const c1Restored = lastTwoCalls.some(
-        (call) => call[0] === "c1" && call[1] === 25 && call[2] === 100,
-      );
-      // One of the last two calls should restore c2
-      const c2Restored = lastTwoCalls.some(
-        (call) => call[0] === "c2" && call[1] === 75 && call[2] === 100,
-      );
-
-      expect(c1Restored).toBe(true);
-      expect(c2Restored).toBe(true);
+      expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenLastCalledWith([
+        { node: { kind: "point", id: "c1" }, x: 25, y: 100 },
+        { node: { kind: "point", id: "c2" }, x: 75, y: 100 },
+      ]);
     });
   });
 

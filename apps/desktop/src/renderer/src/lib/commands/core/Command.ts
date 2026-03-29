@@ -20,6 +20,7 @@ type CommandEditingMethods =
   | "insertPointBefore"
   | "movePoints"
   | "movePointTo"
+  | "setNodePositions"
   | "removePoints"
   | "addContour"
   | "removeContour"

@@ -1,6 +1,7 @@
 # shift-ir - LLM Context
 
 ## Quick Facts
+
 - **Purpose**: Rich intermediate representation for font data - a format-agnostic font model
 - **Language**: Rust
 - **Key Files**: `font.rs`, `glyph.rs`, `contour.rs`, `point.rs`, `entity.rs`, `layer.rs`
@@ -8,6 +9,7 @@
 - **Dependents**: shift-core, shift-backends, shift-node
 
 ## File Structure
+
 ```
 src/
 ├── lib.rs              # Crate root, module exports
@@ -31,6 +33,7 @@ src/
 ## Core Abstractions
 
 ### Typed Entity IDs (entity.rs:35-80)
+
 ```rust
 macro_rules! typed_id {
     ($name:ident) => {
@@ -50,6 +53,7 @@ typed_id!(SourceId);
 ```
 
 ### Font (font.rs:56-90)
+
 ```rust
 pub struct Font {
     metadata: FontMetadata,
@@ -67,6 +71,7 @@ pub struct Font {
 ```
 
 ### Glyph (glyph.rs:12-18)
+
 ```rust
 pub struct Glyph {
     id: GlyphId,
@@ -78,6 +83,7 @@ pub struct Glyph {
 ```
 
 ### GlyphLayer (glyph.rs:20-29)
+
 ```rust
 pub struct GlyphLayer {
     width: f64,
@@ -91,6 +97,7 @@ pub struct GlyphLayer {
 ```
 
 ### Contour (contour.rs:6-10)
+
 ```rust
 pub struct Contour {
     id: ContourId,
@@ -100,6 +107,7 @@ pub struct Contour {
 ```
 
 ### Point (point.rs:17-24)
+
 ```rust
 pub struct Point {
     id: PointId,
@@ -113,6 +121,7 @@ pub struct Point {
 ## Key Patterns
 
 ### Layer-Based Architecture
+
 ```rust
 // Font has layers; glyphs have per-layer data
 let default_layer_id = font.default_layer_id();
@@ -122,6 +131,7 @@ for contour in layer_data.contours_iter() { ... }
 ```
 
 ### Typed Entity IDs
+
 ```rust
 // Type-safe IDs prevent mixing point/contour/glyph IDs
 let point_id: PointId = PointId::new();
@@ -130,12 +140,14 @@ let contour_id: ContourId = ContourId::new();
 ```
 
 ### Glyph Lookup by Name or Unicode
+
 ```rust
 let glyph = font.glyph("A");             // By name
 let glyph = font.glyph_by_unicode(65);   // By codepoint
 ```
 
 ### Take/Put for Editing
+
 ```rust
 let glyph = font.take_glyph("A")?;  // Remove from font
 // ... mutate glyph ...
@@ -144,23 +156,23 @@ font.put_glyph(glyph);               // Return to font
 
 ## API Surface
 
-| Function/Method | File | Signature |
-|----------------|------|-----------|
-| `Font::new` | font.rs | `fn new() -> Self` |
-| `Font::glyph` | font.rs | `fn glyph(&self, name: &str) -> Option<&Glyph>` |
-| `Font::glyph_mut` | font.rs | `fn glyph_mut(&mut self, name: &str) -> Option<&mut Glyph>` |
-| `Font::glyph_by_unicode` | font.rs | `fn glyph_by_unicode(&self, unicode: u32) -> Option<&Glyph>` |
-| `Font::take_glyph` | font.rs | `fn take_glyph(&mut self, name: &str) -> Option<Glyph>` |
-| `Font::put_glyph` | font.rs | `fn put_glyph(&mut self, glyph: Glyph)` |
-| `Font::default_layer_id` | font.rs | `fn default_layer_id(&self) -> LayerId` |
-| `Glyph::new` | glyph.rs | `fn new(name: GlyphName) -> Self` |
-| `Glyph::with_unicode` | glyph.rs | `fn with_unicode(name: GlyphName, unicode: u32) -> Self` |
-| `Glyph::layer` | glyph.rs | `fn layer(&self, id: LayerId) -> Option<&GlyphLayer>` |
-| `GlyphLayer::add_contour` | glyph.rs | `fn add_contour(&mut self, contour: Contour) -> ContourId` |
-| `Contour::new` | contour.rs | `fn new() -> Self` |
-| `Contour::add_point` | contour.rs | `fn add_point(&mut self, x, y, type, smooth) -> PointId` |
-| `Point::on_curve` | point.rs | `fn on_curve(x: f64, y: f64) -> Self` |
-| `Point::off_curve` | point.rs | `fn off_curve(x: f64, y: f64) -> Self` |
+| Function/Method           | File       | Signature                                                    |
+| ------------------------- | ---------- | ------------------------------------------------------------ |
+| `Font::new`               | font.rs    | `fn new() -> Self`                                           |
+| `Font::glyph`             | font.rs    | `fn glyph(&self, name: &str) -> Option<&Glyph>`              |
+| `Font::glyph_mut`         | font.rs    | `fn glyph_mut(&mut self, name: &str) -> Option<&mut Glyph>`  |
+| `Font::glyph_by_unicode`  | font.rs    | `fn glyph_by_unicode(&self, unicode: u32) -> Option<&Glyph>` |
+| `Font::take_glyph`        | font.rs    | `fn take_glyph(&mut self, name: &str) -> Option<Glyph>`      |
+| `Font::put_glyph`         | font.rs    | `fn put_glyph(&mut self, glyph: Glyph)`                      |
+| `Font::default_layer_id`  | font.rs    | `fn default_layer_id(&self) -> LayerId`                      |
+| `Glyph::new`              | glyph.rs   | `fn new(name: GlyphName) -> Self`                            |
+| `Glyph::with_unicode`     | glyph.rs   | `fn with_unicode(name: GlyphName, unicode: u32) -> Self`     |
+| `Glyph::layer`            | glyph.rs   | `fn layer(&self, id: LayerId) -> Option<&GlyphLayer>`        |
+| `GlyphLayer::add_contour` | glyph.rs   | `fn add_contour(&mut self, contour: Contour) -> ContourId`   |
+| `Contour::new`            | contour.rs | `fn new() -> Self`                                           |
+| `Contour::add_point`      | contour.rs | `fn add_point(&mut self, x, y, type, smooth) -> PointId`     |
+| `Point::on_curve`         | point.rs   | `fn on_curve(x: f64, y: f64) -> Self`                        |
+| `Point::off_curve`        | point.rs   | `fn off_curve(x: f64, y: f64) -> Self`                       |
 
 ## Constraints and Invariants
 

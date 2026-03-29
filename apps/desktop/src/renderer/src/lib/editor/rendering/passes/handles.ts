@@ -16,8 +16,46 @@ import { Validate } from "@shift/validation";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 
+/** Draws off-curve tether lines connecting control points to their anchors. */
+export function renderHandleControlLines(
+  draw: DrawAPI,
+  glyph: Glyph,
+  isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
+): void {
+  const renderer = draw.renderer;
+  renderer.save();
+  draw.setStyle(DEFAULT_STYLES);
+  renderer.beginPath();
+  let hasLines = false;
+
+  for (const contour of glyph.contours) {
+    const { points } = contour;
+    const len = points.length;
+    for (let index = 0; index < len; index += 1) {
+      const current = points[index];
+      if (!current) continue;
+      if (!Validate.isOffCurve(current)) continue;
+
+      const prev = index > 0 ? points[index - 1] : contour.closed ? points[len - 1] : undefined;
+      const next = index + 1 < len ? points[index + 1] : contour.closed ? points[0] : undefined;
+      const anchor = next && Validate.isOffCurve(next) ? prev : next;
+      if (!anchor || Validate.isOffCurve(anchor)) continue;
+      if (isLineVisible && !isLineVisible(anchor, current)) continue;
+
+      renderer.moveTo(anchor.x, anchor.y);
+      renderer.lineTo(current.x, current.y);
+      hasLines = true;
+    }
+  }
+
+  if (hasLines) {
+    renderer.stroke();
+  }
+  renderer.restore();
+}
+
 /**
- * Draws all point handles for the glyph, including off-curve tether lines.
+ * Draws all point handles for the glyph.
  * `getHandleState` is called per point to determine visual styling.
  */
 export function renderHandles(
@@ -25,26 +63,6 @@ export function renderHandles(
   glyph: Glyph,
   getHandleState: (pointId: PointId) => HandleState,
 ): void {
-  draw.setStyle(DEFAULT_STYLES);
-
-  for (const contour of glyph.contours) {
-    for (const { current, prev, next } of Contours.withNeighbors(contour)) {
-      if (!Validate.isOffCurve(current)) continue;
-
-      const anchor = next && Validate.isOffCurve(next) ? prev : next;
-      if (!anchor || Validate.isOffCurve(anchor)) continue;
-
-      draw.line(
-        { x: anchor.x, y: anchor.y },
-        { x: current.x, y: current.y },
-        {
-          strokeStyle: DEFAULT_STYLES.strokeStyle,
-          strokeWidth: DEFAULT_STYLES.lineWidth,
-        },
-      );
-    }
-  }
-
   for (const contour of glyph.contours) {
     const numPoints = contour.points.length;
     if (numPoints === 0) continue;

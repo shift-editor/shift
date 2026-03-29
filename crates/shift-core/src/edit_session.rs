@@ -2,6 +2,7 @@ use crate::{
     snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, GuidelineId,
     PointId, PointType,
 };
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeRef {
@@ -250,18 +251,22 @@ impl EditSession {
     }
 
     pub fn move_points(&mut self, point_ids: &[PointId], dx: f64, dy: f64) -> Vec<PointId> {
-        let mut moved_points = Vec::new();
+        if point_ids.is_empty() {
+            return Vec::new();
+        }
 
-        let point_contours: Vec<(PointId, ContourId)> = point_ids
-            .iter()
-            .filter_map(|&pid| self.find_point_contour(pid).map(|cid| (pid, cid)))
-            .collect();
+        let target_ids: HashSet<PointId> = point_ids.iter().copied().collect();
+        let contour_ids: Vec<_> = self.layer.contours().keys().copied().collect();
+        let mut moved_points = Vec::with_capacity(point_ids.len());
 
-        for (point_id, contour_id) in point_contours {
+        for contour_id in contour_ids {
             if let Some(contour) = self.layer.contour_mut(contour_id) {
-                if let Some(point) = contour.get_point_mut(point_id) {
-                    point.translate(dx, dy);
-                    moved_points.push(point_id);
+                for point in contour.points_mut() {
+                    let point_id = point.id();
+                    if target_ids.contains(&point_id) {
+                        point.translate(dx, dy);
+                        moved_points.push(point_id);
+                    }
                 }
             }
         }
@@ -333,23 +338,41 @@ impl EditSession {
     }
 
     pub fn set_node_positions(&mut self, updates: &[NodePositionUpdate]) -> bool {
-        let mut updated_any = false;
+        let mut point_updates = HashMap::new();
+        let mut anchor_updates = HashMap::new();
         for update in updates {
             match update.node {
                 NodeRef::Point(point_id) => {
-                    if self.set_point_position(point_id, update.x, update.y) {
-                        updated_any = true;
-                    }
+                    point_updates.insert(point_id, (update.x, update.y));
                 }
                 NodeRef::Anchor(anchor_id) => {
-                    if self.set_anchor_position(anchor_id, update.x, update.y) {
-                        updated_any = true;
-                    }
+                    anchor_updates.insert(anchor_id, (update.x, update.y));
                 }
-                // Placeholder for guideline editing support.
                 NodeRef::Guideline(_guideline_id) => {}
             }
         }
+
+        let mut updated_any = false;
+        if !point_updates.is_empty() {
+            let contour_ids: Vec<_> = self.layer.contours().keys().copied().collect();
+            for contour_id in contour_ids {
+                if let Some(contour) = self.layer.contour_mut(contour_id) {
+                    for point in contour.points_mut() {
+                        if let Some((x, y)) = point_updates.get(&point.id()) {
+                            point.set_position(*x, *y);
+                            updated_any = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (anchor_id, (x, y)) in anchor_updates {
+            if self.set_anchor_position(anchor_id, x, y) {
+                updated_any = true;
+            }
+        }
+
         updated_any
     }
 

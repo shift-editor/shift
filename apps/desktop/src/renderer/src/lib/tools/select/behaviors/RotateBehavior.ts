@@ -6,7 +6,7 @@ import type { SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
-import { cacheSelectedPositions, restoreCachedPointPositions } from "../utils";
+import { cacheSelectedPositions } from "../utils";
 import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export class RotateBehavior implements SelectBehavior {
@@ -75,38 +75,36 @@ export class RotateBehavior implements SelectBehavior {
         const rotated = Vec2.rotateAround(initialPos, state.rotate.center, deltaAngle);
         updates.push({ node: { kind: "point", id }, x: rotated.x, y: rotated.y });
       }
-      editor.setNodePositions(updates);
+      editor.previewNodePositions(state.rotate.baseGlyph, updates);
+      state.rotate.lastPos = currentPos;
+      state.rotate.currentAngle = currentAngle;
+      state.rotate.latestUpdates = updates;
+      if (snappedAngle !== undefined) {
+        state.rotate.snappedAngle = snappedAngle;
+      } else {
+        delete state.rotate.snappedAngle;
+      }
 
-      return {
-        state: {
-          type: "rotating",
-          rotate: {
-            ...state.rotate,
-            lastPos: currentPos,
-            currentAngle,
-            ...(snappedAngle !== undefined ? { snappedAngle } : {}),
-          },
-        },
-      };
+      return { state };
     }
 
     if (event.type === "dragEnd") {
       const totalAngle = state.rotate.currentAngle - state.rotate.startAngle;
-      restoreCachedPointPositions(editor, state.rotate.initialPositions);
+      if (totalAngle !== 0) {
+        editor.commitPreviewNodePositions(
+          "Rotate Points",
+          state.rotate.baseGlyph,
+          state.rotate.latestUpdates,
+        );
+      }
 
       return {
         state: { type: "selected" },
-        action: {
-          type: "rotatePoints",
-          pointIds: state.rotate.draggedPointIds,
-          angle: totalAngle,
-          center: state.rotate.center,
-        },
       };
     }
 
     if (event.type === "dragCancel") {
-      restoreCachedPointPositions(editor, state.rotate.initialPositions);
+      editor.restorePreviewGlyph(state.rotate.baseGlyph);
       return {
         state: { type: "selected" },
       };
@@ -126,8 +124,9 @@ export class RotateBehavior implements SelectBehavior {
     const bbHit = editor.hitTestBoundingBoxAt(event.coords);
     const corner: CornerHandle | null = bbHit?.type === "rotate" ? bbHit.corner : null;
     const bounds = editor.getSelectionBoundingRect();
+    const baseGlyph = editor.glyph.peek();
 
-    if (!corner || !bounds) return null;
+    if (!corner || !bounds || !baseGlyph) return null;
 
     const localPoint = event.coords.glyphLocal;
     const center = Vec2.midpoint(
@@ -144,6 +143,7 @@ export class RotateBehavior implements SelectBehavior {
       state: {
         type: "rotating",
         rotate: {
+          baseGlyph,
           corner,
           startPos: localPoint,
           lastPos: localPoint,
@@ -152,6 +152,7 @@ export class RotateBehavior implements SelectBehavior {
           currentAngle: startAngle,
           draggedPointIds,
           initialPositions,
+          latestUpdates: [],
         },
       },
     };

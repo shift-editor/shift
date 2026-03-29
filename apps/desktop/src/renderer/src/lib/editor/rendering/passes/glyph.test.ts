@@ -104,7 +104,7 @@ describe("glyph", () => {
   });
 
   describe("renderGlyphOutline", () => {
-    it("calls beginPath and stroke", () => {
+    it("strokes cached contour paths", () => {
       const glyph: Glyph = {
         name: "A",
         contours: [createClosedTriangleContour()],
@@ -117,16 +117,15 @@ describe("glyph", () => {
 
       renderGlyphOutline(ctx, glyph);
 
-      expect(ctx.beginPath).toHaveBeenCalledTimes(1);
-      expect(ctx.stroke).toHaveBeenCalledTimes(1);
+      expect(ctx.strokePath).toHaveBeenCalledTimes(1);
     });
 
-    it("builds paths for all contours", () => {
+    it("strokes paths for all contours", () => {
       const glyph = createGlyphWithHole();
 
       renderGlyphOutline(ctx, glyph);
 
-      expect(ctx.moveTo).toHaveBeenCalledTimes(2);
+      expect(ctx.strokePath).toHaveBeenCalledTimes(2);
     });
 
     it("returns true when glyph has closed contours", () => {
@@ -168,12 +167,9 @@ describe("glyph", () => {
       expect(result).toBe(true);
     });
 
-    it("calls beginPath before any drawing and stroke at the end", () => {
+    it("strokes each contour path", () => {
       const callOrder: string[] = [];
-      ctx.beginPath = vi.fn(() => callOrder.push("beginPath"));
-      ctx.moveTo = vi.fn(() => callOrder.push("moveTo"));
-      ctx.lineTo = vi.fn(() => callOrder.push("lineTo"));
-      ctx.stroke = vi.fn(() => callOrder.push("stroke"));
+      ctx.strokePath = vi.fn(() => callOrder.push("strokePath"));
 
       const glyph: Glyph = {
         name: "A",
@@ -187,8 +183,7 @@ describe("glyph", () => {
 
       renderGlyphOutline(ctx, glyph);
 
-      expect(callOrder[0]).toBe("beginPath");
-      expect(callOrder[callOrder.length - 1]).toBe("stroke");
+      expect(callOrder).toEqual(["strokePath"]);
     });
 
     it("returns false for empty glyph with no contours", () => {
@@ -204,6 +199,27 @@ describe("glyph", () => {
       const result = renderGlyphOutline(ctx, glyph);
 
       expect(result).toBe(false);
+    });
+
+    it("skips contours that are entirely outside the visible scene bounds", () => {
+      const glyph: Glyph = {
+        name: "offscreen",
+        contours: [createClosedTriangleContour()],
+        xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
+      };
+
+      renderGlyphOutline(
+        ctx,
+        glyph,
+        { minX: 1000, maxX: 1100, minY: 1000, maxY: 1100 },
+        { x: 0, y: 0 },
+      );
+
+      expect(ctx.strokePath).not.toHaveBeenCalled();
     });
   });
 
@@ -237,23 +253,22 @@ describe("glyph", () => {
 
       renderGlyphFilled(ctx, glyph);
 
-      expect(ctx.beginPath).toHaveBeenCalledTimes(1);
-      expect(ctx.fill).toHaveBeenCalledTimes(1);
+      expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+      expect(ctx.beginPath).not.toHaveBeenCalled();
+      expect(ctx.fill).not.toHaveBeenCalled();
     });
 
-    it("builds paths for all contours", () => {
+    it("fills a combined cached path for all contours", () => {
       const glyph = createGlyphWithHole();
 
       renderGlyphFilled(ctx, glyph);
 
-      expect(ctx.moveTo).toHaveBeenCalledTimes(2);
+      expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+      expect(ctx.moveTo).not.toHaveBeenCalled();
     });
 
-    it("calls beginPath before drawing and fill at the end", () => {
-      const callOrder: string[] = [];
-      ctx.beginPath = vi.fn(() => callOrder.push("beginPath"));
-      ctx.moveTo = vi.fn(() => callOrder.push("moveTo"));
-      ctx.fill = vi.fn(() => callOrder.push("fill"));
+    it("fills through cached paths without manual path tracing", () => {
+      ctx.fillPath = vi.fn();
 
       const glyph: Glyph = {
         name: "A",
@@ -267,8 +282,10 @@ describe("glyph", () => {
 
       renderGlyphFilled(ctx, glyph);
 
-      expect(callOrder[0]).toBe("beginPath");
-      expect(callOrder[callOrder.length - 1]).toBe("fill");
+      expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+      expect(ctx.beginPath).not.toHaveBeenCalled();
+      expect(ctx.moveTo).not.toHaveBeenCalled();
+      expect(ctx.fill).not.toHaveBeenCalled();
     });
 
     it("does not call stroke", () => {
@@ -285,6 +302,29 @@ describe("glyph", () => {
       renderGlyphFilled(ctx, glyph);
 
       expect(ctx.stroke).not.toHaveBeenCalled();
+    });
+
+    it("skips filling contours that are entirely outside the visible scene bounds", () => {
+      const glyph: Glyph = {
+        name: "offscreen",
+        contours: [createClosedTriangleContour()],
+        xAdvance: 100,
+        unicode: 65,
+        anchors: [],
+        compositeContours: [],
+        activeContourId: asContourId("triangle"),
+      };
+
+      renderGlyphFilled(
+        ctx,
+        glyph,
+        { minX: 1000, maxX: 1100, minY: 1000, maxY: 1100 },
+        { x: 0, y: 0 },
+      );
+
+      expect(ctx.moveTo).not.toHaveBeenCalled();
+      expect(ctx.fillPath).toHaveBeenCalledTimes(1);
+      expect(ctx.fill).not.toHaveBeenCalled();
     });
   });
 });

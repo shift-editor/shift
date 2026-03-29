@@ -10,10 +10,7 @@ import type { ToolRenderContext, ToolRenderLayer } from "./ToolRenderContributor
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<ToolState, any>;
-const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = [
-  "static-scene-before-handles",
-  "static-screen-after-handles",
-];
+const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = ["static-scene-before-handles"];
 function isStaticRenderLayer(layer: ToolRenderLayer): boolean {
   return STATIC_RENDER_LAYERS.includes(layer);
 }
@@ -27,7 +24,11 @@ export class ToolManager implements ToolSwitchHandler {
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
-  private pendingPointerMove: { screenPoint: Point2D; modifiers: Modifiers } | null = null;
+  private pendingPointerMove: {
+    screenPoint: Point2D;
+    modifiers: Modifiers;
+    skipHover: boolean;
+  } | null = null;
   private frameId: number | null = null;
   private lastScreenPoint: Point2D | null = null;
 
@@ -118,9 +119,10 @@ export class ToolManager implements ToolSwitchHandler {
   handlePointerMove(
     screenPoint: Point2D,
     modifiers: Modifiers,
-    options?: { force?: boolean },
+    options?: { force?: boolean; skipHover?: boolean },
   ): void {
     const force = options?.force ?? false;
+    const skipHover = options?.skipHover ?? false;
     if (
       !force &&
       this.lastScreenPoint &&
@@ -131,7 +133,7 @@ export class ToolManager implements ToolSwitchHandler {
     }
     this.lastScreenPoint = screenPoint;
 
-    this.pendingPointerMove = { screenPoint, modifiers };
+    this.pendingPointerMove = { screenPoint, modifiers, skipHover };
 
     if (!this.frameId) {
       this.frameId = requestAnimationFrame(() => this.flushPointerMove());
@@ -145,7 +147,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     if (!this.pendingPointerMove) return;
 
-    const { screenPoint, modifiers } = this.pendingPointerMove;
+    const { screenPoint, modifiers, skipHover } = this.pendingPointerMove;
     this.pendingPointerMove = null;
 
     this.editor.setCurrentModifiers?.(modifiers);
@@ -154,7 +156,7 @@ export class ToolManager implements ToolSwitchHandler {
     const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
     this.dispatchEvents(events);
 
-    if (!this.gesture.isDragging) {
+    if (!this.gesture.isDragging && !skipHover) {
       this.editor.updateHover(coords);
     }
 

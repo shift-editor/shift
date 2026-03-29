@@ -428,25 +428,16 @@ describe("Select tool", () => {
       });
     });
 
-    it("should restore initial geometry before executing scale command", () => {
+    it("commits the previewed scale directly without replaying a scale command", () => {
       sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
-
-      let rightmostBeforeExecute: number | null = null;
-      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
-        (cmd: { execute?: (ctx: unknown) => unknown }) => {
-          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
-          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
-          return cmd.execute?.({
-            fontEngine: ctx.fontEngine,
-            glyph: ctx.fontEngine.$glyph.value,
-          });
-        },
-      );
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
 
       sim.onMouseUp(createToolMouseEvent(50, 50));
 
-      expect(rightmostBeforeExecute).toBe(100);
+      const pointsAfter = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...pointsAfter.map((p) => p.x))).toBe(50);
+      expect(ctx.mocks.commands.execute).not.toHaveBeenCalled();
     });
 
     it("should transition to resizing state when dragging from edge", () => {
@@ -507,25 +498,18 @@ describe("Select tool", () => {
       });
     });
 
-    it("should restore initial geometry before executing rotate command", () => {
+    it("commits the previewed rotation directly without replaying a rotate command", () => {
       sim.onMouseDown(createToolMouseEvent(-10, -10));
       sim.onMouseMove(createToolMouseEvent(110, -10));
-
-      let rightmostBeforeExecute: number | null = null;
-      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
-        (cmd: { execute?: (ctx: unknown) => unknown }) => {
-          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
-          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
-          return cmd.execute?.({
-            fontEngine: ctx.fontEngine,
-            glyph: ctx.fontEngine.$glyph.value,
-          });
-        },
-      );
+      const previewPoints = getAllPoints(ctx.edit.getGlyph()).map((p) => ({ x: p.x, y: p.y }));
+      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
 
       sim.onMouseUp(createToolMouseEvent(110, -10));
 
-      expect(rightmostBeforeExecute).toBe(200);
+      expect(getAllPoints(ctx.edit.getGlyph()).map((p) => ({ x: p.x, y: p.y }))).toEqual(
+        previewPoints,
+      );
+      expect(ctx.mocks.commands.execute).not.toHaveBeenCalled();
     });
 
     it("should restore geometry on rotate dragCancel", () => {

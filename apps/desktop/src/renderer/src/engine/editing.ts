@@ -287,22 +287,27 @@ export class EditingManager {
     const glyph = this.#engine.getGlyph();
     if (!glyph) return [];
 
-    const patch = constrainDrag({
-      glyph,
-      selectedIds: selectedPoints,
-      mousePosition: { x: dx, y: dy },
-    });
+    const patch = constrainDrag(
+      {
+        glyph,
+        selectedIds: selectedPoints,
+        mousePosition: { x: dx, y: dy },
+      },
+      { includeMatchedRules: false },
+    );
 
-    const updates: NodePositionUpdateList = patch.pointUpdates.map((update) => ({
-      node: { kind: "point", id: update.id },
-      x: update.x,
-      y: update.y,
-    }));
+    const updates: NodePositionUpdateList = patch.pointUpdates.map(
+      (update: (typeof patch.pointUpdates)[number]) => ({
+        node: { kind: "point", id: update.id },
+        x: update.x,
+        y: update.y,
+      }),
+    );
     if (updates.length > 0) {
       this.setNodePositions(updates);
     }
 
-    return patch.pointUpdates.map((u) => u.id);
+    return patch.pointUpdates.map((u: (typeof patch.pointUpdates)[number]) => u.id);
   }
 
   /** Batch-sets absolute node positions. Applies optimistically to the signal, then syncs to native. */
@@ -322,6 +327,68 @@ export class EditingManager {
       y: update.y,
     }));
     this.#engine.setNodePositions(nativeUpdates);
+  }
+
+  /** Syncs absolute node positions to native without re-emitting the current glyph snapshot. */
+  syncNodePositions(updates: NodePositionUpdateList): void {
+    if (!this.#engine.hasSession()) return;
+    if (updates.length === 0) return;
+
+    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
+      node: { kind: update.node.kind, id: update.node.id },
+      x: update.x,
+      y: update.y,
+    }));
+    this.#engine.setNodePositions(nativeUpdates);
+  }
+
+  /** Syncs a uniform delta move to native without re-emitting the current glyph snapshot. */
+  syncMoveNodes(pointIds: PointId[], anchorIds: AnchorId[], delta: Point2D): void {
+    if (!this.#engine.hasSession()) return;
+    if (pointIds.length === 0 && anchorIds.length === 0) return;
+    if (delta.x === 0 && delta.y === 0) return;
+
+    if (typeof this.#engine.raw.movePointsAndAnchorsLight === "function") {
+      this.#engine.raw.movePointsAndAnchorsLight(pointIds, anchorIds, delta.x, delta.y);
+      return;
+    }
+
+    if (typeof this.#engine.raw.moveNodesLight === "function") {
+      const nodes = [
+        ...pointIds.map((id) => ({ kind: "point" as const, id })),
+        ...anchorIds.map((id) => ({ kind: "anchor" as const, id })),
+      ];
+      this.#engine.raw.moveNodesLight(nodes, delta.x, delta.y);
+      return;
+    }
+
+    this.#execute(
+      this.#engine.raw.moveNodes(
+        [
+          ...pointIds.map((id) => ({ kind: "point" as const, id })),
+          ...anchorIds.map((id) => ({ kind: "anchor" as const, id })),
+        ],
+        delta.x,
+        delta.y,
+      ),
+    );
+  }
+
+  prepareMoveNodes(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
+    if (!this.#engine.hasSession()) return false;
+    if (typeof this.#engine.raw.prepareMoveNodesLight !== "function") return false;
+    return this.#engine.raw.prepareMoveNodesLight(pointIds, anchorIds);
+  }
+
+  movePreparedNodes(delta: Point2D): boolean {
+    if (!this.#engine.hasSession()) return false;
+    if (typeof this.#engine.raw.movePreparedNodesLight !== "function") return false;
+    if (delta.x === 0 && delta.y === 0) return true;
+    return this.#engine.raw.movePreparedNodesLight(delta.x, delta.y);
+  }
+
+  clearPreparedMove(): void {
+    this.#engine.raw.clearPreparedMoveLight?.();
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */

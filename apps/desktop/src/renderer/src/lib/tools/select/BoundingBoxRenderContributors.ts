@@ -1,7 +1,6 @@
 import type { ToolRenderContributor } from "../core/ToolRenderContributor";
 import { BOUNDING_RECTANGLE_STYLES } from "@/lib/styles/style";
 import { renderBoundingRect, renderBoundingBoxHandles } from "@/lib/editor/rendering/passes";
-import { isBoundingBoxVisibleAtZoom } from "./boundingBoxHitTest";
 
 export const selectionBoundingRectContributor: ToolRenderContributor = {
   id: "selection-bounding-rect",
@@ -12,7 +11,6 @@ export const selectionBoundingRectContributor: ToolRenderContributor = {
     if (editor.isPreviewMode()) return;
     if (!editor.shouldRenderEditableGlyph()) return;
     const zoom = (editor as { getZoom?: () => number }).getZoom?.() ?? 1;
-    if (!isBoundingBoxVisibleAtZoom(zoom)) return;
 
     const rect = editor.getSelectionBoundingRect();
     if (!rect) return;
@@ -41,14 +39,12 @@ export const selectionBoundingRectContributor: ToolRenderContributor = {
 
 export const selectionBoundingHandleContributor: ToolRenderContributor = {
   id: "selection-bounding-handles",
-  layer: "static-screen-after-handles",
+  layer: "overlay-screen",
   visibility: "always",
   render({ editor, renderer, projectGlyphLocalToScreen }) {
     if (!renderer) return;
     if (editor.isPreviewMode()) return;
     if (!editor.shouldRenderEditableGlyph()) return;
-    const zoom = (editor as { getZoom?: () => number }).getZoom?.() ?? 1;
-    if (!isBoundingBoxVisibleAtZoom(zoom)) return;
 
     const rect = editor.getSelectionBoundingRect();
     if (!rect) return;
