@@ -84,6 +84,7 @@ import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { EditorAPI } from "../tools/core/EditorAPI";
 import type { DragTarget, DragSession, DragUpdate } from "../tools/core/EditorAPI";
+import type { NodePositionPreviewSession } from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
@@ -117,6 +118,7 @@ type DragContext = {
   id: number;
   baseGlyph: GlyphSnapshot;
   target: DragTarget;
+  preview: NodePositionPreviewSession;
   selectedPointIds: ReadonlySet<PointId>;
   preparedConstrainDrag: PreparedConstrainDrag | null;
   preparedNativeMove: boolean;
@@ -135,6 +137,17 @@ type SidebarGlyphInfo = {
 };
 
 type SidebarSelectionBounds = Bounds | null;
+
+type NodePositionPreviewCommit = (updates: NodePositionUpdateList, after: GlyphSnapshot) => void;
+
+type NodePositionPreviewConfig = {
+  label: string;
+  baseGlyph: GlyphSnapshot;
+  onStart?: () => void;
+  onPreview?: (updates: NodePositionUpdateList) => void;
+  commitToNative?: NodePositionPreviewCommit;
+  onFinish?: () => void;
+};
 
 /**
  * Central orchestrator for the glyph editing surface.
@@ -833,6 +846,40 @@ export class Editor implements ShiftEditor {
         pointIds: [...target.pointIds],
         anchorIds: [...target.anchorIds],
       },
+      preview: this.#createNodePositionPreviewSession({
+        label: this.#getDragCommitLabel(target),
+        baseGlyph: currentGlyph,
+        onStart: () => {
+          this.#frozenSidebarGlyph.set(this.#$glyph.peek());
+          this.#deferTextRunGlyphRefresh.set(true);
+        },
+        onPreview: () => {
+          this.#updateSidebarGlyphInfoDuringDrag(context);
+        },
+        commitToNative: (updates) => {
+          const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
+          if (uniformDeltaCommit) {
+            const committedPreparedMove =
+              context.preparedNativeMove &&
+              this.#fontEngine.editing.movePreparedNodes(uniformDeltaCommit.delta);
+            if (!committedPreparedMove) {
+              this.#fontEngine.editing.syncMoveNodes(
+                context.target.pointIds,
+                context.target.anchorIds,
+                uniformDeltaCommit.delta,
+              );
+            }
+            return;
+          }
+
+          this.#fontEngine.editing.syncNodePositions(updates);
+        },
+        onFinish: () => {
+          this.#frozenSidebarGlyph.set(null);
+          this.#sidebarGlyphInfoOverride.set(null);
+          this.#sidebarSelectionBoundsOverride.set(null);
+        },
+      }),
       selectedPointIds: new Set(target.pointIds),
       preparedConstrainDrag:
         target.pointIds.length > 0
@@ -851,8 +898,6 @@ export class Editor implements ShiftEditor {
     );
     context.baseSidebearings = deriveGlyphSidebearings(context.baseGlyph);
     this.#activeDrag = context;
-    this.#frozenSidebarGlyph.set(this.#$glyph.peek());
-    this.#deferTextRunGlyphRefresh.set(true);
 
     return {
       update: (input) => {
@@ -909,43 +954,11 @@ export class Editor implements ShiftEditor {
     }
 
     context.latestUpdates = allUpdates;
-    this.previewNodePositions(context.baseGlyph, allUpdates);
-    this.#updateSidebarGlyphInfoDuringDrag(context);
+    context.preview.preview(allUpdates);
   }
 
   #commitDrag(context: DragContext): void {
-    const after = this.#fontEngine.$glyph.value;
-    if (after && !areGlyphSnapshotsEqual(context.baseGlyph, after)) {
-      const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
-      if (uniformDeltaCommit) {
-        const committedPreparedMove =
-          context.preparedNativeMove &&
-          this.#fontEngine.editing.movePreparedNodes(uniformDeltaCommit.delta);
-        if (!committedPreparedMove) {
-          this.#fontEngine.editing.syncMoveNodes(
-            context.target.pointIds,
-            context.target.anchorIds,
-            uniformDeltaCommit.delta,
-          );
-        }
-      } else {
-        this.#fontEngine.editing.syncNodePositions(context.latestUpdates);
-      }
-
-      this.#commandHistory.record(
-        SetNodePositionsCommand.fromBaseGlyphAndUpdates(
-          this.#getDragCommitLabel(context.target),
-          context.baseGlyph,
-          context.latestUpdates,
-        ) ??
-          new SnapshotCommand(this.#getDragCommitLabel(context.target), context.baseGlyph, after),
-      );
-    }
-
-    this.#deferTextRunGlyphRefresh.set(false);
-    this.#frozenSidebarGlyph.set(null);
-    this.#sidebarGlyphInfoOverride.set(null);
-    this.#sidebarSelectionBoundsOverride.set(null);
+    context.preview.commit();
     this.#clearActiveDrag(context);
   }
 
@@ -995,11 +1008,7 @@ export class Editor implements ShiftEditor {
   }
 
   #cancelDrag(context: DragContext): void {
-    this.restorePreviewGlyph(context.baseGlyph);
-    this.#deferTextRunGlyphRefresh.set(false);
-    this.#frozenSidebarGlyph.set(null);
-    this.#sidebarGlyphInfoOverride.set(null);
-    this.#sidebarSelectionBoundsOverride.set(null);
+    context.preview.cancel();
     this.#clearActiveDrag(context);
   }
 
@@ -1926,8 +1935,18 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.editing.setNodePositions(updates);
   }
 
+  public beginNodePositionPreview(label: string, baseGlyph: Glyph): NodePositionPreviewSession {
+    return this.#createNodePositionPreviewSession({
+      label,
+      baseGlyph: baseGlyph as GlyphSnapshot,
+    });
+  }
+
   public previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void {
-    const baseSnapshot = baseGlyph as GlyphSnapshot;
+    this.#previewNodePositions(baseGlyph as GlyphSnapshot, updates);
+  }
+
+  #previewNodePositions(baseSnapshot: GlyphSnapshot, updates: NodePositionUpdateList): void {
     this.#deferTextRunGlyphRefresh.set(true);
 
     if (updates.length === 0) {
@@ -2008,21 +2027,7 @@ export class Editor implements ShiftEditor {
     baseGlyph: Glyph,
     updates: NodePositionUpdateList,
   ): void {
-    const baseSnapshot = baseGlyph as GlyphSnapshot;
-    const after = this.#fontEngine.$glyph.value as GlyphSnapshot | null;
-    if (!after || areGlyphSnapshotsEqual(baseSnapshot, after)) {
-      this.#deferTextRunGlyphRefresh.set(false);
-      this.#sidebarSelectionBoundsOverride.set(null);
-      return;
-    }
-
-    this.#sidebarSelectionBoundsOverride.set(null);
-    this.#fontEngine.editing.syncNodePositions(updates);
-    this.#deferTextRunGlyphRefresh.set(false);
-    this.#commandHistory.record(
-      SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, baseSnapshot, updates) ??
-        new SnapshotCommand(label, baseSnapshot, after),
-    );
+    this.#commitNodePositionPreview(label, baseGlyph as GlyphSnapshot, updates);
   }
 
   #getPointLocations(
@@ -2059,9 +2064,78 @@ export class Editor implements ShiftEditor {
   }
 
   public restorePreviewGlyph(snapshot: Glyph): void {
+    this.#restoreNodePositionPreview(snapshot as GlyphSnapshot);
+  }
+
+  #createNodePositionPreviewSession(config: NodePositionPreviewConfig): NodePositionPreviewSession {
+    let active = true;
+    let latestUpdates: NodePositionUpdateList = [];
+
+    config.onStart?.();
+
+    const finish = () => {
+      if (!active) return false;
+      active = false;
+      config.onFinish?.();
+      return true;
+    };
+
+    return {
+      preview: (updates) => {
+        if (!active) return;
+        latestUpdates = updates;
+        this.#previewNodePositions(config.baseGlyph, updates);
+        config.onPreview?.(updates);
+      },
+      commit: () => {
+        if (!finish()) return;
+        this.#commitNodePositionPreview(
+          config.label,
+          config.baseGlyph,
+          latestUpdates,
+          config.commitToNative,
+        );
+      },
+      cancel: () => {
+        if (!finish()) return;
+        this.#restoreNodePositionPreview(config.baseGlyph);
+      },
+    };
+  }
+
+  #commitNodePositionPreview(
+    label: string,
+    baseGlyph: GlyphSnapshot,
+    updates: NodePositionUpdateList,
+    commitToNative?: NodePositionPreviewCommit,
+  ): void {
+    const after = this.#fontEngine.$glyph.value as GlyphSnapshot | null;
+    if (!after || areGlyphSnapshotsEqual(baseGlyph, after)) {
+      this.#resetNodePositionPreviewState();
+      return;
+    }
+
+    this.#sidebarSelectionBoundsOverride.set(null);
+    if (commitToNative) {
+      commitToNative(updates, after);
+    } else {
+      this.#fontEngine.editing.syncNodePositions(updates);
+    }
+    this.#deferTextRunGlyphRefresh.set(false);
+    this.#commandHistory.record(
+      SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, baseGlyph, updates) ??
+        new SnapshotCommand(label, baseGlyph, after),
+    );
+  }
+
+  #restoreNodePositionPreview(snapshot: GlyphSnapshot): void {
+    this.#resetNodePositionPreviewState();
+    this.#fontEngine.emitGlyph(snapshot);
+  }
+
+  #resetNodePositionPreviewState(): void {
     this.#deferTextRunGlyphRefresh.set(false);
     this.#sidebarSelectionBoundsOverride.set(null);
-    this.#fontEngine.emitGlyph(snapshot as GlyphSnapshot);
   }
 
   public removePoints(ids: PointId[]): void {

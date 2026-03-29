@@ -11,6 +11,7 @@ import {
   type GpuHandleInstance,
   type GpuHandleShape,
 } from "./types";
+import { getVisibleSceneBounds } from "../visibleSceneBounds";
 
 const TRANSPARENT: GpuColour = [0, 0, 0, 0];
 const FIRST_HANDLE_GAP_PX = 3;
@@ -124,7 +125,7 @@ export function buildPackedGpuHandleInstances(
   const requiredLength = instanceCount * GPU_HANDLE_INSTANCE_FLOATS;
   const packed =
     reusable && reusable.length === requiredLength ? reusable : new Float32Array(requiredLength);
-  const visibleSceneBounds = getVisibleSceneBounds(viewport);
+  const visibleSceneBounds = getVisibleSceneBounds(viewport, HANDLE_CULL_MARGIN_PX);
 
   let index = 0;
   for (const contour of glyph.contours) {
@@ -215,31 +216,6 @@ function isHandleVisibleInViewport(
     sceneY >= visibleSceneBounds.minY &&
     sceneY <= visibleSceneBounds.maxY
   );
-}
-
-function getVisibleSceneBounds(viewport: ViewportTransform): {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-} {
-  const logicalWidth = viewport.centre.x * 2;
-  const viewTranslateX = viewport.panX + viewport.centre.x * (1 - viewport.zoom);
-  const viewTranslateY = viewport.panY + viewport.centre.y * (1 - viewport.zoom);
-  const baselineY =
-    viewport.logicalHeight - viewport.padding - viewport.descender * viewport.upmScale;
-  const zoomedScale = viewport.upmScale * viewport.zoom;
-  const minScreenX = -HANDLE_CULL_MARGIN_PX;
-  const maxScreenX = logicalWidth + HANDLE_CULL_MARGIN_PX;
-  const minScreenY = -HANDLE_CULL_MARGIN_PX;
-  const maxScreenY = viewport.logicalHeight + HANDLE_CULL_MARGIN_PX;
-
-  const minX = (minScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
-  const maxX = (maxScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
-  const maxY = (baselineY * viewport.zoom + viewTranslateY - minScreenY) / zoomedScale;
-  const minY = (baselineY * viewport.zoom + viewTranslateY - maxScreenY) / zoomedScale;
-
-  return { minX, maxX, minY, maxY };
 }
 
 function createSimpleInstance(

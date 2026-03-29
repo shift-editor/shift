@@ -1,10 +1,10 @@
-import type { PointId, Point2D, Rect2D, AnchorId, Glyph } from "@shift/types";
+import type { PointId, Point2D, Rect2D, AnchorId } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
 import type { SelectAction } from "./actions";
-import type { DragSession } from "../core/EditorAPI";
+import type { DragSession, NodePositionPreviewSession } from "../core/EditorAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 /** Tracks the start and current positions of a marquee drag. */
@@ -24,7 +24,7 @@ export interface TranslateData {
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
 export interface ResizeData {
-  baseGlyph: Glyph;
+  preview: NodePositionPreviewSession;
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
   lastPos: Point2D;
@@ -38,7 +38,7 @@ export interface ResizeData {
 
 /** Live state of a rotation drag, tracking angles and initial point positions for the transform. */
 export interface RotateData {
-  baseGlyph: Glyph;
+  preview: NodePositionPreviewSession;
   corner: CornerHandle;
   startPos: Point2D;
   lastPos: Point2D;

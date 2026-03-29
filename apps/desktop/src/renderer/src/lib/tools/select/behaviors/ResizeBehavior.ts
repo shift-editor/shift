@@ -45,7 +45,7 @@ export class ResizeBehavior implements SelectBehavior {
   private transitionResizing(
     state: SelectState & { type: "resizing" },
     event: ToolEvent,
-    editor: EditorAPI,
+    _editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const uniformScale = event.shiftKey;
@@ -66,7 +66,7 @@ export class ResizeBehavior implements SelectBehavior {
         const newPos = Vec2.add(anchor, scaled);
         updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
       }
-      editor.previewNodePositions(state.resize.baseGlyph, updates);
+      state.resize.preview.preview(updates);
       state.resize.lastPos = currentPos;
       state.resize.uniformScale = uniformScale;
       state.resize.latestUpdates = updates;
@@ -84,11 +84,9 @@ export class ResizeBehavior implements SelectBehavior {
         uniformScale,
       );
       if (sx !== 1 || sy !== 1) {
-        editor.commitPreviewNodePositions(
-          "Scale Points",
-          state.resize.baseGlyph,
-          state.resize.latestUpdates,
-        );
+        state.resize.preview.commit();
+      } else {
+        state.resize.preview.cancel();
       }
 
       return {
@@ -97,7 +95,7 @@ export class ResizeBehavior implements SelectBehavior {
     }
 
     if (event.type === "dragCancel") {
-      editor.restorePreviewGlyph(state.resize.baseGlyph);
+      state.resize.preview.cancel();
       return {
         state: { type: "selected" },
       };
@@ -130,7 +128,7 @@ export class ResizeBehavior implements SelectBehavior {
       state: {
         type: "resizing",
         resize: {
-          baseGlyph,
+          preview: editor.beginNodePositionPreview("Scale Points", baseGlyph),
           edge,
           startPos: localPoint,
           lastPos: localPoint,

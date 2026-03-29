@@ -39,6 +39,7 @@ import {
   renderDebugGlyphBbox,
 } from "./passes";
 import { buildPackedGpuHandleInstances } from "./gpu/handleInstances";
+import { getVisibleSceneBounds } from "./visibleSceneBounds";
 
 const HANDLE_CULL_MARGIN_PX = 64;
 
@@ -317,7 +318,7 @@ export class CanvasCoordinator {
     const handlesVisible = this.#ctx.isHandlesVisible();
     const viewport = this.#ctx.getViewportTransform();
     const drawOffset = this.#ctx.getDrawOffset();
-    const visibleSceneBounds = this.#getVisibleSceneBounds(viewport);
+    const visibleSceneBounds = getVisibleSceneBounds(viewport, HANDLE_CULL_MARGIN_PX);
 
     const rc = {
       ctx,
@@ -440,31 +441,6 @@ export class CanvasCoordinator {
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {
     const offset = this.#ctx.getDrawOffset();
     return this.#ctx.projectSceneToScreen(x + offset.x, y + offset.y);
-  }
-
-  #getVisibleSceneBounds(viewport: ViewportTransform): {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-  } {
-    const logicalWidth = viewport.centre.x * 2;
-    const viewTranslateX = viewport.panX + viewport.centre.x * (1 - viewport.zoom);
-    const viewTranslateY = viewport.panY + viewport.centre.y * (1 - viewport.zoom);
-    const baselineY =
-      viewport.logicalHeight - viewport.padding - viewport.descender * viewport.upmScale;
-    const zoomedScale = viewport.upmScale * viewport.zoom;
-    const minScreenX = -HANDLE_CULL_MARGIN_PX;
-    const maxScreenX = logicalWidth + HANDLE_CULL_MARGIN_PX;
-    const minScreenY = -HANDLE_CULL_MARGIN_PX;
-    const maxScreenY = viewport.logicalHeight + HANDLE_CULL_MARGIN_PX;
-
-    const minX = (minScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
-    const maxX = (maxScreenX - viewTranslateX - viewport.padding * viewport.zoom) / zoomedScale;
-    const maxY = (baselineY * viewport.zoom + viewTranslateY - minScreenY) / zoomedScale;
-    const minY = (baselineY * viewport.zoom + viewTranslateY - maxScreenY) / zoomedScale;
-
-    return { minX, maxX, minY, maxY };
   }
 
   #isSceneSegmentVisible(

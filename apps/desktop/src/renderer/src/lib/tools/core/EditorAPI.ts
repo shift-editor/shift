@@ -71,6 +71,12 @@ export interface DragSession {
   cancel(): void;
 }
 
+export interface NodePositionPreviewSession {
+  preview(updates: NodePositionUpdateList): void;
+  commit(): void;
+  cancel(): void;
+}
+
 /**
  * Coordinate-space conversions and viewport state.
  *
@@ -182,6 +188,7 @@ export interface Snapping {
 export interface Editing {
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
+  beginNodePositionPreview(label: string, baseGlyph: Glyph): NodePositionPreviewSession;
   previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void;
   commitPreviewNodePositions(
     label: string,

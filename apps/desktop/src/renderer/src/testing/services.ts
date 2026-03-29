@@ -1402,6 +1402,11 @@ export function createMockToolContext(): MockToolContext {
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
+    beginNodePositionPreview: (_label: string, baseGlyph: Glyph) => ({
+      preview: (updates: NodePositionUpdateList) => previewNodePositions(baseGlyph, updates),
+      commit: () => {},
+      cancel: () => fontEngine.emitGlyph(baseGlyph as GlyphSnapshot),
+    }),
     previewNodePositions,
     commitPreviewNodePositions: (
       _label: string,

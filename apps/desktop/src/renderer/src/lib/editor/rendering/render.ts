@@ -14,28 +14,20 @@ import {
   type SegmentContourLike,
 } from "@shift/font";
 import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
-
-const contourPathCache = new WeakMap<
-  SegmentContourLike,
-  {
-    path: Path2D;
-    isClosed: boolean;
-    bounds: BoundsType | null;
-  }
->();
+import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 
 export function getCachedContourPath(contour: SegmentContourLike): {
   path: Path2D;
   isClosed: boolean;
   bounds: BoundsType | null;
 } {
-  const cached = contourPathCache.get(contour);
+  const cached = GlyphRenderCache.getContourPath(contour);
   if (cached) return cached;
 
   const path = new Path2D();
   if (contour.points.length < 2) {
     const result = { path, isClosed: false, bounds: null };
-    contourPathCache.set(contour, result);
+    GlyphRenderCache.setContourPath(contour, result);
     return result;
   }
 
@@ -43,7 +35,7 @@ export function getCachedContourPath(contour: SegmentContourLike): {
   const firstSegment = segments[0];
   if (!firstSegment) {
     const result = { path, isClosed: false, bounds: null };
-    contourPathCache.set(contour, result);
+    GlyphRenderCache.setContourPath(contour, result);
     return result;
   }
 
@@ -80,7 +72,7 @@ export function getCachedContourPath(contour: SegmentContourLike): {
   if (contour.closed) path.closePath();
 
   const result = { path, isClosed: contour.closed, bounds };
-  contourPathCache.set(contour, result);
+  GlyphRenderCache.setContourPath(contour, result);
   return result;
 }
 

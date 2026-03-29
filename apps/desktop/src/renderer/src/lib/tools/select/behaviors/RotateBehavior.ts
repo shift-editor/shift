@@ -52,7 +52,7 @@ export class RotateBehavior implements SelectBehavior {
   private transitionRotating(
     state: SelectState & { type: "rotating" },
     event: ToolEvent,
-    editor: EditorAPI,
+    _editor: EditorAPI,
   ): TransitionResult<SelectState, SelectAction> {
     if (event.type === "drag") {
       const currentPos = event.coords.glyphLocal;
@@ -75,7 +75,7 @@ export class RotateBehavior implements SelectBehavior {
         const rotated = Vec2.rotateAround(initialPos, state.rotate.center, deltaAngle);
         updates.push({ node: { kind: "point", id }, x: rotated.x, y: rotated.y });
       }
-      editor.previewNodePositions(state.rotate.baseGlyph, updates);
+      state.rotate.preview.preview(updates);
       state.rotate.lastPos = currentPos;
       state.rotate.currentAngle = currentAngle;
       state.rotate.latestUpdates = updates;
@@ -91,11 +91,9 @@ export class RotateBehavior implements SelectBehavior {
     if (event.type === "dragEnd") {
       const totalAngle = state.rotate.currentAngle - state.rotate.startAngle;
       if (totalAngle !== 0) {
-        editor.commitPreviewNodePositions(
-          "Rotate Points",
-          state.rotate.baseGlyph,
-          state.rotate.latestUpdates,
-        );
+        state.rotate.preview.commit();
+      } else {
+        state.rotate.preview.cancel();
       }
 
       return {
@@ -104,7 +102,7 @@ export class RotateBehavior implements SelectBehavior {
     }
 
     if (event.type === "dragCancel") {
-      editor.restorePreviewGlyph(state.rotate.baseGlyph);
+      state.rotate.preview.cancel();
       return {
         state: { type: "selected" },
       };
@@ -143,7 +141,7 @@ export class RotateBehavior implements SelectBehavior {
       state: {
         type: "rotating",
         rotate: {
-          baseGlyph,
+          preview: editor.beginNodePositionPreview("Rotate Points", baseGlyph),
           corner,
           startPos: localPoint,
           lastPos: localPoint,
