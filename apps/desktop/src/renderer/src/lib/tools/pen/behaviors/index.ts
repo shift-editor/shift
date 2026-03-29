@@ -1,3 +1,3 @@
-export { PlaceBehavior } from "./PlaceBehavior";
-export { HandleBehavior } from "./HandleBehavior";
+export { PenDownBehaviour } from "./PenDownBehaviour";
+export { HandleBehavior } from "./DragHandlesBehaviour";
 export { EscapeBehavior } from "./CancelBehaviour";

@@ -772,12 +772,6 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn add_point(&mut self, x: f64, y: f64, point_type: String, smooth: bool) -> Result<String> {
-    let pt = parse_or_err!(point_type, PointType, "point type");
-    self.command_try(|s| s.add_point(x, y, pt, smooth).map(|id| vec![id]))
-  }
-
-  #[napi]
   pub fn add_point_to_contour(
     &mut self,
     contour_id: String,

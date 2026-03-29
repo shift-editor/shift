@@ -4,6 +4,7 @@ import {
   getAllPoints,
   createMockToolContext,
   createToolMouseEvent,
+  makeTestCoordinates,
   ToolEventSimulator,
   expectAt,
   expectDefined,
@@ -146,27 +147,23 @@ describe("Select tool", () => {
       expect(expectAt(points, 0).y).toBe(130);
     });
 
-    it("should begin drag session when dragging", () => {
-      ctx.mocks.drag.mocks.beginDrag.mockClear();
+    it("should begin edit session when dragging", () => {
+      expectDefined(ctx.mocks.edit.mocks.beginInteractionSession, "edit.beginInteractionSession mock").mockClear();
       sim.onMouseDown(createToolMouseEvent(100, 100));
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      expect(ctx.mocks.drag.mocks.beginDrag).toHaveBeenCalled();
+      expect(ctx.mocks.edit.beginInteractionSession).toHaveBeenCalledWith("Move Points");
     });
 
-    it("should update drag session during drag", () => {
+    it("should keep a single edit session active across drag updates", () => {
+      expectDefined(ctx.mocks.edit.mocks.beginInteractionSession, "edit.beginInteractionSession mock").mockClear();
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      ctx.mocks.drag.lastSession.update.mockClear();
 
       sim.onMouseMove(createToolMouseEvent(150, 160));
+      sim.onMouseMove(createToolMouseEvent(160, 170));
 
-      expect(ctx.mocks.drag.lastSession.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          pointer: expect.any(Object),
-          modifiers: expect.any(Object),
-        }),
-      );
+      expect(ctx.mocks.edit.beginInteractionSession).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -428,25 +425,14 @@ describe("Select tool", () => {
       });
     });
 
-    it("should restore initial geometry before executing scale command", () => {
+    it("keeps preview geometry on resize dragEnd", () => {
       sim.onMouseDown(createToolMouseEvent(110, 50));
       sim.onMouseMove(createToolMouseEvent(50, 50));
 
-      let rightmostBeforeExecute: number | null = null;
-      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
-        (cmd: { execute?: (ctx: unknown) => unknown }) => {
-          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
-          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
-          return cmd.execute?.({
-            fontEngine: ctx.fontEngine,
-            glyph: ctx.fontEngine.$glyph.value,
-          });
-        },
-      );
-
       sim.onMouseUp(createToolMouseEvent(50, 50));
 
-      expect(rightmostBeforeExecute).toBe(100);
+      const points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).toBe(50);
     });
 
     it("should transition to resizing state when dragging from edge", () => {
@@ -507,25 +493,14 @@ describe("Select tool", () => {
       });
     });
 
-    it("should restore initial geometry before executing rotate command", () => {
+    it("keeps preview geometry on rotate dragEnd", () => {
       sim.onMouseDown(createToolMouseEvent(-10, -10));
       sim.onMouseMove(createToolMouseEvent(110, -10));
 
-      let rightmostBeforeExecute: number | null = null;
-      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockImplementation(
-        (cmd: { execute?: (ctx: unknown) => unknown }) => {
-          const pointsBefore = getAllPoints(ctx.edit.getGlyph());
-          rightmostBeforeExecute = Math.max(...pointsBefore.map((p) => p.x));
-          return cmd.execute?.({
-            fontEngine: ctx.fontEngine,
-            glyph: ctx.fontEngine.$glyph.value,
-          });
-        },
-      );
-
       sim.onMouseUp(createToolMouseEvent(110, -10));
 
-      expect(rightmostBeforeExecute).toBe(200);
+      const points = getAllPoints(ctx.edit.getGlyph());
+      expect(Math.max(...points.map((p) => p.x))).not.toBe(200);
     });
 
     it("should restore geometry on rotate dragCancel", () => {
@@ -539,6 +514,101 @@ describe("Select tool", () => {
 
       points = getAllPoints(ctx.edit.getGlyph());
       expect(Math.max(...points.map((p) => p.x))).toBe(200);
+    });
+  });
+
+  describe("bend behavior", () => {
+    const findCubicSegmentPoint = (): { x: number; y: number } => {
+      for (let y = 120; y <= 220; y += 5) {
+        for (let x = 120; x <= 280; x += 5) {
+          const hit = ctx.getNodeAt(makeTestCoordinates({ x, y }));
+          if (hit && hit.type === "segment" && hit.segment.type === "cubic") {
+            return { x, y };
+          }
+        }
+      }
+      throw new Error("No cubic segment hit point found");
+    };
+
+    it("starts bending with meta drag on cubic segment and applies weighted control deltas", () => {
+      ctx.edit.addPoint(100, 100, "onCurve", false);
+      const c1Id = ctx.edit.addPoint(150, 220, "offCurve", false);
+      const c2Id = ctx.edit.addPoint(250, 220, "offCurve", false);
+      ctx.edit.addPoint(300, 100, "onCurve", false);
+
+      const startPoint = findCubicSegmentPoint();
+      sim.onMouseDown(createToolMouseEvent(startPoint.x, startPoint.y, { metaKey: true }));
+
+      const startState = select.getState();
+      expect(startState.type).toBe("bending");
+      if (startState.type !== "bending") return;
+
+      const beforeC1 = expectDefined(ctx.edit.getPointById(c1Id), "control1 before");
+      const beforeC2 = expectDefined(ctx.edit.getPointById(c2Id), "control2 before");
+      const beforeC1Pos = { x: beforeC1.x, y: beforeC1.y };
+      const beforeC2Pos = { x: beforeC2.x, y: beforeC2.y };
+      const start = startState.bend.startPos;
+      const t = startState.bend.t;
+      const w1 = 3 * (1 - t) ** 2 * t;
+      const w2 = 3 * (1 - t) * t ** 2;
+      const denom = w1 * w1 + w2 * w2;
+
+      sim.onMouseMove(createToolMouseEvent(startPoint.x + 15, startPoint.y + 15, { metaKey: true }));
+
+      const afterC1 = expectDefined(ctx.edit.getPointById(c1Id), "control1 after");
+      const afterC2 = expectDefined(ctx.edit.getPointById(c2Id), "control2 after");
+      const dx = startPoint.x + 15 - start.x;
+      const dy = startPoint.y + 15 - start.y;
+
+      expect(afterC1.x).toBeCloseTo(beforeC1Pos.x + dx * (w1 / denom), 6);
+      expect(afterC1.y).toBeCloseTo(beforeC1Pos.y + dy * (w1 / denom), 6);
+      expect(afterC2.x).toBeCloseTo(beforeC2Pos.x + dx * (w2 / denom), 6);
+      expect(afterC2.y).toBeCloseTo(beforeC2Pos.y + dy * (w2 / denom), 6);
+    });
+
+    it("opens an edit session and completes bend on dragEnd", () => {
+      ctx.edit.addPoint(100, 100, "onCurve", false);
+      ctx.edit.addPoint(150, 220, "offCurve", false);
+      ctx.edit.addPoint(250, 220, "offCurve", false);
+      ctx.edit.addPoint(300, 100, "onCurve", false);
+      const startPoint = findCubicSegmentPoint();
+
+      expectDefined(ctx.mocks.edit.mocks.beginInteractionSession, "edit.beginInteractionSession mock").mockClear();
+
+      sim.onMouseDown(createToolMouseEvent(startPoint.x, startPoint.y, { metaKey: true }));
+      sim.onMouseMove(createToolMouseEvent(startPoint.x + 20, startPoint.y + 20, { metaKey: true }));
+      sim.onMouseUp(createToolMouseEvent(startPoint.x + 20, startPoint.y + 20, { metaKey: true }));
+
+      expect(ctx.mocks.edit.beginInteractionSession).toHaveBeenCalledWith("Bend curve");
+      expect(select.getState().type).toBe("ready");
+    });
+
+    it("restores controls and records no undo on dragCancel", () => {
+      ctx.edit.addPoint(100, 100, "onCurve", false);
+      const c1Id = ctx.edit.addPoint(150, 220, "offCurve", false);
+      const c2Id = ctx.edit.addPoint(250, 220, "offCurve", false);
+      ctx.edit.addPoint(300, 100, "onCurve", false);
+      const startPoint = findCubicSegmentPoint();
+
+      sim.onMouseDown(createToolMouseEvent(startPoint.x, startPoint.y, { metaKey: true }));
+      const beforeC1 = expectDefined(ctx.edit.getPointById(c1Id), "control1 before cancel");
+      const beforeC2 = expectDefined(ctx.edit.getPointById(c2Id), "control2 before cancel");
+      const beforeC1Pos = { x: beforeC1.x, y: beforeC1.y };
+      const beforeC2Pos = { x: beforeC2.x, y: beforeC2.y };
+
+      sim.onMouseMove(createToolMouseEvent(startPoint.x + 20, startPoint.y + 20, { metaKey: true }));
+
+      expectDefined(ctx.mocks.commands.mocks.record, "commands.record mock").mockClear();
+      select.handleEvent({ type: "dragCancel" });
+
+      const restoredC1 = expectDefined(ctx.edit.getPointById(c1Id), "control1 restored");
+      const restoredC2 = expectDefined(ctx.edit.getPointById(c2Id), "control2 restored");
+      expect(restoredC1.x).toBe(beforeC1Pos.x);
+      expect(restoredC1.y).toBe(beforeC1Pos.y);
+      expect(restoredC2.x).toBe(beforeC2Pos.x);
+      expect(restoredC2.y).toBe(beforeC2Pos.y);
+      expect(ctx.mocks.commands.record).not.toHaveBeenCalled();
+      expect(select.getState().type).toBe("ready");
     });
   });
 });

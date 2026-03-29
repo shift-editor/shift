@@ -10,6 +10,7 @@ export interface ToolStateMap {
   select: SelectState;
   pen: PenState;
   shape: ShapeState;
+  text: TextState;
   disabled: ToolState;
   text: TextState;
 }

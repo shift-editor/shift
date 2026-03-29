@@ -1,7 +1,6 @@
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
+import { BaseTool, type ToolName, defineStateDiagram, DrawAPI } from "../core";
 import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
-import { executeAction, type SelectAction } from "./actions";
 import {
   SelectionBehavior,
   MarqueeBehavior,
@@ -12,19 +11,25 @@ import {
   EscapeBehavior,
   ToggleSmoothBehavior,
   UpgradeSegmentBehavior,
+<<<<<<< Updated upstream
+  SelectContourOnDoubleClickBehavior,
+=======
   DoubleClickSelectContourBehavior,
+  DoubleClickTextBehavior,
+>>>>>>> Stashed changes
 } from "./behaviors";
 import { TextRunEditBehavior } from "./behaviors/TextRunEditBehavior";
 import { TextRunHoverBehavior } from "./behaviors/TextRunHoverBehavior";
 import { normalizeRect } from "./utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
+import { BendCurveBehaviour } from "./behaviors/BendCurveBehaviour";
 
 export type { BoundingRectEdge, SelectState };
 
-export class Select extends BaseTool<SelectState, SelectAction> {
+export class Select extends BaseTool<SelectState> {
   static stateSpec = defineStateDiagram<SelectState["type"]>({
-    states: ["idle", "ready", "selecting", "selected", "translating", "resizing", "rotating"],
+    states: ["idle", "ready", "selecting", "selected", "translating", "resizing", "rotating", "bending"],
     initial: "idle",
     transitions: [
       { from: "idle", to: "ready", event: "activate" },
@@ -40,9 +45,15 @@ export class Select extends BaseTool<SelectState, SelectAction> {
 
   readonly id: ToolName = "select";
 
+<<<<<<< Updated upstream
   readonly behaviors: SelectBehavior[] = [
-    new ToggleSmoothBehavior(),
+=======
+  private behaviors: SelectBehavior[] = [
+    new DoubleClickTextBehavior(),
     new DoubleClickSelectContourBehavior(),
+>>>>>>> Stashed changes
+    new ToggleSmoothBehavior(),
+    new SelectContourOnDoubleClickBehavior(),
     new TextRunHoverBehavior(),
     new TextRunEditBehavior(),
     new UpgradeSegmentBehavior(),
@@ -51,6 +62,7 @@ export class Select extends BaseTool<SelectState, SelectAction> {
     new EscapeBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
+    new BendCurveBehaviour(),
     new TranslateBehavior(),
     new MarqueeBehavior(),
   ];
@@ -85,24 +97,6 @@ export class Select extends BaseTool<SelectState, SelectAction> {
 
   override deactivate(): void {
     this.state = { type: "idle" };
-  }
-
-  protected override preTransition(state: SelectState, event: ToolEvent) {
-    if (event.type === "selectionChanged") {
-      const hasSelection = this.editor.hasSelection();
-      if (hasSelection && state.type === "ready") {
-        return { state: { type: "selected" as const } };
-      }
-      if (!hasSelection && state.type === "selected") {
-        return { state: { type: "ready" as const } };
-      }
-      return { state };
-    }
-    return null;
-  }
-
-  protected override executeAction(action: SelectAction): void {
-    executeAction(action, this.editor);
   }
 
   override render(draw: DrawAPI): void {

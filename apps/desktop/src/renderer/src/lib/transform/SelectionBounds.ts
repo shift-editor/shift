@@ -1,4 +1,4 @@
-import { Segment } from "@/lib/geo/Segment";
+import { Segments } from "@/lib/geo/Segments";
 import { Bounds } from "@shift/geo";
 import { asPointId } from "@shift/types";
 import type { GlyphSnapshot, PointId } from "@shift/types";
@@ -24,8 +24,8 @@ export function getSegmentAwareBounds(
   const processedSegments = new Set<string>();
   const pointsInFullSegments = new Set<PointId>();
 
-  for (const { segment } of Segment.iterateGlyph(snapshot.contours)) {
-    const segmentPointIds = Segment.getPointIds(segment);
+  for (const { segment } of Segments.iterateGlyph(snapshot.contours)) {
+    const segmentPointIds = Segments.getPointIds(segment);
     const allSelected = segmentPointIds.every((id) => selectedSet.has(id));
 
     if (allSelected) {
@@ -35,7 +35,7 @@ export function getSegmentAwareBounds(
         for (const id of segmentPointIds) {
           pointsInFullSegments.add(id);
         }
-        segBounds.push(Segment.bounds(segment));
+        segBounds.push(Segments.bounds(segment));
       }
     }
   }

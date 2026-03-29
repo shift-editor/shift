@@ -1,9 +1,5 @@
 import type { ClipboardContent, ClipboardImporter, ContourContent, PointContent } from "../types";
-
-type PathCommand = {
-  type: string;
-  args: number[];
-};
+import { parseSvgPath, type SvgPathCommand } from "@/lib/editor/rendering/svgPath";
 
 export class SvgImporter implements ClipboardImporter {
   readonly name = "SVG";
@@ -21,7 +17,7 @@ export class SvgImporter implements ClipboardImporter {
     const pathData = this.#extractPathData(trimmed);
     if (!pathData) return null;
 
-    const commands = this.#parsePathCommands(pathData);
+    const commands = parseSvgPath(pathData);
     if (commands.length === 0) return null;
 
     const contours = this.#commandsToContours(commands);
@@ -47,6 +43,7 @@ export class SvgImporter implements ClipboardImporter {
     return null;
   }
 
+<<<<<<< Updated upstream
   #parsePathCommands(pathData: string): PathCommand[] {
     const commands: PathCommand[] = [];
     const regex = /([MmZzLlHhVvCcSsQqTtAa])([^MmZzLlHhVvCcSsQqTtAa]*)/g;
@@ -72,6 +69,9 @@ export class SvgImporter implements ClipboardImporter {
   }
 
   #commandsToContours(commands: PathCommand[]): ContourContent[] {
+=======
+  #commandsToContours(commands: SvgPathCommand[]): ContourContent[] {
+>>>>>>> Stashed changes
     const contours: ContourContent[] = [];
     let currentContour: PointContent[] = [];
     let currentX = 0;

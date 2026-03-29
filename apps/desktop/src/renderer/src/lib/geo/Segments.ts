@@ -49,7 +49,7 @@ export interface SegmentHitResult {
   distance: number;
 }
 
-export const Segment = {
+export const Segments = {
   id(segment: SegmentType): SegmentId {
     switch (segment.type) {
       case "line":
@@ -82,12 +82,12 @@ export const Segment = {
   },
 
   bounds(segment: SegmentType): Bounds {
-    const curve = Segment.toCurve(segment);
+    const curve = Segments.toCurve(segment);
     return Curve.bounds(curve);
   },
 
   hitTest(segment: SegmentType, pos: Point2D, radius: number): SegmentHitResult | null {
-    const bounds = Segment.bounds(segment);
+    const bounds = Segments.bounds(segment);
     const radiusVec = { x: radius, y: radius };
     const expandedMin = Vec2.sub(bounds.min, radiusVec);
     const expandedMax = Vec2.add(bounds.max, radiusVec);
@@ -101,13 +101,13 @@ export const Segment = {
       return null;
     }
 
-    const curve = Segment.toCurve(segment);
+    const curve = Segments.toCurve(segment);
     const closest = Curve.closestPoint(curve, pos);
 
     if (closest.distance < radius) {
       return {
         segment,
-        segmentId: Segment.id(segment),
+        segmentId: Segments.id(segment),
         t: closest.t,
         point: closest.point,
         distance: closest.distance,
@@ -121,7 +121,7 @@ export const Segment = {
     let bestHit: SegmentHitResult | null = null;
 
     for (const segment of segments) {
-      const hit = Segment.hitTest(segment, pos, radius);
+      const hit = Segments.hitTest(segment, pos, radius);
       if (hit && (bestHit === null || hit.distance < bestHit.distance)) {
         bestHit = hit;
       }
@@ -252,7 +252,7 @@ export const Segment = {
     const result = new Map<string, SegmentType[]>();
 
     for (const contour of contours) {
-      const segments = Segment.parse(contour.points, contour.closed);
+      const segments = Segments.parse(contour.points, contour.closed);
       result.set(contour.id, segments);
     }
 
@@ -264,7 +264,7 @@ export const Segment = {
     contourId: string;
   }> {
     for (const contour of contours) {
-      const segments = Segment.parse(contour.points, contour.closed);
+      const segments = Segments.parse(contour.points, contour.closed);
       for (const segment of segments) {
         yield { segment, contourId: contour.id };
       }

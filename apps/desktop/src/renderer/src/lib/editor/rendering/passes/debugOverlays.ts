@@ -3,7 +3,7 @@ import type { Bounds } from "@shift/geo";
 import type { SegmentId } from "@/types/indicator";
 import { Bounds as BoundsUtil } from "@shift/geo";
 import type { RenderContext } from "./types";
-import { Segment } from "@/lib/geo/Segment";
+import { Segments } from "@/lib/geo/Segments";
 import { Glyphs } from "@shift/font";
 
 const COLOR_TIGHT_BOUNDS = "red";
@@ -18,10 +18,10 @@ export function renderDebugTightBounds(
 ): void {
   if (hoveredSegmentId === null) return;
 
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    if (Segment.id(segment) !== hoveredSegmentId) continue;
+  for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
+    if (Segments.id(segment) !== hoveredSegmentId) continue;
 
-    const bounds = Segment.bounds(segment);
+    const bounds = Segments.bounds(segment);
     const width = bounds.max.x - bounds.min.x;
     const height = bounds.max.y - bounds.min.y;
 
@@ -45,8 +45,8 @@ export function renderDebugSegmentBounds(rc: RenderContext, glyph: Glyph): void 
   rc.ctx.strokeStyle = COLOR_SEGMENT_BOUNDS;
   rc.ctx.lineWidth = rc.pxToUpm();
 
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    const bounds = Segment.bounds(segment);
+  for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
+    const bounds = Segments.bounds(segment);
     const width = bounds.max.x - bounds.min.x;
     const height = bounds.max.y - bounds.min.y;
     rc.ctx.strokeRect(bounds.min.x, bounds.min.y, width, height);
@@ -55,8 +55,8 @@ export function renderDebugSegmentBounds(rc: RenderContext, glyph: Glyph): void 
 
 export function renderDebugGlyphBbox(rc: RenderContext, glyph: Glyph): void {
   let bbox: Bounds | null = null;
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    const sb = Segment.bounds(segment);
+  for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
+    const sb = Segments.bounds(segment);
     bbox = bbox ? BoundsUtil.union(bbox, sb) : sb;
   }
   if (!bbox) return;

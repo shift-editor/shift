@@ -25,6 +25,33 @@ export interface EditingEngineDeps {
 }
 
 /**
+ * Minimal editing surface required by command execution.
+ *
+ * Kept in the engine layer so command infrastructure can depend on a stable
+ * contract without importing the full {@link EditingManager} class type.
+ */
+export interface CommandEditingAPI {
+  addPointToContour(contourId: ContourId, edit: PointEdit): PointId;
+  insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId;
+  movePoints(pointIds: PointId[], delta: Point2D): PointId[];
+  movePointTo(pointId: PointId, x: number, y: number): void;
+  toggleSmooth(pointId: PointId): void;
+  setNodePositions(updates: NodePositionUpdateList): void;
+  removePoints(pointIds: PointId[]): void;
+  addContour(): ContourId;
+  removeContour(contourId: ContourId): void;
+  closeContour(): void;
+  openContour(contourId: ContourId): void;
+  getActiveContourId(): ContourId | null;
+  setActiveContour(contourId: ContourId): void;
+  reverseContour(contourId: ContourId): void;
+  setXAdvance(width: number): void;
+  translateLayer(dx: number, dy: number): void;
+  restoreSnapshot(snapshot: GlyphSnapshot): void;
+  pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult;
+}
+
+/**
  * All glyph mutations flow through this manager.
  *
  * Every public method guards on an active session, then dispatches via one of three internal helpers:
@@ -32,7 +59,7 @@ export interface EditingEngineDeps {
  * - `#dispatch` -- executes, emits the snapshot, and returns affected point IDs
  * - `#dispatchVoid` -- executes and emits, discarding the ID list
  */
-export class EditingManager {
+export class EditingManager implements CommandEditingAPI {
   #engine: EditingEngineDeps;
 
   constructor(engine: EditingEngineDeps) {
@@ -117,25 +144,6 @@ export class EditingManager {
     };
   }
 
-  addPoint(edit: PointEdit): PointId {
-    const ids = this.#dispatch(
-      this.#engine.raw.addPoint(edit.x, edit.y, edit.pointType, edit.smooth),
-    );
-
-    const pointId = ids[0];
-    if (pointId) {
-      return pointId;
-    }
-
-    const glyph = this.#engine.getGlyph()!;
-    const lastContour = glyph.contours[glyph.contours.length - 1];
-    const lastPoint = lastContour?.points[lastContour.points.length - 1];
-    if (!lastPoint) {
-      throw new NativeOperationError("Native addPoint returned no point ID");
-    }
-    return lastPoint.id;
-  }
-
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#engine.raw.addPointToContour(contourId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -189,7 +197,7 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.removePoints(pointIds));
   }
 
-  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
+  /** @knipclassignore used via CommandEditingAPI */
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#engine.raw.insertPointBefore(
@@ -227,12 +235,12 @@ export class EditingManager {
     return this.#engine.getActiveContourId();
   }
 
-  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
+  /** @knipclassignore used via CommandEditingAPI */
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#engine.raw.setXAdvance(width));
   }
 
-  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
+  /** @knipclassignore used via CommandEditingAPI */
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#engine.raw.translateLayer(dx, dy));
   }
@@ -250,12 +258,12 @@ export class EditingManager {
     this.#dispatchVoid(this.#engine.raw.reverseContour(contourId));
   }
 
-  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
+  /** @knipclassignore used via CommandEditingAPI */
   removeContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#engine.raw.removeContour(contourId));
   }
 
-  /** @knipclassignore used via Pick<EditingManager, CommandEditingMethods> */
+  /** @knipclassignore used via CommandEditingAPI */
   openContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#engine.raw.openContour(contourId));
   }

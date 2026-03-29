@@ -212,7 +212,7 @@ describe("ToolManager", () => {
   });
 
   describe("pipeline (pointer → gesture → tool)", () => {
-    const modifiers = { shiftKey: false, altKey: false };
+    const modifiers = { shiftKey: false, altKey: false, metaKey: false };
 
     it("tap (down then up at same point) drives tool with click and leaves activeToolState defined", () => {
       toolManager.activate("select");
@@ -311,7 +311,7 @@ describe("ToolManager", () => {
       });
       try {
         toolManager.activate("select");
-        const mods: Modifiers = { shiftKey: true, altKey: true };
+        const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
 
         toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
 

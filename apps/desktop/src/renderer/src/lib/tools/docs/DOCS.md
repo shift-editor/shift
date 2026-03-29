@@ -9,19 +9,19 @@ The tools library provides editing tools (Pen, Select, Hand, Shape, Text) built 
 ## Architecture
 
 ```
-BaseTool<S, A>
+BaseTool<S, Settings>
 ├── id: ToolName
 ├── state: S
-├── editor: ToolContext
-├── behaviors: Behavior<S, ToolEvent, A>[]  (abstract)
+├── editor: EditorAPI
+├── behaviors: Behavior<S>[]  (abstract)
 ├── initialState(): S
 ├── transition(state, event): S              (owns behavior loop)
-├── preTransition?(state, event): TransitionResult | null
-├── executeAction?(action, prev, next): void
+├── preTransition?(state, event): { state: S } | null
 ├── onStateChange?(prev, next, event): void
 ├── render?(renderer): void
+├── renderBelowHandles?(renderer): void
 ├── activate?() / deactivate?()
-└── handleEvent(event): void
+└── handleEvent(event): boolean
 
 ToolManager
 ├── activate(tool): void
@@ -53,7 +53,6 @@ tools/
 │   ├── Select.ts
 │   ├── behaviors/           # State-specific behavior handlers
 │   ├── cursor.ts
-│   ├── actions.ts
 │   ├── types.ts
 │   └── utils.ts
 ├── hand/                    # Canvas panning
@@ -69,20 +68,20 @@ tools/
 
 ### Key Design Decisions
 
-1. **State Machine Pattern**: Tools use discriminated union states with pure transitions
-2. **Side Effects in onTransition**: State changes trigger side effects after transition
+1. **State Machine Pattern**: Tools use discriminated union states and ordered behavior handlers
+2. **Explicit Side Effects**: Side effects live in behavior handlers/hooks and `onStateChange`
 3. **GestureDetector**: Converts raw pointer events to semantic events (click, drag, doubleClick)
 4. **Editor Injection**: Tools receive the `Editor` instance, accessing services via `this.editor.serviceName`
 5. **Behavior Pattern**: Complex tools delegate to behavior classes for cleaner separation
-6. **Action Pattern**: State transitions produce actions, executed by BaseTool in `onTransition` via `executeAction`
-7. **High-frequency actions**: For drag-like gestures that run every frame (e.g. marquee rect), avoid emitting actions that update selection or other global signals on every event; commit once on dragEnd (or throttle) to keep the hot path cheap.
+6. **Semantic Editor API**: Behaviors call explicit editor methods; command details stay in editor-layer operations
+7. **High-frequency edits**: For drag-like gestures that run every frame (e.g. marquee rect), avoid expensive global writes on every event; commit once on dragEnd (or throttle) to keep the hot path cheap.
 
 ### Performance
 
 - **Pointer → rAF**: Pointer handlers store input and request one rAF; projection, hit-test, and tool events run in the rAF callback so the synchronous handler stays minimal. Mouse position and other high-fan-out signals update at most once per frame.
-- **Action commit on end**: For drag-like gestures (e.g. marquee selection), emit actions that update global state (e.g. selection) only on gesture end (e.g. dragEnd), not on every drag event. Use local/transition state for visual feedback during the gesture.
+- **Commit on end**: For drag-like gestures (e.g. marquee selection), commit global state changes on drag end, not on every drag event. Use local tool state for visual feedback during the gesture.
 - **Signal → React boundary**: Effects that subscribe to signals and call React `setState` should only update when the displayed value actually changes (e.g. compare to previous or use a guarded setState) to avoid unnecessary re-renders.
-- **Stable state references and cheap cursor**: Return the same state object reference when the logical state has not changed so `setActiveToolState` and `onTransition` are not invoked unnecessarily. Keep `getCursor` and other code on the cursor path cheap and minimal in signal reads.
+- **Stable state references and cheap cursor**: Return the same state object reference when the logical state has not changed so commit hooks are not invoked unnecessarily. Keep `getCursor` and other code on the cursor path cheap and minimal in signal reads.
 
 ## Key Concepts
 
@@ -91,51 +90,49 @@ tools/
 Abstract base class all tools extend:
 
 ```typescript
-abstract class BaseTool<S extends ToolState, A = never, Settings = Record<string, never>> {
+abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
-  abstract readonly behaviors: Behavior<S, ToolEvent, A>[];
+  abstract readonly behaviors: Behavior<S>[];
   readonly $cursor: ComputedSignal<CursorType>; // from getCursor(activeToolState)
   state: S;
-  protected editor: ToolContext;
+  protected editor: EditorAPI;
 
   getCursor(state: S): CursorType; // default: { type: "default" }; override for state-based cursor
   abstract initialState(): S;
 
   // Optional hooks
-  protected preTransition?(state: S, event: ToolEvent): { state: S; action?: A } | null;
-  protected executeAction?(action: A, prev: S, next: S): void;
+  protected preTransition?(state: S, event: ToolEvent): { state: S } | null;
   protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
   render?(renderer: DrawAPI): void;
+  renderBelowHandles?(renderer: DrawAPI): void;
   activate?(): void;
   deactivate?(): void;
 
-  handleEvent(event: ToolEvent): void;
+  handleEvent(event: ToolEvent): boolean;
 
   // Helpers
   protected batch<T>(name: string, fn: () => T): T;
-  protected beginPreview(): void;
-  protected commitPreview(label: string): void;
-  protected cancelPreview(): void;
 }
 ```
 
-BaseTool owns the behavior loop and action mediation internally. Tools do NOT manually write `transition()` or manage `#pendingAction` — they declare `behaviors` and optionally override the hooks above.
+BaseTool owns behavior dispatch. Tools do NOT override dispatch internals; they declare `behaviors` and optionally override hooks.
 
 The `transition()` method in BaseTool:
 
 1. Returns early if state is `"idle"`
 2. Calls `preTransition()` if defined (short-circuit before behaviors)
-3. Iterates `behaviors` in array order; first `canHandle` match wins
-4. Stores `result.action` internally as `#pendingAction`
-5. Returns `result.state`
+3. Iterates `behaviors` in array order and dispatches by event-type handler (`onClick`, `onDrag`, etc.)
+4. First handler returning `true` wins
+5. Returns the resulting state
 
-The `onTransition()` method in BaseTool:
+The `handleEvent()` method commits and notifies:
 
-1. If `#pendingAction` exists and `executeAction` is defined, calls `executeAction(action, prev, next)`
-2. Calls `onTransition` on each behavior
-3. Calls `onStateChange(prev, next, event)` if defined
-
+1. Runs behavior dispatch and computes `next` state
+2. If state changed: calls all `onStateExit` hooks
+3. Commits state and updates `editor.setActiveToolState(next)`
+4. Calls all `onStateEnter` hooks
+5. Calls `onStateChange(prev, next, event)` if defined
 ### ToolEvent
 
 Semantic events produced by GestureDetector:
@@ -143,7 +140,7 @@ Semantic events produced by GestureDetector:
 ```typescript
 type ToolEvent =
   | { type: "pointerMove"; point: Point2D }
-  | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean }
+  | { type: "click"; point: Point2D; shiftKey: boolean; altKey: boolean; metaKey: boolean }
   | { type: "doubleClick"; point: Point2D }
   | {
       type: "dragStart";
@@ -151,6 +148,7 @@ type ToolEvent =
       screenPoint: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey: boolean;
     }
   | {
       type: "drag";
@@ -162,6 +160,7 @@ type ToolEvent =
       screenDelta: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey: boolean;
     }
   | {
       type: "dragEnd";
@@ -212,7 +211,7 @@ Available services:
 
 ### Hit testing
 
-Use **getNodeAt(pos)** to answer "what's under this position?" with consistent priority: contour endpoint → middle point → point → segment. It returns a `HitResult`; use type guards (`isPointHit`, `isSegmentHit`, `isContourEndpointHit`, `isMiddlePointHit`) and read `hit.point`, `hit.segment`, `hit.segmentId`, `hit.pointId` from the result. For point-like hits (point, contour endpoint, middle point) use **getPointIdFromHit(hit)** to get `pointId`. Do not call **getSegmentById** when you already have a segment from a hit (e.g. `isSegmentHit(hit)` → use `hit.segment`). Use **getSegmentById(segmentId)** only when you have a segment id from elsewhere (e.g. from an action payload), not from a position hit.
+Use **getNodeAt(pos)** to answer "what's under this position?" with consistent priority: contour endpoint → middle point → point → segment. It returns a `HitResult`; use type guards (`isPointHit`, `isSegmentHit`, `isContourEndpointHit`, `isMiddlePointHit`) and read `hit.point`, `hit.segment`, `hit.segmentId`, `hit.pointId` from the result. For point-like hits (point, contour endpoint, middle point) use **getPointIdFromHit(hit)** to get `pointId`. Do not call **getSegmentById** when you already have a segment from a hit (e.g. `isSegmentHit(hit)` → use `hit.segment`). Use **getSegmentById(segmentId)** only when you have a segment id from state or persisted ids, not from a position hit.
 
 ## Tool Implementations
 
@@ -349,18 +348,15 @@ Rectangle creation.
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `getCursor(state)`                  | Return cursor for state (default: `{ type: "default" }`); override for state-based cursor. May read `editor.hoveredPointId`, `editor.hoveredSegmentId`, `editor.hoveredBoundingBoxHandle`, and `editor.currentModifiers` for reactive cursor updates. |
 | `initialState()`                    | Return the initial state                                                                                                                                                                                                                              |
-| `behaviors` (abstract)              | Array of `Behavior<S, ToolEvent, A>` tried in order; first `canHandle` match wins                                                                                                                                                                     |
-| `preTransition(state, event)`       | Optional hook to short-circuit before behaviors run; return `{ state, action? }` or `null`                                                                                                                                                            |
-| `executeAction(action, prev, next)` | Optional hook for action side effects (action-aware tools like Pen, Select)                                                                                                                                                                           |
+| `behaviors` (abstract)              | Array of `Behavior<S>` tried in order; first handler returning `true` wins                                                                                                                                                                            |
+| `preTransition(state, event)`       | Optional hook to short-circuit before behaviors run; return `{ state }` or `null`                                                                                                                                                                    |
 | `onStateChange(prev, next, event)`  | Optional hook for tool-specific post-transition logic                                                                                                                                                                                                 |
 | `render(renderer)`                  | Draw interactive overlays                                                                                                                                                                                                                             |
+| `renderBelowHandles(renderer)`      | Draw overlays below handles                                                                                                                                                                                                                           |
 | `activate()`                        | Called when tool becomes active                                                                                                                                                                                                                       |
 | `deactivate()`                      | Called when tool becomes inactive                                                                                                                                                                                                                     |
 | `handleEvent(event)`                | Process a ToolEvent                                                                                                                                                                                                                                   |
 | `batch(name, fn)`                   | Execute commands in a batch                                                                                                                                                                                                                           |
-| `beginPreview()`                    | Start preview mode                                                                                                                                                                                                                                    |
-| `commitPreview(label)`              | Commit preview as command                                                                                                                                                                                                                             |
-| `cancelPreview()`                   | Cancel preview, restore state                                                                                                                                                                                                                         |
 
 ### ToolContext (cursor and hover)
 
@@ -415,53 +411,40 @@ class MyTool extends BaseTool<MyState> {
 }
 ```
 
-BaseTool owns `transition()` and `onTransition()` — tools do not override them. Instead, tools declare `behaviors` and optionally override `preTransition`, `executeAction`, and `onStateChange`.
+BaseTool owns `transition()` and `handleEvent()` internals — tools do not override dispatch internals. Instead, tools declare `behaviors` and optionally override `preTransition` and `onStateChange`.
 
 ### Behavior semantics
 
-Behaviors are tried in **array order**. The first behavior for which `canHandle(state, event)` is true wins; its `transition()` returns a `TransitionResult<S, A>` containing both the next state and an optional action. BaseTool unwraps the result internally: it uses `result.state` as the next state and stores `result.action` in an internal `#pendingAction` field. Actions are executed in `onTransition` via BaseTool calling `executeAction(action, prev, next)` — Pen implements `executeAction` to run pen-specific side effects; Select implements `executeAction` to dispatch select actions. This ensures "where are actions run?" is in one place (`executeAction`). State types carry no `action` field — actions flow through `TransitionResult`, not through state.
+Behaviors are tried in **array order**. For the current event type, BaseTool calls the matching handler (`onClick`, `onDragStart`, etc.). The first handler that returns `true` wins. Handler logic can mutate editor state directly and/or update tool state via `ctx.setState(...)`.
 
 ### Behavior interface and createBehavior
 
-All tools (Hand, Shape, Pen, Select) use the same behavior pattern. The core exports a generic `Behavior<S, E, A>` interface, `TransitionResult<S, A>` type, and `createBehavior(impl)` helper. Behaviors are state-transition only — they do NOT render. Tools own all rendering in their `render()` method. Hand and Shape use `createBehavior` for ReadyBehavior and DraggingBehavior (see `hand/behaviors/`, `shape/behaviors/`); Pen and Select use class-based behaviors. Use `createBehavior<MyState>({ canHandle, transition, onTransition? })` for object-style behaviors.
+All tools (Hand, Shape, Pen, Select) use the same behavior pattern. The core exports `Behavior<S>` and `createBehavior(impl)`. Behaviors handle events and state transitions; tools own rendering in `render()` / `renderBelowHandles()`.
 
 ### Behavior Pattern
 
 Complex tools delegate state-specific logic to behavior classes or objects from `createBehavior`:
 
 ```typescript
-import { createBehavior, type Behavior, type TransitionResult } from "../core";
+import { createBehavior, type Behavior } from "../core";
 
-type MyBehavior = Behavior<MyState, ToolEvent>;
+type MyBehavior = Behavior<MyState>;
 
 class MyTool extends BaseTool<MyState> {
   readonly behaviors: MyBehavior[] = [HoverBehavior, TranslateBehavior];
 
-  // No need to override transition() — BaseTool handles the behavior loop.
-  // No need to override onTransition() — BaseTool calls behavior.onTransition
-  // and then onStateChange() for tool-specific logic.
+  // No need to override transition()/handleEvent() internals —
+  // BaseTool handles the behavior loop and state commit hooks.
 }
 ```
 
-For action-aware tools (Pen, Select), implement `executeAction`:
+For behaviors with side effects, call semantic EditorAPI methods directly:
 
 ```typescript
-type MyAction = { type: "doSomething"; data: Data } | { type: "doOther" };
-type MyBehavior = Behavior<MyState, ToolEvent, MyAction>;
+type MyBehavior = Behavior<MyState>;
 
-class MyTool extends BaseTool<MyState, MyAction> {
+class MyTool extends BaseTool<MyState> {
   readonly behaviors: MyBehavior[] = [SomeBehavior, OtherBehavior];
-
-  protected executeAction(action: MyAction, prev: MyState, next: MyState): void {
-    switch (action.type) {
-      case "doSomething":
-        this.editor.doSomething(action.data);
-        break;
-      case "doOther":
-        this.editor.doOther();
-        break;
-    }
-  }
 }
 ```
 
@@ -469,12 +452,12 @@ class MyTool extends BaseTool<MyState, MyAction> {
 
 1. Add a variant to the state union (e.g. `| { type: "newState"; data: Data }`).
 2. Add the state to `stateSpec.states` and add transitions to/from it in `stateSpec.transitions`.
-3. Add transition branches in a new behavior that `canHandle` the new state/event.
-4. If there are side effects, add an action type and a case in `executeAction`.
+3. Add event handlers in a behavior for the new state/event combination.
+4. If the behavior needs a new domain operation, add a semantic method on `EditorAPI` and implement it in `Editor`.
 
 ### Adding a behavior
 
-1. Implement the behavior interface: `canHandle(state, event)`, `transition(state, event, editor)` returning `TransitionResult<S, A> | null`, and optionally `onTransition`.
+1. Implement event handlers (`onClick`, `onDragStart`, `onDrag`, `onKeyDown`, etc.) and optional `onStateExit` / `onStateEnter`.
 2. Insert the behavior in the tool's `behaviors` array at the right position (first match wins).
 3. Behaviors are state-only — they do NOT render. All rendering belongs in the tool's `render()` method.
 
@@ -508,11 +491,11 @@ protected onStateChange(prev: SelectState, next: SelectState, event: ToolEvent):
 Checklist:
 
 1. **Add tool id to ToolName** in `createContext.ts` (e.g. add `"myTool"` to the union), or document self-registration if introduced.
-2. **Create tool class**: implement `id`, `behaviors`, `initialState`; optionally override `getCursor(state)` for state-based cursor (default is `{ type: "default" }`), and `activate`, `deactivate`, `executeAction`, `onStateChange`, `render`, `stateSpec`.
+2. **Create tool class**: implement `id`, `behaviors`, `initialState`; optionally override `getCursor(state)` (default `{ type: "default" }`), plus `activate`, `deactivate`, `onStateChange`, `render`, `stateSpec`.
 3. **Register**: in `tools.ts` call `editor.registerTool({ id, ToolClass, icon, tooltip, shortcut? })` so the tool and its shortcut are registered in one place.
 4. **Shortcut** (optional): pass `shortcut: "m"` in the registerTool descriptor; Editor binds it via getToolShortcuts(), no separate key handler needed.
 5. **When to use behaviors**: All tools use the behavior pattern. Use `createBehavior` for simple state machines (Hand, Shape); use class-based behaviors for many (state, event) handlers or split-by-concern (Pen, Select).
-6. **When to use actions**: Use actions when the same state change can trigger different side effects (e.g. close vs continue contour); transition returns state with optional action, BaseTool calls `executeAction` with the action.
+6. **When to add Editor methods**: Add a new semantic `EditorAPI` method when behavior logic would otherwise instantiate low-level commands directly or duplicate mutation rules across tools.
 
 Minimal example (add to ToolName, then):
 
@@ -545,10 +528,10 @@ Where things happen:
 - ToolManager → **GestureDetector** (pointer → semantic events)
 - GestureDetector emits **ToolEvent[]** (click, dragStart, drag, dragEnd, pointerMove, keyDown, etc.)
 - ToolManager dispatches to **activeTool.handleEvent(event)**
-- **BaseTool.handleEvent**: calls `transition(state, event)` → updates state and `setActiveToolState(next)` → calls **onTransition(prev, next, event)** (runs `executeAction`, behavior `onTransition`, and `onStateChange`)
+- **BaseTool.handleEvent**: runs behavior dispatch → if state changed, calls `onStateExit` hooks, commits state, calls `onStateEnter` hooks, then `onStateChange`
 - Redraw: **editor.requestRedraw()**; overlay: **tool.render(draw)**
 
-So: "Where does X happen?" — pointer handling in ToolManager/GestureDetector, state change in BaseTool.transition (behavior loop), side effects and actions in onTransition (executeAction + onStateChange).
+So: "Where does X happen?" — pointer handling in ToolManager/GestureDetector, state dispatch in BaseTool, side effects in behavior handlers/hooks plus `onStateChange`.
 
 ## Data Flow
 
@@ -565,9 +548,9 @@ ToolEvent (click | drag | doubleClick | ...)
       ↓
 BaseTool.handleEvent(event)
       ↓
-tool.transition(state, event) → new state (behavior loop + action capture)
+tool.transition(state, event) → next state (behavior loop only)
       ↓
-tool.onTransition(prev, next, event) → executeAction + behavior hooks + onStateChange
+tool.handleEvent(event) commit → behavior onStateExit/onStateEnter + onStateChange
       ↓
 editor.requestRedraw()
       ↓

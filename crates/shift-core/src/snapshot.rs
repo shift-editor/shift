@@ -258,7 +258,7 @@ mod tests {
         let mut session = EditSession::new("A".to_string(), 65, GlyphLayer::with_width(600.0));
         let contour_id = session.add_empty_contour();
         session
-            .add_point(50.0, 50.0, IrPointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 50.0, 50.0, IrPointType::OnCurve, false)
             .unwrap();
         session
             .layer_mut()
@@ -303,9 +303,9 @@ mod tests {
     #[test]
     fn snapshot_serializes_to_json() {
         let mut session = EditSession::new("C".to_string(), 67, GlyphLayer::with_width(550.0));
-        session.add_empty_contour();
+        let contour_id = session.add_empty_contour();
         session
-            .add_point(10.0, 20.0, IrPointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 10.0, 20.0, IrPointType::OnCurve, false)
             .unwrap();
 
         let snapshot = GlyphSnapshot::from_edit_session(&session);

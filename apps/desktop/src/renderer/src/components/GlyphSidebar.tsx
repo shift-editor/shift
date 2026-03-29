@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Separator } from "@shift/ui";
-import { TransformSection } from "./TransformSection";
-import { ScaleSection } from "./ScaleSection";
+import { TransformSection } from "./sidebar-right/TransformSection";
+import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
-import { GlyphSection } from "./GlyphSection";
-import { AnchorSection } from "./AnchorSection";
+import { GlyphSection } from "./sidebar-right/GlyphSection";
+import { AnchorSection } from "./sidebar-right/AnchorSection";
 
-export const Sidebar = () => {
+export const GlyphSidebar = () => {
   const editor = getEditor();
   const { familyName } = editor.font.getMetadata();
   const zoom = useSignalState(editor.zoom);

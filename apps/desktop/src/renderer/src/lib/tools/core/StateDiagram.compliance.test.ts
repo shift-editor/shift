@@ -7,6 +7,7 @@ import { Hand } from "../hand/Hand";
 import { Shape } from "../shape/Shape";
 import { Pen } from "../pen/Pen";
 import { Select } from "../select/Select";
+import { Text } from "../text/Text";
 import { asPointId } from "@shift/types";
 import type { HandleData } from "../pen/types";
 
@@ -17,7 +18,14 @@ function makePointerMove(): ToolEvent {
   return { type: "pointerMove", point: p, coords: coordsP };
 }
 function makeClick(): ToolEvent {
-  return { type: "click", point: p, coords: coordsP, shiftKey: false, altKey: false };
+  return {
+    type: "click",
+    point: p,
+    coords: coordsP,
+    shiftKey: false,
+    altKey: false,
+    metaKey: false,
+  };
 }
 function makeDragStart(): ToolEvent {
   return {
@@ -27,6 +35,7 @@ function makeDragStart(): ToolEvent {
     screenPoint: p,
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDrag(): ToolEvent {
@@ -41,6 +50,7 @@ function makeDrag(): ToolEvent {
     screenDelta: p,
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDragEnd(): ToolEvent {
@@ -59,10 +69,6 @@ function makeDragCancel(): ToolEvent {
 function makeKeyDownEscape(): ToolEvent {
   return { type: "keyDown", key: "Escape", shiftKey: false, altKey: false, metaKey: false };
 }
-function makeSelectionChanged(): ToolEvent {
-  return { type: "selectionChanged" };
-}
-
 function assertResultInDiagram(
   spec: StateDiagram,
   result: { type: string },
@@ -232,13 +238,39 @@ describe("State diagram compliance", () => {
       result = select.transition(ready, makeClick());
       expect(spec.states).toContain(result.type);
 
-      result = select.transition(ready, makeSelectionChanged());
-      expect(spec.states).toContain(result.type);
-
       result = select.transition(selected, makeKeyDownEscape());
       expect(spec.states).toContain(result.type);
+    });
+  });
 
-      result = select.transition(selected, makeSelectionChanged());
+  describe("Text", () => {
+    let textTool: Text;
+    let spec: StateDiagram;
+
+    beforeEach(() => {
+      const ctx = createMockToolContext();
+      textTool = new Text(ctx);
+      spec = Text.stateSpec;
+    });
+
+    it("transition result is always in stateSpec.states for sampled (state, event) pairs", () => {
+      const idle = { type: "idle" as const };
+      const ready = { type: "ready" as const };
+      const typing = { type: "typing" as const, text: "AB", cursorIndex: 2, layout: [] };
+
+      let result = textTool.transition(idle, makePointerMove());
+      expect(spec.states).toContain(result.type);
+
+      result = textTool.transition(ready, makeClick());
+      expect(spec.states).toContain(result.type);
+
+      result = textTool.transition(typing, makeKeyDownEscape());
+      assertResultInDiagram(spec, result, "typing", "escape");
+
+      result = textTool.transition(typing, makeClick());
+      expect(spec.states).toContain(result.type);
+
+      result = textTool.transition(typing, makePointerMove());
       expect(spec.states).toContain(result.type);
     });
   });

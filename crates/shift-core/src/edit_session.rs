@@ -138,20 +138,6 @@ impl EditSession {
         Ok(point_id)
     }
 
-    pub fn add_point(
-        &mut self,
-        x: f64,
-        y: f64,
-        point_type: PointType,
-        is_smooth: bool,
-    ) -> Result<PointId, String> {
-        let contour_id = match self.active_contour_id {
-            Some(id) => id,
-            None => self.add_empty_contour(),
-        };
-        self.add_point_to_contour(contour_id, x, y, point_type, is_smooth)
-    }
-
     pub fn toggle_smooth(&mut self, point_id: PointId) -> Result<(), String> {
         let contour_id = self
             .find_point_contour(point_id)
@@ -623,7 +609,7 @@ mod tests {
         let contour_id = session.add_empty_contour();
 
         let point_id = session
-            .add_point(100.0, 200.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 100.0, 200.0, PointType::OnCurve, false)
             .unwrap();
 
         let contour = session.contour(contour_id).unwrap();
@@ -634,22 +620,17 @@ mod tests {
     }
 
     #[test]
-    fn add_point_without_active_contour_creates_one() {
+    fn add_point_without_active_contour_fails() {
         let mut session = create_session();
         assert!(session.active_contour_id().is_none());
 
-        let result = session.add_point(100.0, 200.0, PointType::OnCurve, false);
+        let missing_contour = ContourId::new();
+        let result =
+            session.add_point_to_contour(missing_contour, 100.0, 200.0, PointType::OnCurve, false);
 
-        assert!(result.is_ok());
-        assert!(session.active_contour_id().is_some());
-        assert_eq!(session.contours_count(), 1);
-
-        let contour_id = session.active_contour_id().unwrap();
-        let point_id = result.unwrap();
-        let contour = session.contour(contour_id).unwrap();
-        let point = contour.get_point(point_id).unwrap();
-        assert_eq!(point.x(), 100.0);
-        assert_eq!(point.y(), 200.0);
+        assert!(result.is_err());
+        assert!(session.active_contour_id().is_none());
+        assert_eq!(session.contours_count(), 0);
     }
 
     #[test]
@@ -657,7 +638,7 @@ mod tests {
         let mut session = create_session();
         let contour_id = session.add_empty_contour();
         let point_id = session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
 
         session
@@ -679,7 +660,7 @@ mod tests {
         let mut session = create_session();
         let contour_id = session.add_empty_contour();
         let point_id = session
-            .add_point(10.0, 20.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap();
 
         session
@@ -711,10 +692,10 @@ mod tests {
         let mut session = create_session();
         let contour_id = session.add_empty_contour();
         let p1 = session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
         let p2 = session
-            .add_point(100.0, 100.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 100.0, 100.0, PointType::OnCurve, false)
             .unwrap();
 
         let moved = session.move_points(&[p1, p2], 10.0, 20.0);
@@ -735,12 +716,12 @@ mod tests {
         let mut session = create_session();
         let c1_id = session.add_empty_contour();
         let p1 = session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(c1_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
 
         let c2_id = session.add_empty_contour();
         let p2 = session
-            .add_point(50.0, 50.0, PointType::OnCurve, false)
+            .add_point_to_contour(c2_id, 50.0, 50.0, PointType::OnCurve, false)
             .unwrap();
 
         let moved = session.move_points(&[p1, p2], 5.0, 5.0);
@@ -760,7 +741,7 @@ mod tests {
         let original_width = session.width();
         let contour_id = session.add_empty_contour();
         let point_id = session
-            .add_point(10.0, 20.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap();
         let anchor_id =
             session
@@ -800,15 +781,15 @@ mod tests {
     #[test]
     fn remove_points_multiple() {
         let mut session = create_session();
-        session.add_empty_contour();
+        let contour_id = session.add_empty_contour();
         let p1 = session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
         let p2 = session
-            .add_point(100.0, 100.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 100.0, 100.0, PointType::OnCurve, false)
             .unwrap();
         let p3 = session
-            .add_point(200.0, 200.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 200.0, 200.0, PointType::OnCurve, false)
             .unwrap();
 
         let removed = session.remove_points(&[p1, p3]);
@@ -828,10 +809,10 @@ mod tests {
         let contour_id = session.add_empty_contour();
 
         let anchor1 = session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
         let anchor2 = session
-            .add_point(100.0, 100.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 100.0, 100.0, PointType::OnCurve, false)
             .unwrap();
 
         let control = session
@@ -854,9 +835,9 @@ mod tests {
     #[test]
     fn insert_point_before_nonexistent_fails() {
         let mut session = create_session();
-        session.add_empty_contour();
+        let contour_id = session.add_empty_contour();
         session
-            .add_point(0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(contour_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
 
         let fake_id = PointId::new();

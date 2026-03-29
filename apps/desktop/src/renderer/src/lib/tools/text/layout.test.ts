@@ -172,8 +172,12 @@ describe("hitTestTextSlot", () => {
 
     const pathHitTester = {
       hitPath: vi.fn(
-        (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) =>
-          x >= 40 && x <= 120 && y >= 0 && y <= 100,
+        (path: Path2D, x: number, y: number, strokeWidth: number, fill: boolean) => {
+          void path;
+          void strokeWidth;
+          void fill;
+          return x >= 40 && x <= 120 && y >= 0 && y <= 100;
+        },
       ),
     };
 
@@ -214,7 +218,10 @@ describe("hitTestTextSlot", () => {
   it("shape hit test should return slot only when path hit succeeds", () => {
     const pathHitTester = {
       hitPath: vi.fn(
-        (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) => {
+        (path: Path2D, x: number, y: number, strokeWidth: number, fill: boolean) => {
+          void path;
+          void strokeWidth;
+          void fill;
           return x >= 20 && x <= 80 && y >= 10 && y <= 90;
         },
       ),

@@ -25,8 +25,7 @@ describe("AddPointCommand", () => {
     const pointId = cmd.execute(ctx);
 
     expect(pointId).toBe("point-1");
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith({
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 100,
       y: 200,
       pointType: "onCurve",
@@ -40,8 +39,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith({
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 50,
       y: 75,
       pointType: "onCurve",
@@ -55,8 +53,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith({
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 30,
       y: 40,
       pointType: "offCurve",
@@ -185,8 +182,7 @@ describe("RemovePointsCommand", () => {
     cmd.undo(ctx);
 
     // Should re-add the removed point
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledWith({
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-1", {
       x: 100,
       y: 200,
       pointType: "onCurve",

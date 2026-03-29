@@ -165,7 +165,7 @@ export class ViewportManager {
   }
 
   get mousePosition(): Point2D {
-    return this.projectScreenToScene(this.#mouseX, this.#mouseY);
+    return this.projectScreenToScene({ x: this.#mouseX, y: this.#mouseY });
   }
 
   get screenMousePosition(): Signal<Point2D> {
@@ -181,9 +181,9 @@ export class ViewportManager {
    * commit it to the screen-space signal. This two-phase update avoids
    * redundant UPM projections during high-frequency mouse events.
    */
-  updateMousePosition(clientX: number, clientY: number): void {
-    this.#pendingClientX = clientX;
-    this.#pendingClientY = clientY;
+  updateMousePosition(client: Point2D): void {
+    this.#pendingClientX = client.x;
+    this.#pendingClientY = client.y;
   }
 
   flushMousePosition(): void {
@@ -193,31 +193,31 @@ export class ViewportManager {
   }
 
   /** Screen pixels (Y-down, origin top-left) to scene (UPM, Y-up, origin baseline). */
-  public projectScreenToScene(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.$screenToUpmMatrix.value, { x, y });
+  public projectScreenToScene(screen: Point2D): Point2D {
+    return Mat.applyToPoint(this.$screenToUpmMatrix.value, screen);
   }
 
   /** Scene (UPM, Y-up, origin baseline) to screen pixels (Y-down, origin top-left). */
-  public projectSceneToScreen(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.$upmToScreenMatrix.value, { x, y });
+  public projectSceneToScreen(scene: Point2D): Point2D {
+    return Mat.applyToPoint(this.$upmToScreenMatrix.value, scene);
   }
 
-  setPan(x: number, y: number): void {
-    this.$panX.value = x;
-    this.$panY.value = y;
+  setPan(pan: Point2D): void {
+    this.$panX.value = pan.x;
+    this.$panY.value = pan.y;
   }
 
   /**
    * Zooms toward or away from a screen-space point, adjusting pan so the
    * point under the cursor stays fixed. Used for scroll-wheel zoom.
    */
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
-    const before = this.projectScreenToScene(screenX, screenY);
+  public zoomToPoint(screen: Point2D, zoomDelta: number): void {
+    const before = this.projectScreenToScene(screen);
 
     const newZoom = clamp(this.$zoom.value * zoomDelta, MIN_ZOOM, MAX_ZOOM);
     this.$zoom.value = newZoom;
 
-    const after = this.projectScreenToScene(screenX, screenY);
+    const after = this.projectScreenToScene(screen);
 
     const scale = this.upmScale;
     const deltaX = (before.x - after.x) * scale * newZoom;
@@ -228,11 +228,11 @@ export class ViewportManager {
   }
 
   zoomIn(): void {
-    this.zoomToPoint(this.centre.x, this.centre.y, 1.25);
+    this.zoomToPoint(this.centre, 1.25);
   }
 
   zoomOut(): void {
-    this.zoomToPoint(this.centre.x, this.centre.y, 0.8);
+    this.zoomToPoint(this.centre, 0.8);
   }
 
   public screenToUpmDistance(screenDistance: number): number {

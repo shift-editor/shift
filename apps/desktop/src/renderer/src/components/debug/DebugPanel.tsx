@@ -41,7 +41,7 @@ export function DebugPanel() {
     if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
-      const coords = editor.fromScreen(screen.x, screen.y);
+      const coords = editor.fromScreen(screen);
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)

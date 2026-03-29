@@ -1,39 +1,64 @@
 import type { PointId, Rect2D } from "@shift/types";
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import type { ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 import { normalizeRect, pointInRect } from "../utils";
 
-export class MarqueeBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (state.type === "selecting") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
-    }
-    if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return true;
-    }
-    return false;
-  }
-
-  transition(
+export class MarqueeBehavior implements SelectHandlerBehavior {
+  onDragStart(
     state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (state.type === "selecting") {
-      return this.transitionSelecting(state, event, editor);
-    }
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean {
+    if (state.type !== "ready" && state.type !== "selected") return false;
 
-    if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return this.tryStartMarquee(state, event, editor);
-    }
+    const hit = ctx.editor.getNodeAt(event.coords);
+    if (hit !== null) return false;
 
-    return null;
+    const localPoint = event.coords.glyphLocal;
+    if (state.type === "selected") {
+      ctx.editor.clearSelection();
+    }
+    ctx.editor.setSelectionMode("preview");
+    ctx.setState({
+      type: "selecting",
+      selection: { startPos: localPoint, currentPos: localPoint },
+    });
+
+    return true;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "selecting") return false;
+    const localPoint = event.coords.glyphLocal;
+
+    ctx.setState({
+      type: "selecting",
+      selection: { ...state.selection, currentPos: localPoint },
+    });
+    return true;
+  }
+
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "selecting") return false;
+
+    const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
+    const pointIds = this.getPointsInRect(rect, ctx);
+    ctx.editor.clearSelection();
+    ctx.editor.selectPoints([...pointIds]);
+    ctx.setState(pointIds.size > 0 ? { type: "selected" } : { type: "ready" });
+    return true;
+  }
+
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "selecting") return false;
+    ctx.editor.clearSelection();
+    ctx.setState({ type: "ready" });
+    return true;
+  }
+
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+    const editor = ctx.editor;
     if (next.type === "selecting") {
       const rect = normalizeRect(next.selection.startPos, next.selection.currentPos);
       editor.setMarqueePreviewRect(rect);
@@ -45,77 +70,8 @@ export class MarqueeBehavior implements SelectBehavior {
     }
   }
 
-  private transitionSelecting(
-    state: SelectState & { type: "selecting" },
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> {
-    if (event.type === "drag") {
-      const localPoint = event.coords.glyphLocal;
-      return {
-        state: {
-          type: "selecting",
-          selection: { ...state.selection, currentPos: localPoint },
-        },
-      };
-    }
-
-    if (event.type === "dragEnd") {
-      const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
-      const pointIds = this.getPointsInRect(rect, editor);
-
-      if (pointIds.size > 0) {
-        return {
-          state: { type: "selected" },
-          action: { type: "selectPointsInRect", rect },
-        };
-      }
-      return {
-        state: { type: "ready" },
-        action: { type: "selectPointsInRect", rect },
-      };
-    }
-
-    if (event.type === "dragCancel") {
-      return {
-        state: { type: "ready" },
-        action: { type: "clearSelection" },
-      };
-    }
-
-    return { state };
-  }
-
-  private tryStartMarquee(
-    state: SelectState & { type: "ready" | "selected" },
-    event: ToolEvent & { type: "dragStart" },
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    const hit = editor.getNodeAt(event.coords);
-    if (hit !== null) return null;
-    const localPoint = event.coords.glyphLocal;
-
-    if (state.type === "selected") {
-      return {
-        state: {
-          type: "selecting",
-          selection: { startPos: localPoint, currentPos: localPoint },
-        },
-        action: { type: "clearAndStartMarquee" },
-      };
-    }
-
-    return {
-      state: {
-        type: "selecting",
-        selection: { startPos: localPoint, currentPos: localPoint },
-      },
-      action: { type: "setSelectionMode", mode: "preview" },
-    };
-  }
-
-  private getPointsInRect(rect: Rect2D, editor: EditorAPI): Set<PointId> {
-    const allPoints = editor.getAllPoints();
+  private getPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<PointId> {
+    const allPoints = ctx.editor.getAllPoints();
     const hitPoints = allPoints.filter((p) => pointInRect(p, rect));
     return new Set(hitPoints.map((p) => p.id));
   }

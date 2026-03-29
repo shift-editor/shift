@@ -119,7 +119,7 @@ result = Compose(screenTransform, upmTransform);
 
 #### Zoom-to-Cursor
 
-The `zoomToPoint(screenX, screenY, zoomDelta)` algorithm maintains the UPM coordinate under the cursor:
+The `zoomToPoint(screenPoint, zoomDelta)` algorithm maintains the UPM coordinate under the cursor:
 
 ```typescript
 1. Record UPM at cursor BEFORE zoom
@@ -169,7 +169,7 @@ type SelectionMode = "preview" | "committed";
 
 - `pan(dx, dy)` - Pan canvas
 - `zoomIn() / zoomOut()` - Zoom to canvas center (1.25x / 0.8x)
-- `zoomToPoint(screenX, screenY, zoomDelta)` - Zoom toward cursor position
+- `zoomToPoint(screenPoint, zoomDelta)` - Zoom toward cursor position
 - `projectScreenToUpm(x, y): Point2D` - Screen to UPM transform
 - `projectUpmToScreen(x, y): Point2D` - UPM to screen transform
 - `getUpmToScreenMatrix(): Mat` - Get transformation matrix

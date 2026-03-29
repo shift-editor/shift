@@ -53,7 +53,7 @@ The exposed API is organized into functional groups:
 | Session      | `startEditSession`, `endEditSession`, `hasEditSession`, `getEditingUnicode`                        |
 | Snapshots    | `getSnapshot`, `getSnapshotData`                                                                   |
 | Contours     | `addEmptyContour`, `addContour`, `getActiveContourId`, `closeContour`                              |
-| Points       | `addPoint`, `addPointToContour`, `movePoints`, `removePoints`, `insertPointBefore`, `toggleSmooth` |
+| Points       | `addPointToContour`, `movePoints`, `removePoints`, `insertPointBefore`, `toggleSmooth` |
 | Unified Edit | `applyEditsUnified`                                                                                |
 
 ## API Reference
@@ -89,7 +89,6 @@ The exposed API is organized into functional groups:
 
 ### Point Operations
 
-- `addPoint(x, y, pointType, smooth): string`
 - `addPointToContour(contourId, x, y, pointType, smooth): string`
 - `movePoints(pointIds, dx, dy): string`
 - `removePoints(pointIds): string`
@@ -110,8 +109,9 @@ const engine = window.shiftFont;
 
 engine.loadFont("/path/to/font.ufo");
 engine.startEditSession(65);
+const contourId = JSON.parse(engine.addContour()).snapshot.activeContourId;
 
-const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
+const result = JSON.parse(engine.addPointToContour(contourId, 100, 200, "onCurve", false));
 if (result.success) {
   console.log("Added point:", result.affectedPointIds[0]);
 }
@@ -147,15 +147,15 @@ if (hasNative()) {
 ## Data Flow
 
 ```
-Renderer calls window.shiftFont.addPoint(...)
+Renderer calls window.shiftFont.addPointToContour(...)
     ↓
 contextBridge forwards to preload
     ↓
-fontEngineAPI.addPoint(...) called
+fontEngineAPI.addPointToContour(...) called
     ↓
-fontEngineInstance.addPoint(...) (NAPI)
+fontEngineInstance.addPointToContour(...) (NAPI)
     ↓
-Rust FontEngine::add_point(...) executes
+Rust FontEngine::add_point_to_contour(...) executes
     ↓
 CommandResult serialized to JSON
     ↓

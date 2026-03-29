@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { Segment } from "./Segment";
+import { Segments } from "./Segments";
 import type {
   LineSegment,
   QuadSegment,
@@ -48,7 +48,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 100),
         },
       };
-      expect(Segment.id(segment)).toBe("p1:p2");
+      expect(Segments.id(segment)).toBe("p1:p2");
     });
 
     it("should create id for quad segment", () => {
@@ -60,7 +60,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      expect(Segment.id(segment)).toBe("p1:p2");
+      expect(Segments.id(segment)).toBe("p1:p2");
     });
 
     it("should create id for cubic segment", () => {
@@ -73,7 +73,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      expect(Segment.id(segment)).toBe("p1:p2");
+      expect(Segments.id(segment)).toBe("p1:p2");
     });
   });
 
@@ -86,7 +86,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 100),
         },
       };
-      const curve = Segment.toCurve(segment);
+      const curve = Segments.toCurve(segment);
       expect(curve.type).toBe("line");
       expect(curve.p0).toEqual({
         x: 0,
@@ -113,7 +113,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      const curve = Segment.toCurve(segment);
+      const curve = Segments.toCurve(segment);
       expect(curve.type).toBe("quadratic");
     });
 
@@ -127,7 +127,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      const curve = Segment.toCurve(segment);
+      const curve = Segments.toCurve(segment);
       expect(curve.type).toBe("cubic");
     });
   });
@@ -141,7 +141,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 80),
         },
       };
-      const bounds = Segment.bounds(segment);
+      const bounds = Segments.bounds(segment);
       expect(bounds.min.x).toBe(10);
       expect(bounds.min.y).toBe(20);
       expect(bounds.max.x).toBe(100);
@@ -158,7 +158,7 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      const bounds = Segment.bounds(segment);
+      const bounds = Segments.bounds(segment);
       expect(bounds.min.x).toBeLessThanOrEqual(0);
       expect(bounds.min.y).toBeLessThanOrEqual(0);
       expect(bounds.max.x).toBeGreaterThanOrEqual(100);
@@ -176,15 +176,15 @@ describe("Segment", () => {
         },
       };
 
-      const hitOnLine = Segment.hitTest(segment, { x: 50, y: 0 }, 5);
+      const hitOnLine = Segments.hitTest(segment, { x: 50, y: 0 }, 5);
       expect(hitOnLine).not.toBeNull();
       expect(hitOnLine!.distance).toBeLessThan(5);
       expect(hitOnLine!.segmentId).toBe("p1:p2");
 
-      const hitNearLine = Segment.hitTest(segment, { x: 50, y: 3 }, 5);
+      const hitNearLine = Segments.hitTest(segment, { x: 50, y: 3 }, 5);
       expect(hitNearLine).not.toBeNull();
 
-      const missLine = Segment.hitTest(segment, { x: 50, y: 10 }, 5);
+      const missLine = Segments.hitTest(segment, { x: 50, y: 10 }, 5);
       expect(missLine).toBeNull();
     });
 
@@ -197,7 +197,7 @@ describe("Segment", () => {
         },
       };
 
-      const hit = Segment.hitTest(segment, { x: 50, y: 2 }, 5);
+      const hit = Segments.hitTest(segment, { x: 50, y: 2 }, 5);
       expect(hit).not.toBeNull();
       expect(hit!.point.x).toBeCloseTo(50, 1);
       expect(hit!.point.y).toBeCloseTo(0, 1);
@@ -215,10 +215,10 @@ describe("Segment", () => {
         },
       };
 
-      const hitNearStart = Segment.hitTest(segment, { x: 0, y: 0 }, 5);
+      const hitNearStart = Segments.hitTest(segment, { x: 0, y: 0 }, 5);
       expect(hitNearStart).not.toBeNull();
 
-      const missSegment = Segment.hitTest(segment, { x: 50, y: 100 }, 5);
+      const missSegment = Segments.hitTest(segment, { x: 50, y: 100 }, 5);
       expect(missSegment).toBeNull();
     });
 
@@ -231,7 +231,7 @@ describe("Segment", () => {
         },
       };
 
-      const farAway = Segment.hitTest(segment, { x: 500, y: 500 }, 5);
+      const farAway = Segments.hitTest(segment, { x: 500, y: 500 }, 5);
       expect(farAway).toBeNull();
     });
   });
@@ -255,7 +255,7 @@ describe("Segment", () => {
         },
       ];
 
-      const hit = Segment.hitTestMultiple(segments, { x: 50, y: 1 }, 10);
+      const hit = Segments.hitTestMultiple(segments, { x: 50, y: 1 }, 10);
       expect(hit).not.toBeNull();
       expect(hit!.segmentId).toBe("p1:p2");
     });
@@ -271,25 +271,25 @@ describe("Segment", () => {
         },
       ];
 
-      const hit = Segment.hitTestMultiple(segments, { x: 50, y: 100 }, 5);
+      const hit = Segments.hitTestMultiple(segments, { x: 50, y: 100 }, 5);
       expect(hit).toBeNull();
     });
 
     it("should return null for empty segments array", () => {
-      const hit = Segment.hitTestMultiple([], { x: 50, y: 0 }, 5);
+      const hit = Segments.hitTestMultiple([], { x: 50, y: 0 }, 5);
       expect(hit).toBeNull();
     });
   });
 
   describe("parse", () => {
     it("should return empty array for fewer than 2 points", () => {
-      expect(Segment.parse([], false)).toEqual([]);
-      expect(Segment.parse([makeSegmentPoint("p1", 0, 0)], false)).toEqual([]);
+      expect(Segments.parse([], false)).toEqual([]);
+      expect(Segments.parse([makeSegmentPoint("p1", 0, 0)], false)).toEqual([]);
     });
 
     it("should parse two onCurve points as a line", () => {
       const points = [makeSegmentPoint("p1", 0, 0), makeSegmentPoint("p2", 100, 100)];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
       expect(segments).toHaveLength(1);
       expect(expectAt(segments, 0).type).toBe("line");
     });
@@ -300,7 +300,7 @@ describe("Segment", () => {
         makeSegmentPoint("c1", 50, 100, "offCurve"),
         makeSegmentPoint("p2", 100, 0),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
       expect(segments).toHaveLength(1);
       expect(expectAt(segments, 0).type).toBe("quad");
     });
@@ -312,7 +312,7 @@ describe("Segment", () => {
         makeSegmentPoint("c2", 75, 100, "offCurve"),
         makeSegmentPoint("p2", 100, 0),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
       expect(segments).toHaveLength(1);
       expect(expectAt(segments, 0).type).toBe("cubic");
     });
@@ -334,7 +334,7 @@ describe("Segment", () => {
         makeSegmentPoint("c8", 524, 895, "offCurve"),
       ];
 
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments.length).toBe(5);
 
@@ -370,7 +370,7 @@ describe("Segment", () => {
         makeSegmentPoint("c1", 50, 50, "offCurve"),
       ];
 
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(2);
       expectLineSegment(expectAt(segments, 0));
@@ -387,7 +387,7 @@ describe("Segment", () => {
         makeSegmentPoint("p3", 50, 50),
       ];
 
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(3);
       expectLineSegment(expectAt(segments, 0));
@@ -405,7 +405,7 @@ describe("Segment", () => {
         makeSegmentPoint("c2", 150, 100, "offCurve"),
         makeSegmentPoint("p3", 100, 150),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
 
       expect(segments).toHaveLength(2);
       expect(expectAt(segments, 0).type).toBe("line");
@@ -419,7 +419,7 @@ describe("Segment", () => {
         makeSegmentPoint("p3", 100, 100),
         makeSegmentPoint("p4", 0, 100),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
 
       expect(segments).toHaveLength(3);
       expect(segments.every((s) => s.type === "line")).toBe(true);
@@ -432,7 +432,7 @@ describe("Segment", () => {
         makeSegmentPoint("c1", 150, 50, "offCurve"),
         makeSegmentPoint("c2", 150, 100, "offCurve"),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
 
       expect(segments).toHaveLength(1);
       expect(expectAt(segments, 0).type).toBe("line");
@@ -447,7 +447,7 @@ describe("Segment", () => {
         makeSegmentPoint("c2", 250, 50, "offCurve"),
         makeSegmentPoint("p4", 300, 0),
       ];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
 
       expect(segments).toHaveLength(3);
       expect(expectAt(segments, 0).type).toBe("quad");
@@ -461,7 +461,7 @@ describe("Segment", () => {
         makeSegmentPoint("p2", 100, 0),
         makeSegmentPoint("p3", 50, 87),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(3);
       expect(segments.every((s) => s.type === "line")).toBe(true);
@@ -483,7 +483,7 @@ describe("Segment", () => {
         makeSegmentPoint("p3", 100, 50),
         makeSegmentPoint("p4", 0, 50),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(4);
       expect(segments.every((s) => s.type === "line")).toBe(true);
@@ -504,7 +504,7 @@ describe("Segment", () => {
         makeSegmentPoint("c7", 0, 22, "offCurve"),
         makeSegmentPoint("c8", 22, 0, "offCurve"),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(4);
       expect(segments.every((s) => s.type === "cubic")).toBe(true);
@@ -523,7 +523,7 @@ describe("Segment", () => {
         makeSegmentPoint("p2", 100, 0),
         makeSegmentPoint("p3", 50, -20),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(3);
       expect(expectAt(segments, 0).type).toBe("cubic");
@@ -533,7 +533,7 @@ describe("Segment", () => {
 
     it("should parse two points as single line for open contour", () => {
       const points = [makeSegmentPoint("p1", 0, 0), makeSegmentPoint("p2", 100, 100)];
-      const segments = Segment.parse(points, false);
+      const segments = Segments.parse(points, false);
 
       expect(segments).toHaveLength(1);
       expect(expectAt(segments, 0).type).toBe("line");
@@ -541,7 +541,7 @@ describe("Segment", () => {
 
     it("should parse two points as single line segment for closed contour", () => {
       const points = [makeSegmentPoint("p1", 0, 0), makeSegmentPoint("p2", 100, 100)];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(2);
       expectLineSegment(expectAt(segments, 0));
@@ -556,7 +556,7 @@ describe("Segment", () => {
         makeSegmentPoint("c1", 50, 100, "offCurve"),
         makeSegmentPoint("p2", 100, 0),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(2);
       expect(expectAt(segments, 0).type).toBe("quad");
@@ -570,7 +570,7 @@ describe("Segment", () => {
         makeSegmentPoint("c2", 75, 100, "offCurve"),
         makeSegmentPoint("p2", 100, 0),
       ];
-      const segments = Segment.parse(points, true);
+      const segments = Segments.parse(points, true);
 
       expect(segments).toHaveLength(2);
       expect(expectAt(segments, 0).type).toBe("cubic");
@@ -596,7 +596,7 @@ describe("Segment", () => {
           closed: false,
         },
       ];
-      const result = [...Segment.iterateGlyph(contours)];
+      const result = [...Segments.iterateGlyph(contours)];
 
       expect(result).toHaveLength(3);
       expect(expectAt(result, 0).contourId).toBe("c1");
@@ -608,7 +608,7 @@ describe("Segment", () => {
     });
 
     it("yields nothing for empty contours array", () => {
-      const result = [...Segment.iterateGlyph([])];
+      const result = [...Segments.iterateGlyph([])];
       expect(result).toHaveLength(0);
     });
 
@@ -616,7 +616,7 @@ describe("Segment", () => {
       const contours = [
         { id: asContourId("c1"), points: [makeSegmentPoint("p1", 0, 0)], closed: false },
       ];
-      const result = [...Segment.iterateGlyph(contours)];
+      const result = [...Segments.iterateGlyph(contours)];
       expect(result).toHaveLength(0);
     });
 
@@ -632,7 +632,7 @@ describe("Segment", () => {
           closed: true,
         },
       ];
-      const result = [...Segment.iterateGlyph(contours)];
+      const result = [...Segments.iterateGlyph(contours)];
 
       expect(result).toHaveLength(3);
       expect(result.every((r) => r.contourId === "c1")).toBe(true);
@@ -649,9 +649,9 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      expect(Segment.isLine(segment)).toBe(true);
-      expect(Segment.isQuad(segment)).toBe(false);
-      expect(Segment.isCubic(segment)).toBe(false);
+      expect(Segments.isLine(segment)).toBe(true);
+      expect(Segments.isQuad(segment)).toBe(false);
+      expect(Segments.isCubic(segment)).toBe(false);
     });
 
     it("should identify quad segments", () => {
@@ -663,9 +663,9 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      expect(Segment.isLine(segment)).toBe(false);
-      expect(Segment.isQuad(segment)).toBe(true);
-      expect(Segment.isCubic(segment)).toBe(false);
+      expect(Segments.isLine(segment)).toBe(false);
+      expect(Segments.isQuad(segment)).toBe(true);
+      expect(Segments.isCubic(segment)).toBe(false);
     });
 
     it("should identify cubic segments", () => {
@@ -678,9 +678,9 @@ describe("Segment", () => {
           anchor2: makeSegmentPoint("p2", 100, 0),
         },
       };
-      expect(Segment.isLine(segment)).toBe(false);
-      expect(Segment.isQuad(segment)).toBe(false);
-      expect(Segment.isCubic(segment)).toBe(true);
+      expect(Segments.isLine(segment)).toBe(false);
+      expect(Segments.isQuad(segment)).toBe(false);
+      expect(Segments.isCubic(segment)).toBe(true);
     });
   });
 });

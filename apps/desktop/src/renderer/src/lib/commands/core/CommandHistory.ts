@@ -123,6 +123,22 @@ export class CommandHistory {
     this.#batch = null;
   }
 
+  /**
+   * Execute `fn` inside a named batch and close it automatically.
+   * If `fn` throws, the batch is cancelled and the error is rethrown.
+   */
+  withBatch<TResult>(name: string, fn: () => TResult): TResult {
+    this.beginBatch(name);
+    try {
+      const result = fn();
+      this.endBatch();
+      return result;
+    } catch (err) {
+      this.cancelBatch();
+      throw err;
+    }
+  }
+
   #addToUndoStack(command: Command<unknown>): void {
     this.#undoStack.push(command);
 

@@ -2,16 +2,15 @@ import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import type { Point2D } from "@shift/types";
 import { BaseTool, type ToolName, defineStateDiagram, DrawAPI, ToolEvent } from "../core";
-import { executeAction, type PenAction } from "./actions";
-import type { PenState, PenBehavior } from "./types";
-import { PlaceBehavior, HandleBehavior, EscapeBehavior } from "./behaviors";
+import type { PenState } from "./types";
+import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
 import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 import type { CursorType } from "@/types/editor";
 import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
 
 export type { PenState };
 
-export class Pen extends BaseTool<PenState, PenAction> {
+export class Pen extends BaseTool<PenState> {
   static stateSpec = defineStateDiagram<PenState["type"]>({
     states: ["idle", "ready", "anchored", "dragging"],
     initial: "idle",
@@ -27,11 +26,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
 
   readonly id: ToolName = "pen";
 
-  readonly behaviors: PenBehavior[] = [
-    new EscapeBehavior(),
-    new PlaceBehavior(),
-    new HandleBehavior(),
-  ];
+  readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
 
   override getCursor(state: PenState): CursorType {
     if (state.type !== "ready") return { type: "pen" };
@@ -45,7 +40,7 @@ export class Pen extends BaseTool<PenState, PenAction> {
       return { type: "pen" };
     }
 
-    const hit = this.editor.getNodeAt(this.editor.fromGlyphLocal(pos.x, pos.y));
+    const hit = this.editor.getNodeAt(this.editor.fromGlyphLocal(pos));
     if (isContourEndpointHit(hit) && !hit.contour.closed) return { type: "pen-end" };
     if (isMiddlePointHit(hit)) return { type: "pen-end" };
     if (isSegmentHit(hit)) return { type: "pen-add" };
@@ -74,55 +69,6 @@ export class Pen extends BaseTool<PenState, PenAction> {
       };
     }
     return null;
-  }
-
-  protected override executeAction(action: PenAction, prev: PenState): void {
-    switch (action.type) {
-      case "close":
-        this.batch("Close Contour", () => {
-          executeAction(action, this.editor);
-        });
-        break;
-
-      case "continue":
-        this.batch("Continue Contour", () => {
-          executeAction(action, this.editor);
-        });
-        break;
-
-      case "splitPoint":
-        this.batch("Split Contour", () => {
-          executeAction(action, this.editor);
-        });
-        break;
-
-      case "splitSegment":
-        this.batch("Split Segment", () => {
-          executeAction(action, this.editor);
-        });
-        break;
-
-      case "placePoint":
-        if (prev.type === "ready") {
-          this.batch("Add Point", () => {
-            const pointId = executeAction(action, this.editor);
-            if (this.state.type === "anchored") {
-              (this.state as any).anchor.pointId = pointId;
-            }
-          });
-        }
-        break;
-
-      case "abandonContour":
-        this.batch("Abandon Contour", () => {
-          executeAction(action, this.editor);
-        });
-        break;
-
-      case "updateHover":
-        executeAction(action, this.editor);
-        break;
-    }
   }
 
   private shouldCloseContour(x: number, y: number): boolean {

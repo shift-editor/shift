@@ -1,27 +1,23 @@
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
+import { createBehavior, type ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ShapeState } from "../types";
-import { createBehavior } from "../../core/Behavior";
 
 export const ShapeDraggingBehavior = createBehavior<ShapeState>({
-  canHandle(state: ShapeState, event: ToolEvent): boolean {
-    return (
-      state.type === "dragging" &&
-      (event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel")
-    );
+  onDrag(state: ShapeState, ctx: ToolContext<ShapeState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "dragging") return false;
+    ctx.setState({ ...state, currentPos: event.point });
+    return true;
   },
 
-  transition(state: ShapeState, event: ToolEvent, _editor: EditorAPI) {
-    if (state.type !== "dragging") return null;
+  onDragEnd(state: ShapeState, ctx: ToolContext<ShapeState>): boolean {
+    if (state.type !== "dragging") return false;
+    ctx.setState({ type: "ready" });
+    return true;
+  },
 
-    if (event.type === "drag") {
-      return { state: { ...state, currentPos: event.point } };
-    }
-
-    if (event.type === "dragEnd" || event.type === "dragCancel") {
-      return { state: { type: "ready" as const } };
-    }
-
-    return null;
+  onDragCancel(state: ShapeState, ctx: ToolContext<ShapeState>): boolean {
+    if (state.type !== "dragging") return false;
+    ctx.setState({ type: "ready" });
+    return true;
   },
 });

@@ -65,17 +65,17 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const toolManager = editor.toolManager;
 
     const handleWheel = (e: WheelEvent) => {
-      editor.updateMousePosition(e.clientX, e.clientY);
+      editor.updateMousePosition({ x: e.clientX, y: e.clientY });
       const screenPos = editor.getScreenMousePosition();
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
-        editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
+        editor.zoomToPoint(screenPos, zoomFactor);
         editor.requestRedraw();
       } else {
         const currentPan = editor.pan;
         const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
-        editor.setPan(newPan.x, newPan.y);
+        editor.setPan(newPan);
 
         toolManager.handlePointerMove(
           screenPos,
@@ -100,7 +100,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       className="relative z-20 h-full w-full overflow-hidden"
       style={{ cursor: cursorStyle }}
       onMouseMove={(e) => {
-        editor.updateMousePosition(e.clientX, e.clientY);
+        editor.updateMousePosition({ x: e.clientX, y: e.clientY });
       }}
     >
       <CanvasContextProvider>

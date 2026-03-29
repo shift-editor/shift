@@ -18,6 +18,21 @@ import {
 import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { PointId } from "@shift/types";
 
+function addPointToActiveContour(
+  fontEngine: ReturnType<typeof createMockFontEngine>,
+  edit: {
+    id?: PointId;
+    x: number;
+    y: number;
+    pointType: "onCurve" | "offCurve";
+    smooth: boolean;
+  },
+): PointId {
+  const contourId = fontEngine.editing.getActiveContourId();
+  if (!contourId) throw new Error("No active contour");
+  return fontEngine.editing.addPointToContour(contourId, edit);
+}
+
 describe("CommandHistory", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
   let history: CommandHistory;
@@ -255,10 +270,39 @@ describe("batching", () => {
     });
   });
 
+  describe("withBatch", () => {
+    it("should return callback result and group commands into one undo step", () => {
+      const pointId = history.withBatch("Add Points", () => {
+        history.execute(new AddPointCommand(100, 100, "onCurve"));
+        return history.execute(new AddPointCommand(200, 200, "onCurve"));
+      });
+
+      expect(pointId).toBeDefined();
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+      expect(history.undoCount.value).toBe(1);
+
+      history.undo();
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    });
+
+    it("should cancel batch and rethrow when callback throws", () => {
+      expect(() =>
+        history.withBatch("Failing Batch", () => {
+          history.execute(new AddPointCommand(100, 100, "onCurve"));
+          throw new Error("boom");
+        }),
+      ).toThrow("boom");
+
+      expect(history.isBatching).toBe(false);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(history.undoCount.value).toBe(0);
+    });
+  });
+
   describe("record", () => {
     it("should add command to undo stack without executing", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
@@ -284,7 +328,7 @@ describe("batching", () => {
     });
 
     it("should work within a batch", () => {
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
@@ -341,7 +385,7 @@ describe("onDirty callback", () => {
   });
 
   it("should call onDirty when command is recorded", () => {
-    const pointId = fontEngine.editing.addPoint({
+    const pointId = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
@@ -398,7 +442,7 @@ describe("Command integration with history", () => {
   describe("MovePointsCommand", () => {
     it("should move points and undo returns them to original position", () => {
       // Add a point first
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -425,7 +469,7 @@ describe("Command integration with history", () => {
 
   describe("NudgePointsCommand", () => {
     it("should nudge points and undo returns them to original position", () => {
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -445,7 +489,7 @@ describe("Command integration with history", () => {
 
   describe("RemovePointsCommand", () => {
     it("should remove points and undo restores them", () => {
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -469,7 +513,7 @@ describe("Command integration with history", () => {
   describe("Complex undo/redo sequences", () => {
     it("should handle move undo/redo on existing points", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -516,7 +560,7 @@ describe("Command integration with history", () => {
 
     it("should restore point at removed position when undoing remove", () => {
       // Add and move a point
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -539,14 +583,14 @@ describe("Command integration with history", () => {
     });
 
     it("should handle multiple points with single command", () => {
-      const p1 = fontEngine.editing.addPoint({
+      const p1 = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
         pointType: "onCurve",
         smooth: false,
       });
-      const p2 = fontEngine.editing.addPoint({
+      const p2 = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 200,
         y: 200,

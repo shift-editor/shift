@@ -10,7 +10,7 @@ export const InteractiveScene = () => {
 
   const getScreenPoint = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      editor.updateMousePosition(e.clientX, e.clientY);
+      editor.updateMousePosition({ x: e.clientX, y: e.clientY });
       const bounds = interactiveCanvasRef.current?.getBoundingClientRect();
       if (bounds) {
         return {
@@ -26,8 +26,7 @@ export const InteractiveScene = () => {
   const getModifiers = (e: React.MouseEvent<HTMLCanvasElement>) => ({
     shiftKey: e.shiftKey,
     altKey: e.altKey,
-    metaKey: e.metaKey,
-    ctrlKey: e.ctrlKey,
+    metaKey: e.metaKey || e.ctrlKey,
   });
 
   const getCanvasBounds = useCallback(() => {

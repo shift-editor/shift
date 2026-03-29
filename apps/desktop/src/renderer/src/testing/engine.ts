@@ -9,7 +9,7 @@ import { vi } from "vitest";
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asPointId, asContourId } from "@shift/types";
 import { FontEngine, MockFontEngine } from "@/engine";
-import type { CommandEditingAPI } from "@/lib/commands/core/Command";
+import type { CommandEditingAPI } from "@/engine/editing";
 
 /**
  * Create a mock FontEngine for testing.
@@ -27,7 +27,7 @@ export function createMockFontEngine(): FontEngine {
  * Create mock editing operations for testing commands.
  *
  * Returns vi.fn() mocks for each editing method with sensible defaults:
- * - `addPoint`, `addPointToContour`, `insertPointBefore` return auto-incrementing point IDs
+ * - `addPointToContour`, `insertPointBefore` return auto-incrementing point IDs
  * - `addContour` returns auto-incrementing contour IDs
  * - `getActiveContourId` returns "contour-0"
  * - Other methods are simple mocks
@@ -51,11 +51,12 @@ export function createMockEditing(): CommandEditingAPI {
   let contourIdCounter = 0;
 
   return {
-    addPoint: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     addPointToContour: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     insertPointBefore: vi.fn().mockImplementation(() => asPointId(`point-${++pointIdCounter}`)),
     movePoints: vi.fn().mockReturnValue([]),
     movePointTo: vi.fn(),
+    toggleSmooth: vi.fn(),
+    setNodePositions: vi.fn(),
     setXAdvance: vi.fn(),
     translateLayer: vi.fn(),
     removePoints: vi.fn(),

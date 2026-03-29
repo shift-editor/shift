@@ -68,6 +68,7 @@ export class ToolEventSimulator {
       screenPoint: event.screen,
       shiftKey: event.shiftKey,
       altKey: event.altKey,
+      metaKey: event.metaKey || event.ctrlKey,
     });
   }
 
@@ -91,6 +92,7 @@ export class ToolEventSimulator {
         },
         shiftKey: event.shiftKey,
         altKey: event.altKey,
+        metaKey: event.metaKey || event.ctrlKey,
       });
     } else {
       this.tool.handleEvent({
@@ -118,7 +120,11 @@ export class ToolEventSimulator {
     this.downScreenPoint = null;
   }
 
-  click(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): void {
+  click(
+    x: number,
+    y: number,
+    options?: { shiftKey?: boolean; altKey?: boolean; metaKey?: boolean },
+  ): void {
     const point = { x, y };
     const coords = makeTestCoordinates(point);
     this.tool.handleEvent({
@@ -127,6 +133,7 @@ export class ToolEventSimulator {
       coords,
       shiftKey: options?.shiftKey ?? false,
       altKey: options?.altKey ?? false,
+      metaKey: options?.metaKey ?? false,
     });
   }
 

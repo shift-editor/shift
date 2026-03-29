@@ -26,7 +26,14 @@ export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "Arrow
  */
 export type ToolEvent =
   | { type: "pointerMove"; point: Point2D; coords: Coordinates }
-  | { type: "click"; point: Point2D; coords: Coordinates; shiftKey: boolean; altKey: boolean }
+  | {
+      type: "click";
+      point: Point2D;
+      coords: Coordinates;
+      shiftKey: boolean;
+      altKey: boolean;
+      metaKey: boolean;
+    }
   | { type: "doubleClick"; point: Point2D; coords: Coordinates }
   | {
       type: "dragStart";
@@ -35,6 +42,7 @@ export type ToolEvent =
       screenPoint: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey: boolean;
     }
   | {
       type: "drag";
@@ -47,6 +55,7 @@ export type ToolEvent =
       screenDelta: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey: boolean;
     }
   | {
       type: "dragEnd";
@@ -64,8 +73,9 @@ export type ToolEvent =
       altKey: boolean;
       metaKey: boolean;
     }
-  | { type: "keyUp"; key: ToolKey | (string & {}) }
-  | { type: "selectionChanged" };
+  | { type: "keyUp"; key: ToolKey | (string & {}) };
+
+export type ToolEventOf<T extends ToolEvent["type"]> = Extract<ToolEvent, { type: T }>;
 
 /**
  * Modifier key state captured at the moment of a pointer or key event.
@@ -75,7 +85,7 @@ export type ToolEvent =
 export interface Modifiers {
   shiftKey: boolean;
   altKey: boolean;
-  metaKey?: boolean;
+  metaKey: boolean;
 }
 
 /**
@@ -161,6 +171,7 @@ export class GestureDetector {
           screenPoint: this.downScreenPoint,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
+          metaKey: this.downModifiers.metaKey,
         },
       ];
     }
@@ -184,6 +195,7 @@ export class GestureDetector {
           },
           shiftKey: modifiers.shiftKey,
           altKey: modifiers.altKey,
+          metaKey: modifiers.metaKey,
         },
       ];
     }
@@ -232,6 +244,7 @@ export class GestureDetector {
           coords,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
+          metaKey: this.downModifiers.metaKey,
         });
         this.lastClickTime = now;
         this.lastClickPoint = point;

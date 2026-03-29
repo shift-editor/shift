@@ -299,19 +299,6 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, []);
   }
 
-  addPoint(x: number, y: number, pointType: PointType, smooth: boolean): string {
-    if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
-
-    if (!this.#snapshot.activeContourId) this.#addEmptyContour();
-
-    const activeContour = this.#findContour(this.#snapshot.activeContourId ?? "");
-    if (!activeContour) return this.#makeResult(false, [], "No active contour");
-
-    const pointId = this.#generateId() as PointId;
-    activeContour.points.push({ id: pointId, x, y, pointType, smooth });
-    return this.#makeResult(true, [pointId]);
-  }
-
   addPointToContour(
     contourId: string,
     x: number,

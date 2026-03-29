@@ -54,7 +54,8 @@ Provides mutable access to a single glyph during editing:
 ```rust
 let glyph = font.take_glyph(unicode);        // Extract glyph
 let mut session = EditSession::new(glyph);   // Create session
-session.add_point(100.0, 200.0, OnCurve, false);
+let contour_id = session.add_empty_contour();
+session.add_point_to_contour(contour_id, 100.0, 200.0, OnCurve, false);
 let glyph = session.into_glyph();            // Consume session
 font.put_glyph(glyph);                       // Return glyph
 ```
@@ -125,8 +126,8 @@ let mut session = EditSession::new(glyph);
 
 // Add points
 let contour_id = session.add_empty_contour();
-let p1 = session.add_point(0.0, 0.0, OnCurve, false);
-let p2 = session.add_point(100.0, 200.0, OnCurve, true);
+let p1 = session.add_point_to_contour(contour_id, 0.0, 0.0, OnCurve, false);
+let p2 = session.add_point_to_contour(contour_id, 100.0, 200.0, OnCurve, true);
 
 // Move with rule application
 let result = apply_edits(&mut session, &selected_ids, dx, dy);

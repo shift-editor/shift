@@ -1,6 +1,6 @@
 import { BaseTool, type ToolName, defineStateDiagram } from "../core";
 import type { CursorType } from "@/types/editor";
-import type { HandState, HandBehavior } from "./types";
+import type { HandState } from "./types";
 import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
 
 export class Hand extends BaseTool<HandState> {
@@ -17,7 +17,7 @@ export class Hand extends BaseTool<HandState> {
 
   readonly id: ToolName = "hand";
 
-  readonly behaviors: HandBehavior[] = [HandReadyBehavior, HandDraggingBehavior];
+  readonly behaviors = [HandReadyBehavior, HandDraggingBehavior];
 
   override getCursor(state: HandState): CursorType {
     if (state.type === "dragging") return { type: "grabbing" };

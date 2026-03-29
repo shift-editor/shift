@@ -10,34 +10,9 @@
  * - Clear separation between UI interaction and data mutation
  */
 
-import type { EditingManager } from "@/engine/editing";
+import type { CommandEditingAPI } from "@/engine/editing";
 import type { Signal } from "@/lib/reactive/signal";
 import type { GlyphSnapshot } from "@shift/types";
-
-type CommandEditingMethods =
-  | "addPoint"
-  | "addPointToContour"
-  | "insertPointBefore"
-  | "movePoints"
-  | "movePointTo"
-  | "removePoints"
-  | "addContour"
-  | "removeContour"
-  | "closeContour"
-  | "openContour"
-  | "getActiveContourId"
-  | "setActiveContour"
-  | "reverseContour"
-  | "setXAdvance"
-  | "translateLayer"
-  | "restoreSnapshot"
-  | "pasteContours";
-
-/**
- * Minimal editing surface required by command execution.
- * Derived from the production EditingManager type.
- */
-export type CommandEditingAPI = Pick<EditingManager, CommandEditingMethods>;
 
 export interface CommandFontEngine {
   readonly editing: CommandEditingAPI;

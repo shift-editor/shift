@@ -3,13 +3,13 @@ import type { EditorAPI } from "./EditorAPI";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
-import type { BaseTool, ToolState } from "./BaseTool";
+import type { BaseTool } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
 import type { ToolManifest } from "./ToolManifest";
 import type { ToolRenderContext, ToolRenderLayer } from "./ToolRenderContributor";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ToolInstance = BaseTool<ToolState, any>;
+type ToolInstance = BaseTool<any>;
 const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = [
   "static-scene-before-handles",
   "static-screen-after-handles",
@@ -51,6 +51,7 @@ export class ToolManager implements ToolSwitchHandler {
     return this.gesture.isDragging;
   }
 
+<<<<<<< Updated upstream
   register(manifest: ToolManifest): void {
     if (typeof manifest.id !== "string" || manifest.id.trim() === "") {
       throw new Error("[ToolManager] Tool id must be a non-empty string");
@@ -59,6 +60,14 @@ export class ToolManager implements ToolSwitchHandler {
       throw new Error(`[ToolManager] Tool already registered: ${manifest.id}`);
     }
     this.registry.set(manifest.id, manifest);
+=======
+  handleEvent(event: ToolEvent): void {
+    this.activeTool?.handleEvent(event);
+  }
+
+  register(id: ToolName, ToolClass: ToolConstructor): void {
+    this.registry.set(id, ToolClass);
+>>>>>>> Stashed changes
   }
 
   activate(id: ToolName): void {
@@ -111,7 +120,7 @@ export class ToolManager implements ToolSwitchHandler {
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
     this.editor.setCurrentModifiers?.(modifiers);
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     this.gesture.pointerDown(coords, screenPoint, modifiers);
   }
 
@@ -150,7 +159,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.editor.setCurrentModifiers?.(modifiers);
 
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
     this.dispatchEvents(events);
 
@@ -164,7 +173,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerUp(screenPoint: Point2D): void {
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     const events = this.gesture.pointerUp(coords, screenPoint);
     this.dispatchEvents(events);
   }
@@ -173,11 +182,12 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey,
+      metaKey: e.metaKey || e.ctrlKey,
     });
 
     if (e.key === "Escape" && this.gesture.isDragging) {
       this.gesture.reset();
+<<<<<<< Updated upstream
       this.activeTool?.handleEvent({ type: "dragCancel" });
       return true;
     }
@@ -188,24 +198,45 @@ export class ToolManager implements ToolSwitchHandler {
         key: e.key,
         shiftKey: e.shiftKey,
         altKey: e.altKey,
-        metaKey: e.metaKey,
+        metaKey: e.metaKey || e.ctrlKey,
       }) ?? false
     );
+=======
+      this.handleEvent({ type: "dragCancel" });
+      return;
+    }
+
+    this.handleEvent({
+      type: "keyDown",
+      key: e.key,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    });
+>>>>>>> Stashed changes
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey,
+      metaKey: e.metaKey || e.ctrlKey,
     });
 
+<<<<<<< Updated upstream
     return (
       this.activeTool?.handleEvent({
         type: "keyUp",
         key: e.key,
       }) ?? false
     );
+=======
+    if (this.primaryTool?.handleModifier(e.code, false)) {
+      return;
+    }
+
+    this.handleEvent({ type: "keyUp", key: e.key });
+>>>>>>> Stashed changes
   }
 
   render(draw: DrawAPI): void {
@@ -231,7 +262,7 @@ export class ToolManager implements ToolSwitchHandler {
 
   private dispatchEvents(events: ToolEvent[]): void {
     for (const event of events) {
-      this.activeTool?.handleEvent(event);
+      this.handleEvent(event);
     }
   }
 
@@ -254,10 +285,13 @@ export class ToolManager implements ToolSwitchHandler {
     }
   }
 
+<<<<<<< Updated upstream
+=======
   notifySelectionChanged(): void {
-    this.activeTool?.handleEvent({ type: "selectionChanged" });
+    this.handleEvent({ type: "selectionChanged" });
   }
 
+>>>>>>> Stashed changes
   private createToolInstance(id: ToolName): ToolInstance | null {
     const manifest = this.registry.get(id);
     if (!manifest) return null;

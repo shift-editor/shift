@@ -7,7 +7,7 @@ import {
   SplitSegmentCommand,
 } from "./BezierCommands";
 import { asContourId, asPointId } from "@shift/types";
-import type { GlyphSnapshot, PointId } from "@shift/types";
+import type { GlyphSnapshot } from "@shift/types";
 import { createMockCommandContext } from "@/testing";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
 
@@ -46,7 +46,7 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Should add 3 points
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledTimes(3);
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledTimes(3);
   });
 
   it("should add anchor as smooth onCurve point", () => {
@@ -56,8 +56,7 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // First call is anchor
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(1, {
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenNthCalledWith(1, "contour-0", {
       x: 100,
       y: 100,
       pointType: "onCurve",
@@ -72,8 +71,7 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Second call is leading control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(2, {
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenNthCalledWith(2, "contour-0", {
       x: 150,
       y: 120,
       pointType: "offCurve",
@@ -90,8 +88,7 @@ describe("AddBezierAnchorCommand", () => {
     cmd.execute(ctx);
 
     // Third call is trailing control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(3, {
-      id: "" as PointId,
+    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenNthCalledWith(3, "contour-0", {
       x: 50, // 2 * 100 - 150
       y: 80, // 2 * 100 - 120
       pointType: "offCurve",

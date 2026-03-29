@@ -4,7 +4,7 @@ import { renderSegmentHighlights } from "./segments";
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph, Contour } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import { Segment } from "@/lib/geo/Segment";
+import { Segments } from "@/lib/geo/Segments";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE, resolveDrawStyle } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 import { asContourId, asPointId } from "@shift/types";
@@ -81,8 +81,8 @@ function createTriangleGlyph(): Glyph {
 }
 
 function getSegmentIds(contour: Contour): SegmentId[] {
-  const segments = Segment.parse(contour.points, contour.closed);
-  return segments.map((s) => Segment.id(s));
+  const segments = Segments.parse(contour.points, contour.closed);
+  return segments.map((s) => Segments.id(s));
 }
 
 describe("segments", () => {

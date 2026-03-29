@@ -61,7 +61,85 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
     }));
 
     const keyDownHandler = (e: KeyboardEvent) => {
+<<<<<<< Updated upstream
       keyboardRouter.handleKeyDown(e);
+=======
+      const canvasActive = activeZone === "canvas" || focusLock || toolManager.isDragging;
+
+      if ((e.key === "=" || e.key === "+") && e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        editor.zoomIn();
+        editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "-" && e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        editor.zoomOut();
+        editor.requestRedraw();
+        return;
+      }
+
+      if (e.key === "c" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.copy();
+        return;
+      }
+
+      if (e.key === "x" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.cut();
+        return;
+      }
+
+      if (e.key === "v" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        editor.paste();
+        return;
+      }
+
+      if (e.key === "z" && e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        editor.undo();
+        return;
+      }
+
+      if (e.key === "z" && e.metaKey && e.shiftKey) {
+        e.preventDefault();
+        editor.redo();
+        return;
+      }
+
+      if (!canvasActive) return;
+
+      if (editor.isTextEditing()) {
+        toolManager.handleKeyDown(e);
+        return;
+      }
+
+      for (const { toolId, shortcut } of editor.getToolShortcuts()) {
+        if (e.key === shortcut) {
+          e.preventDefault();
+          editor.setActiveTool(toolId);
+          editor.requestRedraw();
+          return;
+        }
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        editor.deleteSelectedPoints();
+        return;
+      }
+
+      if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
+        editor.selectAll();
+        e.preventDefault();
+        return;
+      }
+
+      toolManager.handleKeyDown(e);
+>>>>>>> Stashed changes
     };
 
     const keyUpHandler = (e: KeyboardEvent) => {

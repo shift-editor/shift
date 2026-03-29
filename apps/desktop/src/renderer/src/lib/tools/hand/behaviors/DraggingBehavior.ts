@@ -1,34 +1,26 @@
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
+import { createBehavior, type ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
 import type { HandState } from "../types";
-import { createBehavior } from "../../core/Behavior";
+import { Vec2 } from "@shift/geo";
 
 export const HandDraggingBehavior = createBehavior<HandState>({
-  canHandle(state: HandState, event: ToolEvent): boolean {
-    return (
-      state.type === "dragging" &&
-      (event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel")
-    );
+  onDrag(state: HandState, ctx: ToolContext<HandState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "dragging") return false;
+    const newPan = Vec2.add(state.startPan, event.screenDelta);
+    ctx.editor.setPan(newPan);
+    ctx.editor.requestRedraw();
+    return true;
   },
 
-  transition(state: HandState, event: ToolEvent, editor: EditorAPI) {
-    if (state.type !== "dragging") return null;
+  onDragEnd(state: HandState, ctx: ToolContext<HandState>): boolean {
+    if (state.type !== "dragging") return false;
+    ctx.setState({ type: "ready" });
+    return true;
+  },
 
-    if (event.type === "drag") {
-      const screenDelta = event.screenDelta;
-      const newPan = {
-        x: state.startPan.x + screenDelta.x,
-        y: state.startPan.y + screenDelta.y,
-      };
-      editor.setPan(newPan.x, newPan.y);
-      editor.requestRedraw();
-      return { state };
-    }
-
-    if (event.type === "dragEnd" || event.type === "dragCancel") {
-      return { state: { type: "ready" as const } };
-    }
-
-    return null;
+  onDragCancel(state: HandState, ctx: ToolContext<HandState>): boolean {
+    if (state.type !== "dragging") return false;
+    ctx.setState({ type: "ready" });
+    return true;
   },
 });

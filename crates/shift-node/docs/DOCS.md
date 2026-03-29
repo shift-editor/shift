@@ -42,7 +42,7 @@ class FontEngine {
   endEditSession(): void;
   getSnapshot(): string | null; // JSON
   getSnapshotData(): NativeGlyphSnapshot; // Native object
-  addPoint(x, y, pointType, smooth): string;
+  addPointToContour(contourId, x, y, pointType, smooth): string;
   movePoints(pointIds, dx, dy): string;
   applyEditsUnified(pointIds, dx, dy): string;
 }
@@ -104,7 +104,6 @@ All mutations return JSON with consistent structure:
 
 ### Point Operations
 
-- `addPoint(x, y, pointType, smooth): string`
 - `addPointToContour(contourId, x, y, pointType, smooth): string`
 - `insertPointBefore(beforePointId, x, y, pointType, smooth): string`
 - `movePoints(pointIds, dx, dy): string`
@@ -123,8 +122,9 @@ All mutations return JSON with consistent structure:
 const engine = new FontEngine();
 engine.loadFont("/path/to/font.ufo");
 engine.startEditSession(65); // 'A'
+const contourId = JSON.parse(engine.addContour()).snapshot.activeContourId;
 
-const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
+const result = JSON.parse(engine.addPointToContour(contourId, 100, 200, "onCurve", false));
 if (result.success) {
   console.log("Added point:", result.affectedPointIds[0]);
 }

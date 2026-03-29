@@ -9,11 +9,10 @@ import { createMockToolContext } from "@/testing";
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
 const ClickBehavior: Behavior<ContractState> = {
-  canHandle(state, event) {
-    return state.type === "ready" && event.type === "click";
-  },
-  transition() {
-    return { state: { type: "clicked" } };
+  onClick(state, ctx) {
+    if (state.type !== "ready") return false;
+    ctx.setState({ type: "clicked" });
+    return true;
   },
 };
 
@@ -60,6 +59,7 @@ describe("BaseTool contract", () => {
         coords: makeTestCoordinates({ x: 10, y: 10 }),
         shiftKey: false,
         altKey: false,
+        metaKey: false,
       };
 
       tool.handleEvent(clickEvent);
@@ -98,6 +98,7 @@ describe("BaseTool contract", () => {
         coords: makeTestCoordinates({ x: 0, y: 0 }),
         shiftKey: false,
         altKey: false,
+        metaKey: false,
       });
       setActiveToolStateSpy.mockClear();
       tool.onStateChangeSpy.mockClear();
@@ -110,6 +111,70 @@ describe("BaseTool contract", () => {
 
       expect(setActiveToolStateSpy).not.toHaveBeenCalled();
       expect(tool.onStateChangeSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("explicit handler dispatch", () => {
+    it("dispatches doubleClick and keyUp to handler-based behaviors", () => {
+      type HandlerState =
+        | { type: "idle" }
+        | { type: "ready" }
+        | { type: "doubleClicked" }
+        | { type: "keyUpped" };
+
+      const exitSpy = vi.fn();
+      const enterSpy = vi.fn();
+
+      const handlerBehavior: Behavior<HandlerState> = {
+        onDoubleClick(state, ctx) {
+          if (state.type !== "ready") return false;
+          ctx.setState({ type: "doubleClicked" });
+          return true;
+        },
+        onKeyUp(state, ctx) {
+          if (state.type !== "ready") return false;
+          ctx.setState({ type: "keyUpped" });
+          return true;
+        },
+        onStateExit(prev, next) {
+          exitSpy(prev, next);
+        },
+        onStateEnter(prev, next) {
+          enterSpy(prev, next);
+        },
+      };
+
+      class HandlerTool extends BaseTool<HandlerState> {
+        readonly id: ToolName = "select";
+        readonly behaviors = [handlerBehavior];
+        initialState(): HandlerState {
+          return { type: "idle" };
+        }
+        override activate(): void {
+          this.state = { type: "ready" };
+        }
+      }
+
+      const ctx = createMockToolContext();
+      const handlerTool = new HandlerTool(ctx);
+      handlerTool.activate();
+
+      handlerTool.handleEvent({
+        type: "doubleClick",
+        point: { x: 10, y: 10 },
+        coords: makeTestCoordinates({ x: 10, y: 10 }),
+      });
+      expect(handlerTool.getState()).toEqual({ type: "doubleClicked" });
+      expect(exitSpy).toHaveBeenCalledWith({ type: "ready" }, { type: "doubleClicked" });
+      expect(enterSpy).toHaveBeenCalledWith({ type: "ready" }, { type: "doubleClicked" });
+
+      handlerTool.state = { type: "ready" };
+      exitSpy.mockClear();
+      enterSpy.mockClear();
+      handlerTool.handleEvent({ type: "keyUp", key: "Meta" });
+      expect(handlerTool.getState()).toEqual({ type: "keyUpped" });
+      expect(exitSpy).toHaveBeenCalledWith({ type: "ready" }, { type: "keyUpped" });
+      expect(enterSpy).toHaveBeenCalledWith({ type: "ready" }, { type: "keyUpped" });
     });
   });
 });

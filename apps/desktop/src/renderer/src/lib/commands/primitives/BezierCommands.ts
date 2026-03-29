@@ -2,7 +2,7 @@ import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
-import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import { Segments as SegmentOps } from "@/lib/geo/Segments";
 
 /**
  * Inserts a point into an existing contour immediately before a reference point.
@@ -89,24 +89,26 @@ export class AddBezierAnchorCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    this.#anchorId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
+    const contourId = ctx.fontEngine.editing.getActiveContourId();
+    if (!contourId) {
+      throw new Error("No active contour");
+    }
+
+    this.#anchorId = ctx.fontEngine.editing.addPointToContour(contourId, {
       x: this.#anchorX,
       y: this.#anchorY,
       pointType: "onCurve",
       smooth: true,
     });
 
-    this.#leadingId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
+    this.#leadingId = ctx.fontEngine.editing.addPointToContour(contourId, {
       x: this.#leadingX,
       y: this.#leadingY,
       pointType: "offCurve",
       smooth: false,
     });
 
-    this.#trailingId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
+    this.#trailingId = ctx.fontEngine.editing.addPointToContour(contourId, {
       x: this.#trailingX,
       y: this.#trailingY,
       pointType: "offCurve",
@@ -357,7 +359,6 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
 
     this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, {
-      id: "" as PointId,
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -366,7 +367,6 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     this.#insertedPointIds.push(this.#splitPointId);
 
     const cBId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, {
-      id: "" as PointId,
       x: cB.x,
       y: cB.y,
       pointType: "offCurve",

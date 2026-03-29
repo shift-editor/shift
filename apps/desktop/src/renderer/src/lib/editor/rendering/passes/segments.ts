@@ -9,7 +9,7 @@
 import type { IRenderer } from "@/types/graphics";
 import type { Glyph } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import { Segment } from "@/lib/geo/Segment";
+import { Segments } from "@/lib/geo/Segments";
 import { SEGMENT_HOVER_STYLE, SEGMENT_SELECTED_STYLE } from "@/lib/styles/style";
 import type { RenderContext } from "./types";
 
@@ -25,8 +25,8 @@ export function renderSegmentHighlights(
 ): void {
   if (!hoveredId && !hasAnySelectedSegment(glyph, isSelected)) return;
 
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    const segmentId = Segment.id(segment);
+  for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
+    const segmentId = Segments.id(segment);
     const isHovered = hoveredId === segmentId;
     const selected = isSelected(segmentId);
 
@@ -43,14 +43,17 @@ function hasAnySelectedSegment(
   glyph: Glyph,
   isSelected: (segmentId: SegmentId) => boolean,
 ): boolean {
-  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-    if (isSelected(Segment.id(segment))) return true;
+  for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
+    if (isSelected(Segments.id(segment))) return true;
   }
   return false;
 }
 
-function drawSegmentCurve(ctx: IRenderer, segment: ReturnType<typeof Segment.parse>[number]): void {
-  const curve = Segment.toCurve(segment);
+function drawSegmentCurve(
+  ctx: IRenderer,
+  segment: ReturnType<typeof Segments.parse>[number],
+): void {
+  const curve = Segments.toCurve(segment);
   ctx.beginPath();
   ctx.moveTo(curve.p0.x, curve.p0.y);
 

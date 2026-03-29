@@ -55,7 +55,14 @@ effect(() => {
 
 // Manager access
 engine.session.startEditSession({ glyphName: "A", unicode: 65 });
-engine.editing.addPoint({ id: "" as PointId, x: 100, y: 200, pointType: "onCurve", smooth: false });
+const contourId = engine.editing.addContour();
+engine.editing.addPointToContour(contourId, {
+  id: "" as PointId,
+  x: 100,
+  y: 200,
+  pointType: "onCurve",
+  smooth: false,
+});
 ```
 
 ### commit() — Centralized State Transitions
@@ -110,7 +117,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ### EditingManager
 
-- `addPoint(edit): PointId`
+- `addPointToContour(contourId, edit): PointId`
 - `addContour(): ContourId`
 - `movePoints(ids, delta): PointId[]`
 - `removePoints(ids): void`
@@ -158,7 +165,7 @@ effect(() => {
 
 // Add geometry
 const contourId = engine.editing.addContour();
-const pointId = engine.editing.addPoint({
+const pointId = engine.editing.addPointToContour(contourId, {
   id: "" as PointId,
   x: 100,
   y: 200,
@@ -198,13 +205,13 @@ for (const [contourId, segments] of segmentMap) {
 ```
 User Action
     ↓
-Manager Method (e.g., editing.addPoint())
+Manager Method (e.g., editing.addPointToContour())
     ↓
 Validate Session (#requireSession)
     ↓
 commit(operation, extract?)
     ↓
-Call Native (engine.native.addPoint())
+Call Native (engine.native.addPointToContour())
     ↓
 Parse JSON CommandResult
     ↓

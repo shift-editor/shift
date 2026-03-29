@@ -73,7 +73,6 @@ export interface FontEngineAPI {
   translateLayer(dx: number, dy: number): string;
 
   // ── Point Operations ──
-  addPoint(x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string;
   addPointToContour(
     contourId: string,
     x: number,
