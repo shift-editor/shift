@@ -2,12 +2,13 @@ import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
+import type { RotateData, SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 import { cacheSelectedPositions } from "../utils";
 import type { NodePositionUpdate } from "@/types/positionUpdate";
+import { createRotationTransform } from "@/lib/editor/affineTransform";
 
 export class RotateBehavior implements SelectBehavior {
   #snap: RotateSnapSession | null = null;
@@ -95,6 +96,7 @@ export class RotateBehavior implements SelectBehavior {
       } else {
         state.rotate.preview.cancel();
       }
+      state.rotate.transformSession.dispose();
 
       return {
         state: { type: "selected" },
@@ -103,6 +105,7 @@ export class RotateBehavior implements SelectBehavior {
 
     if (event.type === "dragCancel") {
       state.rotate.preview.cancel();
+      state.rotate.transformSession.dispose();
       return {
         state: { type: "selected" },
       };
@@ -136,22 +139,35 @@ export class RotateBehavior implements SelectBehavior {
     const draggedPointIds = [...editor.getSelectedPoints()];
     this.startSnap(editor);
     const initialPositions = cacheSelectedPositions(editor);
+    const transformSession = editor.createPreparedNodeTransformSession(draggedPointIds, []);
+    let rotate: RotateData;
+    const rotateWithoutPreview: Omit<RotateData, "preview"> = {
+      corner,
+      startPos: localPoint,
+      lastPos: localPoint,
+      center,
+      startAngle,
+      currentAngle: startAngle,
+      draggedPointIds,
+      initialPositions,
+      latestUpdates: [],
+      transformSession,
+    };
+    const preview = editor.beginNodePositionPreview("Rotate Points", baseGlyph, {
+      commitToNative: (updates) => {
+        const totalAngle = rotate.currentAngle - rotate.startAngle;
+        transformSession.commitTransform(createRotationTransform(center, totalAngle), updates);
+      },
+    });
+    rotate = {
+      ...rotateWithoutPreview,
+      preview,
+    };
 
     return {
       state: {
         type: "rotating",
-        rotate: {
-          preview: editor.beginNodePositionPreview("Rotate Points", baseGlyph),
-          corner,
-          startPos: localPoint,
-          lastPos: localPoint,
-          center,
-          startAngle,
-          currentAngle: startAngle,
-          draggedPointIds,
-          initialPositions,
-          latestUpdates: [],
-        },
+        rotate,
       },
     };
   }

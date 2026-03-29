@@ -34,6 +34,6 @@ export class PointDragConstraintSession {
   }
 
   allowsUniformTranslationCommit(): boolean {
-    return this.#prepared.matchedRules.length === 0;
+    return this.#prepared.allowsUniformTranslationCommit;
   }
 }

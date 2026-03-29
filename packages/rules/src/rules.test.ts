@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { expandPattern } from "./parser";
 import { buildRuleTable, buildRuleTableFromSpecs } from "./rules";
 import { diagnoseSelectionPatterns, pickRule } from "./matcher";
-import { constrainDrag } from "./actions";
+import { constrainDrag, prepareConstrainDrag } from "./actions";
 import type { ContourSnapshot, GlyphSnapshot, PointSnapshot } from "@shift/types";
 import type { PointId, ContourId } from "@shift/types";
 import type { PointMove } from "./types";
@@ -579,6 +579,20 @@ describe("Rule Application", () => {
     ]);
   });
 
+  it("marks isolated corner-only drags as uniform-translation-safe", () => {
+    const glyph = createGlyph([
+      createContour("corners-only", [
+        createPoint("corner1", 0, 0, "onCurve", false),
+        createPoint("corner2", 100, 0, "onCurve", false),
+      ]),
+    ]);
+    const selected = new Set(["corner1" as PointId, "corner2" as PointId]);
+
+    const prepared = prepareConstrainDrag(glyph, selected);
+
+    expect(prepared.allowsUniformTranslationCommit).toBe(true);
+  });
+
   it("includes handle moves when moving smooth anchor", () => {
     const glyph = createTestGlyph();
     const selected = new Set(["smooth" as PointId]);
@@ -601,6 +615,15 @@ describe("Rule Application", () => {
     expect(handle1Move?.y).toBe(10); // 0 + 10
     expect(handle2Move?.x).toBe(160); // 150 + 10
     expect(handle2Move?.y).toBe(110); // 100 + 10
+  });
+
+  it("marks rule-driven drags as not uniform-translation-safe", () => {
+    const glyph = createTestGlyph();
+    const selected = new Set(["smooth" as PointId]);
+
+    const prepared = prepareConstrainDrag(glyph, selected);
+
+    expect(prepared.allowsUniformTranslationCommit).toBe(false);
   });
 
   it("applies moves to glyph correctly", () => {

@@ -18,6 +18,14 @@ export interface JsNodePositionUpdate {
   x: number
   y: number
 }
+export interface JsAffineTransform {
+  a: number
+  b: number
+  c: number
+  d: number
+  e: number
+  f: number
+}
 /** Input type for set_point_positions - a single point move. */
 export interface JsPointMove {
   id: string
@@ -88,16 +96,16 @@ export declare class FontEngine {
    */
   movePointsAndAnchorsLight(pointIds: Array<string>, anchorIds: Array<string>, dx: number, dy: number): boolean
   /**
-   * Parse and store point/anchor ids once for a later direct translation call.
+   * Parse and store point/anchor ids once for a later direct transform call.
    * Returns true on success, false if no edit session is active or no ids could be parsed.
    */
-  prepareNodeTranslationLight(pointIds: Array<string>, anchorIds: Array<string>): boolean
+  prepareNodeTransformLight(pointIds: Array<string>, anchorIds: Array<string>): boolean
   /**
-   * Move the last prepared point/anchor set directly.
+   * Transform the last prepared point/anchor set directly.
    * Returns true on success, false if no edit session is active.
    */
-  applyPreparedNodeTranslationLight(dx: number, dy: number): boolean
-  clearPreparedNodeTranslationLight(): void
+  applyPreparedNodeTransformLight(transform: JsAffineTransform): boolean
+  clearPreparedNodeTransformLight(): void
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string

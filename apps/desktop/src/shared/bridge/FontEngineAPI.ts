@@ -11,6 +11,15 @@ export interface NodePositionUpdate {
   y: number;
 }
 
+export interface AffineTransformPayload {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
+
 export interface CompositeComponentPayload {
   componentGlyphName: string;
   sourceUnicodes: number[];
@@ -96,9 +105,9 @@ export interface FontEngineAPI {
     dx: number,
     dy: number,
   ): boolean;
-  prepareNodeTranslationLight?(pointIds: string[], anchorIds: string[]): boolean;
-  applyPreparedNodeTranslationLight?(dx: number, dy: number): boolean;
-  clearPreparedNodeTranslationLight?(): void;
+  prepareNodeTransformLight?(pointIds: string[], anchorIds: string[]): boolean;
+  applyPreparedNodeTransformLight?(transform: AffineTransformPayload): boolean;
+  clearPreparedNodeTransformLight?(): void;
   removePoints(pointIds: string[]): string;
   toggleSmooth(pointId: string): string;
 

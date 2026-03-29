@@ -4,6 +4,7 @@ import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import type {
+  AffineTransformPayload,
   FontEngineAPI,
   NodePositionUpdate as BridgeNodePositionUpdate,
 } from "@shared/bridge/FontEngineAPI";
@@ -374,21 +375,20 @@ export class EditingManager {
     );
   }
 
-  prepareNodeTranslation(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
+  prepareNodeTransform(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
     if (!this.#engine.hasSession()) return false;
-    if (typeof this.#engine.raw.prepareNodeTranslationLight !== "function") return false;
-    return this.#engine.raw.prepareNodeTranslationLight(pointIds, anchorIds);
+    if (typeof this.#engine.raw.prepareNodeTransformLight !== "function") return false;
+    return this.#engine.raw.prepareNodeTransformLight(pointIds, anchorIds);
   }
 
-  applyPreparedNodeTranslation(delta: Point2D): boolean {
+  applyPreparedNodeTransform(transform: AffineTransformPayload): boolean {
     if (!this.#engine.hasSession()) return false;
-    if (typeof this.#engine.raw.applyPreparedNodeTranslationLight !== "function") return false;
-    if (delta.x === 0 && delta.y === 0) return true;
-    return this.#engine.raw.applyPreparedNodeTranslationLight(delta.x, delta.y);
+    if (typeof this.#engine.raw.applyPreparedNodeTransformLight !== "function") return false;
+    return this.#engine.raw.applyPreparedNodeTransformLight(transform);
   }
 
-  clearPreparedNodeTranslation(): void {
-    this.#engine.raw.clearPreparedNodeTranslationLight?.();
+  clearPreparedNodeTransform(): void {
+    this.#engine.raw.clearPreparedNodeTransformLight?.();
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */

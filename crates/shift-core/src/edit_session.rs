@@ -1,6 +1,6 @@
 use crate::{
     snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, GuidelineId,
-    PointId, PointType,
+    PointId, PointType, Transform,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -274,6 +274,37 @@ impl EditSession {
         moved_points
     }
 
+    pub fn transform_points(
+        &mut self,
+        point_ids: &[PointId],
+        transform: Transform,
+    ) -> Vec<PointId> {
+        if point_ids.is_empty() {
+            return Vec::new();
+        }
+
+        let target_ids: HashSet<PointId> = point_ids.iter().copied().collect();
+        let contour_ids: Vec<_> = self.layer.contours().keys().copied().collect();
+        let mut moved_points = Vec::with_capacity(point_ids.len());
+
+        for contour_id in contour_ids {
+            if let Some(contour) = self.layer.contour_mut(contour_id) {
+                for point in contour.points_mut() {
+                    let point_id = point.id();
+                    if !target_ids.contains(&point_id) {
+                        continue;
+                    }
+
+                    let (x, y) = transform.transform_point(point.x(), point.y());
+                    point.set_position(x, y);
+                    moved_points.push(point_id);
+                }
+            }
+        }
+
+        moved_points
+    }
+
     /// Set absolute position for a single point
     pub fn set_point_position(&mut self, point_id: PointId, x: f64, y: f64) -> bool {
         let Some(contour_id) = self.find_point_contour(point_id) else {
@@ -317,6 +348,26 @@ impl EditSession {
         self.layer.move_anchors(anchor_ids, dx, dy)
     }
 
+    pub fn transform_anchors(
+        &mut self,
+        anchor_ids: &[AnchorId],
+        transform: Transform,
+    ) -> Vec<AnchorId> {
+        let mut moved_anchors = Vec::with_capacity(anchor_ids.len());
+
+        for anchor_id in anchor_ids {
+            let Some(anchor) = self.layer.anchor_mut(*anchor_id) else {
+                continue;
+            };
+
+            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
+            anchor.set_position(x, y);
+            moved_anchors.push(*anchor_id);
+        }
+
+        moved_anchors
+    }
+
     pub fn move_nodes(&mut self, nodes: &[NodeRef], dx: f64, dy: f64) -> Vec<PointId> {
         let mut point_ids = Vec::new();
         let mut anchor_ids = Vec::new();
@@ -333,6 +384,25 @@ impl EditSession {
         let moved_points = self.move_points(&point_ids, dx, dy);
         if !anchor_ids.is_empty() {
             self.layer.move_anchors(&anchor_ids, dx, dy);
+        }
+        moved_points
+    }
+
+    pub fn transform_nodes(&mut self, nodes: &[NodeRef], transform: Transform) -> Vec<PointId> {
+        let mut point_ids = Vec::new();
+        let mut anchor_ids = Vec::new();
+
+        for node in nodes {
+            match node {
+                NodeRef::Point(point_id) => point_ids.push(*point_id),
+                NodeRef::Anchor(anchor_id) => anchor_ids.push(*anchor_id),
+                NodeRef::Guideline(_guideline_id) => {}
+            }
+        }
+
+        let moved_points = self.transform_points(&point_ids, transform);
+        if !anchor_ids.is_empty() {
+            self.transform_anchors(&anchor_ids, transform);
         }
         moved_points
     }
@@ -598,6 +668,45 @@ mod tests {
         let anchor = session.layer().anchor(anchor_id).unwrap();
         assert_eq!(anchor.x(), 105.0);
         assert_eq!(anchor.y(), 190.0);
+    }
+
+    #[test]
+    fn transform_nodes_applies_affine_transform_to_points_and_anchors() {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour();
+
+        let point_id = session
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap();
+        let anchor_id =
+            session
+                .layer_mut()
+                .add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+
+        let moved_points = session.transform_nodes(
+            &[NodeRef::Point(point_id), NodeRef::Anchor(anchor_id)],
+            Transform {
+                xx: 2.0,
+                xy: 0.0,
+                yx: 0.0,
+                yy: 3.0,
+                dx: 5.0,
+                dy: -10.0,
+            },
+        );
+
+        assert_eq!(moved_points, vec![point_id]);
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        assert_eq!(point.x(), 25.0);
+        assert_eq!(point.y(), 50.0);
+
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        assert_eq!(anchor.x(), 205.0);
+        assert_eq!(anchor.y(), 590.0);
     }
 
     #[test]

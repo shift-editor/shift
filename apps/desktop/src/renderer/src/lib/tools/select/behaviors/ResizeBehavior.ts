@@ -3,11 +3,12 @@ import { Vec2 } from "@shift/geo";
 import type { ToolEvent } from "../../core/GestureDetector";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
+import type { ResizeData, SelectState, SelectBehavior } from "../types";
 import type { SelectAction } from "../actions";
 import type { BoundingRectEdge } from "../cursor";
 import { cacheSelectedPositions } from "../utils";
 import type { NodePositionUpdate } from "@/types/positionUpdate";
+import { createScaleTransform } from "@/lib/editor/affineTransform";
 
 export class ResizeBehavior implements SelectBehavior {
   canHandle(state: SelectState, event: ToolEvent): boolean {
@@ -88,6 +89,7 @@ export class ResizeBehavior implements SelectBehavior {
       } else {
         state.resize.preview.cancel();
       }
+      state.resize.transformSession.dispose();
 
       return {
         state: { type: "selected" },
@@ -96,6 +98,7 @@ export class ResizeBehavior implements SelectBehavior {
 
     if (event.type === "dragCancel") {
       state.resize.preview.cancel();
+      state.resize.transformSession.dispose();
       return {
         state: { type: "selected" },
       };
@@ -123,22 +126,41 @@ export class ResizeBehavior implements SelectBehavior {
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
     const draggedPointIds = [...editor.getSelectedPoints()];
     const initialPositions = cacheSelectedPositions(editor);
+    const transformSession = editor.createPreparedNodeTransformSession(draggedPointIds, []);
+    let resize: ResizeData;
+    const resizeWithoutPreview: Omit<ResizeData, "preview"> = {
+      edge,
+      startPos: localPoint,
+      lastPos: localPoint,
+      initialBounds: bounds,
+      anchorPoint,
+      draggedPointIds,
+      initialPositions,
+      uniformScale: false,
+      latestUpdates: [],
+      transformSession,
+    };
+    const preview = editor.beginNodePositionPreview("Scale Points", baseGlyph, {
+      commitToNative: (updates) => {
+        const { sx, sy } = this.calculateScaleFactors(
+          edge,
+          resize.lastPos,
+          anchorPoint,
+          bounds,
+          resize.uniformScale,
+        );
+        transformSession.commitTransform(createScaleTransform(anchorPoint, sx, sy), updates);
+      },
+    });
+    resize = {
+      ...resizeWithoutPreview,
+      preview,
+    };
 
     return {
       state: {
         type: "resizing",
-        resize: {
-          preview: editor.beginNodePositionPreview("Scale Points", baseGlyph),
-          edge,
-          startPos: localPoint,
-          lastPos: localPoint,
-          initialBounds: bounds,
-          anchorPoint,
-          draggedPointIds,
-          initialPositions,
-          uniformScale: false,
-          latestUpdates: [],
-        },
+        resize,
       },
     };
   }

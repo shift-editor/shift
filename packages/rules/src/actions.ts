@@ -28,6 +28,7 @@ export interface PreparedConstrainDrag {
   pointIndex: PointIndex;
   selectedPoints: readonly Point[];
   matchedRules: readonly MatchedRule[];
+  allowsUniformTranslationCommit: boolean;
 }
 
 function getPointAtContourOffset(
@@ -157,6 +158,7 @@ export function prepareConstrainDrag(
     pointIndex,
     selectedPoints,
     matchedRules,
+    allowsUniformTranslationCommit: matchedRules.length === 0,
   };
 }
 
@@ -337,7 +339,7 @@ export function constrainPreparedDrag(
   mousePosition: Point2D,
   options?: ConstrainDragOptions,
 ): DragPatch {
-  const { pointIndex, selectedPoints, matchedRules } = prepared;
+  const { pointIndex, selectedPoints, matchedRules, allowsUniformTranslationCommit } = prepared;
   const includeMatchedRules = options?.includeMatchedRules ?? true;
   const selectedMoves = new Map<PointId, PointMove>();
 
@@ -348,7 +350,7 @@ export function constrainPreparedDrag(
     });
   }
 
-  if (matchedRules.length === 0) {
+  if (allowsUniformTranslationCommit) {
     return {
       pointUpdates: Array.from(selectedMoves.values()),
       matched: [],

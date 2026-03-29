@@ -1402,17 +1402,38 @@ export function createMockToolContext(): MockToolContext {
       edit.addPoint(x, y, type, smooth),
     movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
-    beginNodePositionPreview: (_label: string, baseGlyph: Glyph) => ({
-      preview: (updates: NodePositionUpdateList) => previewNodePositions(baseGlyph, updates),
-      commit: () => {},
-      cancel: () => fontEngine.emitGlyph(baseGlyph as GlyphSnapshot),
-    }),
+    beginNodePositionPreview: (
+      _label: string,
+      baseGlyph: Glyph,
+      options?: { commitToNative?(updates: NodePositionUpdateList): void },
+    ) => {
+      let latestUpdates: NodePositionUpdateList = [];
+      return {
+        preview: (updates: NodePositionUpdateList) => {
+          latestUpdates = updates;
+          previewNodePositions(baseGlyph, updates);
+        },
+        commit: () => {
+          if (options?.commitToNative) {
+            options.commitToNative(latestUpdates);
+            return;
+          }
+          edit.setNodePositions(latestUpdates);
+        },
+        cancel: () => fontEngine.emitGlyph(baseGlyph as GlyphSnapshot),
+      };
+    },
     previewNodePositions,
     commitPreviewNodePositions: (
       _label: string,
       _baseGlyph: Glyph,
       updates: NodePositionUpdateList,
     ) => edit.setNodePositions(updates),
+    createPreparedNodeTransformSession: () => ({
+      commitTranslation: () => {},
+      commitTransform: () => {},
+      dispose: () => {},
+    }),
     restorePreviewGlyph: (snapshot: Glyph) => fontEngine.emitGlyph(snapshot as GlyphSnapshot),
     moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
     toggleSmooth: (id: PointId) => edit.toggleSmooth(id),

@@ -108,7 +108,7 @@ import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
 import { PointDragConstraintSession } from "./PointDragConstraintSession";
-import { PreparedNodeMoveSession } from "./PreparedNodeMoveSession";
+import { PreparedNodeTransformSession } from "./PreparedNodeTransformSession";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -118,7 +118,7 @@ type DragContext = {
   target: DragTarget;
   preview: NodePositionPreviewSession;
   pointConstraints: PointDragConstraintSession | null;
-  nativeMoveSession: PreparedNodeMoveSession;
+  nativeTransformSession: PreparedNodeTransformSession;
   startPointer: Point2D;
   currentPointer: Point2D;
   currentDelta: Point2D;
@@ -126,7 +126,7 @@ type DragContext = {
   baseSidebearings: { lsb: number | null; rsb: number | null };
 };
 
-type NodePositionPreviewCommit = (updates: NodePositionUpdateList, after: GlyphSnapshot) => void;
+type NodePositionPreviewCommit = (updates: NodePositionUpdateList) => void;
 
 type NodePositionPreviewConfig = {
   label: string;
@@ -818,7 +818,7 @@ export class Editor implements ShiftEditor {
         commitToNative: (updates) => {
           const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
           if (uniformDeltaCommit) {
-            context.nativeMoveSession.commitUniformDelta(uniformDeltaCommit.delta);
+            context.nativeTransformSession.commitTranslation(uniformDeltaCommit.delta);
             return;
           }
 
@@ -829,11 +829,10 @@ export class Editor implements ShiftEditor {
         },
       }),
       pointConstraints: PointDragConstraintSession.prepare(currentGlyph, target.pointIds),
-      nativeMoveSession: new PreparedNodeMoveSession(
-        this.#fontEngine.editing,
+      nativeTransformSession: this.createPreparedNodeTransformSession(
         target.pointIds,
         target.anchorIds,
-      ),
+      ) as PreparedNodeTransformSession,
       startPointer: startPointer,
       currentPointer: startPointer,
       currentDelta: { x: 0, y: 0 },
@@ -951,7 +950,7 @@ export class Editor implements ShiftEditor {
 
   #clearActiveDrag(context: DragContext): void {
     if (this.#activeDrag?.id !== context.id) return;
-    context.nativeMoveSession.dispose();
+    context.nativeTransformSession.dispose();
     this.#activeDrag = null;
   }
 
@@ -1862,10 +1861,15 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.editing.setNodePositions(updates);
   }
 
-  public beginNodePositionPreview(label: string, baseGlyph: Glyph): NodePositionPreviewSession {
+  public beginNodePositionPreview(
+    label: string,
+    baseGlyph: Glyph,
+    options?: { commitToNative?(updates: NodePositionUpdateList): void },
+  ): NodePositionPreviewSession {
     return this.#createNodePositionPreviewSession({
       label,
       baseGlyph: baseGlyph as GlyphSnapshot,
+      commitToNative: options?.commitToNative,
     });
   }
 
@@ -1957,6 +1961,13 @@ export class Editor implements ShiftEditor {
     this.#commitNodePositionPreview(label, baseGlyph as GlyphSnapshot, updates);
   }
 
+  public createPreparedNodeTransformSession(
+    pointIds: PointId[],
+    anchorIds: AnchorId[],
+  ): PreparedNodeTransformSession {
+    return new PreparedNodeTransformSession(this.#fontEngine.editing, pointIds, anchorIds);
+  }
+
   #getPointLocations(
     glyph: Glyph,
   ): ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }> {
@@ -2044,7 +2055,7 @@ export class Editor implements ShiftEditor {
 
     this.#sidebar.clearSelectionBoundsOverride();
     if (commitToNative) {
-      commitToNative(updates, after);
+      commitToNative(updates);
     } else {
       this.#fontEngine.editing.syncNodePositions(updates);
     }

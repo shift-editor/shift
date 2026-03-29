@@ -52,7 +52,10 @@ import type { Font } from "@/lib/editor/Font";
 import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
-import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type {
+  AffineTransformPayload,
+  CompositeComponentsPayload,
+} from "@shared/bridge/FontEngineAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export type DragTarget = {
@@ -75,6 +78,16 @@ export interface NodePositionPreviewSession {
   preview(updates: NodePositionUpdateList): void;
   commit(): void;
   cancel(): void;
+}
+
+export interface PreparedTransformSession {
+  commitTranslation(delta: Point2D): void;
+  commitTransform(transform: AffineTransformPayload, fallbackUpdates: NodePositionUpdateList): void;
+  dispose(): void;
+}
+
+export interface NodePositionPreviewOptions {
+  commitToNative?(updates: NodePositionUpdateList): void;
 }
 
 /**
@@ -188,13 +201,21 @@ export interface Snapping {
 export interface Editing {
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
-  beginNodePositionPreview(label: string, baseGlyph: Glyph): NodePositionPreviewSession;
+  beginNodePositionPreview(
+    label: string,
+    baseGlyph: Glyph,
+    options?: NodePositionPreviewOptions,
+  ): NodePositionPreviewSession;
   previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void;
   commitPreviewNodePositions(
     label: string,
     baseGlyph: Glyph,
     updates: NodePositionUpdateList,
   ): void;
+  createPreparedNodeTransformSession(
+    pointIds: PointId[],
+    anchorIds: AnchorId[],
+  ): PreparedTransformSession;
   restorePreviewGlyph(snapshot: Glyph): void;
   moveAnchors(ids: AnchorId[], delta: Point2D): void;
   toggleSmooth(id: PointId): void;
