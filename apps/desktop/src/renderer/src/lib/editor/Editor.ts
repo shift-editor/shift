@@ -107,11 +107,8 @@ import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
-import {
-  constrainPreparedDrag,
-  prepareConstrainDrag,
-  type PreparedConstrainDrag,
-} from "@shift/rules";
+import { PointDragConstraintSession } from "./PointDragConstraintSession";
+import { PreparedNodeMoveSession } from "./PreparedNodeMoveSession";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -120,9 +117,8 @@ type DragContext = {
   baseGlyph: GlyphSnapshot;
   target: DragTarget;
   preview: NodePositionPreviewSession;
-  selectedPointIds: ReadonlySet<PointId>;
-  preparedConstrainDrag: PreparedConstrainDrag | null;
-  preparedNativeMove: boolean;
+  pointConstraints: PointDragConstraintSession | null;
+  nativeMoveSession: PreparedNodeMoveSession;
   startPointer: Point2D;
   currentPointer: Point2D;
   currentDelta: Point2D;
@@ -822,16 +818,7 @@ export class Editor implements ShiftEditor {
         commitToNative: (updates) => {
           const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
           if (uniformDeltaCommit) {
-            const committedPreparedMove =
-              context.preparedNativeMove &&
-              this.#fontEngine.editing.movePreparedNodes(uniformDeltaCommit.delta);
-            if (!committedPreparedMove) {
-              this.#fontEngine.editing.syncMoveNodes(
-                context.target.pointIds,
-                context.target.anchorIds,
-                uniformDeltaCommit.delta,
-              );
-            }
+            context.nativeMoveSession.commitUniformDelta(uniformDeltaCommit.delta);
             return;
           }
 
@@ -841,22 +828,18 @@ export class Editor implements ShiftEditor {
           this.#sidebar.clearTransientState();
         },
       }),
-      selectedPointIds: new Set(target.pointIds),
-      preparedConstrainDrag:
-        target.pointIds.length > 0
-          ? prepareConstrainDrag(currentGlyph, new Set(target.pointIds))
-          : null,
-      preparedNativeMove: false,
+      pointConstraints: PointDragConstraintSession.prepare(currentGlyph, target.pointIds),
+      nativeMoveSession: new PreparedNodeMoveSession(
+        this.#fontEngine.editing,
+        target.pointIds,
+        target.anchorIds,
+      ),
       startPointer: startPointer,
       currentPointer: startPointer,
       currentDelta: { x: 0, y: 0 },
       latestUpdates: [],
       baseSidebearings: { lsb: null, rsb: null },
     };
-    context.preparedNativeMove = this.#fontEngine.editing.prepareMoveNodes(
-      context.target.pointIds,
-      context.target.anchorIds,
-    );
     context.baseSidebearings = deriveGlyphSidebearings(context.baseGlyph);
     this.#activeDrag = context;
 
@@ -890,17 +873,8 @@ export class Editor implements ShiftEditor {
     const allUpdates: NodePositionUpdate[] = [];
 
     // Points via single-pass rules
-    if (context.preparedConstrainDrag) {
-      const patch = constrainPreparedDrag(context.preparedConstrainDrag, mousePos, {
-        includeMatchedRules: false,
-      });
-
-      for (const update of patch.pointUpdates) {
-        allUpdates.push({
-          node: { kind: "point", id: update.id },
-          ...update,
-        });
-      }
+    if (context.pointConstraints) {
+      allUpdates.push(...context.pointConstraints.constrain(mousePos));
     }
 
     for (const anchorId of context.target.anchorIds) {
@@ -961,7 +935,9 @@ export class Editor implements ShiftEditor {
 
   #getSimpleDragCommitDelta(context: DragContext): { delta: Point2D } | null {
     if (context.latestUpdates.length === 0) return null;
-    if (context.preparedConstrainDrag?.matchedRules.length) return null;
+    if (context.pointConstraints && !context.pointConstraints.allowsUniformTranslationCommit()) {
+      return null;
+    }
 
     const { x, y } = context.currentDelta;
     if (x === 0 && y === 0) return null;
@@ -975,9 +951,7 @@ export class Editor implements ShiftEditor {
 
   #clearActiveDrag(context: DragContext): void {
     if (this.#activeDrag?.id !== context.id) return;
-    if (context.preparedNativeMove) {
-      this.#fontEngine.editing.clearPreparedMove();
-    }
+    context.nativeMoveSession.dispose();
     this.#activeDrag = null;
   }
 
