@@ -374,21 +374,21 @@ export class EditingManager {
     );
   }
 
-  prepareMoveNodes(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
+  prepareNodeTranslation(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
     if (!this.#engine.hasSession()) return false;
-    if (typeof this.#engine.raw.prepareMoveNodesLight !== "function") return false;
-    return this.#engine.raw.prepareMoveNodesLight(pointIds, anchorIds);
+    if (typeof this.#engine.raw.prepareNodeTranslationLight !== "function") return false;
+    return this.#engine.raw.prepareNodeTranslationLight(pointIds, anchorIds);
   }
 
-  movePreparedNodes(delta: Point2D): boolean {
+  applyPreparedNodeTranslation(delta: Point2D): boolean {
     if (!this.#engine.hasSession()) return false;
-    if (typeof this.#engine.raw.movePreparedNodesLight !== "function") return false;
+    if (typeof this.#engine.raw.applyPreparedNodeTranslationLight !== "function") return false;
     if (delta.x === 0 && delta.y === 0) return true;
-    return this.#engine.raw.movePreparedNodesLight(delta.x, delta.y);
+    return this.#engine.raw.applyPreparedNodeTranslationLight(delta.x, delta.y);
   }
 
-  clearPreparedMove(): void {
-    this.#engine.raw.clearPreparedMoveLight?.();
+  clearPreparedNodeTranslation(): void {
+    this.#engine.raw.clearPreparedNodeTranslationLight?.();
   }
 
   /** Validates and restores a previous snapshot. Throws on invalid data. Used for undo/redo. */

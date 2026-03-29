@@ -608,7 +608,7 @@ impl FontEngine {
     self.current_edit_session = Some(edit_session);
     self.editing_glyph = Some(glyph);
     self.editing_layer_id = Some(layer_id);
-    self.clear_prepared_move_light();
+    self.clear_prepared_node_translation_light();
 
     Ok(())
   }
@@ -700,7 +700,7 @@ impl FontEngine {
     }
     self.font.put_glyph(glyph);
     self.dependency_graph = DependencyGraph::rebuild(&self.font);
-    self.clear_prepared_move_light();
+    self.clear_prepared_node_translation_light();
 
     Ok(())
   }
@@ -920,10 +920,10 @@ impl FontEngine {
     Ok(true)
   }
 
-  /// Parse and store point/anchor ids once for a later direct move call.
+  /// Parse and store point/anchor ids once for a later direct translation call.
   /// Returns true on success, false if no edit session is active or no ids could be parsed.
-  #[napi(js_name = "prepareMoveNodesLight")]
-  pub fn prepare_move_nodes_light(
+  #[napi(js_name = "prepareNodeTranslationLight")]
+  pub fn prepare_node_translation_light(
     &mut self,
     point_ids: Vec<String>,
     anchor_ids: Vec<String>,
@@ -950,8 +950,8 @@ impl FontEngine {
 
   /// Move the last prepared point/anchor set directly.
   /// Returns true on success, false if no edit session is active.
-  #[napi(js_name = "movePreparedNodesLight")]
-  pub fn move_prepared_nodes_light(&mut self, dx: f64, dy: f64) -> Result<bool> {
+  #[napi(js_name = "applyPreparedNodeTranslationLight")]
+  pub fn apply_prepared_node_translation_light(&mut self, dx: f64, dy: f64) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
@@ -968,8 +968,8 @@ impl FontEngine {
     Ok(true)
   }
 
-  #[napi(js_name = "clearPreparedMoveLight")]
-  pub fn clear_prepared_move_light(&mut self) {
+  #[napi(js_name = "clearPreparedNodeTranslationLight")]
+  pub fn clear_prepared_node_translation_light(&mut self) {
     self.prepared_move_point_ids.clear();
     self.prepared_move_anchor_ids.clear();
   }
@@ -1346,9 +1346,11 @@ mod tests {
       .to_string();
 
     assert!(engine
-      .prepare_move_nodes_light(vec![point_id.clone()], vec![])
+      .prepare_node_translation_light(vec![point_id.clone()], vec![])
       .unwrap());
-    assert!(engine.move_prepared_nodes_light(12.0, 34.0).unwrap());
+    assert!(engine
+      .apply_prepared_node_translation_light(12.0, 34.0)
+      .unwrap());
 
     let snapshot_json = engine.get_snapshot_data().unwrap();
     let snapshot: GlyphSnapshot = serde_json::from_str(&snapshot_json).unwrap();

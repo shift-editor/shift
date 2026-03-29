@@ -161,7 +161,7 @@ export class MockFontEngine implements FontEngineAPI {
 
   endEditSession(): void {
     this.#snapshot = null;
-    this.clearPreparedMoveLight();
+    this.clearPreparedNodeTranslationLight();
   }
 
   hasEditSession(): boolean {
@@ -443,14 +443,14 @@ export class MockFontEngine implements FontEngineAPI {
     return movedAny || (pointIds.length === 0 && anchorIds.length === 0);
   }
 
-  prepareMoveNodesLight(pointIds: string[], anchorIds: string[]): boolean {
+  prepareNodeTranslationLight(pointIds: string[], anchorIds: string[]): boolean {
     if (!this.#snapshot) return false;
     this.#preparedMovePointIds = [...pointIds];
     this.#preparedMoveAnchorIds = [...anchorIds];
     return true;
   }
 
-  movePreparedNodesLight(dx: number, dy: number): boolean {
+  applyPreparedNodeTranslationLight(dx: number, dy: number): boolean {
     return this.movePointsAndAnchorsLight(
       this.#preparedMovePointIds,
       this.#preparedMoveAnchorIds,
@@ -459,7 +459,7 @@ export class MockFontEngine implements FontEngineAPI {
     );
   }
 
-  clearPreparedMoveLight(): void {
+  clearPreparedNodeTranslationLight(): void {
     this.#preparedMovePointIds = [];
     this.#preparedMoveAnchorIds = [];
   }

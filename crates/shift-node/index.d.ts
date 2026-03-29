@@ -88,16 +88,16 @@ export declare class FontEngine {
    */
   movePointsAndAnchorsLight(pointIds: Array<string>, anchorIds: Array<string>, dx: number, dy: number): boolean
   /**
-   * Parse and store point/anchor ids once for a later direct move call.
+   * Parse and store point/anchor ids once for a later direct translation call.
    * Returns true on success, false if no edit session is active or no ids could be parsed.
    */
-  prepareMoveNodesLight(pointIds: Array<string>, anchorIds: Array<string>): boolean
+  prepareNodeTranslationLight(pointIds: Array<string>, anchorIds: Array<string>): boolean
   /**
    * Move the last prepared point/anchor set directly.
    * Returns true on success, false if no edit session is active.
    */
-  movePreparedNodesLight(dx: number, dy: number): boolean
-  clearPreparedMoveLight(): void
+  applyPreparedNodeTranslationLight(dx: number, dy: number): boolean
+  clearPreparedNodeTranslationLight(): void
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string

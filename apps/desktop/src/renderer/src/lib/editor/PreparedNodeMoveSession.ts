@@ -12,13 +12,14 @@ export class PreparedNodeMoveSession {
     this.#editing = editing;
     this.#pointIds = pointIds;
     this.#anchorIds = anchorIds;
-    this.#prepared = this.#editing.prepareMoveNodes(pointIds, anchorIds);
+    this.#prepared = this.#editing.prepareNodeTranslation(pointIds, anchorIds);
   }
 
   commitUniformDelta(delta: Point2D): void {
     if (!this.#active) return;
 
-    const committedPreparedMove = this.#prepared && this.#editing.movePreparedNodes(delta);
+    const committedPreparedMove =
+      this.#prepared && this.#editing.applyPreparedNodeTranslation(delta);
     if (committedPreparedMove) return;
 
     this.#editing.syncMoveNodes(this.#pointIds, this.#anchorIds, delta);
@@ -29,7 +30,7 @@ export class PreparedNodeMoveSession {
     this.#active = false;
 
     if (this.#prepared) {
-      this.#editing.clearPreparedMove();
+      this.#editing.clearPreparedNodeTranslation();
     }
   }
 }

@@ -13,10 +13,10 @@ function asAnchorId(id: string): AnchorId {
 describe("PreparedNodeMoveSession", () => {
   it("uses the prepared move fast path when available", () => {
     const editing = {
-      prepareMoveNodes: vi.fn(() => true),
-      movePreparedNodes: vi.fn(() => true),
+      prepareNodeTranslation: vi.fn(() => true),
+      applyPreparedNodeTranslation: vi.fn(() => true),
       syncMoveNodes: vi.fn(),
-      clearPreparedMove: vi.fn(),
+      clearPreparedNodeTranslation: vi.fn(),
     };
     const session = new PreparedNodeMoveSession(
       editing as never,
@@ -27,18 +27,21 @@ describe("PreparedNodeMoveSession", () => {
     session.commitUniformDelta({ x: 10, y: -4 });
     session.dispose();
 
-    expect(editing.prepareMoveNodes).toHaveBeenCalledWith([asPointId("p1")], [asAnchorId("a1")]);
-    expect(editing.movePreparedNodes).toHaveBeenCalledWith({ x: 10, y: -4 });
+    expect(editing.prepareNodeTranslation).toHaveBeenCalledWith(
+      [asPointId("p1")],
+      [asAnchorId("a1")],
+    );
+    expect(editing.applyPreparedNodeTranslation).toHaveBeenCalledWith({ x: 10, y: -4 });
     expect(editing.syncMoveNodes).not.toHaveBeenCalled();
-    expect(editing.clearPreparedMove).toHaveBeenCalledTimes(1);
+    expect(editing.clearPreparedNodeTranslation).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to syncMoveNodes when prepared move is unavailable", () => {
     const editing = {
-      prepareMoveNodes: vi.fn(() => false),
-      movePreparedNodes: vi.fn(() => false),
+      prepareNodeTranslation: vi.fn(() => false),
+      applyPreparedNodeTranslation: vi.fn(() => false),
       syncMoveNodes: vi.fn(),
-      clearPreparedMove: vi.fn(),
+      clearPreparedNodeTranslation: vi.fn(),
     };
     const pointIds = [asPointId("p1")];
     const anchorIds = [asAnchorId("a1")];
@@ -47,8 +50,8 @@ describe("PreparedNodeMoveSession", () => {
     session.commitUniformDelta({ x: 3, y: 7 });
     session.dispose();
 
-    expect(editing.movePreparedNodes).not.toHaveBeenCalled();
+    expect(editing.applyPreparedNodeTranslation).not.toHaveBeenCalled();
     expect(editing.syncMoveNodes).toHaveBeenCalledWith(pointIds, anchorIds, { x: 3, y: 7 });
-    expect(editing.clearPreparedMove).not.toHaveBeenCalled();
+    expect(editing.clearPreparedNodeTranslation).not.toHaveBeenCalled();
   });
 });
