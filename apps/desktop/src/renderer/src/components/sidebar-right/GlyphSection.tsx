@@ -9,7 +9,7 @@ import { roundSidebearing } from "@/lib/editor/sidebearings";
 
 export const GlyphSection = () => {
   const editor = getEditor();
-  const glyphInfoState = useSignalState(editor.sidebarGlyphInfo);
+  const glyphInfoState = useSignalState(editor.sidebar.glyphInfo);
   const glyphInfo = getGlyphInfo();
   if (!glyphInfoState) return null;
   const sidebearingsEnabled = glyphInfoState.lsb !== null && glyphInfoState.rsb !== null;

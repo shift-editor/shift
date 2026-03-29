@@ -18,7 +18,7 @@ export const ScaleSection = () => {
 
   useSignalEffect(() => {
     editor.selectedPointIds.value;
-    const bounds = editor.sidebarSelectionBounds.value;
+    const bounds = editor.sidebar.selectionBounds.value;
 
     if (!widthRef.current || !heightRef.current) return;
     if (!bounds) return;

@@ -106,6 +106,7 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
 import {
   constrainPreparedDrag,
   prepareConstrainDrag,
@@ -128,15 +129,6 @@ type DragContext = {
   latestUpdates: NodePositionUpdate[];
   baseSidebearings: { lsb: number | null; rsb: number | null };
 };
-
-type SidebarGlyphInfo = {
-  unicode: number;
-  xAdvance: number;
-  lsb: number | null;
-  rsb: number | null;
-};
-
-type SidebarSelectionBounds = Bounds | null;
 
 type NodePositionPreviewCommit = (updates: NodePositionUpdateList, after: GlyphSnapshot) => void;
 
@@ -197,9 +189,7 @@ export class Editor implements ShiftEditor {
   #fontEngine: FontEngine;
   #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
-  #$sidebarGlyph: ComputedSignal<Glyph | null>;
-  #$sidebarGlyphInfo: ComputedSignal<SidebarGlyphInfo | null>;
-  #$sidebarSelectionBounds: ComputedSignal<SidebarSelectionBounds>;
+  #sidebar: SidebarViewModel;
   #fontManager: FontManager;
   #staticEffect: Effect;
   #textRunGlyphRefreshEffect: Effect;
@@ -219,9 +209,6 @@ export class Editor implements ShiftEditor {
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
   #drawOffset: WritableSignal<Point2D>;
-  #frozenSidebarGlyph: WritableSignal<Glyph | null>;
-  #sidebarGlyphInfoOverride: WritableSignal<SidebarGlyphInfo | null>;
-  #sidebarSelectionBoundsOverride: WritableSignal<SidebarSelectionBounds>;
   $renderState: ComputedSignal<RenderState>;
   $staticState: ComputedSignal<StaticRenderState>;
   $overlayState: ComputedSignal<OverlayRenderState>;
@@ -273,33 +260,9 @@ export class Editor implements ShiftEditor {
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
-    this.#frozenSidebarGlyph = signal<Glyph | null>(null);
-    this.#sidebarGlyphInfoOverride = signal<SidebarGlyphInfo | null>(null);
-    this.#sidebarSelectionBoundsOverride = signal<SidebarSelectionBounds>(null);
-    this.#$sidebarGlyph = computed<Glyph | null>(() => {
-      const frozenGlyph = this.#frozenSidebarGlyph.value;
-      if (frozenGlyph) return frozenGlyph;
-      return this.#$glyph.value;
-    });
-    this.#$sidebarGlyphInfo = computed<SidebarGlyphInfo | null>(() => {
-      const override = this.#sidebarGlyphInfoOverride.value;
-      if (override) return override;
-
-      const glyph = this.#$glyph.value;
-      if (!glyph) return null;
-
-      const sidebearings = deriveGlyphSidebearings(glyph);
-      return {
-        unicode: glyph.unicode,
-        xAdvance: glyph.xAdvance,
-        lsb: sidebearings.lsb,
-        rsb: sidebearings.rsb,
-      };
-    });
-    this.#$sidebarSelectionBounds = computed<SidebarSelectionBounds>(() => {
-      const override = this.#sidebarSelectionBoundsOverride.value;
-      if (override) return override;
-      return this.getSelectionBounds();
+    this.#sidebar = new SidebarViewModel({
+      glyph: this.#$glyph,
+      getSelectionBounds: () => this.getSelectionBounds(),
     });
     this.#fontManager = new FontManager({
       getMetrics: () => this.#fontEngine.info.getMetrics(),
@@ -850,7 +813,7 @@ export class Editor implements ShiftEditor {
         label: this.#getDragCommitLabel(target),
         baseGlyph: currentGlyph,
         onStart: () => {
-          this.#frozenSidebarGlyph.set(this.#$glyph.peek());
+          this.#sidebar.freezeGlyph(this.#$glyph.peek());
           this.#deferTextRunGlyphRefresh.set(true);
         },
         onPreview: () => {
@@ -875,9 +838,7 @@ export class Editor implements ShiftEditor {
           this.#fontEngine.editing.syncNodePositions(updates);
         },
         onFinish: () => {
-          this.#frozenSidebarGlyph.set(null);
-          this.#sidebarGlyphInfoOverride.set(null);
-          this.#sidebarSelectionBoundsOverride.set(null);
+          this.#sidebar.clearTransientState();
         },
       }),
       selectedPointIds: new Set(target.pointIds),
@@ -974,17 +935,17 @@ export class Editor implements ShiftEditor {
 
   #updateSidebarGlyphInfoDuringDrag(context: DragContext): void {
     if (context.target.anchorIds.length > 0 || context.target.pointIds.length === 0) {
-      this.#sidebarGlyphInfoOverride.set(null);
+      this.#sidebar.overrideGlyphInfo(null);
       return;
     }
 
     const uniformDeltaCommit = this.#getSimpleDragCommitDelta(context);
     if (!uniformDeltaCommit) {
-      this.#sidebarGlyphInfoOverride.set(null);
+      this.#sidebar.overrideGlyphInfo(null);
       return;
     }
 
-    this.#sidebarGlyphInfoOverride.set({
+    this.#sidebar.overrideGlyphInfo({
       unicode: context.baseGlyph.unicode,
       xAdvance: context.baseGlyph.xAdvance,
       lsb:
@@ -1324,16 +1285,8 @@ export class Editor implements ShiftEditor {
     return this.#$glyph;
   }
 
-  public get sidebarGlyph(): Signal<Glyph | null> {
-    return this.#$sidebarGlyph;
-  }
-
-  public get sidebarGlyphInfo(): Signal<SidebarGlyphInfo | null> {
-    return this.#$sidebarGlyphInfo;
-  }
-
-  public get sidebarSelectionBounds(): Signal<SidebarSelectionBounds> {
-    return this.#$sidebarSelectionBounds;
+  public get sidebar(): SidebarViewModel {
+    return this.#sidebar;
   }
 
   public getActiveGlyphUnicode(): number | null {
@@ -1950,7 +1903,7 @@ export class Editor implements ShiftEditor {
     this.#deferTextRunGlyphRefresh.set(true);
 
     if (updates.length === 0) {
-      this.#sidebarSelectionBoundsOverride.set(null);
+      this.#sidebar.clearSelectionBoundsOverride();
       this.#fontEngine.emitGlyph(baseSnapshot);
       return;
     }
@@ -2014,7 +1967,7 @@ export class Editor implements ShiftEditor {
             return { ...anchor, x: next.x, y: next.y };
           });
 
-    this.#sidebarSelectionBoundsOverride.set(this.#buildSidebarSelectionBoundsOverride(updates));
+    this.#sidebar.overrideSelectionBounds(this.#buildSidebarSelectionBoundsOverride(updates));
     this.#fontEngine.emitGlyph({
       ...baseSnapshot,
       contours,
@@ -2115,7 +2068,7 @@ export class Editor implements ShiftEditor {
       return;
     }
 
-    this.#sidebarSelectionBoundsOverride.set(null);
+    this.#sidebar.clearSelectionBoundsOverride();
     if (commitToNative) {
       commitToNative(updates, after);
     } else {
@@ -2135,7 +2088,7 @@ export class Editor implements ShiftEditor {
 
   #resetNodePositionPreviewState(): void {
     this.#deferTextRunGlyphRefresh.set(false);
-    this.#sidebarSelectionBoundsOverride.set(null);
+    this.#sidebar.clearSelectionBoundsOverride();
   }
 
   public removePoints(ids: PointId[]): void {

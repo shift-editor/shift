@@ -105,7 +105,7 @@ export const TransformSection = () => {
 
   useSignalEffect(() => {
     const pointIds = editor.selectedPointIds.value;
-    const bounds = editor.sidebarSelectionBounds.value;
+    const bounds = editor.sidebar.selectionBounds.value;
 
     if (pointIds.size === 0) {
       xRef.current?.setValue(0);
