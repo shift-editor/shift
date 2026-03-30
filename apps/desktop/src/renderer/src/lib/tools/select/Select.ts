@@ -1,7 +1,6 @@
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
 import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
-import { executeAction, type SelectAction } from "./actions";
 import {
   SelectionBehavior,
   MarqueeBehavior,
@@ -12,7 +11,8 @@ import {
   EscapeBehavior,
   ToggleSmoothBehavior,
   UpgradeSegmentBehavior,
-  DoubleClickSelectContourBehavior,
+  SelectContourOnDoubleClickBehavior,
+  BendCurveBehaviour,
 } from "./behaviors";
 import { TextRunEditBehavior } from "./behaviors/TextRunEditBehavior";
 import { TextRunHoverBehavior } from "./behaviors/TextRunHoverBehavior";
@@ -22,9 +22,18 @@ import type { CursorType } from "@/types/editor";
 
 export type { BoundingRectEdge, SelectState };
 
-export class Select extends BaseTool<SelectState, SelectAction> {
+export class Select extends BaseTool<SelectState> {
   static stateSpec = defineStateDiagram<SelectState["type"]>({
-    states: ["idle", "ready", "selecting", "selected", "translating", "resizing", "rotating"],
+    states: [
+      "idle",
+      "ready",
+      "selecting",
+      "selected",
+      "translating",
+      "resizing",
+      "rotating",
+      "bending",
+    ],
     initial: "idle",
     transitions: [
       { from: "idle", to: "ready", event: "activate" },
@@ -42,7 +51,7 @@ export class Select extends BaseTool<SelectState, SelectAction> {
 
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmoothBehavior(),
-    new DoubleClickSelectContourBehavior(),
+    new SelectContourOnDoubleClickBehavior(),
     new TextRunHoverBehavior(),
     new TextRunEditBehavior(),
     new UpgradeSegmentBehavior(),
@@ -51,6 +60,7 @@ export class Select extends BaseTool<SelectState, SelectAction> {
     new EscapeBehavior(),
     new ResizeBehavior(),
     new RotateBehavior(),
+    new BendCurveBehaviour(),
     new TranslateBehavior(),
     new MarqueeBehavior(),
   ];
@@ -99,10 +109,6 @@ export class Select extends BaseTool<SelectState, SelectAction> {
       return { state };
     }
     return null;
-  }
-
-  protected override executeAction(action: SelectAction): void {
-    executeAction(action, this.editor);
   }
 
   override render(draw: DrawAPI): void {

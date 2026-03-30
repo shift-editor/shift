@@ -10,7 +10,11 @@ export function deriveGlyphXBounds(glyph: Glyph): { minX: number; maxX: number }
   return deriveFontGlyphXBounds(glyph);
 }
 
-export function deriveGlyphSidebearings(glyph: Glyph): GlyphSidebearings {
+export function deriveGlyphSidebearings(glyph: Glyph | null): GlyphSidebearings {
+  if (!glyph) {
+    return { lsb: null, rsb: null };
+  }
+
   const bounds = deriveGlyphXBounds(glyph);
   if (!bounds) {
     return { lsb: null, rsb: null };

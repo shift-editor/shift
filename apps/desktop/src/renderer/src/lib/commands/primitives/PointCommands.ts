@@ -1,4 +1,4 @@
-import type { PointType, PointId } from "@shift/types";
+import type { ContourId, PointType, PointId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
 /**
@@ -9,6 +9,7 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 export class AddPointCommand extends BaseCommand<PointId> {
   readonly name = "Add Point";
 
+  #contourId: ContourId | null;
   #x: number;
   #y: number;
   #pointType: PointType;
@@ -16,8 +17,15 @@ export class AddPointCommand extends BaseCommand<PointId> {
 
   #resultId: PointId | null = null;
 
-  constructor(x: number, y: number, pointType: PointType, smooth: boolean = false) {
+  constructor(
+    x: number,
+    y: number,
+    pointType: PointType,
+    smooth: boolean = false,
+    contourId: ContourId | null = null,
+  ) {
     super();
+    this.#contourId = contourId;
     this.#x = x;
     this.#y = y;
     this.#pointType = pointType;
@@ -25,8 +33,11 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
+    const contourId = this.#contourId ?? ctx.fontEngine.editing.getActiveContourId();
+    if (!contourId) {
+      throw new Error("No active contour");
+    }
+    this.#resultId = ctx.fontEngine.editing.addPointToContour(contourId, {
       x: this.#x,
       y: this.#y,
       pointType: this.#pointType,
@@ -90,7 +101,7 @@ export class RemovePointsCommand extends BaseCommand<void> {
   #pointIds: PointId[];
 
   #removedPoints: Array<{
-    contourId: string;
+    contourId: ContourId;
     x: number;
     y: number;
     pointType: PointType;
@@ -127,8 +138,7 @@ export class RemovePointsCommand extends BaseCommand<void> {
 
   undo(ctx: CommandContext): void {
     for (const pt of this.#removedPoints) {
-      ctx.fontEngine.editing.addPoint({
-        id: "" as PointId,
+      ctx.fontEngine.editing.addPointToContour(pt.contourId, {
         x: pt.x,
         y: pt.y,
         pointType: pt.pointType,

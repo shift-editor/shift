@@ -91,12 +91,11 @@ describe("Pen tool", () => {
   });
 
   describe("point creation", () => {
-    it("should add point on mouse down via commandHistory", () => {
+    it("should start a pen preview gesture and add a point on mouse down", () => {
       const event = createToolMouseEvent(100, 200);
       sim.onMouseDown(event);
 
-      expect(ctx.mocks.commands.mocks.beginBatch).toHaveBeenCalledWith("Add Point");
-      expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
+      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
       expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(1);
     });
 
@@ -104,7 +103,7 @@ describe("Pen tool", () => {
       const event = createToolMouseEvent(100, 200, { button: 2 });
       sim.onMouseDown(event);
 
-      expect(ctx.mocks.commands.mocks.execute).not.toHaveBeenCalled();
+      expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(0);
     });
 
     it("should not add point when not in ready state", () => {
@@ -112,7 +111,7 @@ describe("Pen tool", () => {
       const event = createToolMouseEvent(100, 200);
       sim.onMouseDown(event);
 
-      expect(ctx.mocks.commands.mocks.execute).not.toHaveBeenCalled();
+      expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(0);
     });
   });
 
@@ -121,7 +120,6 @@ describe("Pen tool", () => {
       const event = createToolMouseEvent(150, 250);
       sim.onMouseDown(event);
 
-      expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
       const glyph = ctx.fontEngine.$glyph.value;
       const activeContour = glyph?.contours.find((c) => c.id === glyph.activeContourId);
       expect(activeContour?.points[0]?.x).toBe(150);
@@ -206,16 +204,15 @@ describe("Pen tool", () => {
   });
 
   describe("mouse up handling", () => {
-    it("should return to ready state on mouse up and end batch", () => {
+    it("should return to ready state on mouse up and commit preview", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
 
-      expect(ctx.mocks.commands.mocks.endBatch).toHaveBeenCalled();
+      expect(ctx.mocks.preview.mocks.commitPreview).toHaveBeenCalledWith("Add Point");
 
-      expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
+      const before = getPointCount(ctx.fontEngine.$glyph.value);
       sim.onMouseDown(createToolMouseEvent(200, 200));
-      expect(ctx.mocks.commands.mocks.execute).toHaveBeenCalled();
-      expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(2);
+      expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(before + 1);
     });
   });
 
@@ -333,10 +330,11 @@ describe("Pen tool", () => {
 
       expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
       expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
+      expectDefined(ctx.mocks.preview.mocks.beginPreview, "preview.beginPreview mock").mockClear();
 
       sim.onMouseDown(createToolMouseEvent(115, 115));
 
-      expect(ctx.mocks.commands.mocks.beginBatch).toHaveBeenCalledWith("Add Point");
+      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
       expect(ctx.mocks.commands.mocks.beginBatch).not.toHaveBeenCalledWith("Close Contour");
     });
 
@@ -387,11 +385,11 @@ describe("Pen tool", () => {
     it("should cancel point placement on Escape during anchored state", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       expect(pen.getState().type).toBe("anchored");
-      expect(ctx.mocks.commands.mocks.beginBatch).toHaveBeenCalledWith("Add Point");
+      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
 
       sim.cancel();
 
-      expect(ctx.mocks.commands.mocks.cancelBatch).toHaveBeenCalled();
+      expect(ctx.mocks.preview.mocks.cancelPreview).toHaveBeenCalled();
       expect(pen.getState().type).toBe("ready");
     });
 
@@ -402,7 +400,7 @@ describe("Pen tool", () => {
 
       sim.cancel();
 
-      expect(ctx.mocks.commands.mocks.cancelBatch).toHaveBeenCalled();
+      expect(ctx.mocks.preview.mocks.cancelPreview).toHaveBeenCalled();
       expect(pen.getState().type).toBe("ready");
     });
 
@@ -500,11 +498,14 @@ describe("Pen tool", () => {
 
       expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
       expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
+      expectDefined(
+        ctx.mocks.edit.mocks.setActiveContour,
+        "edit.setActiveContour mock",
+      ).mockClear();
 
       sim.onMouseDown(createToolMouseEvent(202, 202));
 
-      expect(ctx.mocks.commands.mocks.beginBatch).toHaveBeenCalledWith("Split Contour");
-      expect(ctx.mocks.commands.mocks.endBatch).toHaveBeenCalled();
+      expect(ctx.mocks.edit.mocks.setActiveContour).toHaveBeenCalled();
     });
 
     it("should not split when there is an active drawing contour", () => {

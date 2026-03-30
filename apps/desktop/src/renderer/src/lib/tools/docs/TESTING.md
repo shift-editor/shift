@@ -36,8 +36,8 @@ Tests are split into **unit**, **contract**, and **pipeline** layers so behavior
 
 - **Tap (user clicked, no drag)**
   Prefer a single **click** event when the scenario is “user clicked here”:
-  - `sim.click(x, y)` (sends one `{ type: "click", point, shiftKey, altKey }`), or
-  - `tool.handleEvent({ type: "click", point: { x, y }, shiftKey, altKey })`.
+  - `sim.click(x, y)` (sends one `{ type: "click", point, shiftKey, altKey, metaKey }`), or
+  - `tool.handleEvent({ type: "click", point: { x, y }, shiftKey, altKey, metaKey })`.
 
   Avoid simulating tap as `dragStart` + `dragEnd`; that can hide bugs where the tool treats tap and drag the same.
 

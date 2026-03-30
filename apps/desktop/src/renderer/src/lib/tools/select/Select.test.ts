@@ -147,26 +147,20 @@ describe("Select tool", () => {
     });
 
     it("should begin drag session when dragging", () => {
-      ctx.mocks.drag.mocks.beginDrag.mockClear();
       sim.onMouseDown(createToolMouseEvent(100, 100));
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      expect(ctx.mocks.drag.mocks.beginDrag).toHaveBeenCalled();
+      expect(ctx.mocks.edit.beginInteractionSession).toHaveBeenCalled();
     });
 
     it("should update drag session during drag", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
-      ctx.mocks.drag.lastSession.update.mockClear();
-
       sim.onMouseMove(createToolMouseEvent(150, 160));
 
-      expect(ctx.mocks.drag.lastSession.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          pointer: expect.any(Object),
-          modifiers: expect.any(Object),
-        }),
-      );
+      const points = getAllPoints(ctx.edit.getGlyph());
+      expect(expectAt(points, 0).x).toBe(150);
+      expect(expectAt(points, 0).y).toBe(160);
     });
   });
 

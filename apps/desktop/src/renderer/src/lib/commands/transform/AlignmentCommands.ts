@@ -4,7 +4,6 @@ import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 /**
  * Resolves point ids against a glyph snapshot, returning lightweight
@@ -34,7 +33,6 @@ export class AlignPointsCommand extends BaseCommand<void> {
   #pointIds: PointId[];
   #alignment: AlignmentType;
   #originalPositions: Map<PointId, Point2D> = new Map();
-  #alignedPositions: Map<PointId, Point2D> = new Map();
 
   constructor(pointIds: PointId[], alignment: AlignmentType) {
     super();
@@ -59,31 +57,30 @@ export class AlignPointsCommand extends BaseCommand<void> {
     if (!bounds) return;
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
-    if (this.#alignedPositions.size === 0) {
-      for (const p of aligned) {
-        this.#alignedPositions.set(p.id, { x: p.x, y: p.y });
-      }
+    for (const p of aligned) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
-    ctx.fontEngine.editing.setNodePositions(toPointUpdates(aligned));
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.setNodePositions(toMapUpdates(this.#originalPositions));
+    for (const [id, pos] of this.#originalPositions) {
+      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+    }
   }
 
   override redo(ctx: CommandContext): void {
-    if (this.#alignedPositions.size > 0) {
-      ctx.fontEngine.editing.setNodePositions(toMapUpdates(this.#alignedPositions));
-      return;
+    const points: TransformablePoint[] = [];
+    for (const [id, pos] of this.#originalPositions) {
+      points.push({ id, x: pos.x, y: pos.y });
     }
 
-    const points = mapToTransformablePoints(this.#originalPositions);
     const bounds = Bounds.fromPoints(points);
     if (!bounds) return;
 
-    ctx.fontEngine.editing.setNodePositions(
-      toPointUpdates(Alignment.alignPoints(points, this.#alignment, bounds)),
-    );
+    const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
+    for (const p of aligned) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+    }
   }
 }
 
@@ -98,7 +95,6 @@ export class DistributePointsCommand extends BaseCommand<void> {
   #pointIds: PointId[];
   #type: DistributeType;
   #originalPositions: Map<PointId, Point2D> = new Map();
-  #distributedPositions: Map<PointId, Point2D> = new Map();
 
   constructor(pointIds: PointId[], type: DistributeType) {
     super();
@@ -120,56 +116,26 @@ export class DistributePointsCommand extends BaseCommand<void> {
     }
 
     const distributed = Alignment.distributePoints(points, this.#type);
-    if (this.#distributedPositions.size === 0) {
-      for (const p of distributed) {
-        this.#distributedPositions.set(p.id, { x: p.x, y: p.y });
-      }
+    for (const p of distributed) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
-    ctx.fontEngine.editing.setNodePositions(toPointUpdates(distributed));
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.setNodePositions(toMapUpdates(this.#originalPositions));
+    for (const [id, pos] of this.#originalPositions) {
+      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+    }
   }
 
   override redo(ctx: CommandContext): void {
-    if (this.#distributedPositions.size > 0) {
-      ctx.fontEngine.editing.setNodePositions(toMapUpdates(this.#distributedPositions));
-      return;
+    const points: TransformablePoint[] = [];
+    for (const [id, pos] of this.#originalPositions) {
+      points.push({ id, x: pos.x, y: pos.y });
     }
 
-    ctx.fontEngine.editing.setNodePositions(
-      toPointUpdates(
-        Alignment.distributePoints(mapToTransformablePoints(this.#originalPositions), this.#type),
-      ),
-    );
+    const distributed = Alignment.distributePoints(points, this.#type);
+    for (const p of distributed) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+    }
   }
-}
-
-function toPointUpdates(points: readonly TransformablePoint[]): NodePositionUpdate[] {
-  return points.map((point) => ({
-    node: { kind: "point", id: point.id },
-    x: point.x,
-    y: point.y,
-  }));
-}
-
-function toMapUpdates(positions: ReadonlyMap<PointId, Point2D>): NodePositionUpdate[] {
-  const updates: NodePositionUpdate[] = [];
-  for (const [id, pos] of positions) {
-    updates.push({
-      node: { kind: "point", id },
-      x: pos.x,
-      y: pos.y,
-    });
-  }
-  return updates;
-}
-
-function mapToTransformablePoints(positions: ReadonlyMap<PointId, Point2D>): TransformablePoint[] {
-  const points: TransformablePoint[] = [];
-  for (const [id, pos] of positions) {
-    points.push({ id, x: pos.x, y: pos.y });
-  }
-  return points;
 }

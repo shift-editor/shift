@@ -1,7 +1,6 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
-import { AddContourCommand, CloseContourCommand, AddPointCommand } from "@/lib/commands";
-import type { ShapeState, ShapeBehavior } from "./types";
+import type { ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 import { DEFAULT_STYLES } from "@/lib/styles/style";
 
@@ -19,7 +18,7 @@ export class Shape extends BaseTool<ShapeState> {
 
   readonly id: ToolName = "shape";
 
-  readonly behaviors: ShapeBehavior[] = [ShapeReadyBehavior, ShapeDraggingBehavior];
+  readonly behaviors = [ShapeReadyBehavior, ShapeDraggingBehavior];
 
   initialState(): ShapeState {
     return { type: "idle" };
@@ -72,21 +71,29 @@ export class Shape extends BaseTool<ShapeState> {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    this.editor.commands.beginBatch("Draw Rectangle");
+    this.batch("Draw Rectangle", () => {
+      const contourId = this.editor.getActiveContourId() ?? this.editor.addContour();
 
-    this.editor.commands.execute(new AddPointCommand(rect.x, rect.y, "onCurve", false));
-    this.editor.commands.execute(
-      new AddPointCommand(rect.x + rect.width, rect.y, "onCurve", false),
-    );
-    this.editor.commands.execute(
-      new AddPointCommand(rect.x + rect.width, rect.y + rect.height, "onCurve", false),
-    );
-    this.editor.commands.execute(
-      new AddPointCommand(rect.x, rect.y + rect.height, "onCurve", false),
-    );
-    this.editor.commands.execute(new CloseContourCommand());
-    this.editor.commands.execute(new AddContourCommand());
-
-    this.editor.commands.endBatch();
+      this.editor.addPointToContour(contourId, { x: rect.x, y: rect.y }, "onCurve", false);
+      this.editor.addPointToContour(
+        contourId,
+        { x: rect.x + rect.width, y: rect.y },
+        "onCurve",
+        false,
+      );
+      this.editor.addPointToContour(
+        contourId,
+        { x: rect.x + rect.width, y: rect.y + rect.height },
+        "onCurve",
+        false,
+      );
+      this.editor.addPointToContour(
+        contourId,
+        { x: rect.x, y: rect.y + rect.height },
+        "onCurve",
+        false,
+      );
+      this.editor.closeContour();
+    });
   }
 }

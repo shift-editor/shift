@@ -6,6 +6,7 @@ import type { DrawStyle } from "@/lib/styles/style";
 
 export type ToolRenderLayer =
   | "static-scene-before-handles"
+  | "static-screen-after-handles"
   | "overlay-screen"
   | "interactive-scene";
 

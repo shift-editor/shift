@@ -1,15 +1,9 @@
-import type { PointId, Point2D, Rect2D, AnchorId } from "@shift/types";
+import type { PointId, Point2D, Rect2D, AnchorId, GlyphSnapshot } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
-import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
-import type { SelectAction } from "./actions";
-import type {
-  DragSession,
-  NodePositionPreviewSession,
-  PreparedTransformSession,
-} from "../core/EditorAPI";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import type { InteractionSession } from "../core/EditorAPI";
+import { SegmentId } from "@/types/indicator";
 
 /** Tracks the start and current positions of a marquee drag. */
 export interface SelectionData {
@@ -19,42 +13,47 @@ export interface SelectionData {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
-  session: DragSession;
+  session: InteractionSession;
+  startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
   draggedPointIds: PointId[];
   draggedAnchorIds: AnchorId[];
+  baseGlyph: GlyphSnapshot;
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
 export interface ResizeData {
-  preview: NodePositionPreviewSession;
-  transformSession: PreparedTransformSession;
+  session: InteractionSession;
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
   lastPos: Point2D;
   initialBounds: Rect2D;
   anchorPoint: Point2D;
-  draggedPointIds: PointId[];
   initialPositions: Map<PointId, Point2D>;
   uniformScale: boolean;
-  latestUpdates: NodePositionUpdateList;
 }
 
 /** Live state of a rotation drag, tracking angles and initial point positions for the transform. */
 export interface RotateData {
-  preview: NodePositionPreviewSession;
-  transformSession: PreparedTransformSession;
+  session: InteractionSession;
   corner: CornerHandle;
   startPos: Point2D;
   lastPos: Point2D;
   center: Point2D;
   startAngle: number;
   currentAngle: number;
-  draggedPointIds: PointId[];
   initialPositions: Map<PointId, Point2D>;
   snappedAngle?: number;
-  latestUpdates: NodePositionUpdateList;
+}
+
+export interface BendData {
+  session: InteractionSession;
+  t: number;
+  startPos: Point2D;
+  initialControlOne: Point2D;
+  initialControlTwo: Point2D;
+  segmentId: SegmentId;
 }
 
 /**
@@ -75,7 +74,8 @@ export type SelectState =
   | { type: "selected" }
   | { type: "translating"; translate: TranslateData }
   | { type: "resizing"; resize: ResizeData }
-  | { type: "rotating"; rotate: RotateData };
+  | { type: "rotating"; rotate: RotateData }
+  | { type: "bending"; bend: BendData };
 
-/** Behavior type alias for the select tool's state/event/action triple. */
-export type SelectBehavior = Behavior<SelectState, ToolEvent, SelectAction>;
+export type SelectBehavior = Behavior<SelectState>;
+export type SelectHandlerBehavior = SelectBehavior;

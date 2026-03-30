@@ -1,166 +1,116 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
-import type { ToolEvent } from "../../core/GestureDetector";
+import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { ResizeData, SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import { cacheSelectedPositions } from "../utils";
 import type { NodePositionUpdate } from "@/types/positionUpdate";
-import { createScaleTransform } from "@/lib/editor/affineTransform";
 
-export class ResizeBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (state.type === "resizing") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
-    }
-    if (state.type === "selected" && event.type === "dragStart") {
-      return true;
-    }
-    return false;
-  }
-
-  transition(
+export class ResizeBehavior implements SelectHandlerBehavior {
+  onDragStart(
     state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (state.type === "resizing") {
-      return this.transitionResizing(state, event, editor);
-    }
-
-    if (state.type === "selected" && event.type === "dragStart") {
-      return this.tryStartResize(state, event, editor);
-    }
-
-    return null;
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean {
+    if (state.type !== "selected") return false;
+    const next = this.tryStartResize(event, ctx.editor);
+    if (!next) return false;
+    ctx.setState(next);
+    return true;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "resizing") return false;
+    const next = this.nextResizingState(state, event);
+    ctx.setState(next);
+    return true;
+  }
+
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "resizing") return false;
+    if (state.resize.session.hasChanges()) state.resize.session.commit();
+    else state.resize.session.cancel();
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "resizing") return false;
+    state.resize.session.cancel();
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+    const editor = ctx.editor;
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.clearHover();
     }
   }
 
-  private transitionResizing(
-    state: SelectState & { type: "resizing" },
-    event: ToolEvent,
-    _editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> {
-    if (event.type === "drag") {
-      const uniformScale = event.shiftKey;
-      const currentPos = event.coords.glyphLocal;
-      const { sx, sy } = this.calculateScaleFactors(
-        state.resize.edge,
-        currentPos,
-        state.resize.anchorPoint,
-        state.resize.initialBounds,
+  private nextResizingState(state: SelectState, event: ToolEventOf<"drag">): SelectState {
+    if (state.type !== "resizing") return state;
+
+    const uniformScale = event.shiftKey;
+    const currentPos = event.coords.glyphLocal;
+    const { sx, sy } = this.calculateScaleFactors(
+      state.resize.edge,
+      currentPos,
+      state.resize.anchorPoint,
+      state.resize.initialBounds,
+      uniformScale,
+    );
+
+    const updates: NodePositionUpdate[] = [];
+    for (const [id, initialPos] of state.resize.initialPositions) {
+      const anchor = state.resize.anchorPoint;
+      const offset = Vec2.sub(initialPos, anchor);
+      const scaled = Vec2.mul(offset, { x: sx, y: sy });
+      const newPos = Vec2.add(anchor, scaled);
+      updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
+    }
+    state.resize.session.apply(updates);
+
+    return {
+      type: "resizing",
+      resize: {
+        ...state.resize,
+        lastPos: currentPos,
         uniformScale,
-      );
-
-      const updates: NodePositionUpdate[] = [];
-      for (const [id, initialPos] of state.resize.initialPositions) {
-        const anchor = state.resize.anchorPoint;
-        const offset = Vec2.sub(initialPos, anchor);
-        const scaled = Vec2.mul(offset, { x: sx, y: sy });
-        const newPos = Vec2.add(anchor, scaled);
-        updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
-      }
-      state.resize.preview.preview(updates);
-      state.resize.lastPos = currentPos;
-      state.resize.uniformScale = uniformScale;
-      state.resize.latestUpdates = updates;
-
-      return { state };
-    }
-
-    if (event.type === "dragEnd") {
-      const { edge, lastPos, anchorPoint, initialBounds, uniformScale } = state.resize;
-      const { sx, sy } = this.calculateScaleFactors(
-        edge,
-        lastPos,
-        anchorPoint,
-        initialBounds,
-        uniformScale,
-      );
-      if (sx !== 1 || sy !== 1) {
-        state.resize.preview.commit();
-      } else {
-        state.resize.preview.cancel();
-      }
-      state.resize.transformSession.dispose();
-
-      return {
-        state: { type: "selected" },
-      };
-    }
-
-    if (event.type === "dragCancel") {
-      state.resize.preview.cancel();
-      state.resize.transformSession.dispose();
-      return {
-        state: { type: "selected" },
-      };
-    }
-
-    return { state };
+      },
+    };
   }
 
-  private tryStartResize(
-    _state: SelectState & { type: "selected" },
-    event: ToolEvent & { type: "dragStart" },
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
+  private tryStartResize(event: ToolEventOf<"dragStart">, editor: EditorAPI): SelectState | null {
     const point = editor.getPointAt(event.coords);
     if (point) return null;
 
     const bbHit = editor.hitTestBoundingBoxAt(event.coords);
-    const edge: BoundingRectEdge = bbHit?.type === "resize" ? bbHit.edge : null;
-    const bounds = editor.getSelectionBoundingRect();
-    const baseGlyph = editor.glyph.peek();
+    if (!bbHit) return null;
 
-    if (!edge || !bounds || !baseGlyph) return null;
+    const edge: BoundingRectEdge = bbHit.type === "resize" ? bbHit.edge : null;
+    const bounds = editor.getSelectionBoundingRect();
+
+    if (!edge || !bounds) return null;
 
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const draggedPointIds = [...editor.getSelectedPoints()];
     const initialPositions = cacheSelectedPositions(editor);
-    const transformSession = editor.createPreparedNodeTransformSession(draggedPointIds, []);
-    let resize: ResizeData;
-    const resizeWithoutPreview: Omit<ResizeData, "preview"> = {
-      edge,
-      startPos: localPoint,
-      lastPos: localPoint,
-      initialBounds: bounds,
-      anchorPoint,
-      draggedPointIds,
-      initialPositions,
-      uniformScale: false,
-      latestUpdates: [],
-      transformSession,
-    };
-    const preview = editor.beginNodePositionPreview("Scale Points", baseGlyph, {
-      commitToNative: (updates) => {
-        const { sx, sy } = this.calculateScaleFactors(
-          edge,
-          resize.lastPos,
-          anchorPoint,
-          bounds,
-          resize.uniformScale,
-        );
-        transformSession.commitTransform(createScaleTransform(anchorPoint, sx, sy), updates);
-      },
-    });
-    resize = {
-      ...resizeWithoutPreview,
-      preview,
-    };
+    const session = editor.beginInteractionSession("Scale Points");
 
     return {
-      state: {
-        type: "resizing",
-        resize,
+      type: "resizing",
+      resize: {
+        session,
+        edge,
+        startPos: localPoint,
+        lastPos: localPoint,
+        initialBounds: bounds,
+        anchorPoint,
+        initialPositions,
+        uniformScale: false,
       },
     };
   }

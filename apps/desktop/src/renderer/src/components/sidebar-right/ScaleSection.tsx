@@ -17,10 +17,12 @@ export const ScaleSection = () => {
   const heightRef = useRef<EditableSidebarInputHandle>(null);
 
   useSignalEffect(() => {
+    editor.glyph.value;
     editor.selectedPointIds.value;
-    const bounds = editor.sidebar.selectionBounds.value;
 
     if (!widthRef.current || !heightRef.current) return;
+
+    const bounds = editor.getSelectionBounds();
     if (!bounds) return;
 
     const width = Bounds.width(bounds);

@@ -21,7 +21,7 @@ type EdgePanEditor = {
     ): void;
   };
   pan: Point2D;
-  setPan(x: number, y: number): void;
+  setPan(pan: Point2D): void;
   requestRedraw(): void;
 };
 
@@ -67,7 +67,7 @@ export class EdgePanManager {
     }
 
     const newPan = Vec2.sub(this.editor.pan, this.velocity);
-    this.editor.setPan(newPan.x, newPan.y);
+    this.editor.setPan(newPan);
 
     this.editor.toolManager.handlePointerMove(
       this.lastScreenPos,

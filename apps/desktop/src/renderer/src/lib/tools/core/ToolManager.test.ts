@@ -212,7 +212,7 @@ describe("ToolManager", () => {
   });
 
   describe("pipeline (pointer → gesture → tool)", () => {
-    const modifiers = { shiftKey: false, altKey: false };
+    const modifiers = { shiftKey: false, altKey: false, metaKey: false };
 
     it("tap (down then up at same point) drives tool with click and leaves activeToolState defined", () => {
       toolManager.activate("select");
@@ -291,27 +291,6 @@ describe("ToolManager", () => {
         vi.stubGlobal("requestAnimationFrame", originalRAF);
       }
     });
-
-    it("can skip hover recompute for forced viewport moves", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        expectDefined(editor.mocks.hitTest.mocks.updateHover, "updateHover mock").mockClear();
-
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers, {
-          force: true,
-          skipHover: true,
-        });
-
-        expect(editor.mocks.hitTest.updateHover).not.toHaveBeenCalled();
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
-    });
   });
 
   describe("currentModifiers", () => {
@@ -332,7 +311,7 @@ describe("ToolManager", () => {
       });
       try {
         toolManager.activate("select");
-        const mods: Modifiers = { shiftKey: true, altKey: true };
+        const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
 
         toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
 

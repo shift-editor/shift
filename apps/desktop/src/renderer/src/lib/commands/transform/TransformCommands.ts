@@ -4,7 +4,6 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 import { Transform } from "../../transform/Transform";
 import type { ReflectAxis, TransformablePoint } from "@/types/transform";
 import { Glyphs } from "@shift/font";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 /**
  * Template for point-set transform commands. Captures original positions on
@@ -17,7 +16,6 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
   #pointIds: PointId[];
   #originalPositions: Map<PointId, Point2D> = new Map();
-  #transformedPositions: Map<PointId, Point2D> = new Map();
 
   constructor(pointIds: PointId[]) {
     super();
@@ -40,17 +38,15 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
     }
 
     const transformed = this.transformPoints(points);
-    if (this.#transformedPositions.size === 0) {
-      for (const p of transformed) {
-        this.#transformedPositions.set(p.id, { x: p.x, y: p.y });
-      }
+    for (const p of transformed) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
-
-    ctx.fontEngine.editing.setNodePositions(this.#toUpdates(transformed));
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.setNodePositions(this.#mapToUpdates(this.#originalPositions));
+    for (const [id, pos] of this.#originalPositions) {
+      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+    }
   }
 
   override redo(ctx: CommandContext): void {
@@ -61,33 +57,10 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
       points.push({ id, x: pos.x, y: pos.y });
     }
 
-    if (this.#transformedPositions.size > 0) {
-      ctx.fontEngine.editing.setNodePositions(this.#mapToUpdates(this.#transformedPositions));
-      return;
-    }
-
     const transformed = this.transformPoints(points);
-    ctx.fontEngine.editing.setNodePositions(this.#toUpdates(transformed));
-  }
-
-  #toUpdates(points: readonly TransformablePoint[]): NodePositionUpdate[] {
-    return points.map((point) => ({
-      node: { kind: "point", id: point.id },
-      x: point.x,
-      y: point.y,
-    }));
-  }
-
-  #mapToUpdates(positions: ReadonlyMap<PointId, Point2D>): NodePositionUpdate[] {
-    const updates: NodePositionUpdate[] = [];
-    for (const [id, pos] of positions) {
-      updates.push({
-        node: { kind: "point", id },
-        x: pos.x,
-        y: pos.y,
-      });
+    for (const p of transformed) {
+      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
     }
-    return updates;
   }
 }
 

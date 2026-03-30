@@ -11,6 +11,7 @@ export {
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
 export { SnapshotCommand } from "./SnapshotCommand";
+export { NodePositionPatchCommand, type NodePatchEntry } from "./NodePositionPatchCommand";
 export { SetNodePositionsCommand } from "./SetNodePositionsCommand";
 export {
   SetXAdvanceCommand,

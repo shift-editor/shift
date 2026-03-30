@@ -1,45 +1,56 @@
-import type { AnchorId, Point2D, PointId } from "@shift/types";
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { DragTarget, EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
-import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import { Vec2 } from "@shift/geo";
+import type { AnchorId, Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import type { ToolContext } from "../../core/Behavior";
+import type { EditorAPI } from "../../core/EditorAPI";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SegmentId } from "@/types/indicator";
+import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
+import { constrainDrag } from "@shift/rules";
+import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
-export class TranslateBehavior implements SelectBehavior {
+export class TranslateBehavior implements SelectHandlerBehavior {
   #snap: DragSnapSession | null = null;
 
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (state.type === "translating") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
-    }
-    if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return true;
-    }
-    return false;
-  }
-
-  transition(
+  onDragStart(
     state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (state.type === "translating") {
-      return this.transitionTranslating(state, event, editor);
-    }
-
-    if ((state.type === "ready" || state.type === "selected") && event.type === "dragStart") {
-      return this.tryStartDrag(state, event, editor);
-    }
-
-    return null;
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean {
+    if (state.type !== "ready" && state.type !== "selected") return false;
+    const nextState = this.tryStartDrag(state, event, ctx.editor);
+    if (!nextState) return false;
+    ctx.setState(nextState);
+    return true;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "translating") return false;
+    const nextState = this.nextTranslatingState(state, event, ctx.editor);
+    ctx.setState(nextState);
+    return true;
+  }
+
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "translating") return false;
+    this.finishTranslating(state);
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "translating") return false;
+    state.translate.session.cancel();
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+    const editor = ctx.editor;
     if (prev.type !== "translating" && next.type === "translating") {
       editor.clearHover();
     }
@@ -50,66 +61,87 @@ export class TranslateBehavior implements SelectBehavior {
     }
   }
 
-  private transitionTranslating(
+  private nextTranslatingState(
     state: TranslatingState,
-    event: ToolEvent,
+    event: ToolEventOf<"drag">,
     editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> {
-    if (event.type === "drag") {
-      let newLastPos = event.point;
+  ): TranslatingState {
+    let newLastPos = event.point;
 
-      if (this.#snap) {
-        const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
-        newLastPos = result.point;
-        editor.setSnapIndicator(result.indicator);
-      }
+    if (this.#snap) {
+      const result = this.#snap.snap(event.point, { shiftKey: event.shiftKey });
+      newLastPos = result.point;
+      editor.setSnapIndicator(result.indicator);
+    }
 
-      const deltaX = newLastPos.x - state.translate.lastPos.x;
-      const deltaY = newLastPos.y - state.translate.lastPos.y;
+    const totalDelta = Vec2.sub(newLastPos, state.translate.startPos);
+    const updates = this.getTranslatingUpdates(state, totalDelta);
+    state.translate.session.apply(updates);
 
-      state.translate.session.update({
-        pointer: newLastPos,
-        modifiers: { shiftKey: event.shiftKey, altKey: event.altKey, metaKey: false },
+    return {
+      type: "translating",
+      translate: {
+        ...state.translate,
+        lastPos: newLastPos,
+        totalDelta,
+      },
+    };
+  }
+
+  private getTranslatingUpdates(
+    state: TranslatingState,
+    totalDelta: Point2D,
+  ): NodePositionUpdate[] {
+    const updates: NodePositionUpdate[] = [];
+    const { baseGlyph, draggedPointIds, draggedAnchorIds } = state.translate;
+
+    if (draggedPointIds.length > 0) {
+      const patch = constrainDrag({
+        glyph: baseGlyph,
+        selectedIds: new Set(draggedPointIds),
+        mousePosition: totalDelta,
       });
 
-      state.translate.lastPos = { x: newLastPos.x, y: newLastPos.y };
-      state.translate.totalDelta = {
-        x: state.translate.totalDelta.x + deltaX,
-        y: state.translate.totalDelta.y + deltaY,
-      };
-
-      return { state };
-    }
-
-    if (event.type === "dragEnd") {
-      const { totalDelta, draggedPointIds, draggedAnchorIds } = state.translate;
-      const nothingDragged = draggedPointIds.length === 0 && draggedAnchorIds.length === 0;
-      const noMovement = totalDelta.x === 0 && totalDelta.y === 0;
-
-      if (nothingDragged || noMovement) {
-        state.translate.session.cancel();
-        return { state: { type: "selected" } };
+      for (const point of patch.pointUpdates) {
+        updates.push({
+          node: { kind: "point", id: point.id },
+          x: point.x,
+          y: point.y,
+        });
       }
-
-      state.translate.session.commit();
-      return { state: { type: "selected" } };
     }
 
-    if (event.type === "dragCancel") {
+    if (draggedAnchorIds.length > 0) {
+      const selectedAnchorIds = new Set(draggedAnchorIds);
+      for (const anchor of baseGlyph.anchors) {
+        if (!selectedAnchorIds.has(anchor.id)) continue;
+        const moved = Vec2.add(anchor, totalDelta);
+        updates.push({
+          node: { kind: "anchor", id: anchor.id },
+          x: moved.x,
+          y: moved.y,
+        });
+      }
+    }
+
+    return updates;
+  }
+
+  private finishTranslating(state: TranslatingState): void {
+    const { draggedPointIds, draggedAnchorIds } = state.translate;
+    const nothingDragged = draggedPointIds.length === 0 && draggedAnchorIds.length === 0;
+    if (nothingDragged || !state.translate.session.hasChanges()) {
       state.translate.session.cancel();
-      return {
-        state: { type: "selected" },
-      };
+      return;
     }
-
-    return { state };
+    state.translate.session.commit();
   }
 
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
-    event: ToolEvent & { type: "dragStart" },
+    event: ToolEventOf<"dragStart">,
     editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
+  ): SelectState | null {
     const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
     const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
@@ -120,11 +152,8 @@ export class TranslateBehavior implements SelectBehavior {
       if (!isSelected) {
         const draggedPointIds: PointId[] = [];
         const draggedAnchorIds = [anchorId];
-        let anchorPos = event.point;
-        return {
-          state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-          action: { type: "selectAnchor", anchorId, additive: false },
-        };
+        this.selectAnchor(editor, anchorId, false);
+        return this.beginTranslating(editor, event.point, draggedPointIds, draggedAnchorIds);
       }
 
       const draggedPointIds = editor.getSelectedPoints();
@@ -134,15 +163,13 @@ export class TranslateBehavior implements SelectBehavior {
       if (snapAnchorPointId !== null) {
         anchorPos = this.startSnap(editor, snapAnchorPointId, event.point, draggedPointIds);
       }
-      return {
-        state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-      };
+      return this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds);
     }
 
     if (pointId !== null) {
       const isSelected = state.type === "selected" && editor.isPointSelected(pointId);
 
-      if (event.altKey && isSelected) {
+      if (event.altKey) {
         const result = this.startDuplicateDrag(editor, event.point);
         if (result) return result;
       }
@@ -151,17 +178,19 @@ export class TranslateBehavior implements SelectBehavior {
       const draggedAnchorIds = isSelected ? editor.getSelectedAnchors() : [];
       const anchorPos = this.startSnap(editor, pointId, event.point, draggedPointIds);
 
-      return {
-        state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-        ...(isSelected ? {} : { action: { type: "selectPoint", pointId, additive: false } }),
-      };
+      if (!isSelected) {
+        this.selectPoint(editor, pointId, false);
+      }
+      return this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds);
     }
 
     if (isSegmentHit(hit)) {
+      console.log("startDrag SEGMENT");
       const pointIds = SegmentOps.getPointIds(hit.segment);
       const isSelected = state.type === "selected" && editor.isSegmentSelected(hit.segmentId);
 
-      if (event.altKey && isSelected) {
+      if (event.altKey) {
+        console.log("startDuplicateDrag SEGMENT");
         const result = this.startDuplicateDrag(editor, event.point);
         if (result) return result;
       }
@@ -173,36 +202,25 @@ export class TranslateBehavior implements SelectBehavior {
 
       const anchorPos = this.startSnap(editor, anchorPointId, event.point, draggedPointIds);
 
-      return {
-        state: this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds),
-        ...(isSelected
-          ? {}
-          : {
-              action: {
-                type: "selectSegment",
-                segmentId: hit.segmentId,
-                additive: false,
-              },
-            }),
-      };
+      if (!isSelected) {
+        this.selectSegment(editor, hit.segmentId, false);
+      }
+      return this.beginTranslating(editor, anchorPos, draggedPointIds, draggedAnchorIds);
     }
 
     return null;
   }
 
-  private startDuplicateDrag(
-    editor: EditorAPI,
-    startPos: Point2D,
-  ): TransitionResult<SelectState, SelectAction> | null {
+  private startDuplicateDrag(editor: EditorAPI, startPos: Point2D): SelectState | null {
     const newPointIds = editor.duplicateSelection();
+    console.log("startDuplicateDrag NEW POINT IDS", newPointIds);
     const firstPointId = newPointIds[0];
     if (!firstPointId) return null;
 
     const anchorPos = this.startSnap(editor, firstPointId, startPos, newPointIds);
-    return {
-      state: this.beginTranslating(editor, anchorPos, newPointIds, []),
-      action: { type: "selectPoints", pointIds: newPointIds },
-    };
+    editor.clearSelection();
+    editor.selectPoints(newPointIds);
+    return this.beginTranslating(editor, anchorPos, newPointIds, []);
   }
 
   private beginTranslating(
@@ -211,27 +229,32 @@ export class TranslateBehavior implements SelectBehavior {
     draggedPointIds: PointId[],
     draggedAnchorIds: AnchorId[],
   ): TranslatingState {
-    const session = editor.beginDrag(
-      this.createDragTarget(draggedPointIds, draggedAnchorIds),
-      startPointer,
+    const baseGlyph = editor.glyph.peek() as GlyphSnapshot | null;
+    if (!baseGlyph) {
+      throw new Error("Cannot begin translate without an active glyph");
+    }
+    const session = editor.beginInteractionSession(
+      this.getTranslateLabel(draggedPointIds, draggedAnchorIds),
     );
+
     return {
       type: "translating",
       translate: {
         session,
+        startPos: startPointer,
         lastPos: startPointer,
         totalDelta: { x: 0, y: 0 },
         draggedPointIds,
         draggedAnchorIds,
+        baseGlyph,
       },
     };
   }
 
-  private createDragTarget(pointIds: PointId[], anchorIds: AnchorId[]): DragTarget {
-    return {
-      pointIds,
-      anchorIds,
-    };
+  private getTranslateLabel(pointIds: PointId[], anchorIds: AnchorId[]): string {
+    if (pointIds.length > 0 && anchorIds.length > 0) return "Move Selection";
+    if (anchorIds.length > 0) return "Move Anchors";
+    return "Move Points";
   }
 
   private startSnap(
@@ -254,5 +277,43 @@ export class TranslateBehavior implements SelectBehavior {
   private clearSnap(): void {
     if (this.#snap) this.#snap.clear();
     this.#snap = null;
+  }
+
+  private selectPoint(editor: EditorAPI, pointId: PointId, additive: boolean): void {
+    if (additive) {
+      editor.selectPoints([...editor.getSelectedPoints(), pointId]);
+      return;
+    }
+
+    editor.clearSelection();
+    editor.selectPoints([pointId]);
+  }
+
+  private selectAnchor(editor: EditorAPI, anchorId: AnchorId, additive: boolean): void {
+    if (additive) {
+      editor.selectAnchors([...editor.getSelectedAnchors(), anchorId]);
+      return;
+    }
+
+    editor.clearSelection();
+    editor.selectAnchors([anchorId]);
+  }
+
+  private selectSegment(editor: EditorAPI, segmentId: SegmentId, additive: boolean): void {
+    const segment = editor.getSegmentById(segmentId);
+    if (!segment) return;
+    const pointIds = SegmentOps.getPointIds(segment);
+
+    if (additive) {
+      editor.addSegmentToSelection(segmentId);
+      for (const pointId of pointIds) {
+        editor.addPointToSelection(pointId);
+      }
+      return;
+    }
+
+    editor.clearSelection();
+    editor.selectSegments([segmentId]);
+    editor.selectPoints(pointIds);
   }
 }

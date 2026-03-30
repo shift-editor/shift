@@ -45,6 +45,11 @@ import {
   SetRightSidebearingCommand,
   SetNodePositionsCommand,
   SetXAdvanceCommand,
+  NudgePointsCommand,
+  SetActiveContourCommand,
+  ReverseContourCommand,
+  SplitSegmentCommand,
+  UpgradeLineToCubicCommand,
 } from "../commands";
 import {
   RotatePointsCommand,
@@ -84,6 +89,7 @@ import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { EditorAPI } from "../tools/core/EditorAPI";
 import type { DragTarget, DragSession, DragUpdate } from "../tools/core/EditorAPI";
+import type { InteractionSession } from "../tools/core/EditorAPI";
 import type { NodePositionPreviewSession } from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
@@ -109,6 +115,7 @@ import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positio
 import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
 import { PointDragConstraintSession } from "./PointDragConstraintSession";
 import { PreparedNodeTransformSession } from "./PreparedNodeTransformSession";
+import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -136,6 +143,14 @@ type NodePositionPreviewConfig = {
   commitToNative?: NodePositionPreviewCommit;
   onFinish?: () => void;
 };
+
+function resolvePointInput(pointOrX: Point2D | number, y?: number): Point2D {
+  if (typeof pointOrX === "number") {
+    return { x: pointOrX, y: y ?? 0 };
+  }
+
+  return pointOrX;
+}
 
 /**
  * Central orchestrator for the glyph editing surface.
@@ -786,6 +801,56 @@ export class Editor implements ShiftEditor {
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getSnapIndicator(): SnapIndicator | null {
     return this.#snapIndicator.peek();
+  }
+
+  public beginInteractionSession(label: string): InteractionSession {
+    const baseGlyph = this.#fontEngine.$glyph.peek();
+    if (!baseGlyph) {
+      throw new Error("Cannot begin interaction session without an active glyph");
+    }
+
+    let latestUpdates: NodePositionUpdateList = [];
+    const preview = this.#createNodePositionPreviewSession({
+      label,
+      baseGlyph,
+      onStart: () => {
+        this.#sidebar.freezeGlyph(this.#$glyph.peek());
+        this.#deferTextRunGlyphRefresh.set(true);
+      },
+      onFinish: () => {
+        this.#sidebar.clearTransientState();
+      },
+    });
+
+    return {
+      apply: (updates) => {
+        latestUpdates = updates;
+        preview.preview(updates);
+      },
+      hasChanges: () => latestUpdates.length > 0,
+      commit: () => {
+        preview.commit();
+      },
+      cancel: () => {
+        preview.cancel();
+      },
+    };
+  }
+
+  public withBatch<TResult>(label: string, fn: () => TResult): TResult {
+    return this.#commandHistory.withBatch(label, fn);
+  }
+
+  public withPreview<TResult>(label: string, fn: () => TResult): TResult {
+    this.beginPreview();
+    try {
+      const result = fn();
+      this.commitPreview(label);
+      return result;
+    } catch (error) {
+      this.cancelPreview();
+      throw error;
+    }
   }
 
   public beginDrag(target: DragTarget, startPointer: Point2D): DragSession {
@@ -1477,8 +1542,11 @@ export class Editor implements ShiftEditor {
     this.#viewport.flushMousePosition();
   }
 
-  public projectScreenToScene(x: number, y: number): Point2D {
-    return this.#viewport.projectScreenToScene(x, y);
+  public projectScreenToScene(screen: Point2D): Point2D;
+  public projectScreenToScene(x: number, y: number): Point2D;
+  public projectScreenToScene(screenOrX: Point2D | number, y?: number): Point2D {
+    const screen = resolvePointInput(screenOrX, y);
+    return this.#viewport.projectScreenToScene(screen.x, screen.y);
   }
 
   public sceneToGlyphLocal(point: Point2D): Point2D {
@@ -1515,27 +1583,37 @@ export class Editor implements ShiftEditor {
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public projectSceneToScreen(x: number, y: number): Point2D {
-    return this.#viewport.projectSceneToScreen(x, y);
+  public projectSceneToScreen(scene: Point2D): Point2D;
+  public projectSceneToScreen(x: number, y: number): Point2D;
+  public projectSceneToScreen(sceneOrX: Point2D | number, y?: number): Point2D {
+    const scene = resolvePointInput(sceneOrX, y);
+    return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
 
-  public fromScreen(sx: number, sy: number): Coordinates {
-    const scene = this.projectScreenToScene(sx, sy);
-    const glyphLocal = this.sceneToGlyphLocal(scene);
-    return { screen: { x: sx, y: sy }, scene, glyphLocal };
-  }
-
-  public fromScene(x: number, y: number): Coordinates {
-    const scene = { x, y };
-    const screen = this.projectSceneToScreen(x, y);
+  public fromScreen(screen: Point2D): Coordinates;
+  public fromScreen(sx: number, sy: number): Coordinates;
+  public fromScreen(screenOrX: Point2D | number, y?: number): Coordinates {
+    const screen = resolvePointInput(screenOrX, y);
+    const scene = this.projectScreenToScene(screen);
     const glyphLocal = this.sceneToGlyphLocal(scene);
     return { screen, scene, glyphLocal };
   }
 
-  public fromGlyphLocal(x: number, y: number): Coordinates {
-    const glyphLocal = { x, y };
+  public fromScene(scene: Point2D): Coordinates;
+  public fromScene(x: number, y: number): Coordinates;
+  public fromScene(sceneOrX: Point2D | number, y?: number): Coordinates {
+    const scene = resolvePointInput(sceneOrX, y);
+    const screen = this.projectSceneToScreen(scene);
+    const glyphLocal = this.sceneToGlyphLocal(scene);
+    return { screen, scene, glyphLocal };
+  }
+
+  public fromGlyphLocal(glyphLocal: Point2D): Coordinates;
+  public fromGlyphLocal(x: number, y: number): Coordinates;
+  public fromGlyphLocal(glyphLocalOrX: Point2D | number, y?: number): Coordinates {
+    const glyphLocal = resolvePointInput(glyphLocalOrX, y);
     const scene = this.glyphLocalToScene(glyphLocal);
-    const screen = this.projectSceneToScreen(scene.x, scene.y);
+    const screen = this.projectSceneToScreen(scene);
     return { screen, scene, glyphLocal };
   }
 
@@ -1543,8 +1621,11 @@ export class Editor implements ShiftEditor {
     return this.#viewport.pan;
   }
 
-  public setPan(x: number, y: number): void {
-    this.#viewport.setPan(x, y);
+  public setPan(pan: Point2D): void;
+  public setPan(x: number, y: number): void;
+  public setPan(panOrX: Point2D | number, y?: number): void {
+    const pan = resolvePointInput(panOrX, y);
+    this.#viewport.setPan(pan.x, pan.y);
   }
 
   public zoomIn(): void {
@@ -1828,16 +1909,73 @@ export class Editor implements ShiftEditor {
 
   public addPointToContour(
     contourId: ContourId,
+    position: Point2D,
+    type: PointType,
+    smooth?: boolean,
+  ): PointId;
+  public addPointToContour(
+    contourId: ContourId,
     x: number,
     y: number,
     type: PointType,
     smooth: boolean,
+  ): PointId;
+  public addPointToContour(
+    contourId: ContourId,
+    positionOrX: Point2D | number,
+    yOrType: number | PointType,
+    typeOrSmooth?: PointType | boolean,
+    smooth?: boolean,
   ): PointId {
+    const position =
+      typeof positionOrX === "number" ? { x: positionOrX, y: yOrType as number } : positionOrX;
+    const type = (typeof positionOrX === "number" ? typeOrSmooth : yOrType) as PointType;
+    const resolvedSmooth =
+      typeof positionOrX === "number"
+        ? (smooth ?? false)
+        : ((typeOrSmooth as boolean | undefined) ?? false);
+
     return this.#fontEngine.editing.addPointToContour(contourId, {
-      x,
-      y,
+      x: position.x,
+      y: position.y,
       pointType: type,
-      smooth,
+      smooth: resolvedSmooth,
+    });
+  }
+
+  public insertPointBefore(
+    beforePointId: PointId,
+    position: Point2D,
+    type: PointType,
+    smooth?: boolean,
+  ): PointId;
+  public insertPointBefore(
+    beforePointId: PointId,
+    x: number,
+    y: number,
+    type: PointType,
+    smooth: boolean,
+  ): PointId;
+  public insertPointBefore(
+    beforePointId: PointId,
+    positionOrX: Point2D | number,
+    yOrType: number | PointType,
+    typeOrSmooth?: PointType | boolean,
+    smooth?: boolean,
+  ): PointId {
+    const position =
+      typeof positionOrX === "number" ? { x: positionOrX, y: yOrType as number } : positionOrX;
+    const type = (typeof positionOrX === "number" ? typeOrSmooth : yOrType) as PointType;
+    const resolvedSmooth =
+      typeof positionOrX === "number"
+        ? (smooth ?? false)
+        : ((typeOrSmooth as boolean | undefined) ?? false);
+
+    return this.#fontEngine.editing.insertPointBefore(beforePointId, {
+      x: position.x,
+      y: position.y,
+      pointType: type,
+      smooth: resolvedSmooth,
     });
   }
 
@@ -1849,8 +1987,11 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.editing.moveAnchors(ids, delta);
   }
 
-  public movePointTo(id: PointId, x: number, y: number): void {
-    this.#fontEngine.editing.movePointTo(id, x, y);
+  public movePointTo(id: PointId, position: Point2D): void;
+  public movePointTo(id: PointId, x: number, y: number): void;
+  public movePointTo(id: PointId, positionOrX: Point2D | number, y?: number): void {
+    const position = resolvePointInput(positionOrX, y);
+    this.#fontEngine.editing.movePointTo(id, position.x, position.y);
   }
 
   public applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
@@ -1859,6 +2000,21 @@ export class Editor implements ShiftEditor {
 
   public setNodePositions(updates: NodePositionUpdateList): void {
     this.#fontEngine.editing.setNodePositions(updates);
+  }
+
+  public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
+    this.#commandHistory.withBatch("Continue Contour", () => {
+      this.#commandHistory.execute(new SetActiveContourCommand(contourId));
+      if (fromStart) {
+        this.#commandHistory.execute(new ReverseContourCommand(contourId));
+      }
+    });
+    this.clearSelection();
+    this.selectPoints([pointId]);
+  }
+
+  public splitSegment(segment: GlyphSegment, t: number): PointId {
+    return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
   public beginNodePositionPreview(
@@ -1966,6 +2122,25 @@ export class Editor implements ShiftEditor {
     anchorIds: AnchorId[],
   ): PreparedNodeTransformSession {
     return new PreparedNodeTransformSession(this.#fontEngine.editing, pointIds, anchorIds);
+  }
+
+  public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
+    if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
+    this.#commandHistory.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
+  }
+
+  public rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void {
+    if (pointIds.length === 0 || angle === 0) return;
+    this.#commandHistory.execute(new RotatePointsCommand([...pointIds], angle, center));
+  }
+
+  public nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void {
+    if (pointIds.length === 0 || (dx === 0 && dy === 0)) return;
+    this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
+  }
+
+  public upgradeLineToCubic(segment: LineSegment): void {
+    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
   }
 
   #getPointLocations(

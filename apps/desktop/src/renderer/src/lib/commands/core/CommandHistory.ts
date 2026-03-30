@@ -123,6 +123,18 @@ export class CommandHistory {
     this.#batch = null;
   }
 
+  withBatch<TResult>(name: string, fn: () => TResult): TResult {
+    this.beginBatch(name);
+    try {
+      const result = fn();
+      this.endBatch();
+      return result;
+    } catch (error) {
+      this.cancelBatch();
+      throw error;
+    }
+  }
+
   #addToUndoStack(command: Command<unknown>): void {
     this.#undoStack.push(command);
 

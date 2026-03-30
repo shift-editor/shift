@@ -1,5 +1,5 @@
 import { BaseTool, type ToolName } from "../core/BaseTool";
-import type { TextAction, TextBehavior, TextState } from "./types";
+import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
 import { TypingBehavior } from "./behaviors/TypingBehaviour";
@@ -13,7 +13,7 @@ interface ResumeEditContext {
   activeGlyphName: string | null;
 }
 
-class TextTool extends BaseTool<TextState, TextAction> {
+export class Text extends BaseTool<TextState> {
   readonly id: ToolName = "text";
 
   readonly behaviors: TextBehavior[] = [new TypingBehavior()];
@@ -63,33 +63,6 @@ class TextTool extends BaseTool<TextState, TextAction> {
     this.#resumeContext = null;
     this.#pendingOriginX = null;
     // Keep typed buffer/layout persisted across tool switches.
-  }
-
-  protected override executeAction(action: TextAction): void {
-    switch (action.type) {
-      case "insert":
-        this.editor.insertTextCodepoint(action.codepoint);
-        this.#recompute();
-        break;
-      case "delete":
-        if (this.editor.deleteTextCodepoint()) {
-          this.#recompute();
-        }
-        break;
-      case "moveLeft":
-        if (this.editor.moveTextCursorLeft()) {
-          this.#recompute();
-        }
-        break;
-      case "moveRight":
-        if (this.editor.moveTextCursorRight()) {
-          this.#recompute();
-        }
-        break;
-      case "cancel":
-        this.editor.setActiveTool("select");
-        break;
-    }
   }
 
   #restoreEditingContext(): void {
@@ -171,4 +144,4 @@ class TextTool extends BaseTool<TextState, TextAction> {
   }
 }
 
-export default TextTool;
+export default Text;

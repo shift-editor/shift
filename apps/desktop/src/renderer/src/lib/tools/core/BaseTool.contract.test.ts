@@ -9,11 +9,10 @@ import { createMockToolContext } from "@/testing";
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
 const ClickBehavior: Behavior<ContractState> = {
-  canHandle(state, event) {
-    return state.type === "ready" && event.type === "click";
-  },
-  transition() {
-    return { state: { type: "clicked" } };
+  onClick(state, ctx) {
+    if (state.type !== "ready") return false;
+    ctx.setState({ type: "clicked" });
+    return true;
   },
 };
 

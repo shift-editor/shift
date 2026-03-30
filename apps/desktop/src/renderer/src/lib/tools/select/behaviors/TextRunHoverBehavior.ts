@@ -1,58 +1,52 @@
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { ToolContext } from "../../core/Behavior";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 import { hitTestTextSlot } from "../../text/layout";
 import { resolveComponentAtPoint } from "../compositeHitTest";
 
 /**
  * Updates hover indicator on text run glyphs during pointer movement.
  *
- * This is a visual-only behavior — it always returns null so that
+ * This is a visual-only behavior — it returns false so that
  * subsequent behaviors can also process the pointer move event.
  */
-export class TextRunHoverBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    return (state.type === "ready" || state.type === "selected") && event.type === "pointerMove";
-  }
+export class TextRunHoverBehavior implements SelectHandlerBehavior {
+  onPointerMove(
+    state: SelectState,
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"pointerMove">,
+  ): boolean {
+    if (state.type !== "ready" && state.type !== "selected") return false;
 
-  transition(
-    _state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (event.type !== "pointerMove") return null;
+    const textRunState = ctx.editor.getTextRunState();
+    if (!textRunState) return false;
 
-    const textRunState = editor.getTextRunState();
-    if (!textRunState) return null;
-
-    const metrics = editor.font.getMetrics();
+    const metrics = ctx.editor.font.getMetrics();
     const hitIndex = hitTestTextSlot(textRunState.layout, event.point, metrics, {
-      outlineRadius: editor.hitRadius,
+      outlineRadius: ctx.editor.hitRadius,
       includeFill: true,
       requireShape: true,
     });
 
-    editor.setTextRunHovered(hitIndex);
+    ctx.editor.setTextRunHovered(hitIndex);
     const inspection = textRunState.compositeInspection;
     if (!inspection || hitIndex !== inspection.slotIndex) {
-      editor.setTextRunInspectionComponent(null);
-      return null;
+      ctx.editor.setTextRunInspectionComponent(null);
+      return false;
     }
 
     const slot = textRunState.layout.slots[inspection.slotIndex];
     if (!slot) {
-      editor.setTextRunInspectionComponent(null);
-      return null;
+      ctx.editor.setTextRunInspectionComponent(null);
+      return false;
     }
 
-    const composite = editor.getGlyphCompositeComponents(slot.glyph.glyphName);
+    const composite = ctx.editor.getGlyphCompositeComponents(slot.glyph.glyphName);
     const localPoint = { x: event.point.x - slot.x, y: event.point.y };
     const hitComponent = resolveComponentAtPoint(composite, localPoint);
-    editor.setTextRunInspectionComponent(hitComponent?.index ?? null);
+    ctx.editor.setTextRunInspectionComponent(hitComponent?.index ?? null);
 
-    // Return null to let other behaviors also process this event
-    return null;
+    // Do not consume pointerMove -- later behaviors still need it.
+    return false;
   }
 }

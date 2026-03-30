@@ -3,7 +3,7 @@ import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
-import { effect, useSignalState } from "@/lib/reactive";
+import { effect } from "@/lib/reactive";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
@@ -13,7 +13,6 @@ export function DebugPanel() {
   const debug = useDebugSafe();
   const editor = getEditor();
   const isOpen = debug?.debugPanelOpen ?? false;
-  const gpuHandlesEnabled = useSignalState(editor.gpuHandlesEnabled);
 
   useEffect(() => {
     if (isOpen) {
@@ -42,7 +41,7 @@ export function DebugPanel() {
     if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
-      const coords = editor.fromScreen(screen.x, screen.y);
+      const coords = editor.fromScreen(screen);
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)
@@ -74,20 +73,6 @@ export function DebugPanel() {
         <div className="flex flex-col">
           <h2 className="text-ui font-medium">FPS</h2>
           <span ref={fpsRef} className="text-ui text-muted font-mono tabular-nums" />
-        </div>
-        <Separator className="bg-gray-300" />
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <h2 className="text-ui font-medium">GPU Handles</h2>
-            <span className="text-ui text-muted">Compare WebGL and Canvas2D handle rendering</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => editor.setGpuHandlesEnabled(!gpuHandlesEnabled)}
-            className="rounded border border-line-subtle px-2 py-1 text-ui text-primary"
-          >
-            {gpuHandlesEnabled ? "On" : "Off"}
-          </button>
         </div>
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">

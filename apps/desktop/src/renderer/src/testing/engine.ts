@@ -59,6 +59,7 @@ export function createMockEditing(): CommandEditingAPI {
     setNodePositions: vi.fn(),
     setXAdvance: vi.fn(),
     translateLayer: vi.fn(),
+    toggleSmooth: vi.fn(),
     removePoints: vi.fn(),
     addContour: vi.fn().mockImplementation(() => asContourId(`contour-${++contourIdCounter}`)),
     removeContour: vi.fn(),

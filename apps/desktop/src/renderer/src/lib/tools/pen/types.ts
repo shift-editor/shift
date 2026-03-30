@@ -1,7 +1,5 @@
 import type { Point2D, PointId } from "@shift/types";
-import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
-import type { PenAction } from "./actions";
 
 /** The on-curve anchor point placed by a pen click, plus its contour context. */
 export interface AnchorData {
@@ -43,5 +41,4 @@ export type PenState =
       snappedPos?: Point2D;
     };
 
-/** Behavior type alias for the pen tool's state/event/action triple. */
-export type PenBehavior = Behavior<PenState, ToolEvent, PenAction>;
+export type PenBehavior = Behavior<PenState>;

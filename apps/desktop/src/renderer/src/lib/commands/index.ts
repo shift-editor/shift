@@ -22,6 +22,8 @@ export {
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
+  NodePositionPatchCommand,
+  type NodePatchEntry,
   SetNodePositionsCommand,
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,

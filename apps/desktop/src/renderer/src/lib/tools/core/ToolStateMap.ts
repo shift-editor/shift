@@ -10,8 +10,8 @@ export interface ToolStateMap {
   select: SelectState;
   pen: PenState;
   shape: ShapeState;
-  disabled: ToolState;
   text: TextState;
+  disabled: ToolState;
 }
 
 export type ActiveToolState = ToolStateMap[keyof ToolStateMap] | ToolState;

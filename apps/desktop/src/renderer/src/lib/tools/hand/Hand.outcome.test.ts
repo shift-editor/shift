@@ -14,6 +14,7 @@ function makeDragStart(): ToolEvent {
     screenPoint: p,
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDrag(screenDelta: { x: number; y: number }): ToolEvent {
@@ -28,6 +29,7 @@ function makeDrag(screenDelta: { x: number; y: number }): ToolEvent {
     screenDelta,
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDragEnd(): ToolEvent {

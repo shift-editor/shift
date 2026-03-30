@@ -9,19 +9,19 @@ import type {
   AnchorId,
   PointType,
 } from "@shift/types";
-import type {
-  EditorAPI,
-  ActiveToolState,
-  DragTarget,
-  DragUpdate,
-  DragSession,
-} from "@/lib/tools/core";
+import type { EditorAPI, ActiveToolState, InteractionSession } from "@/lib/tools/core";
 import type { Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
 import type { ContourEndpointHit, HitResult } from "@/types/hitResult";
 import type { TemporaryToolOptions, SnapPreferences } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
+import {
+  NudgePointsCommand,
+  RotatePointsCommand,
+  ScalePointsCommand,
+  UpgradeLineToCubicCommand,
+} from "@/lib/commands";
 import type { SelectionMode, CursorType } from "@/types/editor";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { Point2D, Rect2D } from "@shift/types";
@@ -35,9 +35,10 @@ import type {
 } from "@/lib/editor/snapping/types";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 import type { ReflectAxis } from "@/types/transform";
+import type { LineSegment } from "@/types/segments";
 import { FontEngine, MockFontEngine } from "@/engine";
 import { TextRunManager } from "@/lib/editor/managers/TextRunManager";
-import { Segment as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segment";
+import { Segments as SegmentOps, type SegmentHitResult } from "@/lib/geo/Segments";
 import { glyphRefFromUnicode } from "@/lib/utils/unicode";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import { makeTestCoordinatesFromScene, makeTestCoordinatesFromGlyphLocal } from "./coordinates";
@@ -46,8 +47,8 @@ interface ScreenService {
   toUpmDistance(pixels: number): number;
   readonly hitRadius: number;
   lineWidth(pixels?: number): number;
-  projectScreenToScene(x: number, y: number): Point2D;
-  projectSceneToScreen(x: number, y: number): Point2D;
+  projectScreenToScene(screen: Point2D): Point2D;
+  projectSceneToScreen(scene: Point2D): Point2D;
   getMousePosition(x?: number, y?: number): Point2D;
 }
 
@@ -107,9 +108,17 @@ interface EditService {
     type: PointType,
     smooth: boolean,
   ): PointId;
+  insertPointBefore(
+    beforePointId: PointId,
+    x: number,
+    y: number,
+    type: PointType,
+    smooth: boolean,
+  ): PointId;
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
+  beginInteractionSession(label: string): InteractionSession;
   moveAnchors(ids: AnchorId[], dx: number, dy: number): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
@@ -129,21 +138,6 @@ interface PreviewService {
   commitPreview(label: string): void;
   isInPreview(): boolean;
   getPreviewSnapshot(): GlyphSnapshot | null;
-}
-
-interface DragService {
-  beginDrag(target: DragTarget, startPointer: Point2D): DragSession;
-  lastSession: {
-    update: ReturnType<typeof vi.fn>;
-    commit: ReturnType<typeof vi.fn>;
-    cancel: ReturnType<typeof vi.fn>;
-  };
-  mocks: {
-    beginDrag: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    commit: ReturnType<typeof vi.fn>;
-    cancel: ReturnType<typeof vi.fn>;
-  };
 }
 
 interface TransformService {
@@ -212,7 +206,6 @@ export interface MockToolContext extends EditorAPI {
     setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void;
   };
   readonly edit: ReturnType<typeof createMockEditService>;
-  readonly drag: ReturnType<typeof createMockDragService>;
   readonly preview: ReturnType<typeof createMockPreviewService>;
   readonly transform: ReturnType<typeof createMockTransformService>;
   readonly cursor: ReturnType<typeof createMockCursorService>;
@@ -230,12 +223,30 @@ export interface MockToolContext extends EditorAPI {
   setCurrentModifiers(modifiers: Modifiers): void;
   getAllPoints(): Point[];
   addPoint(x: number, y: number, type: unknown, smooth?: boolean): PointId;
+  getGlyphSvgPath(unicode: number): string | null;
+  getGlyphAdvance(unicode: number): number | null;
+  getFontMetrics(): {
+    unitsPerEm: number;
+    ascender: number;
+    descender: number;
+    capHeight: number;
+    xHeight: number;
+    lineGap: number;
+    italicAngle: number;
+    underlinePosition: number;
+    underlineThickness: number;
+  };
+  setTextContent(content: unknown): void;
+  getTextContent(): unknown;
+  hitTestTextContent(pos: Point2D): boolean;
+  hitTestTextContentIndex(pos: Point2D): number | null;
+  resumeTextEditing(glyphIndex?: number): void;
+  switchEditSession(unicode: number): void;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
     hover: ReturnType<typeof createMockHoverService>;
     edit: ReturnType<typeof createMockEditService>;
-    drag: ReturnType<typeof createMockDragService>;
     preview: ReturnType<typeof createMockPreviewService>;
     transform: ReturnType<typeof createMockTransformService>;
     cursor: ReturnType<typeof createMockCursorService>;
@@ -252,8 +263,8 @@ function createMockScreenService(): ScreenService & {
   const mocks = {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
-    projectScreenToScene: vi.fn((x: number, y: number) => ({ x, y })),
-    projectSceneToScreen: vi.fn((x: number, y: number) => ({ x, y })),
+    projectScreenToScene: vi.fn((screen: Point2D) => ({ x: screen.x, y: screen.y })),
+    projectSceneToScreen: vi.fn((scene: Point2D) => ({ x: scene.x, y: scene.y })),
     getMousePosition: vi.fn((x?: number, y?: number) => ({
       x: x ?? 0,
       y: y ?? 0,
@@ -549,12 +560,32 @@ function createMockEditService(
   };
 
   const mocks = {
-    addPoint: vi.fn((x: number, y: number, type: PointType, smooth = false) =>
-      fontEngine.editing.addPoint({ id: "" as PointId, x, y, pointType: type, smooth }),
-    ),
+    addPoint: vi.fn((x: number, y: number, type: PointType, smooth = false) => {
+      const contourId = fontEngine.editing.getActiveContourId();
+      if (!contourId) {
+        throw new Error("No active contour");
+      }
+      return fontEngine.editing.addPointToContour(contourId, {
+        id: "" as PointId,
+        x,
+        y,
+        pointType: type,
+        smooth,
+      });
+    }),
     addPointToContour: vi.fn(
       (contourId: ContourId, x: number, y: number, type: PointType, smooth: boolean) =>
         fontEngine.editing.addPointToContour(contourId, {
+          id: "" as PointId,
+          x,
+          y,
+          pointType: type,
+          smooth,
+        }),
+    ),
+    insertPointBefore: vi.fn(
+      (beforePointId: PointId, x: number, y: number, type: PointType, smooth: boolean) =>
+        fontEngine.editing.insertPointBefore(beforePointId, {
           id: "" as PointId,
           x,
           y,
@@ -571,6 +602,75 @@ function createMockEditService(
     setNodePositions: vi.fn((updates: NodePositionUpdateList) =>
       fontEngine.editing.setNodePositions(updates),
     ),
+    beginInteractionSession: vi.fn((label: string): InteractionSession => {
+      const touched = new Map<
+        string,
+        { node: NodePositionUpdate["node"]; before: Point2D; after: Point2D }
+      >();
+      let closed = false;
+
+      const keyFor = (node: NodePositionUpdate["node"]) => `${node.kind}:${node.id}`;
+      const readPos = (node: NodePositionUpdate["node"]): Point2D | null => {
+        const glyph = fontEngine.$glyph.value;
+        if (!glyph) return null;
+        if (node.kind === "point") {
+          for (const contour of glyph.contours) {
+            const point = contour.points.find((item) => item.id === node.id);
+            if (point) return { x: point.x, y: point.y };
+          }
+          return null;
+        }
+        if (node.kind === "anchor") {
+          const anchor = glyph.anchors.find((item) => item.id === node.id);
+          return anchor ? { x: anchor.x, y: anchor.y } : null;
+        }
+        return null;
+      };
+
+      const hasChanges = (): boolean =>
+        [...touched.values()].some(
+          (entry) => entry.before.x !== entry.after.x || entry.before.y !== entry.after.y,
+        );
+
+      return {
+        apply(updates: NodePositionUpdateList) {
+          if (closed || updates.length === 0) return;
+
+          for (const update of updates) {
+            const key = keyFor(update.node);
+            let entry = touched.get(key);
+            if (!entry) {
+              const before = readPos(update.node) ?? { x: update.x, y: update.y };
+              entry = { node: update.node, before, after: before };
+              touched.set(key, entry);
+            }
+            entry.after = { x: update.x, y: update.y };
+          }
+
+          fontEngine.editing.setNodePositions(updates);
+        },
+        hasChanges,
+        commit() {
+          if (closed) return;
+          void label;
+          closed = true;
+        },
+        cancel() {
+          if (closed) return;
+          const restore = [...touched.values()]
+            .filter((entry) => entry.before.x !== entry.after.x || entry.before.y !== entry.after.y)
+            .map((entry) => ({
+              node: entry.node,
+              x: entry.before.x,
+              y: entry.before.y,
+            }));
+          if (restore.length > 0) {
+            fontEngine.editing.setNodePositions(restore);
+          }
+          closed = true;
+        },
+      };
+    }),
     moveAnchors: vi.fn((ids: AnchorId[], dx: number, dy: number) =>
       fontEngine.editing.moveAnchors(ids, { x: dx, y: dy }),
     ),
@@ -602,9 +702,11 @@ function createMockEditService(
     getActiveContour: mocks.getActiveContour,
     addPoint: mocks.addPoint,
     addPointToContour: mocks.addPointToContour,
+    insertPointBefore: mocks.insertPointBefore,
     movePoints: mocks.movePoints,
     movePointTo: mocks.movePointTo,
     setNodePositions: mocks.setNodePositions,
+    beginInteractionSession: mocks.beginInteractionSession,
     moveAnchors: mocks.moveAnchors,
     applySmartEdits: mocks.applySmartEdits,
     removePoints: mocks.removePoints,
@@ -616,89 +718,6 @@ function createMockEditService(
     clearActiveContour: mocks.clearActiveContour,
     reverseContour: mocks.reverseContour,
     mocks,
-  };
-}
-
-function createMockDragService(fontEngine: FontEngine): DragService {
-  type ActiveDrag = {
-    target: DragTarget;
-    startPointer: Point2D;
-    baseGlyph: GlyphSnapshot;
-  };
-
-  let activeDrag: ActiveDrag | null = null;
-
-  const update = vi.fn((input: DragUpdate) => {
-    if (!activeDrag) return;
-    const drag = activeDrag;
-
-    const fromStart = {
-      x: input.pointer.x - drag.startPointer.x,
-      y: input.pointer.y - drag.startPointer.y,
-    };
-
-    fontEngine.editing.restoreSnapshot(drag.baseGlyph);
-
-    if (drag.target.pointIds.length > 0) {
-      fontEngine.editing.applySmartEdits(new Set(drag.target.pointIds), fromStart.x, fromStart.y);
-    }
-
-    const anchorUpdates: NodePositionUpdate[] = [];
-    for (const anchorId of drag.target.anchorIds) {
-      const anchor = drag.baseGlyph.anchors.find((item) => item.id === anchorId);
-      if (!anchor) continue;
-      anchorUpdates.push({
-        node: { kind: "anchor", id: anchorId },
-        x: anchor.x + fromStart.x,
-        y: anchor.y + fromStart.y,
-      });
-    }
-    if (anchorUpdates.length > 0) {
-      fontEngine.editing.setNodePositions(anchorUpdates);
-    }
-  });
-
-  const commit = vi.fn(() => {
-    activeDrag = null;
-  });
-
-  const cancel = vi.fn(() => {
-    if (activeDrag) {
-      fontEngine.editing.restoreSnapshot(activeDrag.baseGlyph);
-    }
-    activeDrag = null;
-  });
-
-  const beginDrag = vi.fn((target: DragTarget, startPointer: Point2D): DragSession => {
-    activeDrag = {
-      target: {
-        pointIds: [...target.pointIds],
-        anchorIds: [...target.anchorIds],
-      },
-      startPointer: { x: startPointer.x, y: startPointer.y },
-      baseGlyph: fontEngine.getSnapshot(),
-    };
-
-    return {
-      update,
-      commit,
-      cancel,
-    };
-  });
-
-  return {
-    beginDrag,
-    lastSession: {
-      update,
-      commit,
-      cancel,
-    },
-    mocks: {
-      beginDrag,
-      update,
-      commit,
-      cancel,
-    },
   };
 }
 
@@ -1090,7 +1109,7 @@ function createMockCommandHistory(
       }),
     ),
     record: vi.fn(),
-    beginBatch: vi.fn(() => {
+    beginBatch: vi.fn((_name?: string) => {
       _isBatching = true;
     }),
     endBatch: vi.fn(() => {
@@ -1098,6 +1117,17 @@ function createMockCommandHistory(
     }),
     cancelBatch: vi.fn(() => {
       _isBatching = false;
+    }),
+    withBatch: vi.fn((name: string, fn: () => unknown) => {
+      mocks.beginBatch(name);
+      try {
+        const result = fn();
+        mocks.endBatch();
+        return result;
+      } catch (err) {
+        mocks.cancelBatch();
+        throw err;
+      }
     }),
     undo: vi.fn(),
     redo: vi.fn(),
@@ -1110,6 +1140,7 @@ function createMockCommandHistory(
     beginBatch: mocks.beginBatch,
     endBatch: mocks.endBatch,
     cancelBatch: mocks.cancelBatch,
+    withBatch: mocks.withBatch,
     get isBatching() {
       return _isBatching;
     },
@@ -1145,7 +1176,6 @@ export function createMockToolContext(): MockToolContext {
     },
   };
   const edit = createMockEditService(fontEngine);
-  const drag = createMockDragService(fontEngine);
   const preview = createMockPreviewService(fontEngine);
   const transform = createMockTransformService();
   const cursor = createMockCursorService();
@@ -1278,42 +1308,6 @@ export function createMockToolContext(): MockToolContext {
     };
   }
 
-  function previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void {
-    if (updates.length === 0) {
-      fontEngine.emitGlyph(baseGlyph as GlyphSnapshot);
-      return;
-    }
-
-    const pointUpdates = new Map<string, { x: number; y: number }>();
-    const anchorUpdates = new Map<string, { x: number; y: number }>();
-
-    for (const update of updates) {
-      switch (update.node.kind) {
-        case "point":
-          pointUpdates.set(update.node.id, { x: update.x, y: update.y });
-          break;
-        case "anchor":
-          anchorUpdates.set(update.node.id, { x: update.x, y: update.y });
-          break;
-      }
-    }
-
-    fontEngine.emitGlyph({
-      ...baseGlyph,
-      contours: baseGlyph.contours.map((contour) => ({
-        ...contour,
-        points: contour.points.map((point) => {
-          const next = pointUpdates.get(point.id);
-          return next ? { ...point, x: next.x, y: next.y } : point;
-        }),
-      })),
-      anchors: baseGlyph.anchors.map((anchor) => {
-        const next = anchorUpdates.get(anchor.id);
-        return next ? { ...anchor, x: next.x, y: next.y } : anchor;
-      }),
-    } as GlyphSnapshot);
-  }
-
   return {
     getDrawOffset: vi.fn(() => drawOffset),
     setDrawOffset: vi.fn((offset: Point2D) => {
@@ -1324,7 +1318,6 @@ export function createMockToolContext(): MockToolContext {
     selection,
     hover: hoverProxy,
     edit,
-    drag,
     preview,
     transform,
     cursor,
@@ -1350,12 +1343,11 @@ export function createMockToolContext(): MockToolContext {
     get activeToolState() {
       return $activeToolState;
     },
-    getMousePosition: () =>
-      screen.projectScreenToScene($screenMousePosition.peek().x, $screenMousePosition.peek().y),
+    getMousePosition: () => screen.projectScreenToScene($screenMousePosition.peek()),
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
-    projectScreenToScene: (x: number, y: number) => screen.projectScreenToScene(x, y),
-    projectSceneToScreen: (x: number, y: number) => screen.projectSceneToScreen(x, y),
+    projectScreenToScene: (screenPoint: Point2D) => screen.projectScreenToScene(screenPoint),
+    projectSceneToScreen: (scenePoint: Point2D) => screen.projectSceneToScreen(scenePoint),
     sceneToGlyphLocal: (point: Point2D) => ({
       x: point.x - drawOffset.x,
       y: point.y - drawOffset.y,
@@ -1364,14 +1356,15 @@ export function createMockToolContext(): MockToolContext {
       x: point.x + drawOffset.x,
       y: point.y + drawOffset.y,
     }),
-    fromScreen: (sx: number, sy: number) =>
-      makeTestCoordinatesFromScene(screen.projectScreenToScene(sx, sy), drawOffset, {
-        x: sx,
-        y: sy,
-      }),
-    fromScene: (x: number, y: number) => makeTestCoordinatesFromScene({ x, y }, drawOffset),
-    fromGlyphLocal: (x: number, y: number) =>
-      makeTestCoordinatesFromGlyphLocal({ x, y }, drawOffset),
+    fromScreen: (screenPoint: Point2D) =>
+      makeTestCoordinatesFromScene(
+        screen.projectScreenToScene(screenPoint),
+        drawOffset,
+        screenPoint,
+      ),
+    fromScene: (scenePoint: Point2D) => makeTestCoordinatesFromScene(scenePoint, drawOffset),
+    fromGlyphLocal: (glyphLocal: Point2D) =>
+      makeTestCoordinatesFromGlyphLocal(glyphLocal, drawOffset),
     screenToUpmDistance: (pixels: number) => pixels,
     hasSelection: () => selection.hasSelection(),
     getActiveToolState: () => $activeToolState.value,
@@ -1398,53 +1391,70 @@ export function createMockToolContext(): MockToolContext {
     isSegmentSelected: (id: SegmentId) => selection.isSegmentSelected(id),
     glyph: computed<Glyph | null>(() => edit.getGlyph() as Glyph | null),
     font,
-    addPoint: (x: number, y: number, type: PointType, smooth?: boolean) =>
+    addPoint: (x: number, y: number, type: PointType, smooth = false) =>
       edit.addPoint(x, y, type, smooth),
-    movePointTo: (id: PointId, x: number, y: number) => edit.movePointTo(id, x, y),
+    addContour: () => edit.addContour(),
+    addPointToContour: (contourId: ContourId, position: Point2D, type: PointType, smooth = false) =>
+      edit.addPointToContour(contourId, position.x, position.y, type, smooth),
+    insertPointBefore: (
+      beforePointId: PointId,
+      position: Point2D,
+      type: PointType,
+      smooth = false,
+    ) => edit.insertPointBefore(beforePointId, position.x, position.y, type, smooth),
+    closeContour: () => edit.closeContour(),
+    movePointTo: (id: PointId, position: Point2D) => edit.movePointTo(id, position.x, position.y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
-    beginNodePositionPreview: (
-      _label: string,
-      baseGlyph: Glyph,
-      options?: { commitToNative?(updates: NodePositionUpdateList): void },
-    ) => {
-      let latestUpdates: NodePositionUpdateList = [];
-      return {
-        preview: (updates: NodePositionUpdateList) => {
-          latestUpdates = updates;
-          previewNodePositions(baseGlyph, updates);
-        },
-        commit: () => {
-          if (options?.commitToNative) {
-            options.commitToNative(latestUpdates);
-            return;
-          }
-          edit.setNodePositions(latestUpdates);
-        },
-        cancel: () => fontEngine.emitGlyph(baseGlyph as GlyphSnapshot),
-      };
+    beginInteractionSession: (label: string) => edit.beginInteractionSession(label),
+    splitSegment: vi.fn(() => "" as PointId),
+    continueContour: (contourId: ContourId, fromStart: boolean, pointId: PointId) => {
+      edit.setActiveContour(contourId);
+      if (fromStart) {
+        edit.reverseContour(contourId);
+      }
+      selection.selectPoints([pointId]);
     },
-    previewNodePositions,
-    commitPreviewNodePositions: (
-      _label: string,
-      _baseGlyph: Glyph,
-      updates: NodePositionUpdateList,
-    ) => edit.setNodePositions(updates),
-    createPreparedNodeTransformSession: () => ({
-      commitTranslation: () => {},
-      commitTransform: () => {},
-      dispose: () => {},
-    }),
-    restorePreviewGlyph: (snapshot: Glyph) => fontEngine.emitGlyph(snapshot as GlyphSnapshot),
+    scalePoints: (pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D) => {
+      if (pointIds.length === 0) return;
+      if (sx === 1 && sy === 1) return;
+      commands.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
+    },
+    rotatePoints: (pointIds: readonly PointId[], angle: number, center: Point2D) => {
+      if (pointIds.length === 0) return;
+      if (angle === 0) return;
+      commands.execute(new RotatePointsCommand([...pointIds], angle, center));
+    },
+    nudgePoints: (pointIds: readonly PointId[], dx: number, dy: number) => {
+      if (pointIds.length === 0) return;
+      if (dx === 0 && dy === 0) return;
+      commands.execute(new NudgePointsCommand([...pointIds], dx, dy));
+    },
+    upgradeLineToCubic: (segment: LineSegment) => {
+      commands.execute(new UpgradeLineToCubicCommand(segment));
+    },
     moveAnchors: (ids: AnchorId[], delta: Point2D) => edit.moveAnchors(ids, delta.x, delta.y),
     toggleSmooth: (id: PointId) => edit.toggleSmooth(id),
     getActiveContourId: () => edit.getActiveContourId(),
     getActiveContour: () => edit.getActiveContour(),
     setActiveContour: (id: ContourId) => edit.setActiveContour(id),
     clearActiveContour: () => edit.clearActiveContour(),
-    beginDrag: (target: DragTarget, startPointer: Point2D) => drag.beginDrag(target, startPointer),
+    reverseContour: (id: ContourId) => edit.reverseContour(id),
     beginPreview: () => preview.beginPreview(),
     cancelPreview: () => preview.cancelPreview(),
     commitPreview: (label: string) => preview.commitPreview(label),
+    withBatch: <TResult>(label: string, fn: () => TResult): TResult =>
+      commands.withBatch(label, fn) as TResult,
+    withPreview: <TResult>(label: string, fn: () => TResult): TResult => {
+      preview.beginPreview();
+      try {
+        const result = fn();
+        preview.commitPreview(label);
+        return result;
+      } catch (err) {
+        preview.cancelPreview();
+        throw err;
+      }
+    },
     requestRedraw: () => render.requestRedraw(),
     requestStaticRedraw: () => render.requestStaticRedraw(),
     isPreviewMode: () => render.isPreviewMode(),
@@ -1466,7 +1476,7 @@ export function createMockToolContext(): MockToolContext {
     get pan() {
       return viewport.getPan();
     },
-    setPan: (x: number, y: number) => viewport.pan(x, y),
+    setPan: (pan: Point2D) => viewport.pan(pan.x, pan.y),
     get hoveredBoundingBoxHandle() {
       return $hoveredBoundingBoxHandle;
     },
@@ -1567,12 +1577,30 @@ export function createMockToolContext(): MockToolContext {
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
     returnFromTemporaryTool: () => tools.returnFromTemporary(),
+    getGlyphSvgPath: vi.fn((_unicode: number) => null as string | null),
+    getGlyphAdvance: vi.fn((_unicode: number) => 500 as number | null),
+    getFontMetrics: vi.fn(() => ({
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+      capHeight: 700,
+      xHeight: 500,
+      lineGap: 0,
+      italicAngle: 0,
+      underlinePosition: -100,
+      underlineThickness: 50,
+    })),
+    setTextContent: vi.fn(),
+    getTextContent: vi.fn(() => null),
+    hitTestTextContent: vi.fn(() => false),
+    hitTestTextContentIndex: vi.fn(() => null as number | null),
+    resumeTextEditing: vi.fn(),
+    switchEditSession: vi.fn(),
     mocks: {
       screen,
       selection,
       hover: hoverProxy,
       edit,
-      drag,
       preview,
       transform,
       cursor,

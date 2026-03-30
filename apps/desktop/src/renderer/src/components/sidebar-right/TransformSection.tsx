@@ -104,8 +104,8 @@ export const TransformSection = () => {
   });
 
   useSignalEffect(() => {
+    editor.glyph.value;
     const pointIds = editor.selectedPointIds.value;
-    const bounds = editor.sidebar.selectionBounds.value;
 
     if (pointIds.size === 0) {
       xRef.current?.setValue(0);
@@ -113,6 +113,7 @@ export const TransformSection = () => {
       return;
     }
 
+    const bounds = editor.getSelectionBounds();
     if (bounds) {
       xRef.current?.setValue(Math.round(bounds.min.x));
       yRef.current?.setValue(Math.round(bounds.min.y));

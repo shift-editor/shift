@@ -22,6 +22,7 @@ import type {
   Point2D,
   PointId,
   ContourId,
+  PointType,
   Point,
   Contour,
   Glyph,
@@ -38,8 +39,8 @@ import type { ActiveToolState } from "./ToolStateMap";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { Signal } from "@/lib/reactive/signal";
-import type { SegmentHitResult } from "@/lib/geo/Segment";
-import type { Segment } from "@/types/segments";
+import type { SegmentHitResult } from "@/lib/geo/Segments";
+import type { LineSegment, Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
 import type { Modifiers } from "./GestureDetector";
 import type {
@@ -52,21 +53,18 @@ import type { Font } from "@/lib/editor/Font";
 import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
-import type {
-  AffineTransformPayload,
-  CompositeComponentsPayload,
-} from "@shared/bridge/FontEngineAPI";
+import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
-export type DragTarget = {
+export interface DragTarget {
   pointIds: PointId[];
   anchorIds: AnchorId[];
-};
+}
 
-export type DragUpdate = {
+export interface DragUpdate {
   pointer: Point2D;
-  modifiers: { shiftKey: boolean; altKey: boolean; metaKey: boolean };
-};
+  modifiers?: Modifiers;
+}
 
 export interface DragSession {
   update(input: DragUpdate): void;
@@ -80,14 +78,11 @@ export interface NodePositionPreviewSession {
   cancel(): void;
 }
 
-export interface PreparedTransformSession {
-  commitTranslation(delta: Point2D): void;
-  commitTransform(transform: AffineTransformPayload, fallbackUpdates: NodePositionUpdateList): void;
-  dispose(): void;
-}
-
-export interface NodePositionPreviewOptions {
-  commitToNative?(updates: NodePositionUpdateList): void;
+export interface InteractionSession {
+  apply(updates: NodePositionUpdateList): void;
+  hasChanges(): boolean;
+  commit(): void;
+  cancel(): void;
 }
 
 /**
@@ -102,24 +97,24 @@ export interface Viewport {
   /** Force an immediate position update (used before hit-testing during drags). */
   flushMousePosition?(): void;
   /** Convert screen pixels to scene (UPM) coordinates. */
-  projectScreenToScene(x: number, y: number): Point2D;
+  projectScreenToScene(screen: Point2D): Point2D;
   /** Convert scene (UPM) coordinates to screen pixels. */
-  projectSceneToScreen(x: number, y: number): Point2D;
+  projectSceneToScreen(sceneOrX: Point2D | number, y?: number): Point2D;
   /** Convert a scene point into glyph-local coordinates using the current draw offset. */
   sceneToGlyphLocal(point: Point2D): Point2D;
   /** Convert a glyph-local point into scene coordinates using the current draw offset. */
   glyphLocalToScene(point: Point2D): Point2D;
   /** Build Coordinates from a screen position. */
-  fromScreen(sx: number, sy: number): Coordinates;
+  fromScreen(screen: Point2D): Coordinates;
   /** Build Coordinates from a scene (UPM) position. */
-  fromScene(x: number, y: number): Coordinates;
+  fromScene(scene: Point2D): Coordinates;
   /** Build Coordinates from a glyph-local position. */
-  fromGlyphLocal(x: number, y: number): Coordinates;
+  fromGlyphLocal(glyphLocal: Point2D): Coordinates;
   screenToUpmDistance(pixels: number): number;
   /** Hit-test radius in UPM units, derived from a fixed pixel radius and current zoom. */
   readonly hitRadius: number;
   readonly pan: Point2D;
-  setPan(x: number, y: number): void;
+  setPan(pan: Point2D): void;
 }
 
 /**
@@ -199,32 +194,38 @@ export interface Snapping {
  * and manage the "active contour" (the contour currently being drawn by the Pen tool).
  */
 export interface Editing {
-  movePointTo(id: PointId, x: number, y: number): void;
+  addContour(): ContourId;
+  addPointToContour(
+    contourId: ContourId,
+    position: Point2D,
+    type: PointType,
+    smooth?: boolean,
+  ): PointId;
+  insertPointBefore(
+    beforePointId: PointId,
+    position: Point2D,
+    type: PointType,
+    smooth?: boolean,
+  ): PointId;
+  movePointTo(id: PointId, position: Point2D): void;
+  splitSegment(segment: Segment, t: number): PointId;
+  continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void;
   setNodePositions(updates: NodePositionUpdateList): void;
-  beginNodePositionPreview(
-    label: string,
-    baseGlyph: Glyph,
-    options?: NodePositionPreviewOptions,
-  ): NodePositionPreviewSession;
-  previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void;
-  commitPreviewNodePositions(
-    label: string,
-    baseGlyph: Glyph,
-    updates: NodePositionUpdateList,
-  ): void;
-  createPreparedNodeTransformSession(
-    pointIds: PointId[],
-    anchorIds: AnchorId[],
-  ): PreparedTransformSession;
-  restorePreviewGlyph(snapshot: Glyph): void;
+  beginInteractionSession(label: string): InteractionSession;
+  scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void;
+  rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void;
+  nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void;
+  upgradeLineToCubic(segment: LineSegment): void;
   moveAnchors(ids: AnchorId[], delta: Point2D): void;
   toggleSmooth(id: PointId): void;
+  closeContour(): void;
   duplicateSelection(): PointId[];
   /** The contour currently being extended by the Pen tool, or null. */
   getActiveContour(): Contour | null;
   getActiveContourId(): ContourId | null;
   clearActiveContour(): void;
   setActiveContour(id: ContourId): void;
+  reverseContour(id: ContourId): void;
   /** Open a glyph for editing by canonical glyph reference. */
   startEditSession(glyph: GlyphRef): void;
   /** Return the unicode codepoint of the glyph currently being edited, or null. */
@@ -286,6 +287,13 @@ export interface ToolStateStore {
  */
 export interface Commands {
   readonly commands: CommandHistory;
+  /** Execute `fn` as a single undoable command batch. */
+  withBatch<TResult>(label: string, fn: () => TResult): TResult;
+  /**
+   * Execute `fn` inside preview mode.
+   * Commits with `label` on success and cancels on exception.
+   */
+  withPreview<TResult>(label: string, fn: () => TResult): TResult;
   /**
    * Start a preview transaction. Subsequent edits are tentative and rendered
    * live but not yet on the undo stack. Must be paired with {@link commitPreview}
@@ -296,10 +304,6 @@ export interface Commands {
   commitPreview(label: string): void;
   /** Discard all edits since {@link beginPreview}, restoring the prior state. */
   cancelPreview(): void;
-}
-
-export interface Dragging {
-  beginDrag(target: DragTarget, startPointer: Point2D): DragSession;
 }
 
 /**
@@ -363,7 +367,6 @@ export type EditorAPI = Viewport &
   Selection &
   HitTesting &
   Snapping &
-  Dragging &
   Editing &
   Commands &
   ToolLifecycle &

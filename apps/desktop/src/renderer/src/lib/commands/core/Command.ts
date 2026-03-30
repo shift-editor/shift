@@ -31,6 +31,7 @@ type CommandEditingMethods =
   | "reverseContour"
   | "setXAdvance"
   | "translateLayer"
+  | "toggleSmooth"
   | "restoreSnapshot"
   | "pasteContours";
 

@@ -21,6 +21,21 @@ function createTestContent(points: Array<{ x: number; y: number }>): ClipboardCo
   };
 }
 
+function addPointToActiveContour(
+  fontEngine: ReturnType<typeof createMockFontEngine>,
+  edit: {
+    id?: PointId;
+    x: number;
+    y: number;
+    pointType: "onCurve" | "offCurve";
+    smooth: boolean;
+  },
+): PointId {
+  const contourId = fontEngine.editing.getActiveContourId();
+  if (!contourId) throw new Error("No active contour");
+  return fontEngine.editing.addPointToContour(contourId, edit);
+}
+
 describe("CutCommand", () => {
   let fontEngine: ReturnType<typeof createMockFontEngine>;
   let history: CommandHistory;
@@ -33,14 +48,14 @@ describe("CutCommand", () => {
   });
 
   it("should remove points on execute", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
       pointType: "onCurve",
       smooth: false,
     });
-    fontEngine.editing.addPoint({
+    addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 200,
       y: 200,
@@ -57,7 +72,7 @@ describe("CutCommand", () => {
   });
 
   it("should restore points on undo", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
@@ -76,7 +91,7 @@ describe("CutCommand", () => {
   });
 
   it("should remove same points on redo", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
@@ -93,21 +108,21 @@ describe("CutCommand", () => {
   });
 
   it("should handle multiple points", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
       pointType: "onCurve",
       smooth: false,
     });
-    const p2 = fontEngine.editing.addPoint({
+    const p2 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 200,
       y: 200,
       pointType: "onCurve",
       smooth: false,
     });
-    fontEngine.editing.addPoint({
+    addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 300,
       y: 300,
@@ -226,7 +241,7 @@ describe("Cut + Paste integration", () => {
   });
 
   it("should support cut then paste workflow", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
@@ -249,7 +264,7 @@ describe("Cut + Paste integration", () => {
   });
 
   it("should undo cut and paste separately", () => {
-    const p1 = fontEngine.editing.addPoint({
+    const p1 = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,

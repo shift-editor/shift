@@ -3,14 +3,17 @@ import type { EditorAPI } from "./EditorAPI";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
-import type { BaseTool, ToolState } from "./BaseTool";
+import type { BaseTool } from "./BaseTool";
 import type { DrawAPI } from "./DrawAPI";
 import type { ToolManifest } from "./ToolManifest";
 import type { ToolRenderContext, ToolRenderLayer } from "./ToolRenderContributor";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ToolInstance = BaseTool<ToolState, any>;
-const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = ["static-scene-before-handles"];
+type ToolInstance = BaseTool<any, any>;
+const STATIC_RENDER_LAYERS: readonly ToolRenderLayer[] = [
+  "static-scene-before-handles",
+  "static-screen-after-handles",
+];
 function isStaticRenderLayer(layer: ToolRenderLayer): boolean {
   return STATIC_RENDER_LAYERS.includes(layer);
 }
@@ -112,7 +115,7 @@ export class ToolManager implements ToolSwitchHandler {
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
     this.editor.setCurrentModifiers?.(modifiers);
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     this.gesture.pointerDown(coords, screenPoint, modifiers);
   }
 
@@ -152,7 +155,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.editor.setCurrentModifiers?.(modifiers);
 
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
     this.dispatchEvents(events);
 
@@ -166,7 +169,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerUp(screenPoint: Point2D): void {
-    const coords = this.editor.fromScreen(screenPoint.x, screenPoint.y);
+    const coords = this.editor.fromScreen(screenPoint);
     const events = this.gesture.pointerUp(coords, screenPoint);
     this.dispatchEvents(events);
   }
@@ -175,7 +178,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey,
+      metaKey: e.metaKey || e.ctrlKey,
     });
 
     if (e.key === "Escape" && this.gesture.isDragging) {
@@ -190,7 +193,7 @@ export class ToolManager implements ToolSwitchHandler {
         key: e.key,
         shiftKey: e.shiftKey,
         altKey: e.altKey,
-        metaKey: e.metaKey,
+        metaKey: e.metaKey || e.ctrlKey,
       }) ?? false
     );
   }
@@ -199,7 +202,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.setCurrentModifiers?.({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
-      metaKey: e.metaKey,
+      metaKey: e.metaKey || e.ctrlKey,
     });
 
     return (

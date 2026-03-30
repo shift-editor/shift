@@ -20,7 +20,8 @@
  * ```
  */
 
-import type { Point, Contour, PointId } from "@shift/types";
+import { Vec2 } from "@shift/geo";
+import type { Point, Contour, PointId, Point2D } from "@shift/types";
 
 type PointCollection<TPoint> = {
   readonly points: readonly TPoint[];
@@ -136,6 +137,15 @@ export const Contours = {
    */
   hasInteriorPoints(contour: Contour): boolean {
     return contour.points.length >= 3;
+  },
+
+  canClose(contour: Contour, position: Point2D, hitRadius: number): boolean {
+    if (!this.hasInteriorPoints(contour) || contour.closed) return false;
+
+    const firstPoint = this.firstPoint(contour);
+    if (!firstPoint) return false;
+
+    return Vec2.isWithin(position, firstPoint, hitRadius);
   },
 
   /**
