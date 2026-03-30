@@ -29,15 +29,9 @@ export function renderHandleControlLines(
   let hasLines = false;
 
   for (const contour of glyph.contours) {
-    const { points } = contour;
-    const len = points.length;
-    for (let index = 0; index < len; index += 1) {
-      const current = points[index];
-      if (!current) continue;
+    for (const { current, prev, next } of Contours.withNeighbors(contour)) {
       if (!Validate.isOffCurve(current)) continue;
 
-      const prev = index > 0 ? points[index - 1] : contour.closed ? points[len - 1] : undefined;
-      const next = index + 1 < len ? points[index + 1] : contour.closed ? points[0] : undefined;
       const anchor = next && Validate.isOffCurve(next) ? prev : next;
       if (!anchor || Validate.isOffCurve(anchor)) continue;
       if (isLineVisible && !isLineVisible(anchor, current)) continue;

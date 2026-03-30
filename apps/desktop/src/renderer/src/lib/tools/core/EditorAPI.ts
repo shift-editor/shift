@@ -98,23 +98,29 @@ export interface Viewport {
   flushMousePosition?(): void;
   /** Convert screen pixels to scene (UPM) coordinates. */
   projectScreenToScene(screen: Point2D): Point2D;
+  projectScreenToScene(x: number, y: number): Point2D;
   /** Convert scene (UPM) coordinates to screen pixels. */
-  projectSceneToScreen(sceneOrX: Point2D | number, y?: number): Point2D;
+  projectSceneToScreen(scene: Point2D): Point2D;
+  projectSceneToScreen(x: number, y: number): Point2D;
   /** Convert a scene point into glyph-local coordinates using the current draw offset. */
   sceneToGlyphLocal(point: Point2D): Point2D;
   /** Convert a glyph-local point into scene coordinates using the current draw offset. */
   glyphLocalToScene(point: Point2D): Point2D;
   /** Build Coordinates from a screen position. */
   fromScreen(screen: Point2D): Coordinates;
+  fromScreen(x: number, y: number): Coordinates;
   /** Build Coordinates from a scene (UPM) position. */
   fromScene(scene: Point2D): Coordinates;
+  fromScene(x: number, y: number): Coordinates;
   /** Build Coordinates from a glyph-local position. */
   fromGlyphLocal(glyphLocal: Point2D): Coordinates;
+  fromGlyphLocal(x: number, y: number): Coordinates;
   screenToUpmDistance(pixels: number): number;
   /** Hit-test radius in UPM units, derived from a fixed pixel radius and current zoom. */
   readonly hitRadius: number;
   readonly pan: Point2D;
   setPan(pan: Point2D): void;
+  setPan(x: number, y: number): void;
 }
 
 /**

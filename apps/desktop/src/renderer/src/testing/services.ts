@@ -223,8 +223,6 @@ export interface MockToolContext extends EditorAPI {
   setCurrentModifiers(modifiers: Modifiers): void;
   getAllPoints(): Point[];
   addPoint(x: number, y: number, type: unknown, smooth?: boolean): PointId;
-  getGlyphSvgPath(unicode: number): string | null;
-  getGlyphAdvance(unicode: number): number | null;
   getFontMetrics(): {
     unitsPerEm: number;
     ascender: number;
@@ -236,12 +234,6 @@ export interface MockToolContext extends EditorAPI {
     underlinePosition: number;
     underlineThickness: number;
   };
-  setTextContent(content: unknown): void;
-  getTextContent(): unknown;
-  hitTestTextContent(pos: Point2D): boolean;
-  hitTestTextContentIndex(pos: Point2D): number | null;
-  resumeTextEditing(glyphIndex?: number): void;
-  switchEditSession(unicode: number): void;
   mocks: {
     screen: ReturnType<typeof createMockScreenService>;
     selection: ReturnType<typeof createMockSelectionService>;
@@ -1349,10 +1341,14 @@ export function createMockToolContext(): MockToolContext {
     },
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
-    projectScreenToScene: (screenPoint: Point2D) =>
-      screen.projectScreenToScene(screenPoint.x, screenPoint.y),
-    projectSceneToScreen: (scenePoint: Point2D) =>
-      screen.projectSceneToScreen(scenePoint.x, scenePoint.y),
+    projectScreenToScene: (screenOrX: Point2D | number, y?: number) => {
+      const screenPoint = typeof screenOrX === "number" ? { x: screenOrX, y: y ?? 0 } : screenOrX;
+      return screen.projectScreenToScene(screenPoint.x, screenPoint.y);
+    },
+    projectSceneToScreen: (sceneOrX: Point2D | number, y?: number) => {
+      const scenePoint = typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX;
+      return screen.projectSceneToScreen(scenePoint.x, scenePoint.y);
+    },
     sceneToGlyphLocal: (point: Point2D) => ({
       x: point.x - drawOffset.x,
       y: point.y - drawOffset.y,
@@ -1361,15 +1357,23 @@ export function createMockToolContext(): MockToolContext {
       x: point.x + drawOffset.x,
       y: point.y + drawOffset.y,
     }),
-    fromScreen: (screenPoint: Point2D) =>
-      makeTestCoordinatesFromScene(
+    fromScreen: (screenOrX: Point2D | number, y?: number) => {
+      const screenPoint = typeof screenOrX === "number" ? { x: screenOrX, y: y ?? 0 } : screenOrX;
+      return makeTestCoordinatesFromScene(
         screen.projectScreenToScene(screenPoint.x, screenPoint.y),
         drawOffset,
         screenPoint,
-      ),
-    fromScene: (scenePoint: Point2D) => makeTestCoordinatesFromScene(scenePoint, drawOffset),
-    fromGlyphLocal: (glyphLocal: Point2D) =>
-      makeTestCoordinatesFromGlyphLocal(glyphLocal, drawOffset),
+      );
+    },
+    fromScene: (sceneOrX: Point2D | number, y?: number) => {
+      const scenePoint = typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX;
+      return makeTestCoordinatesFromScene(scenePoint, drawOffset);
+    },
+    fromGlyphLocal: (glyphLocalOrX: Point2D | number, y?: number) => {
+      const glyphLocal =
+        typeof glyphLocalOrX === "number" ? { x: glyphLocalOrX, y: y ?? 0 } : glyphLocalOrX;
+      return makeTestCoordinatesFromGlyphLocal(glyphLocal, drawOffset);
+    },
     screenToUpmDistance: (pixels: number) => pixels,
     hasSelection: () => selection.hasSelection(),
     getActiveToolState: () => $activeToolState.value,
@@ -1481,7 +1485,10 @@ export function createMockToolContext(): MockToolContext {
     get pan() {
       return viewport.getPan();
     },
-    setPan: (pan: Point2D) => viewport.pan(pan.x, pan.y),
+    setPan: (panOrX: Point2D | number, y?: number) => {
+      const pan = typeof panOrX === "number" ? { x: panOrX, y: y ?? 0 } : panOrX;
+      viewport.pan(pan.x, pan.y);
+    },
     get hoveredBoundingBoxHandle() {
       return $hoveredBoundingBoxHandle;
     },
@@ -1582,8 +1589,6 @@ export function createMockToolContext(): MockToolContext {
     requestTemporaryTool: (toolId: ToolName, options?: TemporaryToolOptions) =>
       tools.requestTemporary(toolId, options),
     returnFromTemporaryTool: () => tools.returnFromTemporary(),
-    getGlyphSvgPath: vi.fn((_unicode: number) => null as string | null),
-    getGlyphAdvance: vi.fn((_unicode: number) => 500 as number | null),
     getFontMetrics: vi.fn(() => ({
       unitsPerEm: 1000,
       ascender: 800,
@@ -1595,12 +1600,6 @@ export function createMockToolContext(): MockToolContext {
       underlinePosition: -100,
       underlineThickness: 50,
     })),
-    setTextContent: vi.fn(),
-    getTextContent: vi.fn(() => null),
-    hitTestTextContent: vi.fn(() => false),
-    hitTestTextContentIndex: vi.fn(() => null as number | null),
-    resumeTextEditing: vi.fn(),
-    switchEditSession: vi.fn(),
     mocks: {
       screen,
       selection,

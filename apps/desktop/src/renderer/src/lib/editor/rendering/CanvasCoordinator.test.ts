@@ -51,7 +51,10 @@ function createGraphicContext(renderer: IRenderer): IGraphicContext {
 
 function createContext(
   drawOffset: Point2D,
-  projectSceneToScreen: (x: number, y: number) => Point2D,
+  projectSceneToScreen: {
+    (scene: Point2D): Point2D;
+    (x: number, y: number): Point2D;
+  },
   renderToolContributors: CanvasCoordinatorContext["renderToolContributors"] = vi.fn(),
 ): CanvasCoordinatorContext {
   const font: Font = {
@@ -131,7 +134,9 @@ function createContext(
 describe("CanvasCoordinator", () => {
   it("applies drawOffset when projecting contributor screen points", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
+    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
+      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
+    );
     const renderToolContributors = vi.fn((layer, context) => {
       if (layer !== "overlay-screen") return;
       context.projectGlyphLocalToScreen({ x: 10, y: 60 });
@@ -150,7 +155,9 @@ describe("CanvasCoordinator", () => {
 
   it("uses raw contributor points when drawOffset is zero", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
+    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
+      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
+    );
     const renderToolContributors = vi.fn((layer, context) => {
       if (layer !== "overlay-screen") return;
       context.projectGlyphLocalToScreen({ x: 10, y: 60 });
@@ -169,7 +176,9 @@ describe("CanvasCoordinator", () => {
 
   it("does not project points when contributor does not request projection", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((x: number, y: number) => ({ x, y }));
+    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
+      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
+    );
     const renderToolContributors = vi.fn();
     const context = createContext({ x: 350, y: 40 }, projectSceneToScreen, renderToolContributors);
     const coordinator = new CanvasCoordinator(context);

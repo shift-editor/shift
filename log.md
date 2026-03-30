@@ -258,8 +258,81 @@ Use this as the recommended handoff order for a second pass.
   - Goal: reduce duplicate viewport math and clarify whether packing belongs in renderer coordination or the WebGL backend.
   - Main files:
     - [apps/desktop/src/renderer/src/lib/editor/rendering/gpu/handleInstances.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/rendering/gpu/handleInstances.ts)
-    - [apps/desktop/src/renderer/src/lib/graphics/backends/ReglHandleContext.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/graphics/backends/ReglHandleContext.ts)
-    - [apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts)
+
+## Refactor Port Handoff
+
+### Latest Checkpoints
+
+- `9da55eb` — `Checkpoint refactor parity port`
+- `f559300` — `Refine editor parity and rendering test scaffolding`
+
+### What Landed In This Phase
+
+- Ported a large chunk of `kostya/pen-tool-etc-refactir` into the active desktop/editor/tool stack without keeping backwards-compat hooks.
+- Kept the current branch perf work integrated where it still fits the refactor shape, especially around:
+  - GPU handle rendering
+  - cached contour/glyph/text-run path rendering
+  - drag preview / native transform support
+- Moved editor/tool behavior further onto the refactored model:
+  - removed legacy pen/select action-model files
+  - added node-position preview / drag support
+  - restored command-history paths for editor operations where I had drifted from branch behavior
+- Fixed renderer-test infrastructure so cached `Path2D` rendering works in Vitest.
+- Brought the test/mock viewport API into line with the scalar coordinate projection shape used by the current editor/viewport code.
+
+### Important Files Touched
+
+- [apps/desktop/src/renderer/src/lib/editor/Editor.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/Editor.ts)
+- [apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts)
+- [apps/desktop/src/renderer/src/lib/tools/core/EditorAPI.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/tools/core/EditorAPI.ts)
+- [apps/desktop/src/renderer/src/lib/editor/SidebarViewModel.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/SidebarViewModel.ts)
+- [apps/desktop/src/renderer/src/lib/editor/PreparedNodeTransformSession.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/PreparedNodeTransformSession.ts)
+- [apps/desktop/src/renderer/src/lib/editor/PointDragConstraintSession.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/PointDragConstraintSession.ts)
+- [apps/desktop/src/renderer/src/testing/setup.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/testing/setup.ts)
+- [apps/desktop/src/renderer/src/testing/services.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/testing/services.ts)
+
+### Current Health Snapshot
+
+- `pnpm -C apps/desktop exec tsc --noEmit --pretty false` passes.
+- Targeted editor/render/tool suites pass, including:
+  - `ViewportManager.test.ts`
+  - `glyph.test.ts`
+  - `textRun.test.ts`
+  - `Select.test.ts`
+  - `Text.test.ts`
+  - command history / point command slices
+- `pre-commit run --all-files` is mostly green until:
+  - `deadcode (strict)`
+  - `vitest` because of `Pen.test.ts`
+
+### Known Remaining Non-Pen Issues
+
+- `deadcode (strict)` still reports:
+  - unused files:
+    - [apps/desktop/src/renderer/src/components/sidebar-right/Sidebar.tsx](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/components/sidebar-right/Sidebar.tsx)
+    - [apps/desktop/src/renderer/src/lib/tools/pen/operations.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/tools/pen/operations.ts)
+    - [apps/desktop/src/renderer/src/testing/services-internal/factories.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/testing/services-internal/factories.ts)
+    - [apps/desktop/src/renderer/src/testing/services-internal/types.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/testing/services-internal/types.ts)
+    - [apps/desktop/src/renderer/src/types/textContext.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/types/textContext.ts)
+  - unused exports:
+    - `createRotationTransform`
+    - `createScaleTransform`
+    - in [apps/desktop/src/renderer/src/lib/editor/affineTransform.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/affineTransform.ts)
+
+### Pen Status
+
+- `Pen.test.ts` is still the only behavioral test failure in the full desktop suite.
+- That surface was intentionally left unfinished because pen is being refactored manually.
+- Non-pen work should avoid trying to “fix around” pen behavior until that refactor lands.
+
+### Recommended Resume Order After Pen Refactor
+
+1. Re-run `pre-commit run --all-files`.
+2. Reconcile the new pen refactor with the current editor/tool API surface.
+3. Clear the remaining `deadcode` findings.
+4. Continue shrinking the remaining diff in [apps/desktop/src/renderer/src/lib/editor/Editor.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/Editor.ts), focusing on drag/preview/selection internals rather than renderer architecture.
+   - [apps/desktop/src/renderer/src/lib/graphics/backends/ReglHandleContext.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/graphics/backends/ReglHandleContext.ts)
+   - [apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts](/Users/kostyafarber/repos/shift/apps/desktop/src/renderer/src/lib/editor/rendering/CanvasCoordinator.ts)
 
 - Generalize the native editing API around prepared transforms rather than translate-specific helpers.
   - Goal: shape the bridge for future rotate/resize/affine commits and reduce one-off methods.
