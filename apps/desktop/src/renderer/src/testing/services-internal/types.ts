@@ -24,8 +24,8 @@ export interface ScreenService {
   toUpmDistance(pixels: number): number;
   readonly hitRadius: number;
   lineWidth(pixels?: number): number;
-  projectScreenToScene(screen: Point2D): Point2D;
-  projectSceneToScreen(scene: Point2D): Point2D;
+  projectScreenToScene(x: number, y: number): Point2D;
+  projectSceneToScreen(x: number, y: number): Point2D;
   getMousePosition(x?: number, y?: number): Point2D;
 }
 

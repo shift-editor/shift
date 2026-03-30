@@ -138,7 +138,6 @@ export class CanvasCoordinator {
   #fpsMonitor: FpsMonitor;
   #ctx: CanvasCoordinatorContext;
   #packedGpuHandleInstances: Float32Array | null = null;
-  #hasLoggedVisiblePointCount = false;
 
   constructor(ctx: CanvasCoordinatorContext) {
     this.#ctx = ctx;
@@ -340,10 +339,6 @@ export class CanvasCoordinator {
     ctx.restore();
 
     const shouldRenderEditableGlyph = this.#ctx.shouldRenderEditableGlyph();
-    if (!this.#hasLoggedVisiblePointCount && glyph && shouldRenderEditableGlyph) {
-      console.log(`[CanvasCoordinator] Total glyph points: ${this.#countGlyphPoints(glyph)}`);
-      this.#hasLoggedVisiblePointCount = true;
-    }
 
     ctx.save();
     this.#applyTransforms(ctx);
@@ -460,16 +455,6 @@ export class CanvasCoordinator {
       maxY < visibleSceneBounds.minY ||
       minY > visibleSceneBounds.maxY
     );
-  }
-
-  #countGlyphPoints(glyph: Glyph): number {
-    let count = 0;
-    for (const contour of glyph.contours) {
-      for (const _point of contour.points) {
-        count += 1;
-      }
-    }
-    return count;
   }
 
   destroy(): void {

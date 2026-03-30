@@ -28,6 +28,7 @@ export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
+  ToggleSmoothCommand,
 } from "./primitives";
 
 // Clipboard commands

@@ -13,6 +13,7 @@ export {
 export { SnapshotCommand } from "./SnapshotCommand";
 export { NodePositionPatchCommand, type NodePatchEntry } from "./NodePositionPatchCommand";
 export { SetNodePositionsCommand } from "./SetNodePositionsCommand";
+export { ToggleSmoothCommand } from "./ToggleSmoothCommand";
 export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,

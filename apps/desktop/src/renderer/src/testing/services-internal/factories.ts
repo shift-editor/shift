@@ -43,8 +43,8 @@ export function createMockScreenService(): ScreenService & {
   const mocks = {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
-    projectScreenToScene: vi.fn((screen: Point2D) => ({ x: screen.x, y: screen.y })),
-    projectSceneToScreen: vi.fn((scene: Point2D) => ({ x: scene.x, y: scene.y })),
+    projectScreenToScene: vi.fn((x: number, y: number) => ({ x, y })),
+    projectSceneToScreen: vi.fn((x: number, y: number) => ({ x, y })),
     getMousePosition: vi.fn((x?: number, y?: number) => ({
       x: x ?? 0,
       y: y ?? 0,

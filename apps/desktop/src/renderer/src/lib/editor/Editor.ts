@@ -41,6 +41,9 @@ import { glyphDataStore } from "@/store/GlyphDataStore";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
+  AddPointCommand,
+  CloseContourCommand,
+  InsertPointCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
   SetNodePositionsCommand,
@@ -49,6 +52,7 @@ import {
   SetActiveContourCommand,
   ReverseContourCommand,
   SplitSegmentCommand,
+  ToggleSmoothCommand,
   UpgradeLineToCubicCommand,
 } from "../commands";
 import {
@@ -76,7 +80,7 @@ import { ContentResolver } from "../clipboard";
 import { ClipboardManager } from "./managers/ClipboardManager";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
-import { hitTestBoundingBox } from "../tools/select/boundingBoxHitTest";
+import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "../tools/select/boundingBoxHitTest";
 import { pointInRect } from "../tools/select/utils";
 import { SelectionManager, HoverManager, EdgePanManager } from "./managers";
 import {
@@ -719,6 +723,8 @@ export class Editor implements ShiftEditor {
   }
 
   public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
+    if (!isBoundingBoxVisibleAtZoom(this.getZoom())) return null;
+
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
@@ -1935,12 +1941,9 @@ export class Editor implements ShiftEditor {
         ? (smooth ?? false)
         : ((typeOrSmooth as boolean | undefined) ?? false);
 
-    return this.#fontEngine.editing.addPointToContour(contourId, {
-      x: position.x,
-      y: position.y,
-      pointType: type,
-      smooth: resolvedSmooth,
-    });
+    return this.#commandHistory.execute(
+      new AddPointCommand(position.x, position.y, type, resolvedSmooth, contourId),
+    );
   }
 
   public insertPointBefore(
@@ -1971,12 +1974,9 @@ export class Editor implements ShiftEditor {
         ? (smooth ?? false)
         : ((typeOrSmooth as boolean | undefined) ?? false);
 
-    return this.#fontEngine.editing.insertPointBefore(beforePointId, {
-      x: position.x,
-      y: position.y,
-      pointType: type,
-      smooth: resolvedSmooth,
-    });
+    return this.#commandHistory.execute(
+      new InsertPointCommand(beforePointId, position.x, position.y, type, resolvedSmooth),
+    );
   }
 
   public movePoints(ids: PointId[], dx: number, dy: number): void {
@@ -2008,9 +2008,8 @@ export class Editor implements ShiftEditor {
       if (fromStart) {
         this.#commandHistory.execute(new ReverseContourCommand(contourId));
       }
+      this.selectPoints([pointId]);
     });
-    this.clearSelection();
-    this.selectPoints([pointId]);
   }
 
   public splitSegment(segment: GlyphSegment, t: number): PointId {
@@ -2260,11 +2259,11 @@ export class Editor implements ShiftEditor {
   }
 
   public closeContour(): void {
-    this.#fontEngine.editing.closeContour();
+    this.#commandHistory.execute(new CloseContourCommand());
   }
 
   public toggleSmooth(id: PointId): void {
-    this.#fontEngine.editing.toggleSmooth(id);
+    this.#commandHistory.execute(new ToggleSmoothCommand(id));
   }
 
   public setActiveContour(contourId: ContourId): void {
@@ -2276,7 +2275,7 @@ export class Editor implements ShiftEditor {
   }
 
   public reverseContour(contourId: ContourId): void {
-    this.#fontEngine.editing.reverseContour(contourId);
+    this.#commandHistory.execute(new ReverseContourCommand(contourId));
   }
 
   public getPointAt(coords: Coordinates): Point | null {

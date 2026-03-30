@@ -47,8 +47,8 @@ interface ScreenService {
   toUpmDistance(pixels: number): number;
   readonly hitRadius: number;
   lineWidth(pixels?: number): number;
-  projectScreenToScene(screen: Point2D): Point2D;
-  projectSceneToScreen(scene: Point2D): Point2D;
+  projectScreenToScene(x: number, y: number): Point2D;
+  projectSceneToScreen(x: number, y: number): Point2D;
   getMousePosition(x?: number, y?: number): Point2D;
 }
 
@@ -263,8 +263,8 @@ function createMockScreenService(): ScreenService & {
   const mocks = {
     toUpmDistance: vi.fn((px: number) => px),
     lineWidth: vi.fn((px = 1) => px),
-    projectScreenToScene: vi.fn((screen: Point2D) => ({ x: screen.x, y: screen.y })),
-    projectSceneToScreen: vi.fn((scene: Point2D) => ({ x: scene.x, y: scene.y })),
+    projectScreenToScene: vi.fn((x: number, y: number) => ({ x, y })),
+    projectSceneToScreen: vi.fn((x: number, y: number) => ({ x, y })),
     getMousePosition: vi.fn((x?: number, y?: number) => ({
       x: x ?? 0,
       y: y ?? 0,
@@ -1343,11 +1343,16 @@ export function createMockToolContext(): MockToolContext {
     get activeToolState() {
       return $activeToolState;
     },
-    getMousePosition: () => screen.projectScreenToScene($screenMousePosition.peek()),
+    getMousePosition: () => {
+      const point = $screenMousePosition.peek();
+      return screen.projectScreenToScene(point.x, point.y);
+    },
     getScreenMousePosition: () => $screenMousePosition.peek(),
     flushMousePosition: () => {},
-    projectScreenToScene: (screenPoint: Point2D) => screen.projectScreenToScene(screenPoint),
-    projectSceneToScreen: (scenePoint: Point2D) => screen.projectSceneToScreen(scenePoint),
+    projectScreenToScene: (screenPoint: Point2D) =>
+      screen.projectScreenToScene(screenPoint.x, screenPoint.y),
+    projectSceneToScreen: (scenePoint: Point2D) =>
+      screen.projectSceneToScreen(scenePoint.x, scenePoint.y),
     sceneToGlyphLocal: (point: Point2D) => ({
       x: point.x - drawOffset.x,
       y: point.y - drawOffset.y,
@@ -1358,7 +1363,7 @@ export function createMockToolContext(): MockToolContext {
     }),
     fromScreen: (screenPoint: Point2D) =>
       makeTestCoordinatesFromScene(
-        screen.projectScreenToScene(screenPoint),
+        screen.projectScreenToScene(screenPoint.x, screenPoint.y),
         drawOffset,
         screenPoint,
       ),
