@@ -7,7 +7,7 @@ import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/engine/draft";
-import { patchPositions } from "@/engine/draft";
+
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { DragTarget } from "../../core/EditorAPI";
 
@@ -97,7 +97,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
     const currentAngle = state.rotate.startAngle + deltaAngle;
 
     const updates = buildRotateUpdates(this.#draft!.base, this.#target!, this.#origin!, deltaAngle);
-    this.#draft!.change(patchPositions(this.#draft!.base, updates));
+    this.#draft!.setPositions(updates);
 
     return {
       type: "rotating",

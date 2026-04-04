@@ -1594,12 +1594,10 @@ export function createMockToolContext(): MockToolContext {
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
     createDraft: () => {
       const base = fontEngine.$glyph.peek()!;
-      let current = base;
       return {
         base,
-        change: (next: GlyphSnapshot) => {
-          current = next;
-          fontEngine.emitGlyph(next);
+        setPositions: (_updates: NodePositionUpdateList) => {
+          fontEngine.emitGlyph(base);
         },
         finish: (_label: string) => {
           fontEngine.syncNodePositions([]);

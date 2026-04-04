@@ -3,7 +3,6 @@ import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { GlyphDraft } from "@/engine/draft";
-import { patchPositions } from "@/engine/draft";
 
 export class BendCurveBehaviour implements SelectHandlerBehavior {
   #draft: GlyphDraft | null = null;
@@ -64,7 +63,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
       { node: { kind: "point" as const, id: control1.id }, x: newCp1.x, y: newCp1.y },
       { node: { kind: "point" as const, id: control2.id }, x: newCp2.x, y: newCp2.y },
     ];
-    this.#draft.change(patchPositions(this.#draft.base, updates));
+    this.#draft.setPositions(updates);
     this.#hasChanges = true;
     return true;
   }

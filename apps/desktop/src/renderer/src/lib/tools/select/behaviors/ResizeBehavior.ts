@@ -6,7 +6,6 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import type { GlyphDraft } from "@/engine/draft";
-import { patchPositions } from "@/engine/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectHandlerBehavior {
@@ -80,7 +79,7 @@ export class ResizeBehavior implements SelectHandlerBehavior {
     );
 
     const updates = buildResizeUpdates(this.#draft!.base, this.#target!, this.#origin!, sx, sy);
-    this.#draft!.change(patchPositions(this.#draft!.base, updates));
+    this.#draft!.setPositions(updates);
 
     return {
       type: "resizing",

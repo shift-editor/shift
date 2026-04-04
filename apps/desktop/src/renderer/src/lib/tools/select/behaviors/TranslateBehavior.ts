@@ -9,7 +9,7 @@ import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/engine/draft";
-import { patchPositions } from "@/engine/draft";
+
 import { constrainPreparedDrag, prepareConstrainDrag, type PreparedConstrainDrag } from "@shift/rules";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
@@ -106,7 +106,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 
     const totalDelta = Vec2.sub(newLastPos, state.translate.startPos);
     const updates = buildTranslateUpdates(this.#draft!.base, this.#target!, totalDelta, this.#rules);
-    this.#draft!.change(patchPositions(this.#draft!.base, updates));
+    this.#draft!.setPositions(updates);
 
     return {
       type: "translating",
