@@ -9,25 +9,25 @@
 
 ### What Rust Owns
 
-| Domain | Crate | Notes |
-|--------|-------|-------|
-| Font I/O (UFO, Glyphs, TTF/OTF) | `shift-core` (`font_loader`, `binary`) | All file reading/writing happens in Rust. TS never touches font bytes. |
-| IR data model | `shift-ir` | `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Anchor`, `Transform`, all ID types. Single source of truth. |
-| Geometry math | `shift-core` (`curve`, `vec2`, `composite`) | Bezier bounds, SVG path generation, bounding boxes, composite flattening. |
-| Component resolution | `shift-core` (`composite`) | Flattening composites, anchor-driven placement, cycle detection. Uses `GlyphLayerProvider` trait so the NAPI layer can inject session-aware resolution. |
-| Edit session | `shift-core` (`edit_session`) | Mutable editing buffer. All point/contour/anchor mutations happen here. Returns `CommandResult` with a new snapshot after every operation. |
-| Dependency graph | `shift-core` (`dependency_graph`) | "What glyphs depend on this component?" queries. |
-| Snapshot serialization | `shift-core` (`snapshot`) | `GlyphSnapshot`, `CommandResult`, `PointSnapshot`, `ContourSnapshot`, etc. Defined once in Rust with `serde::Serialize` + `ts_rs::TS` so TypeScript types are auto-generated. |
+| Domain                          | Crate                                       | Notes                                                                                                                                                                         |
+| ------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Font I/O (UFO, Glyphs, TTF/OTF) | `shift-core` (`font_loader`, `binary`)      | All file reading/writing happens in Rust. TS never touches font bytes.                                                                                                        |
+| IR data model                   | `shift-ir`                                  | `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Anchor`, `Transform`, all ID types. Single source of truth.                                                               |
+| Geometry math                   | `shift-core` (`curve`, `vec2`, `composite`) | Bezier bounds, SVG path generation, bounding boxes, composite flattening.                                                                                                     |
+| Component resolution            | `shift-core` (`composite`)                  | Flattening composites, anchor-driven placement, cycle detection. Uses `GlyphLayerProvider` trait so the NAPI layer can inject session-aware resolution.                       |
+| Edit session                    | `shift-core` (`edit_session`)               | Mutable editing buffer. All point/contour/anchor mutations happen here. Returns `CommandResult` with a new snapshot after every operation.                                    |
+| Dependency graph                | `shift-core` (`dependency_graph`)           | "What glyphs depend on this component?" queries.                                                                                                                              |
+| Snapshot serialization          | `shift-core` (`snapshot`)                   | `GlyphSnapshot`, `CommandResult`, `PointSnapshot`, `ContourSnapshot`, etc. Defined once in Rust with `serde::Serialize` + `ts_rs::TS` so TypeScript types are auto-generated. |
 
 ### What TypeScript Owns
 
-| Domain | Location | Notes |
-|--------|----------|-------|
-| Reactive state | `engine/FontEngine.ts` | `$glyph: Signal<GlyphSnapshot \| null>` drives the UI. Managers update it; the rest of the app subscribes. |
-| Canvas rendering | renderer layer | Drawing glyphs, handles, guides. Uses browser Canvas/Path2D APIs. |
-| Tool system & interaction | `lib/tools/` | Pen tool, select tool, text tool behavior. Event handling, hit testing. |
-| Undo/redo stack | TS-side | Manages snapshot history. |
-| UI chrome | Solid.js components | Panels, menus, sidebars. |
+| Domain                    | Location               | Notes                                                                                                      |
+| ------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Reactive state            | `engine/FontEngine.ts` | `$glyph: Signal<GlyphSnapshot \| null>` drives the UI. Managers update it; the rest of the app subscribes. |
+| Canvas rendering          | renderer layer         | Drawing glyphs, handles, guides. Uses browser Canvas/Path2D APIs.                                          |
+| Tool system & interaction | `lib/tools/`           | Pen tool, select tool, text tool behavior. Event handling, hit testing.                                    |
+| Undo/redo stack           | TS-side                | Manages snapshot history.                                                                                  |
+| UI chrome                 | Solid.js components    | Panels, menus, sidebars.                                                                                   |
 
 ### What the NAPI Layer (`shift-node`) Owns
 
@@ -169,6 +169,7 @@ pub fn get_glyph_note(&self, glyph_name: String) -> Option<String> {
 ```
 
 **Rules for NAPI methods:**
+
 - Return primitives, `Option<primitive>`, `Vec<primitive>`, or `String` (JSON) for complex types.
 - Use `to_json()` for anything with nested structure.
 - Accept primitives or `#[napi(object)]` structs as parameters.
@@ -192,11 +193,11 @@ If tests use `mock.ts`, add the method there too.
 
 ### Decision guide: snapshot field vs. standalone query?
 
-| Use a snapshot field when... | Use a standalone query when... |
-|------------------------------|-------------------------------|
+| Use a snapshot field when...                                  | Use a standalone query when...           |
+| ------------------------------------------------------------- | ---------------------------------------- |
 | The data changes during editing and the UI needs live updates | The data is read-once or rarely accessed |
-| It's part of the glyph's visual/structural state | It's metadata or a derived computation |
-| Multiple UI components need it reactively | Only one call site needs it |
+| It's part of the glyph's visual/structural state              | It's metadata or a derived computation   |
+| Multiple UI components need it reactively                     | Only one call site needs it              |
 
 ### What NOT to do
 
@@ -204,3 +205,179 @@ If tests use `mock.ts`, add the method there too.
 - **Don't put domain logic in `shift-node`.** If you're writing `if/else` or math in `font_engine.rs`, it probably belongs in `shift-core`. The binding layer should orchestrate, not compute.
 - **Don't return complex objects as NAPI structs.** Use JSON strings for anything with nesting. NAPI object mapping is fragile and doesn't support enums, optionals-of-objects, or nested vecs well.
 - **Don't add TS-side geometric math** unless it genuinely requires browser APIs (Canvas, Path2D, DOM measurements). If it's pure coordinate math, put it in Rust.
+
+---
+
+## 4. The Three Mutation Tiers
+
+Every glyph mutation in the editor falls into one of three tiers, distinguished
+by how much work crosses the Rust boundary and how expensive the round-trip is.
+
+### Tier 1: TS-only preview (no Rust round-trip)
+
+**Purpose:** Immediate visual feedback during drags/interactions at 60fps.
+
+**How it works:** Clone the base `GlyphSnapshot`, patch point/anchor positions
+in TypeScript, emit the patched snapshot to the `$glyph` signal. Rust never
+sees these intermediate states.
+
+**Where:** `Editor.#previewNodePositions()` builds a new snapshot by
+index-lookup into the base snapshot's contours/anchors arrays.
+
+**Cost:** Zero NAPI calls. One shallow clone + signal emit per frame.
+
+**Risk:** The preview snapshot can diverge from what Rust would produce if Rust
+applies constraints, snapping, or normalization. Currently safe because
+previews only change `x`/`y` coordinates, which Rust treats as passthrough.
+
+### Tier 2: Lightweight Rust sync (bool return, no snapshot)
+
+**Purpose:** Tell Rust "these positions changed" without paying for full
+snapshot serialization and composite enrichment.
+
+**Where (current):**
+
+- `setNodePositions(updates)` → `raw.setNodePositions()` returns `bool`
+- `setPointPositions(moves)` → `raw.setPointPositions()` returns `bool`
+
+**Where (GPU branch, in progress):**
+
+- `moveNodesLight(nodes, dx, dy)` → delta move, returns `bool`
+- `movePointsAndAnchorsLight(pointIds, anchorIds, dx, dy)` → split ID variant
+- `prepareNodeTransformLight(pointIds, anchorIds)` → cache transform targets
+- `applyPreparedNodeTransformLight(transform)` → apply affine matrix to cached targets
+- `clearPreparedNodeTransformLight()` → release cached targets
+
+**Cost:** One NAPI call, no JSON serialization of results, no composite
+enrichment. The `Light` suffix convention signals "no snapshot return."
+
+**Risk:** Rust's internal state updates but the TS `$glyph` signal is NOT
+refreshed from Rust — the preview snapshot (Tier 1) is what the UI shows.
+If commit happens without a Tier 3 call afterward, the next `getSnapshotData()`
+must agree with what TS previewed.
+
+### Tier 3: Full command dispatch (JSON CommandResult with snapshot)
+
+**Purpose:** Discrete mutations that produce a new canonical snapshot —
+addPoint, removePoints, toggleSmooth, closeContour, etc.
+
+**How it works:** NAPI method returns a JSON string containing
+`{ success, snapshot, affectedPointIds, error }`. The snapshot includes
+re-enriched composite contours. TS parses the JSON, validates success,
+emits the snapshot to the `$glyph` signal.
+
+**Where:** `EditingManager.#execute()` → `#dispatch()` / `#dispatchVoid()`.
+
+**Cost:** Full JSON serialization of `CommandResult` + composite enrichment.
+Acceptable for discrete operations (user clicks), too expensive for
+per-frame drags.
+
+### How the tiers compose: NodePositionPreviewSession
+
+The `NodePositionPreviewSession` pattern (on the GPU branch as
+`Editor.#createNodePositionPreviewSession`) orchestrates all three tiers
+into a `preview/commit/cancel` lifecycle:
+
+```
+preview(updates)  → Tier 1: TS-only glyph patch, every frame
+commit()          → Tier 2: sync to Rust (light), record undo command
+cancel()          → Restore base snapshot, no Rust call
+```
+
+The three drag operations (translate, rotate, resize) differ only in how
+they **build updates** from user input, not in the preview/commit/cancel
+lifecycle:
+
+| Drag type | Input → Updates                                               |
+| --------- | ------------------------------------------------------------- |
+| Translate | `delta` → add delta to base positions (with constraint rules) |
+| Rotate    | `angle + origin` → `Vec2.rotateAround` each point             |
+| Resize    | `scaleX, scaleY + origin` → scale offset from origin          |
+
+All three feed their updates into the same `PreviewSession.preview()`.
+
+### Design implications
+
+1. **`dispatchCommand()` (Tier 3) is not the only reusable core.** The preview
+   session lifecycle (Tier 1 + 2 composition) is equally fundamental.
+
+2. **Tier boundaries should be explicit in the API.** Methods that do Tier 2
+   (light sync) should be visually distinct from Tier 3 (full dispatch).
+   The GPU branch's `Light` suffix is one convention.
+
+3. **The mock must implement all three tiers.** `MockFontEngine` currently
+   implements Tier 3 (full command mocking) and the GPU branch adds Tier 2
+   (`moveNodesLight`, `prepareNodeTransformLight`, etc.). This is the main
+   source of mock complexity growth.
+
+4. **Preview session extraction is the next architectural step.** Currently
+   `#createNodePositionPreviewSession` is a private method on Editor that
+   returns a closure object. Extracting it would let tools and commands
+   create preview sessions without going through Editor's 2000+ line surface.
+
+---
+
+## 5. Current Indirection Problem
+
+### The edit call chain
+
+A typical Tier 3 edit (e.g. `removePoints`) crosses these layers:
+
+```
+Tool / Behavior
+  → editor.removePoints(ids)                  // Editor.ts — 0 logic, delegates
+    → fontEngine.editing.removePoints(ids)     // EditingManager — 0 logic
+      → #dispatchVoid(raw.removePoints(ids))   // dispatch pattern — real work
+        → raw.removePoints(ids)                // NAPI call
+```
+
+Four TS layers, two adding zero logic. The reusable part is the dispatch
+pattern (`#execute`, `#dispatch`, `#dispatchVoid`) — ~25 lines of real code.
+Everything else is method-per-method forwarding.
+
+### Pass-through layers
+
+| Layer            | Lines | Logic added                                                                                                     |
+| ---------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
+| `EditingManager` | 342   | ~50 lines real (dispatch + optimistic updates). 15+ methods are identical `#dispatchVoid(raw.foo())` one-liners |
+| `InfoManager`    | 95    | 0 — every method is `return this.#engine.getX()`                                                                |
+| `IOManager`      | 23    | 0 — 2 methods, pure forward                                                                                     |
+| `FontManager`    | 61    | 0 — 8 methods, pure forward                                                                                     |
+
+### What a flatter design looks like
+
+Extract the dispatch pattern as a free function:
+
+```typescript
+function dispatchCommand(json: string, emit: (g: GlyphSnapshot) => void): PointId[] {
+  const r = executeCommand(json); // JSON parse + validate
+  emit(r.snapshot);
+  return r.affectedPointIds;
+}
+```
+
+Collapse EditingManager's one-liner methods onto FontEngine. Kill
+InfoManager/IOManager/FontManager — use `Pick<FontEngine, ...>` types for
+access control. The call chain becomes:
+
+```
+Tool → editor.removePoints(ids) → fontEngine.removePoints(ids) → raw
+```
+
+Commands change from `ctx.fontEngine.editing.removePoints(ids)` to
+`ctx.engine.removePoints(ids)`.
+
+### What blocks this today
+
+- Commands depend on `CommandFontEngine.editing: CommandEditingAPI` — a
+  `Pick<EditingManager, ...>` type with 17 method names. Changing this
+  touches every command class.
+- The GPU branch adds more methods to EditingManager (`syncMoveNodes`,
+  `prepareNodeTransform`, etc.), deepening the dependency.
+- MockFontEngine implements `FontEngineAPI` (the NAPI contract), not
+  `EditingManager`. Flattening would change what interface the mock targets.
+- Tests use `createMockEditing()` which returns `vi.fn()` stubs matching
+  `CommandEditingAPI`. These would need to match the new surface.
+
+The refactor is viable but should be done as a focused effort, not
+mixed into feature work.
