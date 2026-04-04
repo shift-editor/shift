@@ -55,30 +55,35 @@ import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import type { GlyphDraft } from "@/engine/draft";
 
 export interface DragTarget {
   pointIds: PointId[];
   anchorIds: AnchorId[];
 }
 
+/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
 export interface TranslateDrag {
   update(delta: Point2D, pointer: Point2D, modifiers: Modifiers): void;
   commit(): void;
   cancel(): void;
 }
 
+/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
 export interface RotateDrag {
   update(angle: number, pointer: Point2D, modifiers: Modifiers): void;
   commit(): void;
   cancel(): void;
 }
 
+/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
 export interface ResizeDrag {
   update(scaleX: number, scaleY: number, pointer: Point2D, modifiers: Modifiers): void;
   commit(): void;
   cancel(): void;
 }
 
+/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
 export interface NodePositionOperation {
   apply(updates: NodePositionUpdateList): void;
   hasChanges(): boolean;
@@ -218,24 +223,29 @@ export interface Editing {
   splitSegment(segment: Segment, t: number): PointId;
   continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void;
   setNodePositions(updates: NodePositionUpdateList): void;
-  beginTranslateDrag(
+  createDraft(): GlyphDraft;
+  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
+  beginTranslateDrag?(
     target: DragTarget,
     startPointer: Point2D,
     label?: string,
   ): TranslateDrag;
-  beginRotateDrag(
+  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
+  beginRotateDrag?(
     target: DragTarget,
     origin: Point2D,
     startPointer: Point2D,
     label?: string,
   ): RotateDrag;
-  beginResizeDrag(
+  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
+  beginResizeDrag?(
     target: DragTarget,
     origin: Point2D,
     startPointer: Point2D,
     options?: { uniformScale?: boolean; label?: string },
   ): ResizeDrag;
-  beginNodePositionOperation(label: string): NodePositionOperation;
+  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
+  beginNodePositionOperation?(label: string): NodePositionOperation;
   scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void;
   rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void;
   nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void;

@@ -1592,13 +1592,23 @@ export function createMockToolContext(): MockToolContext {
     closeContour: () => edit.closeContour(),
     movePointTo: (id: PointId, position: Point2D) => edit.movePointTo(id, position.x, position.y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
-    beginNodePositionOperation: (label: string) => edit.beginNodePositionOperation(label),
-    beginTranslateDrag: (target, startPointer, label) =>
-      edit.beginTranslateDrag(target, startPointer, label),
-    beginRotateDrag: (target, origin, startPointer, label) =>
-      edit.beginRotateDrag(target, origin, startPointer, label),
-    beginResizeDrag: (target, origin, startPointer, options) =>
-      edit.beginResizeDrag(target, origin, startPointer, options),
+    createDraft: () => {
+      const base = fontEngine.$glyph.peek()!;
+      let current = base;
+      return {
+        base,
+        change: (next: GlyphSnapshot) => {
+          current = next;
+          fontEngine.emitGlyph(next);
+        },
+        finish: (_label: string) => {
+          fontEngine.syncNodePositions([]);
+        },
+        discard: () => {
+          fontEngine.emitGlyph(base);
+        },
+      };
+    },
     splitSegment: vi.fn(() => "" as PointId),
     continueContour: (contourId: ContourId, fromStart: boolean, pointId: PointId) => {
       edit.setActiveContour(contourId);

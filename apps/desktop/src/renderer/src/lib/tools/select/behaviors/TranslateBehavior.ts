@@ -1,18 +1,25 @@
 import { Vec2 } from "@shift/geo";
-import type { AnchorId, Point2D, PointId } from "@shift/types";
+import type { AnchorId, GlyphSnapshot, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { SegmentId } from "@/types/indicator";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
+import type { GlyphDraft } from "@/engine/draft";
+import { patchPositions } from "@/engine/draft";
+import { constrainPreparedDrag, prepareConstrainDrag, type PreparedConstrainDrag } from "@shift/rules";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class TranslateBehavior implements SelectHandlerBehavior {
   #snap: DragSnapSession | null = null;
+  #draft: GlyphDraft | null = null;
+  #target: DragTarget | null = null;
+  #rules: PreparedConstrainDrag | null = null;
 
   onDragStart(
     state: SelectState,
@@ -30,6 +37,8 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "translating") return false;
+    if (!this.#draft || !this.#target) return false;
+
     const nextState = this.nextTranslatingState(state, event, ctx.editor);
     ctx.setState(nextState);
     return true;
@@ -37,14 +46,17 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
-    this.finishTranslating(state);
+    const label = this.#getDragLabel();
+    this.#draft?.finish(label);
+    this.#cleanup(ctx.editor);
     ctx.setState({ type: "selected" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
-    state.translate.session.cancel();
+    this.#draft?.discard();
+    this.#cleanup(ctx.editor);
     ctx.setState({ type: "selected" });
     return true;
   }
@@ -56,9 +68,27 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
 
     if (prev.type === "translating" && next.type !== "translating") {
-      this.clearSnap();
-      editor.setSnapIndicator(null);
+      this.#cleanup(editor);
     }
+  }
+
+  #cleanup(editor: EditorAPI): void {
+    this.#draft = null;
+    this.#target = null;
+    this.#rules = null;
+    this.clearSnap();
+    editor.setSnapIndicator(null);
+  }
+
+  #getDragLabel(): string {
+    if (!this.#target) return "Move Points";
+    if (this.#target.pointIds.length > 0 && this.#target.anchorIds.length > 0) {
+      return "Move Selection";
+    }
+    if (this.#target.anchorIds.length > 0) {
+      return "Move Anchors";
+    }
+    return "Move Points";
   }
 
   private nextTranslatingState(
@@ -75,11 +105,8 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
 
     const totalDelta = Vec2.sub(newLastPos, state.translate.startPos);
-    state.translate.session.update(totalDelta, newLastPos, {
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-      metaKey: event.metaKey ?? false,
-    });
+    const updates = buildTranslateUpdates(this.#draft!.base, this.#target!, totalDelta, this.#rules);
+    this.#draft!.change(patchPositions(this.#draft!.base, updates));
 
     return {
       type: "translating",
@@ -89,10 +116,6 @@ export class TranslateBehavior implements SelectHandlerBehavior {
         totalDelta,
       },
     };
-  }
-
-  private finishTranslating(state: TranslatingState): void {
-    state.translate.session.commit();
   }
 
   private tryStartDrag(
@@ -187,18 +210,19 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     draggedPointIds: PointId[],
     draggedAnchorIds: AnchorId[],
   ): TranslatingState {
-    const session = editor.beginTranslateDrag(
-      {
-        pointIds: draggedPointIds,
-        anchorIds: draggedAnchorIds,
-      },
-      startPointer,
-    );
+    this.#draft = editor.createDraft();
+    this.#target = {
+      pointIds: draggedPointIds,
+      anchorIds: draggedAnchorIds,
+    };
+    this.#rules =
+      draggedPointIds.length > 0
+        ? prepareConstrainDrag(this.#draft.base, new Set(draggedPointIds))
+        : null;
 
     return {
       type: "translating",
       translate: {
-        session,
         startPos: startPointer,
         lastPos: startPointer,
         totalDelta: { x: 0, y: 0 },
@@ -265,4 +289,40 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     editor.selectSegments([segmentId]);
     editor.selectPoints(pointIds);
   }
+}
+
+function buildTranslateUpdates(
+  base: GlyphSnapshot,
+  target: DragTarget,
+  delta: Point2D,
+  rules: PreparedConstrainDrag | null,
+): NodePositionUpdateList {
+  const updates: Array<NodePositionUpdateList[number]> = [];
+
+  if (rules) {
+    const patch = constrainPreparedDrag(rules, delta, { includeMatchedRules: false });
+    for (const u of patch.pointUpdates) {
+      updates.push({ node: { kind: "point", id: u.id }, x: u.x, y: u.y });
+    }
+  } else {
+    for (const contour of base.contours) {
+      for (const point of contour.points) {
+        if (!target.pointIds.includes(point.id)) continue;
+        updates.push({
+          node: { kind: "point", id: point.id },
+          x: point.x + delta.x,
+          y: point.y + delta.y,
+        });
+      }
+    }
+  }
+
+  for (const anchorId of target.anchorIds) {
+    const anchor = base.anchors.find((a) => a.id === anchorId);
+    if (!anchor) continue;
+    const next = Vec2.add(anchor, delta);
+    updates.push({ node: { kind: "anchor", id: anchorId }, x: next.x, y: next.y });
+  }
+
+  return updates;
 }

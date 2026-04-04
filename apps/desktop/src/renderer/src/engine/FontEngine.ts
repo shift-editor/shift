@@ -16,6 +16,7 @@ import { Bounds } from "@shift/geo";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import { patchPositions } from "./draft";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -336,7 +337,7 @@ export class FontEngine {
     const glyph = this.getGlyph();
     if (!glyph) return;
 
-    const updatedGlyph = this.#applyNodePositionUpdatesToGlyph(glyph, updates);
+    const updatedGlyph = patchPositions(glyph, updates);
     this.emitGlyph(updatedGlyph);
 
     const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
@@ -465,53 +466,4 @@ export class FontEngine {
     this.emitGlyph(snapshot);
   }
 
-  // ── Private: optimistic glyph patching ──
-
-  #applyNodePositionUpdatesToGlyph(
-    glyph: GlyphSnapshot,
-    updates: NodePositionUpdateList,
-  ): GlyphSnapshot {
-    if (updates.length === 0) return glyph;
-
-    const pointUpdatesById = new Map<PointId, { x: number; y: number }>();
-    const anchorUpdatesById = new Map<AnchorId, { x: number; y: number }>();
-
-    for (const update of updates) {
-      switch (update.node.kind) {
-        case "point":
-          pointUpdatesById.set(update.node.id, { x: update.x, y: update.y });
-          break;
-        case "anchor":
-          anchorUpdatesById.set(update.node.id, { x: update.x, y: update.y });
-          break;
-        case "guideline":
-          break;
-      }
-    }
-
-    if (pointUpdatesById.size === 0 && anchorUpdatesById.size === 0) return glyph;
-
-    return {
-      ...glyph,
-      contours:
-        pointUpdatesById.size === 0
-          ? glyph.contours
-          : glyph.contours.map((contour) => ({
-              ...contour,
-              points: contour.points.map((point) => {
-                const update = pointUpdatesById.get(point.id);
-                if (!update) return point;
-                return { ...point, x: update.x, y: update.y };
-              }),
-            })),
-      anchors:
-        anchorUpdatesById.size === 0
-          ? glyph.anchors
-          : glyph.anchors.map((anchor) => {
-              const update = anchorUpdatesById.get(anchor.id);
-              if (!update) return anchor;
-              return { ...anchor, x: update.x, y: update.y };
-            }),
-    };
-  }
 }

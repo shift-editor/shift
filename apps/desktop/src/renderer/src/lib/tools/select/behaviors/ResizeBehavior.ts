@@ -1,12 +1,19 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { GlyphSnapshot, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
+import type { GlyphDraft } from "@/engine/draft";
+import { patchPositions } from "@/engine/draft";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectHandlerBehavior {
+  #draft: GlyphDraft | null = null;
+  #target: DragTarget | null = null;
+  #origin: Point2D | null = null;
+
   onDragStart(
     state: SelectState,
     ctx: ToolContext<SelectState>,
@@ -23,6 +30,8 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "resizing") return false;
+    if (!this.#draft || !this.#target || !this.#origin) return false;
+
     const next = this.nextResizingState(state, event);
     ctx.setState(next);
     return true;
@@ -30,14 +39,16 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "resizing") return false;
-    state.resize.session.commit();
+    this.#draft?.finish("Scale Points");
+    this.#cleanup();
     ctx.setState({ type: "selected" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "resizing") return false;
-    state.resize.session.cancel();
+    this.#draft?.discard();
+    this.#cleanup();
     ctx.setState({ type: "selected" });
     return true;
   }
@@ -47,6 +58,12 @@ export class ResizeBehavior implements SelectHandlerBehavior {
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.clearHover();
     }
+  }
+
+  #cleanup(): void {
+    this.#draft = null;
+    this.#target = null;
+    this.#origin = null;
   }
 
   private nextResizingState(state: SelectState, event: ToolEventOf<"drag">): SelectState {
@@ -62,11 +79,8 @@ export class ResizeBehavior implements SelectHandlerBehavior {
       uniformScale,
     );
 
-    state.resize.session.update(sx, sy, currentPos, {
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-      metaKey: event.metaKey ?? false,
-    });
+    const updates = buildResizeUpdates(this.#draft!.base, this.#target!, this.#origin!, sx, sy);
+    this.#draft!.change(patchPositions(this.#draft!.base, updates));
 
     return {
       type: "resizing",
@@ -92,20 +106,17 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const session = editor.beginResizeDrag(
-      {
-        pointIds: editor.getSelectedPoints(),
-        anchorIds: editor.getSelectedAnchors(),
-      },
-      anchorPoint,
-      localPoint,
-      { label: "Scale Points" },
-    );
+
+    this.#draft = editor.createDraft();
+    this.#target = {
+      pointIds: editor.getSelectedPoints(),
+      anchorIds: editor.getSelectedAnchors(),
+    };
+    this.#origin = anchorPoint;
 
     return {
       type: "resizing",
       resize: {
-        session,
         edge,
         startPos: localPoint,
         lastPos: localPoint,
@@ -200,4 +211,47 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
     return { sx, sy };
   }
+}
+
+function scaleAround(point: Point2D, origin: Point2D, scaleX: number, scaleY: number): Point2D {
+  const offset = Vec2.sub(point, origin);
+  return Vec2.add(origin, {
+    x: offset.x * scaleX,
+    y: offset.y * scaleY,
+  });
+}
+
+function buildResizeUpdates(
+  base: GlyphSnapshot,
+  target: DragTarget,
+  origin: Point2D,
+  scaleX: number,
+  scaleY: number,
+): NodePositionUpdateList {
+  const updates: Array<NodePositionUpdateList[number]> = [];
+
+  for (const contour of base.contours) {
+    for (const point of contour.points) {
+      if (!target.pointIds.includes(point.id)) continue;
+      const next = scaleAround(point, origin, scaleX, scaleY);
+      updates.push({
+        node: { kind: "point", id: point.id },
+        x: next.x,
+        y: next.y,
+      });
+    }
+  }
+
+  for (const anchorId of target.anchorIds) {
+    const anchor = base.anchors.find((item) => item.id === anchorId);
+    if (!anchor) continue;
+    const next = scaleAround(anchor, origin, scaleX, scaleY);
+    updates.push({
+      node: { kind: "anchor", id: anchorId },
+      x: next.x,
+      y: next.y,
+    });
+  }
+
+  return updates;
 }

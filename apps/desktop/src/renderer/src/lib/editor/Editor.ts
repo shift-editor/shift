@@ -92,13 +92,6 @@ import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { EditorAPI } from "../tools/core/EditorAPI";
-import type {
-  DragTarget,
-  NodePositionOperation,
-  ResizeDrag,
-  RotateDrag,
-  TranslateDrag,
-} from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
@@ -122,64 +115,9 @@ import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
-import {
-  constrainPreparedDrag,
-  prepareConstrainDrag,
-  type PreparedConstrainDrag,
-} from "@shift/rules";
-import {
-  createRotationTransform,
-  createScaleTransform,
-  createTranslationTransform,
-} from "./affineTransform";
+import type { GlyphDraft } from "@/engine/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
-
-type ActiveDragOperation = {
-  cancel(): void;
-};
-
-type PointIndex = ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }>;
-
-type TranslateOperationState = {
-  label: string;
-  baseGlyph: GlyphSnapshot;
-  target: DragTarget;
-  startPointer: Point2D;
-  currentPointer: Point2D;
-  delta: Point2D;
-  pointRules: PreparedConstrainDrag | null;
-  pointIndex: PointIndex;
-  latestUpdates: NodePositionUpdateList;
-  preparedNativeTransform: boolean;
-};
-
-type RotateOperationState = {
-  label: string;
-  baseGlyph: GlyphSnapshot;
-  target: DragTarget;
-  origin: Point2D;
-  startPointer: Point2D;
-  currentPointer: Point2D;
-  angle: number;
-  pointIndex: PointIndex;
-  latestUpdates: NodePositionUpdateList;
-  preparedNativeTransform: boolean;
-};
-
-type ResizeOperationState = {
-  label: string;
-  baseGlyph: GlyphSnapshot;
-  target: DragTarget;
-  origin: Point2D;
-  startPointer: Point2D;
-  currentPointer: Point2D;
-  scaleX: number;
-  scaleY: number;
-  pointIndex: PointIndex;
-  latestUpdates: NodePositionUpdateList;
-  preparedNativeTransform: boolean;
-};
 
 interface NodePositionPreviewSession {
   preview(updates: NodePositionUpdateList): void;
@@ -268,7 +206,6 @@ export class Editor implements ShiftEditor {
 
   #previewSnapshot: GlyphSnapshot | null = null;
   #isInPreview: boolean = false;
-  #activeDrag: ActiveDragOperation | null = null;
   #zone: FocusZone = "canvas";
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
@@ -857,31 +794,65 @@ export class Editor implements ShiftEditor {
     return this.#snapIndicator.peek();
   }
 
-  public beginNodePositionOperation(label: string): NodePositionOperation {
-    const baseGlyph = this.#fontEngine.$glyph.peek();
-    if (!baseGlyph) {
-      throw new Error("Cannot begin node position operation without an active glyph");
+  public createDraft(): GlyphDraft {
+    const base = this.#fontEngine.$glyph.peek();
+    if (!base) {
+      throw new Error("Cannot create draft without an active glyph");
     }
-
-    let latestUpdates: NodePositionUpdateList = [];
-    const preview = this.#createNodePositionPreviewSession({
-      label,
-      baseGlyph,
-    });
+    let current = base;
+    let finished = false;
 
     return {
-      apply: (updates) => {
-        latestUpdates = updates;
-        preview.preview(updates);
+      base,
+      change: (next) => {
+        if (finished) return;
+        current = next;
+        this.#fontEngine.emitGlyph(next);
       },
-      hasChanges: () => latestUpdates.length > 0,
-      commit: () => {
-        preview.commit();
+      finish: (label) => {
+        if (finished) return;
+        finished = true;
+        if (current !== base) {
+          this.#fontEngine.syncNodePositions(
+            this.#deriveUpdatesFromSnapshots(base, current),
+          );
+          this.#commandHistory.record(
+            new SnapshotCommand(label, base, current),
+          );
+        }
       },
-      cancel: () => {
-        preview.cancel();
+      discard: () => {
+        if (finished) return;
+        finished = true;
+        this.#fontEngine.emitGlyph(base);
       },
     };
+  }
+
+  #deriveUpdatesFromSnapshots(before: GlyphSnapshot, after: GlyphSnapshot): NodePositionUpdateList {
+    const updates: Array<NodePositionUpdateList[number]> = [];
+    for (let ci = 0; ci < after.contours.length; ci++) {
+      const bc = before.contours[ci];
+      const ac = after.contours[ci];
+      if (!bc || !ac) continue;
+      for (let pi = 0; pi < ac.points.length; pi++) {
+        const bp = bc.points[pi];
+        const ap = ac.points[pi];
+        if (!bp || !ap) continue;
+        if (bp.x !== ap.x || bp.y !== ap.y) {
+          updates.push({ node: { kind: "point", id: ap.id }, x: ap.x, y: ap.y });
+        }
+      }
+    }
+    for (let ai = 0; ai < after.anchors.length; ai++) {
+      const ba = before.anchors[ai];
+      const aa = after.anchors[ai];
+      if (!ba || !aa) continue;
+      if (ba.x !== aa.x || ba.y !== aa.y) {
+        updates.push({ node: { kind: "anchor", id: aa.id }, x: aa.x, y: aa.y });
+      }
+    }
+    return updates;
   }
 
   public withBatch<TResult>(label: string, fn: () => TResult): TResult {
@@ -900,391 +871,6 @@ export class Editor implements ShiftEditor {
     }
   }
 
-  public beginTranslateDrag(
-    target: DragTarget,
-    startPointer: Point2D,
-    label = this.#getTranslateDragLabel(target),
-  ): TranslateDrag {
-    if (this.#activeDrag) {
-      throw new Error("A drag operation is already active");
-    }
-
-    const baseGlyph = this.#fontEngine.$glyph.peek();
-    if (!baseGlyph) {
-      throw new Error("Cannot begin translate drag without an active glyph");
-    }
-
-    const state: TranslateOperationState = {
-      label,
-      baseGlyph,
-      target: {
-        pointIds: [...target.pointIds],
-        anchorIds: [...target.anchorIds],
-      },
-      startPointer,
-      currentPointer: startPointer,
-      delta: { x: 0, y: 0 },
-      pointRules:
-        target.pointIds.length > 0
-          ? prepareConstrainDrag(baseGlyph, new Set(target.pointIds))
-          : null,
-      pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
-      latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
-        target.pointIds,
-        target.anchorIds,
-      ),
-    };
-
-    const preview = this.#createNodePositionPreviewSession({
-      label,
-      baseGlyph,
-      commitToNative: (updates) => {
-        if (this.#canCommitTranslateAsDelta(state)) {
-          if (
-            state.preparedNativeTransform &&
-            this.#fontEngine.applyPreparedNodeTransform(
-              createTranslationTransform(state.delta),
-            )
-          ) {
-            return;
-          }
-
-          this.#fontEngine.syncMoveNodes(
-            state.target.pointIds,
-            state.target.anchorIds,
-            state.delta,
-          );
-          return;
-        }
-
-        this.#fontEngine.syncNodePositions(updates);
-      },
-    });
-
-    const operation: TranslateDrag = {
-      update: (delta, pointer) => {
-        if (this.#activeDrag !== operation) return;
-        state.delta = delta;
-        state.currentPointer = pointer;
-        state.latestUpdates = this.#buildTranslateUpdates(state);
-        preview.preview(state.latestUpdates);
-      },
-      commit: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.commit();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-      cancel: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.cancel();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-    };
-
-    this.#activeDrag = operation;
-    return operation;
-  }
-
-  public beginRotateDrag(
-    target: DragTarget,
-    origin: Point2D,
-    startPointer: Point2D,
-    label = "Rotate Points",
-  ): RotateDrag {
-    if (this.#activeDrag) {
-      throw new Error("A drag operation is already active");
-    }
-
-    const baseGlyph = this.#fontEngine.$glyph.peek();
-    if (!baseGlyph) {
-      throw new Error("Cannot begin rotate drag without an active glyph");
-    }
-
-    const state: RotateOperationState = {
-      label,
-      baseGlyph,
-      target: {
-        pointIds: [...target.pointIds],
-        anchorIds: [...target.anchorIds],
-      },
-      origin,
-      startPointer,
-      currentPointer: startPointer,
-      angle: 0,
-      pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
-      latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
-        target.pointIds,
-        target.anchorIds,
-      ),
-    };
-
-    const preview = this.#createNodePositionPreviewSession({
-      label,
-      baseGlyph,
-      commitToNative: (updates) => {
-        if (
-          state.preparedNativeTransform &&
-          this.#fontEngine.applyPreparedNodeTransform(
-            createRotationTransform(state.origin, state.angle),
-          )
-        ) {
-          return;
-        }
-
-        this.#fontEngine.syncNodePositions(updates);
-      },
-    });
-
-    const operation: RotateDrag = {
-      update: (angle, pointer) => {
-        if (this.#activeDrag !== operation) return;
-        state.angle = angle;
-        state.currentPointer = pointer;
-        state.latestUpdates = this.#buildRotateUpdates(state);
-        preview.preview(state.latestUpdates);
-      },
-      commit: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.commit();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-      cancel: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.cancel();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-    };
-
-    this.#activeDrag = operation;
-    return operation;
-  }
-
-  public beginResizeDrag(
-    target: DragTarget,
-    origin: Point2D,
-    startPointer: Point2D,
-    options?: { uniformScale?: boolean; label?: string },
-  ): ResizeDrag {
-    if (this.#activeDrag) {
-      throw new Error("A drag operation is already active");
-    }
-
-    const baseGlyph = this.#fontEngine.$glyph.peek();
-    if (!baseGlyph) {
-      throw new Error("Cannot begin resize drag without an active glyph");
-    }
-
-    const state: ResizeOperationState = {
-      label: options?.label ?? "Scale Points",
-      baseGlyph,
-      target: {
-        pointIds: [...target.pointIds],
-        anchorIds: [...target.anchorIds],
-      },
-      origin,
-      startPointer,
-      currentPointer: startPointer,
-      scaleX: 1,
-      scaleY: 1,
-      pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
-      latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
-        target.pointIds,
-        target.anchorIds,
-      ),
-    };
-
-    const preview = this.#createNodePositionPreviewSession({
-      label: state.label,
-      baseGlyph,
-      commitToNative: (updates) => {
-        if (
-          state.preparedNativeTransform &&
-          this.#fontEngine.applyPreparedNodeTransform(
-            createScaleTransform(state.origin, state.scaleX, state.scaleY),
-          )
-        ) {
-          return;
-        }
-
-        this.#fontEngine.syncNodePositions(updates);
-      },
-    });
-
-    const operation: ResizeDrag = {
-      update: (scaleX, scaleY, pointer) => {
-        if (this.#activeDrag !== operation) return;
-        state.scaleX = scaleX;
-        state.scaleY = scaleY;
-        state.currentPointer = pointer;
-        state.latestUpdates = this.#buildResizeUpdates(state);
-        preview.preview(state.latestUpdates);
-      },
-      commit: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.commit();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-      cancel: () => {
-        if (this.#activeDrag !== operation) return;
-        preview.cancel();
-        if (state.preparedNativeTransform) {
-          this.#fontEngine.clearPreparedNodeTransform();
-        }
-        this.#activeDrag = null;
-      },
-    };
-
-    this.#activeDrag = operation;
-    return operation;
-  }
-
-  #getTranslateDragLabel(target: DragTarget): string {
-    if (target.pointIds.length > 0 && target.anchorIds.length > 0) {
-      return "Move Selection";
-    }
-    if (target.anchorIds.length > 0) {
-      return "Move Anchors";
-    }
-    return "Move Points";
-  }
-
-  #getTargetPointIndex(glyph: GlyphSnapshot, pointIds: readonly PointId[]): PointIndex {
-    const pointLocations = this.#getPointLocations(glyph);
-    const pointIndex = new Map<PointId, { contourIndex: number; pointIndex: number }>();
-
-    for (const pointId of pointIds) {
-      const location = pointLocations.get(pointId);
-      if (location) {
-        pointIndex.set(pointId, location);
-      }
-    }
-
-    return pointIndex;
-  }
-
-  #buildTranslateUpdates(state: TranslateOperationState): NodePositionUpdateList {
-    const updates: NodePositionUpdateList = [];
-
-    if (state.pointRules) {
-      const patch = constrainPreparedDrag(state.pointRules, state.delta, {
-        includeMatchedRules: false,
-      });
-      updates.push(
-        ...patch.pointUpdates.map((pointUpdate) => ({
-          node: { kind: "point" as const, id: pointUpdate.id },
-          x: pointUpdate.x,
-          y: pointUpdate.y,
-        })),
-      );
-    }
-
-    for (const anchorId of state.target.anchorIds) {
-      const anchor = state.baseGlyph.anchors.find((item) => item.id === anchorId);
-      if (!anchor) continue;
-      const next = Vec2.add(anchor, state.delta);
-      updates.push({
-        node: { kind: "anchor", id: anchorId },
-        x: next.x,
-        y: next.y,
-      });
-    }
-
-    return updates;
-  }
-
-  #buildRotateUpdates(state: RotateOperationState): NodePositionUpdateList {
-    const updates: NodePositionUpdateList = [];
-
-    for (const [pointId, location] of state.pointIndex) {
-      const point = state.baseGlyph.contours[location.contourIndex]?.points[location.pointIndex];
-      if (!point) continue;
-      const next = Vec2.rotateAround(point, state.origin, state.angle);
-      updates.push({
-        node: { kind: "point", id: pointId },
-        x: next.x,
-        y: next.y,
-      });
-    }
-
-    for (const anchorId of state.target.anchorIds) {
-      const anchor = state.baseGlyph.anchors.find((item) => item.id === anchorId);
-      if (!anchor) continue;
-      const next = Vec2.rotateAround(anchor, state.origin, state.angle);
-      updates.push({
-        node: { kind: "anchor", id: anchorId },
-        x: next.x,
-        y: next.y,
-      });
-    }
-
-    return updates;
-  }
-
-  #buildResizeUpdates(state: ResizeOperationState): NodePositionUpdateList {
-    const updates: NodePositionUpdateList = [];
-
-    for (const [pointId, location] of state.pointIndex) {
-      const point = state.baseGlyph.contours[location.contourIndex]?.points[location.pointIndex];
-      if (!point) continue;
-      const next = this.#scaleAround(point, state.origin, state.scaleX, state.scaleY);
-      updates.push({
-        node: { kind: "point", id: pointId },
-        x: next.x,
-        y: next.y,
-      });
-    }
-
-    for (const anchorId of state.target.anchorIds) {
-      const anchor = state.baseGlyph.anchors.find((item) => item.id === anchorId);
-      if (!anchor) continue;
-      const next = this.#scaleAround(anchor, state.origin, state.scaleX, state.scaleY);
-      updates.push({
-        node: { kind: "anchor", id: anchorId },
-        x: next.x,
-        y: next.y,
-      });
-    }
-
-    return updates;
-  }
-
-  #scaleAround(point: Point2D, origin: Point2D, scaleX: number, scaleY: number): Point2D {
-    const offset = Vec2.sub(point, origin);
-    return Vec2.add(origin, {
-      x: offset.x * scaleX,
-      y: offset.y * scaleY,
-    });
-  }
-
-  #canCommitTranslateAsDelta(state: TranslateOperationState): boolean {
-    if (state.latestUpdates.length === 0) return false;
-    if (!state.pointRules) {
-      return state.delta.x !== 0 || state.delta.y !== 0;
-    }
-
-    return (
-      state.pointRules.allowsUniformTranslationCommit &&
-      (state.delta.x !== 0 || state.delta.y !== 0)
-    );
-  }
 
   public get debugOverlays(): Signal<DebugOverlays> {
     return this.#debugOverlays;
@@ -1687,10 +1273,6 @@ export class Editor implements ShiftEditor {
   }
 
   public undo() {
-    if (this.#activeDrag) {
-      this.#activeDrag.cancel();
-      return;
-    }
     if (this.#isInPreview) {
       this.cancelPreview();
       return;
@@ -1699,10 +1281,6 @@ export class Editor implements ShiftEditor {
   }
 
   public redo() {
-    if (this.#activeDrag) {
-      this.#activeDrag.cancel();
-      return;
-    }
     if (this.#isInPreview) {
       this.cancelPreview();
       return;

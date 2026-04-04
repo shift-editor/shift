@@ -1,13 +1,21 @@
 import { Vec2 } from "@shift/geo";
+import type { GlyphSnapshot, Point2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
+import type { GlyphDraft } from "@/engine/draft";
+import { patchPositions } from "@/engine/draft";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import type { DragTarget } from "../../core/EditorAPI";
 
 export class RotateBehavior implements SelectHandlerBehavior {
   #snap: RotateSnapSession | null = null;
+  #draft: GlyphDraft | null = null;
+  #target: DragTarget | null = null;
+  #origin: Point2D | null = null;
 
   onDragStart(
     state: SelectState,
@@ -25,6 +33,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "rotating") return false;
+    if (!this.#draft || !this.#target || !this.#origin) return false;
 
     const next = this.nextRotatingState(state, event);
     ctx.setState(next);
@@ -34,14 +43,16 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "rotating") return false;
-    state.rotate.session.commit();
+    this.#draft?.finish("Rotate Points");
+    this.#cleanup(ctx.editor);
     ctx.setState({ type: "selected" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "rotating") return false;
-    state.rotate.session.cancel();
+    this.#draft?.discard();
+    this.#cleanup(ctx.editor);
     ctx.setState({ type: "selected" });
     return true;
   }
@@ -53,9 +64,17 @@ export class RotateBehavior implements SelectHandlerBehavior {
       editor.clearHover();
     }
     if (prev.type === "rotating" && next.type !== "rotating") {
-      this.clearSnap();
+      this.#cleanup(editor);
       editor.setHandlesVisible(true);
     }
+  }
+
+  #cleanup(editor: EditorAPI): void {
+    this.#draft = null;
+    this.#target = null;
+    this.#origin = null;
+    this.clearSnap();
+    editor.setSnapIndicator(null);
   }
 
   private nextRotatingState(
@@ -77,11 +96,8 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
     const currentAngle = state.rotate.startAngle + deltaAngle;
 
-    state.rotate.session.update(deltaAngle, currentPos, {
-      shiftKey: event.shiftKey,
-      altKey: event.altKey,
-      metaKey: event.metaKey ?? false,
-    });
+    const updates = buildRotateUpdates(this.#draft!.base, this.#target!, this.#origin!, deltaAngle);
+    this.#draft!.change(patchPositions(this.#draft!.base, updates));
 
     return {
       type: "rotating",
@@ -113,20 +129,17 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
     const startAngle = Vec2.angleTo(center, localPoint);
     this.startSnap(editor);
-    const session = editor.beginRotateDrag(
-      {
-        pointIds: editor.getSelectedPoints(),
-        anchorIds: editor.getSelectedAnchors(),
-      },
-      center,
-      localPoint,
-      "Rotate Points",
-    );
+
+    this.#draft = editor.createDraft();
+    this.#target = {
+      pointIds: editor.getSelectedPoints(),
+      anchorIds: editor.getSelectedAnchors(),
+    };
+    this.#origin = center;
 
     return {
       type: "rotating",
       rotate: {
-        session,
         corner,
         startPos: localPoint,
         lastPos: localPoint,
@@ -146,4 +159,38 @@ export class RotateBehavior implements SelectHandlerBehavior {
     if (this.#snap) this.#snap.clear();
     this.#snap = null;
   }
+}
+
+function buildRotateUpdates(
+  base: GlyphSnapshot,
+  target: DragTarget,
+  origin: Point2D,
+  angle: number,
+): NodePositionUpdateList {
+  const updates: Array<NodePositionUpdateList[number]> = [];
+
+  for (const contour of base.contours) {
+    for (const point of contour.points) {
+      if (!target.pointIds.includes(point.id)) continue;
+      const next = Vec2.rotateAround(point, origin, angle);
+      updates.push({
+        node: { kind: "point", id: point.id },
+        x: next.x,
+        y: next.y,
+      });
+    }
+  }
+
+  for (const anchorId of target.anchorIds) {
+    const anchor = base.anchors.find((item) => item.id === anchorId);
+    if (!anchor) continue;
+    const next = Vec2.rotateAround(anchor, origin, angle);
+    updates.push({
+      node: { kind: "anchor", id: anchorId },
+      x: next.x,
+      y: next.y,
+    });
+  }
+
+  return updates;
 }

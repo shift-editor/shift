@@ -2,8 +2,13 @@ import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { GlyphDraft } from "@/engine/draft";
+import { patchPositions } from "@/engine/draft";
 
 export class BendCurveBehaviour implements SelectHandlerBehavior {
+  #draft: GlyphDraft | null = null;
+  #hasChanges = false;
+
   onDragStart(
     state: SelectState,
     ctx: ToolContext<SelectState>,
@@ -16,10 +21,13 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
 
     const { t, closestPoint, segmentId, segment } = hit;
     const { control1, control2 } = segment.points;
+
+    this.#draft = ctx.editor.createDraft();
+    this.#hasChanges = false;
+
     ctx.setState({
       type: "bending",
       bend: {
-        session: ctx.editor.beginNodePositionOperation("Bend curve"),
         t,
         startPos: closestPoint,
         segmentId,
@@ -32,6 +40,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "bending") return false;
+    if (!this.#draft) return false;
 
     const { glyphLocal } = event.coords;
     const delta = Vec2.sub(glyphLocal, state.bend.startPos);
@@ -51,18 +60,25 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     const newCp2 = Vec2.add(initialControlTwo, delta2);
     const { control1, control2 } = segment.points;
 
-    state.bend.session.apply([
-      { node: { kind: "point", id: control1.id }, x: newCp1.x, y: newCp1.y },
-      { node: { kind: "point", id: control2.id }, x: newCp2.x, y: newCp2.y },
-    ]);
+    const updates = [
+      { node: { kind: "point" as const, id: control1.id }, x: newCp1.x, y: newCp1.y },
+      { node: { kind: "point" as const, id: control2.id }, x: newCp2.x, y: newCp2.y },
+    ];
+    this.#draft.change(patchPositions(this.#draft.base, updates));
+    this.#hasChanges = true;
     return true;
   }
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "bending") return false;
 
-    if (state.bend.session.hasChanges()) state.bend.session.commit();
-    else state.bend.session.cancel();
+    if (this.#hasChanges) {
+      this.#draft?.finish("Bend curve");
+    } else {
+      this.#draft?.discard();
+    }
+    this.#draft = null;
+    this.#hasChanges = false;
 
     ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
@@ -70,7 +86,9 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "bending") return false;
-    state.bend.session.cancel();
+    this.#draft?.discard();
+    this.#draft = null;
+    this.#hasChanges = false;
     ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
   }
