@@ -5,8 +5,6 @@ import type { EditorAPI } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
-import { cacheSelectedPositions } from "../utils";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectHandlerBehavior {
   onDragStart(
@@ -15,8 +13,10 @@ export class ResizeBehavior implements SelectHandlerBehavior {
     event: ToolEventOf<"dragStart">,
   ): boolean {
     if (state.type !== "selected") return false;
+
     const next = this.tryStartResize(event, ctx.editor);
     if (!next) return false;
+
     ctx.setState(next);
     return true;
   }
@@ -30,8 +30,7 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "resizing") return false;
-    if (state.resize.session.hasChanges()) state.resize.session.commit();
-    else state.resize.session.cancel();
+    state.resize.session.commit();
     ctx.setState({ type: "selected" });
     return true;
   }
@@ -63,15 +62,11 @@ export class ResizeBehavior implements SelectHandlerBehavior {
       uniformScale,
     );
 
-    const updates: NodePositionUpdate[] = [];
-    for (const [id, initialPos] of state.resize.initialPositions) {
-      const anchor = state.resize.anchorPoint;
-      const offset = Vec2.sub(initialPos, anchor);
-      const scaled = Vec2.mul(offset, { x: sx, y: sy });
-      const newPos = Vec2.add(anchor, scaled);
-      updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
-    }
-    state.resize.session.apply(updates);
+    state.resize.session.update(sx, sy, currentPos, {
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey ?? false,
+    });
 
     return {
       type: "resizing",
@@ -97,8 +92,15 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const initialPositions = cacheSelectedPositions(editor);
-    const session = editor.beginInteractionSession("Scale Points");
+    const session = editor.beginResizeDrag(
+      {
+        pointIds: editor.getSelectedPoints(),
+        anchorIds: editor.getSelectedAnchors(),
+      },
+      anchorPoint,
+      localPoint,
+      { label: "Scale Points" },
+    );
 
     return {
       type: "resizing",
@@ -109,7 +111,6 @@ export class ResizeBehavior implements SelectHandlerBehavior {
         lastPos: localPoint,
         initialBounds: bounds,
         anchorPoint,
-        initialPositions,
         uniformScale: false,
       },
     };

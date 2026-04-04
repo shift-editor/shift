@@ -151,7 +151,7 @@ describe("Select tool", () => {
 
       sim.onMouseMove(createToolMouseEvent(150, 150));
 
-      expect(ctx.mocks.edit.beginInteractionSession).toHaveBeenCalled();
+      expect(ctx.mocks.edit.beginTranslateDrag).toHaveBeenCalled();
     });
 
     it("should update drag session during drag", () => {

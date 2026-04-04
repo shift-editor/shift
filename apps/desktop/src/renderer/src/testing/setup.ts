@@ -25,6 +25,11 @@ if (typeof globalThis.Path2D === "undefined") {
     > = [];
 
     constructor(_path?: string | Path2D) {
+      if (_path === undefined) {
+        this.commands.push({ type: "constructor" });
+        return;
+      }
+
       this.commands.push({ type: "constructor", path: _path });
     }
 

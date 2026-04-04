@@ -5,8 +5,6 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
-import { cacheSelectedPositions } from "../utils";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export class RotateBehavior implements SelectHandlerBehavior {
   #snap: RotateSnapSession | null = null;
@@ -36,8 +34,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "rotating") return false;
-    if (state.rotate.session.hasChanges()) state.rotate.session.commit();
-    else state.rotate.session.cancel();
+    state.rotate.session.commit();
     ctx.setState({ type: "selected" });
     return true;
   }
@@ -80,12 +77,11 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
     const currentAngle = state.rotate.startAngle + deltaAngle;
 
-    const updates: NodePositionUpdate[] = [];
-    for (const [id, initialPos] of state.rotate.initialPositions) {
-      const rotated = Vec2.rotateAround(initialPos, state.rotate.center, deltaAngle);
-      updates.push({ node: { kind: "point", id }, x: rotated.x, y: rotated.y });
-    }
-    state.rotate.session.apply(updates);
+    state.rotate.session.update(deltaAngle, currentPos, {
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey ?? false,
+    });
 
     return {
       type: "rotating",
@@ -117,8 +113,15 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
     const startAngle = Vec2.angleTo(center, localPoint);
     this.startSnap(editor);
-    const initialPositions = cacheSelectedPositions(editor);
-    const session = editor.beginInteractionSession("Rotate Points");
+    const session = editor.beginRotateDrag(
+      {
+        pointIds: editor.getSelectedPoints(),
+        anchorIds: editor.getSelectedAnchors(),
+      },
+      center,
+      localPoint,
+      "Rotate Points",
+    );
 
     return {
       type: "rotating",
@@ -130,7 +133,6 @@ export class RotateBehavior implements SelectHandlerBehavior {
         center,
         startAngle,
         currentAngle: startAngle,
-        initialPositions,
       },
     };
   }

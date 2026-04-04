@@ -19,7 +19,10 @@ export type {
 } from "./ToolRenderContributor";
 export type {
   EditorAPI,
-  InteractionSession,
+  NodePositionOperation,
+  TranslateDrag,
+  RotateDrag,
+  ResizeDrag,
   Viewport,
   Selection,
   HitTesting,

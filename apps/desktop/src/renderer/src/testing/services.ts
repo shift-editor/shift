@@ -9,7 +9,15 @@ import type {
   AnchorId,
   PointType,
 } from "@shift/types";
-import type { EditorAPI, ActiveToolState, InteractionSession } from "@/lib/tools/core";
+import { Vec2 } from "@shift/geo";
+import type {
+  EditorAPI,
+  ActiveToolState,
+  NodePositionOperation,
+  RotateDrag,
+  ResizeDrag,
+  TranslateDrag,
+} from "@/lib/tools/core";
 import type { Modifiers } from "@/lib/tools/core/GestureDetector";
 import { asContourId, asPointId } from "@shift/types";
 import type { ToolName } from "@/lib/tools/core";
@@ -118,7 +126,19 @@ interface EditService {
   movePoints(ids: Iterable<PointId>, dx: number, dy: number): void;
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
-  beginInteractionSession(label: string): InteractionSession;
+  beginNodePositionOperation(label: string): NodePositionOperation;
+  beginTranslateDrag(target: {
+    pointIds: PointId[];
+    anchorIds: AnchorId[];
+  }, startPointer: Point2D, label?: string): TranslateDrag;
+  beginRotateDrag(target: {
+    pointIds: PointId[];
+    anchorIds: AnchorId[];
+  }, origin: Point2D, startPointer: Point2D, label?: string): RotateDrag;
+  beginResizeDrag(target: {
+    pointIds: PointId[];
+    anchorIds: AnchorId[];
+  }, origin: Point2D, startPointer: Point2D, options?: { uniformScale?: boolean; label?: string }): ResizeDrag;
   moveAnchors(ids: AnchorId[], dx: number, dy: number): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
@@ -594,7 +614,7 @@ function createMockEditService(
     setNodePositions: vi.fn((updates: NodePositionUpdateList) =>
       fontEngine.editing.setNodePositions(updates),
     ),
-    beginInteractionSession: vi.fn((label: string): InteractionSession => {
+    beginNodePositionOperation: vi.fn((label: string): NodePositionOperation => {
       const touched = new Map<
         string,
         { node: NodePositionUpdate["node"]; before: Point2D; after: Point2D }
@@ -663,6 +683,148 @@ function createMockEditService(
         },
       };
     }),
+    beginTranslateDrag: vi.fn(
+      (
+        target: { pointIds: PointId[]; anchorIds: AnchorId[] },
+        startPointer: Point2D,
+        label?: string,
+      ): TranslateDrag => {
+        void startPointer;
+        void label;
+        const baseGlyph = fontEngine.$glyph.value;
+        if (!baseGlyph) {
+          throw new Error("Cannot begin translate drag without an active glyph");
+        }
+
+        let closed = false;
+        return {
+          update(delta: Point2D) {
+            if (closed) return;
+            const updates: NodePositionUpdate[] = [];
+
+            for (const contour of baseGlyph.contours) {
+              for (const point of contour.points) {
+                if (!target.pointIds.includes(point.id)) continue;
+                const next = Vec2.add(point, delta);
+                updates.push({ node: { kind: "point", id: point.id }, x: next.x, y: next.y });
+              }
+            }
+
+            for (const anchor of baseGlyph.anchors) {
+              if (!target.anchorIds.includes(anchor.id)) continue;
+              const next = Vec2.add(anchor, delta);
+              updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
+            }
+
+            fontEngine.editing.setNodePositions(updates);
+          },
+          commit() {
+            closed = true;
+          },
+          cancel() {
+            if (closed) return;
+            fontEngine.editing.restoreSnapshot(baseGlyph);
+            closed = true;
+          },
+        };
+      },
+    ),
+    beginRotateDrag: vi.fn(
+      (
+        target: { pointIds: PointId[]; anchorIds: AnchorId[] },
+        origin: Point2D,
+        startPointer: Point2D,
+        label?: string,
+      ): RotateDrag => {
+        void startPointer;
+        void label;
+        const baseGlyph = fontEngine.$glyph.value;
+        if (!baseGlyph) {
+          throw new Error("Cannot begin rotate drag without an active glyph");
+        }
+
+        let closed = false;
+        return {
+          update(angle: number) {
+            if (closed) return;
+            const updates: NodePositionUpdate[] = [];
+
+            for (const contour of baseGlyph.contours) {
+              for (const point of contour.points) {
+                if (!target.pointIds.includes(point.id)) continue;
+                const next = Vec2.rotateAround(point, origin, angle);
+                updates.push({ node: { kind: "point", id: point.id }, x: next.x, y: next.y });
+              }
+            }
+
+            for (const anchor of baseGlyph.anchors) {
+              if (!target.anchorIds.includes(anchor.id)) continue;
+              const next = Vec2.rotateAround(anchor, origin, angle);
+              updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
+            }
+
+            fontEngine.editing.setNodePositions(updates);
+          },
+          commit() {
+            closed = true;
+          },
+          cancel() {
+            if (closed) return;
+            fontEngine.editing.restoreSnapshot(baseGlyph);
+            closed = true;
+          },
+        };
+      },
+    ),
+    beginResizeDrag: vi.fn(
+      (
+        target: { pointIds: PointId[]; anchorIds: AnchorId[] },
+        origin: Point2D,
+        startPointer: Point2D,
+        options?: { uniformScale?: boolean; label?: string },
+      ): ResizeDrag => {
+        void startPointer;
+        void options;
+        const baseGlyph = fontEngine.$glyph.value;
+        if (!baseGlyph) {
+          throw new Error("Cannot begin resize drag without an active glyph");
+        }
+
+        let closed = false;
+        return {
+          update(scaleX: number, scaleY: number) {
+            if (closed) return;
+            const updates: NodePositionUpdate[] = [];
+
+            for (const contour of baseGlyph.contours) {
+              for (const point of contour.points) {
+                if (!target.pointIds.includes(point.id)) continue;
+                const offset = Vec2.sub(point, origin);
+                const next = Vec2.add(origin, { x: offset.x * scaleX, y: offset.y * scaleY });
+                updates.push({ node: { kind: "point", id: point.id }, x: next.x, y: next.y });
+              }
+            }
+
+            for (const anchor of baseGlyph.anchors) {
+              if (!target.anchorIds.includes(anchor.id)) continue;
+              const offset = Vec2.sub(anchor, origin);
+              const next = Vec2.add(origin, { x: offset.x * scaleX, y: offset.y * scaleY });
+              updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
+            }
+
+            fontEngine.editing.setNodePositions(updates);
+          },
+          commit() {
+            closed = true;
+          },
+          cancel() {
+            if (closed) return;
+            fontEngine.editing.restoreSnapshot(baseGlyph);
+            closed = true;
+          },
+        };
+      },
+    ),
     moveAnchors: vi.fn((ids: AnchorId[], dx: number, dy: number) =>
       fontEngine.editing.moveAnchors(ids, { x: dx, y: dy }),
     ),
@@ -698,7 +860,10 @@ function createMockEditService(
     movePoints: mocks.movePoints,
     movePointTo: mocks.movePointTo,
     setNodePositions: mocks.setNodePositions,
-    beginInteractionSession: mocks.beginInteractionSession,
+    beginNodePositionOperation: mocks.beginNodePositionOperation,
+    beginTranslateDrag: mocks.beginTranslateDrag,
+    beginRotateDrag: mocks.beginRotateDrag,
+    beginResizeDrag: mocks.beginResizeDrag,
     moveAnchors: mocks.moveAnchors,
     applySmartEdits: mocks.applySmartEdits,
     removePoints: mocks.removePoints,
@@ -1414,7 +1579,13 @@ export function createMockToolContext(): MockToolContext {
     closeContour: () => edit.closeContour(),
     movePointTo: (id: PointId, position: Point2D) => edit.movePointTo(id, position.x, position.y),
     setNodePositions: (updates: NodePositionUpdateList) => edit.setNodePositions(updates),
-    beginInteractionSession: (label: string) => edit.beginInteractionSession(label),
+    beginNodePositionOperation: (label: string) => edit.beginNodePositionOperation(label),
+    beginTranslateDrag: (target, startPointer, label) =>
+      edit.beginTranslateDrag(target, startPointer, label),
+    beginRotateDrag: (target, origin, startPointer, label) =>
+      edit.beginRotateDrag(target, origin, startPointer, label),
+    beginResizeDrag: (target, origin, startPointer, options) =>
+      edit.beginResizeDrag(target, origin, startPointer, options),
     splitSegment: vi.fn(() => "" as PointId),
     continueContour: (contourId: ContourId, fromStart: boolean, pointId: PointId) => {
       edit.setActiveContour(contourId);

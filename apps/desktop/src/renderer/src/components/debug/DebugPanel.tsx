@@ -33,6 +33,18 @@ export function DebugPanel() {
     return `${editor.fps.value}`;
   });
 
+  const pointCountRef = useSignalText(() => {
+    const glyph = editor.glyph.value;
+    if (!glyph) return "0";
+
+    let pointCount = 0;
+    for (const contour of glyph.contours) {
+      pointCount += contour.points.length;
+    }
+
+    return `${pointCount}`;
+  });
+
   const upmRef = useRef<HTMLTableCellElement>(null);
   const screenRef = useRef<HTMLTableCellElement>(null);
   const worldRef = useRef<HTMLTableCellElement>(null);
@@ -73,6 +85,14 @@ export function DebugPanel() {
         <div className="flex flex-col">
           <h2 className="text-ui font-medium">FPS</h2>
           <span ref={fpsRef} className="text-ui text-muted font-mono tabular-nums" />
+        </div>
+        <Separator className="bg-gray-300" />
+        <div className="flex flex-col">
+          <h2 className="text-ui font-medium">Canvas</h2>
+          <div className="flex items-center justify-between gap-4 text-ui text-muted">
+            <span>Total Points</span>
+            <span ref={pointCountRef} className="font-mono tabular-nums" />
+          </div>
         </div>
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">

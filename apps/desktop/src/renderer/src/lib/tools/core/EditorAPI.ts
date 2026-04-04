@@ -61,24 +61,25 @@ export interface DragTarget {
   anchorIds: AnchorId[];
 }
 
-export interface DragUpdate {
-  pointer: Point2D;
-  modifiers?: Modifiers;
-}
-
-export interface DragSession {
-  update(input: DragUpdate): void;
+export interface TranslateDrag {
+  update(delta: Point2D, pointer: Point2D, modifiers: Modifiers): void;
   commit(): void;
   cancel(): void;
 }
 
-export interface NodePositionPreviewSession {
-  preview(updates: NodePositionUpdateList): void;
+export interface RotateDrag {
+  update(angle: number, pointer: Point2D, modifiers: Modifiers): void;
   commit(): void;
   cancel(): void;
 }
 
-export interface InteractionSession {
+export interface ResizeDrag {
+  update(scaleX: number, scaleY: number, pointer: Point2D, modifiers: Modifiers): void;
+  commit(): void;
+  cancel(): void;
+}
+
+export interface NodePositionOperation {
   apply(updates: NodePositionUpdateList): void;
   hasChanges(): boolean;
   commit(): void;
@@ -217,7 +218,24 @@ export interface Editing {
   splitSegment(segment: Segment, t: number): PointId;
   continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void;
   setNodePositions(updates: NodePositionUpdateList): void;
-  beginInteractionSession(label: string): InteractionSession;
+  beginTranslateDrag(
+    target: DragTarget,
+    startPointer: Point2D,
+    label?: string,
+  ): TranslateDrag;
+  beginRotateDrag(
+    target: DragTarget,
+    origin: Point2D,
+    startPointer: Point2D,
+    label?: string,
+  ): RotateDrag;
+  beginResizeDrag(
+    target: DragTarget,
+    origin: Point2D,
+    startPointer: Point2D,
+    options?: { uniformScale?: boolean; label?: string },
+  ): ResizeDrag;
+  beginNodePositionOperation(label: string): NodePositionOperation;
   scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void;
   rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void;
   nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void;

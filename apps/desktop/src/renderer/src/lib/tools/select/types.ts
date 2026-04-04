@@ -1,8 +1,8 @@
-import type { PointId, Point2D, Rect2D, AnchorId, GlyphSnapshot } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { Behavior } from "../core/Behavior";
-import type { InteractionSession } from "../core/EditorAPI";
+import type { NodePositionOperation, RotateDrag, ResizeDrag, TranslateDrag } from "../core/EditorAPI";
 import { SegmentId } from "@/types/indicator";
 
 /** Tracks the start and current positions of a marquee drag. */
@@ -13,42 +13,37 @@ export interface SelectionData {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
-  session: InteractionSession;
+  session: TranslateDrag;
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
-  draggedPointIds: PointId[];
-  draggedAnchorIds: AnchorId[];
-  baseGlyph: GlyphSnapshot;
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
 export interface ResizeData {
-  session: InteractionSession;
+  session: ResizeDrag;
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
   lastPos: Point2D;
   initialBounds: Rect2D;
   anchorPoint: Point2D;
-  initialPositions: Map<PointId, Point2D>;
   uniformScale: boolean;
 }
 
 /** Live state of a rotation drag, tracking angles and initial point positions for the transform. */
 export interface RotateData {
-  session: InteractionSession;
+  session: RotateDrag;
   corner: CornerHandle;
   startPos: Point2D;
   lastPos: Point2D;
   center: Point2D;
   startAngle: number;
   currentAngle: number;
-  initialPositions: Map<PointId, Point2D>;
   snappedAngle?: number;
 }
 
 export interface BendData {
-  session: InteractionSession;
+  session: NodePositionOperation;
   t: number;
   startPos: Point2D;
   initialControlOne: Point2D;

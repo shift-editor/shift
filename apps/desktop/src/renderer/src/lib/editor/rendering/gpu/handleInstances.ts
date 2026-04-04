@@ -1,7 +1,6 @@
-import type { Glyph, Point2D, PointId, Point, Contour } from "@shift/types";
+import type { Glyph, Point2D, PointId } from "@shift/types";
 import type { HandleState } from "@/types/graphics";
 import { Vec2 } from "@shift/geo";
-import { Contours, Glyphs } from "@shift/font";
 import { Validate } from "@shift/validation";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
@@ -49,31 +48,63 @@ const DIRECTION_STYLE_CACHE = createDirectionalStyleCacheEntry("direction");
 const FIRST_STYLE_CACHE = createDirectionalStyleCacheEntry("first");
 const LAST_STYLE_CACHE = createDirectionalStyleCacheEntry("last");
 
-type HandlePoint = {
-  contour: Contour;
-  current: Point;
-  prev: Point | null;
-  next: Point | null;
-  numPoints: number;
-  isFirst: boolean;
-  isLast: boolean;
-};
-
-type HandleDescriptor =
-  | { shape: "corner" | "smooth" | "control"; rotation: 0 }
-  | { shape: "direction" | "first" | "last"; rotation: number };
-
 export function buildGpuHandleInstances(
   glyph: Glyph,
   getHandleState: (pointId: PointId) => HandleState,
 ): GpuHandleInstance[] {
   const instances: GpuHandleInstance[] = [];
 
-  for (const handlePoint of iterateHandlePoints(glyph)) {
-    const { current } = handlePoint;
-    const state = getHandleState(current.id);
-    const descriptor = classifyHandlePoint(handlePoint);
-    instances.push(createInstance(current, descriptor, state));
+  for (const contour of glyph.contours) {
+    const points = contour.points;
+    const numPoints = points.length;
+    if (numPoints === 0) continue;
+
+    for (let pointIndex = 0; pointIndex < numPoints; pointIndex += 1) {
+      const current = points[pointIndex];
+      if (!current) continue;
+
+      const prev =
+        pointIndex > 0
+          ? points[pointIndex - 1]
+          : contour.closed
+            ? points[numPoints - 1]
+            : undefined;
+      const next =
+        pointIndex + 1 < numPoints
+          ? points[pointIndex + 1]
+          : contour.closed
+            ? points[0]
+            : undefined;
+      const state = getHandleState(current.id);
+      const position = { x: current.x, y: current.y };
+
+      if (numPoints === 1) {
+        instances.push(createSimpleInstance(position, "corner", state));
+        continue;
+      }
+
+      if (pointIndex === 0) {
+        const segmentAngle = Vec2.angleTo(current, next!);
+        if (contour.closed) {
+          instances.push(createDirectionInstance(position, segmentAngle, state));
+        } else {
+          instances.push(createFirstInstance(position, segmentAngle, state));
+        }
+        continue;
+      }
+
+      if (pointIndex === numPoints - 1 && !contour.closed) {
+        const angle = Vec2.angleTo(current, prev!) + Math.PI / 2;
+        instances.push(createLastInstance(position, angle, state));
+        continue;
+      }
+
+      if (Validate.isOnCurve(current)) {
+        instances.push(createSimpleInstance(position, current.smooth ? "smooth" : "corner", state));
+      } else {
+        instances.push(createSimpleInstance(position, "control", state));
+      }
+    }
   }
 
   return instances;
@@ -87,8 +118,8 @@ export function buildPackedGpuHandleInstances(
   reusable: Float32Array | null,
 ): { packedInstances: Float32Array; instanceCount: number } {
   let instanceCount = 0;
-  for (const _point of Glyphs.points(glyph)) {
-    instanceCount += 1;
+  for (const contour of glyph.contours) {
+    instanceCount += contour.points.length;
   }
 
   const requiredLength = instanceCount * GPU_HANDLE_INSTANCE_FLOATS;
@@ -97,118 +128,78 @@ export function buildPackedGpuHandleInstances(
   const visibleSceneBounds = getVisibleSceneBounds(viewport, HANDLE_CULL_MARGIN_PX);
 
   let index = 0;
-  for (const handlePoint of iterateHandlePoints(glyph)) {
-    const { current } = handlePoint;
-    if (!isHandleVisibleInViewport(current.x, current.y, visibleSceneBounds, drawOffset)) {
-      continue;
-    }
+  for (const contour of glyph.contours) {
+    const points = contour.points;
+    const numPoints = points.length;
+    if (numPoints === 0) continue;
 
-    const state = getHandleState(current.id);
-    const descriptor = classifyHandlePoint(handlePoint);
-    writePackedHandleInstance(packed, index, current, descriptor, state);
-    index += 1;
+    for (let pointIndex = 0; pointIndex < numPoints; pointIndex += 1) {
+      const current = points[pointIndex];
+      if (!current) continue;
+
+      const prev =
+        pointIndex > 0
+          ? points[pointIndex - 1]
+          : contour.closed
+            ? points[numPoints - 1]
+            : undefined;
+      const next =
+        pointIndex + 1 < numPoints
+          ? points[pointIndex + 1]
+          : contour.closed
+            ? points[0]
+            : undefined;
+
+      if (!isHandleVisibleInViewport(current.x, current.y, visibleSceneBounds, drawOffset)) {
+        continue;
+      }
+
+      const state = getHandleState(current.id);
+
+      if (numPoints === 1) {
+        writeInstance(packed, index, current.x, current.y, 0, SIMPLE_STYLE_CACHE.corner[state]);
+        index += 1;
+        continue;
+      }
+
+      if (pointIndex === 0) {
+        const segmentAngle = Vec2.angleTo(current, next!);
+        writeInstance(
+          packed,
+          index,
+          current.x,
+          current.y,
+          segmentAngle,
+          contour.closed ? DIRECTION_STYLE_CACHE[state] : FIRST_STYLE_CACHE[state],
+        );
+        index += 1;
+        continue;
+      }
+
+      if (pointIndex === numPoints - 1 && !contour.closed) {
+        const angle = Vec2.angleTo(current, prev!) + Math.PI / 2;
+        writeInstance(packed, index, current.x, current.y, angle, LAST_STYLE_CACHE[state]);
+        index += 1;
+        continue;
+      }
+
+      if (Validate.isOnCurve(current)) {
+        writeInstance(
+          packed,
+          index,
+          current.x,
+          current.y,
+          0,
+          current.smooth ? SIMPLE_STYLE_CACHE.smooth[state] : SIMPLE_STYLE_CACHE.corner[state],
+        );
+      } else {
+        writeInstance(packed, index, current.x, current.y, 0, SIMPLE_STYLE_CACHE.control[state]);
+      }
+      index += 1;
+    }
   }
 
   return { packedInstances: packed, instanceCount: index };
-}
-
-function* iterateHandlePoints(glyph: Glyph): Generator<HandlePoint> {
-  for (const { point: current, contour, index } of Glyphs.points(glyph)) {
-    const numPoints = Contours.pointCount(contour);
-    const { prev, next } = Contours.neighbors(contour, index);
-    yield {
-      contour,
-      current,
-      prev,
-      next,
-      numPoints,
-      isFirst: index === 0,
-      isLast: index === numPoints - 1,
-    };
-  }
-}
-
-function classifyHandlePoint(handlePoint: HandlePoint): HandleDescriptor {
-  const { contour, current, prev, next, numPoints, isFirst, isLast } = handlePoint;
-
-  if (numPoints === 1) {
-    return { shape: "corner", rotation: 0 };
-  }
-
-  if (isFirst) {
-    const rotation = Vec2.angleTo(current, next!);
-    return { shape: contour.closed ? "direction" : "first", rotation };
-  }
-
-  if (isLast && !contour.closed) {
-    return {
-      shape: "last",
-      rotation: Vec2.angleTo(current, prev!) + Math.PI / 2,
-    };
-  }
-
-  if (Validate.isOnCurve(current)) {
-    return { shape: current.smooth ? "smooth" : "corner", rotation: 0 };
-  }
-
-  return { shape: "control", rotation: 0 };
-}
-
-function createInstance(
-  point: Point,
-  descriptor: HandleDescriptor,
-  state: HandleState,
-): GpuHandleInstance {
-  const position = { x: point.x, y: point.y };
-
-  switch (descriptor.shape) {
-    case "corner":
-    case "smooth":
-    case "control":
-      return createSimpleInstance(position, descriptor.shape, state);
-    case "direction":
-      return createDirectionInstance(position, descriptor.rotation, state);
-    case "first":
-      return createFirstInstance(position, descriptor.rotation, state);
-    case "last":
-      return createLastInstance(position, descriptor.rotation, state);
-  }
-}
-
-function writePackedHandleInstance(
-  packed: Float32Array,
-  index: number,
-  point: Point,
-  descriptor: HandleDescriptor,
-  state: HandleState,
-): void {
-  switch (descriptor.shape) {
-    case "corner":
-      writeInstance(packed, index, point.x, point.y, 0, SIMPLE_STYLE_CACHE.corner[state]);
-      return;
-    case "smooth":
-      writeInstance(packed, index, point.x, point.y, 0, SIMPLE_STYLE_CACHE.smooth[state]);
-      return;
-    case "control":
-      writeInstance(packed, index, point.x, point.y, 0, SIMPLE_STYLE_CACHE.control[state]);
-      return;
-    case "direction":
-      writeInstance(
-        packed,
-        index,
-        point.x,
-        point.y,
-        descriptor.rotation,
-        DIRECTION_STYLE_CACHE[state],
-      );
-      return;
-    case "first":
-      writeInstance(packed, index, point.x, point.y, descriptor.rotation, FIRST_STYLE_CACHE[state]);
-      return;
-    case "last":
-      writeInstance(packed, index, point.x, point.y, descriptor.rotation, LAST_STYLE_CACHE[state]);
-      return;
-  }
 }
 
 function isHandleVisibleInViewport(

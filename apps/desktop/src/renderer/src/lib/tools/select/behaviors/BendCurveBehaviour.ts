@@ -19,7 +19,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     ctx.setState({
       type: "bending",
       bend: {
-        session: ctx.editor.beginInteractionSession("Bend curve"),
+        session: ctx.editor.beginNodePositionOperation("Bend curve"),
         t,
         startPos: closestPoint,
         segmentId,

@@ -1,5 +1,5 @@
 import { Vec2 } from "@shift/geo";
-import type { AnchorId, Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import type { AnchorId, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -8,8 +8,6 @@ import type { SegmentId } from "@/types/indicator";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
-import { constrainDrag } from "@shift/rules";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
@@ -22,8 +20,10 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     event: ToolEventOf<"dragStart">,
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
+
     const nextState = this.tryStartDrag(state, event, ctx.editor);
     if (!nextState) return false;
+
     ctx.setState(nextState);
     return true;
   }
@@ -75,8 +75,11 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
 
     const totalDelta = Vec2.sub(newLastPos, state.translate.startPos);
-    const updates = this.getTranslatingUpdates(state, totalDelta);
-    state.translate.session.apply(updates);
+    state.translate.session.update(totalDelta, newLastPos, {
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey ?? false,
+    });
 
     return {
       type: "translating",
@@ -88,52 +91,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     };
   }
 
-  private getTranslatingUpdates(
-    state: TranslatingState,
-    totalDelta: Point2D,
-  ): NodePositionUpdate[] {
-    const updates: NodePositionUpdate[] = [];
-    const { baseGlyph, draggedPointIds, draggedAnchorIds } = state.translate;
-
-    if (draggedPointIds.length > 0) {
-      const patch = constrainDrag({
-        glyph: baseGlyph,
-        selectedIds: new Set(draggedPointIds),
-        mousePosition: totalDelta,
-      });
-
-      for (const point of patch.pointUpdates) {
-        updates.push({
-          node: { kind: "point", id: point.id },
-          x: point.x,
-          y: point.y,
-        });
-      }
-    }
-
-    if (draggedAnchorIds.length > 0) {
-      const selectedAnchorIds = new Set(draggedAnchorIds);
-      for (const anchor of baseGlyph.anchors) {
-        if (!selectedAnchorIds.has(anchor.id)) continue;
-        const moved = Vec2.add(anchor, totalDelta);
-        updates.push({
-          node: { kind: "anchor", id: anchor.id },
-          x: moved.x,
-          y: moved.y,
-        });
-      }
-    }
-
-    return updates;
-  }
-
   private finishTranslating(state: TranslatingState): void {
-    const { draggedPointIds, draggedAnchorIds } = state.translate;
-    const nothingDragged = draggedPointIds.length === 0 && draggedAnchorIds.length === 0;
-    if (nothingDragged || !state.translate.session.hasChanges()) {
-      state.translate.session.cancel();
-      return;
-    }
     state.translate.session.commit();
   }
 
@@ -229,12 +187,12 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     draggedPointIds: PointId[],
     draggedAnchorIds: AnchorId[],
   ): TranslatingState {
-    const baseGlyph = editor.glyph.peek() as GlyphSnapshot | null;
-    if (!baseGlyph) {
-      throw new Error("Cannot begin translate without an active glyph");
-    }
-    const session = editor.beginInteractionSession(
-      this.getTranslateLabel(draggedPointIds, draggedAnchorIds),
+    const session = editor.beginTranslateDrag(
+      {
+        pointIds: draggedPointIds,
+        anchorIds: draggedAnchorIds,
+      },
+      startPointer,
     );
 
     return {
@@ -244,17 +202,8 @@ export class TranslateBehavior implements SelectHandlerBehavior {
         startPos: startPointer,
         lastPos: startPointer,
         totalDelta: { x: 0, y: 0 },
-        draggedPointIds,
-        draggedAnchorIds,
-        baseGlyph,
       },
     };
-  }
-
-  private getTranslateLabel(pointIds: PointId[], anchorIds: AnchorId[]): string {
-    if (pointIds.length > 0 && anchorIds.length > 0) return "Move Selection";
-    if (anchorIds.length > 0) return "Move Anchors";
-    return "Move Points";
   }
 
   private startSnap(

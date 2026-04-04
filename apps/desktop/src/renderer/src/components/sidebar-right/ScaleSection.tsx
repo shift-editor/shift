@@ -1,61 +1,55 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
+import { useSignalState } from "@/lib/reactive";
 
 export const ScaleSection = () => {
   const editor = getEditor();
   const { anchor, setAnchor } = useTransformOrigin();
+  const selectionBounds = useSignalState(editor.sidebar.selectionBounds);
 
   const widthRef = useRef<EditableSidebarInputHandle>(null);
   const heightRef = useRef<EditableSidebarInputHandle>(null);
 
-  useSignalEffect(() => {
-    editor.glyph.value;
-    editor.selectedPointIds.value;
-
+  useEffect(() => {
     if (!widthRef.current || !heightRef.current) return;
+    if (!selectionBounds) return;
 
-    const bounds = editor.getSelectionBounds();
-    if (!bounds) return;
-
-    const width = Bounds.width(bounds);
-    const height = Bounds.height(bounds);
+    const width = Bounds.width(selectionBounds);
+    const height = Bounds.height(selectionBounds);
 
     widthRef.current.setValue(Math.round(width));
     heightRef.current.setValue(Math.round(height));
-  });
+  }, [selectionBounds]);
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
-      const bounds = editor.getSelectionBounds();
-      if (!bounds) return;
+      if (!selectionBounds) return;
 
-      const current = dimension === "width" ? Bounds.width(bounds) : Bounds.height(bounds);
+      const current =
+        dimension === "width" ? Bounds.width(selectionBounds) : Bounds.height(selectionBounds);
       if (current === 0) return;
 
       const factor = value / current;
-      const anchorPoint = anchorToPoint(anchor, bounds);
+      const anchorPoint = anchorToPoint(anchor, selectionBounds);
       editor.scaleSelection(factor, factor, anchorPoint);
     },
-    [anchor],
+    [anchor, editor, selectionBounds],
   );
 
   const handleScaleChange = useCallback(
     (scale: number) => {
-      const bounds = editor.getSelectionBounds();
-      if (!bounds) return;
-
-      const anchorPoint = anchorToPoint(anchor, bounds);
+      if (!selectionBounds) return;
+      const anchorPoint = anchorToPoint(anchor, selectionBounds);
       editor.scaleSelection(scale, scale, anchorPoint);
     },
-    [anchor],
+    [anchor, editor, selectionBounds],
   );
 
   return (
