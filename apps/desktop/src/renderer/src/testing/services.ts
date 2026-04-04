@@ -1640,22 +1640,8 @@ export function createMockToolContext(): MockToolContext {
     setActiveContour: (id: ContourId) => edit.setActiveContour(id),
     clearActiveContour: () => edit.clearActiveContour(),
     reverseContour: (id: ContourId) => edit.reverseContour(id),
-    beginPreview: () => preview.beginPreview(),
-    cancelPreview: () => preview.cancelPreview(),
-    commitPreview: (label: string) => preview.commitPreview(label),
     withBatch: <TResult>(label: string, fn: () => TResult): TResult =>
       commands.withBatch(label, fn) as TResult,
-    withPreview: <TResult>(label: string, fn: () => TResult): TResult => {
-      preview.beginPreview();
-      try {
-        const result = fn();
-        preview.commitPreview(label);
-        return result;
-      } catch (err) {
-        preview.cancelPreview();
-        throw err;
-      }
-    },
     requestRedraw: () => render.requestRedraw(),
     requestStaticRedraw: () => render.requestStaticRedraw(),
     isPreviewMode: () => render.isPreviewMode(),

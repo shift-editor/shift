@@ -31,7 +31,7 @@ import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Bounds, Vec2 } from "@shift/geo";
-import { Contours, Glyphs, areGlyphSnapshotsEqual } from "@shift/font";
+import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
@@ -46,7 +46,6 @@ import {
   InsertPointCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
-  SetNodePositionsCommand,
   SetXAdvanceCommand,
   NudgePointsCommand,
   SetActiveContourCommand,
@@ -113,28 +112,11 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
+import { SidebarViewModel } from "./SidebarViewModel";
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import { patchPositions, type GlyphDraft } from "@/engine/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
-
-interface NodePositionPreviewSession {
-  preview(updates: NodePositionUpdateList): void;
-  commit(): void;
-  cancel(): void;
-}
-
-type NodePositionPreviewCommit = (updates: NodePositionUpdateList) => void;
-
-type NodePositionPreviewConfig = {
-  label: string;
-  baseGlyph: GlyphSnapshot;
-  onStart?: () => void;
-  onPreview?: (updates: NodePositionUpdateList) => void;
-  commitToNative?: NodePositionPreviewCommit;
-  onFinish?: () => void;
-};
 
 function resolvePointInput(pointOrX: Point2D | number, y?: number): Point2D {
   if (typeof pointOrX === "number") {
@@ -204,8 +186,6 @@ export class Editor implements ShiftEditor {
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
 
-  #previewSnapshot: GlyphSnapshot | null = null;
-  #isInPreview: boolean = false;
   #zone: FocusZone = "canvas";
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
@@ -220,7 +200,6 @@ export class Editor implements ShiftEditor {
   #snapPreferences: WritableSignal<SnapPreferences>;
   #snapIndicator: WritableSignal<SnapIndicator | null>;
   #debugOverlays: WritableSignal<DebugOverlays>;
-  #deferTextRunGlyphRefresh: WritableSignal<boolean>;
   #toolState: {
     app: Map<string, unknown>;
     document: Map<string, unknown>;
@@ -241,11 +220,6 @@ export class Editor implements ShiftEditor {
     glyph: Glyph | null;
     segmentsById: ReadonlyMap<SegmentId, SegmentHitResult["segment"]>;
   } | null = null;
-  #pointLocationCache: {
-    glyph: Glyph | null;
-    locations: ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }>;
-  } | null = null;
-
   /**
    * Initializes all subsystems, wires signal dependencies, and sets up
    * reactive effects that schedule canvas redraws when state changes.
@@ -283,7 +257,6 @@ export class Editor implements ShiftEditor {
     this.$cursor = signal("default");
     this.$handlesVisible = signal(true);
     this.$gpuHandlesEnabled = signal(true);
-    this.#deferTextRunGlyphRefresh = signal(false);
     this.#currentModifiers = signal<Modifiers>({
       shiftKey: false,
       altKey: false,
@@ -395,8 +368,6 @@ export class Editor implements ShiftEditor {
     this.#textRunGlyphRefreshEffect = effect(() => {
       const glyph = this.#$glyph.value;
       if (!glyph) return;
-
-      if (this.#deferTextRunGlyphRefresh.value) return;
 
       const textRun = this.#textRunManager.state.peek();
       if (!textRun) return;
@@ -859,19 +830,6 @@ export class Editor implements ShiftEditor {
     return this.#commandHistory.withBatch(label, fn);
   }
 
-  public withPreview<TResult>(label: string, fn: () => TResult): TResult {
-    this.beginPreview();
-    try {
-      const result = fn();
-      this.commitPreview(label);
-      return result;
-    } catch (error) {
-      this.cancelPreview();
-      throw error;
-    }
-  }
-
-
   public get debugOverlays(): Signal<DebugOverlays> {
     return this.#debugOverlays;
   }
@@ -1268,23 +1226,11 @@ export class Editor implements ShiftEditor {
     this.#$glyphFinderOpen.set(false);
   }
 
-  public get isInPreview(): boolean {
-    return this.#isInPreview;
-  }
-
   public undo() {
-    if (this.#isInPreview) {
-      this.cancelPreview();
-      return;
-    }
     this.#commandHistory.undo();
   }
 
   public redo() {
-    if (this.#isInPreview) {
-      this.cancelPreview();
-      return;
-    }
     this.#commandHistory.redo();
   }
 
@@ -1570,46 +1516,6 @@ export class Editor implements ShiftEditor {
     return this.#clipboard.paste();
   }
 
-  /**
-   * Captures a glyph snapshot and enters preview mode.
-   *
-   * While in preview, tools can mutate the glyph freely. Call `commitPreview()`
-   * to record the changes as a single undoable command, or `cancelPreview()`
-   * to restore the snapshot. No-op if already in preview.
-   *
-   * @knipclassignore Consumed through the Commands interface contract.
-   */
-  public beginPreview(): void {
-    if (this.#isInPreview) return;
-    this.#previewSnapshot = this.#fontEngine.$glyph.value;
-    this.#isInPreview = true;
-  }
-
-  /** @knipclassignore Consumed through the Commands interface contract. */
-  public cancelPreview(): void {
-    if (!this.#isInPreview || !this.#previewSnapshot) return;
-
-    this.#fontEngine.restoreSnapshot(this.#previewSnapshot);
-    this.#previewSnapshot = null;
-    this.#isInPreview = false;
-  }
-
-  /** @knipclassignore Consumed through the Commands interface contract. */
-  public commitPreview(label: string): void {
-    if (!this.#isInPreview || !this.#previewSnapshot) return;
-
-    const before = this.#previewSnapshot;
-    const after = this.#fontEngine.$glyph.value;
-
-    if (before && after) {
-      const cmd = new SnapshotCommand(label, before, after);
-      this.#commandHistory.record(cmd);
-    }
-
-    this.#previewSnapshot = null;
-    this.#isInPreview = false;
-  }
-
   public getSelectionBounds(): Bounds | null {
     const glyph = this.#$glyph.value;
     const selectedPointIds = this.#selection.selectedPointIds.peek();
@@ -1757,31 +1663,9 @@ export class Editor implements ShiftEditor {
     position: Point2D,
     type: PointType,
     smooth?: boolean,
-  ): PointId;
-  public addPointToContour(
-    contourId: ContourId,
-    x: number,
-    y: number,
-    type: PointType,
-    smooth: boolean,
-  ): PointId;
-  public addPointToContour(
-    contourId: ContourId,
-    positionOrX: Point2D | number,
-    yOrType: number | PointType,
-    typeOrSmooth?: PointType | boolean,
-    smooth?: boolean,
   ): PointId {
-    const position =
-      typeof positionOrX === "number" ? { x: positionOrX, y: yOrType as number } : positionOrX;
-    const type = (typeof positionOrX === "number" ? typeOrSmooth : yOrType) as PointType;
-    const resolvedSmooth =
-      typeof positionOrX === "number"
-        ? (smooth ?? false)
-        : ((typeOrSmooth as boolean | undefined) ?? false);
-
     return this.#commandHistory.execute(
-      new AddPointCommand(position.x, position.y, type, resolvedSmooth, contourId),
+      new AddPointCommand(position.x, position.y, type, smooth ?? false, contourId),
     );
   }
 
@@ -1790,31 +1674,9 @@ export class Editor implements ShiftEditor {
     position: Point2D,
     type: PointType,
     smooth?: boolean,
-  ): PointId;
-  public insertPointBefore(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    type: PointType,
-    smooth: boolean,
-  ): PointId;
-  public insertPointBefore(
-    beforePointId: PointId,
-    positionOrX: Point2D | number,
-    yOrType: number | PointType,
-    typeOrSmooth?: PointType | boolean,
-    smooth?: boolean,
   ): PointId {
-    const position =
-      typeof positionOrX === "number" ? { x: positionOrX, y: yOrType as number } : positionOrX;
-    const type = (typeof positionOrX === "number" ? typeOrSmooth : yOrType) as PointType;
-    const resolvedSmooth =
-      typeof positionOrX === "number"
-        ? (smooth ?? false)
-        : ((typeOrSmooth as boolean | undefined) ?? false);
-
     return this.#commandHistory.execute(
-      new InsertPointCommand(beforePointId, position.x, position.y, type, resolvedSmooth),
+      new InsertPointCommand(beforePointId, position.x, position.y, type, smooth ?? false),
     );
   }
 
@@ -1826,10 +1688,7 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.moveAnchors(ids, delta);
   }
 
-  public movePointTo(id: PointId, position: Point2D): void;
-  public movePointTo(id: PointId, x: number, y: number): void;
-  public movePointTo(id: PointId, positionOrX: Point2D | number, y?: number): void {
-    const position = resolvePointInput(positionOrX, y);
+  public movePointTo(id: PointId, position: Point2D): void {
     this.#fontEngine.movePointTo(id, position.x, position.y);
   }
 
@@ -1855,106 +1714,6 @@ export class Editor implements ShiftEditor {
     return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
-  public beginNodePositionPreview(
-    label: string,
-    baseGlyph: Glyph,
-    options?: { commitToNative?(updates: NodePositionUpdateList): void },
-  ): NodePositionPreviewSession {
-    return this.#createNodePositionPreviewSession({
-      label,
-      baseGlyph: baseGlyph as GlyphSnapshot,
-      commitToNative: options?.commitToNative,
-    });
-  }
-
-  public previewNodePositions(baseGlyph: Glyph, updates: NodePositionUpdateList): void {
-    this.#previewNodePositions(baseGlyph as GlyphSnapshot, updates);
-  }
-
-  #previewNodePositions(baseSnapshot: GlyphSnapshot, updates: NodePositionUpdateList): void {
-    this.#deferTextRunGlyphRefresh.set(true);
-
-    if (updates.length === 0) {
-      this.#sidebar.clearSelectionBoundsOverride();
-      this.#fontEngine.emitGlyph(baseSnapshot);
-      return;
-    }
-
-    const pointLocations = this.#getPointLocations(baseSnapshot);
-    const pointUpdatesByContour = new Map<
-      number,
-      Array<{ pointIndex: number; x: number; y: number }>
-    >();
-    const anchorUpdates = new Map<string, { x: number; y: number }>();
-
-    for (const update of updates) {
-      switch (update.node.kind) {
-        case "point": {
-          const location = pointLocations.get(update.node.id);
-          if (!location) break;
-          const contourUpdates = pointUpdatesByContour.get(location.contourIndex) ?? [];
-          contourUpdates.push({
-            pointIndex: location.pointIndex,
-            x: update.x,
-            y: update.y,
-          });
-          pointUpdatesByContour.set(location.contourIndex, contourUpdates);
-          break;
-        }
-        case "anchor":
-          anchorUpdates.set(update.node.id, { x: update.x, y: update.y });
-          break;
-      }
-    }
-
-    const contours =
-      pointUpdatesByContour.size === 0
-        ? baseSnapshot.contours
-        : (() => {
-            const nextContours = [...baseSnapshot.contours];
-            for (const [contourIndex, contourUpdates] of pointUpdatesByContour) {
-              const contour = baseSnapshot.contours[contourIndex];
-              if (!contour) continue;
-              const points = [...contour.points];
-              for (const contourUpdate of contourUpdates) {
-                const point = points[contourUpdate.pointIndex];
-                if (!point) continue;
-                points[contourUpdate.pointIndex] = {
-                  ...point,
-                  x: contourUpdate.x,
-                  y: contourUpdate.y,
-                };
-              }
-              nextContours[contourIndex] = { ...contour, points };
-            }
-            return nextContours;
-          })();
-
-    const anchors =
-      anchorUpdates.size === 0
-        ? baseSnapshot.anchors
-        : baseSnapshot.anchors.map((anchor) => {
-            const next = anchorUpdates.get(anchor.id);
-            if (!next) return anchor;
-            return { ...anchor, x: next.x, y: next.y };
-          });
-
-    this.#sidebar.overrideSelectionBounds(this.#buildSidebarSelectionBoundsOverride(updates));
-    this.#fontEngine.emitGlyph({
-      ...baseSnapshot,
-      contours,
-      anchors,
-    } as GlyphSnapshot);
-  }
-
-  public commitPreviewNodePositions(
-    label: string,
-    baseGlyph: Glyph,
-    updates: NodePositionUpdateList,
-  ): void {
-    this.#commitNodePositionPreview(label, baseGlyph as GlyphSnapshot, updates);
-  }
-
   public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
     if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
     this.#commandHistory.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
@@ -1972,114 +1731,6 @@ export class Editor implements ShiftEditor {
 
   public upgradeLineToCubic(segment: LineSegment): void {
     this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
-  }
-
-  #getPointLocations(
-    glyph: Glyph,
-  ): ReadonlyMap<PointId, { contourIndex: number; pointIndex: number }> {
-    const cached = this.#pointLocationCache;
-    if (cached && cached.glyph === glyph) {
-      return cached.locations;
-    }
-
-    const locations = new Map<PointId, { contourIndex: number; pointIndex: number }>();
-    for (let contourIndex = 0; contourIndex < glyph.contours.length; contourIndex += 1) {
-      const contour = glyph.contours[contourIndex];
-      if (!contour) continue;
-      for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex += 1) {
-        const point = contour.points[pointIndex];
-        if (!point) continue;
-        locations.set(point.id, { contourIndex, pointIndex });
-      }
-    }
-
-    this.#pointLocationCache = { glyph, locations };
-    return locations;
-  }
-
-  #buildSidebarSelectionBoundsOverride(updates: NodePositionUpdateList): SidebarSelectionBounds {
-    const points: Point2D[] = [];
-    for (const update of updates) {
-      if (update.node.kind !== "point") continue;
-      points.push({ x: update.x, y: update.y });
-    }
-    if (points.length === 0) return null;
-    return Bounds.fromPoints(points);
-  }
-
-  public restorePreviewGlyph(snapshot: Glyph): void {
-    this.#restoreNodePositionPreview(snapshot as GlyphSnapshot);
-  }
-
-  #createNodePositionPreviewSession(config: NodePositionPreviewConfig): NodePositionPreviewSession {
-    let active = true;
-    let latestUpdates: NodePositionUpdateList = [];
-
-    config.onStart?.();
-
-    const finish = () => {
-      if (!active) return false;
-      active = false;
-      config.onFinish?.();
-      return true;
-    };
-
-    return {
-      preview: (updates) => {
-        if (!active) return;
-        latestUpdates = updates;
-        this.#previewNodePositions(config.baseGlyph, updates);
-        config.onPreview?.(updates);
-      },
-      commit: () => {
-        if (!finish()) return;
-        this.#commitNodePositionPreview(
-          config.label,
-          config.baseGlyph,
-          latestUpdates,
-          config.commitToNative,
-        );
-      },
-      cancel: () => {
-        if (!finish()) return;
-        this.#restoreNodePositionPreview(config.baseGlyph);
-      },
-    };
-  }
-
-  #commitNodePositionPreview(
-    label: string,
-    baseGlyph: GlyphSnapshot,
-    updates: NodePositionUpdateList,
-    commitToNative?: NodePositionPreviewCommit,
-  ): void {
-    const after = this.#fontEngine.$glyph.value as GlyphSnapshot | null;
-    if (!after || areGlyphSnapshotsEqual(baseGlyph, after)) {
-      this.#resetNodePositionPreviewState();
-      return;
-    }
-
-    this.#sidebar.clearSelectionBoundsOverride();
-    if (commitToNative) {
-      commitToNative(updates);
-    } else {
-      this.#fontEngine.syncNodePositions(updates);
-    }
-    this.#deferTextRunGlyphRefresh.set(false);
-    this.#commandHistory.record(
-      SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, baseGlyph, updates) ??
-        new SnapshotCommand(label, baseGlyph, after),
-    );
-  }
-
-  #restoreNodePositionPreview(snapshot: GlyphSnapshot): void {
-    this.#resetNodePositionPreviewState();
-    this.#fontEngine.emitGlyph(snapshot);
-  }
-
-  #resetNodePositionPreviewState(): void {
-    this.#deferTextRunGlyphRefresh.set(false);
-    this.#sidebar.clearSelectionBoundsOverride();
   }
 
   public removePoints(ids: PointId[]): void {

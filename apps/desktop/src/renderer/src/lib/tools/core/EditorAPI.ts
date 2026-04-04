@@ -264,30 +264,12 @@ export interface ToolStateStore {
 }
 
 /**
- * Undo/redo command stack and preview transaction management.
- *
- * Preview transactions let tools apply speculative edits (e.g. during a drag)
- * that can be committed as a single undoable command or discarded on cancel.
+ * Undo/redo command stack.
  */
 export interface Commands {
   readonly commands: CommandHistory;
   /** Execute `fn` as a single undoable command batch. */
   withBatch<TResult>(label: string, fn: () => TResult): TResult;
-  /**
-   * Execute `fn` inside preview mode.
-   * Commits with `label` on success and cancels on exception.
-   */
-  withPreview<TResult>(label: string, fn: () => TResult): TResult;
-  /**
-   * Start a preview transaction. Subsequent edits are tentative and rendered
-   * live but not yet on the undo stack. Must be paired with {@link commitPreview}
-   * or {@link cancelPreview}.
-   */
-  beginPreview(): void;
-  /** Commit the preview as a single undoable command. */
-  commitPreview(label: string): void;
-  /** Discard all edits since {@link beginPreview}, restoring the prior state. */
-  cancelPreview(): void;
 }
 
 /**
