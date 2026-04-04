@@ -5,7 +5,7 @@ import { createMockEditing } from "./engine";
 
 export function createMockCommandContext(glyph: GlyphSnapshot | null = null): CommandContext {
   const fontEngine: CommandContext["fontEngine"] = {
-    editing: createMockEditing(),
+    ...createMockEditing(),
     $glyph: signal(glyph),
   };
 

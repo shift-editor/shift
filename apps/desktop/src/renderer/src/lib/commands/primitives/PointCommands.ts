@@ -33,11 +33,11 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    const contourId = this.#contourId ?? ctx.fontEngine.editing.getActiveContourId();
+    const contourId = this.#contourId ?? ctx.fontEngine.getActiveContourId();
     if (!contourId) {
       throw new Error("No active contour");
     }
-    this.#resultId = ctx.fontEngine.editing.addPointToContour(contourId, {
+    this.#resultId = ctx.fontEngine.addPointToContour(contourId, {
       x: this.#x,
       y: this.#y,
       pointType: this.#pointType,
@@ -48,7 +48,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
 
   undo(ctx: CommandContext): void {
     if (this.#resultId) {
-      ctx.fontEngine.editing.removePoints([this.#resultId]);
+      ctx.fontEngine.removePoints([this.#resultId]);
     }
   }
 
@@ -77,13 +77,13 @@ export class MovePointsCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.editing.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.fontEngine.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 
   undo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
     // Move back by the negative delta
-    ctx.fontEngine.editing.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+    ctx.fontEngine.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 
   override redo(ctx: CommandContext): void {
@@ -133,12 +133,12 @@ export class RemovePointsCommand extends BaseCommand<void> {
       }
     }
 
-    ctx.fontEngine.editing.removePoints(this.#pointIds);
+    ctx.fontEngine.removePoints(this.#pointIds);
   }
 
   undo(ctx: CommandContext): void {
     for (const pt of this.#removedPoints) {
-      ctx.fontEngine.editing.addPointToContour(pt.contourId, {
+      ctx.fontEngine.addPointToContour(pt.contourId, {
         x: pt.x,
         y: pt.y,
         pointType: pt.pointType,
@@ -148,6 +148,6 @@ export class RemovePointsCommand extends BaseCommand<void> {
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.removePoints(this.#pointIds);
+    ctx.fontEngine.removePoints(this.#pointIds);
   }
 }

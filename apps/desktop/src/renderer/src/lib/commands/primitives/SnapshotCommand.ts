@@ -23,14 +23,14 @@ export class SnapshotCommand {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.editing.restoreSnapshot(this.#after);
+    ctx.fontEngine.restoreSnapshot(this.#after);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.restoreSnapshot(this.#before);
+    ctx.fontEngine.restoreSnapshot(this.#before);
   }
 
   redo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.restoreSnapshot(this.#after);
+    ctx.fontEngine.restoreSnapshot(this.#after);
   }
 }

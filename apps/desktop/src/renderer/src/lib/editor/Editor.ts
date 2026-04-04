@@ -930,7 +930,7 @@ export class Editor implements ShiftEditor {
           : null,
       pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
       latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.editing.prepareNodeTransform(
+      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
         target.pointIds,
         target.anchorIds,
       ),
@@ -943,14 +943,14 @@ export class Editor implements ShiftEditor {
         if (this.#canCommitTranslateAsDelta(state)) {
           if (
             state.preparedNativeTransform &&
-            this.#fontEngine.editing.applyPreparedNodeTransform(
+            this.#fontEngine.applyPreparedNodeTransform(
               createTranslationTransform(state.delta),
             )
           ) {
             return;
           }
 
-          this.#fontEngine.editing.syncMoveNodes(
+          this.#fontEngine.syncMoveNodes(
             state.target.pointIds,
             state.target.anchorIds,
             state.delta,
@@ -958,7 +958,7 @@ export class Editor implements ShiftEditor {
           return;
         }
 
-        this.#fontEngine.editing.syncNodePositions(updates);
+        this.#fontEngine.syncNodePositions(updates);
       },
     });
 
@@ -974,7 +974,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.commit();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -982,7 +982,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.cancel();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -1020,7 +1020,7 @@ export class Editor implements ShiftEditor {
       angle: 0,
       pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
       latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.editing.prepareNodeTransform(
+      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
         target.pointIds,
         target.anchorIds,
       ),
@@ -1032,14 +1032,14 @@ export class Editor implements ShiftEditor {
       commitToNative: (updates) => {
         if (
           state.preparedNativeTransform &&
-          this.#fontEngine.editing.applyPreparedNodeTransform(
+          this.#fontEngine.applyPreparedNodeTransform(
             createRotationTransform(state.origin, state.angle),
           )
         ) {
           return;
         }
 
-        this.#fontEngine.editing.syncNodePositions(updates);
+        this.#fontEngine.syncNodePositions(updates);
       },
     });
 
@@ -1055,7 +1055,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.commit();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -1063,7 +1063,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.cancel();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -1102,7 +1102,7 @@ export class Editor implements ShiftEditor {
       scaleY: 1,
       pointIndex: this.#getTargetPointIndex(baseGlyph, target.pointIds),
       latestUpdates: [],
-      preparedNativeTransform: this.#fontEngine.editing.prepareNodeTransform(
+      preparedNativeTransform: this.#fontEngine.prepareNodeTransform(
         target.pointIds,
         target.anchorIds,
       ),
@@ -1114,14 +1114,14 @@ export class Editor implements ShiftEditor {
       commitToNative: (updates) => {
         if (
           state.preparedNativeTransform &&
-          this.#fontEngine.editing.applyPreparedNodeTransform(
+          this.#fontEngine.applyPreparedNodeTransform(
             createScaleTransform(state.origin, state.scaleX, state.scaleY),
           )
         ) {
           return;
         }
 
-        this.#fontEngine.editing.syncNodePositions(updates);
+        this.#fontEngine.syncNodePositions(updates);
       },
     });
 
@@ -1138,7 +1138,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.commit();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -1146,7 +1146,7 @@ export class Editor implements ShiftEditor {
         if (this.#activeDrag !== operation) return;
         preview.cancel();
         if (state.preparedNativeTransform) {
-          this.#fontEngine.editing.clearPreparedNodeTransform();
+          this.#fontEngine.clearPreparedNodeTransform();
         }
         this.#activeDrag = null;
       },
@@ -1428,7 +1428,7 @@ export class Editor implements ShiftEditor {
     }
 
     this.#fontEngine.startEditSession(glyph);
-    this.#fontEngine.editing.addContour();
+    this.#fontEngine.addContour();
     this.#textRunManager.recompute(this.#fontManager);
   }
 
@@ -1975,7 +1975,7 @@ export class Editor implements ShiftEditor {
   public deleteSelectedPoints(): void {
     const selectedIds = this.getSelectedPoints();
     if (selectedIds.length > 0) {
-      this.#fontEngine.editing.removePoints(selectedIds);
+      this.#fontEngine.removePoints(selectedIds);
       this.clearSelection();
     }
   }
@@ -2011,7 +2011,7 @@ export class Editor implements ShiftEditor {
   public cancelPreview(): void {
     if (!this.#isInPreview || !this.#previewSnapshot) return;
 
-    this.#fontEngine.editing.restoreSnapshot(this.#previewSnapshot);
+    this.#fontEngine.restoreSnapshot(this.#previewSnapshot);
     this.#previewSnapshot = null;
     this.#isInPreview = false;
   }
@@ -2154,7 +2154,7 @@ export class Editor implements ShiftEditor {
   }
 
   public getActiveContourId(): ContourId | null {
-    const id = this.#fontEngine.editing.getActiveContourId();
+    const id = this.#fontEngine.getActiveContourId();
     if (id == null) return null;
     return id;
   }
@@ -2166,7 +2166,7 @@ export class Editor implements ShiftEditor {
   }
 
   public addPoint(x: number, y: number, type: PointType, smooth = false): PointId {
-    return this.#fontEngine.editing.addPoint({
+    return this.#fontEngine.addPoint({
       x,
       y,
       pointType: type,
@@ -2241,26 +2241,26 @@ export class Editor implements ShiftEditor {
   }
 
   public movePoints(ids: PointId[], dx: number, dy: number): void {
-    this.#fontEngine.editing.movePoints(ids, { x: dx, y: dy });
+    this.#fontEngine.movePoints(ids, { x: dx, y: dy });
   }
 
   public moveAnchors(ids: AnchorId[], delta: Point2D): void {
-    this.#fontEngine.editing.moveAnchors(ids, delta);
+    this.#fontEngine.moveAnchors(ids, delta);
   }
 
   public movePointTo(id: PointId, position: Point2D): void;
   public movePointTo(id: PointId, x: number, y: number): void;
   public movePointTo(id: PointId, positionOrX: Point2D | number, y?: number): void {
     const position = resolvePointInput(positionOrX, y);
-    this.#fontEngine.editing.movePointTo(id, position.x, position.y);
+    this.#fontEngine.movePointTo(id, position.x, position.y);
   }
 
   public applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
-    return this.#fontEngine.editing.applySmartEdits(new Set(ids), dx, dy);
+    return this.#fontEngine.applySmartEdits(new Set(ids), dx, dy);
   }
 
   public setNodePositions(updates: NodePositionUpdateList): void {
-    this.#fontEngine.editing.setNodePositions(updates);
+    this.#fontEngine.setNodePositions(updates);
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
@@ -2485,7 +2485,7 @@ export class Editor implements ShiftEditor {
     if (commitToNative) {
       commitToNative(updates);
     } else {
-      this.#fontEngine.editing.syncNodePositions(updates);
+      this.#fontEngine.syncNodePositions(updates);
     }
     this.#deferTextRunGlyphRefresh.set(false);
     this.#commandHistory.record(
@@ -2505,11 +2505,11 @@ export class Editor implements ShiftEditor {
   }
 
   public removePoints(ids: PointId[]): void {
-    this.#fontEngine.editing.removePoints(ids);
+    this.#fontEngine.removePoints(ids);
   }
 
   public addContour(): ContourId {
-    return this.#fontEngine.editing.addContour();
+    return this.#fontEngine.addContour();
   }
 
   public closeContour(): void {
@@ -2521,11 +2521,11 @@ export class Editor implements ShiftEditor {
   }
 
   public setActiveContour(contourId: ContourId): void {
-    this.#fontEngine.editing.setActiveContour(contourId);
+    this.#fontEngine.setActiveContour(contourId);
   }
 
   public clearActiveContour(): void {
-    this.#fontEngine.editing.clearActiveContour();
+    this.#fontEngine.clearActiveContour();
   }
 
   public reverseContour(contourId: ContourId): void {
@@ -2787,7 +2787,7 @@ export class Editor implements ShiftEditor {
     const content = resolver.resolve(glyph, selectedPointIds, selectedSegmentIds);
     if (!content || content.contours.length === 0) return [];
 
-    const result = this.#fontEngine.editing.pasteContours(content.contours, 0, 0);
+    const result = this.#fontEngine.pasteContours(content.contours, 0, 0);
     return result.success ? result.createdPointIds : [];
   }
 

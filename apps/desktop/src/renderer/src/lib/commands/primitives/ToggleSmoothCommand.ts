@@ -12,10 +12,10 @@ export class ToggleSmoothCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.editing.toggleSmooth(this.#pointId);
+    ctx.fontEngine.toggleSmooth(this.#pointId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.toggleSmooth(this.#pointId);
+    ctx.fontEngine.toggleSmooth(this.#pointId);
   }
 }

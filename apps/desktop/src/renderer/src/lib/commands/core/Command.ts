@@ -10,8 +10,7 @@
  * - Clear separation between UI interaction and data mutation
  */
 
-import type { EditingManager } from "@/engine/editing";
-import type { Signal } from "@/lib/reactive/signal";
+import type { FontEngine } from "@/engine/FontEngine";
 import type { GlyphSnapshot } from "@shift/types";
 
 type CommandEditingMethods =
@@ -35,16 +34,9 @@ type CommandEditingMethods =
   | "restoreSnapshot"
   | "pasteContours";
 
-/**
- * Minimal editing surface required by command execution.
- * Derived from the production EditingManager type.
- */
-export type CommandEditingAPI = Pick<EditingManager, CommandEditingMethods>;
-
-export interface CommandFontEngine {
-  readonly editing: CommandEditingAPI;
-  readonly $glyph: Signal<GlyphSnapshot | null>;
-}
+/** Minimal editing surface required by command execution. */
+export type CommandEditingAPI = Pick<FontEngine, CommandEditingMethods>;
+export type CommandFontEngine = Pick<FontEngine, CommandEditingMethods | "$glyph">;
 
 /**
  * Context available to commands during execution.

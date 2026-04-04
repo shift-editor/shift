@@ -23,7 +23,7 @@ export class NodePositionPatchCommand {
 
   execute(ctx: CommandContext): void {
     if (this.#entries.length === 0) return;
-    ctx.fontEngine.editing.setNodePositions(
+    ctx.fontEngine.setNodePositions(
       this.#entries.map((entry) => ({
         node: entry.node,
         x: entry.after.x,
@@ -34,7 +34,7 @@ export class NodePositionPatchCommand {
 
   undo(ctx: CommandContext): void {
     if (this.#entries.length === 0) return;
-    ctx.fontEngine.editing.setNodePositions(
+    ctx.fontEngine.setNodePositions(
       this.#entries.map((entry) => ({
         node: entry.node,
         x: entry.before.x,

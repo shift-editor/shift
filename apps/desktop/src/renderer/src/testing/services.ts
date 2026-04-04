@@ -580,18 +580,18 @@ function createMockEditService(
   };
 
   const getActiveContour = (): Contour | null => {
-    const activeContourId = fontEngine.editing.getActiveContourId();
+    const activeContourId = fontEngine.getActiveContourId();
     if (!activeContourId) return null;
     return getContourById(asContourId(activeContourId));
   };
 
   const mocks = {
     addPoint: vi.fn((x: number, y: number, type: PointType, smooth = false) => {
-      const contourId = fontEngine.editing.getActiveContourId();
+      const contourId = fontEngine.getActiveContourId();
       if (!contourId) {
         throw new Error("No active contour");
       }
-      return fontEngine.editing.addPointToContour(contourId, {
+      return fontEngine.addPointToContour(contourId, {
         id: "" as PointId,
         x,
         y,
@@ -601,7 +601,7 @@ function createMockEditService(
     }),
     addPointToContour: vi.fn(
       (contourId: ContourId, x: number, y: number, type: PointType, smooth: boolean) =>
-        fontEngine.editing.addPointToContour(contourId, {
+        fontEngine.addPointToContour(contourId, {
           id: "" as PointId,
           x,
           y,
@@ -611,7 +611,7 @@ function createMockEditService(
     ),
     insertPointBefore: vi.fn(
       (beforePointId: PointId, x: number, y: number, type: PointType, smooth: boolean) =>
-        fontEngine.editing.insertPointBefore(beforePointId, {
+        fontEngine.insertPointBefore(beforePointId, {
           id: "" as PointId,
           x,
           y,
@@ -620,13 +620,13 @@ function createMockEditService(
         }),
     ),
     movePoints: vi.fn((ids: Iterable<PointId>, dx: number, dy: number) =>
-      fontEngine.editing.movePoints([...ids], { x: dx, y: dy }),
+      fontEngine.movePoints([...ids], { x: dx, y: dy }),
     ),
     movePointTo: vi.fn((id: PointId, x: number, y: number) =>
-      fontEngine.editing.movePointTo(id, x, y),
+      fontEngine.movePointTo(id, x, y),
     ),
     setNodePositions: vi.fn((updates: NodePositionUpdateList) =>
-      fontEngine.editing.setNodePositions(updates),
+      fontEngine.setNodePositions(updates),
     ),
     beginNodePositionOperation: vi.fn((label: string): NodePositionOperation => {
       const touched = new Map<
@@ -673,7 +673,7 @@ function createMockEditService(
             entry.after = { x: update.x, y: update.y };
           }
 
-          fontEngine.editing.setNodePositions(updates);
+          fontEngine.setNodePositions(updates);
         },
         hasChanges,
         commit() {
@@ -691,7 +691,7 @@ function createMockEditService(
               y: entry.before.y,
             }));
           if (restore.length > 0) {
-            fontEngine.editing.setNodePositions(restore);
+            fontEngine.setNodePositions(restore);
           }
           closed = true;
         },
@@ -730,14 +730,14 @@ function createMockEditService(
               updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
             }
 
-            fontEngine.editing.setNodePositions(updates);
+            fontEngine.setNodePositions(updates);
           },
           commit() {
             closed = true;
           },
           cancel() {
             if (closed) return;
-            fontEngine.editing.restoreSnapshot(baseGlyph);
+            fontEngine.restoreSnapshot(baseGlyph);
             closed = true;
           },
         };
@@ -777,14 +777,14 @@ function createMockEditService(
               updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
             }
 
-            fontEngine.editing.setNodePositions(updates);
+            fontEngine.setNodePositions(updates);
           },
           commit() {
             closed = true;
           },
           cancel() {
             if (closed) return;
-            fontEngine.editing.restoreSnapshot(baseGlyph);
+            fontEngine.restoreSnapshot(baseGlyph);
             closed = true;
           },
         };
@@ -826,38 +826,38 @@ function createMockEditService(
               updates.push({ node: { kind: "anchor", id: anchor.id }, x: next.x, y: next.y });
             }
 
-            fontEngine.editing.setNodePositions(updates);
+            fontEngine.setNodePositions(updates);
           },
           commit() {
             closed = true;
           },
           cancel() {
             if (closed) return;
-            fontEngine.editing.restoreSnapshot(baseGlyph);
+            fontEngine.restoreSnapshot(baseGlyph);
             closed = true;
           },
         };
       },
     ),
     moveAnchors: vi.fn((ids: AnchorId[], dx: number, dy: number) =>
-      fontEngine.editing.moveAnchors(ids, { x: dx, y: dy }),
+      fontEngine.moveAnchors(ids, { x: dx, y: dy }),
     ),
     applySmartEdits: vi.fn((ids: readonly PointId[], dx: number, dy: number) =>
-      fontEngine.editing.applySmartEdits(new Set(ids), dx, dy),
+      fontEngine.applySmartEdits(new Set(ids), dx, dy),
     ),
-    removePoints: vi.fn((ids: Iterable<PointId>) => fontEngine.editing.removePoints([...ids])),
-    addContour: vi.fn(() => fontEngine.editing.addContour()),
-    closeContour: vi.fn(() => fontEngine.editing.closeContour()),
-    toggleSmooth: vi.fn((id: PointId) => fontEngine.editing.toggleSmooth(id)),
+    removePoints: vi.fn((ids: Iterable<PointId>) => fontEngine.removePoints([...ids])),
+    addContour: vi.fn(() => fontEngine.addContour()),
+    closeContour: vi.fn(() => fontEngine.closeContour()),
+    toggleSmooth: vi.fn((id: PointId) => fontEngine.toggleSmooth(id)),
     getActiveContourId: vi.fn(() => {
-      const id = fontEngine.editing.getActiveContourId();
+      const id = fontEngine.getActiveContourId();
       return id ? asContourId(id) : null;
     }),
     setActiveContour: vi.fn((contourId: ContourId) =>
-      fontEngine.editing.setActiveContour(contourId),
+      fontEngine.setActiveContour(contourId),
     ),
-    clearActiveContour: vi.fn(() => fontEngine.editing.clearActiveContour()),
-    reverseContour: vi.fn((contourId: ContourId) => fontEngine.editing.reverseContour(contourId)),
+    clearActiveContour: vi.fn(() => fontEngine.clearActiveContour()),
+    reverseContour: vi.fn((contourId: ContourId) => fontEngine.reverseContour(contourId)),
     getPointById: vi.fn(getPointById),
     getContourById: vi.fn(getContourById),
     getActiveContour: vi.fn(getActiveContour),
@@ -909,14 +909,14 @@ function createMockPreviewService(fontEngine: FontEngine): PreviewService & {
     }),
     cancelPreview: vi.fn(() => {
       if (_isInPreview && _previewSnapshot) {
-        fontEngine.editing.restoreSnapshot(_previewSnapshot);
+        fontEngine.restoreSnapshot(_previewSnapshot);
       }
       _previewSnapshot = null;
       _isInPreview = false;
     }),
     resetPreviewToStart: vi.fn(() => {
       if (_isInPreview && _previewSnapshot) {
-        fontEngine.editing.restoreSnapshot(_previewSnapshot);
+        fontEngine.restoreSnapshot(_previewSnapshot);
       }
     }),
     commitPreview: vi.fn(() => {
@@ -1183,7 +1183,7 @@ function createMockHitTestService(
     const snapshot = fontEngine.$glyph.value;
     if (!snapshot) return null;
 
-    const activeContourId = fontEngine.editing.getActiveContourId();
+    const activeContourId = fontEngine.getActiveContourId();
 
     for (const contour of snapshot.contours) {
       if (contour.id === activeContourId || contour.closed) continue;
@@ -1332,7 +1332,7 @@ export function createMockToolContext(): MockToolContext {
     getMappedGlyphName: (unicode: number) => glyphInfo.getGlyphName(unicode),
   };
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
-  fontEngine.editing.addContour();
+  fontEngine.addContour();
 
   const screen = createMockScreenService();
   const selection = createMockSelectionService();
@@ -1748,7 +1748,7 @@ export function createMockToolContext(): MockToolContext {
     },
     startEditSession: vi.fn((glyph: { glyphName: string; unicode: number | null }) => {
       fontEngine.startEditSession(glyph);
-      fontEngine.editing.addContour();
+      fontEngine.addContour();
       textRunManager.recompute(font);
     }),
     getActiveGlyphUnicode: vi.fn(() => fontEngine.getEditingUnicode()),
