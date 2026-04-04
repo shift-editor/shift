@@ -62,34 +62,6 @@ export interface DragTarget {
   anchorIds: AnchorId[];
 }
 
-/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
-export interface TranslateDrag {
-  update(delta: Point2D, pointer: Point2D, modifiers: Modifiers): void;
-  commit(): void;
-  cancel(): void;
-}
-
-/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
-export interface RotateDrag {
-  update(angle: number, pointer: Point2D, modifiers: Modifiers): void;
-  commit(): void;
-  cancel(): void;
-}
-
-/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
-export interface ResizeDrag {
-  update(scaleX: number, scaleY: number, pointer: Point2D, modifiers: Modifiers): void;
-  commit(): void;
-  cancel(): void;
-}
-
-/** @deprecated Use GlyphDraft instead. Kept for test compatibility. */
-export interface NodePositionOperation {
-  apply(updates: NodePositionUpdateList): void;
-  hasChanges(): boolean;
-  commit(): void;
-  cancel(): void;
-}
 
 /**
  * Coordinate-space conversions and viewport state.
@@ -224,28 +196,6 @@ export interface Editing {
   continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void;
   setNodePositions(updates: NodePositionUpdateList): void;
   createDraft(): GlyphDraft;
-  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
-  beginTranslateDrag?(
-    target: DragTarget,
-    startPointer: Point2D,
-    label?: string,
-  ): TranslateDrag;
-  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
-  beginRotateDrag?(
-    target: DragTarget,
-    origin: Point2D,
-    startPointer: Point2D,
-    label?: string,
-  ): RotateDrag;
-  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
-  beginResizeDrag?(
-    target: DragTarget,
-    origin: Point2D,
-    startPointer: Point2D,
-    options?: { uniformScale?: boolean; label?: string },
-  ): ResizeDrag;
-  /** @deprecated Use createDraft() instead. Kept for test compatibility. */
-  beginNodePositionOperation?(label: string): NodePositionOperation;
   scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void;
   rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void;
   nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void;
