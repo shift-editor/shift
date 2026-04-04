@@ -1,4 +1,12 @@
-import type { GlyphSnapshot, FontMetadata, FontMetrics, PointId, ContourId, Point2D, AnchorId } from "@shift/types";
+import type {
+  GlyphSnapshot,
+  FontMetadata,
+  FontMetrics,
+  PointId,
+  ContourId,
+  Point2D,
+  AnchorId,
+} from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import { getNative } from "./native";
 import { NoEditSessionError, NativeOperationError } from "./errors";
@@ -91,8 +99,6 @@ export class FontEngine {
     }
   }
 
-  // ── Font I/O ──
-
   loadFont(path: string): void {
     this.#raw.loadFont(path);
   }
@@ -100,8 +106,6 @@ export class FontEngine {
   saveFontAsync(path: string): Promise<void> {
     return this.#raw.saveFontAsync(path);
   }
-
-  // ── Font queries ──
 
   getMetadata(): FontMetadata {
     return JSON.parse(this.#raw.getMetadata());
@@ -465,5 +469,4 @@ export class FontEngine {
     }
     this.emitGlyph(snapshot);
   }
-
 }
