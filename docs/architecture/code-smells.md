@@ -26,6 +26,7 @@ Editor.deleteSelectedPoints() (line ~1495)
 Four files, zero logic added by the middle two.
 
 **What to do:** Split Editor into:
+
 - `EditorCanvas` — canvas lifecycle, viewport, rendering coordination
 - `EditorState` — signal wiring, effect subscriptions, reactive state
 - `EditorCommands` — public mutation API (thin, but at least separate from state)
@@ -50,12 +51,12 @@ hand. It's the #1 reason test maintenance is painful.
 
 ### Engine managers that exist only to delegate
 
-| File | Lines | Methods | Logic added |
-|------|-------|---------|-------------|
-| `engine/info.ts` | 95 | 12 | None — every method is `return this.#engine.foo()` |
-| `engine/session.ts` | 69 | 5 | One guard (skip re-activation of same glyph) |
-| `engine/io.ts` | 23 | 2 | None |
-| `editor/managers/FontManager.ts` | 61 | 8 | None — pure pass-through |
+| File                             | Lines | Methods | Logic added                                        |
+| -------------------------------- | ----- | ------- | -------------------------------------------------- |
+| `engine/info.ts`                 | 95    | 12      | None — every method is `return this.#engine.foo()` |
+| `engine/session.ts`              | 69    | 5       | One guard (skip re-activation of same glyph)       |
+| `engine/io.ts`                   | 23    | 2       | None                                               |
+| `editor/managers/FontManager.ts` | 61    | 8       | None — pure pass-through                           |
 
 These add 248 lines and force you to trace through an extra layer for every
 operation. `InfoManager` is self-aware about this (line 27: "Thin pass-through
@@ -73,11 +74,11 @@ responsibilities (caching, derived computations).
 
 ### `DEFAULT_X_ADVANCE = 600` exists in three places
 
-| Location | Form |
-|----------|------|
-| `crates/shift-core/src/constants.rs:2` | `pub const DEFAULT_X_ADVANCE: f64 = 600.0;` |
-| `apps/desktop/src/renderer/src/lib/tools/text/layout.ts:7` | `const NON_SPACING_EDITOR_ADVANCE = 600;` |
-| `apps/desktop/src/renderer/src/lib/editor/Editor.ts:1268` | `return 600;` (hardcoded in `getVisualGlyphAdvance`) |
+| Location                                                   | Form                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------- |
+| `crates/shift-core/src/constants.rs:2`                     | `pub const DEFAULT_X_ADVANCE: f64 = 600.0;`          |
+| `apps/desktop/src/renderer/src/lib/tools/text/layout.ts:7` | `const NON_SPACING_EDITOR_ADVANCE = 600;`            |
+| `apps/desktop/src/renderer/src/lib/editor/Editor.ts:1268`  | `return 600;` (hardcoded in `getVisualGlyphAdvance`) |
 
 The TS copies don't reference the Rust constant. If you change the default
 advance in Rust, the text tool and visual advance will silently disagree.
@@ -94,13 +95,13 @@ and enforce it's the single source.
 // apps/desktop/src/shared/bridge/FontEngineAPI.ts:25
 export interface GlyphRef {
   glyphName: string;
-  unicode?: number | null;   // ← optional
+  unicode?: number | null; // ← optional
 }
 
 // apps/desktop/src/renderer/src/lib/tools/text/layout.ts:9
 export interface GlyphRef {
   glyphName: string;
-  unicode: number | null;    // ← required
+  unicode: number | null; // ← required
 }
 ```
 
@@ -134,8 +135,8 @@ different precision, but at least TS should be consistent.
 
 ### Bezier extrema finding implemented in both Rust and TypeScript
 
-| Rust | TypeScript |
-|------|-----------|
+| Rust                                                         | TypeScript                                         |
+| ------------------------------------------------------------ | -------------------------------------------------- |
 | `crates/shift-core/src/curve.rs` — `find_cubic_extrema_1d()` | `packages/geo/src/Curve.ts` — `findCubicExtrema()` |
 
 Both compute cubic curve extrema for bounding boxes and hit testing. Two
@@ -151,6 +152,7 @@ shared test suite (same input/output fixtures) to ensure they agree.
 ### Coordinate transform logic is scattered
 
 Scene-to-glyph and screen-to-scene transforms live in:
+
 - `ViewportManager` — screen ↔ scene
 - `Editor.ts:1352-1360` — `sceneToGlyphLocal()` / `glyphLocalToScene()`
 - `CanvasCoordinator` — render-time projection
@@ -227,6 +229,7 @@ imported by any consumer.
 ### `@shift/rules` has zero test coverage
 
 These files have non-trivial logic and no tests:
+
 - `packages/rules/src/actions.ts` — rule application during drags
 - `packages/rules/src/matcher.ts` — pattern matching
 - `packages/rules/src/parser.ts` — rule parsing
@@ -241,6 +244,87 @@ math is a real risk.
   union types for `GlyphSubCategory`, `GlyphScript`, `CharsetId`, `CharsetSource`
 - `apps/desktop/src/renderer/src/context/ThemeContext.tsx:17` — dark theme
   placeholder (`// TODO: Replace with darkTheme when implemented`)
+
+---
+
+## Tier 6: Architectural debt — the mutation layer
+
+> Added April 2026 after tracing the full edit flow end-to-end and reviewing
+> the GPU branch (`kostya-gpu-point-handles`).
+
+### EditingManager is boilerplate disguised as architecture
+
+Of EditingManager's 342 lines, ~50 are the real dispatch pattern (`#execute`,
+`#dispatch`, `#dispatchVoid`). The remaining ~290 lines are 15+ methods that
+each do `this.#dispatchVoid(this.#engine.raw.someCommand(args))` — identical
+one-liners with different method names.
+
+The dispatch pattern itself is a free function waiting to be extracted:
+
+```typescript
+function dispatchCommand(json: string, emit: EmitGlyph): PointId[] { ... }
+```
+
+Methods with real logic (addPoint, pasteContours, applySmartEdits,
+setNodePositions, restoreSnapshot) should live on FontEngine. The one-liners
+should be replaced by direct `dispatchCommand(raw.foo(), emit)` calls.
+
+**What to do:** Extract dispatch as a utility, collapse one-liner methods
+onto FontEngine, delete EditingManager. See `rust-ts-boundary.md` §5 for
+the full analysis and what blocks it.
+
+### The preview session pattern is duplicated three times
+
+On the GPU branch, `beginTranslateDrag`, `beginRotateDrag`, and
+`beginResizeDrag` each create a `NodePositionPreviewSession` with nearly
+identical orchestration:
+
+1. Capture base glyph
+2. Prepare native transform (Tier 2)
+3. On each frame: build updates from input, call `preview.preview(updates)`
+4. On commit: sync to Rust (Tier 2), record undo command, clear prepared transform
+5. On cancel: restore base glyph, clear prepared transform
+
+The three methods differ only in how they build updates from user input
+(delta vs angle vs scale). The preview/commit/cancel lifecycle, native
+transform preparation, and cleanup are copy-pasted.
+
+**What to do:** Extract `#createNodePositionPreviewSession` into a standalone
+`PreviewSession` that can be composed with different update-building strategies.
+The drag methods become thin: create session + supply an update function.
+
+### MockFontEngine grows with every tier
+
+MockFontEngine is already 499 lines reimplementing the NAPI contract. The GPU
+branch adds ~130 more lines for Tier 2 methods (`moveNodesLight`,
+`movePointsAndAnchorsLight`, `prepareNodeTransformLight`,
+`applyPreparedNodeTransformLight`, `clearPreparedNodeTransformLight`) plus
+the affine transform math.
+
+Every new NAPI method requires a parallel mock implementation. The mock has
+no tests of its own — it's tested indirectly through the code that uses it.
+
+**What to do:** Consider one of:
+
+- Generate the mock from `FontEngineAPI` types (Proxy-based auto-mock)
+- Integration tests against the real native module for critical paths
+- Shared test fixtures that validate mock and real engine produce the same
+  output for the same inputs
+
+### FontEngineAPI is hand-maintained from napi-rs output
+
+napi-rs already generates `crates/shift-node/index.d.ts` with full type
+signatures for all `#[napi]` methods. `FontEngineAPI.ts` is a manually
+maintained copy of the same information. Every new Rust command requires
+updating both files.
+
+The Tauri ecosystem solved this with tauri-specta (auto-generates typed TS
+wrappers from Rust function signatures). We could adapt this by parsing
+the napi-rs generated `.d.ts` and emitting `FontEngineAPI` automatically.
+
+**What to do:** Write a codegen script that reads `crates/shift-node/index.d.ts`
+and generates `FontEngineAPI.ts`. This eliminates one of the 5 touchpoints
+documented in the `/wire-rust` skill.
 
 ---
 
