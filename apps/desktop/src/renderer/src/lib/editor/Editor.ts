@@ -119,7 +119,7 @@ import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
-import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { SidebarViewModel, type SidebarSelectionBounds } from "./SidebarViewModel";
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import {
@@ -132,7 +132,6 @@ import {
   createScaleTransform,
   createTranslationTransform,
 } from "./affineTransform";
-import type { AffineTransformPayload } from "@shared/bridge/FontEngineAPI";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -320,8 +319,7 @@ export class Editor implements ShiftEditor {
     this.#fontEngine = new FontEngine();
     const glyphInfo = getGlyphInfo();
     this.#glyphNaming = new GlyphNamingService({
-      getExistingGlyphNameForUnicode: (unicode) =>
-        this.#fontEngine.info.getGlyphNameForUnicode(unicode),
+      getExistingGlyphNameForUnicode: (unicode) => this.#fontEngine.getGlyphNameForUnicode(unicode),
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
@@ -330,8 +328,8 @@ export class Editor implements ShiftEditor {
       getSelectionBounds: () => this.getSelectionBounds(),
     });
     this.#fontManager = new FontManager({
-      getMetrics: () => this.#fontEngine.info.getMetrics(),
-      getMetadata: () => this.#fontEngine.info.getMetadata(),
+      getMetrics: () => this.#fontEngine.getMetrics(),
+      getMetadata: () => this.#fontEngine.getMetadata(),
       getSvgPathByName: (glyphName) => glyphDataStore.getSvgPathByName(glyphName),
       getSvgPath: (unicode) => glyphDataStore.getSvgPath(unicode),
       getAdvanceByName: (glyphName) => glyphDataStore.getAdvanceByName(glyphName),
@@ -478,10 +476,10 @@ export class Editor implements ShiftEditor {
       unicodes.add(glyph.unicode);
       glyphNames.add(glyph.name);
 
-      const nativeDependents = this.#fontEngine.info.getDependentUnicodesByName(glyph.name);
+      const nativeDependents = this.#fontEngine.getDependentUnicodesByName(glyph.name);
       for (const unicode of nativeDependents) {
         unicodes.add(unicode);
-        const glyphName = this.#fontEngine.info.getGlyphNameForUnicode(unicode);
+        const glyphName = this.#fontEngine.getGlyphNameForUnicode(unicode);
         if (glyphName) {
           glyphNames.add(glyphName);
         }
@@ -1283,7 +1281,8 @@ export class Editor implements ShiftEditor {
     }
 
     return (
-      state.pointRules.allowsUniformTranslationCommit && (state.delta.x !== 0 || state.delta.y !== 0)
+      state.pointRules.allowsUniformTranslationCommit &&
+      (state.delta.x !== 0 || state.delta.y !== 0)
     );
   }
 
@@ -1422,19 +1421,19 @@ export class Editor implements ShiftEditor {
   /** Opens a glyph for editing by canonical glyph reference. */
   public startEditSession(glyph: GlyphRef): void {
     const glyphName = glyph.glyphName;
-    const currentGlyphName = this.#fontEngine.session.getEditingGlyphName();
+    const currentGlyphName = this.#fontEngine.getEditingGlyphName();
     if (currentGlyphName === glyphName) {
       this.#textRunManager.recompute(this.#fontManager);
       return;
     }
 
-    this.#fontEngine.session.startEditSession(glyph);
+    this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.editing.addContour();
     this.#textRunManager.recompute(this.#fontManager);
   }
 
   public endEditSession(): void {
-    this.#fontEngine.session.endEditSession();
+    this.#fontEngine.endEditSession();
   }
 
   public get textRunManager(): TextRunManager {
@@ -1482,7 +1481,7 @@ export class Editor implements ShiftEditor {
   }
 
   public insertTextCodepoint(codepoint: number): void {
-    const glyphName = this.#fontEngine.info.getGlyphNameForUnicode(codepoint);
+    const glyphName = this.#fontEngine.getGlyphNameForUnicode(codepoint);
     if (!glyphName) return;
     this.#textRunManager.buffer.insert({
       glyphName,
@@ -1528,7 +1527,7 @@ export class Editor implements ShiftEditor {
   }
 
   public getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
-    return this.#fontEngine.info.getGlyphCompositeComponents(glyphName);
+    return this.#fontEngine.getGlyphCompositeComponents(glyphName);
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -1596,11 +1595,11 @@ export class Editor implements ShiftEditor {
   }
 
   public getActiveGlyphUnicode(): number | null {
-    return this.#fontEngine.session.getEditingUnicode();
+    return this.#fontEngine.getEditingUnicode();
   }
 
   public getActiveGlyphName(): string | null {
-    return this.#fontEngine.session.getEditingGlyphName();
+    return this.#fontEngine.getEditingGlyphName();
   }
 
   public getActiveGlyphRef(): GlyphRef | null {
@@ -1780,7 +1779,7 @@ export class Editor implements ShiftEditor {
   }
 
   public updateMetricsFromFont(): void {
-    const metrics = this.#fontEngine.info.getMetrics();
+    const metrics = this.#fontEngine.getMetrics();
     this.#viewport.upm = metrics.unitsPerEm;
     this.#viewport.descender = metrics.descender;
     this.requestRedraw();
@@ -1926,12 +1925,12 @@ export class Editor implements ShiftEditor {
    * descender are NOT updated here -- call `updateMetricsFromFont()` to sync.
    */
   public loadFont(filePath: string): void {
-    if (this.#fontEngine.session.isActive()) {
-      this.#fontEngine.session.endEditSession();
+    if (this.#fontEngine.hasSession()) {
+      this.#fontEngine.endEditSession();
     }
-    this.#fontEngine.io.loadFont(filePath);
-    const unicodes = this.#fontEngine.info.getGlyphUnicodes();
-    const metrics = this.#fontEngine.info.getMetrics();
+    this.#fontEngine.loadFont(filePath);
+    const unicodes = this.#fontEngine.getGlyphUnicodes();
+    const metrics = this.#fontEngine.getMetrics();
     glyphDataStore.onFontLoaded(unicodes, metrics);
     this.#commandHistory.clear();
     this.#textRunManager.clearAll();
@@ -1942,7 +1941,7 @@ export class Editor implements ShiftEditor {
   }
 
   public async saveFontAsync(filePath: string): Promise<void> {
-    return this.#fontEngine.io.saveFontAsync(filePath);
+    return this.#fontEngine.saveFontAsync(filePath);
   }
 
   public setCursor(cursor: CursorType): void {

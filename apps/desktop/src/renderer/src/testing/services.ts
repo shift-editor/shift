@@ -127,18 +127,32 @@ interface EditService {
   movePointTo(id: PointId, x: number, y: number): void;
   setNodePositions(updates: NodePositionUpdateList): void;
   beginNodePositionOperation(label: string): NodePositionOperation;
-  beginTranslateDrag(target: {
-    pointIds: PointId[];
-    anchorIds: AnchorId[];
-  }, startPointer: Point2D, label?: string): TranslateDrag;
-  beginRotateDrag(target: {
-    pointIds: PointId[];
-    anchorIds: AnchorId[];
-  }, origin: Point2D, startPointer: Point2D, label?: string): RotateDrag;
-  beginResizeDrag(target: {
-    pointIds: PointId[];
-    anchorIds: AnchorId[];
-  }, origin: Point2D, startPointer: Point2D, options?: { uniformScale?: boolean; label?: string }): ResizeDrag;
+  beginTranslateDrag(
+    target: {
+      pointIds: PointId[];
+      anchorIds: AnchorId[];
+    },
+    startPointer: Point2D,
+    label?: string,
+  ): TranslateDrag;
+  beginRotateDrag(
+    target: {
+      pointIds: PointId[];
+      anchorIds: AnchorId[];
+    },
+    origin: Point2D,
+    startPointer: Point2D,
+    label?: string,
+  ): RotateDrag;
+  beginResizeDrag(
+    target: {
+      pointIds: PointId[];
+      anchorIds: AnchorId[];
+    },
+    origin: Point2D,
+    startPointer: Point2D,
+    options?: { uniformScale?: boolean; label?: string },
+  ): ResizeDrag;
   moveAnchors(ids: AnchorId[], dx: number, dy: number): void;
   applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[];
   removePoints(ids: Iterable<PointId>): void;
@@ -1314,11 +1328,10 @@ export function createMockToolContext(): MockToolContext {
   const fontEngine = new FontEngine(new MockFontEngine());
   const glyphInfo = getGlyphInfo();
   const glyphNameResolverDeps = {
-    getExistingGlyphNameForUnicode: (unicode: number) =>
-      fontEngine.info.getGlyphNameForUnicode(unicode),
+    getExistingGlyphNameForUnicode: (unicode: number) => fontEngine.getGlyphNameForUnicode(unicode),
     getMappedGlyphName: (unicode: number) => glyphInfo.getGlyphName(unicode),
   };
-  fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
+  fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
   fontEngine.editing.addContour();
 
   const screen = createMockScreenService();
@@ -1348,7 +1361,7 @@ export function createMockToolContext(): MockToolContext {
   const textRunManager = new TextRunManager();
   let mainGlyphUnicode: number | null = 65;
   textRunManager.setOwnerGlyph({
-    glyphName: fontEngine.info.getGlyphNameForUnicode(mainGlyphUnicode) ?? "A",
+    glyphName: fontEngine.getGlyphNameForUnicode(mainGlyphUnicode) ?? "A",
     unicode: mainGlyphUnicode,
   });
 
@@ -1734,12 +1747,12 @@ export function createMockToolContext(): MockToolContext {
       toolState[scope].delete(`${toolId}:${key}`);
     },
     startEditSession: vi.fn((glyph: { glyphName: string; unicode: number | null }) => {
-      fontEngine.session.startEditSession(glyph);
+      fontEngine.startEditSession(glyph);
       fontEngine.editing.addContour();
       textRunManager.recompute(font);
     }),
-    getActiveGlyphUnicode: vi.fn(() => fontEngine.session.getEditingUnicode()),
-    getActiveGlyphName: vi.fn(() => fontEngine.session.getEditingGlyphName()),
+    getActiveGlyphUnicode: vi.fn(() => fontEngine.getEditingUnicode()),
+    getActiveGlyphName: vi.fn(() => fontEngine.getEditingGlyphName()),
     setMainGlyphUnicode: (unicode: number | null) => {
       mainGlyphUnicode = unicode;
       const glyphRef =

@@ -3,9 +3,6 @@ import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal"
 import { getNative } from "./native";
 import { NativeOperationError } from "./errors";
 import { EditingManager, type EditingEngineDeps } from "./editing";
-import { SessionManager, type Session } from "./session";
-import { InfoManager, type Info } from "./info";
-import { IOManager, type IO } from "./io";
 import type {
   FontEngineAPI,
   NodePositionUpdate as BridgeNodePositionUpdate,
@@ -16,18 +13,11 @@ import { Bounds } from "@shift/geo";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 
 /**
- * Facade over the four engine managers ({@link EditingManager}, {@link SessionManager},
- * {@link InfoManager}, {@link IOManager}), each receiving a focused dep-interface slice.
- *
- * Owns the raw NAPI bridge and the reactive {@link $glyph} signal. Consumers interact
- * with the managers (`engine.editing`, `engine.session`, etc.) rather than calling
- * FontEngine methods directly.
+ * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
+ * Provides font queries, session lifecycle, and editing (via {@link EditingManager}).
  */
-export class FontEngine implements EditingEngineDeps, Session, Info, IO {
+export class FontEngine implements EditingEngineDeps {
   readonly editing: EditingManager;
-  readonly session: SessionManager;
-  readonly info: InfoManager;
-  readonly io: IOManager;
 
   readonly #$glyph: WritableSignal<GlyphSnapshot | null>;
   #raw: FontEngineAPI;
@@ -36,10 +26,7 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     this.#raw = raw ?? getNative();
     this.#$glyph = signal<GlyphSnapshot | null>(null);
 
-    this.session = new SessionManager(this);
     this.editing = new EditingManager(this);
-    this.info = new InfoManager(this);
-    this.io = new IOManager(this);
   }
 
   /** Reactive glyph snapshot. Updated by {@link emitGlyph} and {@link refreshGlyph}; null when no session is active. */
@@ -52,7 +39,41 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
   }
 
   hasSession(): boolean {
-    return this.session.isActive();
+    return this.#raw.hasEditSession();
+  }
+
+  /** No-op if the same glyph is already active; ends the previous session if a different glyph is active. */
+  startEditSession(target: GlyphRef): void {
+    if (this.hasSession()) {
+      const currentName = this.getEditingGlyphName();
+      if (currentName === target.glyphName) return;
+      this.endEditSession();
+    }
+    this.#raw.startEditSession(target);
+    const glyph = this.getSessionGlyph();
+    this.emitGlyph(glyph);
+  }
+
+  endEditSession(): void {
+    this.#raw.endEditSession();
+    this.emitGlyph(null);
+  }
+
+  getEditingUnicode(): number | null {
+    return this.#raw.getEditingUnicode();
+  }
+
+  getEditingGlyphName(): string | null {
+    return this.#raw.getEditingGlyphName();
+  }
+
+  getSessionGlyph(): GlyphSnapshot | null {
+    if (!this.hasSession()) return null;
+    try {
+      return this.getSnapshot();
+    } catch {
+      return null;
+    }
   }
 
   getGlyph(): GlyphSnapshot | null {
@@ -142,26 +163,6 @@ export class FontEngine implements EditingEngineDeps, Session, Info, IO {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
     return JSON.parse(payload) as CompositeComponentsPayload;
-  }
-
-  startEditSession(glyphRef: GlyphRef): void {
-    this.#raw.startEditSession(glyphRef);
-  }
-
-  endEditSession(): void {
-    this.#raw.endEditSession();
-  }
-
-  hasEditSession(): boolean {
-    return this.#raw.hasEditSession();
-  }
-
-  getEditingUnicode(): number | null {
-    return this.#raw.getEditingUnicode();
-  }
-
-  getEditingGlyphName(): string | null {
-    return this.#raw.getEditingGlyphName();
   }
 
   getActiveContourId(): ContourId | null {
