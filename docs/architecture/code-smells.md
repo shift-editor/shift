@@ -208,6 +208,42 @@ Should derive from the actual advance width or metrics.
 
 ---
 
+## Tier 5: Dead code and unused dependencies
+
+### Unused npm dependencies in `apps/desktop/package.json`
+
+- `beautiful-mermaid` — not imported anywhere in desktop app source
+- `chroma-js` — not imported anywhere in desktop app source
+- `clsx` — not imported in desktop app (only used inside `@shift/ui` where it's its own dep)
+
+Also: root `package.json` has a pnpm override for `beautiful-mermaid` that
+serves no purpose if the dep is removed.
+
+### Unused re-export in `@shift/ui`
+
+`packages/ui/src/index.ts:35` exports `Search` from `lucide-react` — never
+imported by any consumer.
+
+### `@shift/rules` has zero test coverage
+
+These files have non-trivial logic and no tests:
+- `packages/rules/src/actions.ts` — rule application during drags
+- `packages/rules/src/matcher.ts` — pattern matching
+- `packages/rules/src/parser.ts` — rule parsing
+- `packages/rules/src/constraints.ts` — geometric constraint math
+
+This is the constraint system that runs on every pointer-move. Untested vector
+math is a real risk.
+
+### Outstanding TODOs
+
+- `packages/glyph-info/src/types.ts:1,20,21,27,29` — 5 TODOs about narrowing
+  union types for `GlyphSubCategory`, `GlyphScript`, `CharsetId`, `CharsetSource`
+- `apps/desktop/src/renderer/src/context/ThemeContext.tsx:17` — dark theme
+  placeholder (`// TODO: Replace with darkTheme when implemented`)
+
+---
+
 ## Quick-win list (do these first)
 
 1. **Unify `GlyphRef`** — 5 minutes, prevents a real bug
@@ -215,3 +251,5 @@ Should derive from the actual advance width or metrics.
 3. **Extract `DEFAULT_X_ADVANCE` to shared constant** — 15 minutes
 4. **Delete `FontManager.ts`** — replace 8 call sites with `fontEngine.info.*`
 5. **Delete `engine/io.ts`** — 2 methods, inline into FontEngine
+6. **Remove `beautiful-mermaid` and `chroma-js`** from `apps/desktop/package.json`
+7. **Add basic tests for `@shift/rules`** — at minimum, snapshot tests for constraint outputs
