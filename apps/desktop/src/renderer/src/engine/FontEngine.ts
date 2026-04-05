@@ -14,7 +14,6 @@ import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import type {
-  AffineTransformPayload,
   FontEngineAPI,
   NodePositionUpdate as BridgeNodePositionUpdate,
 } from "@shared/bridge/FontEngineAPI";
@@ -364,27 +363,6 @@ export class FontEngine {
     this.#raw.setNodePositions(nativeUpdates);
   }
 
-  syncMoveNodes(pointIds: PointId[], anchorIds: AnchorId[], delta: Point2D): void {
-    if (!this.hasSession()) return;
-    if (pointIds.length === 0 && anchorIds.length === 0) return;
-    if (delta.x === 0 && delta.y === 0) return;
-
-    this.#raw.movePointsAndAnchorsLight(pointIds, anchorIds, delta.x, delta.y);
-  }
-
-  prepareNodeTransform(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
-    if (!this.hasSession()) return false;
-    return this.#raw.prepareNodeTransformLight(pointIds, anchorIds);
-  }
-
-  applyPreparedNodeTransform(transform: AffineTransformPayload): boolean {
-    if (!this.hasSession()) return false;
-    return this.#raw.applyPreparedNodeTransformLight(transform);
-  }
-
-  clearPreparedNodeTransform(): void {
-    this.#raw.clearPreparedNodeTransformLight();
-  }
 
   // ── Editing: rules engine ──
 
