@@ -13,7 +13,7 @@ import type { Point2D, PointId, Glyph, GlyphSnapshot } from "@shift/types";
 import { Glyphs } from "@shift/font";
 import { Editor } from "@/lib/editor/Editor";
 import { FontEngine } from "@/engine/FontEngine";
-import { MockFontEngine } from "@/engine/mock";
+import { MockFontEngine } from "./MockFontEngine";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 

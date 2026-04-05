@@ -16,8 +16,6 @@ import type {
 import { Glyphs } from "@shift/font";
 
 export class MockFontEngine implements FontEngineAPI {
-  // Note: also satisfies EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
-  // when wrapped by FontEngine (used via managers in tests)
   #snapshot: GlyphSnapshot | null = null;
   /** @knipclassignore */
   #nextId = 1;
@@ -430,7 +428,6 @@ export class MockFontEngine implements FontEngineAPI {
 
     return true;
   }
-
 
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string {
     if (!this.#snapshot) {

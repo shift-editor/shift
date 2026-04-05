@@ -1,5 +1,6 @@
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
-import { FontEngine, MockFontEngine } from "@/engine";
+import { FontEngine } from "@/engine";
+import { MockFontEngine } from "./MockFontEngine";
 import { Glyphs } from "@shift/font";
 
 export function createMockFontEngine(): FontEngine {
