@@ -1,9 +1,35 @@
 import { memo } from "react";
-import { useSignalState } from "@/lib/reactive";
-import { computeViewBoxHeight, glyphDataStore, glyphPreviewViewBox } from "@/store/GlyphDataStore";
 import type { FontMetrics } from "@shift/types";
+import { getNative } from "@/engine/native";
 
 export const CELL_HEIGHT = 75;
+
+export const MARGIN_TOP_RATIO = 0.2;
+export const MARGIN_BOTTOM_RATIO = 0.05;
+export const MARGIN_SIDE_RATIO = 0;
+
+export function glyphPreviewViewBox(metrics: FontMetrics | null, advance: number | null): string {
+  if (!metrics) {
+    return "0 -800 1000 1000";
+  }
+
+  const upm = metrics.unitsPerEm;
+  const marginTop = upm * MARGIN_TOP_RATIO;
+  const marginBottom = upm * MARGIN_BOTTOM_RATIO;
+  const marginSide = upm * MARGIN_SIDE_RATIO;
+  const x = -marginSide;
+  const y = -(metrics.ascender + marginTop);
+  const w = Math.max(1, (advance ?? upm) + 2 * marginSide);
+  const h = metrics.ascender - metrics.descender + marginTop + marginBottom;
+  return `${x} ${y} ${w} ${h}`;
+}
+
+export function computeViewBoxHeight(metrics: FontMetrics): number {
+  const upm = metrics.unitsPerEm;
+  const marginTop = upm * MARGIN_TOP_RATIO;
+  const marginBottom = upm * MARGIN_BOTTOM_RATIO;
+  return metrics.ascender - metrics.descender + marginTop + marginBottom;
+}
 
 export interface GlyphPreviewProps {
   unicode: number;
@@ -19,6 +45,7 @@ export function computeCellWidth(
   if (!metrics || advance === null) {
     return cellHeight;
   }
+
   const viewBoxHeight = computeViewBoxHeight(metrics);
   const width = (cellHeight * Math.max(1, advance)) / viewBoxHeight;
   return Math.max(cellHeight, width);
@@ -29,11 +56,11 @@ export const GlyphPreview = memo(function GlyphPreview({
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  useSignalState(glyphDataStore.getGlyphVersion(unicode));
-  const advance = glyphDataStore.getAdvance(unicode);
+  const native = getNative();
+  const advance = native.getGlyphAdvance(unicode) ?? null;
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
-  const path = glyphDataStore.getSvgPath(unicode);
+  const path = native.getGlyphSvgPath(unicode) ?? null;
 
   if (!path) {
     return (

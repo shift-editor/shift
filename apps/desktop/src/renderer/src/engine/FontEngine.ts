@@ -8,6 +8,8 @@ import type {
   AnchorId,
 } from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
+import type { Bounds } from "@shift/geo";
+import { Bounds as BoundsUtil } from "@shift/geo";
 import { getNative } from "./native";
 import { NoEditSessionError, NativeOperationError } from "./errors";
 import { constrainDrag } from "@shift/rules";
@@ -30,17 +32,45 @@ import { produceGlyph } from "./draft";
  */
 export class FontEngine {
   readonly #$glyph: WritableSignal<GlyphSnapshot | null>;
+  readonly #$fontLoaded: WritableSignal<boolean>;
+  readonly #$fontUnicodes: WritableSignal<number[]>;
+  readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
     this.#$glyph = signal<GlyphSnapshot | null>(null);
+    this.#$fontLoaded = signal(false);
+    this.#$fontUnicodes = signal<number[]>([]);
+    this.#$fontMetrics = signal<FontMetrics | null>(null);
   }
-
-  // ── Signals ──
 
   get $glyph(): Signal<GlyphSnapshot | null> {
     return this.#$glyph;
+  }
+
+  get $fontLoaded(): Signal<boolean> {
+    return this.#$fontLoaded;
+  }
+
+  get $fontUnicodes(): Signal<number[]> {
+    return this.#$fontUnicodes;
+  }
+
+  get $fontMetrics(): Signal<FontMetrics | null> {
+    return this.#$fontMetrics;
+  }
+
+  setFontLoaded(unicodes: number[], metrics: FontMetrics): void {
+    this.#$fontUnicodes.set(unicodes);
+    this.#$fontMetrics.set(metrics);
+    this.#$fontLoaded.set(true);
+  }
+
+  resetFontMetadata(): void {
+    this.#$fontLoaded.set(false);
+    this.#$fontUnicodes.set([]);
+    this.#$fontMetrics.set(null);
   }
 
   getGlyph(): GlyphSnapshot | null {
@@ -112,6 +142,34 @@ export class FontEngine {
 
   getGlyphNameForUnicode(unicode: number): string | null {
     return this.#raw.getGlyphNameForUnicode(unicode);
+  }
+
+  getSvgPath(unicode: number): string | null {
+    return this.#raw.getGlyphSvgPath(unicode) ?? null;
+  }
+
+  getSvgPathByName(glyphName: string): string | null {
+    return this.#raw.getGlyphSvgPathByName(glyphName) ?? null;
+  }
+
+  getAdvance(unicode: number): number | null {
+    return this.#raw.getGlyphAdvance(unicode) ?? null;
+  }
+
+  getAdvanceByName(glyphName: string): number | null {
+    return this.#raw.getGlyphAdvanceByName(glyphName) ?? null;
+  }
+
+  getBbox(unicode: number): Bounds | null {
+    const b = this.#raw.getGlyphBbox(unicode);
+    if (b == null || b.length !== 4) return null;
+    return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
+  }
+
+  getBboxByName(glyphName: string): Bounds | null {
+    const b = this.#raw.getGlyphBboxByName(glyphName);
+    if (b == null || b.length !== 4) return null;
+    return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
   }
 
   getDependentUnicodesByName(glyphName: string): number[] {

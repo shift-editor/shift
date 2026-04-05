@@ -36,7 +36,7 @@ import type { Coordinates } from "@/types/coordinates";
 
 import { GlyphNamingService, ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
-import { glyphDataStore } from "@/store/GlyphDataStore";
+import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
@@ -240,12 +240,12 @@ export class Editor implements ShiftEditor {
     this.#fontManager = new FontManager({
       getMetrics: () => this.#fontEngine.getMetrics(),
       getMetadata: () => this.#fontEngine.getMetadata(),
-      getSvgPathByName: (glyphName) => glyphDataStore.getSvgPathByName(glyphName),
-      getSvgPath: (unicode) => glyphDataStore.getSvgPath(unicode),
-      getAdvanceByName: (glyphName) => glyphDataStore.getAdvanceByName(glyphName),
-      getAdvance: (unicode) => glyphDataStore.getAdvance(unicode),
-      getBboxByName: (glyphName) => glyphDataStore.getBboxByName(glyphName),
-      getBbox: (unicode) => glyphDataStore.getBbox(unicode),
+      getSvgPathByName: (glyphName) => this.#fontEngine.getSvgPathByName(glyphName),
+      getSvgPath: (unicode) => this.#fontEngine.getSvgPath(unicode),
+      getAdvanceByName: (glyphName) => this.#fontEngine.getAdvanceByName(glyphName),
+      getAdvance: (unicode) => this.#fontEngine.getAdvance(unicode),
+      getBboxByName: (glyphName) => this.#fontEngine.getBboxByName(glyphName),
+      getBbox: (unicode) => this.#fontEngine.getBbox(unicode),
     });
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
@@ -371,41 +371,29 @@ export class Editor implements ShiftEditor {
       const textRun = this.#textRunManager.state.peek();
       if (!textRun) return;
 
-      const glyphInfo = getGlyphInfo();
-      const unicodes = new Set<number>();
+      // Clear cached Path2D objects for dependent glyphs so text runs re-render
+      // with fresh SVG data from NAPI.
       const glyphNames = new Set<string>();
       for (const slot of textRun.layout.slots) {
         if (slot.glyph.unicode !== null) {
-          unicodes.add(slot.glyph.unicode);
+          GlyphRenderCache.delete(slot.glyph.unicode);
         }
         glyphNames.add(slot.glyph.glyphName);
       }
-      unicodes.add(glyph.unicode);
+      GlyphRenderCache.delete(glyph.unicode);
       glyphNames.add(glyph.name);
 
       const nativeDependents = this.#fontEngine.getDependentUnicodesByName(glyph.name);
       for (const unicode of nativeDependents) {
-        unicodes.add(unicode);
+        GlyphRenderCache.delete(unicode);
         const glyphName = this.#fontEngine.getGlyphNameForUnicode(unicode);
         if (glyphName) {
           glyphNames.add(glyphName);
         }
       }
 
-      if (nativeDependents.length === 0) {
-        // Fallback from Unicode decomposition graph when native dependency data is unavailable.
-        for (const unicode of glyphInfo.getUsedBy(glyph.unicode)) {
-          if (glyphDataStore.hasGlyph(unicode)) {
-            unicodes.add(unicode);
-          }
-        }
-      }
-
-      for (const unicode of unicodes) {
-        glyphDataStore.invalidateGlyph(unicode);
-      }
       for (const glyphName of glyphNames) {
-        glyphDataStore.invalidateGlyphByName(glyphName);
+        GlyphRenderCache.delete(glyphName);
       }
 
       this.#textRunManager.recompute(this.#fontManager);
@@ -1428,7 +1416,8 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.loadFont(filePath);
     const unicodes = this.#fontEngine.getGlyphUnicodes();
     const metrics = this.#fontEngine.getMetrics();
-    glyphDataStore.onFontLoaded(unicodes, metrics);
+    GlyphRenderCache.clear();
+    this.#fontEngine.setFontLoaded(unicodes, metrics);
     this.#commandHistory.clear();
     this.#textRunManager.clearAll();
     this.setMainGlyphUnicode(65);

@@ -47,7 +47,7 @@ import { codepointToHex } from "@/lib/utils/unicode";
 import { useSignalState } from "@/lib/reactive";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import { glyphDataStore } from "@/store/GlyphDataStore";
+import { getEditor } from "@/store/store";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 import { Button } from "@shift/ui";
 
@@ -71,9 +71,10 @@ function computeLayout(width: number) {
 
 export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: GlyphGridProps) {
   const navigate = useNavigate();
-  const fontLoaded = useSignalState(glyphDataStore.fontLoaded);
-  const fontUnicodes = useSignalState(glyphDataStore.fontUnicodes);
-  const fontMetrics = useSignalState(glyphDataStore.fontMetrics);
+  const engine = getEditor().fontEngine;
+  const fontLoaded = useSignalState(engine.$fontLoaded);
+  const fontUnicodes = useSignalState(engine.$fontUnicodes);
+  const fontMetrics = useSignalState(engine.$fontMetrics);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const fallbackUnicodes = useMemo(
