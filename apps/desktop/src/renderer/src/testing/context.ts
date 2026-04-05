@@ -14,7 +14,3 @@ export function createMockCommandContext(glyph: GlyphSnapshot | null = null): Co
     glyph,
   };
 }
-
-export interface MockToolContextOptions {
-  viewportSize?: { width: number; height: number };
-}
