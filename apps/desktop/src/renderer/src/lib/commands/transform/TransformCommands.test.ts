@@ -18,7 +18,7 @@ describe("RotatePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
+    expect(ctx.fontEngine.movePointTo).toHaveBeenCalledWith(
       "p1",
       expect.closeTo(0, 5),
       expect.closeTo(1, 5),
@@ -31,7 +31,7 @@ describe("RotatePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).not.toHaveBeenCalled();
+    expect(ctx.fontEngine.movePointTo).not.toHaveBeenCalled();
   });
 
   it("should restore original positions on undo", () => {
@@ -45,7 +45,7 @@ describe("RotatePointsCommand", () => {
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should re-apply rotation on redo", () => {
@@ -61,7 +61,7 @@ describe("RotatePointsCommand", () => {
     cmd.redo(ctx);
 
     // Last call should be the rotated position again
-    const calls = vi.mocked(ctx.fontEngine.editing.movePointTo).mock.calls;
+    const calls = vi.mocked(ctx.fontEngine.movePointTo).mock.calls;
     const lastCall = expectAt(calls, calls.length - 1);
     expect(lastCall[0]).toBe("p1");
     expect(lastCall[1]).toBeCloseTo(0, 5);
@@ -85,7 +85,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 20, 40);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenCalledWith("p1", 20, 40);
   });
 
   it("should scale non-uniformly", () => {
@@ -95,7 +95,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 20, 60);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenCalledWith("p1", 20, 60);
   });
 
   it("should not call movePointTo with empty point array", () => {
@@ -104,7 +104,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).not.toHaveBeenCalled();
+    expect(ctx.fontEngine.movePointTo).not.toHaveBeenCalled();
   });
 
   it("should restore original positions on undo", () => {
@@ -115,7 +115,7 @@ describe("ScalePointsCommand", () => {
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should have the correct name", () => {
@@ -163,7 +163,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", 10, -20);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenCalledWith("p1", 10, -20);
   });
 
   it("should reflect points vertically", () => {
@@ -176,7 +176,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith("p1", -10, 20);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenCalledWith("p1", -10, 20);
   });
 
   it("should not call movePointTo with empty point array", () => {
@@ -185,7 +185,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).not.toHaveBeenCalled();
+    expect(ctx.fontEngine.movePointTo).not.toHaveBeenCalled();
   });
 
   it("should restore original positions on undo", () => {
@@ -199,7 +199,7 @@ describe("ReflectPointsCommand", () => {
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
+    expect(ctx.fontEngine.movePointTo).toHaveBeenLastCalledWith("p1", 100, 200);
   });
 
   it("should have the correct name", () => {

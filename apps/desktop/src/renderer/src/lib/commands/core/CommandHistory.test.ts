@@ -28,9 +28,9 @@ function addPointToActiveContour(
     smooth: boolean;
   },
 ): PointId {
-  const contourId = fontEngine.editing.getActiveContourId();
+  const contourId = fontEngine.getActiveContourId();
   if (!contourId) throw new Error("No active contour");
-  return fontEngine.editing.addPointToContour(contourId, edit);
+  return fontEngine.addPointToContour(contourId, edit);
 }
 
 describe("CommandHistory", () => {
@@ -40,8 +40,8 @@ describe("CommandHistory", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("execute", () => {
@@ -185,8 +185,8 @@ describe("batching", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("beginBatch/endBatch", () => {
@@ -312,7 +312,7 @@ describe("batching", () => {
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point directly
-      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
+      fontEngine.movePoints([pointId], { x: 50, y: 50 });
       const points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
 
@@ -337,9 +337,9 @@ describe("batching", () => {
       });
 
       history.beginBatch("Drag");
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
       // Record single command for total movement
       history.record(new MovePointsCommand([pointId], 30, 0));
       history.endBatch();
@@ -368,8 +368,8 @@ describe("onDirty callback", () => {
         onDirtyCalled++;
       },
     });
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   it("should call onDirty when command is executed", () => {
@@ -392,7 +392,7 @@ describe("onDirty callback", () => {
       pointType: "onCurve",
       smooth: false,
     });
-    fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
+    fontEngine.movePoints([pointId], { x: 50, y: 50 });
     expect(onDirtyCalled).toBe(0);
 
     history.record(new MovePointsCommand([pointId], 50, 50));
@@ -435,8 +435,8 @@ describe("Command integration with history", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("MovePointsCommand", () => {
@@ -567,7 +567,7 @@ describe("Command integration with history", () => {
         pointType: "onCurve",
         smooth: false,
       });
-      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
+      fontEngine.movePoints([pointId], { x: 50, y: 50 });
 
       // Now remove via command history
       history.execute(new RemovePointsCommand([pointId]));

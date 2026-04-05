@@ -79,14 +79,14 @@ describe("SetNodePositionsCommand", () => {
     const ctx = createMockCommandContext(after);
     command!.execute(ctx);
 
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
       { node: { kind: "point", id: asPointId("point-1") }, x: 15, y: 25 },
       { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 4, y: 5 },
     ]);
 
     command!.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenLastCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenLastCalledWith([
       { node: { kind: "point", id: asPointId("point-1") }, x: 10, y: 20 },
       { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 1, y: 2 },
     ]);
@@ -168,7 +168,7 @@ describe("SetNodePositionsCommand", () => {
     const ctx = createMockCommandContext(base);
     command!.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
       { node: { kind: "point", id: asPointId("point-1") }, x: 10, y: 20 },
       { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 1, y: 2 },
     ]);

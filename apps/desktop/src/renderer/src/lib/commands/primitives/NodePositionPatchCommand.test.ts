@@ -22,7 +22,7 @@ describe("NodePositionPatchCommand", () => {
     cmd.execute(ctx);
 
     expect(cmd.name).toBe("Move Nodes");
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
       { node: { kind: "point", id: asPointId("p1") }, x: 30, y: 40 },
       { node: { kind: "anchor", id: asAnchorId("a1") }, x: 15, y: 19 },
     ]);
@@ -40,7 +40,7 @@ describe("NodePositionPatchCommand", () => {
 
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
       { node: { kind: "point", id: asPointId("p1") }, x: 10, y: 20 },
     ]);
   });
@@ -59,7 +59,7 @@ describe("NodePositionPatchCommand", () => {
     cmd.undo(ctx);
     cmd.redo(ctx);
 
-    expect(ctx.fontEngine.editing.setNodePositions).toHaveBeenLastCalledWith([
+    expect(ctx.fontEngine.setNodePositions).toHaveBeenLastCalledWith([
       { node: { kind: "point", id: asPointId("p1") }, x: 1, y: 2 },
     ]);
   });

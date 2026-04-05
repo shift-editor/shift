@@ -25,7 +25,7 @@ describe("AddPointCommand", () => {
     const pointId = cmd.execute(ctx);
 
     expect(pointId).toBe("point-1");
-    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
+    expect(ctx.fontEngine.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 100,
       y: 200,
       pointType: "onCurve",
@@ -39,7 +39,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
+    expect(ctx.fontEngine.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 50,
       y: 75,
       pointType: "onCurve",
@@ -53,7 +53,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-0", {
+    expect(ctx.fontEngine.addPointToContour).toHaveBeenCalledWith("contour-0", {
       x: 30,
       y: 40,
       pointType: "offCurve",
@@ -68,7 +68,7 @@ describe("AddPointCommand", () => {
     const pointId = cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith([pointId]);
+    expect(ctx.fontEngine.removePoints).toHaveBeenCalledWith([pointId]);
   });
 
   it("should have the correct name", () => {
@@ -85,7 +85,7 @@ describe("MovePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, { x: 10, y: 20 });
+    expect(ctx.fontEngine.movePoints).toHaveBeenCalledWith(pointIds, { x: 10, y: 20 });
   });
 
   it("should move points back by negative delta on undo", () => {
@@ -96,7 +96,7 @@ describe("MovePointsCommand", () => {
     cmd.execute(ctx);
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, { x: -15, y: 5 });
+    expect(ctx.fontEngine.movePoints).toHaveBeenCalledWith(pointIds, { x: -15, y: 5 });
   });
 
   it("should not call movePoints with empty array", () => {
@@ -105,7 +105,7 @@ describe("MovePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.movePoints).not.toHaveBeenCalled();
+    expect(ctx.fontEngine.movePoints).not.toHaveBeenCalled();
   });
 
   it("should redo by executing again", () => {
@@ -119,8 +119,8 @@ describe("MovePointsCommand", () => {
 
     // execute + redo = 2 calls with positive delta
     // undo = 1 call with negative delta
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledTimes(3);
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenLastCalledWith(pointIds, { x: 5, y: 5 });
+    expect(ctx.fontEngine.movePoints).toHaveBeenCalledTimes(3);
+    expect(ctx.fontEngine.movePoints).toHaveBeenLastCalledWith(pointIds, { x: 5, y: 5 });
   });
 
   it("should have the correct name", () => {
@@ -137,7 +137,7 @@ describe("RemovePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(pointIds);
+    expect(ctx.fontEngine.removePoints).toHaveBeenCalledWith(pointIds);
   });
 
   it("should not call removePoints with empty array", () => {
@@ -146,7 +146,7 @@ describe("RemovePointsCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.removePoints).not.toHaveBeenCalled();
+    expect(ctx.fontEngine.removePoints).not.toHaveBeenCalled();
   });
 
   it("should store point data for undo when snapshot available", () => {
@@ -182,7 +182,7 @@ describe("RemovePointsCommand", () => {
     cmd.undo(ctx);
 
     // Should re-add the removed point
-    expect(ctx.fontEngine.editing.addPointToContour).toHaveBeenCalledWith("contour-1", {
+    expect(ctx.fontEngine.addPointToContour).toHaveBeenCalledWith("contour-1", {
       x: 100,
       y: 200,
       pointType: "onCurve",

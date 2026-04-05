@@ -13,7 +13,7 @@ describe("SetXAdvanceCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenCalledWith(530);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenCalledWith(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -22,7 +22,7 @@ describe("SetXAdvanceCommand", () => {
 
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenCalledWith(500);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenCalledWith(500);
   });
 });
 
@@ -33,7 +33,7 @@ describe("SetRightSidebearingCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenCalledWith(530);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenCalledWith(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -42,7 +42,7 @@ describe("SetRightSidebearingCommand", () => {
 
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenCalledWith(500);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenCalledWith(500);
   });
 });
 
@@ -53,8 +53,8 @@ describe("SetLeftSidebearingCommand", () => {
 
     cmd.execute(ctx);
 
-    expect(ctx.fontEngine.editing.translateLayer).toHaveBeenNthCalledWith(1, 20, 0);
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenNthCalledWith(1, 520);
+    expect(ctx.fontEngine.translateLayer).toHaveBeenNthCalledWith(1, 20, 0);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenNthCalledWith(1, 520);
   });
 
   it("reverts advance and translation on undo", () => {
@@ -63,8 +63,8 @@ describe("SetLeftSidebearingCommand", () => {
 
     cmd.undo(ctx);
 
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenNthCalledWith(1, 500);
-    expect(ctx.fontEngine.editing.translateLayer).toHaveBeenNthCalledWith(1, -20, 0);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenNthCalledWith(1, 500);
+    expect(ctx.fontEngine.translateLayer).toHaveBeenNthCalledWith(1, -20, 0);
   });
 
   it("reapplies translation and advance on redo", () => {
@@ -73,7 +73,7 @@ describe("SetLeftSidebearingCommand", () => {
 
     cmd.redo(ctx);
 
-    expect(ctx.fontEngine.editing.translateLayer).toHaveBeenNthCalledWith(1, 20, 0);
-    expect(ctx.fontEngine.editing.setXAdvance).toHaveBeenNthCalledWith(1, 520);
+    expect(ctx.fontEngine.translateLayer).toHaveBeenNthCalledWith(1, 20, 0);
+    expect(ctx.fontEngine.setXAdvance).toHaveBeenNthCalledWith(1, 520);
   });
 });

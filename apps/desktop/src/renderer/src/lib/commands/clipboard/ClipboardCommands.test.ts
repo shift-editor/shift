@@ -31,9 +31,9 @@ function addPointToActiveContour(
     smooth: boolean;
   },
 ): PointId {
-  const contourId = fontEngine.editing.getActiveContourId();
+  const contourId = fontEngine.getActiveContourId();
   if (!contourId) throw new Error("No active contour");
-  return fontEngine.editing.addPointToContour(contourId, edit);
+  return fontEngine.addPointToContour(contourId, edit);
 }
 
 describe("CutCommand", () => {
@@ -43,8 +43,8 @@ describe("CutCommand", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   it("should remove points on execute", () => {
@@ -150,8 +150,8 @@ describe("PasteCommand", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   it("should create points on execute", () => {
@@ -236,8 +236,8 @@ describe("Cut + Paste integration", () => {
   beforeEach(() => {
     fontEngine = createMockFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   it("should support cut then paste workflow", () => {
