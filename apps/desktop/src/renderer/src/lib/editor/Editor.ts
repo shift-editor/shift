@@ -93,7 +93,6 @@ import type { EditorAPI } from "../tools/core/EditorAPI";
 import type { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
-import type { ToolRenderContext, ToolRenderLayer } from "../tools/core/ToolRenderContributor";
 import type {
   DragSnapSession,
   DragSnapSessionConfig,
@@ -488,14 +487,6 @@ export class Editor implements ShiftEditor {
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public renderToolBelowHandles(draw: DrawAPI): void {
     this.#toolManager.renderBelowHandles(draw);
-  }
-
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolContributors(
-    layer: ToolRenderLayer,
-    context: Omit<ToolRenderContext, "editor">,
-  ): void {
-    this.#toolManager.renderContributors(layer, context);
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {

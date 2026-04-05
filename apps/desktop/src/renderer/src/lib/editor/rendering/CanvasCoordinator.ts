@@ -1,5 +1,5 @@
 import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Point2D, PointId, AnchorId } from "@shift/types";
+import type { Glyph, Point2D, PointId, AnchorId, Rect2D } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
@@ -7,9 +7,13 @@ import type { Segment as SegmentType } from "@/types/segments";
 import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
-import type { ToolRenderContext, ToolRenderLayer } from "@/lib/tools/core/ToolRenderContributor";
+import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { TextRunState } from "../managers/TextRunManager";
+import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { CompositeInspectionRenderData } from "./passes/textRun";
 
 import {
+  BOUNDING_RECTANGLE_STYLES,
   DEFAULT_STYLES,
   GUIDE_STYLES,
   SNAP_INDICATOR_CROSS_SIZE_PX,
@@ -37,6 +41,9 @@ import {
   renderDebugHitRadii,
   renderDebugSegmentBounds,
   renderDebugGlyphBbox,
+  renderBoundingRect,
+  renderBoundingBoxHandles,
+  renderTextRun,
 } from "./passes";
 import { packHandleInstances } from "./gpu/classifyHandles";
 import { getVisibleSceneBounds } from "./visibleSceneBounds";
@@ -105,8 +112,14 @@ export interface CanvasCoordinatorContext {
   renderTool(draw: DrawAPI): void;
   /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
   renderToolBelowHandles(draw: DrawAPI): void;
-  renderToolContributors(layer: ToolRenderLayer, context: Omit<ToolRenderContext, "editor">): void;
   shouldRenderEditableGlyph(): boolean;
+  getSelectionBoundingRect(): Rect2D | null;
+  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
+  getZoom(): number;
+  getTextRunState(): TextRunState | null;
+  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
+  getActiveGlyphName(): string | null;
+  getActiveGlyphUnicode(): number | null;
 }
 
 /**
@@ -234,25 +247,6 @@ export class CanvasCoordinator {
     ctx.setStyle(resolveDrawStyle(style, (px) => this.#pxToUpm(px)));
   }
 
-  #createToolRenderContext(context: {
-    draw?: DrawAPI;
-    renderer?: IRenderer;
-    visibleSceneBounds?: {
-      minX: number;
-      maxX: number;
-      minY: number;
-      maxY: number;
-    };
-  }): Omit<ToolRenderContext, "editor"> {
-    return {
-      ...context,
-      pxToUpm: (px?: number) => this.#pxToUpm(px),
-      applyStyle: (renderer, style) =>
-        renderer.setStyle(resolveDrawStyle(style, (px) => this.#pxToUpm(px))),
-      projectGlyphLocalToScreen: (point) => this.#projectGlyphLocalToScreen(point.x, point.y),
-    };
-  }
-
   #drawInteractive(): void {
     if (!this.#interactiveContext?.isReady() || !this.#interactiveDraw) return;
     const ctx = this.#interactiveContext.getContext();
@@ -261,12 +255,6 @@ export class CanvasCoordinator {
 
     this.#applyTransforms(ctx);
     this.#ctx.renderTool(this.#interactiveDraw);
-    this.#ctx.renderToolContributors(
-      "interactive-scene",
-      this.#createToolRenderContext({
-        draw: this.#interactiveDraw,
-      }),
-    );
 
     ctx.restore();
   }
@@ -281,14 +269,7 @@ export class CanvasCoordinator {
       this.#ctx.isHandlesVisible() &&
       this.#ctx.shouldRenderEditableGlyph()
     ) {
-      ctx.save();
-      this.#ctx.renderToolContributors(
-        "overlay-screen",
-        this.#createToolRenderContext({
-          renderer: ctx,
-        }),
-      );
-      ctx.restore();
+      this.#renderSelectionBoundingHandles(ctx);
     }
 
     const indicator = this.#ctx.getSnapIndicator();
@@ -330,13 +311,8 @@ export class CanvasCoordinator {
 
     ctx.save();
     this.#applyViewportTransform(ctx);
-    this.#ctx.renderToolContributors(
-      "static-scene-before-handles",
-      this.#createToolRenderContext({
-        draw,
-        visibleSceneBounds,
-      }),
-    );
+    this.#renderTextRun(rc, visibleSceneBounds);
+    this.#renderSelectionBoundingRect(ctx, rc);
     ctx.restore();
 
     const shouldRenderEditableGlyph = this.#ctx.shouldRenderEditableGlyph();
@@ -432,6 +408,112 @@ export class CanvasCoordinator {
       logicalWidth: viewport.centre.x * 2,
       logicalHeight: viewport.logicalHeight,
     });
+  }
+
+  #renderSelectionBoundingRect(
+    ctx: IRenderer,
+    rc: { ctx: IRenderer; pxToUpm: (px?: number) => number; applyStyle: (style: DrawStyle) => void },
+  ): void {
+    if (this.#ctx.isPreviewMode()) return;
+    if (!this.#ctx.shouldRenderEditableGlyph()) return;
+
+    const rect = this.#ctx.getSelectionBoundingRect();
+    if (!rect) return;
+
+    const zoom = this.#ctx.getZoom();
+    const offset = this.#ctx.getDrawOffset();
+
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    this.#applyStyle(ctx, BOUNDING_RECTANGLE_STYLES);
+    if (ctx.dashPattern.length > 0) {
+      ctx.dashPattern = ctx.dashPattern.map((dash) => dash * zoom);
+    }
+    renderBoundingRect(
+      {
+        ctx,
+        pxToUpm: rc.pxToUpm,
+        applyStyle: (style) => this.#applyStyle(ctx, style),
+      },
+      rect,
+    );
+    ctx.restore();
+  }
+
+  #renderSelectionBoundingHandles(ctx: IRenderer): void {
+    const rect = this.#ctx.getSelectionBoundingRect();
+    if (!rect) return;
+
+    const topLeft = this.#projectGlyphLocalToScreen(rect.x, rect.y + rect.height);
+    const bottomRight = this.#projectGlyphLocalToScreen(rect.x + rect.width, rect.y);
+    const hoveredHandle = this.#ctx.getHoveredBoundingBoxHandle();
+
+    ctx.save();
+    renderBoundingBoxHandles(ctx, {
+      rect: {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y,
+        left: topLeft.x,
+        top: topLeft.y,
+        right: bottomRight.x,
+        bottom: bottomRight.y,
+      },
+      ...(hoveredHandle ? { hoveredHandle } : {}),
+    });
+    ctx.restore();
+  }
+
+  #resolveCompositeInspection(textRunState: TextRunState): CompositeInspectionRenderData | null {
+    const inspection = textRunState.compositeInspection;
+    if (!inspection) return null;
+
+    const slot = textRunState.layout.slots[inspection.slotIndex];
+    if (!slot) return null;
+
+    const composite = this.#ctx.getGlyphCompositeComponents(slot.glyph.glyphName);
+    if (!composite || composite.components.length === 0) return null;
+
+    return {
+      slotIndex: inspection.slotIndex,
+      hoveredComponentIndex: inspection.hoveredComponentIndex,
+      components: composite.components,
+    };
+  }
+
+  #renderTextRun(
+    rc: { ctx: IRenderer; pxToUpm: (px?: number) => number; applyStyle: (style: DrawStyle) => void },
+    visibleSceneBounds: { minX: number; maxX: number; minY: number; maxY: number },
+  ): void {
+    const textRunState = this.#ctx.getTextRunState();
+    if (!textRunState) return;
+
+    const metrics = this.#ctx.font.getMetrics();
+    const glyph = this.#ctx.glyph.peek();
+    const activeGlyphName = this.#ctx.getActiveGlyphName();
+    const liveGlyph =
+      glyph && activeGlyphName
+        ? {
+            name: activeGlyphName,
+            unicode: this.#ctx.getActiveGlyphUnicode(),
+            contours: glyph.contours,
+            compositeContours: glyph.compositeContours,
+          }
+        : null;
+
+    renderTextRun(
+      {
+        ctx: rc.ctx,
+        pxToUpm: rc.pxToUpm,
+        applyStyle: rc.applyStyle,
+      },
+      textRunState,
+      metrics,
+      liveGlyph,
+      this.#resolveCompositeInspection(textRunState),
+      visibleSceneBounds,
+    );
   }
 
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {

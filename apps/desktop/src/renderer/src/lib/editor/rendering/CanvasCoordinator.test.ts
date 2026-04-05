@@ -43,6 +43,7 @@ function createMockRenderer(): IRenderer {
 
 function createGraphicContext(renderer: IRenderer): IGraphicContext {
   return {
+    isReady: () => true,
     resizeCanvas: vi.fn(),
     getContext: () => renderer,
     destroy: vi.fn(),
@@ -55,7 +56,6 @@ function createContext(
     (scene: Point2D): Point2D;
     (x: number, y: number): Point2D;
   },
-  renderToolContributors: CanvasCoordinatorContext["renderToolContributors"] = vi.fn(),
 ): CanvasCoordinatorContext {
   const font: Font = {
     getMetrics: () => ({
@@ -126,61 +126,59 @@ function createContext(
     }),
     renderTool: vi.fn(),
     renderToolBelowHandles: vi.fn(),
-    renderToolContributors,
     shouldRenderEditableGlyph: () => true,
+    getSelectionBoundingRect: () => null,
+    getHoveredBoundingBoxHandle: () => null,
+    getZoom: () => 1,
+    getTextRunState: () => null,
+    getGlyphCompositeComponents: () => null,
+    getActiveGlyphName: () => null,
+    getActiveGlyphUnicode: () => null,
   };
 }
 
 describe("CanvasCoordinator", () => {
-  it("applies drawOffset when projecting contributor screen points", () => {
+  it("applies drawOffset when projecting bounding box handle points", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
       typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
     );
-    const renderToolContributors = vi.fn((layer, context) => {
-      if (layer !== "overlay-screen") return;
-      context.projectGlyphLocalToScreen({ x: 10, y: 60 });
-      context.projectGlyphLocalToScreen({ x: 110, y: 20 });
-    });
-    const context = createContext({ x: 600, y: 25 }, projectSceneToScreen, renderToolContributors);
+    const context = createContext({ x: 600, y: 25 }, projectSceneToScreen);
+    context.getSelectionBoundingRect = () => ({ x: 10, y: 20, width: 100, height: 40 });
     const coordinator = new CanvasCoordinator(context);
     coordinator.setOverlayContext(createGraphicContext(renderer));
 
     coordinator.requestImmediateRedraw();
 
-    expect(projectSceneToScreen).toHaveBeenCalledTimes(2);
-    expect(projectSceneToScreen).toHaveBeenNthCalledWith(1, 610, 85);
-    expect(projectSceneToScreen).toHaveBeenNthCalledWith(2, 710, 45);
+    // topLeft = project(10+600, 20+40+25) = project(610, 85)
+    // bottomRight = project(10+100+600, 20+25) = project(710, 45)
+    expect(projectSceneToScreen).toHaveBeenCalledWith(610, 85);
+    expect(projectSceneToScreen).toHaveBeenCalledWith(710, 45);
   });
 
-  it("uses raw contributor points when drawOffset is zero", () => {
+  it("uses raw points when drawOffset is zero", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
       typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
     );
-    const renderToolContributors = vi.fn((layer, context) => {
-      if (layer !== "overlay-screen") return;
-      context.projectGlyphLocalToScreen({ x: 10, y: 60 });
-      context.projectGlyphLocalToScreen({ x: 110, y: 20 });
-    });
-    const context = createContext({ x: 0, y: 0 }, projectSceneToScreen, renderToolContributors);
+    const context = createContext({ x: 0, y: 0 }, projectSceneToScreen);
+    context.getSelectionBoundingRect = () => ({ x: 10, y: 20, width: 100, height: 40 });
     const coordinator = new CanvasCoordinator(context);
     coordinator.setOverlayContext(createGraphicContext(renderer));
 
     coordinator.requestImmediateRedraw();
 
-    expect(projectSceneToScreen).toHaveBeenCalledTimes(2);
-    expect(projectSceneToScreen).toHaveBeenNthCalledWith(1, 10, 60);
-    expect(projectSceneToScreen).toHaveBeenNthCalledWith(2, 110, 20);
+    // topLeft = project(10, 60), bottomRight = project(110, 20)
+    expect(projectSceneToScreen).toHaveBeenCalledWith(10, 60);
+    expect(projectSceneToScreen).toHaveBeenCalledWith(110, 20);
   });
 
-  it("does not project points when contributor does not request projection", () => {
+  it("does not project points when no selection bounding rect exists", () => {
     const renderer = createMockRenderer();
     const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
       typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
     );
-    const renderToolContributors = vi.fn();
-    const context = createContext({ x: 350, y: 40 }, projectSceneToScreen, renderToolContributors);
+    const context = createContext({ x: 350, y: 40 }, projectSceneToScreen);
     const coordinator = new CanvasCoordinator(context);
     coordinator.setOverlayContext(createGraphicContext(renderer));
 
