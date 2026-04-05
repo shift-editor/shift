@@ -22,7 +22,8 @@ export function packHandleInstances(
   }
 
   const requiredLength = totalPoints * GPU_HANDLE_INSTANCE_FLOATS;
-  const packed = reusable && reusable.length === requiredLength ? reusable : new Float32Array(requiredLength);
+  const packed =
+    reusable && reusable.length === requiredLength ? reusable : new Float32Array(requiredLength);
   const bounds = getVisibleSceneBounds(viewport, HANDLE_CULL_MARGIN_PX);
 
   let index = 0;
@@ -38,13 +39,27 @@ export function packHandleInstances(
 
       const sceneX = point.x + drawOffset.x;
       const sceneY = point.y + drawOffset.y;
-      if (sceneX < bounds.minX || sceneX > bounds.maxX || sceneY < bounds.minY || sceneY > bounds.maxY) continue;
+      if (
+        sceneX < bounds.minX ||
+        sceneX > bounds.maxX ||
+        sceneY < bounds.minY ||
+        sceneY > bounds.maxY
+      )
+        continue;
 
       const prev = i > 0 ? points[i - 1] : contour.closed ? points[numPoints - 1] : undefined;
       const next = i + 1 < numPoints ? points[i + 1] : contour.closed ? points[0] : undefined;
       const state = getHandleState(point.id);
 
-      const { style, rotation } = classifyPoint(point, prev, next, i, numPoints, contour.closed, state);
+      const { style, rotation } = classifyPoint(
+        point,
+        prev,
+        next,
+        i,
+        numPoints,
+        contour.closed,
+        state,
+      );
       writeInstance(packed, index, point.x, point.y, rotation, style);
       index++;
     }

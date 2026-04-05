@@ -30,7 +30,10 @@ export interface CachedInstanceStyle {
 
 type StyleByState = Record<HandleState, CachedInstanceStyle>;
 
-function buildSimpleStyle(shape: "corner" | "smooth" | "control", state: HandleState): CachedInstanceStyle {
+function buildSimpleStyle(
+  shape: "corner" | "smooth" | "control",
+  state: HandleState,
+): CachedInstanceStyle {
   const style = HANDLE_STYLES[shape][state] as BaseHandleStyle;
   const halfSize = shape === "corner" ? style.size / 2 : style.size;
   const padding = Math.max(style.lineWidth, 2);
@@ -49,7 +52,10 @@ function buildSimpleStyle(shape: "corner" | "smooth" | "control", state: HandleS
   };
 }
 
-function buildDirectionalStyle(shape: "direction" | "first" | "last", state: HandleState): CachedInstanceStyle {
+function buildDirectionalStyle(
+  shape: "direction" | "first" | "last",
+  state: HandleState,
+): CachedInstanceStyle {
   if (shape === "direction") {
     const style = HANDLE_STYLES.direction[state];
     return {
@@ -67,7 +73,10 @@ function buildDirectionalStyle(shape: "direction" | "first" | "last", state: Han
   }
 
   if (shape === "first") {
-    const style = HANDLE_STYLES.first[state] as BaseHandleStyle & { barSize: number; barStrokeStyle: string };
+    const style = HANDLE_STYLES.first[state] as BaseHandleStyle & {
+      barSize: number;
+      barStrokeStyle: string;
+    };
     const halfBar = style.barSize / 2;
     const triangleTip = FIRST_HANDLE_GAP_PX + style.size * 2;
     return {
@@ -100,7 +109,10 @@ function buildDirectionalStyle(shape: "direction" | "first" | "last", state: Han
 }
 
 function buildStyleByState(shape: GpuHandleShape): StyleByState {
-  const build = shape === "corner" || shape === "smooth" || shape === "control" ? buildSimpleStyle : buildDirectionalStyle;
+  const build =
+    shape === "corner" || shape === "smooth" || shape === "control"
+      ? buildSimpleStyle
+      : buildDirectionalStyle;
   return {
     idle: build(shape as never, "idle"),
     hovered: build(shape as never, "hovered"),

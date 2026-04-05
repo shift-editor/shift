@@ -165,7 +165,6 @@ describe("SplitSegmentCommand", () => {
       const c1 = fontEngine.addPoint({ x: 50, y: 100, pointType: "offCurve", smooth: false });
       const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
 
-      const points = getAllPoints(fontEngine.getGlyph());
       const segment: QuadSegment = {
         type: "quad",
         points: {

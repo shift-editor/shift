@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { SetNodePositionsCommand } from "./SetNodePositionsCommand";
-import { createFontEngine, getAllPoints } from "@/testing";
-import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
+import { createFontEngine } from "@/testing";
+import type { GlyphSnapshot } from "@shift/types";
 import { asAnchorId, asContourId, asPointId } from "@shift/types";
 import type { FontEngine } from "@/engine";
 import type { CommandContext } from "../core";
@@ -91,9 +91,7 @@ describe("SetNodePositionsCommand", () => {
         {
           id: asContourId("contour-1"),
           closed: false,
-          points: [
-            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
-          ],
+          points: [{ id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false }],
         },
       ],
     });
@@ -119,9 +117,7 @@ describe("SetNodePositionsCommand", () => {
         {
           id: asContourId("contour-1"),
           closed: false,
-          points: [
-            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
-          ],
+          points: [{ id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false }],
         },
       ],
       anchors: [{ id: asAnchorId("anchor-1"), name: "top", x: 1, y: 2 }],

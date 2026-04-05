@@ -2,6 +2,8 @@ import type { ContourId, PointId, AnchorId } from "@shift/types";
 export declare class FontEngine {
   constructor()
   loadFont(path: string): void
+  saveFont(path: string): void
+  getGlyphCount(): number
   saveFontAsync(path: string): Promise<void>
   getMetadata(): string
   getMetrics(): string

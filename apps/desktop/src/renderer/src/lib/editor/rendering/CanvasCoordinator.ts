@@ -412,7 +412,11 @@ export class CanvasCoordinator {
 
   #renderSelectionBoundingRect(
     ctx: IRenderer,
-    rc: { ctx: IRenderer; pxToUpm: (px?: number) => number; applyStyle: (style: DrawStyle) => void },
+    rc: {
+      ctx: IRenderer;
+      pxToUpm: (px?: number) => number;
+      applyStyle: (style: DrawStyle) => void;
+    },
   ): void {
     if (this.#ctx.isPreviewMode()) return;
     if (!this.#ctx.shouldRenderEditableGlyph()) return;
@@ -483,7 +487,11 @@ export class CanvasCoordinator {
   }
 
   #renderTextRun(
-    rc: { ctx: IRenderer; pxToUpm: (px?: number) => number; applyStyle: (style: DrawStyle) => void },
+    rc: {
+      ctx: IRenderer;
+      pxToUpm: (px?: number) => number;
+      applyStyle: (style: DrawStyle) => void;
+    },
     visibleSceneBounds: { minX: number; maxX: number; minY: number; maxY: number },
   ): void {
     const textRunState = this.#ctx.getTextRunState();

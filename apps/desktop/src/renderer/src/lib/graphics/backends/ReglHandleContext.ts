@@ -36,7 +36,8 @@ export class ReglHandleContext {
   }
 
   draw(frame: GpuHandleFrame): boolean {
-    if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available) return false;
+    if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
+      return false;
 
     if (frame.instanceCount === 0) {
       this.clear();
@@ -80,12 +81,22 @@ export class ReglHandleContext {
       const regl = REGL({
         canvas,
         pixelRatio,
-        attributes: { alpha: true, antialias: true, depth: false, stencil: false, premultipliedAlpha: true },
+        attributes: {
+          alpha: true,
+          antialias: true,
+          depth: false,
+          stencil: false,
+          premultipliedAlpha: true,
+        },
         extensions: ["ANGLE_instanced_arrays", "OES_standard_derivatives"],
       });
 
       const quadBuffer = regl.buffer(UNIT_QUAD);
-      const instanceBuffer = regl.buffer({ usage: "dynamic", type: "float", data: new Float32Array(0) });
+      const instanceBuffer = regl.buffer({
+        usage: "dynamic",
+        type: "float",
+        data: new Float32Array(0),
+      });
       const stride = GPU_HANDLE_INSTANCE_FLOATS * 4;
       const prop = (name: string) => regl.prop(name as never) as never;
 

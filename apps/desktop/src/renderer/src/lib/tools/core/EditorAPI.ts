@@ -62,7 +62,6 @@ export interface DragTarget {
   anchorIds: AnchorId[];
 }
 
-
 /**
  * Coordinate-space conversions and viewport state.
  *

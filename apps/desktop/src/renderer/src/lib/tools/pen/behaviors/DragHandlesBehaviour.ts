@@ -154,7 +154,12 @@ export class HandleBehavior implements PenBehavior {
     return { cpIn: cpInId };
   }
 
-  #updateHandles(anchor: AnchorData, handles: HandleData, snappedPos: Point2D, editor: EditorAPI): void {
+  #updateHandles(
+    anchor: AnchorData,
+    handles: HandleData,
+    snappedPos: Point2D,
+    editor: EditorAPI,
+  ): void {
     if (handles.cpOut) {
       editor.movePointTo(handles.cpOut, snappedPos);
     }

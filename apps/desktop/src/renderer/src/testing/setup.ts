@@ -4,10 +4,11 @@
 
 // window + requestAnimationFrame — used by FrameHandler for render scheduling.
 if (typeof globalThis.window === "undefined") {
-  (globalThis as any).window = globalThis;
+  (globalThis as unknown as Record<string, unknown>).window = globalThis;
 }
 if (typeof globalThis.requestAnimationFrame === "undefined") {
-  globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0) as unknown as number;
+  globalThis.requestAnimationFrame = (cb: FrameRequestCallback) =>
+    setTimeout(cb, 0) as unknown as number;
   globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
 }
 

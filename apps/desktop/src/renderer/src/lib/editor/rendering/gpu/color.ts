@@ -43,7 +43,10 @@ function parseHex(hex: string): GpuColor {
 }
 
 function parseRgb(input: string): GpuColor {
-  const values = input.slice(input.indexOf("(") + 1, input.lastIndexOf(")")).split(",").map((s) => s.trim());
+  const values = input
+    .slice(input.indexOf("(") + 1, input.lastIndexOf(")"))
+    .split(",")
+    .map((s) => s.trim());
   const [r = "0", g = "0", b = "0", a = "1"] = values;
   return [
     clamp(parseFloat(r) / 255),

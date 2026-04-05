@@ -146,6 +146,21 @@ impl FontEngine {
     Ok(())
   }
 
+  #[napi]
+  pub fn save_font(&mut self, path: String) -> Result<()> {
+    let backup = self.apply_edits_for_save();
+    let font = self.font.clone();
+    self.restore_from_backup(backup);
+    self.font_loader.write_font(&font, &path)
+      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    Ok(())
+  }
+
+  #[napi]
+  pub fn get_glyph_count(&self) -> u32 {
+    self.font.glyph_count() as u32
+  }
+
   #[napi(ts_return_type = "Promise<void>")]
   pub fn save_font_async(&mut self, path: String) -> AsyncTask<SaveFontTask> {
     let backup = self.apply_edits_for_save();
