@@ -21,7 +21,7 @@ import type {
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { Bounds } from "@shift/geo";
-import type { GlyphRef } from "@/lib/tools/text/layout";
+import type { GlyphRef } from "@shared/bridge/FontEngineAPI";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { patchPositions } from "./draft";
@@ -369,46 +369,21 @@ export class FontEngine {
     if (pointIds.length === 0 && anchorIds.length === 0) return;
     if (delta.x === 0 && delta.y === 0) return;
 
-    if (typeof this.#raw.movePointsAndAnchorsLight === "function") {
-      this.#raw.movePointsAndAnchorsLight(pointIds, anchorIds, delta.x, delta.y);
-      return;
-    }
-
-    if (typeof this.#raw.moveNodesLight === "function") {
-      const nodes = [
-        ...pointIds.map((id) => ({ kind: "point" as const, id })),
-        ...anchorIds.map((id) => ({ kind: "anchor" as const, id })),
-      ];
-      this.#raw.moveNodesLight(nodes, delta.x, delta.y);
-      return;
-    }
-
-    this.#execute(
-      this.#raw.moveNodes(
-        [
-          ...pointIds.map((id) => ({ kind: "point" as const, id })),
-          ...anchorIds.map((id) => ({ kind: "anchor" as const, id })),
-        ],
-        delta.x,
-        delta.y,
-      ),
-    );
+    this.#raw.movePointsAndAnchorsLight(pointIds, anchorIds, delta.x, delta.y);
   }
 
   prepareNodeTransform(pointIds: PointId[], anchorIds: AnchorId[]): boolean {
     if (!this.hasSession()) return false;
-    if (typeof this.#raw.prepareNodeTransformLight !== "function") return false;
     return this.#raw.prepareNodeTransformLight(pointIds, anchorIds);
   }
 
   applyPreparedNodeTransform(transform: AffineTransformPayload): boolean {
     if (!this.hasSession()) return false;
-    if (typeof this.#raw.applyPreparedNodeTransformLight !== "function") return false;
     return this.#raw.applyPreparedNodeTransformLight(transform);
   }
 
   clearPreparedNodeTransform(): void {
-    if (this.#raw.clearPreparedNodeTransformLight) this.#raw.clearPreparedNodeTransformLight();
+    this.#raw.clearPreparedNodeTransformLight();
   }
 
   // ── Editing: rules engine ──

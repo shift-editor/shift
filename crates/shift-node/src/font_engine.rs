@@ -729,7 +729,7 @@ impl FontEngine {
     Ok(contour_id.to_string())
   }
 
-  #[napi]
+  #[napi(ts_return_type = "ContourId | null")]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
     Ok(edit_session.active_contour_id().map(|id| id.to_string()))
@@ -1137,6 +1137,7 @@ impl FontEngine {
 /// Tagged node reference for node-based drag/edit operations.
 #[napi(object)]
 pub struct JsNodeRef {
+  #[napi(ts_type = "'point' | 'anchor' | 'guideline'")]
   pub kind: String,
   pub id: String,
 }
