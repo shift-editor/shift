@@ -19,8 +19,7 @@ import type {
 } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
-import { Bounds } from "@shift/geo";
-import type { GlyphRef } from "@shared/bridge/FontEngineAPI";
+import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { patchPositions } from "./draft";
@@ -64,7 +63,10 @@ export class FontEngine {
       if (currentName === target.glyphName) return;
       this.endEditSession();
     }
-    this.#raw.startEditSession(target);
+    this.#raw.startEditSession({
+      glyphName: target.glyphName,
+      unicode: target.unicode ?? undefined,
+    });
     this.emitGlyph(this.getSessionGlyph());
   }
 
@@ -106,10 +108,6 @@ export class FontEngine {
     return JSON.parse(this.#raw.getMetrics());
   }
 
-  getGlyphCount(): number {
-    return this.#raw.getGlyphCount();
-  }
-
   getGlyphUnicodes(): number[] {
     return this.#raw.getGlyphUnicodes();
   }
@@ -118,44 +116,8 @@ export class FontEngine {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
-  getGlyphUnicodesForName(glyphName: string): number[] {
-    return this.#raw.getGlyphUnicodesForName(glyphName);
-  }
-
-  getDependentUnicodes(unicode: number): number[] {
-    return this.#raw.getDependentUnicodes(unicode);
-  }
-
   getDependentUnicodesByName(glyphName: string): number[] {
     return this.#raw.getDependentUnicodesByName(glyphName);
-  }
-
-  getGlyphSvgPath(unicode: number): string | null {
-    return this.#raw.getGlyphSvgPath(unicode);
-  }
-
-  getGlyphSvgPathByName(glyphName: string): string | null {
-    return this.#raw.getGlyphSvgPathByName(glyphName);
-  }
-
-  getGlyphAdvance(unicode: number): number | null {
-    return this.#raw.getGlyphAdvance(unicode);
-  }
-
-  getGlyphAdvanceByName(glyphName: string): number | null {
-    return this.#raw.getGlyphAdvanceByName(glyphName);
-  }
-
-  getGlyphBbox(unicode: number): Bounds | null {
-    const bbox = this.#raw.getGlyphBbox(unicode);
-    if (!bbox) return null;
-    return Bounds.create({ x: bbox[0], y: bbox[1] }, { x: bbox[2], y: bbox[3] });
-  }
-
-  getGlyphBboxByName(glyphName: string): Bounds | null {
-    const bbox = this.#raw.getGlyphBboxByName(glyphName);
-    if (!bbox) return null;
-    return Bounds.create({ x: bbox[0], y: bbox[1] }, { x: bbox[2], y: bbox[3] });
   }
 
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
@@ -303,10 +265,6 @@ export class FontEngine {
 
   reverseContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.reverseContour(contourId));
-  }
-
-  removeContour(contourId: ContourId): void {
-    this.#dispatchVoid(this.#raw.removeContour(contourId));
   }
 
   openContour(contourId: ContourId): void {
