@@ -6,7 +6,6 @@ import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
-import { AddPointCommand, InsertPointCommand } from "@/lib/commands";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
 const DRAG_THRESHOLD = 3;
@@ -121,7 +120,6 @@ export class HandleBehavior implements PenBehavior {
   #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: EditorAPI): HandleData {
     const { position } = anchor;
     const contour = editor.getActiveContour();
-    const history = editor.commands;
 
     if (!contour) return {};
 
@@ -133,9 +131,7 @@ export class HandleBehavior implements PenBehavior {
     anchor.pointId = anchorId;
 
     if (isFirstPoint) {
-      const cpOutId = history.execute(
-        new AddPointCommand(snappedPos.x, snappedPos.y, "offCurve", false),
-      );
+      const cpOutId = editor.addPointToContour(contour.id, snappedPos, "offCurve", false);
       return { cpOut: cpOutId };
     }
 
@@ -143,24 +139,18 @@ export class HandleBehavior implements PenBehavior {
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(snappedPos, position);
-      const cpInId = history.execute(
-        new InsertPointCommand(anchorId, cpInPos.x, cpInPos.y, "offCurve", false),
-      );
-      const cpOutId = history.execute(
-        new AddPointCommand(snappedPos.x, snappedPos.y, "offCurve", false),
-      );
+      const cpInId = editor.insertPointBefore(anchorId, cpInPos, "offCurve", false);
+      const cpOutId = editor.addPointToContour(contour.id, snappedPos, "offCurve", false);
       return { cpIn: cpInId, cpOut: cpOutId };
     }
 
     if (prevOnCurve) {
       const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
-      history.execute(new InsertPointCommand(anchorId, cp1Pos.x, cp1Pos.y, "offCurve", false));
+      editor.insertPointBefore(anchorId, cp1Pos, "offCurve", false);
     }
 
     const cpInPos = Vec2.mirror(snappedPos, position);
-    const cpInId = history.execute(
-      new InsertPointCommand(anchorId, cpInPos.x, cpInPos.y, "offCurve", false),
-    );
+    const cpInId = editor.insertPointBefore(anchorId, cpInPos, "offCurve", false);
     return { cpIn: cpInId };
   }
 
