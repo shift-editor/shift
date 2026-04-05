@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { FontMetrics } from "@shift/types";
-import { getNative } from "@/engine/native";
+import type { Font } from "@/lib/editor/Font";
 
 export const CELL_HEIGHT = 75;
 
@@ -33,6 +33,7 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
 
 export interface GlyphPreviewProps {
   unicode: number;
+  engine: Font;
   height?: number;
   fontMetrics: FontMetrics | null;
 }
@@ -53,14 +54,14 @@ export function computeCellWidth(
 
 export const GlyphPreview = memo(function GlyphPreview({
   unicode,
+  engine,
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  const native = getNative();
-  const advance = native.getGlyphAdvance(unicode) ?? null;
+  const advance = engine.getAdvance(unicode) ?? null;
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
-  const path = native.getGlyphSvgPath(unicode) ?? null;
+  const path = engine.getSvgPath(unicode) ?? null;
 
   if (!path) {
     return (

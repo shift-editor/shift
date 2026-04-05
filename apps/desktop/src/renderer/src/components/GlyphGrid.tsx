@@ -172,6 +172,7 @@ export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: Gly
                     >
                       <GlyphPreview
                         unicode={unicode}
+                        engine={engine}
                         height={CELL_HEIGHT}
                         fontMetrics={fontMetrics}
                       />
