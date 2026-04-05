@@ -27,6 +27,13 @@ repos:
   # Rust hooks
   - repo: local
     hooks:
+      - id: napi-dead-methods
+        name: napi dead methods
+        entry: ./scripts/check-napi-dead-methods.sh
+        language: system
+        types: [rust]
+        pass_filenames: false
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --
