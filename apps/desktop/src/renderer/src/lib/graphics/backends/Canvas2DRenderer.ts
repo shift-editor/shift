@@ -252,6 +252,10 @@ export class Canvas2DContext implements IGraphicContext {
     return this.#renderer;
   }
 
+  public isReady(): boolean {
+    return this.#renderer !== null;
+  }
+
   public createSurface(canvas: HTMLCanvasElement): void {
     const ctx = canvas.getContext("2d");
 

@@ -51,8 +51,6 @@ export class FontEngine {
     this.#$glyph.set(glyph);
   }
 
-  // ── Session lifecycle ──
-
   hasSession(): boolean {
     return this.#raw.hasEditSession();
   }
@@ -130,8 +128,6 @@ export class FontEngine {
     return JSON.parse(this.#raw.getSnapshotData()) as GlyphSnapshot;
   }
 
-  // ── Command dispatch ──
-
   #execute(json: string): CommandResponse {
     const raw = JSON.parse(json);
     if (!raw.success) {
@@ -161,8 +157,6 @@ export class FontEngine {
       throw new NoEditSessionError();
     }
   }
-
-  // ── Editing: point mutations ──
 
   addPoint(edit: PointEdit): PointId {
     const ids = this.#dispatch(this.#raw.addPoint(edit.x, edit.y, edit.pointType, edit.smooth));
@@ -236,8 +230,6 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.toggleSmooth(pointId));
   }
 
-  // ── Editing: contour operations ──
-
   addContour(): ContourId {
     this.#requireSession();
     const response = this.#execute(this.#raw.addContour());
@@ -271,8 +263,6 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.openContour(contourId));
   }
 
-  // ── Editing: transform & layout ──
-
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#raw.setXAdvance(width));
   }
@@ -280,8 +270,6 @@ export class FontEngine {
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#raw.translateLayer(dx, dy));
   }
-
-  // ── Editing: optimistic position updates ──
 
   setNodePositions(updates: NodePositionUpdateList): void {
     if (!this.hasSession()) return;
@@ -313,9 +301,6 @@ export class FontEngine {
     this.#raw.setNodePositions(nativeUpdates);
   }
 
-
-  // ── Editing: rules engine ──
-
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.hasSession()) return [];
     const glyph = this.getGlyph();
@@ -338,8 +323,6 @@ export class FontEngine {
     }
     return patch.pointUpdates.map((u: (typeof patch.pointUpdates)[number]) => u.id);
   }
-
-  // ── Editing: clipboard & snapshots ──
 
   pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult {
     this.#requireSession();

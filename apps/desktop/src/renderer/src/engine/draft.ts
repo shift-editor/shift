@@ -21,10 +21,7 @@ export interface GlyphDraft {
  * Pure function — returns a new snapshot with structural sharing
  * (unchanged contours/points are identity-equal to the originals).
  */
-export function produceGlyph(
-  base: GlyphSnapshot,
-  updates: NodePositionUpdateList,
-): GlyphSnapshot {
+export function produceGlyph(base: GlyphSnapshot, updates: NodePositionUpdateList): GlyphSnapshot {
   if (updates.length === 0) return base;
 
   const pointMoves = new Map<PointId, Point2D>();
@@ -71,6 +68,7 @@ function updateAnchors(
   return anchors.map((anchor) => {
     const pos = moves.get(anchor.id);
     if (!pos) return anchor;
+
     return { ...anchor, x: pos.x, y: pos.y };
   });
 }

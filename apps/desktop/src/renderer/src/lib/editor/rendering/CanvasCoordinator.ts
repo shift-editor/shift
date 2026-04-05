@@ -254,7 +254,7 @@ export class CanvasCoordinator {
   }
 
   #drawInteractive(): void {
-    if (!this.#interactiveContext || !this.#interactiveDraw) return;
+    if (!this.#interactiveContext?.isReady() || !this.#interactiveDraw) return;
     const ctx = this.#interactiveContext.getContext();
     ctx.clear();
     ctx.save();
@@ -272,7 +272,7 @@ export class CanvasCoordinator {
   }
 
   #drawOverlay(): void {
-    if (!this.#overlayContext) return;
+    if (!this.#overlayContext?.isReady()) return;
     const ctx = this.#overlayContext.getContext();
     ctx.clear();
 
@@ -309,7 +309,7 @@ export class CanvasCoordinator {
   }
 
   #drawStatic(): void {
-    if (!this.#staticContext || !this.#staticDraw) return;
+    if (!this.#staticContext?.isReady() || !this.#staticDraw) return;
     const ctx = this.#staticContext.getContext();
     const draw = this.#staticDraw;
 
