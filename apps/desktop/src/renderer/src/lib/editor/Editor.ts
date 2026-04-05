@@ -18,7 +18,6 @@ import type {
   PointId,
   AnchorId,
   ContourId,
-  GlyphSnapshot,
   Glyph,
   Contour,
   Point,
@@ -1501,7 +1500,7 @@ export class Editor implements ShiftEditor {
 
     const bounds =
       glyph && selectedPointIds.size > 0
-        ? getSegmentAwareBounds(glyph as GlyphSnapshot, Array.from(selectedPointIds))
+        ? getSegmentAwareBounds(glyph, Array.from(selectedPointIds))
         : null;
 
     this.#segmentAwareSelectionBoundsCache = {

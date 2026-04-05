@@ -39,7 +39,7 @@ import type {
 } from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
-import type { PointId, Point, Contour } from "@shift/types";
+import type { PointId, Point, Contour, ContourId } from "@shift/types";
 
 export interface SegmentHitResult {
   segment: SegmentType;
@@ -248,8 +248,8 @@ export const Segments = {
     return segments;
   },
 
-  parseGlyph(contours: readonly Contour[]): Map<string, SegmentType[]> {
-    const result = new Map<string, SegmentType[]>();
+  parseGlyph(contours: readonly Contour[]): Map<ContourId, SegmentType[]> {
+    const result = new Map<ContourId, SegmentType[]>();
 
     for (const contour of contours) {
       const segments = Segments.parse(contour.points, contour.closed);
@@ -261,7 +261,7 @@ export const Segments = {
 
   *iterateGlyph(contours: readonly Contour[]): Generator<{
     segment: SegmentType;
-    contourId: string;
+    contourId: ContourId;
   }> {
     for (const contour of contours) {
       const segments = Segments.parse(contour.points, contour.closed);

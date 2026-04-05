@@ -29,7 +29,9 @@ export class MockFontEngine implements FontEngineAPI {
   }
 
   #findContour(contourId: string): ContourSnapshot | undefined {
-    return Glyphs.findContour(this.#snapshot!, contourId) as ContourSnapshot | undefined;
+    return Glyphs.findContour(this.#snapshot!, contourId as ContourId) as
+      | ContourSnapshot
+      | undefined;
   }
 
   #findPoint(

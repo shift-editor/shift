@@ -7,7 +7,7 @@
  *
  * @module
  */
-import type { Point, Contour, Glyph, PointId, Point2D } from "@shift/types";
+import type { Point, Contour, Glyph, PointId, ContourId, Point2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 
 /**
@@ -41,7 +41,7 @@ export const Glyphs = {
     return null;
   },
 
-  findContour(glyph: Glyph, contourId: string): Contour | undefined {
+  findContour(glyph: Glyph, contourId: ContourId): Contour | undefined {
     return glyph.contours.find((c) => c.id === contourId);
   },
 

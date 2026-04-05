@@ -14,13 +14,13 @@ repos:
     hooks:
       - id: no-empty-files
         name: no empty files
-        entry: bash -c 'for f in "$@"; do if [ -f "$f" ] && [ ! -s "$f" ]; then echo "Empty file: $f"; exit 1; fi; done'
+        entry: "bash -c 'for f in \"$@\"; do if [ -f \"$f\" ] && [ ! -s \"$f\" ]; then echo \"Empty file: $f\"; exit 1; fi; done'"
         language: system
         types_or: [javascript, jsx, ts, tsx, rust, css, json]
 
       - id: no-console-log
         name: no console.log in production code
-        entry: bash -c 'for f in "$@"; do case "$f" in *.test.*|*/testing/*) continue;; esac; if grep -n "^\s*console\.log\b" "$f" >/dev/null 2>&1; then echo "$f has console.log:"; grep -n "^\s*console\.log\b" "$f"; exit 1; fi; done'
+        entry: "bash -c 'for f in \"$@\"; do case \"$f\" in *.test.*|*/testing/*) continue;; esac; if grep -n \"^\\s*console\\.log\\b\" \"$f\" >/dev/null 2>&1; then echo \"$f has console.log:\"; grep -n \"^\\s*console\\.log\\b\" \"$f\"; exit 1; fi; done'"
         language: system
         types_or: [javascript, jsx, ts, tsx]
 

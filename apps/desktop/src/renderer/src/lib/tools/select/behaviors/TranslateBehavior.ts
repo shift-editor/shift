@@ -1,6 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
-import type { AnchorId, GlyphSnapshot, Point2D, PointId } from "@shift/types";
+import type { AnchorId, Glyph, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -11,7 +11,11 @@ import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult"
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/engine/draft";
 
-import { constrainPreparedDrag, prepareConstrainDrag, type PreparedConstrainDrag } from "@shift/rules";
+import {
+  constrainPreparedDrag,
+  prepareConstrainDrag,
+  type PreparedConstrainDrag,
+} from "@shift/rules";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
@@ -106,7 +110,12 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
 
     const totalDelta = Vec2.sub(newLastPos, state.translate.startPos);
-    const updates = buildTranslateUpdates(this.#draft!.base, this.#target!, totalDelta, this.#rules);
+    const updates = buildTranslateUpdates(
+      this.#draft!.base,
+      this.#target!,
+      totalDelta,
+      this.#rules,
+    );
     this.#draft!.setPositions(updates);
 
     return {
@@ -290,7 +299,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 }
 
 function buildTranslateUpdates(
-  base: GlyphSnapshot,
+  base: Glyph,
   target: DragTarget,
   delta: Point2D,
   rules: PreparedConstrainDrag | null,

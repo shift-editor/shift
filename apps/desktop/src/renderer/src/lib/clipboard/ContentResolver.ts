@@ -1,4 +1,4 @@
-import type { Contour, Glyph, Point, PointId } from "@shift/types";
+import type { Contour, ContourId, Glyph, Point, PointId } from "@shift/types";
 import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { SegmentId } from "@/types/indicator";
@@ -42,8 +42,8 @@ export class ContentResolver {
   #groupPointsByContour(
     glyph: Glyph,
     pointIds: Set<PointId>,
-  ): Map<string, { indices: Set<number>; contourIdx: number }> {
-    const groups = new Map<string, { indices: Set<number>; contourIdx: number }>();
+  ): Map<ContourId, { indices: Set<number>; contourIdx: number }> {
+    const groups = new Map<ContourId, { indices: Set<number>; contourIdx: number }>();
 
     for (const [contourIdx, contour] of glyph.contours.entries()) {
       const indices = new Set<number>();
@@ -64,7 +64,7 @@ export class ContentResolver {
 
   #buildContourContents(
     glyph: Glyph,
-    groups: Map<string, { indices: Set<number>; contourIdx: number }>,
+    groups: Map<ContourId, { indices: Set<number>; contourIdx: number }>,
   ): ContourContent[] {
     const contours: ContourContent[] = [];
 

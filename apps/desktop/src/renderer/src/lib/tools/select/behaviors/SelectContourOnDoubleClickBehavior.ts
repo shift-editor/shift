@@ -3,6 +3,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { PointId } from "@shift/types";
+import type { SegmentId } from "@/types/indicator";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { isSegmentHit } from "@/types/hitResult";
 
@@ -26,7 +27,7 @@ export class SelectContourOnDoubleClickBehavior implements SelectHandlerBehavior
     return true;
   }
 
-  private findContourPointIdsForSegment(segmentId: string, editor: EditorAPI): PointId[] | null {
+  private findContourPointIdsForSegment(segmentId: SegmentId, editor: EditorAPI): PointId[] | null {
     const glyph = editor.glyph.peek();
     if (!glyph) return null;
 

@@ -13,12 +13,47 @@ const CONTOURS_ALLOWED = [
   "engine/mock.ts",
   "engine/FontEngine.ts",
   "packages/font/",
-  "rendering/",          // render passes iterate contours to draw them
-  "SelectionBounds.ts",  // segment-aware bounds needs contour structure
+  "rendering/", // render passes iterate contours to draw them
+  "SelectionBounds.ts", // segment-aware bounds needs contour structure
   "compositeHitTest.ts", // component contour bounds check
-  "Editor.ts",           // coordinator-level structural traversal
-  "clipboard/",          // ClipboardContent is not a Glyph, different type
+  "Editor.ts", // coordinator-level structural traversal
+  "clipboard/", // ClipboardContent is not a Glyph, different type
   "SelectContourOnDoubleClickBehavior.ts", // finds contour by segment match
+];
+
+function checkParam(context, node) {
+  // Handle destructured or rest patterns — only check simple identifiers
+  if (node.type !== "Identifier") return;
+
+  const name = node.name;
+  // Only flag known domain ID parameter names, not arbitrary *Id params like toolId
+  const DOMAIN_ID_SUFFIXES = ["pointId", "contourId", "anchorId", "segmentId"];
+  const lowerName = name.toLowerCase();
+  if (!DOMAIN_ID_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) return;
+
+  const typeAnnotation = node.typeAnnotation;
+  if (!typeAnnotation) return;
+
+  // TSTypeAnnotation wraps the actual type node
+  const typeNode = typeAnnotation.typeAnnotation || typeAnnotation;
+  if (typeNode.type === "TSStringKeyword") {
+    context.report({
+      node,
+      messageId: "useBrandedId",
+      data: { name },
+    });
+  }
+}
+
+/** Files where GlyphSnapshot usage is expected (bridge/engine/generated layers). */
+const SNAPSHOT_ALLOWED = [
+  "engine/",
+  "shared/bridge/",
+  "packages/types/",
+  "testing/",
+  "draft.ts",
+  "commands/", // undo/redo deals with raw snapshots
+  "types/engine.ts", // engine response types
 ];
 
 function isAllowedFile(filename, allowList) {
@@ -59,6 +94,88 @@ export default {
           // Catch: y.contours.map / .filter / .find / .flatMap / .some / .every / .reduce / .forEach
           'CallExpression > MemberExpression > MemberExpression[property.name="contours"]'(node) {
             context.report({ node, messageId: "noRawContours" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban parameters named *Id that are typed as plain `string`.
+     *
+     * Domain IDs (PointId, ContourId, AnchorId, SegmentId) are branded types.
+     * Using raw `string` defeats type safety and allows accidental mixing.
+     */
+    "no-unbranded-ids": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useBrandedId:
+            "Parameter '{{name}}' is typed as string. Use the branded type (PointId, ContourId, AnchorId, SegmentId) from @shift/types.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        return {
+          /**
+           * Match function parameters whose name ends with "Id" (case-sensitive)
+           * but whose type annotation is plain "string".
+           *
+           * Catches: (contourId: string), (pointId: string)
+           * Ignores: (contourId: ContourId), (name: string)
+           */
+          "FunctionDeclaration > .params"(node) {
+            checkParam(context, node);
+          },
+          "FunctionExpression > .params"(node) {
+            checkParam(context, node);
+          },
+          "ArrowFunctionExpression > .params"(node) {
+            checkParam(context, node);
+          },
+          "TSMethodSignature > .params"(node) {
+            checkParam(context, node);
+          },
+          "MethodDefinition .params"(node) {
+            checkParam(context, node);
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban GlyphSnapshot in domain/tool/UI code.
+     *
+     * App code should use the immutable `Glyph` domain type from @shift/types.
+     * GlyphSnapshot is the mutable engine representation and should only
+     * appear in engine/, bridge/, types/, testing/, and draft code.
+     */
+    "no-snapshot-in-domain": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useGlyph:
+            "Use the immutable Glyph domain type from @shift/types instead of GlyphSnapshot in app code.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (isAllowedFile(filename, SNAPSHOT_ALLOWED)) return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        return {
+          /**
+           * Match type annotations that reference GlyphSnapshot.
+           * Catches: (snapshot: GlyphSnapshot), Map<GlyphSnapshot, ...>, etc.
+           * Does NOT catch import statements — only usage in type positions.
+           */
+          'TSTypeReference > Identifier[name="GlyphSnapshot"]'(node) {
+            context.report({ node, messageId: "useGlyph" });
           },
         };
       },
