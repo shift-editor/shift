@@ -61,6 +61,43 @@ When completing a feature, check ROADMAP.md and check any box if we have complet
 
 - ALWAYS add tests to verify behaviour after completing a feature
 
+## Testing
+
+### Use TestEditor for tool tests
+
+Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with MockFontEngine as the NAPI backend. Tests break at compile time when APIs change.
+
+```typescript
+const editor = new TestEditor();
+editor.startSession();
+editor.selectTool("pen");
+editor.click(100, 200);
+expect(editor.pointCount).toBe(1);
+```
+
+### Never create mock context builders
+
+Do not create functions like `createMockToolContext()` that return objects with `vi.fn()` stubs mirroring the Editor API. These create a parallel universe where tests pass even when real APIs are deleted.
+
+### Assert on state, not mock calls
+
+```typescript
+// BAD — tests mock wiring, not behavior
+expect(ctx.mocks.edit.addPoint).toHaveBeenCalledWith(100, 200, "onCurve", false);
+
+// GOOD — tests actual outcome
+expect(editor.pointCount).toBe(1);
+```
+
+For command tests, asserting that `ctx.fontEngine.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
+
+### Keep tests lean
+
+- 5-15 lines per test
+- beforeEach under 5 lines (`new TestEditor()` + `startSession()` + `selectTool()`)
+- No wrapper factories around TestEditor
+- No tests for test infrastructure
+
 ## Frontend
 
 ### Base UI Components
