@@ -770,6 +770,8 @@ export class Editor implements ShiftEditor {
     if (!base) {
       throw new Error("Cannot create draft without an active glyph");
     }
+
+    let lastUpdates: NodePositionUpdateList = [];
     let current = base;
     let finished = false;
 
@@ -777,19 +779,17 @@ export class Editor implements ShiftEditor {
       base,
       setPositions: (updates) => {
         if (finished) return;
+        lastUpdates = updates;
         current = patchPositions(base, updates);
         this.#fontEngine.emitGlyph(current);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
+
         if (current !== base) {
-          this.#fontEngine.syncNodePositions(
-            this.#deriveUpdatesFromSnapshots(base, current),
-          );
-          this.#commandHistory.record(
-            new SnapshotCommand(label, base, current),
-          );
+          this.#fontEngine.syncNodePositions(lastUpdates);
+          this.#commandHistory.record(new SnapshotCommand(label, base, current));
         }
       },
       discard: () => {
@@ -798,32 +798,6 @@ export class Editor implements ShiftEditor {
         this.#fontEngine.emitGlyph(base);
       },
     };
-  }
-
-  #deriveUpdatesFromSnapshots(before: GlyphSnapshot, after: GlyphSnapshot): NodePositionUpdateList {
-    const updates: Array<NodePositionUpdateList[number]> = [];
-    for (let ci = 0; ci < after.contours.length; ci++) {
-      const bc = before.contours[ci];
-      const ac = after.contours[ci];
-      if (!bc || !ac) continue;
-      for (let pi = 0; pi < ac.points.length; pi++) {
-        const bp = bc.points[pi];
-        const ap = ac.points[pi];
-        if (!bp || !ap) continue;
-        if (bp.x !== ap.x || bp.y !== ap.y) {
-          updates.push({ node: { kind: "point", id: ap.id }, x: ap.x, y: ap.y });
-        }
-      }
-    }
-    for (let ai = 0; ai < after.anchors.length; ai++) {
-      const ba = before.anchors[ai];
-      const aa = after.anchors[ai];
-      if (!ba || !aa) continue;
-      if (ba.x !== aa.x || ba.y !== aa.y) {
-        updates.push({ node: { kind: "anchor", id: aa.id }, x: aa.x, y: aa.y });
-      }
-    }
-    return updates;
   }
 
   public withBatch<TResult>(label: string, fn: () => TResult): TResult {
