@@ -44,20 +44,12 @@ export class FontEngine {
     return this.#$glyph;
   }
 
-  get raw(): FontEngineAPI {
-    return this.#raw;
-  }
-
   getGlyph(): GlyphSnapshot | null {
     return this.#$glyph.value;
   }
 
   emitGlyph(glyph: GlyphSnapshot | null): void {
     this.#$glyph.set(glyph);
-  }
-
-  refreshGlyph(): void {
-    this.#$glyph.set(this.getSnapshot());
   }
 
   // ── Session lifecycle ──

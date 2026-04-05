@@ -50,29 +50,6 @@ export declare class FontEngine {
   openContour(contourId: string): string
   reverseContour(contourId: string): string
   moveNodes(nodes: Array<JsNodeRef>, dx: number, dy: number): string
-  /**
-   * Move nodes directly — fire-and-forget for drag commit operations.
-   * Returns true on success, false if no edit session is active.
-   * Does NOT return a snapshot — use get_snapshot_data() when needed.
-   */
-  moveNodesLight(nodes: Array<JsNodeRef>, dx: number, dy: number): boolean
-  /**
-   * Move points and anchors directly with compact ID arrays.
-   * Returns true on success, false if no edit session is active.
-   * Does NOT return a snapshot — use get_snapshot_data() when needed.
-   */
-  movePointsAndAnchorsLight(pointIds: Array<string>, anchorIds: Array<string>, dx: number, dy: number): boolean
-  /**
-   * Parse and store point/anchor ids once for a later direct transform call.
-   * Returns true on success, false if no edit session is active or no ids could be parsed.
-   */
-  prepareNodeTransformLight(pointIds: Array<string>, anchorIds: Array<string>): boolean
-  /**
-   * Transform the last prepared point/anchor set directly.
-   * Returns true on success, false if no edit session is active.
-   */
-  applyPreparedNodeTransformLight(transform: JsAffineTransform): boolean
-  clearPreparedNodeTransformLight(): void
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
@@ -85,15 +62,6 @@ export declare class FontEngine {
   setNodePositions(moves: Array<JsNodePositionUpdate>): boolean
   setPointPositions(moves: Array<JsPointMove>): boolean
   restoreSnapshot(snapshotJson: string): boolean
-}
-
-export interface JsAffineTransform {
-  a: number
-  b: number
-  c: number
-  d: number
-  e: number
-  f: number
 }
 
 export interface JsGlyphRef {

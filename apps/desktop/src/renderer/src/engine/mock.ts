@@ -1,5 +1,4 @@
 import type {
-  AffineTransformPayload,
   FontEngineAPI,
   NodeRef,
   NodePositionUpdate,
@@ -22,9 +21,6 @@ export class MockFontEngine implements FontEngineAPI {
   #snapshot: GlyphSnapshot | null = null;
   /** @knipclassignore */
   #nextId = 1;
-  #preparedTransformPointIds: string[] = [];
-  #preparedTransformAnchorIds: string[] = [];
-
   #generateId(): string {
     return String(this.#nextId++);
   }
@@ -162,7 +158,6 @@ export class MockFontEngine implements FontEngineAPI {
 
   endEditSession(): void {
     this.#snapshot = null;
-    this.clearPreparedNodeTransformLight();
   }
 
   hasEditSession(): boolean {
@@ -371,133 +366,6 @@ export class MockFontEngine implements FontEngineAPI {
     return this.#makeResult(true, moved);
   }
 
-  moveNodesLight(nodes: NodeRef[], dx: number, dy: number): boolean {
-    if (!this.#snapshot) return false;
-    let movedAny = false;
-
-    const pointIds = new Set<string>();
-    const anchorIds = new Set<string>();
-    for (const node of nodes) {
-      switch (node.kind) {
-        case "point":
-          pointIds.add(node.id);
-          break;
-        case "anchor":
-          anchorIds.add(node.id);
-          break;
-        case "guideline":
-          break;
-      }
-    }
-
-    for (const contour of this.#snapshot.contours) {
-      for (const point of contour.points) {
-        if (pointIds.has(point.id)) {
-          point.x += dx;
-          point.y += dy;
-          movedAny = true;
-        }
-      }
-    }
-
-    for (const anchor of this.#snapshot.anchors) {
-      if (anchorIds.has(anchor.id)) {
-        anchor.x += dx;
-        anchor.y += dy;
-        movedAny = true;
-      }
-    }
-
-    return movedAny || nodes.length === 0;
-  }
-
-  movePointsAndAnchorsLight(
-    pointIds: string[],
-    anchorIds: string[],
-    dx: number,
-    dy: number,
-  ): boolean {
-    if (!this.#snapshot) return false;
-    let movedAny = false;
-
-    const pointIdSet = new Set(pointIds);
-    const anchorIdSet = new Set(anchorIds);
-
-    for (const contour of this.#snapshot.contours) {
-      for (const point of contour.points) {
-        if (pointIdSet.has(point.id)) {
-          point.x += dx;
-          point.y += dy;
-          movedAny = true;
-        }
-      }
-    }
-
-    for (const anchor of this.#snapshot.anchors) {
-      if (anchorIdSet.has(anchor.id)) {
-        anchor.x += dx;
-        anchor.y += dy;
-        movedAny = true;
-      }
-    }
-
-    return movedAny || (pointIds.length === 0 && anchorIds.length === 0);
-  }
-
-  #applyTransformToNodes(
-    pointIds: string[],
-    anchorIds: string[],
-    transform: AffineTransformPayload,
-  ): boolean {
-    if (!this.#snapshot) return false;
-
-    let movedAny = false;
-    const pointIdSet = new Set(pointIds);
-    const anchorIdSet = new Set(anchorIds);
-
-    for (const contour of this.#snapshot.contours) {
-      for (const point of contour.points) {
-        if (!pointIdSet.has(point.id)) continue;
-        const x = transform.a * point.x + transform.c * point.y + transform.e;
-        const y = transform.b * point.x + transform.d * point.y + transform.f;
-        point.x = x;
-        point.y = y;
-        movedAny = true;
-      }
-    }
-
-    for (const anchor of this.#snapshot.anchors) {
-      if (!anchorIdSet.has(anchor.id)) continue;
-      const x = transform.a * anchor.x + transform.c * anchor.y + transform.e;
-      const y = transform.b * anchor.x + transform.d * anchor.y + transform.f;
-      anchor.x = x;
-      anchor.y = y;
-      movedAny = true;
-    }
-
-    return movedAny || (pointIds.length === 0 && anchorIds.length === 0);
-  }
-
-  prepareNodeTransformLight(pointIds: string[], anchorIds: string[]): boolean {
-    if (!this.#snapshot) return false;
-    this.#preparedTransformPointIds = [...pointIds];
-    this.#preparedTransformAnchorIds = [...anchorIds];
-    return true;
-  }
-
-  applyPreparedNodeTransformLight(transform: AffineTransformPayload): boolean {
-    return this.#applyTransformToNodes(
-      this.#preparedTransformPointIds,
-      this.#preparedTransformAnchorIds,
-      transform,
-    );
-  }
-
-  clearPreparedNodeTransformLight(): void {
-    this.#preparedTransformPointIds = [];
-    this.#preparedTransformAnchorIds = [];
-  }
-
   removePoints(pointIds: string[]): string {
     if (!this.#snapshot) return this.#makeResult(false, [], "No active edit session");
 
@@ -557,6 +425,20 @@ export class MockFontEngine implements FontEngineAPI {
         }
         case "guideline":
           break;
+      }
+    }
+
+    return true;
+  }
+
+  setPointPositions(moves: Array<{ id: string; x: number; y: number }>): boolean {
+    if (!this.#snapshot) return false;
+
+    for (const move of moves) {
+      const found = this.#findPoint(move.id);
+      if (found) {
+        found.point.x = move.x;
+        found.point.y = move.y;
       }
     }
 
