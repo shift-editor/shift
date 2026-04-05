@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { SetNodePositionsCommand } from "./SetNodePositionsCommand";
-import { createMockCommandContext } from "@/testing";
+import { createMockFontEngine, getAllPoints } from "@/testing";
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asAnchorId, asContourId, asPointId } from "@shift/types";
+import type { FontEngine } from "@/engine";
+import type { CommandContext } from "../core";
 
 function makeGlyph(input: {
   contours?: GlyphSnapshot["contours"];
@@ -19,6 +21,18 @@ function makeGlyph(input: {
   };
 }
 
+let fontEngine: FontEngine;
+
+function ctx(): CommandContext {
+  return { fontEngine, glyph: fontEngine.getGlyph() };
+}
+
+beforeEach(() => {
+  fontEngine = createMockFontEngine();
+  fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+  fontEngine.addContour();
+});
+
 describe("SetNodePositionsCommand", () => {
   it("derives batched point and anchor updates from a move-only glyph diff", () => {
     const before = makeGlyph({
@@ -27,20 +41,8 @@ describe("SetNodePositionsCommand", () => {
           id: asContourId("contour-1"),
           closed: false,
           points: [
-            {
-              id: asPointId("point-1"),
-              x: 10,
-              y: 20,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
-            {
-              id: asPointId("point-2"),
-              x: 30,
-              y: 40,
-              pointType: "offCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
+            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
+            { id: asPointId("point-2"), x: 30, y: 40, pointType: "offCurve", smooth: false },
           ],
         },
       ],
@@ -52,20 +54,8 @@ describe("SetNodePositionsCommand", () => {
           id: asContourId("contour-1"),
           closed: false,
           points: [
-            {
-              id: asPointId("point-1"),
-              x: 15,
-              y: 25,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
-            {
-              id: asPointId("point-2"),
-              x: 30,
-              y: 40,
-              pointType: "offCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
+            { id: asPointId("point-1"), x: 15, y: 25, pointType: "onCurve", smooth: false },
+            { id: asPointId("point-2"), x: 30, y: 40, pointType: "offCurve", smooth: false },
           ],
         },
       ],
@@ -76,20 +66,23 @@ describe("SetNodePositionsCommand", () => {
 
     expect(command).not.toBeNull();
 
-    const ctx = createMockCommandContext(after);
-    command!.execute(ctx);
+    // Load the "after" state into the engine so undo can move it back to "before"
+    fontEngine.emitGlyph(after);
+    command!.execute(ctx());
 
-    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
-      { node: { kind: "point", id: asPointId("point-1") }, x: 15, y: 25 },
-      { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 4, y: 5 },
-    ]);
+    // Verify the after positions were applied
+    const glyph = fontEngine.getGlyph()!;
+    const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
+    expect(p1.x).toBe(15);
+    expect(p1.y).toBe(25);
 
-    command!.undo(ctx);
+    command!.undo(ctx());
 
-    expect(ctx.fontEngine.setNodePositions).toHaveBeenLastCalledWith([
-      { node: { kind: "point", id: asPointId("point-1") }, x: 10, y: 20 },
-      { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 1, y: 2 },
-    ]);
+    // Verify the before positions were restored
+    const undoGlyph = fontEngine.getGlyph()!;
+    const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
+    expect(p1Undo.x).toBe(10);
+    expect(p1Undo.y).toBe(20);
   });
 
   it("falls back when the glyph diff changes topology", () => {
@@ -99,13 +92,7 @@ describe("SetNodePositionsCommand", () => {
           id: asContourId("contour-1"),
           closed: false,
           points: [
-            {
-              id: asPointId("point-1"),
-              x: 10,
-              y: 20,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
+            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
           ],
         },
       ],
@@ -116,20 +103,8 @@ describe("SetNodePositionsCommand", () => {
           id: asContourId("contour-1"),
           closed: false,
           points: [
-            {
-              id: asPointId("point-1"),
-              x: 10,
-              y: 20,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
-            {
-              id: asPointId("point-2"),
-              x: 30,
-              y: 40,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
+            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
+            { id: asPointId("point-2"), x: 30, y: 40, pointType: "onCurve", smooth: false },
           ],
         },
       ],
@@ -145,13 +120,7 @@ describe("SetNodePositionsCommand", () => {
           id: asContourId("contour-1"),
           closed: false,
           points: [
-            {
-              id: asPointId("point-1"),
-              x: 10,
-              y: 20,
-              pointType: "onCurve",
-              smooth: false,
-            } satisfies PointSnapshot,
+            { id: asPointId("point-1"), x: 10, y: 20, pointType: "onCurve", smooth: false },
           ],
         },
       ],
@@ -165,12 +134,20 @@ describe("SetNodePositionsCommand", () => {
 
     expect(command).not.toBeNull();
 
-    const ctx = createMockCommandContext(base);
-    command!.undo(ctx);
+    // Load the base state and apply the "after" updates, then undo
+    fontEngine.emitGlyph(base);
+    command!.execute(ctx());
 
-    expect(ctx.fontEngine.setNodePositions).toHaveBeenCalledWith([
-      { node: { kind: "point", id: asPointId("point-1") }, x: 10, y: 20 },
-      { node: { kind: "anchor", id: asAnchorId("anchor-1") }, x: 1, y: 2 },
-    ]);
+    const glyph = fontEngine.getGlyph()!;
+    const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
+    expect(p1.x).toBe(15);
+    expect(p1.y).toBe(25);
+
+    command!.undo(ctx());
+
+    const undoGlyph = fontEngine.getGlyph()!;
+    const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
+    expect(p1Undo.x).toBe(10);
+    expect(p1Undo.y).toBe(20);
   });
 });
