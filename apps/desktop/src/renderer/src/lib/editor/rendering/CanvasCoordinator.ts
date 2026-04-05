@@ -38,7 +38,7 @@ import {
   renderDebugSegmentBounds,
   renderDebugGlyphBbox,
 } from "./passes";
-import { buildPackedGpuHandleInstances } from "./gpu/handleInstances";
+import { packHandleInstances } from "./gpu/classifyHandles";
 import { getVisibleSceneBounds } from "./visibleSceneBounds";
 
 const HANDLE_CULL_MARGIN_PX = 64;
@@ -415,7 +415,7 @@ export class CanvasCoordinator {
 
     const viewport = this.#ctx.getViewportTransform();
     const drawOffset = this.#ctx.getDrawOffset();
-    const { packedInstances, instanceCount } = buildPackedGpuHandleInstances(
+    const { packedInstances, instanceCount } = packHandleInstances(
       glyph,
       (id) => this.#ctx.getHandleState(id),
       viewport,
