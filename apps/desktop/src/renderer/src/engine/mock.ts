@@ -431,19 +431,6 @@ export class MockFontEngine implements FontEngineAPI {
     return true;
   }
 
-  setPointPositions(moves: Array<{ id: string; x: number; y: number }>): boolean {
-    if (!this.#snapshot) return false;
-
-    for (const move of moves) {
-      const found = this.#findPoint(move.id);
-      if (found) {
-        found.point.x = move.x;
-        found.point.y = move.y;
-      }
-    }
-
-    return true;
-  }
 
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string {
     if (!this.#snapshot) {

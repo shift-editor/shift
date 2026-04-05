@@ -963,30 +963,6 @@ impl FontEngine {
     Ok(session.set_node_positions(&updates))
   }
 
-  // Backward-compatible wrapper for already-generated callers inside the app bundle.
-  #[napi]
-  pub fn set_point_positions(&mut self, moves: Vec<JsPointMove>) -> Result<bool> {
-    let Some(session) = self.current_edit_session.as_mut() else {
-      return Ok(false);
-    };
-
-    let mut updates = Vec::new();
-    for m in moves {
-      if let Ok(point_id) = m.id.parse::<PointId>() {
-        updates.push(NodePositionUpdate {
-          node: NodeRef::Point(point_id),
-          x: m.x,
-          y: m.y,
-        });
-      }
-    }
-
-    if updates.is_empty() {
-      return Ok(true);
-    }
-
-    Ok(session.set_node_positions(&updates))
-  }
 
   #[napi]
   pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<bool> {
@@ -1022,14 +998,6 @@ pub struct JsNodeRef {
 #[napi(object)]
 pub struct JsNodePositionUpdate {
   pub node: JsNodeRef,
-  pub x: f64,
-  pub y: f64,
-}
-
-/// Input type for set_point_positions - a single point move.
-#[napi(object)]
-pub struct JsPointMove {
-  pub id: String,
   pub x: f64,
   pub y: f64,
 }

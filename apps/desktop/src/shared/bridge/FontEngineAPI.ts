@@ -7,7 +7,6 @@ import type {
   JsGlyphRef,
   JsNodeRef,
   JsNodePositionUpdate,
-  JsPointMove,
 } from "shift-node";
 import type { RenderContourSnapshot } from "@shift/types";
 
@@ -16,7 +15,6 @@ export type FontEngineAPI = Omit<FontEngine, "constructor">;
 export type GlyphRef = JsGlyphRef;
 export type NodeRef = JsNodeRef;
 export type NodePositionUpdate = JsNodePositionUpdate;
-export type PointMove = JsPointMove;
 
 export interface CompositeComponentPayload {
   componentGlyphName: string;

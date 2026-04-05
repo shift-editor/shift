@@ -60,7 +60,6 @@ export declare class FontEngine {
    * Does NOT return a snapshot — use get_snapshot_data() when needed.
    */
   setNodePositions(moves: Array<JsNodePositionUpdate>): boolean
-  setPointPositions(moves: Array<JsPointMove>): boolean
   restoreSnapshot(snapshotJson: string): boolean
 }
 
@@ -80,11 +79,4 @@ export interface JsNodePositionUpdate {
 export interface JsNodeRef {
   kind: 'point' | 'anchor' | 'guideline'
   id: string
-}
-
-/** Input type for set_point_positions - a single point move. */
-export interface JsPointMove {
-  id: string
-  x: number
-  y: number
 }
