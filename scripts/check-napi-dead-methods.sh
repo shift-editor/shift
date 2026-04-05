@@ -8,6 +8,7 @@ set -euo pipefail
 
 RUST_FILE="crates/shift-node/src/font_engine.rs"
 TS_FILE="apps/desktop/src/renderer/src/engine/FontEngine.ts"
+NATIVE_TESTS="crates/shift-node/__test__"
 
 # Extract Rust pub fn names (napi methods), convert snake_case to camelCase via python
 rust_methods=$(grep -E '^\s+pub fn ' "$RUST_FILE" | sed 's/.*pub fn //' | sed 's/(.*//' | grep -v '^new$')
@@ -21,7 +22,7 @@ parts = s.split('_')
 print(parts[0] + ''.join(p.capitalize() for p in parts[1:]))
 ")
 
-  if ! grep -q "\.${camel}\b" "$TS_FILE" 2>/dev/null; then
+  if ! grep -rq "\.${camel}\b" "$TS_FILE" "$NATIVE_TESTS" 2>/dev/null; then
     dead+=("$method → $camel")
   fi
 done
