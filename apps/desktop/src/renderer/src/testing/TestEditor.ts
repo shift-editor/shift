@@ -15,7 +15,8 @@ import { Editor } from "@/lib/editor/Editor";
 import { FontEngine } from "@/engine/FontEngine";
 import { MockFontEngine } from "@/engine/mock";
 import type { ToolName } from "@/lib/tools/core";
-import { makeTestCoordinates } from "./coordinates";
+
+const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
 export class TestEditor extends Editor {
   readonly mockEngine: MockFontEngine;
@@ -28,85 +29,47 @@ export class TestEditor extends Editor {
 
   // ── Session ──
 
-  startSession(glyphName = "A", unicode?: number): this {
-    this.startEditSession({ glyphName, unicode: unicode ?? 65 });
+  startSession(glyphName = "A", unicode = 65): this {
+    this.startEditSession({ glyphName, unicode });
     this.addContour();
     return this;
   }
 
-  // ── Input simulation (fluent) ──
+  // ── Input simulation (fluent, uses real ToolManager pipeline) ──
 
-  click(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): this {
-    this.toolManager.handleEvent({
-      type: "click",
-      point: { x, y },
-      coords: makeTestCoordinates({ x, y }),
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-      metaKey: false,
-    });
+  click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    const mods = { ...DEFAULT_MODIFIERS, ...options };
+    this.toolManager.handlePointerDown({ x, y }, mods);
+    this.toolManager.handlePointerUp({ x, y });
     return this;
   }
 
-  pointerMove(x: number, y: number): this {
-    this.toolManager.handleEvent({
-      type: "pointerMove",
-      point: { x, y },
-      coords: makeTestCoordinates({ x, y }),
-    });
+  pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    this.toolManager.handlePointerDown({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
     return this;
   }
 
-  pointerDown(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): this {
-    this.toolManager.handleEvent({
-      type: "dragStart",
-      point: { x, y },
-      coords: makeTestCoordinates({ x, y }),
-      screenPoint: { x, y },
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-      metaKey: false,
-    });
-    return this;
-  }
-
-  drag(x: number, y: number, options?: { shiftKey?: boolean; altKey?: boolean }): this {
-    this.toolManager.handleEvent({
-      type: "drag",
-      point: { x, y },
-      coords: makeTestCoordinates({ x, y }),
-      screenPoint: { x, y },
-      origin: { x: 0, y: 0 },
-      screenOrigin: { x: 0, y: 0 },
-      delta: { x, y },
-      screenDelta: { x, y },
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-      metaKey: false,
-    });
+  pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    this.toolManager.handlePointerMove({ x, y }, { ...DEFAULT_MODIFIERS, ...options }, { force: true });
     return this;
   }
 
   pointerUp(x: number, y: number): this {
-    this.toolManager.handleEvent({
-      type: "dragEnd",
-      point: { x, y },
-      coords: makeTestCoordinates({ x, y }),
-      screenPoint: { x, y },
-      origin: { x: 0, y: 0 },
-      screenOrigin: { x: 0, y: 0 },
-    });
+    this.toolManager.handlePointerUp({ x, y });
     return this;
   }
 
-  keyDown(key: string, options?: { shiftKey?: boolean; altKey?: boolean }): this {
-    this.toolManager.handleEvent({
-      type: "keyDown",
+  keyDown(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    const mods = { ...DEFAULT_MODIFIERS, ...options };
+    this.toolManager.handleKeyDown({
       key,
-      shiftKey: options?.shiftKey ?? false,
-      altKey: options?.altKey ?? false,
-      metaKey: false,
-    });
+      code: key,
+      shiftKey: mods.shiftKey,
+      altKey: mods.altKey,
+      metaKey: mods.metaKey,
+      ctrlKey: false,
+      preventDefault: () => {},
+    } as KeyboardEvent);
     return this;
   }
 

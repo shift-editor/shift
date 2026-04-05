@@ -2,6 +2,15 @@
  * Global test setup — provides browser API polyfills for Node.js test environment.
  */
 
+// window + requestAnimationFrame — used by FrameHandler for render scheduling.
+if (typeof globalThis.window === "undefined") {
+  (globalThis as any).window = globalThis;
+}
+if (typeof globalThis.requestAnimationFrame === "undefined") {
+  globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0) as unknown as number;
+  globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
+}
+
 // Path2D is a browser API used by GlyphRenderCache and Canvas2DRenderer.
 // Provide a minimal stub for tests.
 if (typeof globalThis.Path2D === "undefined") {
