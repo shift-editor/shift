@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BaseTool } from "./BaseTool";
 import type { ToolEvent } from "./GestureDetector";
-import { makeTestCoordinates } from "@/testing";
+import { makeTestCoordinates, TestEditor } from "@/testing";
 import type { ToolName } from "./createContext";
 import type { Behavior } from "./Behavior";
-import { createMockToolContext } from "@/testing";
 
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
@@ -40,12 +39,13 @@ class ContractTestTool extends BaseTool<ContractState> {
 
 describe("BaseTool contract", () => {
   let tool: ContractTestTool;
+  let editor: TestEditor;
   let setActiveToolStateSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    const ctx = createMockToolContext();
-    setActiveToolStateSpy = vi.spyOn(ctx, "setActiveToolState");
-    tool = new ContractTestTool(ctx);
+    editor = new TestEditor();
+    setActiveToolStateSpy = vi.spyOn(editor, "setActiveToolState");
+    tool = new ContractTestTool(editor);
     tool.activate();
     setActiveToolStateSpy.mockClear();
     tool.onStateChangeSpy.mockClear();

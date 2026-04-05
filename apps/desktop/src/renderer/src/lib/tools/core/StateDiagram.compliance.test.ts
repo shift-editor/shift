@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import type { ToolEvent } from "./GestureDetector";
 import type { StateDiagram } from "./StateDiagram";
 import { transitionInDiagram } from "./StateDiagram";
-import { createMockToolContext, makeTestCoordinates } from "@/testing";
+import { makeTestCoordinates, TestEditor } from "@/testing";
 import { Hand } from "../hand/Hand";
 import { Shape } from "../shape/Shape";
 import { Pen } from "../pen/Pen";
@@ -78,13 +78,18 @@ function assertResultInDiagram(
 }
 
 describe("State diagram compliance", () => {
+  let editor: TestEditor;
+
+  beforeEach(() => {
+    editor = new TestEditor();
+  });
+
   describe("Hand", () => {
     let hand: Hand;
     let spec: StateDiagram;
 
     beforeEach(() => {
-      const ctx = createMockToolContext();
-      hand = new Hand(ctx);
+      hand = new Hand(editor);
       spec = Hand.stateSpec;
     });
 
@@ -122,8 +127,7 @@ describe("State diagram compliance", () => {
     let spec: StateDiagram;
 
     beforeEach(() => {
-      const ctx = createMockToolContext();
-      shape = new Shape(ctx);
+      shape = new Shape(editor);
       spec = Shape.stateSpec;
     });
 
@@ -161,8 +165,8 @@ describe("State diagram compliance", () => {
     let spec: StateDiagram;
 
     beforeEach(() => {
-      const ctx = createMockToolContext();
-      pen = new Pen(ctx);
+      editor.startSession("A", 65);
+      pen = new Pen(editor);
       spec = Pen.stateSpec;
     });
 
@@ -213,8 +217,7 @@ describe("State diagram compliance", () => {
     let spec: StateDiagram;
 
     beforeEach(() => {
-      const ctx = createMockToolContext();
-      select = new Select(ctx);
+      select = new Select(editor);
       spec = Select.stateSpec;
     });
 

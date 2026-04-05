@@ -15,6 +15,7 @@ import { Editor } from "@/lib/editor/Editor";
 import { FontEngine } from "@/engine/FontEngine";
 import { MockFontEngine } from "@/engine/mock";
 import type { ToolName } from "@/lib/tools/core";
+import { registerBuiltInTools } from "@/lib/tools/tools";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -25,17 +26,13 @@ export class TestEditor extends Editor {
     const mock = new MockFontEngine();
     super({ fontEngine: new FontEngine(mock) });
     this.mockEngine = mock;
+    registerBuiltInTools(this);
   }
-
-  // ── Session ──
 
   startSession(glyphName = "A", unicode = 65): this {
     this.startEditSession({ glyphName, unicode });
-    this.addContour();
     return this;
   }
-
-  // ── Input simulation (fluent, uses real ToolManager pipeline) ──
 
   click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
@@ -50,7 +47,11 @@ export class TestEditor extends Editor {
   }
 
   pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerMove({ x, y }, { ...DEFAULT_MODIFIERS, ...options }, { force: true });
+    this.toolManager.handlePointerMove(
+      { x, y },
+      { ...DEFAULT_MODIFIERS, ...options },
+      { force: true },
+    );
     return this;
   }
 
@@ -77,14 +78,10 @@ export class TestEditor extends Editor {
     return this.keyDown("Escape");
   }
 
-  // ── Tool ──
-
   selectTool(name: ToolName): this {
     this.setActiveTool(name);
     return this;
   }
-
-  // ── Queries ──
 
   get snapshot(): GlyphSnapshot | null {
     return this.fontEngine.$glyph.peek();

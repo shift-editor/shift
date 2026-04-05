@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ToolEvent } from "../core/GestureDetector";
 import { Hand } from "./Hand";
-import { createMockToolContext, makeTestCoordinates } from "@/testing";
+import { makeTestCoordinates, TestEditor } from "@/testing";
 
 const p = { x: 0, y: 0 };
 const coordsP = makeTestCoordinates(p);
@@ -50,8 +50,8 @@ describe("Hand outcome", () => {
   let hand: Hand;
 
   beforeEach(() => {
-    const ctx = createMockToolContext();
-    hand = new Hand(ctx);
+    const editor = new TestEditor();
+    hand = new Hand(editor);
   });
 
   it("ready + dragStart -> dragging with screenStart and startPan from editor.pan", () => {
