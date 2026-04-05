@@ -167,12 +167,10 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
 
     if (isSegmentHit(hit)) {
-      console.log("startDrag SEGMENT");
       const pointIds = SegmentOps.getPointIds(hit.segment);
       const isSelected = state.type === "selected" && editor.isSegmentSelected(hit.segmentId);
 
       if (event.altKey) {
-        console.log("startDuplicateDrag SEGMENT");
         const result = this.startDuplicateDrag(editor, event.point);
         if (result) return result;
       }
@@ -195,7 +193,6 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 
   private startDuplicateDrag(editor: EditorAPI, startPos: Point2D): SelectState | null {
     const newPointIds = editor.duplicateSelection();
-    console.log("startDuplicateDrag NEW POINT IDS", newPointIds);
     const firstPointId = newPointIds[0];
     if (!firstPointId) return null;
 
