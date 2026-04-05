@@ -19,6 +19,14 @@
       {
         "selector": "ExpressionStatement > ChainExpression > CallExpression[optional=true]",
         "message": "Do not use foo?.() as a statement. Use an explicit guard: if (foo) foo();"
+      },
+      {
+        "selector": "ExpressionStatement > ChainExpression > MemberExpression[optional=true]",
+        "message": "Do not use foo?.bar as a statement (unused). Either call it or remove it."
+      },
+      {
+        "selector": "ExportAllDeclaration",
+        "message": "Do not use export *. Use named exports to keep the public API explicit."
       }
     ]
   },
