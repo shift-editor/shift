@@ -3,7 +3,7 @@ import type { Behavior } from "../core/Behavior";
 
 export interface AnchorData {
   position: Point2D;
-  pointId: PointId;
+  pointId?: PointId;
 }
 
 export interface HandleData {

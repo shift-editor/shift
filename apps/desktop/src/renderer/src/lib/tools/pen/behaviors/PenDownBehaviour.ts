@@ -66,16 +66,9 @@ export class PenDownBehaviour implements PenBehavior {
     const activeContour = editor.getActiveContour();
     if (!activeContour) return false;
 
-    const id = editor.addPointToContour(
-      activeContour.id,
-      event.coords.glyphLocal,
-      "onCurve",
-      false,
-    );
-
     ctx.setState({
       type: "anchored",
-      anchor: { position: event.coords.glyphLocal, pointId: id },
+      anchor: { position: event.coords.glyphLocal },
     });
     return true;
   }

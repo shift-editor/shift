@@ -32,6 +32,13 @@ export class HandleBehavior implements PenBehavior {
   onDragEnd(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"dragEnd">): boolean {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
+    if (state.type === "anchored" && !state.anchor.pointId) {
+      const contour = ctx.editor.getActiveContour();
+      if (contour) {
+        ctx.editor.addPointToContour(contour.id, state.anchor.position, "onCurve", false);
+      }
+    }
+
     ctx.setState({ type: "ready", mousePos: event.coords.glyphLocal });
     return true;
   }
@@ -66,7 +73,11 @@ export class HandleBehavior implements PenBehavior {
     const localPoint = event.coords.glyphLocal;
     if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD) return null;
 
-    this.#startSnap(editor, state.anchor);
+    const handles = this.#createHandles(state.anchor, localPoint, editor);
+
+    if (state.anchor.pointId) {
+      this.#startSnap(editor, state.anchor);
+    }
 
     let snappedPos = localPoint;
     if (this.#snap) {
@@ -74,8 +85,6 @@ export class HandleBehavior implements PenBehavior {
       snappedPos = result.point;
       editor.setSnapIndicator(result.indicator);
     }
-
-    const handles = this.#createHandles(state.anchor, snappedPos, editor);
 
     return {
       type: "dragging",
@@ -110,11 +119,18 @@ export class HandleBehavior implements PenBehavior {
   }
 
   #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: EditorAPI): HandleData {
-    const { pointId, position } = anchor;
+    const { position } = anchor;
     const contour = editor.getActiveContour();
     const history = editor.commands;
 
-    const isFirstPoint = !contour || Contours.isEmpty(contour) || contour.points.length <= 1;
+    if (!contour) return {};
+
+    const prevPoint = Contours.lastPoint(contour);
+    const prevOnCurve = Contours.lastOnCurvePoint(contour);
+    const isFirstPoint = Contours.isEmpty(contour);
+
+    const anchorId = editor.addPointToContour(contour.id, position, "onCurve", true);
+    anchor.pointId = anchorId;
 
     if (isFirstPoint) {
       const cpOutId = history.execute(
@@ -123,14 +139,12 @@ export class HandleBehavior implements PenBehavior {
       return { cpOut: cpOutId };
     }
 
-    const lastPoint = Contours.lastOnCurvePoint(contour!);
-    const prevPoint = contour!.points[contour!.points.length - 2];
     const prevIsOffCurve = prevPoint && Validate.isOffCurve(prevPoint);
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(snappedPos, position);
       const cpInId = history.execute(
-        new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, "offCurve", false),
+        new InsertPointCommand(anchorId, cpInPos.x, cpInPos.y, "offCurve", false),
       );
       const cpOutId = history.execute(
         new AddPointCommand(snappedPos.x, snappedPos.y, "offCurve", false),
@@ -138,14 +152,14 @@ export class HandleBehavior implements PenBehavior {
       return { cpIn: cpInId, cpOut: cpOutId };
     }
 
-    if (lastPoint) {
-      const cp1Pos = Vec2.lerp(lastPoint, position, 1 / 3);
-      history.execute(new InsertPointCommand(pointId, cp1Pos.x, cp1Pos.y, "offCurve", false));
+    if (prevOnCurve) {
+      const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
+      history.execute(new InsertPointCommand(anchorId, cp1Pos.x, cp1Pos.y, "offCurve", false));
     }
 
     const cpInPos = Vec2.mirror(snappedPos, position);
     const cpInId = history.execute(
-      new InsertPointCommand(pointId, cpInPos.x, cpInPos.y, "offCurve", false),
+      new InsertPointCommand(anchorId, cpInPos.x, cpInPos.y, "offCurve", false),
     );
     return { cpIn: cpInId };
   }
@@ -161,6 +175,8 @@ export class HandleBehavior implements PenBehavior {
   }
 
   #startSnap(editor: EditorAPI, anchor: AnchorData): void {
+    if (!anchor.pointId) return;
+
     this.#clearSnap();
     this.#snap = editor.createDragSnapSession({
       anchorPointId: anchor.pointId,
