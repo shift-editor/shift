@@ -113,7 +113,7 @@ import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { SidebarViewModel } from "./SidebarViewModel";
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
-import { patchPositions, type GlyphDraft } from "@/engine/draft";
+import { produceGlyph, type GlyphDraft } from "@/engine/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -779,7 +779,7 @@ export class Editor implements ShiftEditor {
       setPositions: (updates) => {
         if (finished) return;
         lastUpdates = updates;
-        current = patchPositions(base, updates);
+        current = produceGlyph(base, updates);
         this.#fontEngine.emitGlyph(current);
       },
       finish: (label) => {

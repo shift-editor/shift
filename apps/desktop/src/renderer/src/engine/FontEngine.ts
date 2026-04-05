@@ -22,7 +22,7 @@ import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { patchPositions } from "./draft";
+import { produceGlyph } from "./draft";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -290,7 +290,7 @@ export class FontEngine {
     const glyph = this.getGlyph();
     if (!glyph) return;
 
-    const updatedGlyph = patchPositions(glyph, updates);
+    const updatedGlyph = produceGlyph(glyph, updates);
     this.emitGlyph(updatedGlyph);
 
     const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
