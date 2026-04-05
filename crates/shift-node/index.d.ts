@@ -2,19 +2,11 @@ import type { ContourId, PointId, AnchorId } from "@shift/types";
 export declare class FontEngine {
   constructor()
   loadFont(path: string): void
-  saveFont(path: string): void
   saveFontAsync(path: string): Promise<void>
   getMetadata(): string
   getMetrics(): string
-  getGlyphCount(): number
   getGlyphUnicodes(): Array<number>
   getGlyphNameForUnicode(unicode: number): string | null
-  getGlyphUnicodesForName(glyphName: string): Array<number>
-  /**
-   * Returns all Unicode codepoints whose glyphs depend on `unicode` via
-   * component relationships (transitively).
-   */
-  getDependentUnicodes(unicode: number): Array<number>
   getDependentUnicodesByName(glyphName: string): Array<number>
   /**
    * Returns SVG path data for the glyph, including resolved component
@@ -53,12 +45,6 @@ export declare class FontEngine {
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
-  removeContour(contourId: string): string
-  /**
-   * Set node positions directly — fire-and-forget for drag operations.
-   * Returns true on success, false if no edit session is active.
-   * Does NOT return a snapshot — use get_snapshot_data() when needed.
-   */
   setNodePositions(moves: Array<JsNodePositionUpdate>): boolean
   restoreSnapshot(snapshotJson: string): boolean
 }

@@ -146,20 +146,6 @@ impl FontEngine {
     Ok(())
   }
 
-  #[napi]
-  pub fn save_font(&mut self, path: String) -> Result<()> {
-    let backup = self.apply_edits_for_save();
-
-    let result = self
-      .font_loader
-      .write_font(&self.font, &path)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")));
-
-    self.restore_from_backup(backup);
-
-    result
-  }
-
   #[napi(ts_return_type = "Promise<void>")]
   pub fn save_font_async(&mut self, path: String) -> AsyncTask<SaveFontTask> {
     let backup = self.apply_edits_for_save();
@@ -353,11 +339,6 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn get_glyph_count(&self) -> u32 {
-    self.font.glyph_count() as u32
-  }
-
-  #[napi]
   pub fn get_glyph_unicodes(&self) -> Vec<u32> {
     let mut unicodes: Vec<u32> = self
       .font
@@ -373,43 +354,6 @@ impl FontEngine {
   #[napi]
   pub fn get_glyph_name_for_unicode(&self, unicode: u32) -> Option<String> {
     self.glyph_name_for_unicode(unicode)
-  }
-
-  #[napi]
-  pub fn get_glyph_unicodes_for_name(&self, glyph_name: String) -> Vec<u32> {
-    if let Some(session) = &self.current_edit_session {
-      if session.glyph_name() == glyph_name {
-        if let Some(glyph) = self.editing_glyph.as_ref() {
-          return glyph.unicodes().to_vec();
-        }
-      }
-    }
-
-    self
-      .font
-      .glyph(&glyph_name)
-      .map(|glyph| glyph.unicodes().to_vec())
-      .unwrap_or_default()
-  }
-
-  #[napi]
-  /// Returns all Unicode codepoints whose glyphs depend on `unicode` via
-  /// component relationships (transitively).
-  pub fn get_dependent_unicodes(&self, unicode: u32) -> Vec<u32> {
-    let Some(glyph_name) = self.glyph_name_for_unicode(unicode) else {
-      return Vec::new();
-    };
-
-    let dependent_names = self.dependency_graph.dependents_recursive(&glyph_name);
-    let mut unicodes = HashSet::new();
-
-    for dependent_name in dependent_names {
-      self.collect_unicodes_for_glyph_name(&dependent_name, &mut unicodes);
-    }
-
-    let mut sorted: Vec<u32> = unicodes.into_iter().collect();
-    sorted.sort_unstable();
-    sorted
   }
 
   #[napi]
@@ -717,12 +661,6 @@ impl FontEngine {
       .map(|s| s.glyph_name().to_string())
   }
 
-  pub fn add_empty_contour(&mut self) -> Result<String> {
-    let edit_session = self.get_edit_session()?;
-    let contour_id = edit_session.add_empty_contour();
-    Ok(contour_id.to_string())
-  }
-
   #[napi(ts_return_type = "ContourId | null")]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
@@ -923,21 +861,6 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn remove_contour(&mut self, contour_id: String) -> Result<String> {
-    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-    self.command_simple(|s| {
-      s.remove_contour(cid);
-    })
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
-  // ═══════════════════════════════════════════════════════════
-
-  /// Set node positions directly — fire-and-forget for drag operations.
-  /// Returns true on success, false if no edit session is active.
-  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
-  #[napi]
   pub fn set_node_positions(&mut self, moves: Vec<JsNodePositionUpdate>) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
@@ -962,7 +885,6 @@ impl FontEngine {
 
     Ok(session.set_node_positions(&updates))
   }
-
 
   #[napi]
   pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<bool> {
