@@ -225,9 +225,9 @@ export class Editor implements ShiftEditor {
    * reactive effects that schedule canvas redraws when state changes.
    *
    */
-  constructor() {
+  constructor(options: { fontEngine: FontEngine }) {
     this.#viewport = new ViewportManager();
-    this.#fontEngine = new FontEngine();
+    this.#fontEngine = options.fontEngine;
     const glyphInfo = getGlyphInfo();
     this.#glyphNaming = new GlyphNamingService({
       getExistingGlyphNameForUnicode: (unicode) => this.#fontEngine.getGlyphNameForUnicode(unicode),

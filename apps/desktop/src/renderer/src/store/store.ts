@@ -1,4 +1,5 @@
 import { Editor } from "@/lib/editor/Editor";
+import { FontEngine } from "@/engine/FontEngine";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { create } from "zustand";
 import type { StoreApi } from "zustand";
@@ -22,7 +23,7 @@ function getFileNameFromPath(path: string | null): string | null {
 }
 
 const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
-  const editor = new Editor();
+  const editor = new Editor({ fontEngine: new FontEngine() });
   registerBuiltInTools(editor);
 
   // Set select tool as ready on startup
