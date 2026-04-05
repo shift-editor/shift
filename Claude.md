@@ -3,53 +3,7 @@
 ## General Guidelines
 
 - Prefer switch statements over long if-else chains when branching on the same value.
-
-```typescript
-// Prefer
-switch (canvas) {
-  case interactiveCanvas:
-    interactiveContext.resizeCanvas(canvas);
-    break;
-  case overlayCanvas:
-    overlayContext.resizeCanvas(canvas);
-    break;
-  case staticCanvas:
-    staticContext.resizeCanvas(canvas);
-    break;
-}
-
-// Avoid long if-else
-if (canvas === interactiveCanvas) {
-  interactiveContext.resizeCanvas(canvas);
-} else if (canvas === overlayCanvas) {
-  overlayContext.resizeCanvas(canvas);
-} else if (canvas === staticCanvas) {
-  staticContext.resizeCanvas(canvas);
-}
-```
-
 - Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level.
-
-```typescript
-// Prefer
-if (rect === null) {
-  this.#marqueePreviewPointIds.set(null);
-  return;
-}
-
-const points = this.getAllPoints();
-const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
-this.#marqueePreviewPointIds.set(new Set(ids));
-
-// Avoid
-if (rect === null) {
-  this.#marqueePreviewPointIds.set(null);
-} else {
-  const points = this.getAllPoints();
-  const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => p.id));
-  this.#marqueePreviewPointIds.set(ids);
-}
-```
 
 ## Documentation
 
@@ -270,137 +224,16 @@ const zoom = viewport.zoom.peek();
 
 ## Anti-Slop Rules
 
-These patterns are BANNED. They have been identified as recurring agent-generated anti-patterns. Violating these will be caught by lint scripts and code review.
+These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.oxlintrc.json` lint rules.
 
-### Use Vec2 for all coordinate math
-
-Never do inline coordinate arithmetic. Use `Vec2` from `@shift/geo`.
-
-```typescript
-// BAD — inline math
-const delta = {
-  x: coords.scene.x - this.downPoint.x,
-  y: coords.scene.y - this.downPoint.y,
-};
-
-// GOOD — Vec2
-const delta = Vec2.sub(coords.scene, this.downPoint);
-```
-
-### Use Point2D in function signatures
-
-Never create function overloads that accept both `(Point2D)` and `(x, y)`. Use `Point2D` only. If a caller has `x, y` separately, they write `{ x, y }` at the call site.
-
-```typescript
-// BAD — overload with resolution code
-public movePointTo(id: PointId, position: Point2D): void;
-public movePointTo(id: PointId, x: number, y: number): void;
-public movePointTo(id: PointId, posOrX: Point2D | number, y?: number): void {
-  const pos = typeof posOrX === "number" ? { x: posOrX, y: y! } : posOrX;
-  // ...
-}
-
-// GOOD — single signature
-public movePointTo(id: PointId, position: Point2D): void {
-  // ...
-}
-```
-
-### Use Glyphs/Contours packages for glyph traversal
-
-Never write raw `for (const contour of glyph.contours) { for (const point ...) }` loops in app code. Use `Glyphs.findPoints`, `Glyphs.points`, `Glyphs.findPoint` from `@shift/font`.
-
-```typescript
-// BAD — raw loop
-for (const contour of base.contours) {
-  for (const point of contour.points) {
-    if (!target.pointIds.includes(point.id)) continue;
-    // ...
-  }
-}
-
-// GOOD — use the package
-const points = Glyphs.findPoints(base, target.pointIds);
-for (const point of points) {
-  // ...
-}
-```
-
-Direct `.contours` access is only allowed inside `packages/font/`, `engine/draft.ts`, and `engine/mock.ts`.
-
-### No nested ternaries with map chains
-
-Break complex conditional mapping into named variables.
-
-```typescript
-// BAD
-return {
-  ...glyph,
-  contours: hasUpdates
-    ? glyph.contours.map((c) => ({
-        ...c,
-        points: c.points.map((p) => {
-          const u = updates.get(p.id);
-          return u ? { ...p, x: u.x, y: u.y } : p;
-        }),
-      }))
-    : glyph.contours,
-};
-
-// GOOD
-const contours = hasUpdates
-  ? glyph.contours.map((c) => applyPointUpdates(c, updates))
-  : glyph.contours;
-
-return { ...glyph, contours };
-```
-
-### Blank lines between logical blocks
-
-Separate guard clauses, branches, and return statements with blank lines inside function bodies.
-
-```typescript
-// BAD
-if (event.type === "selectionChanged") {
-  const hasSelection = this.editor.hasSelection();
-  if (hasSelection && state.type === "ready") {
-    return { state: { type: "selected" as const } };
-  }
-  if (!hasSelection && state.type === "selected") {
-    return { state: { type: "ready" as const } };
-  }
-  return { state };
-}
-return null;
-
-// GOOD
-if (event.type === "selectionChanged") {
-  const hasSelection = this.editor.hasSelection();
-
-  if (hasSelection && state.type === "ready") {
-    return { state: { type: "selected" as const } };
-  }
-
-  if (!hasSelection && state.type === "selected") {
-    return { state: { type: "ready" as const } };
-  }
-
-  return { state };
-}
-
-return null;
-```
-
-### Do not add methods to Editor without justification
-
-Editor.ts is a facade with 150+ delegation methods. Before adding a new public method, ask:
-- Does it add logic beyond forwarding to a manager? If not, consider whether the tool can call the manager directly through the EditorAPI interface.
-- Can it be a pure function instead of a method?
-- Does it belong on FontEngine or a manager, not Editor?
+- **Use Vec2 for all coordinate math.** Never `{ x: a.x - b.x, y: a.y - b.y }` — use `Vec2.sub(a, b)`.
+- **Use Point2D in function signatures.** Never create `(x, y)` / `(Point2D)` overloads with `typeof` resolution code.
+- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `engine/draft.ts`, `engine/mock.ts`.
+- **No nested ternaries with map chains.** Break into named variables.
+- **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
+- **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on FontEngine?
 
 ## Mutation Architecture
-
-### GlyphDraft (Immer-inspired)
 
 All multi-frame glyph mutations (drags, transforms) use the GlyphDraft pattern:
 
