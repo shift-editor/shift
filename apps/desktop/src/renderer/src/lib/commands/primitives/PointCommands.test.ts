@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { AddPointCommand } from "./PointCommands";
-import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
+import { createFontEngine, getAllPoints, getPointCount } from "@/testing";
 import type { FontEngine } from "@/engine";
 import type { CommandContext } from "../core";
 
@@ -11,7 +11,7 @@ function ctx(): CommandContext {
 }
 
 beforeEach(() => {
-  fontEngine = createMockFontEngine();
+  fontEngine = createFontEngine();
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
 });
 

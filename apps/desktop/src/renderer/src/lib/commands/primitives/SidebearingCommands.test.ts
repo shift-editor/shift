@@ -4,7 +4,7 @@ import {
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
 } from "./SidebearingCommands";
-import { createMockFontEngine, getAllPoints } from "@/testing";
+import { createFontEngine, getAllPoints } from "@/testing";
 import type { FontEngine } from "@/engine";
 import type { CommandContext } from "../core";
 
@@ -15,7 +15,7 @@ function ctx(): CommandContext {
 }
 
 beforeEach(() => {
-  fontEngine = createMockFontEngine();
+  fontEngine = createFontEngine();
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
 });
 

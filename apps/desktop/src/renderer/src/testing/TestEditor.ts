@@ -12,20 +12,15 @@
 import type { Point2D, PointId, Glyph, GlyphSnapshot } from "@shift/types";
 import { Glyphs } from "@shift/font";
 import { Editor } from "@/lib/editor/Editor";
-import { FontEngine } from "@/engine/FontEngine";
-import { MockFontEngine } from "./MockFontEngine";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
+import { createFontEngine } from "./engine";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
 export class TestEditor extends Editor {
-  readonly mockEngine: MockFontEngine;
-
   constructor() {
-    const mock = new MockFontEngine();
-    super({ fontEngine: new FontEngine(mock) });
-    this.mockEngine = mock;
+    super({ fontEngine: createFontEngine() });
     registerBuiltInTools(this);
   }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "../core/CommandHistory";
 import { CutCommand, PasteCommand } from "./ClipboardCommands";
-import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
+import { createFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { ClipboardContent } from "../../clipboard/types";
 import type { PointId } from "@shift/types";
 
@@ -22,7 +22,7 @@ function createTestContent(points: Array<{ x: number; y: number }>): ClipboardCo
 }
 
 function addPointToActiveContour(
-  fontEngine: ReturnType<typeof createMockFontEngine>,
+  fontEngine: ReturnType<typeof createFontEngine>,
   edit: {
     id?: PointId;
     x: number;
@@ -37,11 +37,11 @@ function addPointToActiveContour(
 }
 
 describe("CutCommand", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
@@ -144,11 +144,11 @@ describe("CutCommand", () => {
 });
 
 describe("PasteCommand", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
@@ -230,11 +230,11 @@ describe("PasteCommand", () => {
 });
 
 describe("Cut + Paste integration", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();

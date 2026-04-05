@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { SetNodePositionsCommand } from "./SetNodePositionsCommand";
-import { createMockFontEngine, getAllPoints } from "@/testing";
+import { createFontEngine, getAllPoints } from "@/testing";
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
 import { asAnchorId, asContourId, asPointId } from "@shift/types";
 import type { FontEngine } from "@/engine";
@@ -28,7 +28,7 @@ function ctx(): CommandContext {
 }
 
 beforeEach(() => {
-  fontEngine = createMockFontEngine();
+  fontEngine = createFontEngine();
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
   fontEngine.addContour();
 });

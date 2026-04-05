@@ -10,11 +10,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "./CommandHistory";
 import { AddPointCommand, NudgePointsCommand } from "../primitives";
-import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
+import { createFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { PointId } from "@shift/types";
 
 function addPointToActiveContour(
-  fontEngine: ReturnType<typeof createMockFontEngine>,
+  fontEngine: ReturnType<typeof createFontEngine>,
   edit: {
     id?: PointId;
     x: number;
@@ -29,11 +29,11 @@ function addPointToActiveContour(
 }
 
 describe("CommandHistory", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
@@ -174,11 +174,11 @@ describe("CommandHistory", () => {
 });
 
 describe("batching", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
@@ -351,12 +351,12 @@ describe("batching", () => {
 });
 
 describe("onDirty callback", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
   let onDirtyCalled: number;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     onDirtyCalled = 0;
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value, {
       onDirty: () => {
@@ -424,11 +424,11 @@ describe("onDirty callback", () => {
 });
 
 describe("Command integration with history", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();

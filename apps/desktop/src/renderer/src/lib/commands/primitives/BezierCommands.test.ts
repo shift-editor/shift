@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CloseContourCommand, NudgePointsCommand, SplitSegmentCommand } from "./BezierCommands";
-import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
+import { createFontEngine, getAllPoints, getPointCount } from "@/testing";
 import type { FontEngine } from "@/engine";
 import type { CommandContext } from "../core";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
@@ -13,7 +13,7 @@ function ctx(): CommandContext {
 }
 
 beforeEach(() => {
-  fontEngine = createMockFontEngine();
+  fontEngine = createFontEngine();
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
 });
 

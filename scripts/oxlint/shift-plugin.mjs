@@ -10,7 +10,6 @@
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
   "engine/draft.ts",
-  "engine/mock.ts",
   "engine/FontEngine.ts",
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them

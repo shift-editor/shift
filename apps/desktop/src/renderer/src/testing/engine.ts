@@ -1,10 +1,10 @@
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
-import { FontEngine } from "@/engine";
-import { MockFontEngine } from "./MockFontEngine";
+import { FontEngine } from "@/engine/FontEngine";
 import { Glyphs } from "@shift/font";
 
-export function createMockFontEngine(): FontEngine {
-  return new FontEngine(new MockFontEngine());
+export function createFontEngine(): FontEngine {
+  const { FontEngine: NativeFontEngine } = require("shift-node");
+  return new FontEngine(new NativeFontEngine());
 }
 
 export function getAllPoints(snapshot: GlyphSnapshot | null): PointSnapshot[] {
