@@ -101,7 +101,6 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import { FontManager } from "./managers/FontManager";
 import { TextRunManager } from "./managers/TextRunManager";
 import type { PersistedTextRun, TextRunState } from "./managers/TextRunManager";
 import type { GlyphRef } from "@/lib/tools/text/layout";
@@ -174,7 +173,7 @@ export class Editor implements ShiftEditor {
   #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
   #sidebar: SidebarViewModel;
-  #fontManager: FontManager;
+
   #staticEffect: Effect;
   #textRunGlyphRefreshEffect: Effect;
   #overlayEffect: Effect;
@@ -237,16 +236,6 @@ export class Editor implements ShiftEditor {
       glyph: this.#$glyph,
       getSelectionBounds: () => this.getSelectionBounds(),
     });
-    this.#fontManager = new FontManager({
-      getMetrics: () => this.#fontEngine.getMetrics(),
-      getMetadata: () => this.#fontEngine.getMetadata(),
-      getSvgPathByName: (glyphName) => this.#fontEngine.getSvgPathByName(glyphName),
-      getSvgPath: (unicode) => this.#fontEngine.getSvgPath(unicode),
-      getAdvanceByName: (glyphName) => this.#fontEngine.getAdvanceByName(glyphName),
-      getAdvance: (unicode) => this.#fontEngine.getAdvance(unicode),
-      getBboxByName: (glyphName) => this.#fontEngine.getBboxByName(glyphName),
-      getBbox: (unicode) => this.#fontEngine.getBbox(unicode),
-    });
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.$glyph.value,
@@ -289,7 +278,7 @@ export class Editor implements ShiftEditor {
     this.#edgePan = new EdgePanManager(this);
     this.#snapManager = new SnapManager({
       getGlyph: () => this.#$glyph.value,
-      getMetrics: () => this.#fontManager.getMetrics(),
+      getMetrics: () => this.#fontEngine.getMetrics(),
       getSnapPreferences: () => this.#snapPreferences.value,
       screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
@@ -396,7 +385,7 @@ export class Editor implements ShiftEditor {
         GlyphRenderCache.delete(glyphName);
       }
 
-      this.#textRunManager.recompute(this.#fontManager);
+      this.#textRunManager.recompute(this.#fontEngine);
     });
 
     this.#overlayEffect = effect(() => {
@@ -928,13 +917,13 @@ export class Editor implements ShiftEditor {
     const glyphName = glyph.glyphName;
     const currentGlyphName = this.#fontEngine.getEditingGlyphName();
     if (currentGlyphName === glyphName) {
-      this.#textRunManager.recompute(this.#fontManager);
+      this.#textRunManager.recompute(this.#fontEngine);
       return;
     }
 
     this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.addContour();
-    this.#textRunManager.recompute(this.#fontManager);
+    this.#textRunManager.recompute(this.#fontEngine);
   }
 
   public endEditSession(): void {
@@ -1022,7 +1011,7 @@ export class Editor implements ShiftEditor {
   }
 
   public recomputeTextRun(originX?: number): void {
-    this.#textRunManager.recompute(this.#fontManager, originX);
+    this.#textRunManager.recompute(this.#fontEngine, originX);
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
@@ -1084,11 +1073,11 @@ export class Editor implements ShiftEditor {
 
   public hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void {
     this.#textRunManager.hydrateRuns(runsByGlyph);
-    this.#textRunManager.recompute(this.#fontManager);
+    this.#textRunManager.recompute(this.#fontEngine);
   }
 
   public get font(): Font {
-    return this.#fontManager;
+    return this.#fontEngine;
   }
 
   public get glyph(): Signal<Glyph | null> {
@@ -1124,7 +1113,7 @@ export class Editor implements ShiftEditor {
     this.#mainGlyphUnicode = unicode;
     const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
     this.#textRunManager.setOwnerGlyph(glyphRef);
-    this.#textRunManager.recompute(this.#fontManager);
+    this.#textRunManager.recompute(this.#fontEngine);
   }
 
   public getMainGlyphUnicode(): number | null {
@@ -2091,7 +2080,7 @@ export class Editor implements ShiftEditor {
       return offset;
     }
 
-    const metrics = this.#fontManager.getMetrics();
+    const metrics = this.#fontEngine.getMetrics();
     const targetX = 300;
     const targetYForAnchorName = (anchorName: string): number => {
       switch (anchorName) {
@@ -2119,7 +2108,7 @@ export class Editor implements ShiftEditor {
       };
     }
 
-    const bounds = this.#fontManager.getBboxByName?.(glyph.glyphName);
+    const bounds = this.#fontEngine.getBboxByName?.(glyph.glyphName);
     if (!bounds) {
       return offset;
     }
