@@ -154,67 +154,12 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - Re-export types from their domain's index.ts for public API
 - NEVER re-declare types that exist in `@shift/types` (generated from Rust). Import from `@shift/types`; for derived views (e.g. readonly, nested) use the domain pattern in `packages/types/src/domain.ts`
 
-### Tool Structure
-
-All tools MUST follow this directory structure:
-
-```
-/tools/{toolName}/
-  {ToolName}.ts    # Main tool class
-  commands.ts      # Tool-specific commands (if needed)
-  states.ts        # State types re-export (if needed)
-  index.ts         # Public exports
-```
-
-### Command Organization
-
-Commands follow this hierarchy:
-
-```
-/commands/
-  core/           # Command, BaseCommand, CompositeCommand, CommandHistory
-  primitives/     # Low-level: PointCommands, BezierCommands
-  transform/      # TransformCommands
-  clipboard/      # ClipboardCommands
-```
-
-Tool-specific command wrappers stay in their tool directories.
-
 ### Generated and domain types
 
 - **Generated types** (from Rust via ts-rs) live ONLY in `packages/types/src/generated/`. Run `cargo test --package shift-core` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
 - **Domain types** (e.g. `Point`, `Contour`, `Glyph`) live in `packages/types/src/domain.ts`. They MUST derive from generated types (e.g. `Readonly<PointSnapshot>`, `Omit` + composition). See `domain.ts`: same field names, no re-declaration of structure.
 - **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
 - Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).
-
-### Signal Patterns
-
-- The Editor class should expose signals via getters, not as raw public properties
-- Writable signals should be private (`#` prefix) and exposed via read-only getters
-- When effects need to track tool or state changes, explicitly depend on the relevant signals
-
-```typescript
-// GOOD: Expose via getter
-private $activeTool: WritableSignal<ToolName>;
-public get activeTool(): Signal<ToolName> {
-  return this.$activeTool;
-}
-
-// BAD: Expose raw writable signal
-public $activeTool: WritableSignal<ToolName>;
-```
-
-- Always access signal values through getters, never via `.value` or `.peek()` from outside the owning class. Getters encapsulate the signal and keep the reactive contract consistent. `.peek()` should only be used internally within the signal's owning class in computed signals where subscribing would cause circular updates.
-
-```typescript
-// GOOD: Use the getter
-const zoom = viewport.zoomLevel;
-const pan = viewport.panX;
-
-// BAD: Reaching through to the signal
-const zoom = viewport.zoom.value;
-const zoom = viewport.zoom.peek();
-```
 
 ### File Size Guidelines
 
@@ -233,43 +178,13 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 - **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
 - **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on FontEngine?
 
-## Mutation Architecture
+## Architecture References
 
-All multi-frame glyph mutations (drags, transforms) use the GlyphDraft pattern:
+For detailed architecture docs, read these when working on the relevant area:
 
-```typescript
-const draft = editor.createDraft();
-
-// Every frame: apply position updates
-draft.setPositions(updates);
-
-// Commit: syncs to Rust + records undo
-draft.finish("Move Points");
-
-// Or cancel: restores base glyph
-draft.discard();
-```
-
-- `draft.base` is the immutable starting snapshot
-- `draft.setPositions(updates)` patches the base and emits to the glyph signal (Tier 1: TS-only)
-- `draft.finish(label)` syncs final state to Rust (Tier 2) and records undo
-- `draft.discard()` restores the base glyph
-
-Tools own the transform math (buildTranslateUpdates, buildRotateUpdates, etc.) as pure functions. The draft owns the patching and lifecycle.
-
-### Discrete mutations
-
-One-shot mutations (toggleSmooth, addPoint, closeContour) go through FontEngine directly. These are Tier 3 — full Rust round-trip returning a new snapshot.
-
-```typescript
-editor.toggleSmooth(id);       // FontEngine.#dispatchVoid(raw.toggleSmooth(id))
-editor.addPoint(edit);          // FontEngine.#dispatch(raw.addPoint(...))
-```
-
-### NAPI boundary
-
-- All structured data crosses the boundary as JSON strings
-- FontEngine owns `#execute`, `#dispatch`, `#dispatchVoid` for command dispatch
-- `patchPositions` in `engine/draft.ts` handles Tier 1 optimistic glyph patching
-- `syncNodePositions` handles Tier 2 lightweight Rust sync (no snapshot return)
-- See `docs/architecture/rust-ts-boundary.md` for the full boundary design
+- **Mutation tiers & NAPI boundary:** `docs/architecture/rust-ts-boundary.md`
+- **GlyphDraft pattern (Immer-inspired):** `docs/architecture/rust-ts-boundary.md` §4
+- **Code smells & tech debt:** `docs/architecture/code-smells.md`
+- **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments
+- **Tool structure & behavior system:** Read `lib/tools/core/BaseTool.ts`
+- **Command organization:** Read `lib/commands/core/Command.ts`
