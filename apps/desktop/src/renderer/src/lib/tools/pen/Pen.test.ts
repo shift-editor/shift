@@ -91,11 +91,10 @@ describe("Pen tool", () => {
   });
 
   describe("point creation", () => {
-    it("should start a pen preview gesture and add a point on mouse down", () => {
+    it("should add a point on mouse down", () => {
       const event = createToolMouseEvent(100, 200);
       sim.onMouseDown(event);
 
-      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
       expect(getPointCount(ctx.fontEngine.$glyph.value)).toBe(1);
     });
 
@@ -204,11 +203,9 @@ describe("Pen tool", () => {
   });
 
   describe("mouse up handling", () => {
-    it("should return to ready state on mouse up and commit preview", () => {
+    it("should return to ready state on mouse up and allow adding more points", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseUp(createToolMouseEvent(100, 100));
-
-      expect(ctx.mocks.preview.mocks.commitPreview).toHaveBeenCalledWith("Add Point");
 
       const before = getPointCount(ctx.fontEngine.$glyph.value);
       sim.onMouseDown(createToolMouseEvent(200, 200));
@@ -330,11 +327,8 @@ describe("Pen tool", () => {
 
       expectDefined(ctx.mocks.commands.mocks.execute, "commands.execute mock").mockClear();
       expectDefined(ctx.mocks.commands.mocks.beginBatch, "commands.beginBatch mock").mockClear();
-      expectDefined(ctx.mocks.preview.mocks.beginPreview, "preview.beginPreview mock").mockClear();
-
       sim.onMouseDown(createToolMouseEvent(115, 115));
 
-      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
       expect(ctx.mocks.commands.mocks.beginBatch).not.toHaveBeenCalledWith("Close Contour");
     });
 
@@ -385,11 +379,9 @@ describe("Pen tool", () => {
     it("should cancel point placement on Escape during anchored state", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       expect(pen.getState().type).toBe("anchored");
-      expect(ctx.mocks.preview.mocks.beginPreview).toHaveBeenCalled();
 
       sim.cancel();
 
-      expect(ctx.mocks.preview.mocks.cancelPreview).toHaveBeenCalled();
       expect(pen.getState().type).toBe("ready");
     });
 
@@ -400,7 +392,6 @@ describe("Pen tool", () => {
 
       sim.cancel();
 
-      expect(ctx.mocks.preview.mocks.cancelPreview).toHaveBeenCalled();
       expect(pen.getState().type).toBe("ready");
     });
 

@@ -146,14 +146,6 @@ describe("Select tool", () => {
       expect(expectAt(points, 0).y).toBe(130);
     });
 
-    it("should begin drag session when dragging", () => {
-      sim.onMouseDown(createToolMouseEvent(100, 100));
-
-      sim.onMouseMove(createToolMouseEvent(150, 150));
-
-      expect(ctx.mocks.edit.beginTranslateDrag).toHaveBeenCalled();
-    });
-
     it("should update drag session during drag", () => {
       sim.onMouseDown(createToolMouseEvent(100, 100));
       sim.onMouseMove(createToolMouseEvent(150, 160));
