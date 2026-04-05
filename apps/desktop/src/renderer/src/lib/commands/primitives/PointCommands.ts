@@ -1,4 +1,5 @@
 import type { ContourId, PointType, PointId } from "@shift/types";
+import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
 /**
@@ -118,17 +119,16 @@ export class RemovePointsCommand extends BaseCommand<void> {
 
     this.#removedPoints = [];
     if (ctx.glyph) {
-      for (const contour of ctx.glyph.contours) {
-        for (const point of contour.points) {
-          if (this.#pointIds.includes(point.id)) {
-            this.#removedPoints.push({
-              contourId: contour.id,
-              x: point.x,
-              y: point.y,
-              pointType: point.pointType,
-              smooth: point.smooth,
-            });
-          }
+      for (const pointId of this.#pointIds) {
+        const found = Glyphs.findPoint(ctx.glyph, pointId);
+        if (found) {
+          this.#removedPoints.push({
+            contourId: found.contour.id,
+            x: found.point.x,
+            y: found.point.y,
+            pointType: found.point.pointType,
+            smooth: found.point.smooth,
+          });
         }
       }
     }

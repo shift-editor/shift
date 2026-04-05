@@ -1,4 +1,5 @@
 import { Vec2 } from "@shift/geo";
+import { Glyphs } from "@shift/font";
 import type { GlyphSnapshot, Point2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
@@ -169,16 +170,13 @@ function buildRotateUpdates(
 ): NodePositionUpdateList {
   const updates: Array<NodePositionUpdateList[number]> = [];
 
-  for (const contour of base.contours) {
-    for (const point of contour.points) {
-      if (!target.pointIds.includes(point.id)) continue;
-      const next = Vec2.rotateAround(point, origin, angle);
-      updates.push({
-        node: { kind: "point", id: point.id },
-        x: next.x,
-        y: next.y,
-      });
-    }
+  for (const point of Glyphs.findPoints(base, target.pointIds)) {
+    const next = Vec2.rotateAround(point, origin, angle);
+    updates.push({
+      node: { kind: "point", id: point.id },
+      x: next.x,
+      y: next.y,
+    });
   }
 
   for (const anchorId of target.anchorIds) {

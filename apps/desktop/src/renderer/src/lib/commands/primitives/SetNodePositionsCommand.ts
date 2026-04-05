@@ -1,4 +1,5 @@
 import type { GlyphSnapshot } from "@shift/types";
+import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 
@@ -40,9 +41,7 @@ export class SetNodePositionsCommand extends BaseCommand<void> {
     if (after.length === 0) return null;
 
     const pointPositions = new Map(
-      baseGlyph.contours.flatMap((contour) =>
-        contour.points.map((point) => [point.id, point] as const),
-      ),
+      Glyphs.getAllPoints(baseGlyph).map((point) => [point.id, point] as const),
     );
     const anchorPositions = new Map(
       baseGlyph.anchors.map((anchor) => [anchor.id, anchor] as const),

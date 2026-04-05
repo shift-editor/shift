@@ -1,4 +1,5 @@
 import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
+import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
@@ -165,7 +166,7 @@ export class CloseContourCommand extends BaseCommand<void> {
     this.#contourId = ctx.fontEngine.getActiveContourId();
 
     if (ctx.glyph && this.#contourId) {
-      const contour = ctx.glyph.contours.find((c) => c.id === this.#contourId);
+      const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 

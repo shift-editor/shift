@@ -4,6 +4,7 @@ import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/reactive";
+import { Glyphs } from "@shift/font";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
@@ -37,12 +38,7 @@ export function DebugPanel() {
     const glyph = editor.glyph.value;
     if (!glyph) return "0";
 
-    let pointCount = 0;
-    for (const contour of glyph.contours) {
-      pointCount += contour.points.length;
-    }
-
-    return `${pointCount}`;
+    return `${Glyphs.getAllPoints(glyph).length}`;
   });
 
   const upmRef = useRef<HTMLTableCellElement>(null);

@@ -1,4 +1,5 @@
 import { Vec2 } from "@shift/geo";
+import { Glyphs } from "@shift/font";
 import type { AnchorId, GlyphSnapshot, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
@@ -305,15 +306,12 @@ function buildTranslateUpdates(
       updates.push({ node: { kind: "point", id: u.id }, x: u.x, y: u.y });
     }
   } else {
-    for (const contour of base.contours) {
-      for (const point of contour.points) {
-        if (!target.pointIds.includes(point.id)) continue;
-        updates.push({
-          node: { kind: "point", id: point.id },
-          x: point.x + delta.x,
-          y: point.y + delta.y,
-        });
-      }
+    for (const point of Glyphs.findPoints(base, target.pointIds)) {
+      updates.push({
+        node: { kind: "point", id: point.id },
+        x: point.x + delta.x,
+        y: point.y + delta.y,
+      });
     }
   }
 

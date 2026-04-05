@@ -162,10 +162,8 @@ export class SnapManager {
    */
   private getAnchorPosition(snapshot: Glyph | null, pointId: PointId, fallback: Point2D): Point2D {
     if (!snapshot) return fallback;
-    for (const contour of snapshot.contours) {
-      const point = contour.points.find((p) => p.id === pointId);
-      if (point) return { x: point.x, y: point.y };
-    }
+    const result = Glyphs.findPoint(snapshot, pointId);
+    if (result) return { x: result.point.x, y: result.point.y };
     return fallback;
   }
 
@@ -184,18 +182,15 @@ export class SnapManager {
   ): Point2D {
     if (!snapshot) return fallback;
 
-    for (const contour of snapshot.contours) {
-      const idx = Contours.findPointIndex(contour, pointId);
-      if (idx === -1) continue;
-
-      const point = contour.points[idx];
-      if (!point) continue;
+    const found = Glyphs.findPoint(snapshot, pointId);
+    if (found) {
+      const { point, contour, index: idx } = found;
       if (Validate.isOnCurve(point)) {
         return fallback;
       }
 
       const { prev, next } = Contours.neighbors(contour, idx);
-      if (!prev || !next) continue;
+      if (!prev || !next) return fallback;
 
       if (Validate.isOffCurve(next) && Validate.isOnCurve(prev)) {
         return { x: prev.x, y: prev.y };

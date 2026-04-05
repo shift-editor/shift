@@ -1,5 +1,6 @@
 import type { GlyphSnapshot, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
+import { Glyphs } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -229,16 +230,13 @@ function buildResizeUpdates(
 ): NodePositionUpdateList {
   const updates: Array<NodePositionUpdateList[number]> = [];
 
-  for (const contour of base.contours) {
-    for (const point of contour.points) {
-      if (!target.pointIds.includes(point.id)) continue;
-      const next = scaleAround(point, origin, scaleX, scaleY);
-      updates.push({
-        node: { kind: "point", id: point.id },
-        x: next.x,
-        y: next.y,
-      });
-    }
+  for (const point of Glyphs.findPoints(base, target.pointIds)) {
+    const next = scaleAround(point, origin, scaleX, scaleY);
+    updates.push({
+      node: { kind: "point", id: point.id },
+      x: next.x,
+      y: next.y,
+    });
   }
 
   for (const anchorId of target.anchorIds) {

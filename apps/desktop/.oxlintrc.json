@@ -1,5 +1,5 @@
 {
-  "jsPlugins": ["oxlint-plugin-eslint"],
+  "jsPlugins": ["oxlint-plugin-eslint", "../../scripts/oxlint/shift-plugin.mjs"],
   "rules": {
     "eslint/no-unused-expressions": "off",
     "typescript/no-useless-empty-export": "off",
@@ -28,7 +28,9 @@
         "selector": "ExportAllDeclaration",
         "message": "Do not use export *. Use named exports to keep the public API explicit."
       }
-    ]
+    ],
+    "shift/no-raw-contour-access": "error",
+    "shift/no-inline-coordinate-math": "off"
   },
   "overrides": [
     {
