@@ -118,10 +118,10 @@ export const App = () => {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       documentPersistence.dispose();
-      unsubscribeOpen?.();
-      unsubscribeExternalOpen?.();
-      unsubscribeSave?.();
-      unsubscribePatternDump?.();
+      if (unsubscribeOpen) unsubscribeOpen();
+      if (unsubscribeExternalOpen) unsubscribeExternalOpen();
+      if (unsubscribeSave) unsubscribeSave();
+      if (unsubscribePatternDump) unsubscribePatternDump();
     };
   }, []);
 

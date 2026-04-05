@@ -95,7 +95,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
 
       return () => {
         observer.disconnect();
-        unsubscribeZoom?.();
+        if (unsubscribeZoom) unsubscribeZoom();
         gpuHandleContext.destroy();
         interactiveContext.destroy();
         overlayContext.destroy();

@@ -70,7 +70,7 @@ export class ToolManager implements ToolSwitchHandler {
       this.releaseOverride();
     }
 
-    this.primaryTool?.deactivate?.();
+    if (this.primaryTool?.deactivate) this.primaryTool.deactivate();
     this.gesture.reset();
 
     const nextTool = this.createToolInstance(id);
@@ -80,7 +80,7 @@ export class ToolManager implements ToolSwitchHandler {
     }
 
     this.primaryTool = nextTool;
-    this.primaryTool.activate?.();
+    if (this.primaryTool.activate) this.primaryTool.activate();
     this.editor.setActiveToolState(this.primaryTool.getState());
     if (this.needsStaticRedrawOnActivation()) {
       this.editor.requestStaticRedraw();
@@ -95,17 +95,17 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.temporaryOptions = options ?? null;
     this.overrideTool = nextTool;
-    this.overrideTool.activate?.();
+    if (this.overrideTool.activate) this.overrideTool.activate();
     this.editor.setActiveToolState(this.overrideTool.getState());
-    this.temporaryOptions?.onActivate?.();
+    if (this.temporaryOptions?.onActivate) this.temporaryOptions.onActivate();
   }
 
   returnFromTemporary(): void {
     if (!this.overrideTool) return;
 
-    this.overrideTool.deactivate?.();
+    if (this.overrideTool.deactivate) this.overrideTool.deactivate();
     this.overrideTool = null;
-    this.temporaryOptions?.onReturn?.();
+    if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
     this.temporaryOptions = null;
 
     if (this.primaryTool) {
@@ -114,7 +114,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
-    this.editor.setCurrentModifiers?.(modifiers);
+    if (this.editor.setCurrentModifiers) this.editor.setCurrentModifiers(modifiers);
     const coords = this.editor.fromScreen(screenPoint);
     this.gesture.pointerDown(coords, screenPoint, modifiers);
   }
@@ -146,14 +146,14 @@ export class ToolManager implements ToolSwitchHandler {
   private flushPointerMove(): void {
     this.frameId = null;
 
-    this.editor.flushMousePosition?.();
+    if (this.editor.flushMousePosition) this.editor.flushMousePosition();
 
     if (!this.pendingPointerMove) return;
 
     const { screenPoint, modifiers, skipHover } = this.pendingPointerMove;
     this.pendingPointerMove = null;
 
-    this.editor.setCurrentModifiers?.(modifiers);
+    if (this.editor.setCurrentModifiers) this.editor.setCurrentModifiers(modifiers);
 
     const coords = this.editor.fromScreen(screenPoint);
     const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
@@ -175,11 +175,13 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
-    this.editor.setCurrentModifiers?.({
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      metaKey: e.metaKey || e.ctrlKey,
-    });
+    if (this.editor.setCurrentModifiers) {
+      this.editor.setCurrentModifiers({
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey || e.ctrlKey,
+      });
+    }
 
     if (e.key === "Escape" && this.gesture.isDragging) {
       this.gesture.reset();
@@ -199,11 +201,13 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
-    this.editor.setCurrentModifiers?.({
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      metaKey: e.metaKey || e.ctrlKey,
-    });
+    if (this.editor.setCurrentModifiers) {
+      this.editor.setCurrentModifiers({
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        metaKey: e.metaKey || e.ctrlKey,
+      });
+    }
 
     return (
       this.activeTool?.handleEvent({
@@ -214,11 +218,11 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   render(draw: DrawAPI): void {
-    this.activeTool?.render?.(draw);
+    if (this.activeTool?.render) this.activeTool.render(draw);
   }
 
   renderBelowHandles(draw: DrawAPI): void {
-    this.activeTool?.renderBelowHandles?.(draw);
+    if (this.activeTool?.renderBelowHandles) this.activeTool.renderBelowHandles(draw);
   }
 
   renderContributors(layer: ToolRenderLayer, context: Omit<ToolRenderContext, "editor">): void {
@@ -241,11 +245,11 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   private releaseOverride(): void {
-    this.overrideTool?.deactivate?.();
+    if (this.overrideTool?.deactivate) this.overrideTool.deactivate();
     this.overrideTool = null;
-    this.temporaryOptions?.onReturn?.();
+    if (this.temporaryOptions?.onReturn) this.temporaryOptions.onReturn();
     this.temporaryOptions = null;
-    this.primaryTool?.activate?.();
+    if (this.primaryTool?.activate) this.primaryTool.activate();
     if (this.primaryTool) {
       this.editor.setActiveToolState(this.primaryTool.getState());
     }

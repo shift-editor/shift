@@ -87,7 +87,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
           () => {},
         );
         for (const behavior of this.behaviors) {
-          behavior.onStateExit?.(prev, next, preCommitContext, event);
+          if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
         }
 
         this.state = next;
@@ -100,10 +100,10 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
           },
         );
         for (const behavior of this.behaviors) {
-          behavior.onStateEnter?.(prev, next, postCommitContext, event);
+          if (behavior.onStateEnter) behavior.onStateEnter(prev, next, postCommitContext, event);
         }
 
-        this.onStateChange?.(prev, next, event);
+        if (this.onStateChange) this.onStateChange(prev, next, event);
       });
     }
 

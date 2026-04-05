@@ -408,7 +408,7 @@ export class FontEngine {
   }
 
   clearPreparedNodeTransform(): void {
-    this.#raw.clearPreparedNodeTransformLight?.();
+    if (this.#raw.clearPreparedNodeTransformLight) this.#raw.clearPreparedNodeTransformLight();
   }
 
   // ── Editing: rules engine ──

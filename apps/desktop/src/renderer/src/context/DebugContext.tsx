@@ -89,10 +89,10 @@ export function DebugProvider({ children }: DebugProviderProps) {
     });
 
     return () => {
-      unsubscribeReactScan?.();
-      unsubscribePanel?.();
-      unsubscribeDump?.();
-      unsubscribeOverlays?.();
+      if (unsubscribeReactScan) unsubscribeReactScan();
+      if (unsubscribePanel) unsubscribePanel();
+      if (unsubscribeDump) unsubscribeDump();
+      if (unsubscribeOverlays) unsubscribeOverlays();
     };
   }, []);
 

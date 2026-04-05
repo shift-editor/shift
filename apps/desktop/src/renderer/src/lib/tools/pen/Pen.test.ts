@@ -375,7 +375,7 @@ describe("Pen tool", () => {
       const draw = createMockDrawAPI();
       const lineSpy = vi.spyOn(draw, "line");
 
-      pen.renderBelowHandles?.(draw);
+      if (pen.renderBelowHandles) pen.renderBelowHandles(draw);
 
       expect(lineSpy).toHaveBeenCalled();
     });

@@ -163,7 +163,7 @@ export class CommandHistory {
       this.#addToUndoStack(command);
     }
 
-    this.#onDirty?.();
+    if (this.#onDirty) this.#onDirty();
 
     return result;
   }
@@ -183,7 +183,7 @@ export class CommandHistory {
       this.#addToUndoStack(command);
     }
 
-    this.#onDirty?.();
+    if (this.#onDirty) this.#onDirty();
   }
 
   /**

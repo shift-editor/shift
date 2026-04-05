@@ -27,7 +27,7 @@ export class LRUCache<K, V> {
       if (oldest !== undefined) {
         const oldestValue = this.#cache.get(oldest)!;
         this.#cache.delete(oldest);
-        this.#onEvict?.(oldest, oldestValue);
+        if (this.#onEvict) this.#onEvict(oldest, oldestValue);
       }
     }
     this.#cache.set(key, value);

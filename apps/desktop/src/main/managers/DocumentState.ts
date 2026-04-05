@@ -33,12 +33,14 @@ export class DocumentState {
 
   setDirty(dirty: boolean) {
     this.dirty = dirty;
-    this.onTitleUpdate?.();
+    if (this.onTitleUpdate) this.onTitleUpdate();
   }
 
   setFilePath(filePath: string | null) {
     this.filePath = filePath;
-    this.onTitleUpdate?.();
+    if (!this.onTitleUpdate) return;
+
+    this.onTitleUpdate();
   }
 
   private isWritableFormat(filePath: string | null): boolean {

@@ -72,7 +72,7 @@ export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProvide
     });
 
     return () => {
-      unsubscribe?.();
+      if (unsubscribe) unsubscribe();
     };
   }, []);
 

@@ -48,11 +48,11 @@ export class ToolEventSimulator {
   constructor(private tool: ToolEventTarget) {}
 
   setReady(): void {
-    this.tool.activate?.();
+    if (this.tool.activate) this.tool.activate();
   }
 
   setIdle(): void {
-    this.tool.deactivate?.();
+    if (this.tool.deactivate) this.tool.deactivate();
   }
 
   onMouseDown(event: ToolMouseEvent): void {
