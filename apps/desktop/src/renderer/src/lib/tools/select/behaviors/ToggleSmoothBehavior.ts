@@ -2,6 +2,7 @@ import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import { getPointIdFromHit } from "@/types/hitResult";
+import { Validate } from "@shift/validation";
 
 export class ToggleSmoothBehavior implements SelectHandlerBehavior {
   onDoubleClick(
@@ -16,7 +17,7 @@ export class ToggleSmoothBehavior implements SelectHandlerBehavior {
     if (pointId === null) return false;
 
     const point = ctx.editor.getAllPoints().find((p) => p.id === pointId);
-    if (!point || point.pointType !== "onCurve") return false;
+    if (!point || !Validate.isOnCurve(point)) return false;
 
     ctx.editor.toggleSmooth(pointId);
     return true;

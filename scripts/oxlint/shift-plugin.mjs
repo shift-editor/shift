@@ -7,6 +7,13 @@
  * Registered via jsPlugins in apps/desktop/.oxlintrc.json.
  */
 
+/** Files where raw .pointType checks are expected (validation implementation). */
+const POINT_TYPE_ALLOWED = [
+  "packages/validation/",
+  "packages/font/",
+  "packages/rules/",
+];
+
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
   "engine/draft.ts",
@@ -175,6 +182,192 @@ export default {
            */
           'TSTypeReference > Identifier[name="GlyphSnapshot"]'(node) {
             context.report({ node, messageId: "useGlyph" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban raw .pointType checks in app code.
+     *
+     * Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from
+     * @shift/validation instead of point.pointType === "onCurve".
+     */
+    "no-raw-point-type-check": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useValidate:
+            'Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from @shift/validation instead of raw .pointType checks.',
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        return {
+          /**
+           * Match: point.pointType === "onCurve" / "offCurve"
+           * Also catches !== comparisons.
+           * Only flags comparisons against string literals, not point-to-point
+           * equality checks like beforePoint.pointType !== afterPoint.pointType.
+           */
+          BinaryExpression(node) {
+            if (node.operator !== "===" && node.operator !== "!==") return;
+
+            const { left, right } = node;
+
+            // One side must be a .pointType member access
+            const hasPropLeft =
+              left.type === "MemberExpression" &&
+              left.property &&
+              left.property.name === "pointType";
+            const hasPropRight =
+              right.type === "MemberExpression" &&
+              right.property &&
+              right.property.name === "pointType";
+
+            if (!hasPropLeft && !hasPropRight) return;
+
+            // The other side must be a string literal ("onCurve" / "offCurve")
+            const other = hasPropLeft ? right : left;
+            if (other.type !== "Literal" || typeof other.value !== "string") return;
+
+            context.report({ node: hasPropLeft ? left : right, messageId: "useValidate" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban nested ternary expressions containing .map() chains.
+     *
+     * Break these into named variables or use early returns for clarity.
+     */
+    "no-nested-ternary-map": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noTernaryMap:
+            "Do not nest .map() inside a ternary expression. Extract into a named variable or use an if/else block.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        /** Find the first returned ObjectExpression in a block body. */
+        function findReturnedObject(block) {
+          for (const stmt of block.body) {
+            if (stmt.type === "ReturnStatement" && stmt.argument) {
+              if (stmt.argument.type === "ObjectExpression") return stmt.argument;
+              // Parenthesized: return ({ ... })
+              if (
+                stmt.argument.type === "SequenceExpression" &&
+                stmt.argument.expressions.length === 1
+              ) {
+                return stmt.argument.expressions[0];
+              }
+            }
+          }
+          return null;
+        }
+
+        /** Walk up from a node checking if any ancestor is a ConditionalExpression. */
+        function isInsideTernary(node) {
+          let current = node.parent;
+          // Walk up at most 8 levels to avoid false positives from deeply unrelated ternaries
+          let depth = 0;
+          while (current && depth < 8) {
+            if (current.type === "ConditionalExpression") return true;
+            // Stop at statement boundaries — the ternary must be in the same expression
+            if (current.type.endsWith("Statement") || current.type.endsWith("Declaration")) {
+              return false;
+            }
+            current = current.parent;
+            depth++;
+          }
+          return false;
+        }
+
+        return {
+          /**
+           * Match .map() calls inside a ternary where the callback returns
+           * a spread-object containing another .map() — the data-transform
+           * pattern (e.g. contours.map(c => ({ ...c, points: c.points.map(...) }))).
+           *
+           * Ignores React JSX rendering patterns (map returning JSX elements).
+           */
+          'CallExpression > MemberExpression[property.name="map"]'(node) {
+            const callExpr = node.parent;
+            if (!callExpr || callExpr.type !== "CallExpression") return;
+            if (!isInsideTernary(callExpr)) return;
+
+            // Check if the .map() callback body is an object with spread + nested .map()
+            const callback = callExpr.arguments && callExpr.arguments[0];
+            if (!callback) return;
+            if (
+              callback.type !== "ArrowFunctionExpression" &&
+              callback.type !== "FunctionExpression"
+            ) {
+              return;
+            }
+
+            const body = callback.body;
+            if (!body) return;
+
+            // Arrow with expression body: x => ({ ...x, points: x.points.map(...) })
+            // The expression is wrapped in parens, so body is the ObjectExpression
+            // For block body, look for return statements
+            const expr =
+              body.type === "ObjectExpression"
+                ? body
+                : body.type === "BlockStatement"
+                  ? findReturnedObject(body)
+                  : null;
+
+            if (!expr || expr.type !== "ObjectExpression") return;
+
+            // Must have a spread element (structural clone pattern)
+            const hasSpread = expr.properties.some((p) => p.type === "SpreadElement");
+            if (!hasSpread) return;
+
+            // Must have a property whose value contains a .map() call
+            function hasMapCall(astNode) {
+              if (!astNode || typeof astNode !== "object") return false;
+              if (
+                astNode.type === "CallExpression" &&
+                astNode.callee &&
+                astNode.callee.type === "MemberExpression" &&
+                astNode.callee.property &&
+                astNode.callee.property.name === "map"
+              ) {
+                return true;
+              }
+              for (const key of Object.keys(astNode)) {
+                if (key === "parent") continue;
+                const child = astNode[key];
+                if (Array.isArray(child)) {
+                  if (child.some((c) => hasMapCall(c))) return true;
+                } else if (child && typeof child === "object" && child.type) {
+                  if (hasMapCall(child)) return true;
+                }
+              }
+              return false;
+            }
+
+            const propsWithMap = expr.properties.filter(
+              (p) => p.type === "Property" && hasMapCall(p.value),
+            );
+
+            if (propsWithMap.length > 0) {
+              context.report({ node: callExpr, messageId: "noTernaryMap" });
+            }
           },
         };
       },
