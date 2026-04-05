@@ -1,4 +1,17 @@
 {
+  "rules": {
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@shift/types/src/generated/*"],
+            "message": "Import from @shift/types, not from generated/ directly."
+          }
+        ]
+      }
+    ]
+  },
   "overrides": [
     {
       "files": ["src/**/*.test.ts", "src/renderer/src/testing/**/*.ts"],
