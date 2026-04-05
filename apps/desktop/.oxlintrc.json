@@ -10,6 +10,10 @@
           {
             "group": ["@shift/types/src/generated/*"],
             "message": "Import from @shift/types, not from generated/ directly."
+          },
+          {
+            "group": ["@/engine/native"],
+            "message": "Do not import getNative() directly. Use FontEngine instead."
           }
         ]
       }
