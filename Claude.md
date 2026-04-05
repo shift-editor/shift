@@ -167,6 +167,13 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - If a file grows beyond 300 lines, evaluate splitting by responsibility
 - Prefer composition over monolithic classes
 
+## Architectural Constraints
+
+- **NEVER create Manager, Store, or Cache wrapper classes.** FontEngine is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
+- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createFontEngine()` (real FontEngine). No `vi.fn()` stubs for engine methods.
+- **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
+- **NEVER import from `@/engine/native`.** Use `FontEngine` — `getNative()` is internal. Enforced by lint.
+
 ## Anti-Slop Rules
 
 These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.oxlintrc.json` lint rules.
