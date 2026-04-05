@@ -187,11 +187,6 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 
 ## Architecture References
 
-For detailed architecture docs, read these when working on the relevant area:
-
-- **Mutation tiers & NAPI boundary:** `docs/architecture/rust-ts-boundary.md`
-- **GlyphDraft pattern (Immer-inspired):** `docs/architecture/rust-ts-boundary.md` §4
-- **Code smells & tech debt:** `docs/architecture/code-smells.md`
 - **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments
 - **Tool structure & behavior system:** Read `lib/tools/core/BaseTool.ts`
 - **Command organization:** Read `lib/commands/core/Command.ts`
