@@ -14,15 +14,12 @@ import type { FontEngine } from "@/engine/FontEngine";
 import type { GlyphSnapshot } from "@shift/types";
 
 type CommandEditingMethods =
-  | "addPoint"
   | "addPointToContour"
   | "insertPointBefore"
   | "movePoints"
   | "movePointTo"
   | "setNodePositions"
   | "removePoints"
-  | "addContour"
-  | "removeContour"
   | "closeContour"
   | "openContour"
   | "getActiveContourId"

@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  AddBezierAnchorCommand,
-  CloseContourCommand,
-  AddContourCommand,
-  NudgePointsCommand,
-  SplitSegmentCommand,
-} from "./BezierCommands";
-import { createMockFontEngine, getAllPoints, getPointCount, getContourCount } from "@/testing";
+import { CloseContourCommand, NudgePointsCommand, SplitSegmentCommand } from "./BezierCommands";
+import { createMockFontEngine, getAllPoints, getPointCount } from "@/testing";
 import type { FontEngine } from "@/engine";
 import type { CommandContext } from "../core";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
@@ -21,84 +15,6 @@ function ctx(): CommandContext {
 beforeEach(() => {
   fontEngine = createMockFontEngine();
   fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
-});
-
-describe("AddBezierAnchorCommand", () => {
-  it("should add three points: anchor, leading, and trailing", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx());
-
-    expect(getPointCount(fontEngine.getGlyph())).toBe(3);
-  });
-
-  it("should add anchor as smooth onCurve point", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx());
-
-    const points = getAllPoints(fontEngine.getGlyph());
-    expect(points[0]!.x).toBe(100);
-    expect(points[0]!.y).toBe(100);
-    expect(points[0]!.pointType).toBe("onCurve");
-    expect(points[0]!.smooth).toBe(true);
-  });
-
-  it("should add leading control in drag direction", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
-
-    cmd.execute(ctx());
-
-    const points = getAllPoints(fontEngine.getGlyph());
-    expect(points[1]!.x).toBe(150);
-    expect(points[1]!.y).toBe(120);
-    expect(points[1]!.pointType).toBe("offCurve");
-  });
-
-  it("should add trailing control mirrored across anchor", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
-
-    cmd.execute(ctx());
-
-    const points = getAllPoints(fontEngine.getGlyph());
-    expect(points[2]!.x).toBe(50);
-    expect(points[2]!.y).toBe(80);
-    expect(points[2]!.pointType).toBe("offCurve");
-  });
-
-  it("should return the anchor point ID and store all IDs", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    const result = cmd.execute(ctx());
-
-    expect(result).toBeTruthy();
-    expect(cmd.anchorId).toBe(result);
-    expect(cmd.leadingId).toBeTruthy();
-    expect(cmd.trailingId).toBeTruthy();
-    expect(cmd.anchorId).not.toBe(cmd.leadingId);
-    expect(cmd.leadingId).not.toBe(cmd.trailingId);
-  });
-
-  it("should remove all three points on undo", () => {
-    fontEngine.addContour();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx());
-    expect(getPointCount(fontEngine.getGlyph())).toBe(3);
-
-    cmd.undo(ctx());
-    expect(getPointCount(fontEngine.getGlyph())).toBe(0);
-  });
-
-  it("should have the correct name", () => {
-    const cmd = new AddBezierAnchorCommand(0, 0, 10, 10);
-    expect(cmd.name).toBe("Add Bezier Anchor");
-  });
 });
 
 describe("CloseContourCommand", () => {
@@ -128,22 +44,6 @@ describe("CloseContourCommand", () => {
   it("should have the correct name", () => {
     const cmd = new CloseContourCommand();
     expect(cmd.name).toBe("Close Contour");
-  });
-});
-
-describe("AddContourCommand", () => {
-  it("should add a new contour", () => {
-    const cmd = new AddContourCommand();
-
-    const result = cmd.execute(ctx());
-
-    expect(result).toBeTruthy();
-    expect(getContourCount(fontEngine.getGlyph())).toBe(1);
-  });
-
-  it("should have the correct name", () => {
-    const cmd = new AddContourCommand();
-    expect(cmd.name).toBe("Add Contour");
   });
 });
 

@@ -9,12 +9,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "./CommandHistory";
-import {
-  AddPointCommand,
-  MovePointsCommand,
-  RemovePointsCommand,
-  NudgePointsCommand,
-} from "../primitives";
+import { AddPointCommand, NudgePointsCommand } from "../primitives";
 import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { PointId } from "@shift/types";
 
@@ -317,7 +312,7 @@ describe("batching", () => {
       expect(expectAt(points, 0).x).toBe(150);
 
       // Record the move command (already executed)
-      history.record(new MovePointsCommand([pointId], 50, 50));
+      history.record(new NudgePointsCommand([pointId], 50, 50));
 
       expect(history.undoCount.value).toBe(1);
 
@@ -341,7 +336,7 @@ describe("batching", () => {
       fontEngine.movePoints([pointId], { x: 10, y: 0 });
       fontEngine.movePoints([pointId], { x: 10, y: 0 });
       // Record single command for total movement
-      history.record(new MovePointsCommand([pointId], 30, 0));
+      history.record(new NudgePointsCommand([pointId], 30, 0));
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
@@ -395,7 +390,7 @@ describe("onDirty callback", () => {
     fontEngine.movePoints([pointId], { x: 50, y: 50 });
     expect(onDirtyCalled).toBe(0);
 
-    history.record(new MovePointsCommand([pointId], 50, 50));
+    history.record(new NudgePointsCommand([pointId], 50, 50));
     expect(onDirtyCalled).toBe(1);
   });
 
@@ -439,34 +434,6 @@ describe("Command integration with history", () => {
     fontEngine.addContour();
   });
 
-  describe("MovePointsCommand", () => {
-    it("should move points and undo returns them to original position", () => {
-      // Add a point first
-      const pointId = addPointToActiveContour(fontEngine, {
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      const originalPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(originalPoints, 0).x).toBe(100);
-      expect(expectAt(originalPoints, 0).y).toBe(200);
-
-      // Move the point
-      history.execute(new MovePointsCommand([pointId], 50, 50));
-      const movedPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(movedPoints, 0).x).toBe(150);
-      expect(expectAt(movedPoints, 0).y).toBe(250);
-
-      // Undo the move
-      history.undo();
-      const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(restoredPoints, 0).x).toBe(100);
-      expect(expectAt(restoredPoints, 0).y).toBe(200);
-    });
-  });
-
   describe("NudgePointsCommand", () => {
     it("should nudge points and undo returns them to original position", () => {
       const pointId = addPointToActiveContour(fontEngine, {
@@ -487,29 +454,6 @@ describe("Command integration with history", () => {
     });
   });
 
-  describe("RemovePointsCommand", () => {
-    it("should remove points and undo restores them", () => {
-      const pointId = addPointToActiveContour(fontEngine, {
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-
-      history.execute(new RemovePointsCommand([pointId]));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
-
-      // Note: undo may not restore exact point ID, but restores geometry
-      history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-      const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(restoredPoints, 0).x).toBe(100);
-      expect(expectAt(restoredPoints, 0).y).toBe(200);
-    });
-  });
-
   describe("Complex undo/redo sequences", () => {
     it("should handle move undo/redo on existing points", () => {
       // Add point directly (not through history)
@@ -523,7 +467,7 @@ describe("Command integration with history", () => {
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point through history
-      history.execute(new MovePointsCommand([pointId], 50, 50));
+      history.execute(new NudgePointsCommand([pointId], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(250);
@@ -558,30 +502,6 @@ describe("Command integration with history", () => {
       expect(expectAt(points, 0).y).toBe(200);
     });
 
-    it("should restore point at removed position when undoing remove", () => {
-      // Add and move a point
-      const pointId = addPointToActiveContour(fontEngine, {
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      fontEngine.movePoints([pointId], { x: 50, y: 50 });
-
-      // Now remove via command history
-      history.execute(new RemovePointsCommand([pointId]));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
-
-      // Undo remove - restores point at its position when it was removed
-      history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-      const points = getAllPoints(fontEngine.$glyph.value);
-      // Note: point is restored at 150,250 (where it was when removed)
-      expect(expectAt(points, 0).x).toBe(150);
-      expect(expectAt(points, 0).y).toBe(250);
-    });
-
     it("should handle multiple points with single command", () => {
       const p1 = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
@@ -599,7 +519,7 @@ describe("Command integration with history", () => {
       });
 
       // Move both points together
-      history.execute(new MovePointsCommand([p1, p2], 50, 50));
+      history.execute(new NudgePointsCommand([p1, p2], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(150);

@@ -58,96 +58,6 @@ export class InsertPointCommand extends BaseCommand<PointId> {
 }
 
 /**
- * Adds a smooth cubic anchor with symmetric leading and trailing off-curve
- * handles. The trailing handle is auto-reflected through the anchor so the
- * curve enters and exits smoothly. Returns the anchor's PointId; handle ids
- * are available via {@link anchorId}, {@link leadingId}, and {@link trailingId}.
- */
-export class AddBezierAnchorCommand extends BaseCommand<PointId> {
-  readonly name = "Add Bezier Anchor";
-
-  #anchorX: number;
-  #anchorY: number;
-  #leadingX: number;
-  #leadingY: number;
-
-  #trailingX: number;
-  #trailingY: number;
-
-  #anchorId: PointId | null = null;
-  #leadingId: PointId | null = null;
-  #trailingId: PointId | null = null;
-
-  constructor(anchorX: number, anchorY: number, leadingX: number, leadingY: number) {
-    super();
-    this.#anchorX = anchorX;
-    this.#anchorY = anchorY;
-    this.#leadingX = leadingX;
-    this.#leadingY = leadingY;
-
-    this.#trailingX = 2 * anchorX - leadingX;
-    this.#trailingY = 2 * anchorY - leadingY;
-  }
-
-  execute(ctx: CommandContext): PointId {
-    const contourId = ctx.fontEngine.getActiveContourId();
-    if (!contourId) {
-      throw new Error("No active contour");
-    }
-
-    this.#anchorId = ctx.fontEngine.addPointToContour(contourId, {
-      x: this.#anchorX,
-      y: this.#anchorY,
-      pointType: "onCurve",
-      smooth: true,
-    });
-
-    this.#leadingId = ctx.fontEngine.addPointToContour(contourId, {
-      x: this.#leadingX,
-      y: this.#leadingY,
-      pointType: "offCurve",
-      smooth: false,
-    });
-
-    this.#trailingId = ctx.fontEngine.addPointToContour(contourId, {
-      x: this.#trailingX,
-      y: this.#trailingY,
-      pointType: "offCurve",
-      smooth: false,
-    });
-
-    return this.#anchorId;
-  }
-
-  undo(ctx: CommandContext): void {
-    const toRemove: PointId[] = [];
-    if (this.#anchorId) toRemove.push(this.#anchorId);
-    if (this.#leadingId) toRemove.push(this.#leadingId);
-    if (this.#trailingId) toRemove.push(this.#trailingId);
-
-    if (toRemove.length > 0) {
-      ctx.fontEngine.removePoints(toRemove);
-    }
-  }
-
-  override redo(ctx: CommandContext): PointId {
-    return this.execute(ctx);
-  }
-
-  get anchorId(): PointId | null {
-    return this.#anchorId;
-  }
-
-  get leadingId(): PointId | null {
-    return this.#leadingId;
-  }
-
-  get trailingId(): PointId | null {
-    return this.#trailingId;
-  }
-}
-
-/**
  * Closes the active contour, connecting the last point back to the first.
  * No-ops if the contour is already closed. Undo reopens the contour only
  * if this command actually closed it.
@@ -183,36 +93,8 @@ export class CloseContourCommand extends BaseCommand<void> {
 }
 
 /**
- * Creates a new empty contour in the glyph and makes it active. Remembers
- * the previously active contour so undo can restore it after removing the
- * new one.
- */
-export class AddContourCommand extends BaseCommand<ContourId> {
-  readonly name = "Add Contour";
-
-  #newContourId: ContourId | null = null;
-  #previousActiveId: ContourId | null = null;
-
-  execute(ctx: CommandContext): ContourId {
-    this.#previousActiveId = ctx.fontEngine.getActiveContourId();
-    this.#newContourId = ctx.fontEngine.addContour();
-    return this.#newContourId;
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#newContourId) {
-      ctx.fontEngine.removeContour(this.#newContourId);
-    }
-    if (this.#previousActiveId) {
-      ctx.fontEngine.setActiveContour(this.#previousActiveId);
-    }
-  }
-}
-
-/**
  * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
- * Functionally identical to {@link MovePointsCommand} but carries its own
- * command name for distinct undo history labeling.
+ * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
  */
 export class NudgePointsCommand extends BaseCommand<void> {
   readonly name = "Nudge Points";
