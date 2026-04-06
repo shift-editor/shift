@@ -245,9 +245,10 @@ describe("interpolateGlyph", () => {
     expect(result!.contours[0].points[0].x).toBeCloseTo(150);
   });
 
-  it("filters incompatible masters and interpolates with compatible majority", () => {
-    const compatible1 = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const compatible2 = makeMaster("B", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
+  it("filters incompatible masters and interpolates with default-compatible set", () => {
+    // Default (A at wght=0) is compatible with B, but C has extra contour
+    const defaultMaster = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const compatible = makeMaster("B", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
     const incompatible: MasterSnapshot = {
       sourceId: "C",
       sourceName: "C",
@@ -258,14 +259,18 @@ describe("interpolateGlyph", () => {
       ),
     };
 
-    const result = interpolateGlyph([compatible1, incompatible, compatible2], axes, { wght: 500 });
+    const result = interpolateGlyph(
+      [defaultMaster, incompatible, compatible],
+      axes,
+      { wght: 500 },
+    );
 
     expect(result).not.toBeNull();
     expect(result!.contours[0].points[0].x).toBeCloseTo(100);
   });
 
-  it("uses directBlend when default master is the incompatible one", () => {
-    // Default (wght=0) has extra contour, others are compatible
+  it("returns default snapshot when default master is incompatible with others", () => {
+    // Default (wght=0) has extra contour — no compatible group includes the default
     const defaultMaster: MasterSnapshot = {
       sourceId: "Default",
       sourceName: "Default",
@@ -280,10 +285,8 @@ describe("interpolateGlyph", () => {
 
     const result = interpolateGlyph([defaultMaster, mid, bold], axes, { wght: 750 });
 
-    expect(result).not.toBeNull();
-    // Should interpolate between mid and bold via directBlend
-    expect(result!.contours[0].points[0].x).toBeGreaterThan(100);
-    expect(result!.contours[0].points[0].x).toBeLessThan(200);
+    // Default is the reference but incompatible with others → only default remains
+    expect(result).toBe(defaultMaster.snapshot);
   });
 
   it("returns default snapshot when all masters are incompatible with each other", () => {
