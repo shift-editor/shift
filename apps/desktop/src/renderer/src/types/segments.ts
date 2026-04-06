@@ -1,7 +1,5 @@
 import type { PointId } from "@shift/types";
 
-export type SegmentType = "line" | "quad" | "cubic";
-
 /**
  * Minimal point interface for segments.
  * Compatible with PointSnapshot from Rust.

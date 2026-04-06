@@ -2,7 +2,7 @@ import type { EditorAPI } from "./EditorAPI";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
 import type { DrawAPI } from "./DrawAPI";
-import type { Behavior } from "./Behavior";
+import type { Behavior, ToolContext } from "./Behavior";
 import { batch, computed, type ComputedSignal } from "../../reactive/signal";
 import type { CursorType } from "@/types/editor";
 
@@ -21,18 +21,16 @@ export type { ToolName, ToolState };
  * - `id` / `initialState()` — tool identity and starting state.
  * - `behaviors` — ordered list of {@link Behavior} objects.
  * - `preTransition()` — optional short-circuit before the behavior loop.
- * - `executeAction()` — optional handler for action side effects.
  * - `onStateChange()` — optional hook after every committed transition.
  * - `render()` / `renderBelowHandles()` — per-frame drawing on the overlay.
  *
  * @typeParam S - The tool's state union (must extend `ToolState`).
- * @typeParam A - Action type emitted by behaviors. `never` for action-free tools.
  * @typeParam Settings - Optional per-tool settings object.
  */
-export abstract class BaseTool<S extends ToolState, A = never, Settings = Record<string, never>> {
+export abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
   abstract readonly id: ToolName;
   /** Ordered behavior list -- first match wins on each event. */
-  abstract readonly behaviors: Behavior<S, ToolEvent, A>[];
+  abstract readonly behaviors: Behavior<S>[];
   readonly $cursor: ComputedSignal<CursorType>;
   state: S;
   /** @knipclassignore */
@@ -46,10 +44,12 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
     this.$cursor = computed(() => this.getCursor(this.editor.getActiveToolState() as S));
   }
 
-  getCursor(_state: S): CursorType {
+  getCursor(state: S): CursorType {
+    void state;
     return { type: "default" };
   }
 
+  /** @knipclassignore */
   get name(): ToolName {
     return this.id;
   }
@@ -60,10 +60,9 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
     return {} as Settings;
   }
 
-  /** Return a {@link TransitionResult} to short-circuit the behavior loop, or null to continue. */
-  protected preTransition?(_state: S, _event: ToolEvent): { state: S; action?: A } | null;
-  protected executeAction?(_action: A, _prev: S, _next: S): void;
-  protected onStateChange?(_prev: S, _next: S, _event: ToolEvent): void;
+  /** Return a state to short-circuit the behavior loop, or null to continue. */
+  protected preTransition?(state: S, event: ToolEvent): { state: S } | null;
+  protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
   /** Draw tool-specific overlays above handles (e.g. pen preview segments). */
   render?(draw: DrawAPI): void;
@@ -73,80 +72,43 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
   activate?(): void;
   deactivate?(): void;
 
-  /**
-   * Run the behavior loop: try `preTransition`, then each behavior in order.
-   * Returns the next state (may be the same reference if nothing matched).
-   * Stashes any emitted action in `#pendingAction` for `onTransition`.
-   */
   transition(state: S, event: ToolEvent): S {
-    this.#lastTransitionHandled = false;
-    this.#pendingAction = null;
-
-    if (state.type === "idle") {
-      return state;
-    }
-
-    if (this.preTransition) {
-      const result = this.preTransition(state, event);
-      if (result !== null) {
-        this.#lastTransitionHandled = true;
-        this.#pendingAction = result.action ?? null;
-        return result.state;
-      }
-    }
-
-    for (const behavior of this.behaviors) {
-      if (behavior.canHandle(state, event)) {
-        const result = behavior.transition(state, event, this.editor);
-        if (result !== null) {
-          this.#lastTransitionHandled = true;
-          this.#pendingAction = result.action ?? null;
-          return result.state;
-        }
-      }
-    }
-
-    return state;
+    return this.#runBehaviors(state, event).state;
   }
 
-  #pendingAction: A | null = null;
-  #lastTransitionHandled = false;
-
-  /**
-   * Post-transition hook: executes the pending action (if any), then notifies
-   * each behavior and calls `onStateChange`. Runs inside the same `batch` as
-   * the state update.
-   */
-  onTransition(prev: S, next: S, event: ToolEvent): void {
-    if (this.#pendingAction && this.executeAction) {
-      this.executeAction(this.#pendingAction, prev, next);
-    }
-
-    for (const behavior of this.behaviors) {
-      behavior.onTransition?.(prev, next, event, this.editor);
-    }
-
-    this.onStateChange?.(prev, next, event);
-  }
-
-  /**
-   * Main entry point called by ToolManager on every gesture event.
-   * Runs transition, and if the state changed, commits it in a reactive batch.
-   */
   handleEvent(event: ToolEvent): boolean {
     const prev = this.state;
-    const next = this.transition(this.state, event);
-    const handled = this.#lastTransitionHandled;
+    const result = this.#runBehaviors(prev, event);
+    const next = result.state;
 
     if (next !== prev) {
       batch(() => {
+        const preCommitContext = this.#createContext(
+          () => prev,
+          () => {},
+        );
+        for (const behavior of this.behaviors) {
+          if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
+        }
+
         this.state = next;
         this.editor.setActiveToolState(next);
-        this.onTransition(prev, next, event);
+
+        const postCommitContext = this.#createContext(
+          () => this.state,
+          (nextState: S) => {
+            this.state = nextState;
+          },
+        );
+        for (const behavior of this.behaviors) {
+          if (behavior.onStateEnter) behavior.onStateEnter(prev, next, postCommitContext, event);
+        }
+
+        if (this.onStateChange) this.onStateChange(prev, next, event);
       });
     }
 
-    return handled;
+    return result.handled;
   }
 
   getState(): S {
@@ -155,14 +117,93 @@ export abstract class BaseTool<S extends ToolState, A = never, Settings = Record
 
   /** Execute `fn` inside a named command batch. Automatically rolls back on exception. */
   protected batch<T>(name: string, fn: () => T): T {
-    this.editor.commands.beginBatch(name);
-    try {
-      const result = fn();
-      this.editor.commands.endBatch();
-      return result;
-    } catch (err) {
-      this.editor.commands.cancelBatch();
-      throw err;
+    return this.editor.commands.withBatch(name, fn);
+  }
+
+  #runBehaviors(state: S, event: ToolEvent): { state: S; handled: boolean } {
+    if (state.type === "idle") {
+      return { state, handled: false };
+    }
+
+    if (this.preTransition) {
+      const result = this.preTransition(state, event);
+      if (result !== null) {
+        return { state: result.state, handled: true };
+      }
+    }
+
+    let nextState = state;
+    const dispatchContext = this.#createContext(
+      () => nextState,
+      (next: S) => {
+        nextState = next;
+      },
+    );
+
+    for (const behavior of this.behaviors) {
+      const handler = this.#getEventHandler(behavior, event.type);
+      if (handler) {
+        const handled = handler.call(behavior, nextState, dispatchContext, event as never);
+        if (handled) {
+          return { state: nextState, handled: true };
+        }
+      }
+    }
+
+    return { state: nextState, handled: false };
+  }
+
+  #createContext(getState: () => S, setState: (next: S) => void): ToolContext<S> {
+    return {
+      editor: this.editor,
+      getState,
+      setState,
+    };
+  }
+
+  #getEventHandler(
+    behavior: Behavior<S>,
+    type: ToolEvent["type"],
+  ): ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined) | undefined {
+    switch (type) {
+      case "pointerMove":
+        return behavior.onPointerMove as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "click":
+        return behavior.onClick as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "doubleClick":
+        return behavior.onDoubleClick as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "dragStart":
+        return behavior.onDragStart as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "drag":
+        return behavior.onDrag as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "dragEnd":
+        return behavior.onDragEnd as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "dragCancel":
+        return behavior.onDragCancel as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "keyDown":
+        return behavior.onKeyDown as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      case "keyUp":
+        return behavior.onKeyUp as
+          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | undefined;
+      default:
+        return undefined;
     }
   }
 }

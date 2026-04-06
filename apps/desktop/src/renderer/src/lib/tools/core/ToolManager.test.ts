@@ -1,15 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { FC, SVGProps } from "react";
 import { ToolManager } from "./ToolManager";
-import { createTestEditor, expectDefined, type TestEditor } from "@/testing";
-import { Hand } from "../hand/Hand";
-import { Select } from "../select/Select";
-import { Pen } from "../pen/Pen";
-import TextTool from "../text/Text";
-import type { ToolName } from "./createContext";
+import { TestEditor } from "@/testing";
 import type { Modifiers } from "./GestureDetector";
-
-const MockIcon = (() => null) as FC<SVGProps<SVGSVGElement>>;
 
 type KeyboardEventOptions = Partial<
   Pick<KeyboardEvent, "code" | "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">
@@ -47,50 +39,16 @@ describe("ToolManager", () => {
   let editor: TestEditor;
 
   beforeEach(() => {
-    editor = createTestEditor();
-    toolManager = new ToolManager(editor);
-    editor.requestTemporaryTool = (
-      toolId: ToolName,
-      options?: { onActivate?: () => void; onReturn?: () => void },
-    ) => toolManager.requestTemporary(toolId, options);
-    editor.returnFromTemporaryTool = () => toolManager.returnFromTemporary();
-    toolManager.register({
-      id: "hand",
-      create: (api) => new Hand(api),
-      icon: MockIcon,
-      tooltip: "Hand",
-    });
-    toolManager.register({
-      id: "select",
-      create: (api) => new Select(api),
-      icon: MockIcon,
-      tooltip: "Select",
-    });
-    toolManager.register({
-      id: "pen",
-      create: (api) => new Pen(api),
-      icon: MockIcon,
-      tooltip: "Pen",
-    });
-    toolManager.register({
-      id: "text",
-      create: (api) => new TextTool(api),
-      icon: MockIcon,
-      tooltip: "Text",
-    });
+    editor = new TestEditor();
+    toolManager = editor.toolManager;
   });
 
   describe("keyboard delegation", () => {
     it("does not switch tools on space keydown by itself", () => {
       toolManager.activate("pen");
-      expectDefined(
-        editor.mocks.render.mocks.setPreviewMode,
-        "render.setPreviewMode mock",
-      ).mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
 
-      expect(editor.mocks.render.setPreviewMode).not.toHaveBeenCalledWith(true);
       expect(toolManager.activeToolId).toBe("pen");
     });
 
@@ -105,7 +63,6 @@ describe("ToolManager", () => {
   describe("meta key behavior (zoom support)", () => {
     it("should NOT switch to select tool when meta key is pressed", () => {
       toolManager.activate("pen");
-      expectDefined(editor.mocks.cursor.mocks.set, "cursor.set mock").mockClear();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
 
@@ -123,12 +80,12 @@ describe("ToolManager", () => {
 
     it("should not interfere with zoom operations", () => {
       toolManager.activate("pen");
-      const initialCursor = editor.getCursorValue();
+      const initialCursor = editor.getCursor();
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Meta" }));
 
-      expect(editor.getCursorValue()).toBe(initialCursor);
+      expect(editor.getCursor()).toBe(initialCursor);
       expect(toolManager.activeToolId).toBe("pen");
     });
   });
@@ -211,8 +168,8 @@ describe("ToolManager", () => {
     });
   });
 
-  describe("pipeline (pointer → gesture → tool)", () => {
-    const modifiers = { shiftKey: false, altKey: false };
+  describe("pipeline (pointer -> gesture -> tool)", () => {
+    const modifiers = { shiftKey: false, altKey: false, metaKey: false };
 
     it("tap (down then up at same point) drives tool with click and leaves activeToolState defined", () => {
       toolManager.activate("select");
@@ -221,7 +178,7 @@ describe("ToolManager", () => {
       toolManager.handlePointerUp({ x: 100, y: 100 });
 
       expect(toolManager.activeToolId).toBe("select");
-      const lastState = (editor.activeToolState as { value: unknown }).value;
+      const lastState = editor.getActiveToolState();
       expect(lastState).toBeDefined();
       expect(typeof (lastState as { type?: string })?.type).toBe("string");
     });
@@ -239,9 +196,7 @@ describe("ToolManager", () => {
         toolManager.handlePointerUp({ x: 120, y: 100 });
 
         expect(toolManager.isDragging).toBe(false);
-        const lastState = (editor.activeToolState as { value: unknown }).value as {
-          type?: string;
-        };
+        const lastState = editor.getActiveToolState() as { type?: string };
         expect(lastState?.type).toBe("ready");
       } finally {
         vi.stubGlobal("requestAnimationFrame", originalRAF);
@@ -311,7 +266,7 @@ describe("ToolManager", () => {
       });
       try {
         toolManager.activate("select");
-        const mods: Modifiers = { shiftKey: true, altKey: true };
+        const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
 
         toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
 

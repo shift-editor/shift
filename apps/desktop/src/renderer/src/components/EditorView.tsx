@@ -3,8 +3,6 @@ import { FC, useEffect, useRef, useState } from "react";
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
-import { glyphDataStore } from "@/store/GlyphDataStore";
-
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { OverlayScene } from "./OverlayScene";
@@ -53,7 +51,6 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     return () => {
       toolManager.reset();
-      glyphDataStore.invalidateGlyph(unicode);
       editor.endEditSession();
     };
   }, [glyphId]);
@@ -75,7 +72,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       } else {
         const currentPan = editor.pan;
         const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
-        editor.setPan(newPan.x, newPan.y);
+        editor.setPan(newPan);
 
         toolManager.handlePointerMove(
           screenPos,
@@ -84,7 +81,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
             altKey: e.altKey,
             metaKey: e.metaKey,
           },
-          { force: true },
+          { force: true, skipHover: true },
         );
         editor.requestRedraw();
       }

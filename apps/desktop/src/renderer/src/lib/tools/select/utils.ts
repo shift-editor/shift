@@ -1,7 +1,5 @@
-import type { Point2D, PointId, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
-import type { EditorAPI } from "../core/EditorAPI";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
 
 export function normalizeRect(start: Point2D, current: Point2D): Rect2D {
   const min = Vec2.min(start, current);
@@ -20,27 +18,4 @@ export function normalizeRect(start: Point2D, current: Point2D): Rect2D {
 
 export function pointInRect(p: Point2D, rect: Rect2D): boolean {
   return p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
-}
-
-export function cacheSelectedPositions(editor: EditorAPI): Map<PointId, Point2D> {
-  const positions = new Map<PointId, Point2D>();
-  for (const p of editor.getAllPoints()) {
-    if (editor.isPointSelected(p.id as PointId)) {
-      positions.set(p.id as PointId, { x: p.x, y: p.y });
-    }
-  }
-  return positions;
-}
-
-export function restoreCachedPointPositions(
-  editor: EditorAPI,
-  positions: ReadonlyMap<PointId, Point2D>,
-): void {
-  if (positions.size === 0) return;
-
-  const updates: NodePositionUpdate[] = [];
-  for (const [id, point] of positions) {
-    updates.push({ node: { kind: "point", id }, x: point.x, y: point.y });
-  }
-  editor.setNodePositions(updates);
 }

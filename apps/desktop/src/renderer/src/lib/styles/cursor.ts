@@ -30,6 +30,8 @@ export function cursorToCSS(cursor: CursorType): string {
       return `-webkit-image-set(url("/cursors/rotate@32-bl.svg") 1x, url("/cursors/rotate@64-bl.svg") 2x) 16 16, grab`;
     case "rotate-br":
       return `-webkit-image-set(url("/cursors/rotate@32-br.svg") 1x, url("/cursors/rotate@64-br.svg") 2x) 16 16, grab`;
+    case "text":
+      return "text";
     default:
       return cursor.type;
   }

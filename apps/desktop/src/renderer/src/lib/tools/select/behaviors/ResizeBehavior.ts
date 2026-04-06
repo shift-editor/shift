@@ -1,150 +1,128 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { Glyph, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import { Glyphs } from "@shift/font";
+import type { ToolContext } from "../../core/Behavior";
+import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
-import { cacheSelectedPositions, restoreCachedPointPositions } from "../utils";
-import type { NodePositionUpdate } from "@/types/positionUpdate";
+import type { GlyphDraft } from "@/engine/draft";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
-export class ResizeBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (state.type === "resizing") {
-      return event.type === "drag" || event.type === "dragEnd" || event.type === "dragCancel";
-    }
-    if (state.type === "selected" && event.type === "dragStart") {
-      return true;
-    }
-    return false;
-  }
+export class ResizeBehavior implements SelectHandlerBehavior {
+  #draft: GlyphDraft | null = null;
+  #target: DragTarget | null = null;
+  #origin: Point2D | null = null;
 
-  transition(
+  onDragStart(
     state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (state.type === "resizing") {
-      return this.transitionResizing(state, event, editor);
-    }
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean {
+    if (state.type !== "selected") return false;
 
-    if (state.type === "selected" && event.type === "dragStart") {
-      return this.tryStartResize(state, event, editor);
-    }
+    const next = this.tryStartResize(event, ctx.editor);
+    if (!next) return false;
 
-    return null;
+    ctx.setState(next);
+    return true;
   }
 
-  onTransition(prev: SelectState, next: SelectState, _event: ToolEvent, editor: EditorAPI): void {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+    if (state.type !== "resizing") return false;
+    if (!this.#draft || !this.#target || !this.#origin) return false;
+
+    const next = this.nextResizingState(state, event);
+    ctx.setState(next);
+    return true;
+  }
+
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "resizing") return false;
+    this.#draft?.finish("Scale Points");
+    this.#cleanup();
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+    if (state.type !== "resizing") return false;
+    this.#draft?.discard();
+    this.#cleanup();
+    ctx.setState({ type: "selected" });
+    return true;
+  }
+
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+    const editor = ctx.editor;
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.clearHover();
     }
   }
 
-  private transitionResizing(
-    state: SelectState & { type: "resizing" },
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> {
-    if (event.type === "drag") {
-      const uniformScale = event.shiftKey;
-      const currentPos = event.coords.glyphLocal;
-      const { sx, sy } = this.calculateScaleFactors(
-        state.resize.edge,
-        currentPos,
-        state.resize.anchorPoint,
-        state.resize.initialBounds,
-        uniformScale,
-      );
-
-      const updates: NodePositionUpdate[] = [];
-      for (const [id, initialPos] of state.resize.initialPositions) {
-        const anchor = state.resize.anchorPoint;
-        const offset = Vec2.sub(initialPos, anchor);
-        const scaled = Vec2.mul(offset, { x: sx, y: sy });
-        const newPos = Vec2.add(anchor, scaled);
-        updates.push({ node: { kind: "point", id }, x: newPos.x, y: newPos.y });
-      }
-      editor.setNodePositions(updates);
-
-      return {
-        state: {
-          type: "resizing",
-          resize: {
-            ...state.resize,
-            lastPos: currentPos,
-            uniformScale,
-          },
-        },
-      };
-    }
-
-    if (event.type === "dragEnd") {
-      const { edge, lastPos, anchorPoint, initialBounds, uniformScale } = state.resize;
-      const { sx, sy } = this.calculateScaleFactors(
-        edge,
-        lastPos,
-        anchorPoint,
-        initialBounds,
-        uniformScale,
-      );
-      restoreCachedPointPositions(editor, state.resize.initialPositions);
-
-      return {
-        state: { type: "selected" },
-        action: {
-          type: "scalePoints",
-          pointIds: state.resize.draggedPointIds,
-          sx,
-          sy,
-          anchor: state.resize.anchorPoint,
-        },
-      };
-    }
-
-    if (event.type === "dragCancel") {
-      restoreCachedPointPositions(editor, state.resize.initialPositions);
-      return {
-        state: { type: "selected" },
-      };
-    }
-
-    return { state };
+  #cleanup(): void {
+    this.#draft = null;
+    this.#target = null;
+    this.#origin = null;
   }
 
-  private tryStartResize(
-    _state: SelectState & { type: "selected" },
-    event: ToolEvent & { type: "dragStart" },
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
+  private nextResizingState(state: SelectState, event: ToolEventOf<"drag">): SelectState {
+    if (state.type !== "resizing") return state;
+
+    const uniformScale = event.shiftKey;
+    const currentPos = event.coords.glyphLocal;
+    const { sx, sy } = this.calculateScaleFactors(
+      state.resize.edge,
+      currentPos,
+      state.resize.anchorPoint,
+      state.resize.initialBounds,
+      uniformScale,
+    );
+
+    const updates = buildResizeUpdates(this.#draft!.base, this.#target!, this.#origin!, sx, sy);
+    this.#draft!.setPositions(updates);
+
+    return {
+      type: "resizing",
+      resize: {
+        ...state.resize,
+        lastPos: currentPos,
+        uniformScale,
+      },
+    };
+  }
+
+  private tryStartResize(event: ToolEventOf<"dragStart">, editor: EditorAPI): SelectState | null {
     const point = editor.getPointAt(event.coords);
     if (point) return null;
 
     const bbHit = editor.hitTestBoundingBoxAt(event.coords);
-    const edge: BoundingRectEdge = bbHit?.type === "resize" ? bbHit.edge : null;
+    if (!bbHit) return null;
+
+    const edge: BoundingRectEdge = bbHit.type === "resize" ? bbHit.edge : null;
     const bounds = editor.getSelectionBoundingRect();
 
     if (!edge || !bounds) return null;
 
     const localPoint = event.coords.glyphLocal;
     const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-    const draggedPointIds = [...editor.getSelectedPoints()];
-    const initialPositions = cacheSelectedPositions(editor);
+
+    this.#draft = editor.createDraft();
+    this.#target = {
+      pointIds: editor.getSelectedPoints(),
+      anchorIds: editor.getSelectedAnchors(),
+    };
+    this.#origin = anchorPoint;
 
     return {
-      state: {
-        type: "resizing",
-        resize: {
-          edge,
-          startPos: localPoint,
-          lastPos: localPoint,
-          initialBounds: bounds,
-          anchorPoint,
-          draggedPointIds,
-          initialPositions,
-          uniformScale: false,
-        },
+      type: "resizing",
+      resize: {
+        edge,
+        startPos: localPoint,
+        lastPos: localPoint,
+        initialBounds: bounds,
+        anchorPoint,
+        uniformScale: false,
       },
     };
   }
@@ -233,4 +211,44 @@ export class ResizeBehavior implements SelectBehavior {
 
     return { sx, sy };
   }
+}
+
+function scaleAround(point: Point2D, origin: Point2D, scaleX: number, scaleY: number): Point2D {
+  const offset = Vec2.sub(point, origin);
+  return Vec2.add(origin, {
+    x: offset.x * scaleX,
+    y: offset.y * scaleY,
+  });
+}
+
+function buildResizeUpdates(
+  base: Glyph,
+  target: DragTarget,
+  origin: Point2D,
+  scaleX: number,
+  scaleY: number,
+): NodePositionUpdateList {
+  const updates: Array<NodePositionUpdateList[number]> = [];
+
+  for (const point of Glyphs.findPoints(base, target.pointIds)) {
+    const next = scaleAround(point, origin, scaleX, scaleY);
+    updates.push({
+      node: { kind: "point", id: point.id },
+      x: next.x,
+      y: next.y,
+    });
+  }
+
+  for (const anchorId of target.anchorIds) {
+    const anchor = base.anchors.find((item) => item.id === anchorId);
+    if (!anchor) continue;
+    const next = scaleAround(anchor, origin, scaleX, scaleY);
+    updates.push({
+      node: { kind: "anchor", id: anchorId },
+      x: next.x,
+      y: next.y,
+    });
+  }
+
+  return updates;
 }

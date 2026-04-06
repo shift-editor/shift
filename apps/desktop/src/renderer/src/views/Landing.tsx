@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";
-import { glyphDataStore } from "@/store/GlyphDataStore";
 import { documentPersistence } from "@/persistence";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
@@ -32,7 +31,7 @@ export const Landing = () => {
     editor.setMainGlyphUnicode(65);
     editor.startEditSession(glyphRef);
     editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
-    glyphDataStore.onFontUnloaded();
+    editor.fontEngine.resetFontMetadata();
     setFilePath(null);
     clearDirty();
     documentPersistence.closeDocument();

@@ -251,7 +251,7 @@ export class DocumentStatePersistence {
   private hydrateModule(module: PersistenceModule, envelope?: PersistedModuleEnvelope): void {
     if (!this.#editor) return;
     if (!envelope) {
-      module.clear?.({ editor: this.#editor });
+      if (module.clear) module.clear({ editor: this.#editor });
       return;
     }
 

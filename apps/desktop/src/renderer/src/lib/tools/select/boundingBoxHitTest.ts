@@ -7,7 +7,8 @@ type YAxisDirection = "up" | "down";
 export const BOUNDING_BOX_MIN_VISIBLE_ZOOM = 0.15;
 
 export function isBoundingBoxVisibleAtZoom(zoom: number): boolean {
-  return zoom > BOUNDING_BOX_MIN_VISIBLE_ZOOM;
+  void zoom;
+  return true;
 }
 
 export interface HandlePositions {

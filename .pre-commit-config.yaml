@@ -9,9 +9,38 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
 
+  # Slop detection
+  - repo: local
+    hooks:
+      - id: no-empty-files
+        name: no empty files
+        entry: "bash -c 'for f in \"$@\"; do if [ -f \"$f\" ] && [ ! -s \"$f\" ]; then echo \"Empty file: $f\"; exit 1; fi; done'"
+        language: system
+        types_or: [javascript, jsx, ts, tsx, rust, css, json]
+
+      - id: no-console-log
+        name: no console.log in production code
+        entry: "bash -c 'for f in \"$@\"; do case \"$f\" in *.test.*|*/testing/*) continue;; esac; if grep -n \"^\\s*console\\.log\\b\" \"$f\" >/dev/null 2>&1; then echo \"$f has console.log:\"; grep -n \"^\\s*console\\.log\\b\" \"$f\"; exit 1; fi; done'"
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+
   # Rust hooks
   - repo: local
     hooks:
+      - id: napi-dead-methods
+        name: napi dead methods
+        entry: ./scripts/check-napi-dead-methods.sh
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-check-tests
+        name: cargo check (including tests)
+        entry: bash -c 'cargo check --package shift-node --tests'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --

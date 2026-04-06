@@ -1,33 +1,25 @@
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import type { ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 import { getPointIdFromHit } from "@/types/hitResult";
+import { Validate } from "@shift/validation";
 
-export class ToggleSmoothBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    return (state.type === "ready" || state.type === "selected") && event.type === "doubleClick";
-  }
-
-  transition(
+export class ToggleSmoothBehavior implements SelectHandlerBehavior {
+  onDoubleClick(
     state: SelectState,
-    event: ToolEvent,
-    editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (event.type !== "doubleClick") return null;
-    if (state.type !== "ready" && state.type !== "selected") return null;
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"doubleClick">,
+  ): boolean {
+    if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = editor.getNodeAt(event.coords);
+    const hit = ctx.editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
-    if (pointId === null) return null;
+    if (pointId === null) return false;
 
-    const point = editor.getAllPoints().find((p) => p.id === pointId);
-    if (!point || point.pointType !== "onCurve") return null;
+    const point = ctx.editor.getAllPoints().find((p) => p.id === pointId);
+    if (!point || !Validate.isOnCurve(point)) return false;
 
-    return {
-      state: { ...state },
-      action: { type: "toggleSmooth", pointId },
-    };
+    ctx.editor.toggleSmooth(pointId);
+    return true;
   }
 }

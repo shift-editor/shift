@@ -149,15 +149,18 @@ impl FontEngine {
   #[napi]
   pub fn save_font(&mut self, path: String) -> Result<()> {
     let backup = self.apply_edits_for_save();
-
-    let result = self
-      .font_loader
-      .write_font(&self.font, &path)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")));
-
+    let font = self.font.clone();
     self.restore_from_backup(backup);
+    self
+      .font_loader
+      .write_font(&font, &path)
+      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    Ok(())
+  }
 
-    result
+  #[napi]
+  pub fn get_glyph_count(&self) -> u32 {
+    self.font.glyph_count() as u32
   }
 
   #[napi(ts_return_type = "Promise<void>")]
@@ -353,11 +356,6 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn get_glyph_count(&self) -> u32 {
-    self.font.glyph_count() as u32
-  }
-
-  #[napi]
   pub fn get_glyph_unicodes(&self) -> Vec<u32> {
     let mut unicodes: Vec<u32> = self
       .font
@@ -373,43 +371,6 @@ impl FontEngine {
   #[napi]
   pub fn get_glyph_name_for_unicode(&self, unicode: u32) -> Option<String> {
     self.glyph_name_for_unicode(unicode)
-  }
-
-  #[napi]
-  pub fn get_glyph_unicodes_for_name(&self, glyph_name: String) -> Vec<u32> {
-    if let Some(session) = &self.current_edit_session {
-      if session.glyph_name() == glyph_name {
-        if let Some(glyph) = self.editing_glyph.as_ref() {
-          return glyph.unicodes().to_vec();
-        }
-      }
-    }
-
-    self
-      .font
-      .glyph(&glyph_name)
-      .map(|glyph| glyph.unicodes().to_vec())
-      .unwrap_or_default()
-  }
-
-  #[napi]
-  /// Returns all Unicode codepoints whose glyphs depend on `unicode` via
-  /// component relationships (transitively).
-  pub fn get_dependent_unicodes(&self, unicode: u32) -> Vec<u32> {
-    let Some(glyph_name) = self.glyph_name_for_unicode(unicode) else {
-      return Vec::new();
-    };
-
-    let dependent_names = self.dependency_graph.dependents_recursive(&glyph_name);
-    let mut unicodes = HashSet::new();
-
-    for dependent_name in dependent_names {
-      self.collect_unicodes_for_glyph_name(&dependent_name, &mut unicodes);
-    }
-
-    let mut sorted: Vec<u32> = unicodes.into_iter().collect();
-    sorted.sort_unstable();
-    sorted
   }
 
   #[napi]
@@ -717,13 +678,7 @@ impl FontEngine {
       .map(|s| s.glyph_name().to_string())
   }
 
-  pub fn add_empty_contour(&mut self) -> Result<String> {
-    let edit_session = self.get_edit_session()?;
-    let contour_id = edit_session.add_empty_contour();
-    Ok(contour_id.to_string())
-  }
-
-  #[napi]
+  #[napi(ts_return_type = "ContourId | null")]
   pub fn get_active_contour_id(&mut self) -> Result<Option<String>> {
     let edit_session = self.get_edit_session()?;
     Ok(edit_session.active_contour_id().map(|id| id.to_string()))
@@ -923,21 +878,6 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn remove_contour(&mut self, contour_id: String) -> Result<String> {
-    let cid = parse_or_err!(contour_id, ContourId, "contour ID");
-    self.command_simple(|s| {
-      s.remove_contour(cid);
-    })
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // LIGHTWEIGHT DRAG OPERATIONS (no snapshot return)
-  // ═══════════════════════════════════════════════════════════
-
-  /// Set node positions directly — fire-and-forget for drag operations.
-  /// Returns true on success, false if no edit session is active.
-  /// Does NOT return a snapshot — use get_snapshot_data() when needed.
-  #[napi]
   pub fn set_node_positions(&mut self, moves: Vec<JsNodePositionUpdate>) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
@@ -954,31 +894,6 @@ impl FontEngine {
         x: m.x,
         y: m.y,
       });
-    }
-
-    if updates.is_empty() {
-      return Ok(true);
-    }
-
-    Ok(session.set_node_positions(&updates))
-  }
-
-  // Backward-compatible wrapper for already-generated callers inside the app bundle.
-  #[napi]
-  pub fn set_point_positions(&mut self, moves: Vec<JsPointMove>) -> Result<bool> {
-    let Some(session) = self.current_edit_session.as_mut() else {
-      return Ok(false);
-    };
-
-    let mut updates = Vec::new();
-    for m in moves {
-      if let Ok(point_id) = m.id.parse::<PointId>() {
-        updates.push(NodePositionUpdate {
-          node: NodeRef::Point(point_id),
-          x: m.x,
-          y: m.y,
-        });
-      }
     }
 
     if updates.is_empty() {
@@ -1013,6 +928,7 @@ impl FontEngine {
 /// Tagged node reference for node-based drag/edit operations.
 #[napi(object)]
 pub struct JsNodeRef {
+  #[napi(ts_type = "'point' | 'anchor' | 'guideline'")]
   pub kind: String,
   pub id: String,
 }
@@ -1021,14 +937,6 @@ pub struct JsNodeRef {
 #[napi(object)]
 pub struct JsNodePositionUpdate {
   pub node: JsNodeRef,
-  pub x: f64,
-  pub y: f64,
-}
-
-/// Input type for set_point_positions - a single point move.
-#[napi(object)]
-pub struct JsPointMove {
-  pub id: String,
   pub x: f64,
   pub y: f64,
 }
@@ -1117,7 +1025,7 @@ mod tests {
       })
       .unwrap();
 
-    let contour_id = engine.add_empty_contour().unwrap();
+    let contour_id = engine.add_contour().unwrap();
     assert!(!contour_id.is_empty());
 
     let active = engine.get_active_contour_id().unwrap();
@@ -1181,7 +1089,7 @@ mod tests {
       })
       .unwrap();
 
-    let dependents = engine.get_dependent_unicodes(65);
+    let dependents = engine.get_dependent_unicodes_by_name("A".to_string());
     assert!(
       dependents.contains(&0x00C1),
       "Expected U+00C1 (Aacute) to depend on U+0041 (A), got {dependents:?}"

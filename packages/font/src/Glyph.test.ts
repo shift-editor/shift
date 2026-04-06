@@ -54,11 +54,11 @@ describe("Glyphs", () => {
 
   describe("findContour", () => {
     it("finds a contour by ID", () => {
-      expect(Glyphs.findContour(glyph, "c1")).toBe(c1);
+      expect(Glyphs.findContour(glyph, "c1" as ContourId)).toBe(c1);
     });
 
     it("returns undefined for unknown ID", () => {
-      expect(Glyphs.findContour(glyph, "unknown")).toBeUndefined();
+      expect(Glyphs.findContour(glyph, "unknown" as ContourId)).toBeUndefined();
     });
   });
 

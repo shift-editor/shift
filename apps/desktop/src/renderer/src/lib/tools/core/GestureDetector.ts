@@ -26,8 +26,15 @@ export type ToolKey = "Escape" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "Arrow
  */
 export type ToolEvent =
   | { type: "pointerMove"; point: Point2D; coords: Coordinates }
-  | { type: "click"; point: Point2D; coords: Coordinates; shiftKey: boolean; altKey: boolean }
-  | { type: "doubleClick"; point: Point2D; coords: Coordinates }
+  | {
+      type: "click";
+      point: Point2D;
+      coords: Coordinates;
+      shiftKey: boolean;
+      altKey: boolean;
+      metaKey?: boolean;
+    }
+  | { type: "doubleClick"; point: Point2D; coords: Coordinates; metaKey?: boolean }
   | {
       type: "dragStart";
       point: Point2D;
@@ -35,6 +42,7 @@ export type ToolEvent =
       screenPoint: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey?: boolean;
     }
   | {
       type: "drag";
@@ -47,6 +55,7 @@ export type ToolEvent =
       screenDelta: Point2D;
       shiftKey: boolean;
       altKey: boolean;
+      metaKey?: boolean;
     }
   | {
       type: "dragEnd";
@@ -90,6 +99,8 @@ export interface GestureDetectorConfig {
   /** Maximum screen-pixel drift between clicks to count as a double-click. */
   doubleClickDistance?: number;
 }
+
+export type ToolEventOf<TType extends ToolEvent["type"]> = Extract<ToolEvent, { type: TType }>;
 
 const DEFAULT_CONFIG: Required<GestureDetectorConfig> = {
   dragThreshold: 3,
@@ -161,6 +172,7 @@ export class GestureDetector {
           screenPoint: this.downScreenPoint,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
+          metaKey: this.downModifiers.metaKey ?? false,
         },
       ];
     }
@@ -184,6 +196,7 @@ export class GestureDetector {
           },
           shiftKey: modifiers.shiftKey,
           altKey: modifiers.altKey,
+          metaKey: modifiers.metaKey ?? false,
         },
       ];
     }
@@ -222,7 +235,12 @@ export class GestureDetector {
         timeSinceLastClick < this.doubleClickTime &&
         distFromLastClick < this.doubleClickDistance
       ) {
-        events.push({ type: "doubleClick", point, coords });
+        events.push({
+          type: "doubleClick",
+          point,
+          coords,
+          metaKey: this.downModifiers.metaKey ?? false,
+        });
         this.lastClickTime = 0;
         this.lastClickPoint = null;
       } else {
@@ -232,6 +250,7 @@ export class GestureDetector {
           coords,
           shiftKey: this.downModifiers.shiftKey,
           altKey: this.downModifiers.altKey,
+          metaKey: this.downModifiers.metaKey ?? false,
         });
         this.lastClickTime = now;
         this.lastClickPoint = point;

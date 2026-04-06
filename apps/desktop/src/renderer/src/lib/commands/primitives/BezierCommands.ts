@@ -1,8 +1,9 @@
 import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
+import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
-import { Segment as SegmentOps } from "@/lib/geo/Segment";
+import { Segments as SegmentOps } from "@/lib/geo/Segments";
 
 /**
  * Inserts a point into an existing contour immediately before a reference point.
@@ -36,7 +37,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.fontEngine.editing.insertPointBefore(this.#beforePointId, {
+    this.#resultId = ctx.fontEngine.insertPointBefore(this.#beforePointId, {
       x: this.#x,
       y: this.#y,
       pointType: this.#pointType,
@@ -47,100 +48,12 @@ export class InsertPointCommand extends BaseCommand<PointId> {
 
   undo(ctx: CommandContext): void {
     if (this.#resultId) {
-      ctx.fontEngine.editing.removePoints([this.#resultId]);
+      ctx.fontEngine.removePoints([this.#resultId]);
     }
   }
 
   override redo(ctx: CommandContext): PointId {
     return this.execute(ctx);
-  }
-}
-
-/**
- * Adds a smooth cubic anchor with symmetric leading and trailing off-curve
- * handles. The trailing handle is auto-reflected through the anchor so the
- * curve enters and exits smoothly. Returns the anchor's PointId; handle ids
- * are available via {@link anchorId}, {@link leadingId}, and {@link trailingId}.
- */
-export class AddBezierAnchorCommand extends BaseCommand<PointId> {
-  readonly name = "Add Bezier Anchor";
-
-  #anchorX: number;
-  #anchorY: number;
-  #leadingX: number;
-  #leadingY: number;
-
-  #trailingX: number;
-  #trailingY: number;
-
-  #anchorId: PointId | null = null;
-  #leadingId: PointId | null = null;
-  #trailingId: PointId | null = null;
-
-  constructor(anchorX: number, anchorY: number, leadingX: number, leadingY: number) {
-    super();
-    this.#anchorX = anchorX;
-    this.#anchorY = anchorY;
-    this.#leadingX = leadingX;
-    this.#leadingY = leadingY;
-
-    this.#trailingX = 2 * anchorX - leadingX;
-    this.#trailingY = 2 * anchorY - leadingY;
-  }
-
-  execute(ctx: CommandContext): PointId {
-    this.#anchorId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
-      x: this.#anchorX,
-      y: this.#anchorY,
-      pointType: "onCurve",
-      smooth: true,
-    });
-
-    this.#leadingId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
-      x: this.#leadingX,
-      y: this.#leadingY,
-      pointType: "offCurve",
-      smooth: false,
-    });
-
-    this.#trailingId = ctx.fontEngine.editing.addPoint({
-      id: "" as PointId,
-      x: this.#trailingX,
-      y: this.#trailingY,
-      pointType: "offCurve",
-      smooth: false,
-    });
-
-    return this.#anchorId;
-  }
-
-  undo(ctx: CommandContext): void {
-    const toRemove: PointId[] = [];
-    if (this.#anchorId) toRemove.push(this.#anchorId);
-    if (this.#leadingId) toRemove.push(this.#leadingId);
-    if (this.#trailingId) toRemove.push(this.#trailingId);
-
-    if (toRemove.length > 0) {
-      ctx.fontEngine.editing.removePoints(toRemove);
-    }
-  }
-
-  override redo(ctx: CommandContext): PointId {
-    return this.execute(ctx);
-  }
-
-  get anchorId(): PointId | null {
-    return this.#anchorId;
-  }
-
-  get leadingId(): PointId | null {
-    return this.#leadingId;
-  }
-
-  get trailingId(): PointId | null {
-    return this.#trailingId;
   }
 }
 
@@ -160,56 +73,28 @@ export class CloseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#contourId = ctx.fontEngine.editing.getActiveContourId();
+    this.#contourId = ctx.fontEngine.getActiveContourId();
 
     if (ctx.glyph && this.#contourId) {
-      const contour = ctx.glyph.contours.find((c) => c.id === this.#contourId);
+      const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
     if (!this.#wasClosed) {
-      ctx.fontEngine.editing.closeContour();
+      ctx.fontEngine.closeContour();
     }
   }
 
   undo(ctx: CommandContext): void {
     if (this.#contourId && !this.#wasClosed) {
-      ctx.fontEngine.editing.openContour(this.#contourId);
-    }
-  }
-}
-
-/**
- * Creates a new empty contour in the glyph and makes it active. Remembers
- * the previously active contour so undo can restore it after removing the
- * new one.
- */
-export class AddContourCommand extends BaseCommand<ContourId> {
-  readonly name = "Add Contour";
-
-  #newContourId: ContourId | null = null;
-  #previousActiveId: ContourId | null = null;
-
-  execute(ctx: CommandContext): ContourId {
-    this.#previousActiveId = ctx.fontEngine.editing.getActiveContourId();
-    this.#newContourId = ctx.fontEngine.editing.addContour();
-    return this.#newContourId;
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#newContourId) {
-      ctx.fontEngine.editing.removeContour(this.#newContourId);
-    }
-    if (this.#previousActiveId) {
-      ctx.fontEngine.editing.setActiveContour(this.#previousActiveId);
+      ctx.fontEngine.openContour(this.#contourId);
     }
   }
 }
 
 /**
  * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
- * Functionally identical to {@link MovePointsCommand} but carries its own
- * command name for distinct undo history labeling.
+ * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
  */
 export class NudgePointsCommand extends BaseCommand<void> {
   readonly name = "Nudge Points";
@@ -227,12 +112,12 @@ export class NudgePointsCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.editing.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.fontEngine.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 
   undo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.editing.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+    ctx.fontEngine.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 }
 
@@ -253,13 +138,13 @@ export class SetActiveContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#previousActiveId = ctx.fontEngine.editing.getActiveContourId();
-    ctx.fontEngine.editing.setActiveContour(this.#contourId);
+    this.#previousActiveId = ctx.fontEngine.getActiveContourId();
+    ctx.fontEngine.setActiveContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
     if (this.#previousActiveId) {
-      ctx.fontEngine.editing.setActiveContour(this.#previousActiveId);
+      ctx.fontEngine.setActiveContour(this.#previousActiveId);
     }
   }
 }
@@ -280,11 +165,11 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.editing.reverseContour(this.#contourId);
+    ctx.fontEngine.reverseContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.editing.reverseContour(this.#contourId);
+    ctx.fontEngine.reverseContour(this.#contourId);
   }
 }
 
@@ -328,7 +213,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
 
     const anchor2Id = this.#segment.points.anchor2.id;
 
-    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
       y: splitPoint.y,
       pointType: "onCurve",
@@ -356,8 +241,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control.y,
     });
 
-    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, {
-      id: "" as PointId,
+    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -365,8 +249,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.fontEngine.editing.insertPointBefore(anchor2Id, {
-      id: "" as PointId,
+    const cBId = ctx.fontEngine.insertPointBefore(anchor2Id, {
       x: cB.x,
       y: cB.y,
       pointType: "offCurve",
@@ -374,7 +257,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.fontEngine.editing.movePointTo(controlId, cA.x, cA.y);
+    ctx.fontEngine.movePointTo(controlId, cA.x, cA.y);
 
     return this.#splitPointId;
   }
@@ -402,7 +285,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control2.y,
     });
 
-    const c1AId = ctx.fontEngine.editing.insertPointBefore(control2Id, {
+    const c1AId = ctx.fontEngine.insertPointBefore(control2Id, {
       x: c1A.x,
       y: c1A.y,
       pointType: "offCurve",
@@ -410,7 +293,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.fontEngine.editing.insertPointBefore(control2Id, {
+    this.#splitPointId = ctx.fontEngine.insertPointBefore(control2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -418,7 +301,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.fontEngine.editing.insertPointBefore(control2Id, {
+    const c0BId = ctx.fontEngine.insertPointBefore(control2Id, {
       x: c0B.x,
       y: c0B.y,
       pointType: "offCurve",
@@ -426,19 +309,19 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.fontEngine.editing.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.fontEngine.editing.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.fontEngine.movePointTo(control1Id, c0A.x, c0A.y);
+    ctx.fontEngine.movePointTo(control2Id, c1B.x, c1B.y);
 
     return this.#splitPointId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#insertedPointIds.length > 0) {
-      ctx.fontEngine.editing.removePoints(this.#insertedPointIds);
+      ctx.fontEngine.removePoints(this.#insertedPointIds);
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(pointId, pos.x, pos.y);
+      ctx.fontEngine.movePointTo(pointId, pos.x, pos.y);
     }
   }
 
@@ -487,13 +370,13 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.fontEngine.editing.insertPointBefore(this.#anchor2Id, {
+    this.#control2Id = ctx.fontEngine.insertPointBefore(this.#anchor2Id, {
       x: this.#control2Pos.x,
       y: this.#control2Pos.y,
       pointType: "offCurve",
       smooth: false,
     });
-    this.#control1Id = ctx.fontEngine.editing.insertPointBefore(this.#control2Id, {
+    this.#control1Id = ctx.fontEngine.insertPointBefore(this.#control2Id, {
       x: this.#control1Pos.x,
       y: this.#control1Pos.y,
       pointType: "offCurve",
@@ -504,7 +387,7 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   undo(ctx: CommandContext): void {
     const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
     if (toRemove.length > 0) {
-      ctx.fontEngine.editing.removePoints(toRemove);
+      ctx.fontEngine.removePoints(toRemove);
     }
   }
 

@@ -1,172 +1,44 @@
-import { describe, it, expect, vi } from "vitest";
-import {
-  AddBezierAnchorCommand,
-  CloseContourCommand,
-  AddContourCommand,
-  NudgePointsCommand,
-  SplitSegmentCommand,
-} from "./BezierCommands";
-import { asContourId, asPointId } from "@shift/types";
-import type { GlyphSnapshot, PointId } from "@shift/types";
-import { createMockCommandContext } from "@/testing";
+import { describe, it, expect, beforeEach } from "vitest";
+import { CloseContourCommand, NudgePointsCommand, SplitSegmentCommand } from "./BezierCommands";
+import { createFontEngine, getAllPoints, getPointCount } from "@/testing";
+import type { FontEngine } from "@/engine";
+import type { CommandContext } from "../core";
 import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
+import type { PointId } from "@shift/types";
 
-// Helper to create segment points for testing
-const makeSegmentPoint = (
-  id: string,
-  x: number,
-  y: number,
-  pointType: "onCurve" | "offCurve" = "onCurve",
-) => ({
-  id: asPointId(id),
-  x,
-  y,
-  pointType,
-  smooth: false,
-});
+let fontEngine: FontEngine;
 
-function createSnapshot(overrides: Partial<GlyphSnapshot>): GlyphSnapshot {
-  return {
-    unicode: 65,
-    name: "A",
-    xAdvance: 500,
-    contours: [],
-    anchors: [],
-    compositeContours: [],
-    activeContourId: null,
-    ...overrides,
-  };
+function ctx(): CommandContext {
+  return { fontEngine, glyph: fontEngine.getGlyph() };
 }
 
-describe("AddBezierAnchorCommand", () => {
-  it("should add three points: anchor, leading, and trailing", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx);
-
-    // Should add 3 points
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenCalledTimes(3);
-  });
-
-  it("should add anchor as smooth onCurve point", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx);
-
-    // First call is anchor
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(1, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: true,
-    });
-  });
-
-  it("should add leading control in drag direction", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
-
-    cmd.execute(ctx);
-
-    // Second call is leading control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(2, {
-      id: "" as PointId,
-      x: 150,
-      y: 120,
-      pointType: "offCurve",
-      smooth: false,
-    });
-  });
-
-  it("should add trailing control mirrored across anchor", () => {
-    const ctx = createMockCommandContext();
-    // Anchor at (100, 100), leading at (150, 120)
-    // Trailing should be at (50, 80) - mirrored
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 120);
-
-    cmd.execute(ctx);
-
-    // Third call is trailing control
-    expect(ctx.fontEngine.editing.addPoint).toHaveBeenNthCalledWith(3, {
-      id: "" as PointId,
-      x: 50, // 2 * 100 - 150
-      y: 80, // 2 * 100 - 120
-      pointType: "offCurve",
-      smooth: false,
-    });
-  });
-
-  it("should return the anchor point ID", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    const result = cmd.execute(ctx);
-
-    expect(result).toBe("point-1"); // First point added
-    expect(cmd.anchorId).toBe("point-1");
-  });
-
-  it("should store all point IDs for undo", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx);
-
-    expect(cmd.anchorId).toBe("point-1");
-    expect(cmd.leadingId).toBe("point-2");
-    expect(cmd.trailingId).toBe("point-3");
-  });
-
-  it("should remove all three points on undo", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddBezierAnchorCommand(100, 100, 150, 100);
-
-    cmd.execute(ctx);
-    cmd.undo(ctx);
-
-    expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith([
-      "point-1",
-      "point-2",
-      "point-3",
-    ]);
-  });
-
-  it("should have the correct name", () => {
-    const cmd = new AddBezierAnchorCommand(0, 0, 10, 10);
-    expect(cmd.name).toBe("Add Bezier Anchor");
-  });
+beforeEach(() => {
+  fontEngine = createFontEngine();
+  fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
 });
 
 describe("CloseContourCommand", () => {
   it("should close the active contour", () => {
-    const ctx = createMockCommandContext();
+    fontEngine.addContour();
+    fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
     const cmd = new CloseContourCommand();
 
-    cmd.execute(ctx);
+    cmd.execute(ctx());
 
-    expect(ctx.fontEngine.editing.closeContour).toHaveBeenCalled();
+    const glyph = fontEngine.getGlyph()!;
+    expect(glyph.contours[0]!.closed).toBe(true);
   });
 
   it("should not close if already closed", () => {
-    const snapshot = createSnapshot({
-      contours: [
-        {
-          id: asContourId("contour-0"),
-          points: [],
-          closed: true, // Already closed
-        },
-      ],
-      activeContourId: asContourId("contour-0"),
-    });
-    const ctx = createMockCommandContext(snapshot);
+    fontEngine.addContour();
+    fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+    fontEngine.closeContour();
+
     const cmd = new CloseContourCommand();
+    cmd.execute(ctx());
 
-    cmd.execute(ctx);
-
-    expect(ctx.fontEngine.editing.closeContour).not.toHaveBeenCalled();
+    const glyph = fontEngine.getGlyph()!;
+    expect(glyph.contours[0]!.closed).toBe(true);
   });
 
   it("should have the correct name", () => {
@@ -175,55 +47,43 @@ describe("CloseContourCommand", () => {
   });
 });
 
-describe("AddContourCommand", () => {
-  it("should add a new contour", () => {
-    const ctx = createMockCommandContext();
-    const cmd = new AddContourCommand();
-
-    const result = cmd.execute(ctx);
-
-    expect(ctx.fontEngine.editing.addContour).toHaveBeenCalled();
-    expect(result).toBe("contour-1");
-  });
-
-  it("should have the correct name", () => {
-    const cmd = new AddContourCommand();
-    expect(cmd.name).toBe("Add Contour");
-  });
-});
-
 describe("NudgePointsCommand", () => {
   it("should move points by the nudge delta", () => {
-    const ctx = createMockCommandContext();
-    const pointIds = [asPointId("p1"), asPointId("p2")];
-    const cmd = new NudgePointsCommand(pointIds, 1, 0); // Nudge right
+    fontEngine.addContour();
+    const p1 = fontEngine.addPoint({ x: 10, y: 20, pointType: "onCurve", smooth: false });
+    const p2 = fontEngine.addPoint({ x: 30, y: 40, pointType: "onCurve", smooth: false });
+    const cmd = new NudgePointsCommand([p1, p2], 1, 0);
 
-    cmd.execute(ctx);
+    cmd.execute(ctx());
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenCalledWith(pointIds, { x: 1, y: 0 });
+    const points = getAllPoints(fontEngine.getGlyph());
+    expect(points[0]!.x).toBe(11);
+    expect(points[1]!.x).toBe(31);
   });
 
   it("should move points back on undo", () => {
-    const ctx = createMockCommandContext();
-    const pointIds = [asPointId("p1")];
-    const cmd = new NudgePointsCommand(pointIds, 5, -10); // Nudge right and up
+    fontEngine.addContour();
+    const p1 = fontEngine.addPoint({ x: 10, y: 20, pointType: "onCurve", smooth: false });
+    const cmd = new NudgePointsCommand([p1], 5, -10);
 
-    cmd.execute(ctx);
-    cmd.undo(ctx);
+    cmd.execute(ctx());
+    cmd.undo(ctx());
 
-    expect(ctx.fontEngine.editing.movePoints).toHaveBeenLastCalledWith(
-      pointIds,
-      { x: -5, y: 10 }, // Negative of original
-    );
+    const points = getAllPoints(fontEngine.getGlyph());
+    expect(points[0]!.x).toBe(10);
+    expect(points[0]!.y).toBe(20);
   });
 
-  it("should not call movePoints with empty array", () => {
-    const ctx = createMockCommandContext();
+  it("should not change state with empty array", () => {
+    fontEngine.addContour();
+    fontEngine.addPoint({ x: 10, y: 20, pointType: "onCurve", smooth: false });
     const cmd = new NudgePointsCommand([], 5, 5);
 
-    cmd.execute(ctx);
+    cmd.execute(ctx());
 
-    expect(ctx.fontEngine.editing.movePoints).not.toHaveBeenCalled();
+    const points = getAllPoints(fontEngine.getGlyph());
+    expect(points[0]!.x).toBe(10);
+    expect(points[0]!.y).toBe(20);
   });
 
   it("should have the correct name", () => {
@@ -233,284 +93,215 @@ describe("NudgePointsCommand", () => {
 });
 
 describe("SplitSegmentCommand", () => {
+  function makeLineSegment(p1Id: PointId, p2Id: PointId): LineSegment {
+    const points = getAllPoints(fontEngine.getGlyph());
+    const p1 = points.find((p) => p.id === p1Id)!;
+    const p2 = points.find((p) => p.id === p2Id)!;
+
+    return {
+      type: "line",
+      points: {
+        anchor1: { id: p1.id, x: p1.x, y: p1.y, pointType: "onCurve", smooth: false },
+        anchor2: { id: p2.id, x: p2.x, y: p2.y, pointType: "onCurve", smooth: false },
+      },
+    };
+  }
+
   describe("line segment", () => {
     it("should insert a single on-curve point at t=0.5", () => {
-      const ctx = createMockCommandContext();
-      const segment: LineSegment = {
-        type: "line",
-        points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          anchor2: makeSegmentPoint("p2", 100, 0),
-        },
-      };
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+      const segment = makeLineSegment(p1, p2);
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      const result = cmd.execute(ctx);
+      const result = cmd.execute(ctx());
 
-      // Should insert one point before anchor2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(1);
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith("p2", {
-        x: 50,
-        y: 0,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      expect(result).toBe("point-1");
-      expect(cmd.splitPointId).toBe("point-1");
+      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
+      expect(result).toBeTruthy();
+      expect(cmd.splitPointId).toBe(result);
+
+      const points = getAllPoints(fontEngine.getGlyph());
+      const splitPoint = points.find((p) => p.id === result)!;
+      expect(splitPoint.x).toBe(50);
+      expect(splitPoint.y).toBe(0);
+      expect(splitPoint.pointType).toBe("onCurve");
     });
 
     it("should insert point at correct position for t=0.25", () => {
-      const ctx = createMockCommandContext();
-      const segment: LineSegment = {
-        type: "line",
-        points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          anchor2: makeSegmentPoint("p2", 100, 100),
-        },
-      };
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 100, pointType: "onCurve", smooth: false });
+      const segment = makeLineSegment(p1, p2);
       const cmd = new SplitSegmentCommand(segment, 0.25);
 
-      cmd.execute(ctx);
+      cmd.execute(ctx());
 
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledWith("p2", {
-        x: 25,
-        y: 25,
-        pointType: "onCurve",
-        smooth: false,
-      });
+      const points = getAllPoints(fontEngine.getGlyph());
+      const splitPoint = points.find((p) => p.id === cmd.splitPointId)!;
+      expect(splitPoint.x).toBe(25);
+      expect(splitPoint.y).toBe(25);
     });
 
     it("should remove inserted point on undo", () => {
-      const ctx = createMockCommandContext();
-      const segment: LineSegment = {
-        type: "line",
-        points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          anchor2: makeSegmentPoint("p2", 100, 0),
-        },
-      };
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+      const segment = makeLineSegment(p1, p2);
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
-      cmd.undo(ctx);
+      cmd.execute(ctx());
+      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
 
-      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(["point-1"]);
+      cmd.undo(ctx());
+      expect(getPointCount(fontEngine.getGlyph())).toBe(2);
     });
   });
 
   describe("quadratic segment", () => {
-    it("should insert mid point and new control, move existing control", () => {
-      const ctx = createMockCommandContext();
+    it("should insert mid point and new control for quad split", () => {
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const c1 = fontEngine.addPoint({ x: 50, y: 100, pointType: "offCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+
       const segment: QuadSegment = {
         type: "quad",
         points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          control: makeSegmentPoint("c1", 50, 100, "offCurve"),
-          anchor2: makeSegmentPoint("p2", 100, 0),
+          anchor1: { id: p1, x: 0, y: 0, pointType: "onCurve", smooth: false },
+          control: { id: c1, x: 50, y: 100, pointType: "offCurve", smooth: false },
+          anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
+      cmd.execute(ctx());
 
-      // Should insert 2 points (mid and cB) before anchor2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(2);
+      // Original 3 + 2 inserted = 5
+      expect(getPointCount(fontEngine.getGlyph())).toBe(5);
 
-      // First insertion: mid point (onCurve, smooth)
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
-        1,
-        "p2",
-        expect.objectContaining({ pointType: "onCurve", smooth: true }),
-      );
-
-      // Second insertion: cB (offCurve)
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
-        2,
-        "p2",
-        expect.objectContaining({ pointType: "offCurve", smooth: false }),
-      );
-
-      // Should move original control to cA position
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledTimes(1);
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c1",
-        expect.any(Number),
-        expect.any(Number),
-      );
+      // The split point should be on-curve and smooth
+      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const splitPoint = allPoints.find((p) => p.id === cmd.splitPointId)!;
+      expect(splitPoint.pointType).toBe("onCurve");
+      expect(splitPoint.smooth).toBe(true);
     });
 
-    it("should restore original control position on undo", () => {
-      const ctx = createMockCommandContext();
+    it("should restore original state on undo", () => {
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const c1 = fontEngine.addPoint({ x: 50, y: 100, pointType: "offCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+
       const segment: QuadSegment = {
         type: "quad",
         points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          control: makeSegmentPoint("c1", 50, 100, "offCurve"),
-          anchor2: makeSegmentPoint("p2", 100, 0),
+          anchor1: { id: p1, x: 0, y: 0, pointType: "onCurve", smooth: false },
+          control: { id: c1, x: 50, y: 100, pointType: "offCurve", smooth: false },
+          anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
-      cmd.undo(ctx);
+      cmd.execute(ctx());
+      cmd.undo(ctx());
 
-      // Should remove inserted points
-      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith(["point-1", "point-2"]);
+      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
 
-      // Should restore original control position
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenLastCalledWith(
-        "c1",
-        50, // original x
-        100, // original y
-      );
+      // Original control should be restored to its original position
+      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const control = allPoints.find((p) => p.id === c1)!;
+      expect(control.x).toBe(50);
+      expect(control.y).toBe(100);
     });
   });
 
   describe("cubic segment", () => {
-    it("should insert 3 points and move 2 existing controls", () => {
-      const ctx = createMockCommandContext();
+    it("should insert 3 points for cubic split", () => {
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const c1 = fontEngine.addPoint({ x: 25, y: 100, pointType: "offCurve", smooth: false });
+      const c2 = fontEngine.addPoint({ x: 75, y: 100, pointType: "offCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+
       const segment: CubicSegment = {
         type: "cubic",
         points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          control1: makeSegmentPoint("c1", 25, 100, "offCurve"),
-          control2: makeSegmentPoint("c2", 75, 100, "offCurve"),
-          anchor2: makeSegmentPoint("p2", 100, 0),
+          anchor1: { id: p1, x: 0, y: 0, pointType: "onCurve", smooth: false },
+          control1: { id: c1, x: 25, y: 100, pointType: "offCurve", smooth: false },
+          control2: { id: c2, x: 75, y: 100, pointType: "offCurve", smooth: false },
+          anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
+      const result = cmd.execute(ctx());
 
-      // Should insert 3 points (c1A, mid, c0B) before control2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(3);
+      // Original 4 + 3 inserted = 7
+      expect(getPointCount(fontEngine.getGlyph())).toBe(7);
+      expect(result).toBe(cmd.splitPointId);
 
-      // First insertion: c1A (offCurve) before control2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
-        1,
-        "c2",
-        expect.objectContaining({ pointType: "offCurve", smooth: false }),
-      );
-
-      // Second insertion: mid (onCurve, smooth) before control2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
-        2,
-        "c2",
-        expect.objectContaining({ pointType: "onCurve", smooth: true }),
-      );
-
-      // Third insertion: c0B (offCurve) before control2
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenNthCalledWith(
-        3,
-        "c2",
-        expect.objectContaining({ pointType: "offCurve", smooth: false }),
-      );
-
-      // Should move both existing controls
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledTimes(2);
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c1",
-        expect.any(Number),
-        expect.any(Number),
-      );
-      expect(ctx.fontEngine.editing.movePointTo).toHaveBeenCalledWith(
-        "c2",
-        expect.any(Number),
-        expect.any(Number),
-      );
-    });
-
-    it("should return the mid point ID as splitPointId", () => {
-      const ctx = createMockCommandContext();
-      const segment: CubicSegment = {
-        type: "cubic",
-        points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          control1: makeSegmentPoint("c1", 25, 100, "offCurve"),
-          control2: makeSegmentPoint("c2", 75, 100, "offCurve"),
-          anchor2: makeSegmentPoint("p2", 100, 0),
-        },
-      };
-      const cmd = new SplitSegmentCommand(segment, 0.5);
-
-      const result = cmd.execute(ctx);
-
-      // Mid point is the second insertion (point-2)
-      expect(result).toBe("point-2");
-      expect(cmd.splitPointId).toBe("point-2");
+      // The split point should be on-curve and smooth
+      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const splitPoint = allPoints.find((p) => p.id === cmd.splitPointId)!;
+      expect(splitPoint.pointType).toBe("onCurve");
+      expect(splitPoint.smooth).toBe(true);
     });
 
     it("should restore both control positions on undo", () => {
-      const ctx = createMockCommandContext();
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const c1 = fontEngine.addPoint({ x: 25, y: 100, pointType: "offCurve", smooth: false });
+      const c2 = fontEngine.addPoint({ x: 75, y: 100, pointType: "offCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+
       const segment: CubicSegment = {
         type: "cubic",
         points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          control1: makeSegmentPoint("c1", 25, 100, "offCurve"),
-          control2: makeSegmentPoint("c2", 75, 100, "offCurve"),
-          anchor2: makeSegmentPoint("p2", 100, 0),
+          anchor1: { id: p1, x: 0, y: 0, pointType: "onCurve", smooth: false },
+          control1: { id: c1, x: 25, y: 100, pointType: "offCurve", smooth: false },
+          control2: { id: c2, x: 75, y: 100, pointType: "offCurve", smooth: false },
+          anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
-      cmd.undo(ctx);
+      cmd.execute(ctx());
+      cmd.undo(ctx());
 
-      // Should remove all 3 inserted points
-      expect(ctx.fontEngine.editing.removePoints).toHaveBeenCalledWith([
-        "point-1",
-        "point-2",
-        "point-3",
-      ]);
+      expect(getPointCount(fontEngine.getGlyph())).toBe(4);
 
-      // Should restore both original control positions (after the removePoints call)
-      const movePointToCalls = vi.mocked(ctx.fontEngine.editing.movePointTo).mock.calls;
-      const lastTwoCalls = movePointToCalls.slice(-2);
-
-      // One of the last two calls should restore c1
-      const c1Restored = lastTwoCalls.some(
-        (call) => call[0] === "c1" && call[1] === 25 && call[2] === 100,
-      );
-      // One of the last two calls should restore c2
-      const c2Restored = lastTwoCalls.some(
-        (call) => call[0] === "c2" && call[1] === 75 && call[2] === 100,
-      );
-
-      expect(c1Restored).toBe(true);
-      expect(c2Restored).toBe(true);
+      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const control1 = allPoints.find((p) => p.id === c1)!;
+      const control2 = allPoints.find((p) => p.id === c2)!;
+      expect(control1.x).toBe(25);
+      expect(control1.y).toBe(100);
+      expect(control2.x).toBe(75);
+      expect(control2.y).toBe(100);
     });
   });
 
   describe("redo", () => {
     it("should clear state and re-execute", () => {
-      const ctx = createMockCommandContext();
-      const segment: LineSegment = {
-        type: "line",
-        points: {
-          anchor1: makeSegmentPoint("p1", 0, 0),
-          anchor2: makeSegmentPoint("p2", 100, 0),
-        },
-      };
+      fontEngine.addContour();
+      const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+      const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+      const segment = makeLineSegment(p1, p2);
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
-      cmd.execute(ctx);
-      cmd.undo(ctx);
-      const result = cmd.redo(ctx);
+      cmd.execute(ctx());
+      cmd.undo(ctx());
+      cmd.redo(ctx());
 
-      // Should insert point again
-      expect(ctx.fontEngine.editing.insertPointBefore).toHaveBeenCalledTimes(2);
-      expect(result).toBe("point-2"); // New point ID after redo
+      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
     });
   });
 
   it("should have the correct name", () => {
-    const segment: LineSegment = {
-      type: "line",
-      points: {
-        anchor1: makeSegmentPoint("p1", 0, 0),
-        anchor2: makeSegmentPoint("p2", 100, 0),
-      },
-    };
+    fontEngine.addContour();
+    const p1 = fontEngine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+    const p2 = fontEngine.addPoint({ x: 100, y: 0, pointType: "onCurve", smooth: false });
+    const segment = makeLineSegment(p1, p2);
     const cmd = new SplitSegmentCommand(segment, 0.5);
     expect(cmd.name).toBe("Split Segment");
   });

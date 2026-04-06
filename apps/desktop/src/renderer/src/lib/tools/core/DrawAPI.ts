@@ -11,7 +11,7 @@ import type {
 import { Vec2 } from "@shift/geo";
 import { HANDLE_STYLES } from "@/lib/styles/style";
 import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
-import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
+
 /** Gap in pixels between the anchor bar and the start-direction triangle. */
 const START_TRIANGLE_GAP = 3;
 
@@ -99,37 +99,6 @@ export class DrawAPI {
     if (style?.strokeStyle) {
       this.#renderer.strokeStyle = style.strokeStyle;
       this.#renderer.strokeCircle(center.x, center.y, radiusUpm);
-    }
-    this.#renderer.restore();
-  }
-
-  path(points: Point2D[], closed = false, style?: ShapeStyle): void {
-    if (points.length < 2) return;
-    const firstPoint = points[0];
-    if (!firstPoint) return;
-
-    this.#renderer.save();
-    this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
-
-    this.#renderer.beginPath();
-    this.#renderer.moveTo(firstPoint.x, firstPoint.y);
-
-    for (const point of points.slice(1)) {
-      this.#renderer.lineTo(point.x, point.y);
-    }
-
-    if (closed) {
-      this.#renderer.closePath();
-    }
-
-    if (style?.fillStyle) {
-      this.#renderer.fillStyle = style.fillStyle;
-      this.#renderer.fill();
-    }
-    if (style?.strokeStyle) {
-      this.#renderer.strokeStyle = style.strokeStyle;
-      this.#renderer.stroke();
     }
     this.#renderer.restore();
   }
@@ -327,70 +296,6 @@ export class DrawAPI {
       this.#drawHorizontalLine(pos.anchor.x, pos.anchor.y, sizeUpm, perpAngle);
     }
 
-    this.#renderer.restore();
-  }
-
-  /** Draw a Bezier control arm: the thin line from an on-curve anchor to its off-curve control point, then draw the control handle circle at the end. */
-  controlLine(anchor: Point2D, control: Point2D, state: HandleState): void {
-    const style = HANDLE_STYLES.control[state];
-    const lineWidthUpm = this.#toUpm(style.lineWidth);
-
-    this.#renderer.save();
-    this.#renderer.lineWidth = lineWidthUpm;
-    this.#renderer.strokeStyle = style.strokeStyle;
-    this.#renderer.drawLine(anchor.x, anchor.y, control.x, control.y);
-    this.#renderer.restore();
-
-    this.handle(control, "control", state);
-  }
-
-  beginPath(): void {
-    this.#renderer.beginPath();
-  }
-
-  moveTo(point: Point2D): void {
-    this.#renderer.moveTo(point.x, point.y);
-  }
-
-  lineTo(point: Point2D): void {
-    this.#renderer.lineTo(point.x, point.y);
-  }
-
-  quadTo(control: Point2D, end: Point2D): void {
-    this.#renderer.quadTo(control.x, control.y, end.x, end.y);
-  }
-
-  cubicTo(c1: Point2D, c2: Point2D, end: Point2D): void {
-    this.#renderer.cubicTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
-  }
-
-  closePath(): void {
-    this.#renderer.closePath();
-  }
-
-  fill(style?: FillStyle): void {
-    this.#renderer.save();
-    if (style?.fillStyle) this.#renderer.fillStyle = style.fillStyle;
-    this.#renderer.fill();
-    this.#renderer.restore();
-  }
-
-  stroke(style?: StrokeStyle): void {
-    this.#renderer.save();
-    if (style?.strokeStyle) this.#renderer.strokeStyle = style.strokeStyle;
-    this.#renderer.lineWidth = this.#toUpm(style?.strokeWidth ?? 1);
-    this.#renderer.dashPattern = (style?.dashPattern ?? []).map((v) => this.#toUpm(v));
-    this.#renderer.stroke();
-    this.#renderer.restore();
-  }
-
-  /** Render an SVG path string at a UPM offset. The Path2D is cached per unicode codepoint via {@link GlyphRenderCache}. */
-  svgPath(d: string, unicode: number, x: number, y: number, style?: FillStyle): void {
-    const path = GlyphRenderCache.get(unicode, d);
-    this.#renderer.save();
-    this.#renderer.translate(x, y);
-    if (style?.fillStyle) this.#renderer.fillStyle = style.fillStyle;
-    this.#renderer.fillPath(path);
     this.#renderer.restore();
   }
 

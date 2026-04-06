@@ -1,11 +1,11 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
-import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
+import { useSignalState } from "@/lib/reactive";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar-right/rotate-cw.svg";
@@ -91,36 +91,31 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
+  const selectedPointIds = useSignalState(editor.selectedPointIds);
+  const glyph = useSignalState(editor.glyph);
+  const selectionBounds = useMemo(
+    () => editor.getSelectionBounds(),
+    [editor, glyph, selectedPointIds],
+  );
   const [rotation, setRotation] = useState(0);
-  const [pointCount, setPointCount] = useState(0);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
-  useSignalEffect(() => {
-    const pointIds = editor.selectedPointIds.value;
-    const n = pointIds.size;
-    setPointCount((prev) => (prev === n ? prev : n));
-  });
-
-  useSignalEffect(() => {
-    editor.glyph.value;
-    const pointIds = editor.selectedPointIds.value;
-
-    if (pointIds.size === 0) {
+  useEffect(() => {
+    if (selectedPointIds.size === 0) {
       xRef.current?.setValue(0);
       yRef.current?.setValue(0);
       return;
     }
 
-    const bounds = editor.getSelectionBounds();
-    if (bounds) {
-      xRef.current?.setValue(Math.round(bounds.min.x));
-      yRef.current?.setValue(Math.round(bounds.min.y));
-    }
-  });
+    if (!selectionBounds) return;
 
-  const canDistribute = pointCount >= 3;
+    xRef.current?.setValue(Math.round(selectionBounds.min.x));
+    yRef.current?.setValue(Math.round(selectionBounds.min.y));
+  }, [selectedPointIds, selectionBounds]);
+
+  const canDistribute = selectedPointIds.size >= 3;
 
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
@@ -138,11 +133,10 @@ export const TransformSection = () => {
     [editor],
   );
 
-  const getOrigin = () => {
-    const bounds = editor.getSelectionBounds();
-    if (!bounds) return undefined;
-    return anchorToPoint(anchor, bounds);
-  };
+  const origin = useMemo(
+    () => (selectionBounds ? anchorToPoint(anchor, selectionBounds) : undefined),
+    [anchor, selectionBounds],
+  );
 
   const handleRotate90 = () => {
     editor.rotate90CW();
@@ -151,28 +145,27 @@ export const TransformSection = () => {
   const handleRotate = (angle: number) => {
     const wrapped = angle % 360;
     const radians = (wrapped * Math.PI) / 180;
-    editor.rotateSelection(radians, getOrigin());
+    editor.rotateSelection(radians, origin);
     setRotation(wrapped);
   };
 
   const handleFlipH = () => {
-    editor.reflectSelection("vertical", getOrigin());
+    editor.reflectSelection("vertical", origin);
   };
 
   const handleFlipV = () => {
-    editor.reflectSelection("horizontal", getOrigin());
+    editor.reflectSelection("horizontal", origin);
   };
 
   const handlePositionChange = useCallback(
     (axis: "x" | "y", value: number) => {
-      const bounds = editor.getSelectionBounds();
-      if (!bounds) return;
-      const anchorPoint = anchorToPoint(anchor, bounds);
+      if (!selectionBounds) return;
+      const anchorPoint = anchorToPoint(anchor, selectionBounds);
       const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
       editor.moveSelectionTo(target, anchorPoint);
       editor.requestRedraw();
     },
-    [anchor],
+    [anchor, editor, selectionBounds],
   );
 
   return (

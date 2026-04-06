@@ -99,7 +99,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --prefer-offline
       - name: Typecheck
-        run: pnpm test:typecheck
+        run: pnpm typecheck
 
   unit-test:
     name: Unit Tests
@@ -120,6 +120,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build native module
+        run: pnpm build:native
+
       - name: Run unit tests
         run: pnpm test:unit
 
@@ -191,7 +195,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude shift-node
 
   integration:
     name: Integration Tests

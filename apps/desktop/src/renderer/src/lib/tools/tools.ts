@@ -11,8 +11,6 @@ import { Pen } from "./pen";
 import { Select } from "./select";
 import { Shape } from "./shape";
 import TextTool from "./text/Text";
-import { selectRenderContributors } from "./select/BoundingBoxRenderContributors";
-import { textRunRenderContributor } from "./text/TextRunRenderContributor";
 
 export function registerBuiltInTools(editor: Editor): void {
   editor.registerTool({
@@ -21,7 +19,6 @@ export function registerBuiltInTools(editor: Editor): void {
     icon: SelectIcon,
     tooltip: "Select Tool (V)",
     shortcut: "v",
-    renderContributors: selectRenderContributors,
   });
   editor.registerTool({
     id: "pen",
@@ -50,6 +47,5 @@ export function registerBuiltInTools(editor: Editor): void {
     icon: TextIcon,
     tooltip: "Text Tool (T)",
     shortcut: "t",
-    renderContributors: [textRunRenderContributor],
   });
 }

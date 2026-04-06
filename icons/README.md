@@ -5,14 +5,15 @@ This directory contains all the icons generated for your Electron app.
 ## Usage in Electron
 
 ### Main Process (src/main.js)
+
 ```javascript
-const { app, BrowserWindow } = require('electron');
-const path = require('path');
+const { app, BrowserWindow } = require("electron");
+const path = require("path");
 
 app.whenReady().then(() => {
   // Set dock icon (macOS only)
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, '../icons/icon.png'));
+  if (process.platform === "darwin") {
+    app.dock.setIcon(path.join(__dirname, "../icons/icon.png"));
   }
 
   createWindow();
@@ -22,45 +23,46 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, '../icons/icon.png'), // Cross-platform
+    icon: path.join(__dirname, "../icons/icon.png"), // Cross-platform
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
-    }
+      contextIsolation: false,
+    },
   });
 }
 ```
 
 ### Forge Configuration (forge.config.js)
+
 ```javascript
 module.exports = {
   packagerConfig: {
-    icon: './icons/icon', // Don't include extension
+    icon: "./icons/icon", // Don't include extension
   },
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
+      name: "@electron-forge/maker-squirrel",
       config: {
-        iconUrl: 'https://example.com/icon.ico',
-        setupIcon: './icons/icon.ico'
-      }
+        iconUrl: "https://example.com/icon.ico",
+        setupIcon: "./icons/icon.ico",
+      },
     },
     {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      name: "@electron-forge/maker-zip",
+      platforms: ["darwin"],
       config: {
-        icon: './icons/icon.icns'
-      }
+        icon: "./icons/icon.icns",
+      },
     },
     {
-      name: '@electron-forge/maker-deb',
+      name: "@electron-forge/maker-deb",
       config: {
         options: {
-          icon: './icons/icon.png'
-        }
-      }
-    }
-  ]
+          icon: "./icons/icon.png",
+        },
+      },
+    },
+  ],
 };
 ```
 

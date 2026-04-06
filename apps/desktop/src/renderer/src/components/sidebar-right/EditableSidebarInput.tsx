@@ -80,7 +80,7 @@ export const EditableSidebarInput = forwardRef<
       setIsEditing(false);
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
       setDisplayValue(numericValue);
-      onValueChange?.(numericValue);
+      if (onValueChange) onValueChange(numericValue);
     }, [editValue, defaultValue, onValueChange, unlock]);
 
     const handleKeyDown = useCallback(
@@ -119,7 +119,7 @@ export const EditableSidebarInput = forwardRef<
           if (isEditing) {
             setEditValue(String(newValue));
           }
-          onValueChange?.(newValue);
+          if (onValueChange) onValueChange(newValue);
         }
       },
       [isEditing, editValue, displayValue, onValueChange],

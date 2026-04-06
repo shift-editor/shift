@@ -98,6 +98,8 @@ export interface IGraphicContext {
 
   getContext(): IRenderer;
 
+  isReady(): boolean;
+
   destroy(): void;
 }
 

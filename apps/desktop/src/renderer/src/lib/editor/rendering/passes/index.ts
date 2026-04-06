@@ -1,7 +1,7 @@
 export { renderGuides, getGuides, type Guides } from "./guides";
 export { renderGlyphOutline, renderGlyphFilled } from "./glyph";
 export { renderSegmentHighlights } from "./segments";
-export { renderHandles } from "./handles";
+export { renderHandles, renderHandleControlLines } from "./handles";
 export { renderAnchors } from "./anchors";
 export {
   renderBoundingRect,

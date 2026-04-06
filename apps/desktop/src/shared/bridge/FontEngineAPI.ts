@@ -1,15 +1,14 @@
-import type { ContourId, RenderContourSnapshot } from "@shift/types";
+/**
+ * Derived from napi-rs generated FontEngine class — zero maintenance.
+ * When you add a #[napi] method in Rust and rebuild, it appears here automatically.
+ */
+import type { FontEngine, JsNodeRef, JsNodePositionUpdate } from "shift-node";
+import type { RenderContourSnapshot } from "@shift/types";
 
-export interface NodeRef {
-  kind: "point" | "anchor" | "guideline";
-  id: string;
-}
+export type FontEngineAPI = Omit<FontEngine, "constructor">;
 
-export interface NodePositionUpdate {
-  node: NodeRef;
-  x: number;
-  y: number;
-}
+export type NodeRef = JsNodeRef;
+export type NodePositionUpdate = JsNodePositionUpdate;
 
 export interface CompositeComponentPayload {
   componentGlyphName: string;
@@ -20,84 +19,6 @@ export interface CompositeComponentPayload {
 export interface CompositeComponentsPayload {
   glyphName: string;
   components: CompositeComponentPayload[];
-}
-
-export interface GlyphRef {
-  glyphName: string;
-  unicode?: number | null;
-}
-
-export interface FontEngineAPI {
-  // ── Font I/O ──
-  loadFont(path: string): void;
-  saveFont(path: string): void;
-  saveFontAsync(path: string): Promise<void>;
-
-  // ── Font Queries ──
-  getMetadata(): string;
-  getMetrics(): string;
-  getGlyphCount(): number;
-  getGlyphUnicodes(): number[];
-  getGlyphNameForUnicode(unicode: number): string | null;
-  getGlyphUnicodesForName(glyphName: string): number[];
-  getDependentUnicodes(unicode: number): number[];
-  getDependentUnicodesByName(glyphName: string): number[];
-  getGlyphSvgPath(unicode: number): string | null;
-  getGlyphSvgPathByName(glyphName: string): string | null;
-  getGlyphAdvance(unicode: number): number | null;
-  getGlyphAdvanceByName(glyphName: string): number | null;
-  getGlyphBbox(unicode: number): [number, number, number, number] | null;
-  getGlyphBboxByName(glyphName: string): [number, number, number, number] | null;
-  getGlyphCompositeComponents(glyphName: string): string | null;
-
-  // ── Session Lifecycle ──
-  startEditSession(glyphRef: GlyphRef): void;
-  endEditSession(): void;
-  hasEditSession(): boolean;
-  getEditingUnicode(): number | null;
-  getEditingGlyphName(): string | null;
-  getSnapshotData(): string;
-
-  // ── Contour Operations ──
-  addContour(): string;
-  getActiveContourId(): ContourId | null;
-  closeContour(): string;
-  setActiveContour(contourId: string): string;
-  clearActiveContour(): string;
-  openContour(contourId: string): string;
-  reverseContour(contourId: string): string;
-  removeContour(contourId: string): string;
-
-  // ── Glyph Properties ──
-  setXAdvance(width: number): string;
-  translateLayer(dx: number, dy: number): string;
-
-  // ── Point Operations ──
-  addPoint(x: number, y: number, pointType: "onCurve" | "offCurve", smooth: boolean): string;
-  addPointToContour(
-    contourId: string,
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string;
-  insertPointBefore(
-    beforePointId: string,
-    x: number,
-    y: number,
-    pointType: "onCurve" | "offCurve",
-    smooth: boolean,
-  ): string;
-  moveNodes(nodes: NodeRef[], dx: number, dy: number): string;
-  removePoints(pointIds: string[]): string;
-  toggleSmooth(pointId: string): string;
-
-  // ── Clipboard ──
-  pasteContours(contoursJson: string, offsetX: number, offsetY: number): string;
-
-  // ── Drag Operations ──
-  setNodePositions(updates: NodePositionUpdate[]): boolean;
-  restoreSnapshot(snapshotJson: string): boolean;
 }
 
 declare global {

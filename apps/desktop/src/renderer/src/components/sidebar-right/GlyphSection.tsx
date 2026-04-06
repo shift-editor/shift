@@ -11,17 +11,23 @@ export const GlyphSection = () => {
   const editor = getEditor();
   const glyph = useSignalState(editor.glyph);
   const glyphInfo = getGlyphInfo();
+
   if (!glyph) return null;
+
+  const unicode = formatCodepointAsUPlus(glyph.unicode);
   const sidebearings = deriveGlyphSidebearings(glyph);
-  const sidebearingsEnabled = sidebearings.lsb !== null && sidebearings.rsb !== null;
-  const lsb = sidebearings.lsb === null ? null : roundSidebearing(sidebearings.lsb);
-  const rsb = sidebearings.rsb === null ? null : roundSidebearing(sidebearings.rsb);
+  const xAdvance = glyph.xAdvance;
+
+  const lsb = roundSidebearing(sidebearings.lsb);
+  const rsb = roundSidebearing(sidebearings.rsb);
+
+  const sidebearingsEnabled = lsb !== null && rsb !== null;
 
   return (
     <SidebarSection title="Glyph">
       <main className="flex flex-col items-center">
         <div className="flex flex-col items-center gap-0.5 mb-2">
-          <div className="font-mono text-sm">{formatCodepointAsUPlus(glyph.unicode)}</div>
+          <div className="font-mono text-sm">{unicode}</div>
         </div>
         <div className="flex justify-center items-center gap-2">
           <EditableSidebarInput
@@ -46,11 +52,12 @@ export const GlyphSection = () => {
         <div className="mt-2">
           <EditableSidebarInput
             className="text-center"
-            value={glyph.xAdvance}
+            value={xAdvance}
             onValueChange={(width) => editor.setXAdvance(width)}
+            disabled={!glyph}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph.unicode)}</div>
+        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph?.unicode ?? 0)}</div>
       </main>
     </SidebarSection>
   );

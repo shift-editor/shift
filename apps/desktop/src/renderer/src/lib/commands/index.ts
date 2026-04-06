@@ -11,20 +11,18 @@ export {
 // Primitive commands (point, bezier operations)
 export {
   AddPointCommand,
-  MovePointsCommand,
-  RemovePointsCommand,
   InsertPointCommand,
-  AddBezierAnchorCommand,
   CloseContourCommand,
-  AddContourCommand,
   SetActiveContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
+  SetNodePositionsCommand,
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
+  ToggleSmoothCommand,
 } from "./primitives";
 
 // Clipboard commands

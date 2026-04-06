@@ -3,53 +3,7 @@
 ## General Guidelines
 
 - Prefer switch statements over long if-else chains when branching on the same value.
-
-```typescript
-// Prefer
-switch (canvas) {
-  case interactiveCanvas:
-    interactiveContext.resizeCanvas(canvas);
-    break;
-  case overlayCanvas:
-    overlayContext.resizeCanvas(canvas);
-    break;
-  case staticCanvas:
-    staticContext.resizeCanvas(canvas);
-    break;
-}
-
-// Avoid long if-else
-if (canvas === interactiveCanvas) {
-  interactiveContext.resizeCanvas(canvas);
-} else if (canvas === overlayCanvas) {
-  overlayContext.resizeCanvas(canvas);
-} else if (canvas === staticCanvas) {
-  staticContext.resizeCanvas(canvas);
-}
-```
-
-- Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level.
-
-```typescript
-// Prefer
-if (rect === null) {
-  this.#marqueePreviewPointIds.set(null);
-  return;
-}
-
-const points = this.getAllPoints();
-const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
-this.#marqueePreviewPointIds.set(new Set(ids));
-
-// Avoid
-if (rect === null) {
-  this.#marqueePreviewPointIds.set(null);
-} else {
-  const points = this.getAllPoints();
-  const ids = new Set(points.filter((p) => pointInRect(p, rect)).map((p) => p.id));
-  this.#marqueePreviewPointIds.set(ids);
-}
-```
+- Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level. In React components, guard on null data at the top (`if (!glyph) return null;`) instead of scattering `glyph?.foo ?? fallback` throughout the JSX.
 
 ## Documentation
 
@@ -60,6 +14,47 @@ Always keep it up to date after completing a large feature
 When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature.
 
 - ALWAYS add tests to verify behaviour after completing a feature
+
+## Testing
+
+### Use TestEditor for tool tests
+
+Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with MockFontEngine as the NAPI backend. Tests break at compile time when APIs change.
+
+```typescript
+const editor = new TestEditor();
+editor.startSession();
+editor.selectTool("pen");
+editor.click(100, 200);
+expect(editor.pointCount).toBe(1);
+```
+
+### Never create mock context builders
+
+Do not create functions like `createMockToolContext()` that return objects with `vi.fn()` stubs mirroring the Editor API. These create a parallel universe where tests pass even when real APIs are deleted.
+
+### Assert on state, not mock calls
+
+```typescript
+// BAD — tests mock wiring, not behavior
+expect(ctx.mocks.edit.addPoint).toHaveBeenCalledWith(100, 200, "onCurve", false);
+
+// GOOD — tests actual outcome
+expect(editor.pointCount).toBe(1);
+```
+
+For command tests, asserting that `ctx.fontEngine.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
+
+### Never create mock renderer tests
+
+Do not create `createMockRenderer()` factories that return `vi.fn()` stubs for `IRenderer` methods. These tests assert on draw call sequences (`expect(renderer.moveTo).toHaveBeenCalledWith(...)`) which break on any refactor and don't verify visual correctness. Use snapshot tests or Playwright e2e instead for rendering verification.
+
+### Keep tests lean
+
+- 5-15 lines per test
+- beforeEach under 5 lines (`new TestEditor()` + `startSession()` + `selectTool()`)
+- No wrapper factories around TestEditor
+- No tests for test infrastructure
 
 ## Frontend
 
@@ -163,32 +158,6 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - Re-export types from their domain's index.ts for public API
 - NEVER re-declare types that exist in `@shift/types` (generated from Rust). Import from `@shift/types`; for derived views (e.g. readonly, nested) use the domain pattern in `packages/types/src/domain.ts`
 
-### Tool Structure
-
-All tools MUST follow this directory structure:
-
-```
-/tools/{toolName}/
-  {ToolName}.ts    # Main tool class
-  commands.ts      # Tool-specific commands (if needed)
-  states.ts        # State types re-export (if needed)
-  index.ts         # Public exports
-```
-
-### Command Organization
-
-Commands follow this hierarchy:
-
-```
-/commands/
-  core/           # Command, BaseCommand, CompositeCommand, CommandHistory
-  primitives/     # Low-level: PointCommands, BezierCommands
-  transform/      # TransformCommands
-  clipboard/      # ClipboardCommands
-```
-
-Tool-specific command wrappers stay in their tool directories.
-
 ### Generated and domain types
 
 - **Generated types** (from Rust via ts-rs) live ONLY in `packages/types/src/generated/`. Run `cargo test --package shift-core` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
@@ -196,37 +165,32 @@ Tool-specific command wrappers stay in their tool directories.
 - **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
 - Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).
 
-### Signal Patterns
-
-- The Editor class should expose signals via getters, not as raw public properties
-- Writable signals should be private (`#` prefix) and exposed via read-only getters
-- When effects need to track tool or state changes, explicitly depend on the relevant signals
-
-```typescript
-// GOOD: Expose via getter
-private $activeTool: WritableSignal<ToolName>;
-public get activeTool(): Signal<ToolName> {
-  return this.$activeTool;
-}
-
-// BAD: Expose raw writable signal
-public $activeTool: WritableSignal<ToolName>;
-```
-
-- Always access signal values through getters, never via `.value` or `.peek()` from outside the owning class. Getters encapsulate the signal and keep the reactive contract consistent. `.peek()` should only be used internally within the signal's owning class in computed signals where subscribing would cause circular updates.
-
-```typescript
-// GOOD: Use the getter
-const zoom = viewport.zoomLevel;
-const pan = viewport.panX;
-
-// BAD: Reaching through to the signal
-const zoom = viewport.zoom.value;
-const zoom = viewport.zoom.peek();
-```
-
 ### File Size Guidelines
 
 - Single classes should not exceed 500 lines
 - If a file grows beyond 300 lines, evaluate splitting by responsibility
 - Prefer composition over monolithic classes
+
+## Architectural Constraints
+
+- **NEVER create Manager, Store, or Cache wrapper classes.** FontEngine is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
+- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createFontEngine()` (real FontEngine). No `vi.fn()` stubs for engine methods.
+- **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
+- **NEVER import from `@/engine/native`.** Use `FontEngine` — `getNative()` is internal. Enforced by lint.
+
+## Anti-Slop Rules
+
+These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.oxlintrc.json` lint rules.
+
+- **Use Vec2 for all coordinate math.** Never `{ x: a.x - b.x, y: a.y - b.y }` — use `Vec2.sub(a, b)`.
+- **Use Point2D in function signatures.** Never create `(x, y)` / `(Point2D)` overloads with `typeof` resolution code.
+- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `engine/draft.ts`, `engine/mock.ts`.
+- **No nested ternaries with map chains.** Break into named variables.
+- **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
+- **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on FontEngine?
+
+## Architecture References
+
+- **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments
+- **Tool structure & behavior system:** Read `lib/tools/core/BaseTool.ts`
+- **Command organization:** Read `lib/commands/core/Command.ts`

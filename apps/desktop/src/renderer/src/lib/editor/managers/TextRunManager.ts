@@ -186,6 +186,7 @@ export class TextRunManager {
     run.buffer.insert(glyph);
   }
 
+  /** @knipclassignore */
   clear(): void {
     const run = this.#activeRun();
     run.buffer.clear();

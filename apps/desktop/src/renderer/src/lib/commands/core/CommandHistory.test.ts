@@ -9,24 +9,34 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { CommandHistory } from "./CommandHistory";
-import {
-  AddPointCommand,
-  MovePointsCommand,
-  RemovePointsCommand,
-  NudgePointsCommand,
-} from "../primitives";
-import { createMockFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
+import { AddPointCommand, NudgePointsCommand } from "../primitives";
+import { createFontEngine, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { PointId } from "@shift/types";
 
+function addPointToActiveContour(
+  fontEngine: ReturnType<typeof createFontEngine>,
+  edit: {
+    id?: PointId;
+    x: number;
+    y: number;
+    pointType: "onCurve" | "offCurve";
+    smooth: boolean;
+  },
+): PointId {
+  const contourId = fontEngine.getActiveContourId();
+  if (!contourId) throw new Error("No active contour");
+  return fontEngine.addPointToContour(contourId, edit);
+}
+
 describe("CommandHistory", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("execute", () => {
@@ -164,14 +174,14 @@ describe("CommandHistory", () => {
 });
 
 describe("batching", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("beginBatch/endBatch", () => {
@@ -255,10 +265,39 @@ describe("batching", () => {
     });
   });
 
+  describe("withBatch", () => {
+    it("should return callback result and group commands into one undo step", () => {
+      const pointId = history.withBatch("Add Points", () => {
+        history.execute(new AddPointCommand(100, 100, "onCurve"));
+        return history.execute(new AddPointCommand(200, 200, "onCurve"));
+      });
+
+      expect(pointId).toBeDefined();
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+      expect(history.undoCount.value).toBe(1);
+
+      history.undo();
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    });
+
+    it("should cancel batch and rethrow when callback throws", () => {
+      expect(() =>
+        history.withBatch("Failing Batch", () => {
+          history.execute(new AddPointCommand(100, 100, "onCurve"));
+          throw new Error("boom");
+        }),
+      ).toThrow("boom");
+
+      expect(history.isBatching).toBe(false);
+      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(history.undoCount.value).toBe(0);
+    });
+  });
+
   describe("record", () => {
     it("should add command to undo stack without executing", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
@@ -268,12 +307,12 @@ describe("batching", () => {
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point directly
-      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
+      fontEngine.movePoints([pointId], { x: 50, y: 50 });
       const points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
 
       // Record the move command (already executed)
-      history.record(new MovePointsCommand([pointId], 50, 50));
+      history.record(new NudgePointsCommand([pointId], 50, 50));
 
       expect(history.undoCount.value).toBe(1);
 
@@ -284,7 +323,7 @@ describe("batching", () => {
     });
 
     it("should work within a batch", () => {
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
@@ -293,11 +332,11 @@ describe("batching", () => {
       });
 
       history.beginBatch("Drag");
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
-      fontEngine.editing.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
+      fontEngine.movePoints([pointId], { x: 10, y: 0 });
       // Record single command for total movement
-      history.record(new MovePointsCommand([pointId], 30, 0));
+      history.record(new NudgePointsCommand([pointId], 30, 0));
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
@@ -312,20 +351,20 @@ describe("batching", () => {
 });
 
 describe("onDirty callback", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
   let onDirtyCalled: number;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     onDirtyCalled = 0;
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value, {
       onDirty: () => {
         onDirtyCalled++;
       },
     });
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   it("should call onDirty when command is executed", () => {
@@ -341,17 +380,17 @@ describe("onDirty callback", () => {
   });
 
   it("should call onDirty when command is recorded", () => {
-    const pointId = fontEngine.editing.addPoint({
+    const pointId = addPointToActiveContour(fontEngine, {
       id: "" as PointId,
       x: 100,
       y: 100,
       pointType: "onCurve",
       smooth: false,
     });
-    fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
+    fontEngine.movePoints([pointId], { x: 50, y: 50 });
     expect(onDirtyCalled).toBe(0);
 
-    history.record(new MovePointsCommand([pointId], 50, 50));
+    history.record(new NudgePointsCommand([pointId], 50, 50));
     expect(onDirtyCalled).toBe(1);
   });
 
@@ -385,47 +424,19 @@ describe("onDirty callback", () => {
 });
 
 describe("Command integration with history", () => {
-  let fontEngine: ReturnType<typeof createMockFontEngine>;
+  let fontEngine: ReturnType<typeof createFontEngine>;
   let history: CommandHistory;
 
   beforeEach(() => {
-    fontEngine = createMockFontEngine();
+    fontEngine = createFontEngine();
     history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
-    fontEngine.session.startEditSession({ glyphName: "A", unicode: 65 });
-    fontEngine.editing.addContour();
-  });
-
-  describe("MovePointsCommand", () => {
-    it("should move points and undo returns them to original position", () => {
-      // Add a point first
-      const pointId = fontEngine.editing.addPoint({
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      const originalPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(originalPoints, 0).x).toBe(100);
-      expect(expectAt(originalPoints, 0).y).toBe(200);
-
-      // Move the point
-      history.execute(new MovePointsCommand([pointId], 50, 50));
-      const movedPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(movedPoints, 0).x).toBe(150);
-      expect(expectAt(movedPoints, 0).y).toBe(250);
-
-      // Undo the move
-      history.undo();
-      const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(restoredPoints, 0).x).toBe(100);
-      expect(expectAt(restoredPoints, 0).y).toBe(200);
-    });
+    fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+    fontEngine.addContour();
   });
 
   describe("NudgePointsCommand", () => {
     it("should nudge points and undo returns them to original position", () => {
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -443,33 +454,10 @@ describe("Command integration with history", () => {
     });
   });
 
-  describe("RemovePointsCommand", () => {
-    it("should remove points and undo restores them", () => {
-      const pointId = fontEngine.editing.addPoint({
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-
-      history.execute(new RemovePointsCommand([pointId]));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
-
-      // Note: undo may not restore exact point ID, but restores geometry
-      history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-      const restoredPoints = getAllPoints(fontEngine.$glyph.value);
-      expect(expectAt(restoredPoints, 0).x).toBe(100);
-      expect(expectAt(restoredPoints, 0).y).toBe(200);
-    });
-  });
-
   describe("Complex undo/redo sequences", () => {
     it("should handle move undo/redo on existing points", () => {
       // Add point directly (not through history)
-      const pointId = fontEngine.editing.addPoint({
+      const pointId = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 200,
@@ -479,7 +467,7 @@ describe("Command integration with history", () => {
       expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
 
       // Move point through history
-      history.execute(new MovePointsCommand([pointId], 50, 50));
+      history.execute(new NudgePointsCommand([pointId], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(250);
@@ -514,39 +502,15 @@ describe("Command integration with history", () => {
       expect(expectAt(points, 0).y).toBe(200);
     });
 
-    it("should restore point at removed position when undoing remove", () => {
-      // Add and move a point
-      const pointId = fontEngine.editing.addPoint({
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      fontEngine.editing.movePoints([pointId], { x: 50, y: 50 });
-
-      // Now remove via command history
-      history.execute(new RemovePointsCommand([pointId]));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
-
-      // Undo remove - restores point at its position when it was removed
-      history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-      const points = getAllPoints(fontEngine.$glyph.value);
-      // Note: point is restored at 150,250 (where it was when removed)
-      expect(expectAt(points, 0).x).toBe(150);
-      expect(expectAt(points, 0).y).toBe(250);
-    });
-
     it("should handle multiple points with single command", () => {
-      const p1 = fontEngine.editing.addPoint({
+      const p1 = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 100,
         y: 100,
         pointType: "onCurve",
         smooth: false,
       });
-      const p2 = fontEngine.editing.addPoint({
+      const p2 = addPointToActiveContour(fontEngine, {
         id: "" as PointId,
         x: 200,
         y: 200,
@@ -555,7 +519,7 @@ describe("Command integration with history", () => {
       });
 
       // Move both points together
-      history.execute(new MovePointsCommand([p1, p2], 50, 50));
+      history.execute(new NudgePointsCommand([p1, p2], 50, 50));
       let points = getAllPoints(fontEngine.$glyph.value);
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(150);

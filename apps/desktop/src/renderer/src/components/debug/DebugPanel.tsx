@@ -4,6 +4,7 @@ import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/reactive";
+import { Glyphs } from "@shift/font";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
@@ -33,6 +34,13 @@ export function DebugPanel() {
     return `${editor.fps.value}`;
   });
 
+  const pointCountRef = useSignalText(() => {
+    const glyph = editor.glyph.value;
+    if (!glyph) return "0";
+
+    return `${Glyphs.getAllPoints(glyph).length}`;
+  });
+
   const upmRef = useRef<HTMLTableCellElement>(null);
   const screenRef = useRef<HTMLTableCellElement>(null);
   const worldRef = useRef<HTMLTableCellElement>(null);
@@ -41,7 +49,7 @@ export function DebugPanel() {
     if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
-      const coords = editor.fromScreen(screen.x, screen.y);
+      const coords = editor.fromScreen(screen);
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)
@@ -73,6 +81,14 @@ export function DebugPanel() {
         <div className="flex flex-col">
           <h2 className="text-ui font-medium">FPS</h2>
           <span ref={fpsRef} className="text-ui text-muted font-mono tabular-nums" />
+        </div>
+        <Separator className="bg-gray-300" />
+        <div className="flex flex-col">
+          <h2 className="text-ui font-medium">Canvas</h2>
+          <div className="flex items-center justify-between gap-4 text-ui text-muted">
+            <span>Total Points</span>
+            <span ref={pointCountRef} className="font-mono tabular-nums" />
+          </div>
         </div>
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">

@@ -1,33 +1,38 @@
-import type { EditorAPI, ToolEvent, TransitionResult } from "../../core";
-import type { TextAction, TextBehavior, TextState } from "../types";
+import type { ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { TextBehavior, TextState } from "../types";
 
 export class TypingBehavior implements TextBehavior {
-  canHandle(state: TextState, event: ToolEvent): boolean {
-    return state.type === "typing" && event.type === "keyDown";
-  }
-
-  transition(
-    state: TextState,
-    event: ToolEvent,
-    _editor: EditorAPI,
-  ): TransitionResult<TextState, TextAction> | null {
-    if (event.type !== "keyDown") return null;
-    if (state.type !== "typing") return null;
+  onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: ToolEventOf<"keyDown">): boolean {
+    if (state.type !== "typing") return false;
 
     switch (event.key) {
       case "Backspace":
-        return { state: { ...state }, action: { type: "delete" } };
+        if (ctx.editor.deleteTextCodepoint()) {
+          ctx.editor.recomputeTextRun();
+        }
+        return true;
       case "Escape":
-        return { state: { type: "idle" }, action: { type: "cancel" } };
+        ctx.setState({ type: "idle" });
+        ctx.editor.setActiveTool("select");
+        return true;
       case "ArrowLeft":
-        return { state: { ...state }, action: { type: "moveLeft" } };
+        if (ctx.editor.moveTextCursorLeft()) {
+          ctx.editor.recomputeTextRun();
+        }
+        return true;
       case "ArrowRight":
-        return { state: { ...state }, action: { type: "moveRight" } };
+        if (ctx.editor.moveTextCursorRight()) {
+          ctx.editor.recomputeTextRun();
+        }
+        return true;
       default: {
-        if (event.key.length !== 1 || event.metaKey) return null;
+        if (event.key.length !== 1 || event.metaKey) return false;
         const codepoint = event.key.codePointAt(0);
-        if (codepoint === undefined) return null;
-        return { state: { ...state }, action: { type: "insert", codepoint } };
+        if (codepoint === undefined) return false;
+        ctx.editor.insertTextCodepoint(codepoint);
+        ctx.editor.recomputeTextRun();
+        return true;
       }
     }
   }

@@ -1,7 +1,6 @@
 import { Segment } from "@/lib/geo/Segment";
 import { Bounds } from "@shift/geo";
-import { asPointId } from "@shift/types";
-import type { GlyphSnapshot, PointId } from "@shift/types";
+import type { Glyph, PointId } from "@shift/types";
 
 /**
  * Compute a tight bounding box for the current selection that accounts for
@@ -13,7 +12,7 @@ import type { GlyphSnapshot, PointId } from "@shift/types";
  * Returns `null` when `selectedPointIds` is empty.
  */
 export function getSegmentAwareBounds(
-  snapshot: GlyphSnapshot,
+  glyph: Glyph,
   selectedPointIds: readonly PointId[],
 ): Bounds | null {
   if (selectedPointIds.length === 0) return null;
@@ -24,7 +23,7 @@ export function getSegmentAwareBounds(
   const processedSegments = new Set<string>();
   const pointsInFullSegments = new Set<PointId>();
 
-  for (const { segment } of Segment.iterateGlyph(snapshot.contours)) {
+  for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
     const segmentPointIds = Segment.getPointIds(segment);
     const allSelected = segmentPointIds.every((id) => selectedSet.has(id));
 
@@ -41,10 +40,9 @@ export function getSegmentAwareBounds(
   }
 
   const isolatedPoints: { x: number; y: number }[] = [];
-  for (const contour of snapshot.contours) {
+  for (const contour of glyph.contours) {
     for (const point of contour.points) {
-      const pointId = asPointId(point.id);
-      if (selectedSet.has(pointId) && !pointsInFullSegments.has(pointId)) {
+      if (selectedSet.has(point.id) && !pointsInFullSegments.has(point.id)) {
         isolatedPoints.push(point);
       }
     }

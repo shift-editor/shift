@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --name-only --diff-filter=ACMR HEAD | grep -E '\\.(ts|tsx|json|md|css)$' | xargs pnpm prettier --write --ignore-unknown 2>/dev/null; true"
+          }
+        ]
+      }
+    ]
+  }
+}

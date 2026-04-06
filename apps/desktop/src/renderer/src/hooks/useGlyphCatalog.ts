@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
 import { useSignalState } from "@/lib/reactive";
-import { glyphDataStore } from "@/store/GlyphDataStore";
+import { getEditor } from "@/store/store";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 
@@ -20,8 +20,9 @@ export interface GlyphCatalogState {
 
 export const useGlyphCatalog = (): GlyphCatalogState => {
   const glyphInfo = getGlyphInfo();
-  const fontLoaded = useSignalState(glyphDataStore.fontLoaded);
-  const fontUnicodes = useSignalState(glyphDataStore.fontUnicodes);
+  const engine = getEditor().fontEngine;
+  const fontLoaded = useSignalState(engine.$fontLoaded);
+  const fontUnicodes = useSignalState(engine.$fontUnicodes);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);

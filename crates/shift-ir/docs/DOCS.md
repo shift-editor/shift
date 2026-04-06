@@ -158,6 +158,7 @@ kerning.add_pair(KerningPair::new(
 ## API Reference
 
 ### Core Types
+
 - `Font` - Root container with metadata, metrics, layers, glyphs
 - `FontMetadata` - Name and identification information
 - `FontMetrics` - Global font measurements
@@ -171,6 +172,7 @@ kerning.add_pair(KerningPair::new(
 - `Guideline` - Visual alignment guide
 
 ### ID Types
+
 - `PointId` - Unique point identifier
 - `ContourId` - Unique contour identifier
 - `ComponentId` - Unique component identifier
@@ -181,11 +183,13 @@ kerning.add_pair(KerningPair::new(
 - `SourceId` - Unique source identifier
 
 ### Kerning Types
+
 - `KerningData` - Groups and pairs
 - `KerningPair` - First/second side with value
 - `KerningSide` - Glyph or Group reference
 
 ### Variable Font Types
+
 - `Axis` - Design space axis (tag, name, range)
 - `Source` - Master at a specific location
 - `Location` - Axis coordinates

@@ -29,13 +29,19 @@ export const AnchorSection = () => {
       return;
     }
 
-    const selected = glyph.anchors.find((anchor) => anchor.id === ids[0]) ?? null;
+    const selected = glyph.anchors.find((anchor) => anchor.id === ids[0]);
+    if (!selected) {
+      setSingleAnchorId(null);
+      setAnchorName(null);
+      return;
+    }
+
     setSingleAnchorId(ids[0] ?? null);
-    setAnchorName(selected?.name ?? "Unnamed");
-    setAnchorX(selected?.x ?? 0);
-    setAnchorY(selected?.y ?? 0);
-    xRef.current?.setValue(Math.round(selected?.x ?? 0));
-    yRef.current?.setValue(Math.round(selected?.y ?? 0));
+    setAnchorName(selected.name ?? "Unnamed");
+    setAnchorX(selected.x);
+    setAnchorY(selected.y);
+    xRef.current?.setValue(Math.round(selected.x));
+    yRef.current?.setValue(Math.round(selected.y));
   });
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {

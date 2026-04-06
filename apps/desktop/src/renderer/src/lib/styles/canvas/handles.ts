@@ -44,7 +44,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
       idle: {
         size: 6,
         barSize: 18,
-        lineWidth: 1,
+        lineWidth: 0.5,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
@@ -76,7 +76,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
     corner: {
       idle: {
         size: 6,
-        lineWidth: 1,
+        lineWidth: 0.5,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,
@@ -129,7 +129,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
     },
     control: {
       idle: {
-        size: 3,
+        size: 2.5,
         lineWidth: 3,
         antiAlias: false,
         strokeStyle: gray,
@@ -156,7 +156,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
     },
     smooth: {
       idle: {
-        size: 3,
+        size: 2.5,
         lineWidth: 3,
         antiAlias: false,
         strokeStyle: green,
@@ -211,7 +211,7 @@ export function createHandleStyles(theme: ThemeTokens): HandleStylesMap {
     last: {
       idle: {
         size: 12,
-        lineWidth: 1,
+        lineWidth: 0.5,
         antiAlias: false,
         strokeStyle: cyan,
         fillStyle: white,

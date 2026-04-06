@@ -58,13 +58,13 @@ export class AlignPointsCommand extends BaseCommand<void> {
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
     for (const p of aligned) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -79,7 +79,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
     for (const p of aligned) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 }
@@ -117,13 +117,13 @@ export class DistributePointsCommand extends BaseCommand<void> {
 
     const distributed = Alignment.distributePoints(points, this.#type);
     for (const p of distributed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -135,7 +135,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
 
     const distributed = Alignment.distributePoints(points, this.#type);
     for (const p of distributed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 }

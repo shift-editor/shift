@@ -2,6 +2,7 @@ export {
   GestureDetector,
   type GestureDetectorConfig,
   type ToolEvent,
+  type ToolEventOf,
   type ToolKey,
   type Modifiers,
 } from "./GestureDetector";
@@ -11,21 +12,11 @@ export { ToolManager } from "./ToolManager";
 export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
 export type { ToolFactory, ToolManifest } from "./ToolManifest";
 export type {
-  ToolRenderContributor,
-  ToolRenderContext,
-  ToolRenderLayer,
-  ToolRenderVisibility,
-} from "./ToolRenderContributor";
-export type {
   EditorAPI,
-  DragTarget,
-  DragUpdate,
-  DragSession,
   Viewport,
   Selection,
   HitTesting,
   Snapping,
-  Dragging,
   Editing,
   Commands,
   ToolLifecycle,
@@ -41,5 +32,5 @@ export {
   type StateDiagram,
   type StateTransition,
 } from "./StateDiagram";
-export { createBehavior, type Behavior, type TransitionResult } from "./Behavior";
+export { createBehavior, type Behavior, type ToolContext } from "./Behavior";
 export { stateDiagramToMermaid } from "./stateDiagramToMermaid";

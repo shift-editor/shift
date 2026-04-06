@@ -39,13 +39,13 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
     const transformed = this.transformPoints(points);
     for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.editing.movePointTo(id, pos.x, pos.y);
+      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -59,7 +59,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
     const transformed = this.transformPoints(points);
     for (const p of transformed) {
-      ctx.fontEngine.editing.movePointTo(p.id, p.x, p.y);
+      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
     }
   }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ToolEvent } from "../core/GestureDetector";
 import { Shape } from "./Shape";
-import { createMockToolContext, makeTestCoordinates } from "@/testing";
+import { makeTestCoordinates, TestEditor } from "@/testing";
 
 const p = { x: 0, y: 0 };
 const q = { x: 100, y: 50 };
@@ -14,6 +14,7 @@ function makeDragStart(point: { x: number; y: number } = p): ToolEvent {
     screenPoint: point,
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDrag(point: { x: number; y: number }): ToolEvent {
@@ -28,6 +29,7 @@ function makeDrag(point: { x: number; y: number }): ToolEvent {
     screenDelta: { x: 0, y: 0 },
     shiftKey: false,
     altKey: false,
+    metaKey: false,
   };
 }
 function makeDragEnd(point: { x: number; y: number } = q): ToolEvent {
@@ -48,8 +50,8 @@ describe("Shape outcome", () => {
   let shape: Shape;
 
   beforeEach(() => {
-    const ctx = createMockToolContext();
-    shape = new Shape(ctx);
+    const editor = new TestEditor();
+    shape = new Shape(editor);
   });
 
   it("ready + dragStart -> dragging with startPos and currentPos", () => {

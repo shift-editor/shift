@@ -1,10 +1,8 @@
-import type { PointId, Point2D, Rect2D, AnchorId } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
-import type { ToolEvent } from "../core/GestureDetector";
 import type { Behavior } from "../core/Behavior";
-import type { SelectAction } from "./actions";
-import type { DragSession } from "../core/EditorAPI";
+import type { SegmentId } from "@/types/indicator";
 
 /** Tracks the start and current positions of a marquee drag. */
 export interface SelectionData {
@@ -14,11 +12,9 @@ export interface SelectionData {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateData {
-  session: DragSession;
+  startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
-  draggedPointIds: PointId[];
-  draggedAnchorIds: AnchorId[];
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
@@ -28,8 +24,6 @@ export interface ResizeData {
   lastPos: Point2D;
   initialBounds: Rect2D;
   anchorPoint: Point2D;
-  draggedPointIds: PointId[];
-  initialPositions: Map<PointId, Point2D>;
   uniformScale: boolean;
 }
 
@@ -41,9 +35,15 @@ export interface RotateData {
   center: Point2D;
   startAngle: number;
   currentAngle: number;
-  draggedPointIds: PointId[];
-  initialPositions: Map<PointId, Point2D>;
   snappedAngle?: number;
+}
+
+export interface BendData {
+  t: number;
+  startPos: Point2D;
+  initialControlOne: Point2D;
+  initialControlTwo: Point2D;
+  segmentId: SegmentId;
 }
 
 /**
@@ -64,7 +64,8 @@ export type SelectState =
   | { type: "selected" }
   | { type: "translating"; translate: TranslateData }
   | { type: "resizing"; resize: ResizeData }
-  | { type: "rotating"; rotate: RotateData };
+  | { type: "rotating"; rotate: RotateData }
+  | { type: "bending"; bend: BendData };
 
-/** Behavior type alias for the select tool's state/event/action triple. */
-export type SelectBehavior = Behavior<SelectState, ToolEvent, SelectAction>;
+export type SelectBehavior = Behavior<SelectState>;
+export type SelectHandlerBehavior = SelectBehavior;

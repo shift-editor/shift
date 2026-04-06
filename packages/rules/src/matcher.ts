@@ -119,6 +119,43 @@ type RuleEvaluation = {
   probes: PatternProbe[];
 };
 
+function matchRuleAtIndex(
+  contour: ContourMatchInput,
+  pointId: PointId,
+  pointIndex: number,
+  selectedIds: ReadonlySet<PointId>,
+): MatchedRule | null {
+  const ruleTable = getRuleTable();
+  let bestMatch: RuleMatch | null = null;
+  let bestPattern = "";
+
+  for (const windowSize of WINDOW_SIZES) {
+    const pattern = buildPattern(contour, pointIndex, selectedIds, windowSize);
+    const match = ruleTable.get(pattern);
+    if (!match) continue;
+
+    if (!bestMatch || match.precedenceScore > bestMatch.precedenceScore) {
+      bestMatch = match;
+      bestPattern = pattern;
+      continue;
+    }
+
+    if (
+      match.precedenceScore === bestMatch.precedenceScore &&
+      match.rule.id !== bestMatch.rule.id
+    ) {
+      throw new Error(
+        `Ambiguous rule precedence for point ${String(pointId)} between ` +
+          `${bestMatch.rule.id} (${bestPattern}) and ${match.rule.id} (${pattern}) ` +
+          `at score ${match.precedenceScore}.`,
+      );
+    }
+  }
+
+  if (!bestMatch) return null;
+  return createMatchedRule(pointId, bestPattern, bestMatch, contour, pointIndex);
+}
+
 function evaluateRuleAtIndex(
   contour: ContourMatchInput,
   pointId: PointId,
@@ -186,9 +223,16 @@ export function pickRule(
     return null;
   }
 
-  const { matchedRule } = evaluateRuleAtIndex(contour, pointId, pointIndex, selectedIds);
+  return matchRuleAtIndex(contour, pointId, pointIndex, selectedIds);
+}
 
-  return matchedRule;
+export function pickRuleAtIndex(
+  contour: ContourMatchInput,
+  pointId: PointId,
+  pointIndex: number,
+  selectedIds: ReadonlySet<PointId>,
+): MatchedRule | null {
+  return matchRuleAtIndex(contour, pointId, pointIndex, selectedIds);
 }
 
 /**

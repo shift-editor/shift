@@ -1,30 +1,21 @@
-import type { ToolEvent } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
-import type { TransitionResult } from "../../core/Behavior";
-import type { SelectState, SelectBehavior } from "../types";
-import type { SelectAction } from "../actions";
+import type { ToolContext } from "../../core/Behavior";
+import type { ToolEventOf } from "../../core/GestureDetector";
+import type { SelectHandlerBehavior, SelectState } from "../types";
 
-export class EscapeBehavior implements SelectBehavior {
-  canHandle(state: SelectState, event: ToolEvent): boolean {
-    if (event.type !== "keyDown") return false;
-    if (event.key !== "Escape") return false;
-    return state.type === "selected" || state.type === "ready";
-  }
-
-  transition(
+export class EscapeBehavior implements SelectHandlerBehavior {
+  onKeyDown(
     state: SelectState,
-    event: ToolEvent,
-    _editor: EditorAPI,
-  ): TransitionResult<SelectState, SelectAction> | null {
-    if (event.type !== "keyDown" || event.key !== "Escape") return null;
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"keyDown">,
+  ): boolean {
+    if (event.key !== "Escape") return false;
 
     if (state.type === "selected") {
-      return {
-        state: { type: "ready" },
-        action: { type: "clearSelection" },
-      };
+      ctx.editor.clearSelection();
+      ctx.setState({ type: "ready" });
+      return true;
     }
 
-    return null;
+    return state.type === "ready";
   }
 }
