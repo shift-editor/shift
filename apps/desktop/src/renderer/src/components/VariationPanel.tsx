@@ -62,6 +62,7 @@ export const VariationPanel = () => {
 
       setIsInterpolating(true);
       engine.emitGlyph(result.instance);
+      engine.setVariationLocation({ values: newLocation });
     },
     [location, axes, engine],
   );
@@ -82,6 +83,7 @@ export const VariationPanel = () => {
 
       setIsInterpolating(true);
       engine.emitGlyph(master.snapshot);
+      engine.setVariationLocation({ values: newLocation });
     },
     [axes, engine],
   );
@@ -90,6 +92,7 @@ export const VariationPanel = () => {
     if (!isInterpolating) return;
 
     setIsInterpolating(false);
+    engine.setVariationLocation(null);
     const sessionGlyph = engine.getSessionGlyph();
     if (sessionGlyph) {
       engine.emitGlyph(sessionGlyph);

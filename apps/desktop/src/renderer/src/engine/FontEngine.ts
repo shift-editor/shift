@@ -8,6 +8,7 @@ import type {
   AnchorId,
   Axis,
   Source,
+  Location,
 } from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
@@ -38,6 +39,7 @@ export class FontEngine {
   readonly #$fontLoaded: WritableSignal<boolean>;
   readonly #$fontUnicodes: WritableSignal<number[]>;
   readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
+  readonly #$variationLocation: WritableSignal<Location | null>;
   #raw: FontEngineAPI;
 
   constructor(raw?: FontEngineAPI) {
@@ -46,6 +48,7 @@ export class FontEngine {
     this.#$fontLoaded = signal(false);
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
+    this.#$variationLocation = signal<Location | null>(null);
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
@@ -65,6 +68,16 @@ export class FontEngine {
   /** @knipclassignore */
   get $fontMetrics(): Signal<FontMetrics | null> {
     return this.#$fontMetrics;
+  }
+
+  /** @knipclassignore — used by GlyphPreview for variation interpolation */
+  get $variationLocation(): Signal<Location | null> {
+    return this.#$variationLocation;
+  }
+
+  /** @knipclassignore — used by VariationPanel */
+  setVariationLocation(location: Location | null): void {
+    this.#$variationLocation.set(location);
   }
 
   setFontLoaded(unicodes: number[], metrics: FontMetrics): void {
