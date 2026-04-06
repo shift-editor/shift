@@ -34,6 +34,13 @@ repos:
         types: [rust]
         pass_filenames: false
 
+      - id: cargo-check-tests
+        name: cargo check (including tests)
+        entry: bash -c 'cargo check --package shift-node --tests'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --
