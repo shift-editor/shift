@@ -233,4 +233,74 @@ describe("interpolateGlyph", () => {
     expect(result!.contours[0].points[0].y).toBeCloseTo(50);
     expect(result!.xAdvance).toBeCloseTo(550);
   });
+
+  it("deduplicates masters at the same normalized location", () => {
+    const m1 = makeMaster("Sans", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
+    const m2 = makeMaster("Slab", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
+    const m3 = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
+
+    const result = interpolateGlyph([m1, m2, m3], axes, { wght: 500 });
+
+    expect(result).not.toBeNull();
+    expect(result!.contours[0].points[0].x).toBeCloseTo(150);
+  });
+
+  it("filters incompatible masters and interpolates with compatible majority", () => {
+    const compatible1 = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const compatible2 = makeMaster("B", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
+    const incompatible: MasterSnapshot = {
+      sourceId: "C",
+      sourceName: "C",
+      location: { values: { wght: 500 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 100, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
+        600,
+      ),
+    };
+
+    const result = interpolateGlyph([compatible1, incompatible, compatible2], axes, { wght: 500 });
+
+    expect(result).not.toBeNull();
+    expect(result!.contours[0].points[0].x).toBeCloseTo(100);
+  });
+
+  it("uses directBlend when default master is the incompatible one", () => {
+    // Default (wght=0) has extra contour, others are compatible
+    const defaultMaster: MasterSnapshot = {
+      sourceId: "Default",
+      sourceName: "Default",
+      location: { values: { wght: 0 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
+        500,
+      ),
+    };
+    const mid = makeMaster("Mid", { wght: 500 }, makeContour([{ x: 100, y: 0 }]), 600);
+    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
+
+    const result = interpolateGlyph([defaultMaster, mid, bold], axes, { wght: 750 });
+
+    expect(result).not.toBeNull();
+    // Should interpolate between mid and bold via directBlend
+    expect(result!.contours[0].points[0].x).toBeGreaterThan(100);
+    expect(result!.contours[0].points[0].x).toBeLessThan(200);
+  });
+
+  it("returns default snapshot when all masters are incompatible with each other", () => {
+    const m1 = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const m2: MasterSnapshot = {
+      sourceId: "B",
+      sourceName: "B",
+      location: { values: { wght: 1000 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 200, y: 0 }]), makeContour([{ x: 100, y: 100 }])],
+        700,
+      ),
+    };
+
+    const result = interpolateGlyph([m1, m2], axes, { wght: 500 });
+
+    // Falls back to first master since no compatible group
+    expect(result).toBe(m1.snapshot);
+  });
 });

@@ -616,4 +616,44 @@ describe("FontEngine Integration - Designspace", () => {
       expect(m.snapshot.contours.length).toBeGreaterThan(0);
     }
   });
+
+  it("excludes empty contours from master snapshots", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    const masters = JSON.parse(json);
+    for (const m of masters) {
+      for (const contour of m.snapshot.contours) {
+        expect(contour.points.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("returns consistent contour order across masters", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    const masters = JSON.parse(json);
+
+    // All masters should have the same contour signature (point counts per contour)
+    const sigs = masters.map(m =>
+      m.snapshot.contours.map(c => c.points.length).join(",")
+    );
+    const uniqueSigs = new Set(sigs);
+    expect(uniqueSigs.size).toBe(1);
+  });
+
+  it("returns master snapshots for the currently editing glyph", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    engine.startEditSession({ glyphName: "A", unicode: 65 });
+
+    // Glyph is taken from font during session, but snapshots should still work
+    const json = engine.getGlyphMasterSnapshots("A");
+    expect(json).not.toBeNull();
+    const masters = JSON.parse(json);
+    expect(masters.length).toBeGreaterThanOrEqual(4);
+
+    engine.endEditSession();
+  });
 });
