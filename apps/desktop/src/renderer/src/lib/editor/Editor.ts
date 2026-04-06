@@ -404,7 +404,7 @@ export class Editor implements ShiftEditor {
 
   public registerTool(descriptor: ToolDescriptor): void {
     const { id, icon, tooltip, shortcut } = descriptor;
-    this.#toolMetadata.set(id, { icon, tooltip, shortcut });
+    this.#toolMetadata.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
     this.toolManager.register(descriptor);
   }
 
