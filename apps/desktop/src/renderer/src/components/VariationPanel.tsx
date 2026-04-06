@@ -104,7 +104,7 @@ export const VariationPanel = () => {
 
   if (axes.length === 0) return null;
 
-  const masterNames = mastersRef.current?.map((m) => m.sourceName) ?? [];
+  const masters = mastersRef.current ?? [];
 
   return (
     <SidebarSection title="Variation">
@@ -117,16 +117,16 @@ export const VariationPanel = () => {
             onChange={(value) => handleAxisChange(axis.tag, value)}
           />
         ))}
-        {masterNames.length > 0 && (
+        {masters.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {masterNames.map((name) => (
+            {masters.map((m) => (
               <button
-                key={name}
+                key={m.sourceId}
                 type="button"
                 className="px-2 py-0.5 text-[11px] rounded bg-[#f0f0f0] hover:bg-[#e0e0e0] text-[#333] transition-colors"
-                onClick={() => handleMasterClick(name)}
+                onClick={() => handleMasterClick(m.sourceName)}
               >
-                {name}
+                {m.sourceName}
               </button>
             ))}
           </div>
