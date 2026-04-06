@@ -1299,12 +1299,6 @@ export class Editor implements ShiftEditor {
     return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
 
-  public fromScreen(screen: Point2D): Coordinates {
-    const scene = this.projectScreenToScene(screen);
-    const glyphLocal = this.sceneToGlyphLocal(scene);
-    return { screen, scene, glyphLocal };
-  }
-
   public fromScene(scene: Point2D): Coordinates {
     const screen = this.projectSceneToScreen(scene);
     const glyphLocal = this.sceneToGlyphLocal(scene);

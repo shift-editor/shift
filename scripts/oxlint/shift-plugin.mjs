@@ -440,5 +440,79 @@ export default {
         };
       },
     },
+
+    /**
+     * Flag repeated optional chaining on the same variable in React components.
+     *
+     * When the same base appears in 3+ optional chains (e.g. glyph?.foo,
+     * glyph?.bar, glyph?.baz), use an early return instead:
+     *   if (!glyph) return null;
+     *
+     * Only applies to .tsx files (React components).
+     */
+    "no-repeated-optional-chain": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useEarlyReturn:
+            "'{{name}}' is optional-chained {{count}} times. Use an early return (`if (!{{name}}) return null;`) instead.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (!filename.endsWith(".tsx")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        const THRESHOLD = 3;
+
+        function checkFunction(node) {
+          const body = node.body;
+          if (!body) return;
+
+          const counts = new Map();
+
+          function walk(n) {
+            if (!n || typeof n !== "object") return;
+            if (n.type === "ChainExpression" && n.expression?.type === "MemberExpression") {
+              const obj = n.expression.object;
+              if (obj?.type === "Identifier") {
+                counts.set(obj.name, (counts.get(obj.name) || 0) + 1);
+              }
+            }
+            for (const key of Object.keys(n)) {
+              if (key === "parent") continue;
+              const child = n[key];
+              if (Array.isArray(child)) {
+                for (const item of child) {
+                  if (item && typeof item.type === "string") walk(item);
+                }
+              } else if (child && typeof child.type === "string") {
+                walk(child);
+              }
+            }
+          }
+
+          walk(body);
+
+          for (const [name, count] of counts) {
+            if (count >= THRESHOLD) {
+              context.report({
+                node,
+                messageId: "useEarlyReturn",
+                data: { name, count: String(count) },
+              });
+            }
+          }
+        }
+
+        return {
+          FunctionDeclaration: checkFunction,
+          FunctionExpression: checkFunction,
+          ArrowFunctionExpression: checkFunction,
+        };
+      },
+    },
   },
 };
