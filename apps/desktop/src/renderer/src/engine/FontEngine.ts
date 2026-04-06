@@ -241,6 +241,7 @@ export class FontEngine {
     return lastPoint.id;
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.addPointToContour(contourId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -250,6 +251,7 @@ export class FontEngine {
     throw new NativeOperationError("Native addPointToContour returned no point ID");
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.insertPointBefore(beforePointId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -295,6 +297,7 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.removePoints(pointIds));
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   toggleSmooth(pointId: PointId): void {
     this.#dispatchVoid(this.#raw.toggleSmooth(pointId));
   }
@@ -324,18 +327,22 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.clearActiveContour());
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   reverseContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.reverseContour(contourId));
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   openContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.openContour(contourId));
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#raw.setXAdvance(width));
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#raw.translateLayer(dx, dy));
   }
@@ -413,6 +420,7 @@ export class FontEngine {
     };
   }
 
+  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
     if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {
