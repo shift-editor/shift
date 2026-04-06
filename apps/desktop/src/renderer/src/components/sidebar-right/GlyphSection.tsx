@@ -5,17 +5,22 @@ import Glyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { getGlyphInfo } from "@/store/glyphInfo";
+import { deriveGlyphSidebearings, roundSidebearing } from "@/lib/editor/sidebearings";
 
 export const GlyphSection = () => {
   const editor = getEditor();
-  const glyph = useSignalState(editor.sidebar.glyph);
-  const glyphState = useSignalState(editor.sidebar.glyphInfo);
+  const glyph = useSignalState(editor.glyph);
   const glyphInfo = getGlyphInfo();
 
-  const unicode = glyph ? formatCodepointAsUPlus(glyph.unicode) : "";
-  const xAdvance = glyphState?.xAdvance ?? null;
-  const lsb = glyphState?.lsb ?? null;
-  const rsb = glyphState?.rsb ?? null;
+  if (!glyph) return null;
+
+  const unicode = formatCodepointAsUPlus(glyph.unicode);
+  const sidebearings = deriveGlyphSidebearings(glyph);
+  const xAdvance = glyph.xAdvance;
+
+  const lsb = roundSidebearing(sidebearings.lsb);
+  const rsb = roundSidebearing(sidebearings.rsb);
+
   const sidebearingsEnabled = lsb !== null && rsb !== null;
 
   return (

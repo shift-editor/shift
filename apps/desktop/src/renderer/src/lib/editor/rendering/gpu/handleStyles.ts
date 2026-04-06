@@ -37,6 +37,9 @@ function buildSimpleStyle(
   const style = HANDLE_STYLES[shape][state] as BaseHandleStyle;
   const halfSize = shape === "corner" ? style.size / 2 : style.size;
   const padding = Math.max(style.lineWidth, 2);
+  
+  console.log(style);
+  console.log(shape);
 
   return {
     shapeId: SHAPE_IDS[shape],
@@ -79,6 +82,7 @@ function buildDirectionalStyle(
     };
     const halfBar = style.barSize / 2;
     const triangleTip = FIRST_HANDLE_GAP_PX + style.size * 2;
+
     return {
       shapeId: SHAPE_IDS[shape],
       size: style.size,

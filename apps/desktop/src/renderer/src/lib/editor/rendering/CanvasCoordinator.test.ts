@@ -52,10 +52,7 @@ function createGraphicContext(renderer: IRenderer): IGraphicContext {
 
 function createContext(
   drawOffset: Point2D,
-  projectSceneToScreen: {
-    (scene: Point2D): Point2D;
-    (x: number, y: number): Point2D;
-  },
+  projectSceneToScreen: (scene: Point2D) => Point2D,
 ): CanvasCoordinatorContext {
   const font: Font = {
     getMetrics: () => ({
@@ -140,9 +137,7 @@ function createContext(
 describe("CanvasCoordinator", () => {
   it("applies drawOffset when projecting bounding box handle points", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
-      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
-    );
+    const projectSceneToScreen = vi.fn((scene: Point2D) => scene);
     const context = createContext({ x: 600, y: 25 }, projectSceneToScreen);
     context.getSelectionBoundingRect = () => ({ x: 10, y: 20, width: 100, height: 40 });
     const coordinator = new CanvasCoordinator(context);
@@ -150,17 +145,14 @@ describe("CanvasCoordinator", () => {
 
     coordinator.requestImmediateRedraw();
 
-    // topLeft = project(10+600, 20+40+25) = project(610, 85)
-    // bottomRight = project(10+100+600, 20+25) = project(710, 45)
-    expect(projectSceneToScreen).toHaveBeenCalledWith(610, 85);
-    expect(projectSceneToScreen).toHaveBeenCalledWith(710, 45);
+    // topLeft = project({610, 85}), bottomRight = project({710, 45})
+    expect(projectSceneToScreen).toHaveBeenCalledWith({ x: 610, y: 85 });
+    expect(projectSceneToScreen).toHaveBeenCalledWith({ x: 710, y: 45 });
   });
 
   it("uses raw points when drawOffset is zero", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
-      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
-    );
+    const projectSceneToScreen = vi.fn((scene: Point2D) => scene);
     const context = createContext({ x: 0, y: 0 }, projectSceneToScreen);
     context.getSelectionBoundingRect = () => ({ x: 10, y: 20, width: 100, height: 40 });
     const coordinator = new CanvasCoordinator(context);
@@ -168,16 +160,14 @@ describe("CanvasCoordinator", () => {
 
     coordinator.requestImmediateRedraw();
 
-    // topLeft = project(10, 60), bottomRight = project(110, 20)
-    expect(projectSceneToScreen).toHaveBeenCalledWith(10, 60);
-    expect(projectSceneToScreen).toHaveBeenCalledWith(110, 20);
+    // topLeft = project({10, 60}), bottomRight = project({110, 20})
+    expect(projectSceneToScreen).toHaveBeenCalledWith({ x: 10, y: 60 });
+    expect(projectSceneToScreen).toHaveBeenCalledWith({ x: 110, y: 20 });
   });
 
   it("does not project points when no selection bounding rect exists", () => {
     const renderer = createMockRenderer();
-    const projectSceneToScreen = vi.fn((sceneOrX: Point2D | number, y?: number) =>
-      typeof sceneOrX === "number" ? { x: sceneOrX, y: y ?? 0 } : sceneOrX,
-    );
+    const projectSceneToScreen = vi.fn((scene: Point2D) => scene);
     const context = createContext({ x: 350, y: 40 }, projectSceneToScreen);
     const coordinator = new CanvasCoordinator(context);
     coordinator.setOverlayContext(createGraphicContext(renderer));

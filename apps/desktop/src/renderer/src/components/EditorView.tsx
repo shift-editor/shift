@@ -72,7 +72,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       } else {
         const currentPan = editor.pan;
         const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
-        editor.setPan(newPan.x, newPan.y);
+        editor.setPan(newPan);
 
         toolManager.handlePointerMove(
           screenPos,

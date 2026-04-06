@@ -26,6 +26,7 @@ export function deriveGlyphSidebearings(glyph: Glyph | null): GlyphSidebearings 
   };
 }
 
-export function roundSidebearing(value: number): number {
+export function roundSidebearing(value: number | null): number | null {
+  if (value === null) return null;
   return Math.round(value);
 }

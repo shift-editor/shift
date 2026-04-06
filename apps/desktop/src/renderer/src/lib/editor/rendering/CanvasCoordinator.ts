@@ -105,7 +105,6 @@ export interface CanvasCoordinatorContext {
   screenToUpmDistance(px: number): number;
   /** Projects a point from UPM space to screen pixels, used for screen-space handle rendering. */
   projectSceneToScreen(scene: Point2D): Point2D;
-  projectSceneToScreen(x: number, y: number): Point2D;
   getDebugOverlays(): DebugOverlays;
   getVisualGlyphAdvance(glyph: Glyph): number;
   /** Delegates to the active tool's render method (interactive canvas). */
@@ -526,7 +525,7 @@ export class CanvasCoordinator {
 
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {
     const offset = this.#ctx.getDrawOffset();
-    return this.#ctx.projectSceneToScreen(x + offset.x, y + offset.y);
+    return this.#ctx.projectSceneToScreen({ x: x + offset.x, y: y + offset.y });
   }
 
   #isSceneSegmentVisible(

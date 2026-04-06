@@ -109,19 +109,11 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { SidebarViewModel } from "./SidebarViewModel";
+
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import { produceGlyph, type GlyphDraft } from "@/engine/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
-
-function resolvePointInput(pointOrX: Point2D | number, y?: number): Point2D {
-  if (typeof pointOrX === "number") {
-    return { x: pointOrX, y: y ?? 0 };
-  }
-
-  return pointOrX;
-}
 
 /**
  * Central orchestrator for the glyph editing surface.
@@ -171,7 +163,6 @@ export class Editor implements ShiftEditor {
   #fontEngine: FontEngine;
   #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
-  #sidebar: SidebarViewModel;
 
   #staticEffect: Effect;
   #textRunGlyphRefreshEffect: Effect;
@@ -231,10 +222,6 @@ export class Editor implements ShiftEditor {
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
-    this.#sidebar = new SidebarViewModel({
-      glyph: this.#$glyph,
-      getSelectionBounds: () => this.getSelectionBounds(),
-    });
     this.#commandHistory = new CommandHistory(
       this.#fontEngine,
       () => this.#fontEngine.$glyph.value,
@@ -1075,10 +1062,6 @@ export class Editor implements ShiftEditor {
     return this.#$glyph;
   }
 
-  public get sidebar(): SidebarViewModel {
-    return this.#sidebar;
-  }
-
   public getActiveGlyphUnicode(): number | null {
     return this.#fontEngine.getEditingUnicode();
   }
@@ -1212,8 +1195,8 @@ export class Editor implements ShiftEditor {
     const sidebearings = deriveGlyphSidebearings(glyph);
     if (sidebearings.lsb === null) return;
 
-    const current = roundSidebearing(sidebearings.lsb);
-    const target = roundSidebearing(value);
+    const current = roundSidebearing(sidebearings.lsb)!;
+    const target = roundSidebearing(value)!;
     const delta = target - current;
     if (delta === 0) return;
 
@@ -1232,8 +1215,8 @@ export class Editor implements ShiftEditor {
     const sidebearings = deriveGlyphSidebearings(glyph);
     if (sidebearings.rsb === null) return;
 
-    const current = roundSidebearing(sidebearings.rsb);
-    const target = roundSidebearing(value);
+    const current = roundSidebearing(sidebearings.rsb)!;
+    const target = roundSidebearing(value)!;
     const delta = target - current;
     if (delta === 0) return;
 
@@ -1274,10 +1257,7 @@ export class Editor implements ShiftEditor {
     this.#viewport.flushMousePosition();
   }
 
-  public projectScreenToScene(screen: Point2D): Point2D;
-  public projectScreenToScene(x: number, y: number): Point2D;
-  public projectScreenToScene(screenOrX: Point2D | number, y?: number): Point2D {
-    const screen = resolvePointInput(screenOrX, y);
+  public projectScreenToScene(screen: Point2D): Point2D {
     return this.#viewport.projectScreenToScene(screen.x, screen.y);
   }
 
@@ -1315,35 +1295,23 @@ export class Editor implements ShiftEditor {
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public projectSceneToScreen(scene: Point2D): Point2D;
-  public projectSceneToScreen(x: number, y: number): Point2D;
-  public projectSceneToScreen(sceneOrX: Point2D | number, y?: number): Point2D {
-    const scene = resolvePointInput(sceneOrX, y);
+  public projectSceneToScreen(scene: Point2D): Point2D {
     return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
 
-  public fromScreen(screen: Point2D): Coordinates;
-  public fromScreen(sx: number, sy: number): Coordinates;
-  public fromScreen(screenOrX: Point2D | number, y?: number): Coordinates {
-    const screen = resolvePointInput(screenOrX, y);
+  public fromScreen(screen: Point2D): Coordinates {
     const scene = this.projectScreenToScene(screen);
     const glyphLocal = this.sceneToGlyphLocal(scene);
     return { screen, scene, glyphLocal };
   }
 
-  public fromScene(scene: Point2D): Coordinates;
-  public fromScene(x: number, y: number): Coordinates;
-  public fromScene(sceneOrX: Point2D | number, y?: number): Coordinates {
-    const scene = resolvePointInput(sceneOrX, y);
+  public fromScene(scene: Point2D): Coordinates {
     const screen = this.projectSceneToScreen(scene);
     const glyphLocal = this.sceneToGlyphLocal(scene);
     return { screen, scene, glyphLocal };
   }
 
-  public fromGlyphLocal(glyphLocal: Point2D): Coordinates;
-  public fromGlyphLocal(x: number, y: number): Coordinates;
-  public fromGlyphLocal(glyphLocalOrX: Point2D | number, y?: number): Coordinates {
-    const glyphLocal = resolvePointInput(glyphLocalOrX, y);
+  public fromGlyphLocal(glyphLocal: Point2D): Coordinates {
     const scene = this.glyphLocalToScene(glyphLocal);
     const screen = this.projectSceneToScreen(scene);
     return { screen, scene, glyphLocal };
@@ -1353,10 +1321,7 @@ export class Editor implements ShiftEditor {
     return this.#viewport.pan;
   }
 
-  public setPan(pan: Point2D): void;
-  public setPan(x: number, y: number): void;
-  public setPan(panOrX: Point2D | number, y?: number): void {
-    const pan = resolvePointInput(panOrX, y);
+  public setPan(pan: Point2D): void {
     this.#viewport.setPan(pan.x, pan.y);
   }
 
