@@ -45,6 +45,10 @@ expect(editor.pointCount).toBe(1);
 
 For command tests, asserting that `ctx.fontEngine.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
 
+### Never create mock renderer tests
+
+Do not create `createMockRenderer()` factories that return `vi.fn()` stubs for `IRenderer` methods. These tests assert on draw call sequences (`expect(renderer.moveTo).toHaveBeenCalledWith(...)`) which break on any refactor and don't verify visual correctness. Use snapshot tests or Playwright e2e instead for rendering verification.
+
 ### Keep tests lean
 
 - 5-15 lines per test
