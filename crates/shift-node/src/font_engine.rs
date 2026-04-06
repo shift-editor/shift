@@ -540,11 +540,28 @@ impl FontEngine {
   /// including the source location. Used by the TS interpolation engine.
   #[napi]
   pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
-    let glyph = self.font.glyph(&glyph_name)?;
-
     if !self.font.is_variable() {
       return None;
     }
+
+    // The editing glyph is taken out of the font during a session
+    // (and its default layer moved into the EditSession), so reconstruct it.
+    let mut temp_glyph;
+    let glyph = if let (Some(editing), Some(session), Some(layer_id)) = (
+      &self.editing_glyph,
+      &self.current_edit_session,
+      &self.editing_layer_id,
+    ) {
+      if editing.name() == glyph_name {
+        temp_glyph = editing.clone();
+        temp_glyph.set_layer(*layer_id, session.layer().clone());
+        &temp_glyph
+      } else {
+        self.font.glyph(&glyph_name)?
+      }
+    } else {
+      self.font.glyph(&glyph_name)?
+    };
 
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
