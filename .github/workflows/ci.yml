@@ -120,6 +120,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build native module
+        run: pnpm build:native
+
       - name: Run unit tests
         run: pnpm test:unit
 

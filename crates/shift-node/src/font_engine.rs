@@ -151,7 +151,9 @@ impl FontEngine {
     let backup = self.apply_edits_for_save();
     let font = self.font.clone();
     self.restore_from_backup(backup);
-    self.font_loader.write_font(&font, &path)
+    self
+      .font_loader
+      .write_font(&font, &path)
       .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
     Ok(())
   }
