@@ -167,7 +167,7 @@ describe("interpolateGlyph", () => {
     expect(result!.contours[0].points[0].y).toBeCloseTo(400);
   });
 
-  it("returns null for incompatible masters", () => {
+  it("falls back to default master when all others are incompatible", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
     const bold = makeMaster(
       "Bold",
@@ -180,7 +180,7 @@ describe("interpolateGlyph", () => {
     );
 
     const result = interpolateGlyph([light, bold], axes, { wght: 500 });
-    expect(result).toBeNull();
+    expect(result).toBe(light.snapshot);
   });
 
   it("preserves point metadata from reference master", () => {

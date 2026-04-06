@@ -3,7 +3,7 @@ import type { Axis } from "@shift/types";
 import { SidebarSection } from "./sidebar-right/SidebarSection";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
-import { checkCompatibility, interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/interpolate";
+import { interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/interpolate";
 
 /** Variation axis slider panel — shown when a variable font is loaded. */
 export const VariationPanel = () => {
@@ -45,13 +45,7 @@ export const VariationPanel = () => {
       return;
     }
 
-    const loaded = engine.getGlyphMasterSnapshots(editingGlyph);
-    mastersRef.current = loaded;
-    if (loaded) {
-      console.log("[V] masters loaded for", editingGlyph, loaded.map(m =>
-        `${m.sourceName}:${m.snapshot.contours.length}c`
-      ));
-    }
+    mastersRef.current = engine.getGlyphMasterSnapshots(editingGlyph);
     setIsInterpolating(false);
   }, [axes, editingGlyph, engine]);
 
@@ -64,11 +58,7 @@ export const VariationPanel = () => {
       if (!ms || ms.length < 2) return;
 
       const result = interpolateGlyph(ms, axes, newLocation);
-      if (!result) {
-        console.log("[V] interp null, compat:", checkCompatibility(ms));
-        return;
-      }
-      console.log("[V] interp OK, adv:", result.xAdvance);
+      if (!result) return;
 
       setIsInterpolating(true);
       engine.emitGlyph(result);

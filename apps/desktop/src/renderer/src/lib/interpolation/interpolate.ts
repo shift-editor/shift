@@ -358,21 +358,38 @@ export function interpolateGlyph(
 
   if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
 
-  const error = checkCompatibility(uniqueMasters);
-  if (error) return null;
+  // Filter to only masters compatible with the first (default) master
+  const ref = uniqueMasters[0].snapshot;
+  const compatIndices = [0];
+  for (let i = 1; i < uniqueMasters.length; i++) {
+    const other = uniqueMasters[i].snapshot;
+    if (ref.contours.length !== other.contours.length) continue;
+    let compatible = true;
+    for (let c = 0; c < ref.contours.length; c++) {
+      if (ref.contours[c].points.length !== other.contours[c].points.length) {
+        compatible = false;
+        break;
+      }
+    }
+    if (compatible) compatIndices.push(i);
+  }
+  const compatMasters = compatIndices.map((i) => uniqueMasters[i]);
+  const compatLocations = compatIndices.map((i) => uniqueLocations[i]);
+
+  if (compatMasters.length < 2) return compatMasters[0]?.snapshot ?? null;
 
   const axisOrder = axes.map((a) => a.tag);
 
   // Build model — wrap in try/catch for robustness
   let model: VariationModelData;
   try {
-    model = buildVariationModel(uniqueLocations, axisOrder);
+    model = buildVariationModel(compatLocations, axisOrder);
   } catch {
     return null;
   }
 
   // Flatten master values into number arrays
-  const masterFlats = uniqueMasters.map((m) => snapshotToFlat(m.snapshot));
+  const masterFlats = compatMasters.map((m) => snapshotToFlat(m.snapshot));
 
   // Compute deltas
   const deltas: number[][] = [];
@@ -398,7 +415,7 @@ export function interpolateGlyph(
     result = result === null ? contribution : flatAdd(result, contribution);
   }
 
-  if (!result) return uniqueMasters[0].snapshot;
+  if (!result) return compatMasters[0].snapshot;
 
-  return flatToSnapshot(result, uniqueMasters[0].snapshot);
+  return flatToSnapshot(result, compatMasters[0].snapshot);
 }
