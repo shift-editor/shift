@@ -141,20 +141,22 @@ export class NativeBridge {
     return JSON.parse(payload) as CompositeComponentsPayload;
   }
 
-  // ── Variable Font Queries ──
-
+  /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
     return this.#raw.isVariable();
   }
 
+  /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
     return JSON.parse(this.#raw.getAxes()) as Axis[];
   }
 
+  /** @knipclassignore — used by VariationPanel component */
   getSources(): Source[] {
     return JSON.parse(this.#raw.getSources()) as Source[];
   }
 
+  /** @knipclassignore — used by VariationPanel component */
   getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
     const json = this.#raw.getGlyphMasterSnapshots(glyphName);
     if (!json) return null;

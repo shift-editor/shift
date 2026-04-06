@@ -361,7 +361,7 @@
 
 **Designspace Support**
 
-- [ ] Load `.designspace` files
+- [x] Load `.designspace` files
 - [x] Parse axis definitions (wght, wdth, ital, custom)
 - [ ] Named instances
 

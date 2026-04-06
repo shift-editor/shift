@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<designspace format="4.1">
+  <axes>
+    <axis tag="wght" name="Weight" minimum="100" default="100" maximum="900"/>
+  </axes>
+  <sources>
+    <source filename="MutatorSans-Light.ufo" familyname="MutatorSans" stylename="Light">
+      <location>
+        <dimension name="Weight" xvalue="100"/>
+      </location>
+    </source>
+    <source filename="MutatorSans-Bold.ufo" familyname="MutatorSans" stylename="Bold">
+      <location>
+        <dimension name="Weight" xvalue="900"/>
+      </location>
+    </source>
+  </sources>
+</designspace>

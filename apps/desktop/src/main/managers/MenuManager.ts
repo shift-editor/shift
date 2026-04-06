@@ -118,9 +118,12 @@ export class MenuManager {
             accelerator: "CmdOrCtrl+O",
             click: async () => {
               const result = await dialog.showOpenDialog({
-                properties: ["openFile"],
+                properties: ["openFile", "openDirectory"],
                 filters: [
-                  { name: "Fonts", extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage"] },
+                  {
+                    name: "Fonts",
+                    extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage", "designspace"],
+                  },
                 ],
               });
               if (!result.canceled && result.filePaths[0]) {

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::binary::BytesFontAdaptor;
+use shift_backends::designspace::DesignspaceReader;
 use shift_backends::glyphs::GlyphsReader;
 use shift_backends::ufo::UfoReader;
 use shift_backends::FontReader;
@@ -11,6 +12,7 @@ use shift_ir::Font;
 pub enum FontFormat {
     Ufo,
     Glyphs,
+    Designspace,
     Ttf,
     Otf,
 }
@@ -22,6 +24,7 @@ pub trait FontAdaptor {
 
 struct UfoFontAdaptor;
 struct GlyphsFontAdaptor;
+struct DesignspaceFontAdaptor;
 
 impl FontAdaptor for UfoFontAdaptor {
     fn read_font(&self, path: &str) -> Result<Font, String> {
@@ -45,6 +48,16 @@ impl FontAdaptor for GlyphsFontAdaptor {
     }
 }
 
+impl FontAdaptor for DesignspaceFontAdaptor {
+    fn read_font(&self, path: &str) -> Result<Font, String> {
+        DesignspaceReader::new().load(path)
+    }
+
+    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
+        Err("Designspace writing is not supported; save as .ufo instead".to_string())
+    }
+}
+
 pub struct FontLoader {
     adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>>,
 }
@@ -60,6 +73,7 @@ fn format_from_extension(ext: &str) -> Result<FontFormat, String> {
         "ufo" => Ok(FontFormat::Ufo),
         "glyphs" => Ok(FontFormat::Glyphs),
         "glyphspackage" => Ok(FontFormat::Glyphs),
+        "designspace" => Ok(FontFormat::Designspace),
         "ttf" => Ok(FontFormat::Ttf),
         "otf" => Ok(FontFormat::Otf),
         _ => Err(format!("Unsupported font format: {ext}")),
@@ -78,6 +92,7 @@ impl FontLoader {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
         adaptors.insert(FontFormat::Glyphs, Box::new(GlyphsFontAdaptor));
+        adaptors.insert(FontFormat::Designspace, Box::new(DesignspaceFontAdaptor));
         adaptors.insert(FontFormat::Ttf, Box::new(BytesFontAdaptor));
         adaptors.insert(FontFormat::Otf, Box::new(BytesFontAdaptor));
 
@@ -131,6 +146,14 @@ mod tests {
     }
 
     #[test]
+    fn supports_designspace_extension() {
+        assert!(matches!(
+            format_from_extension("designspace"),
+            Ok(FontFormat::Designspace)
+        ));
+    }
+
+    #[test]
     fn extension_matching_is_case_insensitive() {
         assert!(matches!(format_from_extension("UFO"), Ok(FontFormat::Ufo)));
         assert!(matches!(
@@ -138,5 +161,9 @@ mod tests {
             Ok(FontFormat::Glyphs)
         ));
         assert!(matches!(format_from_extension("OTF"), Ok(FontFormat::Otf)));
+        assert!(matches!(
+            format_from_extension("DESIGNSPACE"),
+            Ok(FontFormat::Designspace)
+        ));
     }
 }
