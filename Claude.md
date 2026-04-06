@@ -3,7 +3,7 @@
 ## General Guidelines
 
 - Prefer switch statements over long if-else chains when branching on the same value.
-- Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level.
+- Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level. In React components, guard on null data at the top (`if (!glyph) return null;`) instead of scattering `glyph?.foo ?? fallback` throughout the JSX.
 
 ## Documentation
 
