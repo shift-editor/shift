@@ -11,7 +11,7 @@ use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
-  AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
+  AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId, Location,
   NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
@@ -515,6 +515,91 @@ impl FontEngine {
       glyph_name: resolved_name.to_string(),
       components,
     }))
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // VARIABLE FONT QUERIES
+  // ═══════════════════════════════════════════════════════════
+
+  #[napi]
+  pub fn is_variable(&self) -> bool {
+    self.font.is_variable()
+  }
+
+  #[napi]
+  pub fn get_axes(&self) -> String {
+    to_json(&self.font.axes())
+  }
+
+  #[napi]
+  pub fn get_sources(&self) -> String {
+    to_json(&self.font.sources())
+  }
+
+  /// Returns a JSON object mapping source IDs to their glyph snapshots,
+  /// including the source location. Used by the TS interpolation engine.
+  #[napi]
+  pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
+    let glyph = self.font.glyph(&glyph_name)?;
+
+    if !self.font.is_variable() {
+      return None;
+    }
+
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct MasterSnapshot {
+      source_id: String,
+      source_name: String,
+      location: Location,
+      snapshot: GlyphSnapshot,
+    }
+
+    let mut masters: Vec<MasterSnapshot> = Vec::new();
+
+    for source in self.font.sources() {
+      let layer_id = source.layer_id();
+      let layer = match glyph.layer(layer_id) {
+        Some(l) => l,
+        None => continue,
+      };
+
+      let primary_unicode = glyph.primary_unicode().unwrap_or(0);
+
+      let contours = layer
+        .contours()
+        .values()
+        .map(shift_core::snapshot::ContourSnapshot::from)
+        .collect();
+
+      let anchors = layer
+        .anchors_iter()
+        .map(shift_core::snapshot::AnchorSnapshot::from)
+        .collect();
+
+      let snapshot = GlyphSnapshot {
+        unicode: primary_unicode,
+        name: glyph.name().to_string(),
+        x_advance: layer.width(),
+        contours,
+        anchors,
+        composite_contours: Vec::new(),
+        active_contour_id: None,
+      };
+
+      masters.push(MasterSnapshot {
+        source_id: source.id().raw().to_string(),
+        source_name: source.name().to_string(),
+        location: source.location().clone(),
+        snapshot,
+      });
+    }
+
+    if masters.is_empty() {
+      return None;
+    }
+
+    Some(to_json(&masters))
   }
 
   // ═══════════════════════════════════════════════════════════

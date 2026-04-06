@@ -362,20 +362,20 @@
 **Designspace Support**
 
 - [ ] Load `.designspace` files
-- [ ] Parse axis definitions (wght, wdth, ital, custom)
+- [x] Parse axis definitions (wght, wdth, ital, custom)
 - [ ] Named instances
 
 **Masters Editing**
 
-- [ ] Master list panel
+- [x] Master list panel
 - [ ] Switch between masters
 - [ ] Add/remove masters
 - [ ] Copy glyph between masters
 
 **Interpolation**
 
-- [ ] Compatibility checker (point/contour count)
-- [ ] Interpolation preview slider
+- [x] Compatibility checker (point/contour count)
+- [x] Interpolation preview slider
 - [ ] Intermediate master insertion
 - [ ] Extrapolation warning
 

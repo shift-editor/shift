@@ -25,6 +25,14 @@ export declare class FontEngine {
   getGlyphBbox(unicode: number): Array<number> | null
   getGlyphBboxByName(glyphName: string): Array<number> | null
   getGlyphCompositeComponents(glyphName: string): string | null
+  isVariable(): boolean
+  getAxes(): string
+  getSources(): string
+  /**
+   * Returns a JSON object mapping source IDs to their glyph snapshots,
+   * including the source location. Used by the TS interpolation engine.
+   */
+  getGlyphMasterSnapshots(glyphName: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
   endEditSession(): void
   hasEditSession(): boolean

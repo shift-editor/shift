@@ -23,6 +23,7 @@ const CONTOURS_ALLOWED = [
   "Editor.ts", // coordinator-level structural traversal
   "clipboard/", // ClipboardContent is not a Glyph, different type
   "ContourDoubleClick.ts", // finds contour by segment match
+  "interpolation/", // interpolation produces snapshots from raw contour data
 ];
 
 function checkParam(context, node) {
@@ -60,6 +61,7 @@ const SNAPSHOT_ALLOWED = [
   "behaviors/", // tool behaviors capture snapshots for undo via drafts
   "types/engine.ts", // engine response types
   "lib/model/", // reactive model uses snapshots for sync
+  "interpolation/", // interpolation produces snapshots by blending masters
 ];
 
 function isAllowedFile(filename, allowList) {
