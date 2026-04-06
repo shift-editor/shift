@@ -37,16 +37,20 @@ export const VariationPanel = () => {
   // Track the current glyph and reload masters when it changes
   useEffect(() => {
     const glyphName = engine.getEditingGlyphName();
+    console.log("[Variation] editingGlyph:", glyphName);
     setEditingGlyph(glyphName);
   });
 
   useEffect(() => {
     if (axes.length === 0 || !editingGlyph) {
+      console.log("[Variation] skipping masters load: axes=", axes.length, "glyph=", editingGlyph);
       mastersRef.current = null;
       return;
     }
 
-    mastersRef.current = engine.getGlyphMasterSnapshots(editingGlyph);
+    const masters = engine.getGlyphMasterSnapshots(editingGlyph);
+    console.log("[Variation] loaded masters:", masters?.length, "for", editingGlyph);
+    mastersRef.current = masters;
     setIsInterpolating(false);
   }, [axes, editingGlyph, engine]);
 
@@ -59,8 +63,10 @@ export const VariationPanel = () => {
       if (!masters || masters.length < 2) return;
 
       const result = interpolateGlyph(masters, axes, newLocation);
+      console.log("[Variation] interpolation result:", result ? "OK" : "null", "masters:", masters.length);
       if (!result) return;
 
+      console.log("[Variation] emitting glyph, xAdvance:", result.xAdvance);
       setIsInterpolating(true);
       engine.emitGlyph(result);
     },
@@ -81,7 +87,7 @@ export const VariationPanel = () => {
       }
       setLocation(newLocation);
 
-      // Show this master's snapshot directly
+      console.log("[Variation] master click:", sourceName, "emitting snapshot");
       setIsInterpolating(true);
       engine.emitGlyph(master.snapshot);
     },
