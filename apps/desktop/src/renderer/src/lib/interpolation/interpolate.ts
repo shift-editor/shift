@@ -4,6 +4,10 @@
  * Ported from Fontra's var-model.js which is itself a port of
  * fontTools.varLib.models.VariationModel. Uses support-region box-splitting
  * and delta decomposition for correct multilinear interpolation.
+ *
+ * Incompatible sources are handled per-source during delta computation
+ * (matching Fontra's approach): if subItemwise throws for a source, that
+ * source's delta is zeroed out rather than failing the whole interpolation.
  */
 import type { Axis, GlyphSnapshot, ContourSnapshot, PointSnapshot } from "@shift/types";
 
@@ -13,6 +17,13 @@ export interface MasterSnapshot {
   sourceName: string;
   location: { values: { [key in string]?: number } };
   snapshot: GlyphSnapshot;
+}
+
+/** Per-source error from delta computation. */
+export interface SourceError {
+  sourceIndex: number;
+  sourceName: string;
+  message: string;
 }
 
 // ── Axis normalization ──────────────────────────────────────────────
@@ -71,6 +82,94 @@ export function checkCompatibility(masters: MasterSnapshot[]): string | null {
   }
 
   return null;
+}
+
+// ── Itemwise arithmetic on GlyphSnapshot (matches Fontra) ───────────
+//
+// These operate on the structured glyph data directly. If two snapshots
+// have different contour/point counts, the operation throws — callers
+// catch per-source to handle incompatibility gracefully.
+
+class IncompatibleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IncompatibleError";
+  }
+}
+
+function subPoints(a: PointSnapshot[], b: PointSnapshot[]): PointSnapshot[] {
+  if (a.length !== b.length) {
+    throw new IncompatibleError(`point count ${a.length} vs ${b.length}`);
+  }
+  return a.map((ap, i) => ({ ...ap, x: ap.x - b[i].x, y: ap.y - b[i].y }));
+}
+
+function addPoints(a: PointSnapshot[], b: PointSnapshot[]): PointSnapshot[] {
+  if (a.length !== b.length) {
+    throw new IncompatibleError(`point count ${a.length} vs ${b.length}`);
+  }
+  return a.map((ap, i) => ({ ...ap, x: ap.x + b[i].x, y: ap.y + b[i].y }));
+}
+
+function mulScalarPoints(pts: PointSnapshot[], s: number): PointSnapshot[] {
+  return pts.map((p) => ({ ...p, x: p.x * s, y: p.y * s }));
+}
+
+function subContours(a: ContourSnapshot[], b: ContourSnapshot[]): ContourSnapshot[] {
+  if (a.length !== b.length) {
+    throw new IncompatibleError(`contour count ${a.length} vs ${b.length}`);
+  }
+  return a.map((ac, i) => ({
+    ...ac,
+    points: subPoints(ac.points, b[i].points),
+  }));
+}
+
+function addContours(a: ContourSnapshot[], b: ContourSnapshot[]): ContourSnapshot[] {
+  if (a.length !== b.length) {
+    throw new IncompatibleError(`contour count ${a.length} vs ${b.length}`);
+  }
+  return a.map((ac, i) => ({
+    ...ac,
+    points: addPoints(ac.points, b[i].points),
+  }));
+}
+
+function mulScalarContours(contours: ContourSnapshot[], s: number): ContourSnapshot[] {
+  return contours.map((c) => ({ ...c, points: mulScalarPoints(c.points, s) }));
+}
+
+/** Subtract snapshot B from A: A - B */
+function subSnapshot(a: GlyphSnapshot, b: GlyphSnapshot): GlyphSnapshot {
+  return {
+    ...a,
+    xAdvance: a.xAdvance - b.xAdvance,
+    contours: subContours(a.contours, b.contours),
+  };
+}
+
+/** Add snapshot B to A: A + B */
+function addSnapshot(a: GlyphSnapshot, b: GlyphSnapshot): GlyphSnapshot {
+  return {
+    ...a,
+    xAdvance: a.xAdvance + b.xAdvance,
+    contours: addContours(a.contours, b.contours),
+  };
+}
+
+/** Multiply all coordinates in a snapshot by a scalar */
+function mulScalarSnapshot(snap: GlyphSnapshot, s: number): GlyphSnapshot {
+  if (s === 1) return snap;
+  return {
+    ...snap,
+    xAdvance: snap.xAdvance * s,
+    contours: mulScalarContours(snap.contours, s),
+  };
+}
+
+/** A zero-valued snapshot with the same structure as the reference. */
+function zeroSnapshot(ref: GlyphSnapshot): GlyphSnapshot {
+  return mulScalarSnapshot(ref, 0);
 }
 
 // ── OpenType VariationModel (ported from Fontra/fonttools) ──────────
@@ -161,7 +260,6 @@ function buildVariationModel(
   masterLocations: SparseLocation[],
   axisOrder: string[],
 ): VariationModelData {
-  // Sort locations using fonttools' decorated sort
   const axisPoints: Record<string, Set<number>> = {};
   for (const loc of masterLocations) {
     const keys = Object.keys(loc);
@@ -212,7 +310,6 @@ function buildVariationModel(
 
   for (let i = 0; i < regions.length; i++) {
     const region = { ...regions[i] };
-    // Deep-copy the region's arrays
     for (const axis in region) {
       region[axis] = [...region[axis]];
     }
@@ -232,7 +329,6 @@ function buildVariationModel(
       }
       if (!relevant) continue;
 
-      // Split box
       let bestAxes: Record<string, [number, number, number]> = {};
       let bestRatio = -1;
       for (const axis of Object.keys(prevRegion)) {
@@ -262,7 +358,6 @@ function buildVariationModel(
     supports.push(region);
   }
 
-  // Compute delta weights
   const deltaWeights: Map<number, number>[] = [];
   for (let i = 0; i < sortedLocations.length; i++) {
     const loc = sortedLocations[i];
@@ -277,76 +372,29 @@ function buildVariationModel(
   return { mapping, reverseMapping, supports, deltaWeights };
 }
 
-// ── Flat array helpers for point data ───────────────────────────────
-
-/** Flatten a snapshot's point coordinates + xAdvance into a single number[]. */
-function snapshotToFlat(snapshot: GlyphSnapshot): number[] {
-  const flat: number[] = [snapshot.xAdvance];
-  for (const contour of snapshot.contours) {
-    for (const pt of contour.points) {
-      flat.push(pt.x, pt.y);
-    }
-  }
-  return flat;
-}
-
-function flatSub(a: number[], b: number[]): number[] {
-  const r: number[] = Array.from({ length: a.length });
-  for (let i = 0; i < a.length; i++) r[i] = a[i] - b[i];
-  return r;
-}
-
-function flatMulScalar(a: number[], s: number): number[] {
-  const r: number[] = Array.from({ length: a.length });
-  for (let i = 0; i < a.length; i++) r[i] = a[i] * s;
-  return r;
-}
-
-function flatAdd(a: number[], b: number[]): number[] {
-  const r: number[] = Array.from({ length: a.length });
-  for (let i = 0; i < a.length; i++) r[i] = a[i] + b[i];
-  return r;
-}
-
-/** Reconstruct a GlyphSnapshot from a flat array, using a reference for structure. */
-function flatToSnapshot(flat: number[], ref: GlyphSnapshot): GlyphSnapshot {
-  let idx = 0;
-  const xAdvance = flat[idx++];
-
-  const contours: ContourSnapshot[] = ref.contours.map((refContour) => ({
-    id: refContour.id,
-    closed: refContour.closed,
-    points: refContour.points.map((refPt) => {
-      const x = flat[idx++];
-      const y = flat[idx++];
-      return { ...refPt, x, y } as PointSnapshot;
-    }),
-  }));
-
-  return { ...ref, xAdvance, contours };
-}
-
-function contourSignature(snapshot: GlyphSnapshot): string {
-  return `${snapshot.contours.length}:${snapshot.contours.map((c) => c.points.length).join(",")}`;
-}
-
 // ── Public API ──────────────────────────────────────────────────────
+
+export interface InterpolationResult {
+  instance: GlyphSnapshot;
+  /** Sources that were incompatible and excluded from interpolation. */
+  errors: SourceError[];
+}
 
 /**
  * Interpolate a glyph at a target design-space location using the
  * OpenType VariationModel algorithm (support regions + delta decomposition).
  *
- * Follows Fontra's approach: use the default master as the compatibility
- * reference, filter out incompatible sources, and build the VariationModel
- * with the compatible subset. The default master is always included.
+ * Follows Fontra's approach: build the model with ALL sources, then handle
+ * incompatibility per-source during delta computation. Incompatible sources
+ * get a zero delta (no contribution) and are reported in `errors`.
  */
 export function interpolateGlyph(
   masters: MasterSnapshot[],
   axes: Axis[],
   target: Record<string, number>,
-): GlyphSnapshot | null {
+): InterpolationResult | null {
   if (masters.length === 0) return null;
-  if (masters.length === 1) return masters[0].snapshot;
+  if (masters.length === 1) return { instance: masters[0].snapshot, errors: [] };
 
   // Normalize master locations (sparse: omit axes at default)
   const normalizedLocations = masters.map((m) => normalizeLocation(m.location.values, axes));
@@ -364,49 +412,53 @@ export function interpolateGlyph(
   const uniqueMasters = uniqueIndices.map((i) => masters[i]);
   const uniqueLocations = uniqueIndices.map((i) => normalizedLocations[i]);
 
-  if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
+  if (uniqueMasters.length < 2) {
+    return { instance: uniqueMasters[0]?.snapshot ?? masters[0].snapshot, errors: [] };
+  }
 
-  // Find the default master (at normalized location {})
-  const defaultIdx = uniqueLocations.findIndex((loc) => Object.keys(loc).length === 0);
-  if (defaultIdx < 0) return null;
-
-  // Use the default master as the compatibility reference (matches Fontra).
-  // Filter out masters whose contour structure doesn't match the default.
-  const ref = uniqueMasters[defaultIdx].snapshot;
-  const refSig = contourSignature(ref);
-
-  const compatIndices = uniqueMasters
-    .map((m, i) => (contourSignature(m.snapshot) === refSig ? i : -1))
-    .filter((i) => i >= 0);
-
-  const compatMasters = compatIndices.map((i) => uniqueMasters[i]);
-  const compatLocations = compatIndices.map((i) => uniqueLocations[i]);
-
-  if (compatMasters.length < 2) return compatMasters[0]?.snapshot ?? null;
+  // The VariationModel requires a default location ({})
+  const hasDefault = uniqueLocations.some((loc) => Object.keys(loc).length === 0);
+  if (!hasDefault) return null;
 
   const axisOrder = axes.map((a) => a.tag);
 
-  // Build model — wrap in try/catch for robustness
   let model: VariationModelData;
   try {
-    model = buildVariationModel(compatLocations, axisOrder);
+    model = buildVariationModel(uniqueLocations, axisOrder);
   } catch {
     return null;
   }
 
-  // Flatten master values into number arrays
-  const masterFlats = compatMasters.map((m) => snapshotToFlat(m.snapshot));
+  // Find the default master's snapshot (for zero-value reference)
+  const defaultIdx = uniqueLocations.findIndex((loc) => Object.keys(loc).length === 0);
+  const defaultSnapshot = uniqueMasters[defaultIdx].snapshot;
 
-  // Compute deltas
-  const deltas: number[][] = [];
-  for (let i = 0; i < masterFlats.length; i++) {
-    let delta = masterFlats[model.reverseMapping[i]];
-    const weights = model.deltaWeights[i];
-    for (const [j, weight] of weights.entries()) {
-      delta =
-        weight === 1 ? flatSub(delta, deltas[j]) : flatSub(delta, flatMulScalar(deltas[j], weight));
+  // Compute deltas with per-source error handling.
+  // If subSnapshot throws for a source, that source gets a zero delta.
+  const errors: SourceError[] = [];
+  const deltas: GlyphSnapshot[] = [];
+
+  for (let i = 0; i < uniqueMasters.length; i++) {
+    const masterValue = uniqueMasters[model.reverseMapping[i]].snapshot;
+
+    try {
+      let delta = masterValue;
+      const weights = model.deltaWeights[i];
+      for (const [j, weight] of weights.entries()) {
+        const prev = weight === 1 ? deltas[j] : mulScalarSnapshot(deltas[j], weight);
+        delta = subSnapshot(delta, prev);
+      }
+      deltas.push(delta);
+    } catch (e) {
+      // This source is incompatible — zero delta, no contribution.
+      const originalIdx = model.reverseMapping[i];
+      errors.push({
+        sourceIndex: originalIdx,
+        sourceName: uniqueMasters[originalIdx].sourceName,
+        message: e instanceof Error ? e.message : String(e),
+      });
+      deltas.push(zeroSnapshot(defaultSnapshot));
     }
-    deltas.push(delta);
   }
 
   // Compute scalars at target location
@@ -414,14 +466,15 @@ export function interpolateGlyph(
   const scalars = model.supports.map((support) => supportScalar(normalizedTarget, support));
 
   // Interpolate: sum delta[i] * scalar[i]
-  let result: number[] | null = null;
+  let result: GlyphSnapshot | null = null;
   for (let i = 0; i < scalars.length; i++) {
     if (!scalars[i]) continue;
-    const contribution = flatMulScalar(deltas[i], scalars[i]);
-    result = result === null ? contribution : flatAdd(result, contribution);
+    const contribution = mulScalarSnapshot(deltas[i], scalars[i]);
+    result = result === null ? contribution : addSnapshot(result, contribution);
   }
 
-  if (!result) return compatMasters[0].snapshot;
-
-  return flatToSnapshot(result, compatMasters[0].snapshot);
+  return {
+    instance: result ?? defaultSnapshot,
+    errors,
+  };
 }

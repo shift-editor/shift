@@ -61,7 +61,7 @@ export const VariationPanel = () => {
       if (!result) return;
 
       setIsInterpolating(true);
-      engine.emitGlyph(result);
+      engine.emitGlyph(result.instance);
     },
     [location, axes, engine],
   );
