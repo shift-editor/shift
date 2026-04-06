@@ -13,4 +13,3 @@ export function getNative(): FontEngineAPI {
   cached = window.shiftFont;
   return cached;
 }
-

@@ -1025,7 +1025,7 @@ mod tests {
       })
       .unwrap();
 
-    let contour_id = engine.add_empty_contour().unwrap();
+    let contour_id = engine.add_contour().unwrap();
     assert!(!contour_id.is_empty());
 
     let active = engine.get_active_contour_id().unwrap();
@@ -1089,7 +1089,7 @@ mod tests {
       })
       .unwrap();
 
-    let dependents = engine.get_dependent_unicodes(65);
+    let dependents = engine.get_dependent_unicodes_by_name("A".to_string());
     assert!(
       dependents.contains(&0x00C1),
       "Expected U+00C1 (Aacute) to depend on U+0041 (A), got {dependents:?}"

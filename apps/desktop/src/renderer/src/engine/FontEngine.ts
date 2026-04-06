@@ -95,9 +95,10 @@ export class FontEngine {
       if (currentName === target.glyphName) return;
       this.endEditSession();
     }
-    const ref = target.unicode !== null
-      ? { glyphName: target.glyphName, unicode: target.unicode }
-      : { glyphName: target.glyphName };
+    const ref =
+      target.unicode !== null
+        ? { glyphName: target.glyphName, unicode: target.unicode }
+        : { glyphName: target.glyphName };
     this.#raw.startEditSession(ref);
     this.emitGlyph(this.getSessionGlyph());
   }

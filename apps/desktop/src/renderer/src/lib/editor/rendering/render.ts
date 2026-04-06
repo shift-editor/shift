@@ -111,4 +111,3 @@ export function buildContourPath(ctx: IRenderer, contour: SegmentContourLike): b
   if (contour.closed) ctx.closePath();
   return contour.closed;
 }
-
