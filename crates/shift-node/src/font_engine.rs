@@ -574,11 +574,42 @@ impl FontEngine {
 
     let mut masters: Vec<MasterSnapshot> = Vec::new();
 
+    eprintln!(
+      "[master_snapshots] glyph='{}' total_layers={} sources={}",
+      glyph_name,
+      glyph.layers().len(),
+      self.font.sources().len()
+    );
+
     for source in self.font.sources() {
       let layer_id = source.layer_id();
       let layer = match glyph.layer(layer_id) {
-        Some(l) if !l.contours().is_empty() => l,
-        _ => continue,
+        Some(l) if !l.contours().is_empty() => {
+          eprintln!(
+            "  source='{}' layer_id={:?} contours={}",
+            source.name(),
+            layer_id,
+            l.contours().len()
+          );
+          l
+        }
+        Some(l) => {
+          eprintln!(
+            "  source='{}' layer_id={:?} SKIPPED (empty, contours={})",
+            source.name(),
+            layer_id,
+            l.contours().len()
+          );
+          continue;
+        }
+        None => {
+          eprintln!(
+            "  source='{}' layer_id={:?} SKIPPED (no layer)",
+            source.name(),
+            layer_id
+          );
+          continue;
+        }
       };
 
       let primary_unicode = glyph.primary_unicode().unwrap_or(0);
