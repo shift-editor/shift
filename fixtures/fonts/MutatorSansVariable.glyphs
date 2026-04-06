@@ -1,0 +1,143 @@
+{
+.appVersion = "1225";
+familyName = MutatorSans;
+axes = (
+{
+name = Weight;
+tag = wght;
+}
+);
+fontMaster = (
+{
+ascender = 800;
+capHeight = 700;
+descender = -200;
+id = master-light;
+customName = Light;
+weightValue = 100;
+xHeight = 500;
+},
+{
+ascender = 800;
+capHeight = 700;
+descender = -200;
+id = master-bold;
+customName = Bold;
+weightValue = 900;
+xHeight = 500;
+}
+);
+glyphs = (
+{
+glyphname = A;
+unicode = 0041;
+layers = (
+{
+layerId = master-light;
+width = 500;
+paths = (
+{
+closed = 1;
+nodes = (
+"0 0 LINE",
+"200 700 LINE",
+"250 700 LINE",
+"450 0 LINE",
+"375 0 LINE",
+"325 200 LINE",
+"125 200 LINE",
+"75 0 LINE"
+);
+},
+{
+closed = 1;
+nodes = (
+"150 270 LINE",
+"300 270 LINE",
+"225 560 LINE"
+);
+}
+);
+},
+{
+layerId = master-bold;
+width = 600;
+paths = (
+{
+closed = 1;
+nodes = (
+"0 0 LINE",
+"180 700 LINE",
+"320 700 LINE",
+"500 0 LINE",
+"380 0 LINE",
+"330 200 LINE",
+"170 200 LINE",
+"120 0 LINE"
+);
+},
+{
+closed = 1;
+nodes = (
+"200 270 LINE",
+"300 270 LINE",
+"250 520 LINE"
+);
+}
+);
+}
+);
+},
+{
+glyphname = space;
+unicode = 0020;
+layers = (
+{
+layerId = master-light;
+width = 250;
+},
+{
+layerId = master-bold;
+width = 300;
+}
+);
+},
+{
+glyphname = I;
+unicode = 0049;
+layers = (
+{
+layerId = master-light;
+width = 200;
+paths = (
+{
+closed = 1;
+nodes = (
+"50 0 LINE",
+"50 700 LINE",
+"100 700 LINE",
+"100 0 LINE"
+);
+}
+);
+},
+{
+layerId = master-bold;
+width = 300;
+paths = (
+{
+closed = 1;
+nodes = (
+"50 0 LINE",
+"50 700 LINE",
+"200 700 LINE",
+"200 0 LINE"
+);
+}
+);
+}
+);
+}
+);
+unitsPerEm = 1000;
+}
