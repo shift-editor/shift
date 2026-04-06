@@ -499,3 +499,75 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     expect(reloadedTypes).toEqual(originalTypes);
   });
 });
+
+// --- Variable font (.glyphs with multiple masters) tests ---
+
+const MUTATORSANS_VARIABLE = join(
+  FIXTURES_PATH,
+  "fonts/MutatorSansVariable.glyphs"
+);
+
+describe("FontEngine Integration - Variable Font (.glyphs)", () => {
+  it("detects variable font", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    expect(engine.isVariable()).toBe(true);
+  });
+
+  it("returns axes", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const axes = JSON.parse(engine.getAxes());
+    expect(axes).toHaveLength(1);
+    expect(axes[0].tag).toBe("wght");
+    expect(axes[0].name).toBe("Weight");
+    expect(axes[0].minimum).toBe(100);
+    expect(axes[0].maximum).toBe(900);
+    expect(axes[0].default).toBe(100);
+  });
+
+  it("returns sources", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const sources = JSON.parse(engine.getSources());
+    expect(sources).toHaveLength(2);
+    expect(sources[0].location.values.wght).toBe(100);
+    expect(sources[1].location.values.wght).toBe(900);
+  });
+
+  it("returns master snapshots for glyph A", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    expect(json).not.toBeNull();
+    const masters = JSON.parse(json);
+    expect(masters).toHaveLength(2);
+
+    // Each master snapshot has sourceId, sourceName, location, snapshot
+    for (const m of masters) {
+      expect(m).toHaveProperty("sourceId");
+      expect(m).toHaveProperty("sourceName");
+      expect(m).toHaveProperty("location");
+      expect(m).toHaveProperty("snapshot");
+      expect(m.snapshot.contours).toHaveLength(2);
+    }
+
+    // Both masters should have matching point counts per contour
+    const lightCounts = masters[0].snapshot.contours.map(c => c.points.length);
+    const boldCounts = masters[1].snapshot.contours.map(c => c.points.length);
+    expect(lightCounts).toEqual(boldCounts);
+  });
+
+  it("non-variable font returns isVariable false", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_UFO);
+    expect(engine.isVariable()).toBe(false);
+  });
+
+  it("returns null for non-existent glyph master snapshots", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const json = engine.getGlyphMasterSnapshots("nonexistent");
+    expect(json).toBeNull();
+  });
+});

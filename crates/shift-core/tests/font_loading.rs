@@ -483,3 +483,91 @@ fn test_otf_has_glyph_contours() {
         "OTF glyph 'A' should have contours"
     );
 }
+
+// --- Variable font (multi-master .glyphs) tests ---
+
+fn mutatorsans_variable_glyphs_path() -> PathBuf {
+    fixtures_path().join("fonts/MutatorSansVariable.glyphs")
+}
+
+#[test]
+fn test_variable_glyphs_is_variable() {
+    let path = mutatorsans_variable_glyphs_path();
+    let loader = FontLoader::new();
+    let font = loader
+        .read_font(path.to_str().unwrap())
+        .expect("Failed to load variable .glyphs font");
+
+    assert!(font.is_variable(), "Multi-master font should be variable");
+}
+
+#[test]
+fn test_variable_glyphs_axes() {
+    let path = mutatorsans_variable_glyphs_path();
+    let loader = FontLoader::new();
+    let font = loader.read_font(path.to_str().unwrap()).unwrap();
+
+    let axes = font.axes();
+    assert_eq!(axes.len(), 1, "Should have 1 axis");
+    assert_eq!(axes[0].tag(), "wght");
+    assert_eq!(axes[0].name(), "Weight");
+    assert_eq!(axes[0].minimum(), 100.0);
+    assert_eq!(axes[0].maximum(), 900.0);
+    assert_eq!(axes[0].default(), 100.0);
+}
+
+#[test]
+fn test_variable_glyphs_sources() {
+    let path = mutatorsans_variable_glyphs_path();
+    let loader = FontLoader::new();
+    let font = loader.read_font(path.to_str().unwrap()).unwrap();
+
+    let sources = font.sources();
+    assert_eq!(sources.len(), 2, "Should have 2 sources (Light and Bold)");
+
+    let light = &sources[0];
+    assert_eq!(light.location().get("wght"), Some(100.0));
+
+    let bold = &sources[1];
+    assert_eq!(bold.location().get("wght"), Some(900.0));
+}
+
+#[test]
+fn test_variable_glyphs_glyph_has_multiple_layers() {
+    let path = mutatorsans_variable_glyphs_path();
+    let loader = FontLoader::new();
+    let font = loader.read_font(path.to_str().unwrap()).unwrap();
+
+    let glyph_a = font.glyph("A").expect("Glyph 'A' should exist");
+    assert_eq!(
+        glyph_a.layers().len(),
+        2,
+        "Variable glyph 'A' should have 2 layers (one per master)"
+    );
+}
+
+#[test]
+fn test_variable_glyphs_masters_are_compatible() {
+    let path = mutatorsans_variable_glyphs_path();
+    let loader = FontLoader::new();
+    let font = loader.read_font(path.to_str().unwrap()).unwrap();
+
+    let glyph_a = font.glyph("A").expect("Glyph 'A' should exist");
+    let layers: Vec<_> = glyph_a.layers().values().collect();
+    assert_eq!(layers.len(), 2);
+
+    // Both layers should have the same number of contours
+    assert_eq!(
+        layers[0].contours().len(),
+        layers[1].contours().len(),
+        "Masters should have the same number of contours"
+    );
+
+    // Both outer contours should have the same number of points
+    let contour0_points: usize = layers[0].contours().iter().map(|(_, c)| c.points().len()).sum();
+    let contour1_points: usize = layers[1].contours().iter().map(|(_, c)| c.points().len()).sum();
+    assert_eq!(
+        contour0_points, contour1_points,
+        "Masters should have the same total point count"
+    );
+}
