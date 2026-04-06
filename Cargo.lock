@@ -1555,6 +1555,7 @@ dependencies = [
 name = "shift-ir"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "serde",
  "ts-rs",
 ]
