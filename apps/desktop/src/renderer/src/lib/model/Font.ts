@@ -1,4 +1,5 @@
-import type { FontMetrics, FontMetadata, CompositeGlyph } from "@shift/types";
+import type { FontMetrics, FontMetadata, CompositeGlyph, Axis, Source, Location } from "@shift/types";
+import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
@@ -15,12 +16,14 @@ export class Font {
   readonly #$loaded: WritableSignal<boolean>;
   readonly #$unicodes: WritableSignal<number[]>;
   readonly #$metrics: WritableSignal<FontMetrics | null>;
+  readonly #$variationLocation: WritableSignal<Location | null>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
     this.#$loaded = signal(false);
     this.#$unicodes = signal<number[]>([]);
     this.#$metrics = signal<FontMetrics | null>(null);
+    this.#$variationLocation = signal<Location | null>(null);
   }
 
   /** @knipclassignore */
@@ -91,6 +94,36 @@ export class Font {
 
   getSvgPath(name: string): string | null {
     return this.#bridge.getSvgPath(name);
+  }
+
+  /** @knipclassignore — used by GlyphPreview for variation interpolation */
+  get $variationLocation(): Signal<Location | null> {
+    return this.#$variationLocation;
+  }
+
+  /** @knipclassignore — used by VariationPanel */
+  setVariationLocation(location: Location | null): void {
+    this.#$variationLocation.set(location);
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  isVariable(): boolean {
+    return this.#bridge.isVariable();
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getAxes(): Axis[] {
+    return this.#bridge.getAxes();
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getSources(): Source[] {
+    return this.#bridge.getSources();
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
+    return this.#bridge.getGlyphMasterSnapshots(glyphName);
   }
 
   composites(glyphName: string): CompositeGlyph | null {
