@@ -1,18 +1,325 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<designspace format="4.1">
+<designspace format="5.0">
   <axes>
-    <axis tag="wght" name="Weight" minimum="100" default="100" maximum="900"/>
+    <axis tag="wdth" name="width" minimum="0" maximum="1000" default="0"/>
+    <axis tag="wght" name="weight" minimum="0" maximum="1000" default="0"/>
   </axes>
+  <rules>
+    <rule name="fold_I_serifs">
+      <conditionset>
+        <condition name="width" minimum="0" maximum="328"/>
+      </conditionset>
+      <sub name="I" with="I.narrow"/>
+    </rule>
+    <rule name="fold_S_terminals">
+      <conditionset>
+        <condition name="width" minimum="0" maximum="1000"/>
+        <condition name="weight" minimum="0" maximum="500"/>
+      </conditionset>
+      <sub name="S" with="S.closed"/>
+    </rule>
+  </rules>
   <sources>
-    <source filename="MutatorSans-Light.ufo" familyname="MutatorSans" stylename="Light">
+    <source filename="MutatorSansLightCondensed.ufo" familyname="MutatorMathTest" stylename="LightCondensed">
+      <lib copy="1"/>
+      <groups copy="1"/>
+      <features copy="1"/>
+      <info copy="1"/>
       <location>
-        <dimension name="Weight" xvalue="100"/>
+        <dimension name="width" xvalue="0"/>
+        <dimension name="weight" xvalue="0"/>
       </location>
     </source>
-    <source filename="MutatorSans-Bold.ufo" familyname="MutatorSans" stylename="Bold">
+    <source filename="MutatorSansBoldCondensed.ufo" familyname="MutatorMathTest" stylename="BoldCondensed">
       <location>
-        <dimension name="Weight" xvalue="900"/>
+        <dimension name="width" xvalue="0"/>
+        <dimension name="weight" xvalue="1000"/>
+      </location>
+    </source>
+    <source filename="MutatorSansLightWide.ufo" familyname="MutatorMathTest" stylename="LightWide">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="0"/>
+      </location>
+    </source>
+    <source filename="MutatorSansBoldWide.ufo" familyname="MutatorMathTest" stylename="BoldWide">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="1000"/>
+      </location>
+    </source>
+    <source filename="MutatorSansLightCondensed.ufo" familyname="MutatorMathTest" stylename="LightCondensed" layer="support.crossbar">
+      <location>
+        <dimension name="width" xvalue="0"/>
+        <dimension name="weight" xvalue="700"/>
+      </location>
+    </source>
+    <source filename="MutatorSansLightCondensed.ufo" familyname="MutatorMathTest" stylename="LightCondensed" layer="support.S.wide">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="700"/>
+      </location>
+    </source>
+    <source filename="MutatorSansLightCondensed.ufo" familyname="MutatorMathTest" stylename="LightCondensed" layer="support.S.middle">
+      <location>
+        <dimension name="width" xvalue="569.078"/>
+        <dimension name="weight" xvalue="700"/>
       </location>
     </source>
   </sources>
+  <variable-fonts>
+    <variable-font name="MutatorSans_All_Variable" filename="MutatorSans_All_Variable.ttf">
+      <axis-subsets>
+        <axis-subset name="weight"/>
+        <axis-subset name="width"/>
+      </axis-subsets>
+    </variable-font>
+    <variable-font name="MutatorSans_Weight_Variable_Width_0" filename="MutatorSans_Weight_Variable_Width_400.ttf">
+      <axis-subsets>
+        <axis-subset name="weight"/>
+        <axis-subset name="width" uservalue="0"/>
+      </axis-subsets>
+    </variable-font>
+    <variable-font name="MutatorSans_Width_Variable_Weight_1000" filename="MutatorSans_Width_Variable_Weight_1000.ttf">
+      <axis-subsets>
+        <axis-subset name="weight" uservalue="1000"/>
+        <axis-subset name="width"/>
+      </axis-subsets>
+    </variable-font>
+  </variable-fonts>
+  <instances>
+    <instance familyname="MutatorSans" stylename="LightCondensed" filename="instances/MutatorSans-LightCondensed.ufo" postscriptfontname="MutatorMathTest-LightCondensed">
+      <location>
+        <dimension name="width" xvalue="0"/>
+        <dimension name="weight" xvalue="0"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="BoldCondensed" filename="instances/MutatorSans-BoldCondensed.ufo" postscriptfontname="MutatorMathTest-BoldCondensed">
+      <location>
+        <dimension name="width" xvalue="0"/>
+        <dimension name="weight" xvalue="1000"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="LightWide" filename="instances/MutatorSans-LightWide.ufo" postscriptfontname="MutatorMathTest-LightWide">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="0"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="BoldWide" filename="instances/MutatorSans-BoldWide.ufo" postscriptfontname="MutatorMathTest-BoldWide">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="1000"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Medium_Narrow_I" filename="instances/MutatorSans-Medium_Narrow_I.ufo" postscriptfontname="MutatorMathTest-Medium_Narrow_I">
+      <location>
+        <dimension name="width" xvalue="327"/>
+        <dimension name="weight" xvalue="500"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Two" filename="instances/MutatorSans-Two.ufo" postscriptfontname="MutatorMathTest-Two">
+      <location>
+        <dimension name="width" xvalue="569.078"/>
+        <dimension name="weight" xvalue="1000"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="One" filename="instances/MutatorSans-One.ufo" postscriptfontname="MutatorMathTest-One">
+      <location>
+        <dimension name="width" xvalue="1000"/>
+        <dimension name="weight" xvalue="500"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="UserLocation_700" filename="instances/MutatorSans-UserLocation_700.ufo" postscriptfontname="MutatorSans-UserLocation_700">
+      <location>
+        <dimension name="width" uservalue="700"/>
+        <dimension name="weight" uservalue="775.609"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="UserLocation_100" filename="instances/MutatorSans-UserLocation_100.ufo">
+      <location>
+        <dimension name="width" uservalue="100"/>
+        <dimension name="weight" uservalue="658.597"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Medium_Wide_I" filename="instances/MutatorSans-Medium_Wide_I.ufo" postscriptfontname="MutatorMathTest-Medium_Narrow_I">
+      <location>
+        <dimension name="width" xvalue="328"/>
+        <dimension name="weight" xvalue="500"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Anisotropic_one" filename="instances/MutatorSans-Anisotropic_one.ufo">
+      <location>
+        <dimension name="width" uservalue="500"/>
+        <dimension name="weight" uservalue="200"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Extrapolate" filename="instances/MutatorSans-Extrapolate.ufo">
+      <location>
+        <dimension name="width" xvalue="2000"/>
+        <dimension name="weight" xvalue="2000"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Anisotropic_Extrapolate" filename="instances/MutatorSans-Anisotropic_Extrapolate.ufo">
+      <location>
+        <dimension name="width" xvalue="2000"/>
+        <dimension name="weight" xvalue="200" yvalue="1300"/>
+      </location>
+    </instance>
+    <instance familyname="MutatorSans" stylename="Support_Layer_Demo" filename="instances/MutatorSans-Style_13.ufo">
+      <location>
+        <dimension name="width" xvalue="569.078003"/>
+        <dimension name="weight" xvalue="700"/>
+      </location>
+    </instance>
+    <instance name="instance.14" familyname="MutatorSans" stylename="Rule_result_1" filename="instances/MutatorSans-Rule_result_1.ufo">
+      <location>
+        <dimension name="width" xvalue="140"/>
+        <dimension name="weight" xvalue="140"/>
+      </location>
+    </instance>
+    <instance name="instance.14" familyname="MutatorSans" stylename="Rule_result_2" filename="instances/MutatorSans-Rule_result_2.ufo">
+      <location>
+        <dimension name="width" xvalue="700"/>
+        <dimension name="weight" xvalue="700"/>
+      </location>
+    </instance>
+  </instances>
+  <lib>
+    <dict>
+      <key>com.letterror.designspaceEditor.previewLocation</key>
+      <dict>
+        <key>weight</key>
+        <real>146.73033142089844</real>
+        <key>width</key>
+        <real>58.626346588134766</real>
+      </dict>
+      <key>com.letterror.designspaceEditor.previewText</key>
+      <string>FISH</string>
+      <key>com.letterror.longboard.interactionSources</key>
+      <array>
+        <array>
+          <string>width</string>
+          <string>horizontal</string>
+        </array>
+        <array>
+          <string>weight</string>
+          <string>vertical</string>
+        </array>
+      </array>
+      <key>com.letterror.mathModelPref</key>
+      <string>previewMutatorMath</string>
+      <key>com.letterror.skateboard.interactionSources</key>
+      <dict>
+        <key>horizontal</key>
+        <array>
+          <string>width</string>
+        </array>
+        <key>ignore</key>
+        <array/>
+        <key>vertical</key>
+        <array>
+          <string>weight</string>
+        </array>
+      </dict>
+      <key>com.letterror.skateboard.interestingLocation</key>
+      <array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>775.609</real>
+            <key>width</key>
+            <real>794.522</real>
+          </dict>
+          <string>S1</string>
+        </array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>855.549</real>
+            <key>width</key>
+            <real>795.978</real>
+          </dict>
+          <string>S2</string>
+        </array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>1194.939375384999</real>
+            <key>width</key>
+            <real>898.8087507107668</real>
+          </dict>
+          <string>S3</string>
+        </array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>161.67457510442006</real>
+            <key>width</key>
+            <real>404.05720203707176</real>
+          </dict>
+          <string>This is horrible</string>
+        </array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>467.73409948979594</real>
+            <key>width</key>
+            <real>538.7016581632644</real>
+          </dict>
+          <string>Stem == 200?</string>
+        </array>
+        <array>
+          <dict>
+            <key>weight</key>
+            <real>658.597</real>
+            <key>width</key>
+            <real>93.05199999999985</real>
+          </dict>
+          <string>My_new_location</string>
+        </array>
+      </array>
+      <key>com.letterror.skateboard.previewLocation</key>
+      <dict>
+        <key>weight</key>
+        <real>177.33442834877678</real>
+        <key>width</key>
+        <real>747.3306156281592</real>
+      </dict>
+      <key>com.superpolator.data</key>
+      <dict>
+        <key>axiscolors</key>
+        <dict>
+          <key>weight</key>
+          <array>
+            <real>0.5</real>
+            <real>0.5</real>
+            <real>0.5</real>
+            <real>1.0</real>
+          </array>
+          <key>width</key>
+          <array>
+            <real>0.5</real>
+            <real>0.5</real>
+            <real>0.5</real>
+            <real>1.0</real>
+          </array>
+        </dict>
+        <key>instancefolder</key>
+        <string>instances</string>
+        <key>lineInverted</key>
+        <true/>
+        <key>lineStacked</key>
+        <string>sequence</string>
+        <key>lineViewFilled</key>
+        <true/>
+        <key>previewtext</key>
+        <string>SUPER</string>
+        <key>snippets</key>
+        <array/>
+      </dict>
+      <key>designspaceEdit.notes</key>
+      <string></string>
+    </dict>
+  </lib>
 </designspace>

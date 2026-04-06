@@ -1,7 +1,8 @@
 use crate::traits::FontReader;
 use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
-use shift_ir::{Axis, Font, Layer, Location, Source};
+use shift_ir::{Axis, Font, Layer, LayerId, Location, Source};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub struct DesignspaceReader;
@@ -32,7 +33,6 @@ impl FontReader for DesignspaceReader {
             return Err("Designspace has no sources".to_string());
         }
 
-        // Find the default source — the one whose location matches axis defaults.
         let default_idx = find_default_source_index(&doc);
 
         // Load the default source first to establish the base font.
@@ -45,7 +45,6 @@ impl FontReader for DesignspaceReader {
         let ufo_reader = UfoReader::new();
         let mut font = ufo_reader.load(default_ufo_str)?;
 
-        // Override metadata from the designspace source if available.
         if let Some(ref family) = default_ds_source.familyname {
             font.metadata_mut().family_name = Some(family.clone());
         }
@@ -76,7 +75,10 @@ impl FontReader for DesignspaceReader {
             default_ds_source.filename.clone(),
         ));
 
-        // Load each non-default source as a new layer.
+        // Cache loaded UFO fonts so we don't re-read the same file for support layers.
+        let mut ufo_cache: HashMap<String, Font> = HashMap::new();
+
+        // Load each non-default source.
         for (idx, ds_source) in doc.sources.iter().enumerate() {
             if idx == default_idx {
                 continue;
@@ -85,18 +87,38 @@ impl FontReader for DesignspaceReader {
             let ufo_path = ds_dir.join(&ds_source.filename);
             let ufo_str = ufo_path
                 .to_str()
-                .ok_or_else(|| format!("Invalid UTF-8 in UFO path: {:?}", ufo_path))?;
+                .ok_or_else(|| format!("Invalid UTF-8 in UFO path: {ufo_path:?}"))?
+                .to_string();
 
-            let source_font = ufo_reader.load(ufo_str)?;
-            let source_default_layer = source_font.default_layer_id();
+            let source_font = match ufo_cache.get(&ufo_str) {
+                Some(f) => f,
+                None => {
+                    let loaded = ufo_reader.load(&ufo_str)?;
+                    ufo_cache.insert(ufo_str.clone(), loaded);
+                    ufo_cache.get(&ufo_str).unwrap()
+                }
+            };
+
+            // Determine which layer from the source UFO to read.
+            let source_layer_id = match &ds_source.layer {
+                Some(layer_name) => {
+                    find_layer_by_name(source_font, layer_name).ok_or_else(|| {
+                        format!(
+                            "Layer '{}' not found in '{}'",
+                            layer_name, ds_source.filename
+                        )
+                    })?
+                }
+                None => source_font.default_layer_id(),
+            };
 
             let name = source_name(ds_source, idx);
             let layer = Layer::new(name.clone());
             let layer_id = font.add_layer(layer);
 
-            // Copy glyphs from this source's default layer into the new layer.
+            // Copy glyphs from the resolved layer into the new layer.
             for (glyph_name, source_glyph) in source_font.glyphs() {
-                if let Some(source_layer) = source_glyph.layer(source_default_layer) {
+                if let Some(source_layer) = source_glyph.layer(source_layer_id) {
                     if let Some(existing_glyph) = font.glyph_mut(glyph_name) {
                         existing_glyph.set_layer(layer_id, source_layer.clone());
                     }
@@ -130,7 +152,6 @@ fn location_from_dimensions(
 ) -> Location {
     let mut location = Location::new();
     for dim in dimensions {
-        // Dimension uses axis name; we need the axis tag.
         let value = dim.xvalue.unwrap_or(0.0) as f64;
         if let Some(axis) = doc.axes.iter().find(|a| a.name == dim.name) {
             location.set(axis.tag.clone(), value);
@@ -140,8 +161,12 @@ fn location_from_dimensions(
 }
 
 fn find_default_source_index(doc: &DesignSpaceDocument) -> usize {
-    // The default source is the one whose location matches axis defaults.
     for (idx, source) in doc.sources.iter().enumerate() {
+        // Skip support layer sources.
+        if source.layer.is_some() {
+            continue;
+        }
+
         let is_default = doc.axes.iter().all(|axis| {
             source
                 .location
@@ -157,6 +182,12 @@ fn find_default_source_index(doc: &DesignSpaceDocument) -> usize {
             return idx;
         }
     }
-    // Fall back to first source.
     0
+}
+
+fn find_layer_by_name(font: &Font, name: &str) -> Option<LayerId> {
+    font.layers()
+        .iter()
+        .find(|(_, layer)| layer.name() == name)
+        .map(|(&id, _)| id)
 }

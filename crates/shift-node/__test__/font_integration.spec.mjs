@@ -581,26 +581,28 @@ describe("FontEngine Integration - Designspace", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_DESIGNSPACE);
     expect(engine.isVariable()).toBe(true);
-    expect(engine.getGlyphCount()).toBe(2);
+    expect(engine.getGlyphCount()).toBeGreaterThan(10);
   });
 
   it("returns axes from designspace", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_DESIGNSPACE);
     const axes = JSON.parse(engine.getAxes());
-    expect(axes).toHaveLength(1);
-    expect(axes[0].tag).toBe("wght");
-    expect(axes[0].minimum).toBe(100);
-    expect(axes[0].maximum).toBe(900);
+    expect(axes).toHaveLength(2);
+    expect(axes[0].tag).toBe("wdth");
+    expect(axes[0].minimum).toBe(0);
+    expect(axes[0].maximum).toBe(1000);
+    expect(axes[1].tag).toBe("wght");
   });
 
   it("returns sources from designspace", () => {
     const engine = new FontEngine();
     engine.loadFont(MUTATORSANS_DESIGNSPACE);
     const sources = JSON.parse(engine.getSources());
-    expect(sources).toHaveLength(2);
-    expect(sources[0].location.values.wght).toBe(100);
-    expect(sources[1].location.values.wght).toBe(900);
+    // 4 main masters + 3 support layers
+    expect(sources).toHaveLength(7);
+    expect(sources[0].location.values.wdth).toBe(0);
+    expect(sources[0].location.values.wght).toBe(0);
   });
 
   it("returns master snapshots for glyph A", () => {
@@ -609,8 +611,9 @@ describe("FontEngine Integration - Designspace", () => {
     const json = engine.getGlyphMasterSnapshots("A");
     expect(json).not.toBeNull();
     const masters = JSON.parse(json);
-    expect(masters).toHaveLength(2);
-    expect(masters[0].snapshot.contours).toHaveLength(2);
-    expect(masters[1].snapshot.contours).toHaveLength(2);
+    expect(masters.length).toBeGreaterThanOrEqual(4);
+    for (const m of masters) {
+      expect(m.snapshot.contours.length).toBeGreaterThan(0);
+    }
   });
 });

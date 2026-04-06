@@ -595,7 +595,10 @@ fn test_designspace_loads() {
         .expect("Failed to load designspace");
 
     assert!(font.is_variable(), "Designspace font should be variable");
-    assert_eq!(font.glyph_count(), 2, "Should have 2 glyphs (A, space)");
+    assert!(
+        font.glyph_count() > 10,
+        "MutatorSans should have many glyphs"
+    );
 }
 
 #[test]
@@ -605,12 +608,13 @@ fn test_designspace_axes() {
     let font = loader.read_font(path.to_str().unwrap()).unwrap();
 
     let axes = font.axes();
-    assert_eq!(axes.len(), 1);
-    assert_eq!(axes[0].tag(), "wght");
-    assert_eq!(axes[0].name(), "Weight");
-    assert_eq!(axes[0].minimum(), 100.0);
-    assert_eq!(axes[0].maximum(), 900.0);
-    assert_eq!(axes[0].default(), 100.0);
+    assert_eq!(axes.len(), 2, "MutatorSans has width + weight axes");
+    assert_eq!(axes[0].tag(), "wdth");
+    assert_eq!(axes[0].name(), "width");
+    assert_eq!(axes[0].minimum(), 0.0);
+    assert_eq!(axes[0].maximum(), 1000.0);
+    assert_eq!(axes[1].tag(), "wght");
+    assert_eq!(axes[1].name(), "weight");
 }
 
 #[test]
@@ -620,27 +624,32 @@ fn test_designspace_sources() {
     let font = loader.read_font(path.to_str().unwrap()).unwrap();
 
     let sources = font.sources();
-    assert_eq!(sources.len(), 2, "Should have 2 sources");
+    // 4 main masters + 3 support layer sources = 7
+    assert_eq!(
+        sources.len(),
+        7,
+        "Should have 7 sources (4 masters + 3 support)"
+    );
 
-    let light = &sources[0];
-    assert_eq!(light.location().get("wght"), Some(100.0));
-    assert!(light.filename().is_some());
-
-    let bold = &sources[1];
-    assert_eq!(bold.location().get("wght"), Some(900.0));
+    // Default source (LightCondensed) at (0, 0)
+    let default = &sources[0];
+    assert_eq!(default.location().get("wdth"), Some(0.0));
+    assert_eq!(default.location().get("wght"), Some(0.0));
+    assert!(default.filename().is_some());
 }
 
 #[test]
-fn test_designspace_glyph_has_two_layers() {
+fn test_designspace_glyph_has_multiple_layers() {
     let path = mutatorsans_designspace_path();
     let loader = FontLoader::new();
     let font = loader.read_font(path.to_str().unwrap()).unwrap();
 
     let glyph_a = font.glyph("A").expect("Glyph 'A' should exist");
-    assert_eq!(
-        glyph_a.layers().len(),
-        2,
-        "Glyph A should have 2 layers (one per master)"
+    // At least 4 layers from the 4 main masters
+    assert!(
+        glyph_a.layers().len() >= 4,
+        "Glyph A should have at least 4 layers, got {}",
+        glyph_a.layers().len()
     );
 }
 
@@ -653,7 +662,7 @@ fn test_designspace_metadata_from_default_source() {
     let metadata = font.metadata();
     assert_eq!(
         metadata.family_name.as_deref(),
-        Some("MutatorSans"),
+        Some("MutatorMathTest"),
         "Family name should come from designspace source"
     );
 }
