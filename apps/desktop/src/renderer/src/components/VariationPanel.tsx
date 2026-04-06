@@ -55,11 +55,9 @@ export const VariationPanel = () => {
       setLocation(newLocation);
 
       const ms = mastersRef.current;
-      console.log("[V] axis", tag, value, "masters:", ms?.length, "axes:", axes.length);
       if (!ms || ms.length < 2) return;
 
       const result = interpolateGlyph(ms, axes, newLocation);
-      console.log("[V] result:", result ? `ok adv=${result.xAdvance}` : "null");
       if (!result) return;
 
       setIsInterpolating(true);
