@@ -4,6 +4,7 @@ import {
   normalizeAxisValue,
   checkCompatibility,
   type MasterSnapshot,
+  type InterpolationResult,
 } from "./interpolate";
 import type { Axis, GlyphSnapshot, ContourSnapshot } from "@shift/types";
 
@@ -59,6 +60,12 @@ function makeMaster(
   };
 }
 
+/** Unwrap a non-null InterpolationResult */
+function unwrap(result: InterpolationResult | null): InterpolationResult {
+  expect(result).not.toBeNull();
+  return result!;
+}
+
 describe("normalizeAxisValue", () => {
   const axis = makeAxis({ minimum: 100, default: 400, maximum: 900 });
 
@@ -81,24 +88,8 @@ describe("normalizeAxisValue", () => {
 
 describe("checkCompatibility", () => {
   it("returns null for compatible masters", () => {
-    const light = makeMaster(
-      "Light",
-      { wght: 0 },
-      makeContour([
-        { x: 0, y: 0 },
-        { x: 100, y: 0 },
-      ]),
-      500,
-    );
-    const bold = makeMaster(
-      "Bold",
-      { wght: 1000 },
-      makeContour([
-        { x: 10, y: 0 },
-        { x: 110, y: 0 },
-      ]),
-      600,
-    );
+    const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }, { x: 100, y: 0 }]), 500);
+    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 10, y: 0 }, { x: 110, y: 0 }]), 600);
     expect(checkCompatibility([light, bold])).toBeNull();
   });
 
@@ -113,15 +104,7 @@ describe("checkCompatibility", () => {
 
   it("reports point count mismatch", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const bold = makeMaster(
-      "Bold",
-      { wght: 1000 },
-      makeContour([
-        { x: 0, y: 0 },
-        { x: 100, y: 0 },
-      ]),
-      600,
-    );
+    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 0, y: 0 }, { x: 100, y: 0 }]), 600);
     expect(checkCompatibility([light, bold])).toContain("points");
   });
 });
@@ -131,107 +114,70 @@ describe("interpolateGlyph", () => {
 
   it("returns the single master's snapshot when only one master", () => {
     const master = makeMaster("Regular", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
-    const result = interpolateGlyph([master], axes, { wght: 0 });
-    expect(result).toBe(master.snapshot);
+    const result = unwrap(interpolateGlyph([master], axes, { wght: 0 }));
+    expect(result.instance).toBe(master.snapshot);
+    expect(result.errors).toHaveLength(0);
   });
 
   it("interpolates at midpoint between two masters", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
     const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
 
-    const result = interpolateGlyph([light, bold], axes, { wght: 500 });
+    const { instance } = unwrap(interpolateGlyph([light, bold], axes, { wght: 500 }));
 
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].points[0].x).toBeCloseTo(150);
-    expect(result!.contours[0].points[0].y).toBeCloseTo(300);
-    expect(result!.xAdvance).toBeCloseTo(600);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(150);
+    expect(instance.contours[0].points[0].y).toBeCloseTo(300);
+    expect(instance.xAdvance).toBeCloseTo(600);
   });
 
   it("returns default master at default location", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
     const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
 
-    const result = interpolateGlyph([light, bold], axes, { wght: 0 });
+    const { instance } = unwrap(interpolateGlyph([light, bold], axes, { wght: 0 }));
 
-    expect(result!.contours[0].points[0].x).toBeCloseTo(100);
-    expect(result!.contours[0].points[0].y).toBeCloseTo(200);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(100);
+    expect(instance.contours[0].points[0].y).toBeCloseTo(200);
   });
 
   it("returns non-default master at its location", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
     const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
 
-    const result = interpolateGlyph([light, bold], axes, { wght: 1000 });
+    const { instance } = unwrap(interpolateGlyph([light, bold], axes, { wght: 1000 }));
 
-    expect(result!.contours[0].points[0].x).toBeCloseTo(200);
-    expect(result!.contours[0].points[0].y).toBeCloseTo(400);
-  });
-
-  it("falls back to default master when all others are incompatible", () => {
-    const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const bold = makeMaster(
-      "Bold",
-      { wght: 1000 },
-      makeContour([
-        { x: 0, y: 0 },
-        { x: 100, y: 0 },
-      ]),
-      600,
-    );
-
-    const result = interpolateGlyph([light, bold], axes, { wght: 500 });
-    expect(result).toBe(light.snapshot);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(200);
+    expect(instance.contours[0].points[0].y).toBeCloseTo(400);
   });
 
   it("preserves point metadata from reference master", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
     const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
 
-    const result = interpolateGlyph([light, bold], axes, { wght: 500 });
+    const { instance } = unwrap(interpolateGlyph([light, bold], axes, { wght: 500 }));
 
-    expect(result!.contours[0].points[0].id).toBe(light.snapshot.contours[0].points[0].id);
-    expect(result!.contours[0].points[0].pointType).toBe("onCurve");
-    expect(result!.contours[0].id).toBe(light.snapshot.contours[0].id);
+    expect(instance.contours[0].points[0].id).toBe(light.snapshot.contours[0].points[0].id);
+    expect(instance.contours[0].points[0].pointType).toBe("onCurve");
+    expect(instance.contours[0].id).toBe(light.snapshot.contours[0].id);
   });
 
   it("interpolates with 4 masters on 2 axes", () => {
     const wdthAxis = makeAxis({ tag: "wdth", name: "Width" });
     const wghtAxis = makeAxis({ tag: "wght", name: "Weight" });
 
-    const lc = makeMaster(
-      "LightCondensed",
-      { wdth: 0, wght: 0 },
-      makeContour([{ x: 0, y: 0 }]),
-      400,
-    );
-    const bc = makeMaster(
-      "BoldCondensed",
-      { wdth: 0, wght: 1000 },
-      makeContour([{ x: 100, y: 0 }]),
-      500,
-    );
-    const lw = makeMaster(
-      "LightWide",
-      { wdth: 1000, wght: 0 },
-      makeContour([{ x: 0, y: 100 }]),
-      600,
-    );
-    const bw = makeMaster(
-      "BoldWide",
-      { wdth: 1000, wght: 1000 },
-      makeContour([{ x: 100, y: 100 }]),
-      700,
+    const lc = makeMaster("LightCondensed", { wdth: 0, wght: 0 }, makeContour([{ x: 0, y: 0 }]), 400);
+    const bc = makeMaster("BoldCondensed", { wdth: 0, wght: 1000 }, makeContour([{ x: 100, y: 0 }]), 500);
+    const lw = makeMaster("LightWide", { wdth: 1000, wght: 0 }, makeContour([{ x: 0, y: 100 }]), 600);
+    const bw = makeMaster("BoldWide", { wdth: 1000, wght: 1000 }, makeContour([{ x: 100, y: 100 }]), 700);
+
+    const { instance, errors } = unwrap(
+      interpolateGlyph([lc, bc, lw, bw], [wdthAxis, wghtAxis], { wdth: 500, wght: 500 }),
     );
 
-    const result = interpolateGlyph([lc, bc, lw, bw], [wdthAxis, wghtAxis], {
-      wdth: 500,
-      wght: 500,
-    });
-
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].points[0].x).toBeCloseTo(50);
-    expect(result!.contours[0].points[0].y).toBeCloseTo(50);
-    expect(result!.xAdvance).toBeCloseTo(550);
+    expect(errors).toHaveLength(0);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(50);
+    expect(instance.contours[0].points[0].y).toBeCloseTo(50);
+    expect(instance.xAdvance).toBeCloseTo(550);
   });
 
   it("deduplicates masters at the same normalized location", () => {
@@ -239,19 +185,21 @@ describe("interpolateGlyph", () => {
     const m2 = makeMaster("Slab", { wght: 0 }, makeContour([{ x: 100, y: 200 }]), 500);
     const m3 = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 400 }]), 700);
 
-    const result = interpolateGlyph([m1, m2, m3], axes, { wght: 500 });
+    const { instance } = unwrap(interpolateGlyph([m1, m2, m3], axes, { wght: 500 }));
 
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].points[0].x).toBeCloseTo(150);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(150);
   });
+});
 
-  it("filters incompatible masters and interpolates with default-compatible set", () => {
-    // Default (A at wght=0) is compatible with B, but C has extra contour
-    const defaultMaster = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const compatible = makeMaster("B", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
+describe("interpolateGlyph — incompatible sources", () => {
+  const axes = [makeAxis()];
+
+  it("reports incompatible source and still produces a result", () => {
+    const defaultMaster = makeMaster("Default", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const compatible = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
     const incompatible: MasterSnapshot = {
-      sourceId: "C",
-      sourceName: "C",
+      sourceId: "Bad",
+      sourceName: "Bad",
       location: { values: { wght: 500 } },
       snapshot: makeSnapshot(
         [makeContour([{ x: 100, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
@@ -259,51 +207,86 @@ describe("interpolateGlyph", () => {
       ),
     };
 
-    const result = interpolateGlyph(
-      [defaultMaster, incompatible, compatible],
-      axes,
-      { wght: 500 },
+    const { instance, errors } = unwrap(
+      interpolateGlyph([defaultMaster, incompatible, compatible], axes, { wght: 1000 }),
     );
 
-    expect(result).not.toBeNull();
-    expect(result!.contours[0].points[0].x).toBeCloseTo(100);
+    // Incompatible source reported in errors
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].sourceName).toBe("Bad");
+
+    // At wght=1000 (bold's exact location), result should match bold
+    expect(instance.contours[0].points[0].x).toBeCloseTo(200);
   });
 
-  it("returns default snapshot when default master is incompatible with others", () => {
-    // Default (wght=0) has extra contour — no compatible group includes the default
-    const defaultMaster: MasterSnapshot = {
-      sourceId: "Default",
-      sourceName: "Default",
-      location: { values: { wght: 0 } },
-      snapshot: makeSnapshot(
-        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
-        500,
-      ),
-    };
-    const mid = makeMaster("Mid", { wght: 500 }, makeContour([{ x: 100, y: 0 }]), 600);
-    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 200, y: 0 }]), 700);
-
-    const result = interpolateGlyph([defaultMaster, mid, bold], axes, { wght: 750 });
-
-    // Default is the reference but incompatible with others → only default remains
-    expect(result).toBe(defaultMaster.snapshot);
-  });
-
-  it("returns default snapshot when all masters are incompatible with each other", () => {
-    const m1 = makeMaster("A", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const m2: MasterSnapshot = {
-      sourceId: "B",
-      sourceName: "B",
+  it("returns default when only one compatible source", () => {
+    const defaultMaster = makeMaster("Default", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const incompat: MasterSnapshot = {
+      sourceId: "Bad",
+      sourceName: "Bad",
       location: { values: { wght: 1000 } },
       snapshot: makeSnapshot(
-        [makeContour([{ x: 200, y: 0 }]), makeContour([{ x: 100, y: 100 }])],
+        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
         700,
       ),
     };
 
-    const result = interpolateGlyph([m1, m2], axes, { wght: 500 });
+    const { instance, errors } = unwrap(
+      interpolateGlyph([defaultMaster, incompat], axes, { wght: 500 }),
+    );
 
-    // Falls back to first master since no compatible group
-    expect(result).toBe(m1.snapshot);
+    // Incompatible source zeroed out — result is just the default
+    expect(errors.length).toBeGreaterThan(0);
+    expect(instance.contours[0].points[0].x).toBeCloseTo(0);
+  });
+
+  it("handles all sources incompatible except default", () => {
+    const defaultMaster = makeMaster("Default", { wght: 0 }, makeContour([{ x: 10, y: 20 }]), 500);
+    const bad1: MasterSnapshot = {
+      sourceId: "Bad1",
+      sourceName: "Bad1",
+      location: { values: { wght: 500 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
+        600,
+      ),
+    };
+    const bad2: MasterSnapshot = {
+      sourceId: "Bad2",
+      sourceName: "Bad2",
+      location: { values: { wght: 1000 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }]), makeContour([{ x: 99, y: 99 }])],
+        700,
+      ),
+    };
+
+    const { instance, errors } = unwrap(
+      interpolateGlyph([defaultMaster, bad1, bad2], axes, { wght: 500 }),
+    );
+
+    expect(errors).toHaveLength(2);
+    // Result is the default since both other deltas are zeroed
+    expect(instance.contours[0].points[0].x).toBeCloseTo(10);
+    expect(instance.contours[0].points[0].y).toBeCloseTo(20);
+  });
+
+  it("errors include the source name and a message", () => {
+    const defaultMaster = makeMaster("Default", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
+    const incompat: MasterSnapshot = {
+      sourceId: "Wonky",
+      sourceName: "Wonky",
+      location: { values: { wght: 1000 } },
+      snapshot: makeSnapshot(
+        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
+        700,
+      ),
+    };
+
+    const { errors } = unwrap(interpolateGlyph([defaultMaster, incompat], axes, { wght: 500 }));
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].sourceName).toBe("Wonky");
+    expect(errors[0].message).toContain("contour count");
   });
 });
