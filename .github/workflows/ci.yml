@@ -99,7 +99,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --prefer-offline
       - name: Typecheck
-        run: pnpm test:typecheck
+        run: pnpm typecheck
 
   unit-test:
     name: Unit Tests

@@ -17,7 +17,7 @@
     "test:unit": "pnpm turbo run test --filter='!shift-node'",
     "test:integration": "pnpm --filter shift-node run test && cargo test -p shift-core --test font_loading --test round_trip",
     "test:lint": "pnpm --filter @shift/desktop run lint:check",
-    "test:typecheck": "tsc --noEmit -p apps/desktop/tsconfig.testing.json",
+    "test:typecheck": "pnpm typecheck",
     "test:perf": "echo 'Performance lane is scheduled-only and will be expanded with benchmarks.'",
     "test:playwright": "echo 'Playwright lane is intentionally deferred in this phase. Add specs under apps/desktop/e2e when ready.'",
     "test:ci": "pnpm test:lint && pnpm format:check && pnpm test:typecheck && pnpm test:unit && pnpm test:native && cargo test --workspace && pnpm deadcode:strict",
