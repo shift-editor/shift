@@ -583,11 +583,25 @@ impl FontEngine {
 
       let primary_unicode = glyph.primary_unicode().unwrap_or(0);
 
-      let contours = layer
+      let mut contours: Vec<_> = layer
         .contours()
         .values()
+        .filter(|c| !c.points().is_empty())
         .map(shift_core::snapshot::ContourSnapshot::from)
         .collect();
+
+      // Sort contours deterministically — ContourIds differ between masters
+      // loaded from separate UFOs, so HashMap order is random.
+      contours.sort_by(|a, b| {
+        let len_cmp = a.points.len().cmp(&b.points.len()).reverse();
+        if len_cmp != std::cmp::Ordering::Equal {
+          return len_cmp;
+        }
+        // Tiebreak: first point coordinates
+        let a_pt = a.points.first().map(|p| (p.x.to_bits(), p.y.to_bits()));
+        let b_pt = b.points.first().map(|p| (p.x.to_bits(), p.y.to_bits()));
+        a_pt.cmp(&b_pt)
+      });
 
       let anchors = layer
         .anchors_iter()

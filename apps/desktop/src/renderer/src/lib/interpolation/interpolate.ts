@@ -438,8 +438,6 @@ export function interpolateGlyph(
   // If the default master was filtered out, fall back to direct blending.
   const hasDefault = compatLocations.some((loc) => Object.keys(loc).length === 0);
   if (!hasDefault) {
-    console.log("[interp] default filtered out. compatMasters:", compatMasters.length,
-      "sigs:", [...sigCounts.entries()].map(([s, c]) => `${s}(${c})`));
     return directBlend(compatMasters, axes, target);
   }
 
