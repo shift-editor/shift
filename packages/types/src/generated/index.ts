@@ -15,3 +15,6 @@ export type { MatchedRule } from "./MatchedRule";
 export type { FontMetrics } from "./FontMetrics";
 export type { FontMetadata } from "./FontMetadata";
 export type { DecomposedTransform } from "./DecomposedTransform";
+export type { Axis } from "./Axis";
+export type { Location } from "./Location";
+export type { Source } from "./Source";

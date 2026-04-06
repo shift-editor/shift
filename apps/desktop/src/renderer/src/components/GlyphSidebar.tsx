@@ -8,6 +8,7 @@ import { useSignalState } from "@/lib/reactive";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
+import { VariationPanel } from "./VariationPanel";
 
 export const GlyphSidebar = () => {
   const editor = getEditor();
@@ -39,6 +40,10 @@ export const GlyphSidebar = () => {
       <TransformOriginProvider>
         <div className="px-3 py-3">
           <GlyphSection />
+        </div>
+        <Separator />
+        <div className="px-3 py-3">
+          <VariationPanel />
         </div>
         <Separator />
         {hasPointSelection && (

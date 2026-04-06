@@ -1,12 +1,17 @@
 use crate::axis::Location;
 use crate::entity::{LayerId, SourceId};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct Source {
+    #[ts(type = "string")]
     id: SourceId,
     name: String,
     location: Location,
+    #[ts(type = "string")]
     layer_id: LayerId,
     filename: Option<String>,
 }

@@ -6,7 +6,10 @@ import type {
   ContourId,
   Point2D,
   AnchorId,
+  Axis,
+  Source,
 } from "@shift/types";
+import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
 import { Bounds as BoundsUtil } from "@shift/geo";
@@ -191,6 +194,26 @@ export class FontEngine {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
     return JSON.parse(payload) as CompositeComponentsPayload;
+  }
+
+  // ── Variable Font Queries ──
+
+  isVariable(): boolean {
+    return this.#raw.isVariable();
+  }
+
+  getAxes(): Axis[] {
+    return JSON.parse(this.#raw.getAxes()) as Axis[];
+  }
+
+  getSources(): Source[] {
+    return JSON.parse(this.#raw.getSources()) as Source[];
+  }
+
+  getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
+    const json = this.#raw.getGlyphMasterSnapshots(glyphName);
+    if (!json) return null;
+    return JSON.parse(json) as MasterSnapshot[];
   }
 
   getSnapshot(): GlyphSnapshot {
