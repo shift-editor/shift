@@ -560,8 +560,8 @@ impl FontEngine {
     for source in self.font.sources() {
       let layer_id = source.layer_id();
       let layer = match glyph.layer(layer_id) {
-        Some(l) => l,
-        None => continue,
+        Some(l) if !l.contours().is_empty() => l,
+        _ => continue,
       };
 
       let primary_unicode = glyph.primary_unicode().unwrap_or(0);
