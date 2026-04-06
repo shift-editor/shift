@@ -359,7 +359,10 @@ export function interpolateGlyph(
   if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
 
   const error = checkCompatibility(uniqueMasters);
-  if (error) return null;
+  if (error) {
+    console.log("[interp] compat fail:", error);
+    return null;
+  }
 
   const axisOrder = axes.map((a) => a.tag);
 
@@ -367,7 +370,8 @@ export function interpolateGlyph(
   let model: VariationModelData;
   try {
     model = buildVariationModel(uniqueLocations, axisOrder);
-  } catch {
+  } catch (e) {
+    console.log("[interp] model build fail:", e);
     return null;
   }
 
