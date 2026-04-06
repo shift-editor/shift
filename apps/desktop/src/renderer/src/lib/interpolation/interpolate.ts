@@ -340,18 +340,39 @@ export function interpolateGlyph(
   if (masters.length === 0) return null;
   if (masters.length === 1) return masters[0].snapshot;
 
-  const error = checkCompatibility(masters);
-  if (error) return null;
-
   // Normalize master locations (sparse: omit axes at default)
   const normalizedLocations = masters.map((m) => normalizeLocation(m.location.values, axes));
+
+  // Deduplicate locations — keep only the first master at each location
+  const seen = new Set<string>();
+  const uniqueIndices: number[] = [];
+  for (let i = 0; i < normalizedLocations.length; i++) {
+    const key = locationToString(normalizedLocations[i]);
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueIndices.push(i);
+    }
+  }
+  const uniqueMasters = uniqueIndices.map((i) => masters[i]);
+  const uniqueLocations = uniqueIndices.map((i) => normalizedLocations[i]);
+
+  if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
+
+  const error = checkCompatibility(uniqueMasters);
+  if (error) return null;
+
   const axisOrder = axes.map((a) => a.tag);
 
-  // Build model
-  const model = buildVariationModel(normalizedLocations, axisOrder);
+  // Build model — wrap in try/catch for robustness
+  let model: VariationModelData;
+  try {
+    model = buildVariationModel(uniqueLocations, axisOrder);
+  } catch {
+    return null;
+  }
 
   // Flatten master values into number arrays
-  const masterFlats = masters.map((m) => snapshotToFlat(m.snapshot));
+  const masterFlats = uniqueMasters.map((m) => snapshotToFlat(m.snapshot));
 
   // Compute deltas
   const deltas: number[][] = [];
@@ -377,7 +398,7 @@ export function interpolateGlyph(
     result = result === null ? contribution : flatAdd(result, contribution);
   }
 
-  if (!result) return masters[0].snapshot;
+  if (!result) return uniqueMasters[0].snapshot;
 
-  return flatToSnapshot(result, masters[0].snapshot);
+  return flatToSnapshot(result, uniqueMasters[0].snapshot);
 }
