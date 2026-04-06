@@ -326,58 +326,19 @@ function flatToSnapshot(flat: number[], ref: GlyphSnapshot): GlyphSnapshot {
   return { ...ref, xAdvance, contours };
 }
 
-// ── Public API ──────────────────────────────────────────────────────
-
-/**
- * Fallback: inverse-distance weighted blending when the VariationModel
- * can't be built (e.g. default master filtered out for incompatibility).
- */
-function directBlend(
-  masters: MasterSnapshot[],
-  axes: Axis[],
-  target: Record<string, number>,
-): GlyphSnapshot | null {
-  if (masters.length < 2) return masters[0]?.snapshot ?? null;
-
-  const normalizedTarget: Record<string, number> = {};
-  for (const axis of axes) {
-    normalizedTarget[axis.tag] = normalizeAxisValue(target[axis.tag] ?? axis.default, axis);
-  }
-
-  const distances = masters.map((m) => {
-    let dist = 0;
-    for (const axis of axes) {
-      const val = m.location.values[axis.tag] ?? axis.default;
-      const n = normalizeAxisValue(val, axis);
-      const diff = (normalizedTarget[axis.tag] ?? 0) - n;
-      dist += diff * diff;
-    }
-    return Math.sqrt(dist);
-  });
-
-  // Exact match
-  for (let i = 0; i < distances.length; i++) {
-    if (distances[i] < 1e-10) return masters[i].snapshot;
-  }
-
-  const invDist = distances.map((d) => 1 / d);
-  const sum = invDist.reduce((a, b) => a + b, 0);
-  const weights = invDist.map((w) => w / sum);
-
-  const flats = masters.map((m) => snapshotToFlat(m.snapshot));
-  let result = Array.from<number>({ length: flats[0].length }).fill(0);
-  for (let i = 0; i < flats.length; i++) {
-    for (let j = 0; j < result.length; j++) {
-      result[j] += flats[i][j] * weights[i];
-    }
-  }
-
-  return flatToSnapshot(result, masters[0].snapshot);
+function contourSignature(snapshot: GlyphSnapshot): string {
+  return `${snapshot.contours.length}:${snapshot.contours.map((c) => c.points.length).join(",")}`;
 }
+
+// ── Public API ──────────────────────────────────────────────────────
 
 /**
  * Interpolate a glyph at a target design-space location using the
  * OpenType VariationModel algorithm (support regions + delta decomposition).
+ *
+ * Follows Fontra's approach: use the default master as the compatibility
+ * reference, filter out incompatible sources, and build the VariationModel
+ * with the compatible subset. The default master is always included.
  */
 export function interpolateGlyph(
   masters: MasterSnapshot[],
@@ -405,41 +366,23 @@ export function interpolateGlyph(
 
   if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
 
-  // Find the largest group of mutually compatible masters.
-  // Build a compatibility signature per master: "contourCount:p0,p1,p2..."
-  const signatures = uniqueMasters.map((m) => {
-    const s = m.snapshot;
-    return `${s.contours.length}:${s.contours.map((c) => c.points.length).join(",")}`;
-  });
+  // Find the default master (at normalized location {})
+  const defaultIdx = uniqueLocations.findIndex((loc) => Object.keys(loc).length === 0);
+  if (defaultIdx < 0) return null;
 
-  // Find the most common signature
-  const sigCounts = new Map<string, number>();
-  for (const sig of signatures) {
-    sigCounts.set(sig, (sigCounts.get(sig) ?? 0) + 1);
-  }
-  let bestSig = signatures[0];
-  let bestCount = 0;
-  for (const [sig, count] of sigCounts) {
-    if (count > bestCount) {
-      bestSig = sig;
-      bestCount = count;
-    }
-  }
+  // Use the default master as the compatibility reference (matches Fontra).
+  // Filter out masters whose contour structure doesn't match the default.
+  const ref = uniqueMasters[defaultIdx].snapshot;
+  const refSig = contourSignature(ref);
 
-  const compatIndices = signatures
-    .map((sig, i) => (sig === bestSig ? i : -1))
+  const compatIndices = uniqueMasters
+    .map((m, i) => (contourSignature(m.snapshot) === refSig ? i : -1))
     .filter((i) => i >= 0);
+
   const compatMasters = compatIndices.map((i) => uniqueMasters[i]);
   const compatLocations = compatIndices.map((i) => uniqueLocations[i]);
 
   if (compatMasters.length < 2) return compatMasters[0]?.snapshot ?? null;
-
-  // The VariationModel requires a default location (empty object).
-  // If the default master was filtered out, fall back to direct blending.
-  const hasDefault = compatLocations.some((loc) => Object.keys(loc).length === 0);
-  if (!hasDefault) {
-    return directBlend(compatMasters, axes, target);
-  }
 
   const axisOrder = axes.map((a) => a.tag);
 
