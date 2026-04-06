@@ -98,6 +98,11 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile --prefer-offline
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: shift-rust
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -120,6 +125,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile --prefer-offline
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: shift-rust
 
       - name: Build native module
         run: pnpm build:native
@@ -222,7 +231,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          shared-key: shift-integration
+          shared-key: shift-rust
 
       - run: pnpm install --frozen-lockfile --prefer-offline
 
