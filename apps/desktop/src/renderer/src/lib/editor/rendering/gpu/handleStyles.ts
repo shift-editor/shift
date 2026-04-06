@@ -37,9 +37,6 @@ function buildSimpleStyle(
   const style = HANDLE_STYLES[shape][state] as BaseHandleStyle;
   const halfSize = shape === "corner" ? style.size / 2 : style.size;
   const padding = Math.max(style.lineWidth, 2);
-  
-  console.log(style);
-  console.log(shape);
 
   return {
     shapeId: SHAPE_IDS[shape],

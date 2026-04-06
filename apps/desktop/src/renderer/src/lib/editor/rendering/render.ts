@@ -5,14 +5,8 @@
  * No state is maintained - each call renders based on the provided data.
  */
 
-import type { Glyph } from "@shift/types";
 import type { IRenderer } from "@/types/graphics";
-import {
-  iterateRenderableContours,
-  parseContourSegments,
-  segmentToCurve,
-  type SegmentContourLike,
-} from "@shift/font";
+import { parseContourSegments, segmentToCurve, type SegmentContourLike } from "@shift/font";
 import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
 import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 
@@ -118,19 +112,3 @@ export function buildContourPath(ctx: IRenderer, contour: SegmentContourLike): b
   return contour.closed;
 }
 
-/**
- * Strokes every contour of the glyph.
- * Returns `true` if at least one contour is closed (filled preview is viable).
- */
-export function renderGlyph(ctx: IRenderer, glyph: Glyph): boolean {
-  let hasClosed = false;
-
-  ctx.beginPath();
-  for (const contour of iterateRenderableContours(glyph)) {
-    const isClosed = buildContourPath(ctx, contour);
-    if (isClosed) hasClosed = true;
-  }
-  ctx.stroke();
-
-  return hasClosed;
-}

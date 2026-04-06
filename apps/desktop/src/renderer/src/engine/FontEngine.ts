@@ -49,14 +49,17 @@ export class FontEngine {
     return this.#$glyph;
   }
 
+  /** @knipclassignore — used by React components via editor.fontEngine */
   get $fontLoaded(): Signal<boolean> {
     return this.#$fontLoaded;
   }
 
+  /** @knipclassignore */
   get $fontUnicodes(): Signal<number[]> {
     return this.#$fontUnicodes;
   }
 
+  /** @knipclassignore */
   get $fontMetrics(): Signal<FontMetrics | null> {
     return this.#$fontMetrics;
   }
@@ -67,6 +70,7 @@ export class FontEngine {
     this.#$fontLoaded.set(true);
   }
 
+  /** @knipclassignore */
   resetFontMetadata(): void {
     this.#$fontLoaded.set(false);
     this.#$fontUnicodes.set([]);
@@ -128,6 +132,7 @@ export class FontEngine {
     return this.#raw.saveFontAsync(path);
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getMetadata(): FontMetadata {
     return JSON.parse(this.#raw.getMetadata());
   }
@@ -144,22 +149,27 @@ export class FontEngine {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getSvgPath(unicode: number): string | null {
     return this.#raw.getGlyphSvgPath(unicode) ?? null;
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getSvgPathByName(glyphName: string): string | null {
     return this.#raw.getGlyphSvgPathByName(glyphName) ?? null;
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getAdvance(unicode: number): number | null {
     return this.#raw.getGlyphAdvance(unicode) ?? null;
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getAdvanceByName(glyphName: string): number | null {
     return this.#raw.getGlyphAdvanceByName(glyphName) ?? null;
   }
 
+  /** @knipclassignore — satisfies Font interface */
   getBbox(unicode: number): Bounds | null {
     const b = this.#raw.getGlyphBbox(unicode);
     if (b == null || b.length !== 4) return null;

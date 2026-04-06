@@ -49,6 +49,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     return { type: "default" };
   }
 
+  /** @knipclassignore */
   get name(): ToolName {
     return this.id;
   }

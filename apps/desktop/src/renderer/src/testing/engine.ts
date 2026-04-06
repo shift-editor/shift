@@ -16,8 +16,3 @@ export function getPointCount(snapshot: GlyphSnapshot | null): number {
   if (!snapshot) return 0;
   return Glyphs.getAllPoints(snapshot).length;
 }
-
-export function getContourCount(snapshot: GlyphSnapshot | null): number {
-  if (!snapshot) return 0;
-  return snapshot.contours.length;
-}

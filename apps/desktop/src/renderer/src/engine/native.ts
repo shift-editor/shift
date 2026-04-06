@@ -14,6 +14,3 @@ export function getNative(): FontEngineAPI {
   return cached;
 }
 
-export function hasNative(): boolean {
-  return !!window.shiftFont;
-}

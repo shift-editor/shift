@@ -3,7 +3,7 @@
   "include": ["classMembers"],
   "entry": [],
   "project": [],
-  "ignore": ["apps/desktop/src/renderer/src/testing/setup.ts"],
+  "ignore": ["apps/desktop/src/renderer/src/testing/**"],
   "includeEntryExports": true,
   "ignoreWorkspaces": ["crates/shift-node"],
   "ignoreExportsUsedInFile": true,
