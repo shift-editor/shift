@@ -4,8 +4,8 @@ use napi_derive::napi;
 use shift_core::{
   composite::{
     flatten_component_contours_for_layer as flatten_component_contours, layer_bbox,
-    layer_complexity, layer_to_svg_path, preferred_layer_for_glyph,
-    resolve_component_instances_for_layer, resolved_to_render_contours, GlyphLayerProvider,
+    layer_to_svg_path, resolve_component_instances_for_layer, resolved_to_render_contours,
+    GlyphLayerProvider,
   },
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
@@ -59,10 +59,8 @@ impl GlyphLayerProvider for EngineLayerProvider<'_> {
       }
     }
 
-    self
-      .font
-      .glyph(glyph_name)
-      .and_then(preferred_layer_for_glyph)
+    let glyph = self.font.glyph(glyph_name)?;
+    glyph.layer(self.font.default_layer_id())
   }
 }
 
@@ -233,6 +231,10 @@ impl FontEngine {
     }
   }
 
+  fn default_layer_for_glyph<'a>(&'a self, glyph: &'a Glyph) -> Option<&'a GlyphLayer> {
+    glyph.layer(self.font.default_layer_id())
+  }
+
   fn editing_target_for_unicode(&self, unicode: u32) -> Option<(&str, &GlyphLayer)> {
     if let Some(session) = &self.current_edit_session {
       if session.unicode() == unicode {
@@ -249,7 +251,7 @@ impl FontEngine {
     }
 
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = preferred_layer_for_glyph(glyph)?;
+    let layer = self.default_layer_for_glyph(glyph)?;
     composite_debug!(
       "editing_target_for_unicode U+{:04X}: from font glyph='{}' (contours={}, components={}, anchors={})",
       unicode,
@@ -269,7 +271,7 @@ impl FontEngine {
     }
 
     let glyph = self.font.glyph(glyph_name)?;
-    let layer = preferred_layer_for_glyph(glyph)?;
+    let layer = self.default_layer_for_glyph(glyph)?;
     Some((glyph.name(), layer))
   }
 
@@ -280,10 +282,8 @@ impl FontEngine {
       }
     }
 
-    self
-      .font
-      .glyph(glyph_name)
-      .and_then(preferred_layer_for_glyph)
+    let glyph = self.font.glyph(glyph_name)?;
+    self.default_layer_for_glyph(glyph)
   }
 
   fn flatten_component_contours_for_layer(
@@ -394,7 +394,7 @@ impl FontEngine {
       }
     }
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    preferred_layer_for_glyph(glyph)
+    self.default_layer_for_glyph(glyph)
   }
 
   #[napi]
@@ -637,19 +637,16 @@ impl FontEngine {
       glyph.layers().len(),
       primary_unicode
     );
-    let (layer_id, layer) = glyph
-      .layers()
-      .iter()
-      .max_by_key(|(_, l)| layer_complexity(l))
-      .map(|(id, _)| *id)
-      .and_then(|id| glyph.remove_layer(id).map(|l| (id, l)))
-      .unwrap_or_else(|| (self.font.default_layer_id(), GlyphLayer::with_width(500.0)));
+    let default_layer_id = self.font.default_layer_id();
+    let layer = glyph
+      .remove_layer(default_layer_id)
+      .unwrap_or_else(|| GlyphLayer::with_width(500.0));
 
     let edit_session = EditSession::new(glyph.name().to_string(), primary_unicode, layer);
 
     self.current_edit_session = Some(edit_session);
     self.editing_glyph = Some(glyph);
-    self.editing_layer_id = Some(layer_id);
+    self.editing_layer_id = Some(default_layer_id);
 
     Ok(())
   }
