@@ -358,25 +358,39 @@ export function interpolateGlyph(
 
   if (uniqueMasters.length < 2) return uniqueMasters[0]?.snapshot ?? null;
 
-  // Filter to only masters compatible with the first (default) master
-  const ref = uniqueMasters[0].snapshot;
-  const compatIndices = [0];
-  for (let i = 1; i < uniqueMasters.length; i++) {
-    const other = uniqueMasters[i].snapshot;
-    if (ref.contours.length !== other.contours.length) continue;
-    let compatible = true;
-    for (let c = 0; c < ref.contours.length; c++) {
-      if (ref.contours[c].points.length !== other.contours[c].points.length) {
-        compatible = false;
-        break;
-      }
-    }
-    if (compatible) compatIndices.push(i);
+  // Find the largest group of mutually compatible masters.
+  // Build a compatibility signature per master: "contourCount:p0,p1,p2..."
+  const signatures = uniqueMasters.map((m) => {
+    const s = m.snapshot;
+    return `${s.contours.length}:${s.contours.map((c) => c.points.length).join(",")}`;
+  });
+
+  // Find the most common signature
+  const sigCounts = new Map<string, number>();
+  for (const sig of signatures) {
+    sigCounts.set(sig, (sigCounts.get(sig) ?? 0) + 1);
   }
+  let bestSig = signatures[0];
+  let bestCount = 0;
+  for (const [sig, count] of sigCounts) {
+    if (count > bestCount) {
+      bestSig = sig;
+      bestCount = count;
+    }
+  }
+
+  const compatIndices = signatures
+    .map((sig, i) => (sig === bestSig ? i : -1))
+    .filter((i) => i >= 0);
   const compatMasters = compatIndices.map((i) => uniqueMasters[i]);
   const compatLocations = compatIndices.map((i) => uniqueLocations[i]);
 
   if (compatMasters.length < 2) return compatMasters[0]?.snapshot ?? null;
+
+  // The VariationModel requires a default location (empty object).
+  // If the default master was filtered out, we can't build the model.
+  const hasDefault = compatLocations.some((loc) => Object.keys(loc).length === 0);
+  if (!hasDefault) return null;
 
   const axisOrder = axes.map((a) => a.tag);
 
