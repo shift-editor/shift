@@ -329,6 +329,53 @@ function flatToSnapshot(flat: number[], ref: GlyphSnapshot): GlyphSnapshot {
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
+ * Fallback: inverse-distance weighted blending when the VariationModel
+ * can't be built (e.g. default master filtered out for incompatibility).
+ */
+function directBlend(
+  masters: MasterSnapshot[],
+  axes: Axis[],
+  target: Record<string, number>,
+): GlyphSnapshot | null {
+  if (masters.length < 2) return masters[0]?.snapshot ?? null;
+
+  const normalizedTarget: Record<string, number> = {};
+  for (const axis of axes) {
+    normalizedTarget[axis.tag] = normalizeAxisValue(target[axis.tag] ?? axis.default, axis);
+  }
+
+  const distances = masters.map((m) => {
+    let dist = 0;
+    for (const axis of axes) {
+      const val = m.location.values[axis.tag] ?? axis.default;
+      const n = normalizeAxisValue(val, axis);
+      const diff = (normalizedTarget[axis.tag] ?? 0) - n;
+      dist += diff * diff;
+    }
+    return Math.sqrt(dist);
+  });
+
+  // Exact match
+  for (let i = 0; i < distances.length; i++) {
+    if (distances[i] < 1e-10) return masters[i].snapshot;
+  }
+
+  const invDist = distances.map((d) => 1 / d);
+  const sum = invDist.reduce((a, b) => a + b, 0);
+  const weights = invDist.map((w) => w / sum);
+
+  const flats = masters.map((m) => snapshotToFlat(m.snapshot));
+  let result = Array.from<number>({ length: flats[0].length }).fill(0);
+  for (let i = 0; i < flats.length; i++) {
+    for (let j = 0; j < result.length; j++) {
+      result[j] += flats[i][j] * weights[i];
+    }
+  }
+
+  return flatToSnapshot(result, masters[0].snapshot);
+}
+
+/**
  * Interpolate a glyph at a target design-space location using the
  * OpenType VariationModel algorithm (support regions + delta decomposition).
  */
@@ -388,9 +435,13 @@ export function interpolateGlyph(
   if (compatMasters.length < 2) return compatMasters[0]?.snapshot ?? null;
 
   // The VariationModel requires a default location (empty object).
-  // If the default master was filtered out, we can't build the model.
+  // If the default master was filtered out, fall back to direct blending.
   const hasDefault = compatLocations.some((loc) => Object.keys(loc).length === 0);
-  if (!hasDefault) return null;
+  if (!hasDefault) {
+    console.log("[interp] default filtered out. compatMasters:", compatMasters.length,
+      "sigs:", [...sigCounts.entries()].map(([s, c]) => `${s}(${c})`));
+    return directBlend(compatMasters, axes, target);
+  }
 
   const axisOrder = axes.map((a) => a.tag);
 
