@@ -109,6 +109,7 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import { EditorLifecycle } from "./lifecycle";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import { produceGlyph, type GlyphDraft } from "@/engine/draft";
@@ -170,6 +171,7 @@ export class Editor implements ShiftEditor {
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
+  #lifecycle: EditorLifecycle;
   #textRunManager: TextRunManager;
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
@@ -280,10 +282,17 @@ export class Editor implements ShiftEditor {
     this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
     this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
 
+    this.#lifecycle = new EditorLifecycle();
     this.#toolManager = new ToolManager(this);
     this.#renderer = new CanvasCoordinator(this);
     this.#clipboard = new ClipboardManager(this);
     this.#textRunManager = new TextRunManager();
+
+    this.#lifecycle.on("fontLoaded", () => {
+      GlyphRenderCache.clear();
+      this.#commandHistory.clear();
+      this.#textRunManager.clearAll();
+    });
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
     this.$renderState = computed<RenderState>(() => ({
@@ -1098,6 +1107,10 @@ export class Editor implements ShiftEditor {
     return this.#commandHistory;
   }
 
+  public get lifecycle(): EditorLifecycle {
+    return this.#lifecycle;
+  }
+
   public get commands(): CommandHistory {
     return this.#commandHistory;
   }
@@ -1361,10 +1374,8 @@ export class Editor implements ShiftEditor {
     this.#fontEngine.loadFont(filePath);
     const unicodes = this.#fontEngine.getGlyphUnicodes();
     const metrics = this.#fontEngine.getMetrics();
-    GlyphRenderCache.clear();
     this.#fontEngine.setFontLoaded(unicodes, metrics);
-    this.#commandHistory.clear();
-    this.#textRunManager.clearAll();
+    this.#lifecycle.emit("fontLoaded", { font: this.#fontEngine });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
     this.startEditSession(glyphRef);
@@ -1995,12 +2006,14 @@ export class Editor implements ShiftEditor {
   }
 
   public destroy() {
+    this.#lifecycle.emit("destroying");
     this.#staticEffect.dispose();
     this.#textRunGlyphRefreshEffect.dispose();
     this.#overlayEffect.dispose();
     this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();
     this.#renderer.destroy();
+    this.#lifecycle.dispose();
   }
 
   #toolStateKey(toolId: string, key: string): string {
