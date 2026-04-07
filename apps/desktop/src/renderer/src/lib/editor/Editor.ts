@@ -290,6 +290,7 @@ export class Editor implements ShiftEditor {
     this.#renderer = new CanvasCoordinator(this);
     this.#clipboard = new ClipboardManager(this);
     this.#textRunController = new TextRunController();
+    this.#textRunController.setFont(this.#fontEngine);
 
     this.#events.on("fontLoaded", () => {
       GlyphRenderCache.clear();
@@ -383,7 +384,6 @@ export class Editor implements ShiftEditor {
         GlyphRenderCache.delete(glyphName);
       }
 
-      this.#textRunController.setFont(this.#fontEngine);
       this.#textRunController.recompute();
     });
 
@@ -908,14 +908,12 @@ export class Editor implements ShiftEditor {
     const glyphName = glyph.glyphName;
     const currentGlyphName = this.#fontEngine.getEditingGlyphName();
     if (currentGlyphName === glyphName) {
-      this.#textRunController.setFont(this.#fontEngine);
       this.#textRunController.recompute();
       return;
     }
 
     this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.addContour();
-    this.#textRunController.setFont(this.#fontEngine);
     this.#textRunController.recompute();
   }
 
@@ -927,6 +925,7 @@ export class Editor implements ShiftEditor {
     return this.#textRunController;
   }
 
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getTextRunState(): TextRunRenderState | null {
     return this.#textRunController.state.value;
   }
@@ -1005,7 +1004,6 @@ export class Editor implements ShiftEditor {
   }
 
   public recomputeTextRun(originX?: number): void {
-    this.#textRunController.setFont(this.#fontEngine);
     this.#textRunController.recompute(originX);
   }
 
@@ -1068,7 +1066,6 @@ export class Editor implements ShiftEditor {
 
   public hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void {
     this.#textRunController.hydrateRuns(runsByGlyph);
-    this.#textRunController.setFont(this.#fontEngine);
     this.#textRunController.recompute();
   }
 
@@ -1105,7 +1102,6 @@ export class Editor implements ShiftEditor {
     this.#mainGlyphUnicode = unicode;
     const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
     this.#textRunController.setOwnerGlyph(glyphRef);
-    this.#textRunController.setFont(this.#fontEngine);
     this.#textRunController.recompute();
   }
 
