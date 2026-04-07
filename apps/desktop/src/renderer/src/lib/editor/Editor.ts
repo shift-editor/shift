@@ -109,7 +109,7 @@ import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { EditorLifecycle } from "./lifecycle";
+import { EventEmitter } from "./lifecycle";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import { produceGlyph, type GlyphDraft } from "@/engine/draft";
@@ -171,7 +171,7 @@ export class Editor implements ShiftEditor {
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
-  #lifecycle: EditorLifecycle;
+  #events: EventEmitter;
   #textRunManager: TextRunManager;
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
@@ -282,13 +282,13 @@ export class Editor implements ShiftEditor {
     this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
     this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
 
-    this.#lifecycle = new EditorLifecycle();
+    this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
     this.#renderer = new CanvasCoordinator(this);
     this.#clipboard = new ClipboardManager(this);
     this.#textRunManager = new TextRunManager();
 
-    this.#lifecycle.on("fontLoaded", () => {
+    this.#events.on("fontLoaded", () => {
       GlyphRenderCache.clear();
       this.#commandHistory.clear();
       this.#textRunManager.clearAll();
@@ -1107,9 +1107,8 @@ export class Editor implements ShiftEditor {
     return this.#commandHistory;
   }
 
-  public get lifecycle(): EditorLifecycle {
-    return this.#lifecycle;
-  }
+  /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
+  public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
 
   public get commands(): CommandHistory {
     return this.#commandHistory;
@@ -1375,7 +1374,7 @@ export class Editor implements ShiftEditor {
     const unicodes = this.#fontEngine.getGlyphUnicodes();
     const metrics = this.#fontEngine.getMetrics();
     this.#fontEngine.setFontLoaded(unicodes, metrics);
-    this.#lifecycle.emit("fontLoaded", { font: this.#fontEngine });
+    this.#events.emit("fontLoaded", { font: this.#fontEngine });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
     this.startEditSession(glyphRef);
@@ -2006,14 +2005,14 @@ export class Editor implements ShiftEditor {
   }
 
   public destroy() {
-    this.#lifecycle.emit("destroying");
+    this.#events.emit("destroying");
     this.#staticEffect.dispose();
     this.#textRunGlyphRefreshEffect.dispose();
     this.#overlayEffect.dispose();
     this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();
     this.#renderer.destroy();
-    this.#lifecycle.dispose();
+    this.#events.dispose();
   }
 
   #toolStateKey(toolId: string, key: string): string {

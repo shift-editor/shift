@@ -24,7 +24,7 @@ export type LifecycleEvent = keyof LifecycleEventMap;
 
 type Handler<T> = T extends undefined ? () => void : (payload: T) => void;
 
-export class EditorLifecycle {
+export class EventEmitter {
   #listeners = new Map<LifecycleEvent, Set<Handler<never>>>();
 
   on<E extends LifecycleEvent>(event: E, handler: Handler<LifecycleEventMap[E]>): () => void {

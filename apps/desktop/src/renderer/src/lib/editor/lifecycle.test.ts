@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { EditorLifecycle } from "./lifecycle";
+import { EventEmitter } from "./lifecycle";
 
-describe("EditorLifecycle", () => {
+describe("EventEmitter", () => {
   it("calls handler when event is emitted", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const handler = vi.fn();
 
     lifecycle.on("fontLoaded", handler);
@@ -14,7 +14,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("calls multiple handlers for the same event", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const a = vi.fn();
     const b = vi.fn();
 
@@ -27,7 +27,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("does not call handlers for other events", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const handler = vi.fn();
 
     lifecycle.on("fontSaved", handler);
@@ -37,7 +37,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("unsubscribes via returned disposer", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const handler = vi.fn();
 
     const off = lifecycle.on("fontLoaded", handler);
@@ -48,7 +48,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("handles events with no payload", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const handler = vi.fn();
 
     lifecycle.on("destroying", handler);
@@ -58,7 +58,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("dispose removes all listeners", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
     const a = vi.fn();
     const b = vi.fn();
 
@@ -74,7 +74,7 @@ describe("EditorLifecycle", () => {
   });
 
   it("emitting with no listeners does not throw", () => {
-    const lifecycle = new EditorLifecycle();
+    const lifecycle = new EventEmitter();
 
     expect(() => lifecycle.emit("fontLoaded", { font: {} as never })).not.toThrow();
   });
