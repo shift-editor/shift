@@ -100,8 +100,11 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import { TextRunManager } from "./managers/TextRunManager";
-import type { PersistedTextRun, TextRunState } from "./managers/TextRunManager";
+import {
+  TextRunController,
+  type PersistedTextRun,
+  type TextRunRenderState,
+} from "@/lib/tools/text/TextRunController";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
@@ -172,7 +175,7 @@ export class Editor implements ShiftEditor {
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
   #events: EventEmitter;
-  #textRunManager: TextRunManager;
+  #textRunController: TextRunController;
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
 
@@ -286,12 +289,12 @@ export class Editor implements ShiftEditor {
     this.#toolManager = new ToolManager(this);
     this.#renderer = new CanvasCoordinator(this);
     this.#clipboard = new ClipboardManager(this);
-    this.#textRunManager = new TextRunManager();
+    this.#textRunController = new TextRunController();
 
     this.#events.on("fontLoaded", () => {
       GlyphRenderCache.clear();
       this.#commandHistory.clear();
-      this.#textRunManager.clearAll();
+      this.#textRunController.clearAll();
     });
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
@@ -344,7 +347,7 @@ export class Editor implements ShiftEditor {
 
     this.#staticEffect = effect(() => {
       this.$staticState.value;
-      this.#textRunManager.state.value;
+      this.#textRunController.state.value;
       this.#renderer.requestStaticRedraw();
     });
 
@@ -352,7 +355,7 @@ export class Editor implements ShiftEditor {
       const glyph = this.#$glyph.value;
       if (!glyph) return;
 
-      const textRun = this.#textRunManager.state.peek();
+      const textRun = this.#textRunController.state.peek();
       if (!textRun) return;
 
       // Clear cached Path2D objects for dependent glyphs so text runs re-render
@@ -380,7 +383,8 @@ export class Editor implements ShiftEditor {
         GlyphRenderCache.delete(glyphName);
       }
 
-      this.#textRunManager.recompute(this.#fontEngine);
+      this.#textRunController.setFont(this.#fontEngine);
+      this.#textRunController.recompute();
     });
 
     this.#overlayEffect = effect(() => {
@@ -904,106 +908,110 @@ export class Editor implements ShiftEditor {
     const glyphName = glyph.glyphName;
     const currentGlyphName = this.#fontEngine.getEditingGlyphName();
     if (currentGlyphName === glyphName) {
-      this.#textRunManager.recompute(this.#fontEngine);
+      this.#textRunController.setFont(this.#fontEngine);
+      this.#textRunController.recompute();
       return;
     }
 
     this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.addContour();
-    this.#textRunManager.recompute(this.#fontEngine);
+    this.#textRunController.setFont(this.#fontEngine);
+    this.#textRunController.recompute();
   }
 
   public endEditSession(): void {
     this.#fontEngine.endEditSession();
   }
 
-  public get textRunManager(): TextRunManager {
-    return this.#textRunManager;
+  public get textRunController(): TextRunController {
+    return this.#textRunController;
   }
 
-  public getTextRunState(): TextRunState | null {
-    return this.#textRunManager.state.value;
+  public getTextRunState(): TextRunRenderState | null {
+    return this.#textRunController.state.value;
   }
 
   public getTextRunLength(): number {
-    return this.#textRunManager.buffer.length;
+    return this.#textRunController.length;
   }
 
   public ensureTextRunSeed(glyph: GlyphRef | null): void {
-    this.#textRunManager.ensureSeeded(glyph);
+    if (glyph === null) return;
+    this.#textRunController.seed(glyph);
   }
 
   public setTextRunCursorVisible(visible: boolean): void {
-    this.#textRunManager.setCursorVisible(visible);
+    this.#textRunController.setCursorVisible(visible);
   }
 
   public setTextRunEditingSlot(index: number | null, glyph?: GlyphRef | null): void {
-    this.#textRunManager.setEditingSlot(index, glyph);
+    this.#textRunController.setEditingSlot(index, glyph);
   }
 
   public resetTextRunEditingContext(): void {
-    this.#textRunManager.resetEditingContext();
+    this.#textRunController.resetEditingContext();
   }
 
   public setTextRunHovered(index: number | null): void {
-    this.#textRunManager.setHovered(index);
+    this.#textRunController.setHovered(index);
   }
 
   public setTextRunInspectionSlot(index: number | null): void {
-    this.#textRunManager.setInspectionSlot(index);
+    this.#textRunController.setInspectionSlot(index);
   }
 
   public setTextRunInspectionComponent(index: number | null): void {
-    this.#textRunManager.setInspectionHoveredComponent(index);
+    this.#textRunController.setInspectionHoveredComponent(index);
   }
 
   public clearTextRunInspection(): void {
-    this.#textRunManager.clearInspection();
+    this.#textRunController.clearInspection();
   }
 
   public insertTextCodepoint(codepoint: number): void {
     const glyphName = this.#fontEngine.getGlyphNameForUnicode(codepoint);
     if (!glyphName) return;
-    this.#textRunManager.buffer.insert({
-      glyphName,
-      unicode: codepoint,
-    });
+    this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
 
   public insertTextGlyphAt(index: number, glyph: GlyphRef): void {
-    this.#textRunManager.insertGlyphAt(index, glyph);
+    this.#textRunController.insertAt(index, glyph);
   }
 
   public getTextRunCodepoints(): number[] {
-    return this.#textRunManager.buffer
-      .getText()
-      .map((ref) => ref.unicode)
-      .filter((unicode): unicode is number => unicode !== null);
+    return this.#textRunController.getCodepoints();
   }
 
   public deleteTextCodepoint(): boolean {
-    return this.#textRunManager.buffer.delete();
+    return this.#textRunController.delete();
   }
 
-  public moveTextCursorLeft(): boolean {
-    return this.#textRunManager.buffer.moveLeft();
+  public moveTextCursorLeft(extend = false): boolean {
+    this.#textRunController.moveCursorLeft(extend);
+    return true;
   }
 
-  public moveTextCursorRight(): boolean {
-    return this.#textRunManager.buffer.moveRight();
+  public moveTextCursorRight(extend = false): boolean {
+    this.#textRunController.moveCursorRight(extend);
+    return true;
   }
 
   public moveTextCursorToEnd(): void {
-    this.#textRunManager.buffer.moveTo(this.#textRunManager.buffer.length);
+    this.#textRunController.moveCursorToEnd();
+  }
+
+  public selectAllText(): void {
+    this.#textRunController.selectAll();
   }
 
   public recomputeTextRun(originX?: number): void {
-    this.#textRunManager.recompute(this.#fontEngine, originX);
+    this.#textRunController.setFont(this.#fontEngine);
+    this.#textRunController.recompute(originX);
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public shouldRenderEditableGlyph(): boolean {
-    const state = this.#textRunManager.state.peek();
+    const state = this.#textRunController.state.peek();
     return !state || state.editingIndex !== null;
   }
 
@@ -1055,12 +1063,13 @@ export class Editor implements ShiftEditor {
   }
 
   public exportTextRuns(): Record<string, PersistedTextRun> {
-    return this.#textRunManager.exportRuns();
+    return this.#textRunController.exportRuns();
   }
 
   public hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void {
-    this.#textRunManager.hydrateRuns(runsByGlyph);
-    this.#textRunManager.recompute(this.#fontEngine);
+    this.#textRunController.hydrateRuns(runsByGlyph);
+    this.#textRunController.setFont(this.#fontEngine);
+    this.#textRunController.recompute();
   }
 
   public get font(): Font {
@@ -1095,8 +1104,9 @@ export class Editor implements ShiftEditor {
   public setMainGlyphUnicode(unicode: number | null): void {
     this.#mainGlyphUnicode = unicode;
     const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
-    this.#textRunManager.setOwnerGlyph(glyphRef);
-    this.#textRunManager.recompute(this.#fontEngine);
+    this.#textRunController.setOwnerGlyph(glyphRef);
+    this.#textRunController.setFont(this.#fontEngine);
+    this.#textRunController.recompute();
   }
 
   public getMainGlyphUnicode(): number | null {

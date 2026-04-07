@@ -50,7 +50,7 @@ import type {
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
 import type { Font } from "@/lib/editor/Font";
-import type { TextRunState } from "@/lib/editor/managers/TextRunManager";
+import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
@@ -221,7 +221,7 @@ export interface Editing {
  * manager internals to tools.
  */
 export interface TextRunAccess {
-  getTextRunState(): TextRunState | null;
+  getTextRunState(): TextRunRenderState | null;
   getTextRunLength(): number;
   ensureTextRunSeed(glyph: GlyphRef | null): void;
   setTextRunCursorVisible(visible: boolean): void;
@@ -235,9 +235,10 @@ export interface TextRunAccess {
   insertTextGlyphAt(index: number, glyph: GlyphRef): void;
   getTextRunCodepoints(): number[];
   deleteTextCodepoint(): boolean;
-  moveTextCursorLeft(): boolean;
-  moveTextCursorRight(): boolean;
+  moveTextCursorLeft(extend?: boolean): boolean;
+  moveTextCursorRight(extend?: boolean): boolean;
   moveTextCursorToEnd(): void;
+  selectAllText(): void;
   recomputeTextRun(originX?: number): void;
   shouldRenderEditableGlyph(): boolean;
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;

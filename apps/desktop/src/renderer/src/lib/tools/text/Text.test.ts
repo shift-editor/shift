@@ -17,14 +17,14 @@ describe("Text tool", () => {
   });
 
   it("moves cursor to end of buffer when activating", () => {
-    const buffer = editor.textRunManager.buffer;
-    buffer.insert({ glyphName: "A", unicode: 65 });
-    buffer.insert({ glyphName: "B", unicode: 66 });
-    buffer.moveTo(0);
+    const ctrl = editor.textRunController;
+    ctrl.insert({ glyphName: "A", unicode: 65 });
+    ctrl.insert({ glyphName: "B", unicode: 66 });
+    ctrl.placeCaret(0);
 
     editor.selectTool("text");
 
-    expect(buffer.cursorPosition).toBe(buffer.length);
+    expect(ctrl.cursor).toBe(ctrl.length);
   });
 
   it("returns to select tool on Escape", () => {
@@ -38,11 +38,11 @@ describe("Text tool", () => {
 
   it("handles character input and advances cursor", () => {
     editor.selectTool("text");
-    const buffer = editor.textRunManager.buffer;
-    const lengthBefore = buffer.length;
+    const ctrl = editor.textRunController;
+    const lengthBefore = ctrl.length;
 
     editor.keyDown("b");
 
-    expect(buffer.length).toBeGreaterThanOrEqual(lengthBefore);
+    expect(ctrl.length).toBeGreaterThanOrEqual(lengthBefore);
   });
 });

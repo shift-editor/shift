@@ -95,6 +95,18 @@ export function createTextKeyDownBindings(): KeyBinding[] {
       },
     },
     {
+      id: "text.selectAll",
+      preventDefault: true,
+      when: (ctx) => ctx.activeTool === "text",
+      match: (event) => matchChord(event, { key: "a", primaryModifier: true }),
+      run: (ctx) => {
+        ctx.editor.selectAllText();
+        ctx.editor.recomputeTextRun();
+        ctx.editor.requestRedraw();
+        return true;
+      },
+    },
+    {
       id: "text.capture",
       preventDefault: true,
       when: (ctx) => ctx.activeTool === "text",

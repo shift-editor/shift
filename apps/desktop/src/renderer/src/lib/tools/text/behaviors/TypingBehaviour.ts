@@ -6,25 +6,28 @@ export class TypingBehavior implements TextBehavior {
   onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: ToolEventOf<"keyDown">): boolean {
     if (state.type !== "typing") return false;
 
+    const extend = event.shiftKey;
+
     switch (event.key) {
       case "Backspace":
         if (ctx.editor.deleteTextCodepoint()) {
           ctx.editor.recomputeTextRun();
         }
         return true;
+      case "Delete":
+        ctx.editor.recomputeTextRun();
+        return true;
       case "Escape":
         ctx.setState({ type: "idle" });
         ctx.editor.setActiveTool("select");
         return true;
       case "ArrowLeft":
-        if (ctx.editor.moveTextCursorLeft()) {
-          ctx.editor.recomputeTextRun();
-        }
+        ctx.editor.moveTextCursorLeft(extend);
+        ctx.editor.recomputeTextRun();
         return true;
       case "ArrowRight":
-        if (ctx.editor.moveTextCursorRight()) {
-          ctx.editor.recomputeTextRun();
-        }
+        ctx.editor.moveTextCursorRight(extend);
+        ctx.editor.recomputeTextRun();
         return true;
       default: {
         if (event.key.length !== 1 || event.metaKey) return false;

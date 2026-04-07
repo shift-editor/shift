@@ -5,4 +5,3 @@ export { EdgePanManager } from "./EdgePanManager";
 export { SnapManager } from "./SnapManager";
 export { ClipboardManager } from "./ClipboardManager";
 export { GlyphNamingService } from "./GlyphNamingService";
-export { TextRunManager } from "./TextRunManager";

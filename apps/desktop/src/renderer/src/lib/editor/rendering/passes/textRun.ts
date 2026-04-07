@@ -7,7 +7,7 @@
  */
 import type { FontMetrics } from "@shift/types";
 import type { RenderContext } from "./types";
-import type { TextRunState } from "../../managers/TextRunManager";
+import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
 import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import type { Contour, RenderContour } from "@shift/types";
 import { buildContourPath, getCachedContourPath } from "../render";
@@ -19,6 +19,7 @@ import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
 const CURSOR_BAR_HALF_PX = 20;
+const SELECTION_FILL = "rgba(12, 146, 244, 0.2)";
 const HOVER_OUTLINE = "#0C92F4";
 const HOVER_OUTLINE_WIDTH_PX = 3;
 const COMPOSITE_ARM_FILL = "rgba(128, 128, 128, 0.22)";
@@ -46,7 +47,7 @@ export interface CompositeInspectionRenderData {
 
 export function renderTextRun(
   rc: RenderContext,
-  textRun: TextRunState,
+  textRun: TextRunRenderState,
   metrics: FontMetrics,
   liveGlyph?: LiveGlyphRenderData | null,
   inspection?: CompositeInspectionRenderData | null,
@@ -75,6 +76,16 @@ export function renderTextRun(
       ctx.fillPath(path);
     }
 
+    ctx.restore();
+  }
+
+  // Draw selection highlight
+  if (textRun.selectionRects.length > 0) {
+    ctx.save();
+    ctx.fillStyle = SELECTION_FILL;
+    for (const rect of textRun.selectionRects) {
+      ctx.fillRect(rect.x, rect.bottom, rect.width, rect.top - rect.bottom);
+    }
     ctx.restore();
   }
 
@@ -134,7 +145,7 @@ export function renderTextRun(
 
 function renderCompositeInspection(
   rc: RenderContext,
-  layout: TextRunState["layout"],
+  layout: TextRunRenderState["layout"],
   metrics: FontMetrics,
   inspection?: CompositeInspectionRenderData | null,
 ): void {
@@ -227,7 +238,7 @@ function getCachedLiveGlyphPath(liveGlyph: LiveGlyphRenderData): {
 }
 
 function isSlotVisible(
-  slot: TextRunState["layout"]["slots"][number],
+  slot: TextRunRenderState["layout"]["slots"][number],
   metrics: FontMetrics,
   visibleSceneBounds?: { minX: number; maxX: number; minY: number; maxY: number },
   liveGlyph?: LiveGlyphRenderData | null,
