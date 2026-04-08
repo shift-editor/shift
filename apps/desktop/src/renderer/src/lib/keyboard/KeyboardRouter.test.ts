@@ -78,6 +78,7 @@ describe("KeyboardRouter", () => {
       insertTextCodepoint: vi.fn(),
       recomputeTextRun: vi.fn(),
       getTextRunCodepoints: vi.fn(() => []),
+      selectAllText: vi.fn(),
     };
 
     toolManager = {

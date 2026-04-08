@@ -1,5 +1,5 @@
 import type { PersistenceScope } from "./types";
-import type { PersistedTextRun } from "@/lib/editor/managers/TextRunManager";
+import type { PersistedTextRun } from "@/lib/tools/text/TextRunController";
 import type { SnapPreferences } from "@/types/editor";
 import type { ToolStateScope } from "@/lib/tools/core";
 
