@@ -9,6 +9,16 @@ function createMockFont(
   svgPaths: Record<number, string> = {},
   bboxes: Record<number, Bounds> = {},
 ): Font {
+  const glyphNameMap: Record<number, string> = {};
+  for (const unicode of [
+    ...Object.keys(advances),
+    ...Object.keys(svgPaths),
+    ...Object.keys(bboxes),
+  ]) {
+    const u = Number(unicode);
+    glyphNameMap[u] = `uni${u.toString(16).toUpperCase()}`;
+  }
+
   return {
     getMetrics: () => ({
       unitsPerEm: 1000,
@@ -37,9 +47,21 @@ function createMockFont(
       description: null,
       note: null,
     }),
-    getAdvance: (unicode: number) => advances[unicode] ?? null,
-    getSvgPath: (unicode: number) => svgPaths[unicode] ?? null,
-    getBbox: (unicode: number) => bboxes[unicode] ?? null,
+    getGlyphNameForUnicode: (unicode: number) => glyphNameMap[unicode] ?? null,
+    getGlyphByUnicode: () => null,
+    getGlyph: (name: string) => {
+      const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
+      if (!unicode) return null;
+      const u = Number(unicode);
+      const svgPath = svgPaths[u] ?? null;
+      return {
+        name,
+        advance: advances[u] ?? 0,
+        bbox: bboxes[u] ?? null,
+        svgPath,
+        path2d: svgPath ? new Path2D(svgPath) : null,
+      };
+    },
   };
 }
 
@@ -85,11 +107,12 @@ describe("computeTextLayout", () => {
     expect(layout.totalAdvance).toBe(0);
   });
 
-  it("should include svgPath in slots", () => {
+  it("should include path2d in slots", () => {
     const font = createMockFont({ 65: 500 }, { 65: "M0 0L100 100" });
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
 
     expect(expectAt(layout.slots, 0).svgPath).toBe("M0 0L100 100");
+    expect(expectAt(layout.slots, 0).path2d).toBeInstanceOf(Path2D);
   });
 });
 

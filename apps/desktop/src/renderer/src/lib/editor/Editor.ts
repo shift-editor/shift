@@ -36,7 +36,6 @@ import type { Coordinates } from "@/types/coordinates";
 
 import { GlyphNamingService, ViewportManager } from "./managers";
 import { FontEngine } from "@/engine";
-import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
@@ -169,7 +168,6 @@ export class Editor implements ShiftEditor {
   #$glyph: ComputedSignal<Glyph | null>;
 
   #staticEffect: Effect;
-  #textRunGlyphRefreshEffect: Effect;
   #overlayEffect: Effect;
   #interactiveEffect: Effect;
   #cursorEffect: Effect;
@@ -293,7 +291,7 @@ export class Editor implements ShiftEditor {
     this.#textRunController.setFont(this.#fontEngine);
 
     this.#events.on("fontLoaded", () => {
-      GlyphRenderCache.clear();
+      this.#fontEngine.glyphStore.clear();
       this.#commandHistory.clear();
       this.#textRunController.clearAll();
     });
@@ -350,41 +348,6 @@ export class Editor implements ShiftEditor {
       this.$staticState.value;
       this.#textRunController.state.value;
       this.#renderer.requestStaticRedraw();
-    });
-
-    this.#textRunGlyphRefreshEffect = effect(() => {
-      const glyph = this.#$glyph.value;
-      if (!glyph) return;
-
-      const textRun = this.#textRunController.state.peek();
-      if (!textRun) return;
-
-      // Clear cached Path2D objects for dependent glyphs so text runs re-render
-      // with fresh SVG data from NAPI.
-      const glyphNames = new Set<string>();
-      for (const slot of textRun.layout.slots) {
-        if (slot.glyph.unicode !== null) {
-          GlyphRenderCache.delete(slot.glyph.unicode);
-        }
-        glyphNames.add(slot.glyph.glyphName);
-      }
-      GlyphRenderCache.delete(glyph.unicode);
-      glyphNames.add(glyph.name);
-
-      const nativeDependents = this.#fontEngine.getDependentUnicodesByName(glyph.name);
-      for (const unicode of nativeDependents) {
-        GlyphRenderCache.delete(unicode);
-        const glyphName = this.#fontEngine.getGlyphNameForUnicode(unicode);
-        if (glyphName) {
-          glyphNames.add(glyphName);
-        }
-      }
-
-      for (const glyphName of glyphNames) {
-        GlyphRenderCache.delete(glyphName);
-      }
-
-      this.#textRunController.recompute();
     });
 
     this.#overlayEffect = effect(() => {
@@ -1008,7 +971,7 @@ export class Editor implements ShiftEditor {
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public shouldRenderEditableGlyph(): boolean {
+  public shouldRenderGlyph(): boolean {
     const state = this.#textRunController.state.peek();
     return !state || state.editingIndex !== null;
   }
@@ -2013,7 +1976,6 @@ export class Editor implements ShiftEditor {
   public destroy() {
     this.#events.emit("destroying");
     this.#staticEffect.dispose();
-    this.#textRunGlyphRefreshEffect.dispose();
     this.#overlayEffect.dispose();
     this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();

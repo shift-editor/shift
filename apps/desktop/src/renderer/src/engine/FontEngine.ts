@@ -25,6 +25,7 @@ import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { produceGlyph } from "./draft";
+import { GlyphStore, type GlyphView } from "@/lib/cache/GlyphStore";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -36,6 +37,7 @@ export class FontEngine {
   readonly #$fontUnicodes: WritableSignal<number[]>;
   readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
+  #glyphStore: GlyphStore;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
@@ -43,6 +45,7 @@ export class FontEngine {
     this.#$fontLoaded = signal(false);
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
+    this.#glyphStore = new GlyphStore(this);
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
@@ -77,7 +80,7 @@ export class FontEngine {
     this.#$fontMetrics.set(null);
   }
 
-  getGlyph(): GlyphSnapshot | null {
+  getEditingSnapshot(): GlyphSnapshot | null {
     return this.#$glyph.value;
   }
 
@@ -183,8 +186,19 @@ export class FontEngine {
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
   }
 
-  getDependentUnicodesByName(glyphName: string): number[] {
-    return this.#raw.getDependentUnicodesByName(glyphName);
+  getGlyph(name: string): GlyphView | null {
+    return this.#glyphStore.get(name).value;
+  }
+
+  getGlyphByUnicode(unicode: number): GlyphView | null {
+    const name = this.getGlyphNameForUnicode(unicode);
+    if (!name) return null;
+    return this.getGlyph(name);
+  }
+
+  /** @knipclassignore */
+  get glyphStore(): GlyphStore {
+    return this.#glyphStore;
   }
 
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
@@ -232,7 +246,7 @@ export class FontEngine {
     const pointId = ids[0];
     if (pointId) return pointId;
 
-    const glyph = this.getGlyph()!;
+    const glyph = this.getEditingSnapshot()!;
     const lastContour = glyph.contours[glyph.contours.length - 1];
     const lastPoint = lastContour?.points[lastContour.points.length - 1];
     if (!lastPoint) {
@@ -285,7 +299,7 @@ export class FontEngine {
 
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
-    const glyph = this.getGlyph();
+    const glyph = this.getEditingSnapshot();
     if (!glyph) throw new NativeOperationError("No glyph available");
     const found = Glyphs.findPoint(glyph, pointId);
     if (!found) throw new NativeOperationError(`Point ${pointId} not found`);
@@ -351,7 +365,7 @@ export class FontEngine {
     if (!this.hasSession()) return;
     if (updates.length === 0) return;
 
-    const glyph = this.getGlyph();
+    const glyph = this.getEditingSnapshot();
     if (!glyph) return;
 
     const updatedGlyph = produceGlyph(glyph, updates);
@@ -379,7 +393,7 @@ export class FontEngine {
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.hasSession()) return [];
-    const glyph = this.getGlyph();
+    const glyph = this.getEditingSnapshot();
     if (!glyph) return [];
 
     const patch = constrainDrag(

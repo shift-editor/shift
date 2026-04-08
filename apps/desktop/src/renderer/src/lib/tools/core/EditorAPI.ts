@@ -240,7 +240,7 @@ export interface TextRunAccess {
   moveTextCursorToEnd(): void;
   selectAllText(): void;
   recomputeTextRun(originX?: number): void;
-  shouldRenderEditableGlyph(): boolean;
+  shouldRenderGlyph(): boolean;
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
 }
 

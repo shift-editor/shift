@@ -8,20 +8,17 @@
 import type { IRenderer } from "@/types/graphics";
 import { parseContourSegments, segmentToCurve, type SegmentContourLike } from "@shift/font";
 import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
-import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
+type CachedContourGeometry = { path: Path2D; isClosed: boolean; bounds: BoundsType | null };
+const contourPathCache = new WeakMap<SegmentContourLike, CachedContourGeometry>();
 
-export function getCachedContourPath(contour: SegmentContourLike): {
-  path: Path2D;
-  isClosed: boolean;
-  bounds: BoundsType | null;
-} {
-  const cached = GlyphRenderCache.getContourPath(contour);
+export function getCachedContourPath(contour: SegmentContourLike): CachedContourGeometry {
+  const cached = contourPathCache.get(contour);
   if (cached) return cached;
 
   const path = new Path2D();
   if (contour.points.length < 2) {
     const result = { path, isClosed: false, bounds: null };
-    GlyphRenderCache.setContourPath(contour, result);
+    contourPathCache.set(contour, result);
     return result;
   }
 
@@ -29,7 +26,7 @@ export function getCachedContourPath(contour: SegmentContourLike): {
   const firstSegment = segments[0];
   if (!firstSegment) {
     const result = { path, isClosed: false, bounds: null };
-    GlyphRenderCache.setContourPath(contour, result);
+    contourPathCache.set(contour, result);
     return result;
   }
 
@@ -66,7 +63,7 @@ export function getCachedContourPath(contour: SegmentContourLike): {
   if (contour.closed) path.closePath();
 
   const result = { path, isClosed: contour.closed, bounds };
-  GlyphRenderCache.setContourPath(contour, result);
+  contourPathCache.set(contour, result);
   return result;
 }
 

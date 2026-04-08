@@ -11,7 +11,7 @@ import type { CommandContext } from "../core";
 let fontEngine: FontEngine;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getGlyph() };
+  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
 }
 
 beforeEach(() => {
@@ -25,7 +25,7 @@ describe("SetXAdvanceCommand", () => {
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(530);
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -34,7 +34,7 @@ describe("SetXAdvanceCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(500);
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
   });
 });
 
@@ -44,7 +44,7 @@ describe("SetRightSidebearingCommand", () => {
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(530);
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -53,7 +53,7 @@ describe("SetRightSidebearingCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(500);
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
   });
 });
 
@@ -65,8 +65,8 @@ describe("SetLeftSidebearingCommand", () => {
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(520);
-    const points = getAllPoints(fontEngine.getGlyph());
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(520);
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(120);
   });
 
@@ -78,8 +78,8 @@ describe("SetLeftSidebearingCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(500);
-    const points = getAllPoints(fontEngine.getGlyph());
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
   });
 
@@ -92,8 +92,8 @@ describe("SetLeftSidebearingCommand", () => {
     cmd.undo(ctx());
     cmd.redo(ctx());
 
-    expect(fontEngine.getGlyph()!.xAdvance).toBe(520);
-    const points = getAllPoints(fontEngine.getGlyph());
+    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(520);
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(120);
   });
 });

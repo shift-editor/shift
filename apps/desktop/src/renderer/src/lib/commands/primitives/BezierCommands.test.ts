@@ -9,7 +9,7 @@ import type { PointId } from "@shift/types";
 let fontEngine: FontEngine;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getGlyph() };
+  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
 }
 
 beforeEach(() => {
@@ -25,7 +25,7 @@ describe("CloseContourCommand", () => {
 
     cmd.execute(ctx());
 
-    const glyph = fontEngine.getGlyph()!;
+    const glyph = fontEngine.getEditingSnapshot()!;
     expect(glyph.contours[0]!.closed).toBe(true);
   });
 
@@ -37,7 +37,7 @@ describe("CloseContourCommand", () => {
     const cmd = new CloseContourCommand();
     cmd.execute(ctx());
 
-    const glyph = fontEngine.getGlyph()!;
+    const glyph = fontEngine.getEditingSnapshot()!;
     expect(glyph.contours[0]!.closed).toBe(true);
   });
 
@@ -56,7 +56,7 @@ describe("NudgePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(11);
     expect(points[1]!.x).toBe(31);
   });
@@ -69,7 +69,7 @@ describe("NudgePointsCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(10);
     expect(points[0]!.y).toBe(20);
   });
@@ -81,7 +81,7 @@ describe("NudgePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(10);
     expect(points[0]!.y).toBe(20);
   });
@@ -94,7 +94,7 @@ describe("NudgePointsCommand", () => {
 
 describe("SplitSegmentCommand", () => {
   function makeLineSegment(p1Id: PointId, p2Id: PointId): LineSegment {
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     const p1 = points.find((p) => p.id === p1Id)!;
     const p2 = points.find((p) => p.id === p2Id)!;
 
@@ -117,11 +117,11 @@ describe("SplitSegmentCommand", () => {
 
       const result = cmd.execute(ctx());
 
-      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(3);
       expect(result).toBeTruthy();
       expect(cmd.splitPointId).toBe(result);
 
-      const points = getAllPoints(fontEngine.getGlyph());
+      const points = getAllPoints(fontEngine.getEditingSnapshot());
       const splitPoint = points.find((p) => p.id === result)!;
       expect(splitPoint.x).toBe(50);
       expect(splitPoint.y).toBe(0);
@@ -137,7 +137,7 @@ describe("SplitSegmentCommand", () => {
 
       cmd.execute(ctx());
 
-      const points = getAllPoints(fontEngine.getGlyph());
+      const points = getAllPoints(fontEngine.getEditingSnapshot());
       const splitPoint = points.find((p) => p.id === cmd.splitPointId)!;
       expect(splitPoint.x).toBe(25);
       expect(splitPoint.y).toBe(25);
@@ -151,10 +151,10 @@ describe("SplitSegmentCommand", () => {
       const cmd = new SplitSegmentCommand(segment, 0.5);
 
       cmd.execute(ctx());
-      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(3);
 
       cmd.undo(ctx());
-      expect(getPointCount(fontEngine.getGlyph())).toBe(2);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
     });
   });
 
@@ -178,10 +178,10 @@ describe("SplitSegmentCommand", () => {
       cmd.execute(ctx());
 
       // Original 3 + 2 inserted = 5
-      expect(getPointCount(fontEngine.getGlyph())).toBe(5);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(5);
 
       // The split point should be on-curve and smooth
-      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const allPoints = getAllPoints(fontEngine.getEditingSnapshot());
       const splitPoint = allPoints.find((p) => p.id === cmd.splitPointId)!;
       expect(splitPoint.pointType).toBe("onCurve");
       expect(splitPoint.smooth).toBe(true);
@@ -206,10 +206,10 @@ describe("SplitSegmentCommand", () => {
       cmd.execute(ctx());
       cmd.undo(ctx());
 
-      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(3);
 
       // Original control should be restored to its original position
-      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const allPoints = getAllPoints(fontEngine.getEditingSnapshot());
       const control = allPoints.find((p) => p.id === c1)!;
       expect(control.x).toBe(50);
       expect(control.y).toBe(100);
@@ -238,11 +238,11 @@ describe("SplitSegmentCommand", () => {
       const result = cmd.execute(ctx());
 
       // Original 4 + 3 inserted = 7
-      expect(getPointCount(fontEngine.getGlyph())).toBe(7);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(7);
       expect(result).toBe(cmd.splitPointId);
 
       // The split point should be on-curve and smooth
-      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const allPoints = getAllPoints(fontEngine.getEditingSnapshot());
       const splitPoint = allPoints.find((p) => p.id === cmd.splitPointId)!;
       expect(splitPoint.pointType).toBe("onCurve");
       expect(splitPoint.smooth).toBe(true);
@@ -269,9 +269,9 @@ describe("SplitSegmentCommand", () => {
       cmd.execute(ctx());
       cmd.undo(ctx());
 
-      expect(getPointCount(fontEngine.getGlyph())).toBe(4);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(4);
 
-      const allPoints = getAllPoints(fontEngine.getGlyph());
+      const allPoints = getAllPoints(fontEngine.getEditingSnapshot());
       const control1 = allPoints.find((p) => p.id === c1)!;
       const control2 = allPoints.find((p) => p.id === c2)!;
       expect(control1.x).toBe(25);
@@ -293,7 +293,7 @@ describe("SplitSegmentCommand", () => {
       cmd.undo(ctx());
       cmd.redo(ctx());
 
-      expect(getPointCount(fontEngine.getGlyph())).toBe(3);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(3);
     });
   });
 

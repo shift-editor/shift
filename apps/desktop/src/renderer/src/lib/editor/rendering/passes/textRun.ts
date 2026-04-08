@@ -8,7 +8,6 @@
 import type { FontMetrics } from "@shift/types";
 import type { RenderContext } from "./types";
 import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
-import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import type { Contour, RenderContour } from "@shift/types";
 import { buildContourPath, getCachedContourPath } from "../render";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
@@ -71,9 +70,8 @@ export function renderTextRun(
 
     if (shouldUseLiveGlyph && liveGlyph) {
       ctx.fillPath(getCachedLiveGlyphPath(liveGlyph).path);
-    } else if (slot.svgPath) {
-      const path = GlyphRenderCache.get(slot.glyph.glyphName, slot.svgPath);
-      ctx.fillPath(path);
+    } else if (slot.path2d) {
+      ctx.fillPath(slot.path2d);
     }
 
     ctx.restore();
@@ -110,9 +108,8 @@ export function renderTextRun(
 
       if (shouldUseLiveGlyph && liveGlyph) {
         ctx.strokePath(getCachedLiveGlyphPath(liveGlyph).path);
-      } else if (slot.svgPath) {
-        const path = GlyphRenderCache.get(slot.glyph.glyphName, slot.svgPath);
-        ctx.strokePath(path);
+      } else if (slot.path2d) {
+        ctx.strokePath(slot.path2d);
       }
 
       ctx.restore();
@@ -158,10 +155,9 @@ function renderCompositeInspection(
   ctx.save();
   ctx.translate(slot.x, 0);
 
-  if (slot.svgPath) {
-    const path = GlyphRenderCache.get(slot.glyph.glyphName, slot.svgPath);
+  if (slot.path2d) {
     ctx.fillStyle = COMPOSITE_ARM_FILL;
-    ctx.fillPath(path);
+    ctx.fillPath(slot.path2d);
   }
 
   for (const [i, component] of inspection.components.entries()) {

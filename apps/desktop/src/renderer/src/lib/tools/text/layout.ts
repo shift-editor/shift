@@ -1,7 +1,6 @@
 import type { Point2D, FontMetrics } from "@shift/types";
 import type { Bounds } from "@shift/geo";
 import type { Font } from "@/lib/editor/Font";
-import { GlyphRenderCache } from "@/lib/cache/GlyphRenderCache";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 
 const NON_SPACING_EDITOR_ADVANCE = 600;
@@ -17,6 +16,7 @@ export interface GlyphSlot {
   x: number;
   advance: number;
   bounds: Bounds | null;
+  path2d: Path2D | null;
   svgPath: string | null;
   selected: boolean;
 }
@@ -86,26 +86,18 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
   let x = origin.x;
   const selected = false;
 
-  for (const glyph of glyphs) {
-    const rawAdvance =
-      font.getAdvanceByName?.(glyph.glyphName) ??
-      (glyph.unicode !== null ? font.getAdvance(glyph.unicode) : null) ??
-      0;
-    const advance = resolveEditorAdvance(glyph, rawAdvance);
-    const bounds =
-      font.getBboxByName?.(glyph.glyphName) ??
-      (glyph.unicode !== null ? font.getBbox(glyph.unicode) : null);
-    const svgPath =
-      font.getSvgPathByName?.(glyph.glyphName) ??
-      (glyph.unicode !== null ? font.getSvgPath(glyph.unicode) : null);
+  for (const ref of glyphs) {
+    const resolved = font.getGlyph(ref.glyphName);
+    const advance = resolveEditorAdvance(ref, resolved?.advance ?? 0);
 
     slots.push({
-      glyph,
-      unicode: glyph.unicode,
+      glyph: ref,
+      unicode: ref.unicode,
       x,
       advance,
-      bounds,
-      svgPath,
+      bounds: resolved?.bbox ?? null,
+      path2d: resolved?.path2d ?? null,
+      svgPath: resolved?.svgPath ?? null,
       selected,
     });
 
@@ -213,11 +205,9 @@ export function hitTestTextSlot(
       continue;
     }
 
-    if (slot.svgPath && pathHitTester) {
-      const cacheKey = slot.glyph?.glyphName ?? `unicode:${String(slot.unicode ?? "")}`;
-      const path = GlyphRenderCache.get(cacheKey, slot.svgPath);
+    if (slot.path2d && pathHitTester) {
       const hit = pathHitTester.hitPath(
-        path,
+        slot.path2d,
         pos.x - slot.x,
         pos.y,
         Math.max(outlineRadius * 2, Number.EPSILON),
