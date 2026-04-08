@@ -25,6 +25,7 @@ import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { produceGlyph } from "./draft";
+import { GlyphStore, type ResolvedGlyph } from "@/lib/cache/GlyphStore";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -36,6 +37,7 @@ export class FontEngine {
   readonly #$fontUnicodes: WritableSignal<number[]>;
   readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
+  #glyphStore: GlyphStore;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
@@ -43,6 +45,7 @@ export class FontEngine {
     this.#$fontLoaded = signal(false);
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
+    this.#glyphStore = new GlyphStore(this);
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
@@ -181,6 +184,16 @@ export class FontEngine {
     const b = this.#raw.getGlyphBboxByName(glyphName);
     if (b == null || b.length !== 4) return null;
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
+  }
+
+  /** @knipclassignore — consumers migrating in follow-up */
+  getResolvedGlyph(name: string): ResolvedGlyph | null {
+    return this.#glyphStore.get(name).value;
+  }
+
+  /** @knipclassignore */
+  get glyphStore(): GlyphStore {
+    return this.#glyphStore;
   }
 
   getDependentUnicodesByName(glyphName: string): number[] {
