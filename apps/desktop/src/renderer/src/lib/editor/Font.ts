@@ -1,16 +1,12 @@
 import type { FontMetrics, FontMetadata } from "@shift/types";
-import type { Bounds } from "@shift/geo";
+import type { GlyphView } from "@/lib/cache/GlyphStore";
 
 /** Read-only font data surface exposed to tools and UI. */
 export interface Font {
   getMetrics(): FontMetrics;
   getMetadata(): FontMetadata;
-  getSvgPathByName?(glyphName: string): string | null;
-  getSvgPath(unicode: number): string | null;
-  /** Horizontal advance width in UPM units. */
-  getAdvanceByName?(glyphName: string): number | null;
-  getAdvance(unicode: number): number | null;
-  /** Tight bounding box in UPM space. */
-  getBboxByName?(glyphName: string): Bounds | null;
-  getBbox(unicode: number): Bounds | null;
+  /** Get glyph data by name. Cached and self-invalidating. */
+  getGlyph(name: string): GlyphView | null;
+  /** Get glyph data by unicode codepoint. */
+  getGlyphByUnicode(unicode: number): GlyphView | null;
 }

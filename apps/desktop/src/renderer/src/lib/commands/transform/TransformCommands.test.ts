@@ -7,7 +7,7 @@ import type { CommandContext } from "../core";
 let fontEngine: FontEngine;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getGlyph() };
+  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
 }
 
 beforeEach(() => {
@@ -23,7 +23,7 @@ describe("RotatePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBeCloseTo(0, 5);
     expect(points[0]!.y).toBeCloseTo(1, 5);
   });
@@ -35,7 +35,7 @@ describe("RotatePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(1);
     expect(points[0]!.y).toBe(0);
   });
@@ -48,7 +48,7 @@ describe("RotatePointsCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
     expect(points[0]!.y).toBe(200);
   });
@@ -62,7 +62,7 @@ describe("RotatePointsCommand", () => {
     cmd.undo(ctx());
     cmd.redo(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBeCloseTo(0, 5);
     expect(points[0]!.y).toBeCloseTo(1, 5);
   });
@@ -81,7 +81,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(20);
     expect(points[0]!.y).toBe(40);
   });
@@ -93,7 +93,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(20);
     expect(points[0]!.y).toBe(60);
   });
@@ -105,7 +105,7 @@ describe("ScalePointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(10);
     expect(points[0]!.y).toBe(20);
   });
@@ -118,7 +118,7 @@ describe("ScalePointsCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
     expect(points[0]!.y).toBe(200);
   });
@@ -137,7 +137,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(10);
     expect(points[0]!.y).toBe(-20);
   });
@@ -149,7 +149,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(-10);
     expect(points[0]!.y).toBe(20);
   });
@@ -161,7 +161,7 @@ describe("ReflectPointsCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(10);
     expect(points[0]!.y).toBe(20);
   });
@@ -174,7 +174,7 @@ describe("ReflectPointsCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
     expect(points[0]!.y).toBe(200);
   });

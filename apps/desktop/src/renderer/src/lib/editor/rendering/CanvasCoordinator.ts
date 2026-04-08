@@ -111,7 +111,7 @@ export interface CanvasCoordinatorContext {
   renderTool(draw: DrawAPI): void;
   /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
   renderToolBelowHandles(draw: DrawAPI): void;
-  shouldRenderEditableGlyph(): boolean;
+  shouldRenderGlyph(): boolean;
   getSelectionBoundingRect(): Rect2D | null;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   getZoom(): number;
@@ -266,7 +266,7 @@ export class CanvasCoordinator {
     if (
       !this.#ctx.isPreviewMode() &&
       this.#ctx.isHandlesVisible() &&
-      this.#ctx.shouldRenderEditableGlyph()
+      this.#ctx.shouldRenderGlyph()
     ) {
       this.#renderSelectionBoundingHandles(ctx);
     }
@@ -314,12 +314,12 @@ export class CanvasCoordinator {
     this.#renderSelectionBoundingRect(ctx, rc);
     ctx.restore();
 
-    const shouldRenderEditableGlyph = this.#ctx.shouldRenderEditableGlyph();
+    const shouldRenderGlyph = this.#ctx.shouldRenderGlyph();
 
     ctx.save();
     this.#applyTransforms(ctx);
 
-    if (glyph && shouldRenderEditableGlyph) {
+    if (glyph && shouldRenderGlyph) {
       const guides = getGuides(this.#ctx.getVisualGlyphAdvance(glyph), this.#ctx.font.getMetrics());
       rc.applyStyle(GUIDE_STYLES);
 
@@ -335,7 +335,7 @@ export class CanvasCoordinator {
       }
     }
 
-    if (!previewMode && glyph && shouldRenderEditableGlyph) {
+    if (!previewMode && glyph && shouldRenderGlyph) {
       const hoveredSegmentId = this.#ctx.getHoveredSegmentId();
       const hoveredSegment = hoveredSegmentId ? this.#ctx.getSegmentById(hoveredSegmentId) : null;
       const selectedSegments: SegmentType[] = [];
@@ -348,7 +348,7 @@ export class CanvasCoordinator {
       renderSegmentHighlights(rc, hoveredSegment, selectedSegments);
     }
 
-    if (!previewMode && glyph && shouldRenderEditableGlyph) {
+    if (!previewMode && glyph && shouldRenderGlyph) {
       const debugOverlays = this.#ctx.getDebugOverlays();
       if (debugOverlays.segmentBounds) {
         renderDebugSegmentBounds(rc, glyph);
@@ -368,7 +368,7 @@ export class CanvasCoordinator {
       this.#ctx.renderToolBelowHandles(draw);
     }
 
-    if (!previewMode && handlesVisible && glyph && shouldRenderEditableGlyph) {
+    if (!previewMode && handlesVisible && glyph && shouldRenderGlyph) {
       renderHandleControlLines(draw, glyph, (from, to) =>
         this.#isSceneSegmentVisible(from, to, visibleSceneBounds, drawOffset),
       );
@@ -418,7 +418,7 @@ export class CanvasCoordinator {
     },
   ): void {
     if (this.#ctx.isPreviewMode()) return;
-    if (!this.#ctx.shouldRenderEditableGlyph()) return;
+    if (!this.#ctx.shouldRenderGlyph()) return;
 
     const rect = this.#ctx.getSelectionBoundingRect();
     if (!rect) return;

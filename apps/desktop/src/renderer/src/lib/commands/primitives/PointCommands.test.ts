@@ -7,7 +7,7 @@ import type { CommandContext } from "../core";
 let fontEngine: FontEngine;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getGlyph() };
+  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
 }
 
 beforeEach(() => {
@@ -23,9 +23,9 @@ describe("AddPointCommand", () => {
     const pointId = cmd.execute(ctx());
 
     expect(pointId).toBeTruthy();
-    expect(getPointCount(fontEngine.getGlyph())).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
     expect(points[0]!.y).toBe(200);
     expect(points[0]!.pointType).toBe("onCurve");
@@ -37,7 +37,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.smooth).toBe(true);
   });
 
@@ -47,7 +47,7 @@ describe("AddPointCommand", () => {
 
     cmd.execute(ctx());
 
-    const points = getAllPoints(fontEngine.getGlyph());
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(points[0]!.pointType).toBe("offCurve");
   });
 
@@ -56,10 +56,10 @@ describe("AddPointCommand", () => {
     const cmd = new AddPointCommand(100, 200, "onCurve");
 
     cmd.execute(ctx());
-    expect(getPointCount(fontEngine.getGlyph())).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
     cmd.undo(ctx());
-    expect(getPointCount(fontEngine.getGlyph())).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
   });
 
   it("should have the correct name", () => {

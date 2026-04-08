@@ -24,7 +24,7 @@ function makeGlyph(input: {
 let fontEngine: FontEngine;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getGlyph() };
+  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
 }
 
 beforeEach(() => {
@@ -71,7 +71,7 @@ describe("SetNodePositionsCommand", () => {
     command!.execute(ctx());
 
     // Verify the after positions were applied
-    const glyph = fontEngine.getGlyph()!;
+    const glyph = fontEngine.getEditingSnapshot()!;
     const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1.x).toBe(15);
     expect(p1.y).toBe(25);
@@ -79,7 +79,7 @@ describe("SetNodePositionsCommand", () => {
     command!.undo(ctx());
 
     // Verify the before positions were restored
-    const undoGlyph = fontEngine.getGlyph()!;
+    const undoGlyph = fontEngine.getEditingSnapshot()!;
     const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1Undo.x).toBe(10);
     expect(p1Undo.y).toBe(20);
@@ -134,14 +134,14 @@ describe("SetNodePositionsCommand", () => {
     fontEngine.emitGlyph(base);
     command!.execute(ctx());
 
-    const glyph = fontEngine.getGlyph()!;
+    const glyph = fontEngine.getEditingSnapshot()!;
     const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1.x).toBe(15);
     expect(p1.y).toBe(25);
 
     command!.undo(ctx());
 
-    const undoGlyph = fontEngine.getGlyph()!;
+    const undoGlyph = fontEngine.getEditingSnapshot()!;
     const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1Undo.x).toBe(10);
     expect(p1Undo.y).toBe(20);

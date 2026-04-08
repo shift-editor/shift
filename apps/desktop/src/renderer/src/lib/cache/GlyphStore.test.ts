@@ -65,4 +65,32 @@ describe("GlyphStore", () => {
 
     expect(store.size).toBe(0);
   });
+
+  it("simple glyph entry is reused after edit", () => {
+    engine.startEditSession({ glyphName: "A", unicode: 65 });
+
+    const firstEntry = store.get("A");
+    engine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
+    const secondEntry = store.get("A");
+
+    expect(secondEntry).toBe(firstEntry);
+  });
+});
+
+describe("FontEngine.getGlyphByUnicode", () => {
+  it("resolves unicode to glyph view", () => {
+    const engine = createFontEngine();
+    engine.startEditSession({ glyphName: "A", unicode: 65 });
+
+    const glyph = engine.getGlyphByUnicode(65);
+
+    expect(glyph).not.toBeNull();
+    expect(glyph!.name).toBe("A");
+  });
+
+  it("returns null for unknown unicode", () => {
+    const engine = createFontEngine();
+
+    expect(engine.getGlyphByUnicode(99999)).toBeNull();
+  });
 });

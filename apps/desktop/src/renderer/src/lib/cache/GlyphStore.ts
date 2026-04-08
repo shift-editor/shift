@@ -21,9 +21,8 @@ import {
 import type { Bounds } from "@shift/geo";
 import type { FontEngine } from "@/engine/FontEngine";
 
-export interface ResolvedGlyph {
+export interface GlyphView {
   name: string;
-  unicode: number | null;
   advance: number;
   bbox: Bounds | null;
   path2d: Path2D | null;
@@ -32,8 +31,10 @@ export interface ResolvedGlyph {
 
 const MAX_ENTRIES = 2000;
 
+export type GlyphSignal = WritableSignal<GlyphView | null> | Signal<GlyphView | null>;
+
 export class GlyphStore {
-  #entries = new Map<string, WritableSignal<ResolvedGlyph | null> | Signal<ResolvedGlyph | null>>();
+  #entries = new Map<string, GlyphSignal>();
   #accessOrder: string[] = [];
   #font: FontEngine;
   #effect: Effect;
@@ -50,11 +51,15 @@ export class GlyphStore {
 
       if (this.#isWritable(entry)) {
         entry.set(this.#fetch(glyph.name));
+      } else {
+        // Composite — tear down and recreate on next access.
+        // The fresh computed will read the current component list.
+        this.#entries.delete(glyph.name);
       }
     });
   }
 
-  get(name: string): Signal<ResolvedGlyph | null> {
+  get(name: string): GlyphSignal {
     const existing = this.#entries.get(name);
     if (existing) {
       this.#touch(name);
@@ -64,10 +69,10 @@ export class GlyphStore {
     const componentNames = this.#getComponentNames(name);
 
     if (componentNames) {
-      return this.#createComposite(name, componentNames);
+      return this.#createCompositeGlyphEntry(name, componentNames);
     }
 
-    return this.#createSimple(name);
+    return this.#createGlyphEntry(name);
   }
 
   clear(): void {
@@ -84,14 +89,17 @@ export class GlyphStore {
     return this.#entries.size;
   }
 
-  #createSimple(name: string): WritableSignal<ResolvedGlyph | null> {
-    const entry = signal<ResolvedGlyph | null>(this.#fetch(name));
+  #createGlyphEntry(name: string): GlyphSignal {
+    const entry = signal<GlyphView | null>(this.#fetch(name));
     this.#store(name, entry);
     return entry;
   }
 
-  #createComposite(name: string, componentNames: string[]): Signal<ResolvedGlyph | null> {
-    const entry = computed<ResolvedGlyph | null>(() => {
+  #createCompositeGlyphEntry(name: string, componentNames: string[]): GlyphSignal {
+    const entry = computed<GlyphView | null>(() => {
+      // Read each component signal to establish reactive dependencies.
+      // When a component is edited, this computed auto-invalidates.
+      // The actual data comes from #fetch (Rust returns the flattened composite).
       for (const compName of componentNames) {
         this.get(compName).value;
       }
@@ -102,14 +110,13 @@ export class GlyphStore {
     return entry;
   }
 
-  #fetch(name: string): ResolvedGlyph | null {
+  #fetch(name: string): GlyphView | null {
     const svgPath = this.#font.getSvgPathByName(name);
     const advance = this.#font.getAdvanceByName(name) ?? 0;
     const bbox = this.#font.getBboxByName(name);
 
     return {
       name,
-      unicode: null,
       advance,
       bbox,
       svgPath,
@@ -123,10 +130,7 @@ export class GlyphStore {
     return composite.components.map((c) => c.componentGlyphName);
   }
 
-  #store(
-    name: string,
-    entry: WritableSignal<ResolvedGlyph | null> | Signal<ResolvedGlyph | null>,
-  ): void {
+  #store(name: string, entry: GlyphSignal): void {
     this.#entries.set(name, entry);
     this.#accessOrder.push(name);
     this.#evict();
@@ -147,7 +151,7 @@ export class GlyphStore {
     }
   }
 
-  #isWritable(entry: Signal<ResolvedGlyph | null>): entry is WritableSignal<ResolvedGlyph | null> {
+  #isWritable(entry: GlyphSignal): entry is WritableSignal<GlyphView | null> {
     return "set" in entry;
   }
 }

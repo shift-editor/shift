@@ -12,7 +12,7 @@ if (typeof globalThis.requestAnimationFrame === "undefined") {
   globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
 }
 
-// Path2D is a browser API used by GlyphRenderCache and Canvas2DRenderer.
+// Path2D is a browser API used by GlyphStore and Canvas2DRenderer.
 // Provide a minimal stub for tests.
 if (typeof globalThis.Path2D === "undefined") {
   const Path2DStub = class Path2D {
