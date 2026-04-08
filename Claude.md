@@ -5,6 +5,11 @@
 - Prefer switch statements over long if-else chains when branching on the same value.
 - Prefer early returns over nested if-else blocks. Return early for guard clauses to keep the main logic at the top indentation level. In React components, guard on null data at the top (`if (!glyph) return null;`) instead of scattering `glyph?.foo ?? fallback` throughout the JSX.
 
+## Naming
+
+- **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `GlyphData`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.
+- **Avoid `-Data`, `-Info`, `-State` suffixes** on types unless it genuinely represents transient mutable state (e.g. `TextRunRenderState` for a signal value consumed by a render pass). If the type represents a domain concept, name it after the concept.
+
 ## Documentation
 
 Always keep it up to date after completing a large feature
