@@ -130,7 +130,15 @@ jobs:
         with:
           shared-key: shift-rust
 
+      - name: Cache native module binary
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: crates/shift-node/*.node
+          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
       - name: Build native module
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
       - name: Run unit tests
