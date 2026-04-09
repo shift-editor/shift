@@ -1,10 +1,7 @@
 import type { PersistenceScope } from "./types";
-import type { PersistedTextRun } from "@/lib/tools/text/TextRunController";
 import type { ToolStateScope } from "@/lib/tools/core";
 
 export interface PersistenceEditorAPI {
-  exportTextRuns(): Record<string, PersistedTextRun>;
-  hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void;
   exportToolState(scope: ToolStateScope): Record<string, unknown>;
   hydrateToolState(scope: ToolStateScope, state: Record<string, unknown>): void;
   clearToolState(scope: ToolStateScope): void;

@@ -2,7 +2,6 @@ import type { Editor } from "@/lib/editor/Editor";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
-import { textRunModule } from "./modules/textRun";
 import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";
 import {
   PERSISTENCE_DOCUMENT_LIMIT,
@@ -52,7 +51,6 @@ export class DocumentStatePersistence {
   #isHydrating = false;
 
   constructor(extraModules: PersistenceModule[] = []) {
-    this.registerModule(textRunModule);
     this.registerModule(toolStateAppModule);
     this.registerModule(toolStateDocumentModule);
     for (const module of extraModules) {
@@ -190,13 +188,6 @@ export class DocumentStatePersistence {
     }
 
     // Legacy watchers (will be removed as modules migrate to ShiftState)
-    this.#effects.push(
-      effect(() => {
-        editor.getTextRunState();
-        this.scheduleSave();
-      }),
-    );
-
     let lastGlyphUnicode: number | null = null;
     this.#effects.push(
       effect(() => {

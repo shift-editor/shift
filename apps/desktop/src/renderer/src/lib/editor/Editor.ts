@@ -99,12 +99,9 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import {
-  TextRunController,
-  type PersistedTextRun,
-  type TextRunRenderState,
-} from "@/lib/tools/text/TextRunController";
-import { SnapPreferencesSchema } from "@shift/validation";
+import { TextRunController, type TextRunRenderState } from "@/lib/tools/text/TextRunController";
+import { SnapPreferencesSchema, TextRunModulePayloadSchema } from "@shift/validation";
+import type { TextRunModulePayload } from "@/persistence/types";
 
 interface AppSettings {
   snap: SnapPreferences;
@@ -312,6 +309,25 @@ export class Editor implements ShiftEditor {
     this.#clipboard = new ClipboardManager(this);
     this.#textRunController = new TextRunController();
     this.#textRunController.setFont(this.#fontEngine);
+
+    const textRunPersistence = this.registerState<TextRunModulePayload>({
+      id: "text-run",
+      scope: "document",
+      initial: () => ({ runsByGlyph: {} }),
+      serialize: () => ({ runsByGlyph: this.#textRunController.exportRuns() }),
+      deserialize: (json) => {
+        const payload = TextRunModulePayloadSchema.parse(json);
+        this.#textRunController.hydrateRuns(payload.runsByGlyph);
+        this.#textRunController.recompute();
+        return payload;
+      },
+    });
+
+    // Bridge: when text run controller state changes, notify the persistence field
+    effect(() => {
+      this.#textRunController.state.value;
+      textRunPersistence.set({ runsByGlyph: this.#textRunController.exportRuns() });
+    });
 
     this.#events.on("fontLoaded", () => {
       this.#fontEngine.glyphStore.clear();
@@ -1045,15 +1061,6 @@ export class Editor implements ShiftEditor {
     if (scopedState.size === 0) return;
     scopedState.clear();
     this.#bumpToolStateVersion();
-  }
-
-  public exportTextRuns(): Record<string, PersistedTextRun> {
-    return this.#textRunController.exportRuns();
-  }
-
-  public hydrateTextRuns(runsByGlyph: Record<string, PersistedTextRun>): void {
-    this.#textRunController.hydrateRuns(runsByGlyph);
-    this.#textRunController.recompute();
   }
 
   public get font(): Font {
