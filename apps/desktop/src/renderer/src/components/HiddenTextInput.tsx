@@ -8,6 +8,60 @@
 import { useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
 import { effect } from "@/lib/reactive/signal";
+import type { TextRunController } from "@/lib/tools/text/TextRunController";
+
+function moveCursorVertically(ctrl: TextRunController, direction: 1 | -1, extend: boolean): void {
+  const state = ctrl.state.peek();
+  if (!state) return;
+
+  const { layout } = state;
+  const slots = layout.slots;
+  if (slots.length === 0) return;
+
+  const cursorIdx = ctrl.cursor;
+  const cursorSlot = cursorIdx > 0 ? slots[cursorIdx - 1] : slots[0];
+  if (!cursorSlot) return;
+
+  const currentY = cursorSlot.y;
+  const cursorX = cursorIdx > 0 ? cursorSlot.x + cursorSlot.advance : cursorSlot.x;
+
+  // Find unique line Y values, sorted descending (UPM: higher Y = higher on screen)
+  const lineYs = [...new Set(slots.map((s) => s.y))].sort((a, b) => b - a);
+  const currentLineIdx = lineYs.indexOf(currentY);
+  if (currentLineIdx === -1) return;
+
+  // direction 1 = down = next line (lower Y in UPM)
+  // direction -1 = up = previous line (higher Y in UPM)
+  const targetLineIdx = currentLineIdx + direction;
+  if (targetLineIdx < 0 || targetLineIdx >= lineYs.length) return;
+
+  const targetY = lineYs[targetLineIdx];
+
+  // Find closest slot on target line by X position
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (const [i, slot] of slots.entries()) {
+    if (slot.y !== targetY) continue;
+    const slotMidX = slot.x + slot.advance / 2;
+    const dist = Math.abs(slotMidX - cursorX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i + 1; // cursor goes after this slot
+    }
+  }
+
+  // Check if cursor should be before the first slot on the target line
+  const firstOnLine = slots.find((s) => s.y === targetY);
+  if (firstOnLine && cursorX <= firstOnLine.x) {
+    bestIdx = slots.indexOf(firstOnLine);
+  }
+
+  if (extend) {
+    ctrl.extendSelection(bestIdx);
+  } else {
+    ctrl.placeCaret(bestIdx);
+  }
+}
 
 export function HiddenTextInput() {
   const editor = getEditor();
@@ -86,6 +140,16 @@ export function HiddenTextInput() {
         } else {
           ctrl.moveCursorRight(extend);
         }
+        e.preventDefault();
+        return;
+
+      case "ArrowUp":
+        moveCursorVertically(ctrl, -1, extend);
+        e.preventDefault();
+        return;
+
+      case "ArrowDown":
+        moveCursorVertically(ctrl, 1, extend);
         e.preventDefault();
         return;
 
