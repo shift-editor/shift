@@ -51,6 +51,11 @@ export class DrawAPI {
     return this.#renderer;
   }
 
+  /** Convert screen pixels to UPM units at the current zoom level. */
+  pxToUpm(px = 1): number {
+    return this.#screen.toUpmDistance(px);
+  }
+
   #toUpm(px: number): number {
     return this.#screen.toUpmDistance(px);
   }

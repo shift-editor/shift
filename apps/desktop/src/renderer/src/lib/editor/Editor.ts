@@ -482,6 +482,11 @@ export class Editor implements ShiftEditor {
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  public renderToolInScene(draw: DrawAPI): void {
+    this.#toolManager.renderInScene(draw);
+  }
+
   public renderTool(draw: DrawAPI): void {
     this.#toolManager.render(draw);
   }

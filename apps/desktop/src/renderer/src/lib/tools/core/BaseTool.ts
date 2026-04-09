@@ -64,6 +64,8 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   protected preTransition?(state: S, event: ToolEvent): { state: S } | null;
   protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
+  /** Draw in viewport (scene) space, before the editable glyph. Used for text runs. */
+  renderInScene?(draw: DrawAPI): void;
   /** Draw tool-specific overlays above handles (e.g. pen preview segments). */
   render?(draw: DrawAPI): void;
   /** Draw tool-specific overlays below handles (e.g. marquee rectangle). */

@@ -208,6 +208,10 @@ export class ToolManager implements ToolSwitchHandler {
     );
   }
 
+  renderInScene(draw: DrawAPI): void {
+    if (this.activeTool?.renderInScene) this.activeTool.renderInScene(draw);
+  }
+
   render(draw: DrawAPI): void {
     if (this.activeTool?.render) this.activeTool.render(draw);
   }

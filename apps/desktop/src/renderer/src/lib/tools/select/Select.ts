@@ -19,6 +19,7 @@ import { TextRunHoverBehavior } from "./behaviors/TextRunHoverBehavior";
 import { normalizeRect } from "./utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
+import { renderTextRunInScene } from "../text/renderTextRunScene";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -109,6 +110,10 @@ export class Select extends BaseTool<SelectState> {
       return { state };
     }
     return null;
+  }
+
+  override renderInScene(draw: DrawAPI): void {
+    renderTextRunInScene(this.editor, draw);
   }
 
   override render(draw: DrawAPI): void {

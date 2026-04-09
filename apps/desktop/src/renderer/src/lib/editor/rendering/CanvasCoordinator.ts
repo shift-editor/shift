@@ -8,9 +8,6 @@ import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
-import type { TextRunController, TextRunRenderState } from "@/lib/tools/text/TextRunController";
-import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
-import type { CompositeInspectionRenderData } from "./passes/textRun";
 
 import {
   BOUNDING_RECTANGLE_STYLES,
@@ -43,7 +40,6 @@ import {
   renderDebugGlyphBbox,
   renderBoundingRect,
   renderBoundingBoxHandles,
-  renderTextRun,
 } from "./passes";
 import { packHandleInstances } from "./gpu/classifyHandles";
 import { getVisibleSceneBounds } from "./visibleSceneBounds";
@@ -107,6 +103,8 @@ export interface CanvasCoordinatorContext {
   projectSceneToScreen(scene: Point2D): Point2D;
   getDebugOverlays(): DebugOverlays;
   getVisualGlyphAdvance(glyph: Glyph): number;
+  /** Delegates to the active tool's scene-space render method (static canvas, before glyph). */
+  renderToolInScene(draw: DrawAPI): void;
   /** Delegates to the active tool's render method (interactive canvas). */
   renderTool(draw: DrawAPI): void;
   /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
@@ -115,10 +113,6 @@ export interface CanvasCoordinatorContext {
   getSelectionBoundingRect(): Rect2D | null;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   getZoom(): number;
-  readonly textRunController: TextRunController;
-  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
-  getActiveGlyphName(): string | null;
-  getActiveGlyphUnicode(): number | null;
 }
 
 /**
@@ -310,7 +304,7 @@ export class CanvasCoordinator {
 
     ctx.save();
     this.#applyViewportTransform(ctx);
-    this.#renderTextRun(rc, visibleSceneBounds);
+    this.#ctx.renderToolInScene(this.#staticDraw!);
     this.#renderSelectionBoundingRect(ctx, rc);
     ctx.restore();
 
@@ -466,63 +460,6 @@ export class CanvasCoordinator {
       ...(hoveredHandle ? { hoveredHandle } : {}),
     });
     ctx.restore();
-  }
-
-  #resolveCompositeInspection(
-    textRunState: TextRunRenderState,
-  ): CompositeInspectionRenderData | null {
-    const inspection = textRunState.compositeInspection;
-    if (!inspection) return null;
-
-    const slot = textRunState.layout.slots[inspection.slotIndex];
-    if (!slot) return null;
-
-    const composite = this.#ctx.getGlyphCompositeComponents(slot.glyph.glyphName);
-    if (!composite || composite.components.length === 0) return null;
-
-    return {
-      slotIndex: inspection.slotIndex,
-      hoveredComponentIndex: inspection.hoveredComponentIndex,
-      components: composite.components,
-    };
-  }
-
-  #renderTextRun(
-    rc: {
-      ctx: IRenderer;
-      pxToUpm: (px?: number) => number;
-      applyStyle: (style: DrawStyle) => void;
-    },
-    visibleSceneBounds: { minX: number; maxX: number; minY: number; maxY: number },
-  ): void {
-    const textRunState = this.#ctx.textRunController.state.value;
-    if (!textRunState) return;
-
-    const metrics = this.#ctx.font.getMetrics();
-    const glyph = this.#ctx.glyph.peek();
-    const activeGlyphName = this.#ctx.getActiveGlyphName();
-    const liveGlyph =
-      glyph && activeGlyphName
-        ? {
-            name: activeGlyphName,
-            unicode: this.#ctx.getActiveGlyphUnicode(),
-            contours: glyph.contours,
-            compositeContours: glyph.compositeContours,
-          }
-        : null;
-
-    renderTextRun(
-      {
-        ctx: rc.ctx,
-        pxToUpm: rc.pxToUpm,
-        applyStyle: rc.applyStyle,
-      },
-      textRunState,
-      metrics,
-      liveGlyph,
-      this.#resolveCompositeInspection(textRunState),
-      visibleSceneBounds,
-    );
   }
 
   #projectGlyphLocalToScreen(x: number, y: number): Point2D {
