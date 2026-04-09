@@ -1,0 +1,158 @@
+/**
+ * Hidden textarea that captures text input when the text tool is active.
+ *
+ * Handles IME composition, clipboard paste, and special characters natively.
+ * The textarea is positioned off-screen but remains focused. Input events
+ * feed into the TextRunController; the canvas renders the glyphs.
+ */
+import { useEffect, useRef, useState } from "react";
+import { getEditor } from "@/store/store";
+import { effect } from "@/lib/reactive/signal";
+
+export function HiddenTextInput() {
+  const editor = getEditor();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [isTextTool, setIsTextTool] = useState(false);
+
+  useEffect(() => {
+    const fx = effect(() => {
+      setIsTextTool(editor.getActiveTool() === "text");
+    });
+    return () => fx.dispose();
+  }, [editor]);
+
+  useEffect(() => {
+    if (!isTextTool || !ref.current) return;
+    ref.current.focus();
+  }, [isTextTool]);
+
+  if (!isTextTool) return null;
+
+  const ctrl = editor.textRunController;
+
+  const handleInput = () => {
+    const textarea = ref.current;
+    if (!textarea) return;
+
+    const text = textarea.value;
+    if (!text) return;
+
+    for (const char of text) {
+      const codepoint = char.codePointAt(0);
+      if (codepoint !== undefined) {
+        editor.insertTextCodepoint(codepoint);
+      }
+    }
+
+    ctrl.recompute();
+    editor.requestRedraw();
+    textarea.value = "";
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const extend = e.shiftKey;
+
+    switch (e.key) {
+      case "Escape":
+        editor.setActiveTool("select");
+        e.preventDefault();
+        return;
+
+      case "Backspace":
+        if (ctrl.delete()) {
+          ctrl.recompute();
+          editor.requestRedraw();
+        }
+        e.preventDefault();
+        return;
+
+      case "Delete":
+        if (ctrl.deleteForward()) {
+          ctrl.recompute();
+          editor.requestRedraw();
+        }
+        e.preventDefault();
+        return;
+
+      case "ArrowLeft":
+        if (e.metaKey) {
+          ctrl.moveCursorToStart(extend);
+        } else {
+          ctrl.moveCursorLeft(extend);
+        }
+        ctrl.recompute();
+        editor.requestRedraw();
+        e.preventDefault();
+        return;
+
+      case "ArrowRight":
+        if (e.metaKey) {
+          ctrl.moveCursorToEnd(extend);
+        } else {
+          ctrl.moveCursorRight(extend);
+        }
+        ctrl.recompute();
+        editor.requestRedraw();
+        e.preventDefault();
+        return;
+
+      case "a":
+        if (e.metaKey || e.ctrlKey) {
+          ctrl.selectAll();
+          ctrl.recompute();
+          editor.requestRedraw();
+          e.preventDefault();
+          return;
+        }
+        break;
+
+      case "c":
+        if (e.metaKey || e.ctrlKey) {
+          const codepoints = ctrl.getCodepoints();
+          if (codepoints.length > 0) {
+            const text = String.fromCodePoint(...codepoints);
+            navigator.clipboard?.writeText(text);
+          }
+          e.preventDefault();
+          return;
+        }
+        break;
+
+      case "v":
+        if (e.metaKey || e.ctrlKey) {
+          navigator.clipboard?.readText().then((text) => {
+            for (const char of text) {
+              const codepoint = char.codePointAt(0);
+              if (codepoint !== undefined) {
+                editor.insertTextCodepoint(codepoint);
+              }
+            }
+            ctrl.recompute();
+            editor.requestRedraw();
+          });
+          e.preventDefault();
+          return;
+        }
+        break;
+    }
+  };
+
+  return (
+    <textarea
+      ref={ref}
+      onInput={handleInput}
+      onKeyDown={handleKeyDown}
+      aria-label="Text input"
+      autoComplete="off"
+      style={{
+        position: "absolute",
+        left: -9999,
+        top: -9999,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}

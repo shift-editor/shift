@@ -60,60 +60,9 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
 }
 
 export function createTextKeyDownBindings(): KeyBinding[] {
-  return [
-    {
-      id: "text.paste",
-      preventDefault: true,
-      when: (ctx) => ctx.activeTool === "text",
-      match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
-      run: (ctx) => {
-        navigator.clipboard?.readText().then((text) => {
-          for (const char of text) {
-            const codepoint = char.codePointAt(0);
-            if (codepoint !== undefined) {
-              ctx.editor.insertTextCodepoint(codepoint);
-            }
-          }
-          ctx.editor.textRunController.recompute();
-          ctx.editor.requestRedraw();
-        });
-        return true;
-      },
-    },
-    {
-      id: "text.copy",
-      preventDefault: true,
-      when: (ctx) => ctx.activeTool === "text",
-      match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
-      run: (ctx) => {
-        const codepoints = ctx.editor.textRunController.getCodepoints();
-        if (codepoints.length > 0) {
-          const text = String.fromCodePoint(...codepoints);
-          navigator.clipboard?.writeText(text);
-        }
-        return true;
-      },
-    },
-    {
-      id: "text.selectAll",
-      preventDefault: true,
-      when: (ctx) => ctx.activeTool === "text",
-      match: (event) => matchChord(event, { key: "a", primaryModifier: true }),
-      run: (ctx) => {
-        ctx.editor.textRunController.selectAll();
-        ctx.editor.textRunController.recompute();
-        ctx.editor.requestRedraw();
-        return true;
-      },
-    },
-    {
-      id: "text.capture",
-      preventDefault: true,
-      when: (ctx) => ctx.activeTool === "text",
-      match: (event) => !event.metaKey && !event.ctrlKey,
-      run: (ctx, e) => ctx.toolManager.handleKeyDown(e),
-    },
-  ];
+  // Text input is handled by the hidden textarea (HiddenTextInput component).
+  // No keybindings needed — the textarea handles IME, clipboard, and character input.
+  return [];
 }
 
 export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBinding[] {

@@ -2,42 +2,24 @@ import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { TextBehavior, TextState } from "../types";
 
+/**
+ * Handles tool-level keyboard events for the text tool.
+ *
+ * Character input, arrows, backspace, clipboard, and IME are handled by the
+ * hidden textarea (HiddenTextInput component). This behavior only handles
+ * events that affect tool state (Escape to exit).
+ */
 export class TypingBehavior implements TextBehavior {
   onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: ToolEventOf<"keyDown">): boolean {
     if (state.type !== "typing") return false;
 
-    const ctrl = ctx.editor.textRunController;
-    const extend = event.shiftKey;
-
     switch (event.key) {
-      case "Backspace":
-        if (ctrl.delete()) {
-          ctrl.recompute();
-        }
-        return true;
-      case "Delete":
-        ctrl.recompute();
-        return true;
       case "Escape":
         ctx.setState({ type: "idle" });
         ctx.editor.setActiveTool("select");
         return true;
-      case "ArrowLeft":
-        ctrl.moveCursorLeft(extend);
-        ctrl.recompute();
-        return true;
-      case "ArrowRight":
-        ctrl.moveCursorRight(extend);
-        ctrl.recompute();
-        return true;
-      default: {
-        if (event.key.length !== 1 || event.metaKey) return false;
-        const codepoint = event.key.codePointAt(0);
-        if (codepoint === undefined) return false;
-        ctx.editor.insertTextCodepoint(codepoint);
-        ctrl.recompute();
-        return true;
-      }
+      default:
+        return false;
     }
   }
 }
