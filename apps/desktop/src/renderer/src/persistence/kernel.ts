@@ -2,9 +2,7 @@ import type { Editor } from "@/lib/editor/Editor";
 import { effect, type Effect } from "@/lib/reactive/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
-import { textRunModule } from "./modules/textRun";
 import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";
-import { userPreferencesModule } from "./modules/userPreferences";
 import {
   PERSISTENCE_DOCUMENT_LIMIT,
   PERSISTENCE_SCHEMA_VERSION,
@@ -53,8 +51,6 @@ export class DocumentStatePersistence {
   #isHydrating = false;
 
   constructor(extraModules: PersistenceModule[] = []) {
-    this.registerModule(userPreferencesModule);
-    this.registerModule(textRunModule);
     this.registerModule(toolStateAppModule);
     this.registerModule(toolStateDocumentModule);
     for (const module of extraModules) {
@@ -181,13 +177,17 @@ export class DocumentStatePersistence {
   }
 
   private installWatchers(editor: Editor): void {
-    this.#effects.push(
-      effect(() => {
-        editor.getTextRunState();
-        this.scheduleSave();
-      }),
-    );
+    // Watch all registered ShiftState fields — generic, auto-subscribes
+    for (const state of editor.stateRegistry.all()) {
+      this.#effects.push(
+        effect(() => {
+          state.signal.value;
+          this.scheduleSave();
+        }),
+      );
+    }
 
+    // Legacy watchers (will be removed as modules migrate to ShiftState)
     let lastGlyphUnicode: number | null = null;
     this.#effects.push(
       effect(() => {
@@ -195,13 +195,6 @@ export class DocumentStatePersistence {
         const unicode = glyph?.unicode ?? null;
         if (unicode === lastGlyphUnicode) return;
         lastGlyphUnicode = unicode;
-        this.scheduleSave();
-      }),
-    );
-
-    this.#effects.push(
-      effect(() => {
-        editor.snapPreferences.value;
         this.scheduleSave();
       }),
     );
@@ -229,6 +222,7 @@ export class DocumentStatePersistence {
         const envelope = this.#state.appModules[module.id];
         this.hydrateModule(module, envelope);
       }
+      this.hydrateStates("app", this.#state.appModules);
     } finally {
       this.#isHydrating = false;
     }
@@ -243,8 +237,28 @@ export class DocumentStatePersistence {
         const envelope = documentState.modules[module.id];
         this.hydrateModule(module, envelope);
       }
+      this.hydrateStates("document", documentState.modules);
     } finally {
       this.#isHydrating = false;
+    }
+  }
+
+  private hydrateStates(
+    scope: "app" | "document",
+    envelopes: Record<string, PersistedModuleEnvelope>,
+  ): void {
+    if (!this.#editor) return;
+    for (const state of this.#editor.stateRegistry.getByScope(scope)) {
+      const envelope = envelopes[state.id];
+      if (!envelope) {
+        state.reset();
+        continue;
+      }
+      try {
+        state.hydrate(envelope.payload);
+      } catch {
+        state.reset();
+      }
     }
   }
 
@@ -278,6 +292,13 @@ export class DocumentStatePersistence {
         payload,
       };
     }
+
+    for (const state of this.#editor.stateRegistry.getByScope("app")) {
+      this.#state.appModules[state.id] = {
+        moduleVersion: 1,
+        payload: state.capture(),
+      };
+    }
   }
 
   private captureCurrentDocumentModules(): void {
@@ -294,6 +315,13 @@ export class DocumentStatePersistence {
       documentState.modules[module.id] = {
         moduleVersion: module.version,
         payload,
+      };
+    }
+
+    for (const state of this.#editor.stateRegistry.getByScope("document")) {
+      documentState.modules[state.id] = {
+        moduleVersion: 1,
+        payload: state.capture(),
       };
     }
   }
