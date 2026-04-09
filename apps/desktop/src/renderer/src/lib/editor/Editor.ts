@@ -104,6 +104,22 @@ import {
   type PersistedTextRun,
   type TextRunRenderState,
 } from "@/lib/tools/text/TextRunController";
+import { SnapPreferencesSchema } from "@shift/validation";
+
+interface AppSettings {
+  snap: SnapPreferences;
+}
+
+const defaultAppSettings: AppSettings = {
+  snap: {
+    enabled: true,
+    angle: true,
+    metrics: true,
+    pointToPoint: true,
+    angleIncrementDeg: 45,
+    pointRadiusPx: 8,
+  },
+};
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
@@ -112,6 +128,7 @@ import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { EventEmitter } from "./lifecycle";
+import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import { produceGlyph, type GlyphDraft } from "@/engine/draft";
@@ -173,6 +190,7 @@ export class Editor implements ShiftEditor {
   #cursorEffect: Effect;
   #clipboard: ClipboardManager;
   #events: EventEmitter;
+  #stateRegistry: StateRegistry;
   #textRunController: TextRunController;
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
@@ -188,7 +206,7 @@ export class Editor implements ShiftEditor {
   private $cursor: WritableSignal<string>;
   #currentModifiers: WritableSignal<Modifiers>;
   #isHoveringNode: ComputedSignal<boolean>;
-  #snapPreferences: WritableSignal<SnapPreferences>;
+  #settings: ShiftState<AppSettings>;
   #snapIndicator: WritableSignal<SnapIndicator | null>;
   #debugOverlays: WritableSignal<DebugOverlays>;
   #toolState: {
@@ -234,18 +252,23 @@ export class Editor implements ShiftEditor {
     this.$cursor = signal("default");
     this.$handlesVisible = signal(true);
     this.$gpuHandlesEnabled = signal(true);
+    this.#stateRegistry = new StateRegistry();
     this.#currentModifiers = signal<Modifiers>({
       shiftKey: false,
       altKey: false,
       metaKey: false,
     });
-    this.#snapPreferences = signal<SnapPreferences>({
-      enabled: true,
-      angle: true,
-      metrics: true,
-      pointToPoint: true,
-      angleIncrementDeg: 45,
-      pointRadiusPx: 8,
+    this.#settings = this.registerState<AppSettings>({
+      id: "settings",
+      scope: "app",
+      initial: () => defaultAppSettings,
+      serialize: (v) => v,
+      deserialize: (json) => {
+        const parsed = json as Record<string, unknown>;
+        return {
+          snap: SnapPreferencesSchema.parse(parsed.snap ?? defaultAppSettings.snap),
+        };
+      },
     });
     this.#snapIndicator = signal<SnapIndicator | null>(null);
     this.#debugOverlays = signal<DebugOverlays>({
@@ -268,7 +291,7 @@ export class Editor implements ShiftEditor {
     this.#snapManager = new SnapManager({
       getGlyph: () => this.#$glyph.value,
       getMetrics: () => this.#fontEngine.getMetrics(),
-      getSnapPreferences: () => this.#snapPreferences.value,
+      getSnapPreferences: () => this.#settings.value.snap,
       screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
     this.#isHoveringNode = computed(
@@ -657,17 +680,14 @@ export class Editor implements ShiftEditor {
   }
 
   public getSnapPreferences(): SnapPreferences {
-    return this.#snapPreferences.value;
-  }
-
-  public get snapPreferences(): Signal<SnapPreferences> {
-    return this.#snapPreferences;
+    return this.#settings.value.snap;
   }
 
   public setSnapPreferences(next: Partial<SnapPreferences>): void {
-    this.#snapPreferences.set({
-      ...this.#snapPreferences.value,
-      ...next,
+    const current = this.#settings.peek();
+    this.#settings.set({
+      ...current,
+      snap: { ...current.snap, ...next },
     });
   }
 
@@ -1078,6 +1098,16 @@ export class Editor implements ShiftEditor {
 
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
   public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
+
+  /** Register persistent state. Returns a reactive handle for reading/writing. */
+  public registerState<T>(options: ShiftStateOptions<T>): ShiftState<T> {
+    return this.#stateRegistry.register(options);
+  }
+
+  /** @internal Used by persistence kernel. */
+  get stateRegistry(): StateRegistry {
+    return this.#stateRegistry;
+  }
 
   public get commands(): CommandHistory {
     return this.#commandHistory;
