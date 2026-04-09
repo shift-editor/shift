@@ -78,7 +78,17 @@ export function HiddenTextInput() {
   useEffect(() => {
     if (!isTextTool || !ref.current) return;
     ref.current.focus();
-  }, [isTextTool]);
+
+    // Re-focus textarea when canvas steals focus (e.g. click on canvas)
+    const handleFocusLost = () => {
+      if (editor.getActiveTool() === "text") {
+        setTimeout(() => ref.current?.focus(), 0);
+      }
+    };
+
+    ref.current.addEventListener("blur", handleFocusLost);
+    return () => ref.current?.removeEventListener("blur", handleFocusLost);
+  }, [isTextTool, editor]);
 
   if (!isTextTool) return null;
 
