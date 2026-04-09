@@ -1,5 +1,6 @@
 import type { ToolName } from "@/lib/tools/core";
 import type { ToolShortcutEntry } from "@/types/tools";
+import type { TextRunController } from "@/lib/tools/text/TextRunController";
 
 export interface KeyboardEditorActions {
   zoomIn(): void;
@@ -22,9 +23,7 @@ export interface KeyboardEditorActions {
   isPreviewMode(): boolean;
   setPreviewMode(enabled: boolean): void;
   insertTextCodepoint(codepoint: number): void;
-  recomputeTextRun(): void;
-  getTextRunCodepoints(): number[];
-  selectAllText(): void;
+  readonly textRunController: TextRunController;
   openGlyphFinder(): void;
 }
 

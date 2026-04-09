@@ -29,8 +29,9 @@ export class Text extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    const previous = this.editor.getTextRunState();
-    const hasExistingRun = this.editor.getTextRunLength() > 0;
+    const ctrl = this.editor.textRunController;
+    const previous = ctrl.state.value;
+    const hasExistingRun = ctrl.length > 0;
     const drawOffset = this.editor.getDrawOffset();
     const activeUnicode = this.editor.getActiveGlyphUnicode();
     const activeGlyphName = this.editor.getActiveGlyphName();
@@ -44,46 +45,48 @@ export class Text extends BaseTool<TextState> {
       activeGlyphName,
     };
 
-    this.editor.ensureTextRunSeed(activeGlyph);
+    if (activeGlyph) ctrl.seed(activeGlyph);
     this.#pendingOriginX = hasExistingRun ? null : drawOffset.x;
-    this.editor.moveTextCursorToEnd();
+    ctrl.moveCursorToEnd();
 
     this.state = { type: "typing" };
-    this.editor.resetTextRunEditingContext();
-    this.editor.setTextRunCursorVisible(true);
+    ctrl.resetEditingContext();
+    ctrl.setCursorVisible(true);
     this.editor.setPreviewMode(true);
     this.#recompute();
   }
 
   override deactivate(): void {
-    this.editor.setTextRunCursorVisible(false);
+    const ctrl = this.editor.textRunController;
+    ctrl.setCursorVisible(false);
     this.editor.setPreviewMode(false);
     this.#restoreEditingContext();
     this.state = { type: "idle" };
     this.#resumeContext = null;
     this.#pendingOriginX = null;
-    // Keep typed buffer/layout persisted across tool switches.
   }
 
   #restoreEditingContext(): void {
+    const ctrl = this.editor.textRunController;
+
     if (!this.#resumeContext) {
       this.editor.setDrawOffset({ x: 0, y: 0 });
-      this.editor.resetTextRunEditingContext();
+      ctrl.resetEditingContext();
       return;
     }
 
     this.editor.setDrawOffset(this.#resumeContext.drawOffset);
     const restored = this.#resolveEditingSlot();
     if (restored) {
-      this.editor.setTextRunEditingSlot(restored.index, restored.glyph);
+      ctrl.setEditingSlot(restored.index, restored.glyph);
       return;
     }
-    this.editor.resetTextRunEditingContext();
+    ctrl.resetEditingContext();
   }
 
   #resolveEditingSlot(): { index: number; glyph: GlyphRef } | null {
     const resume = this.#resumeContext;
-    const textRunState = this.editor.getTextRunState();
+    const textRunState = this.editor.textRunController.state.value;
     if (!resume || !textRunState) return null;
 
     const slots = textRunState.layout.slots;
@@ -135,12 +138,13 @@ export class Text extends BaseTool<TextState> {
   }
 
   #recompute(): void {
+    const ctrl = this.editor.textRunController;
     if (this.#pendingOriginX !== null) {
-      this.editor.recomputeTextRun(this.#pendingOriginX);
+      ctrl.recompute(this.#pendingOriginX);
       this.#pendingOriginX = null;
       return;
     }
-    this.editor.recomputeTextRun();
+    ctrl.recompute();
   }
 }
 

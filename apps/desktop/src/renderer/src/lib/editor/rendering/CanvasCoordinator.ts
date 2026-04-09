@@ -8,7 +8,7 @@ import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
-import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
+import type { TextRunController, TextRunRenderState } from "@/lib/tools/text/TextRunController";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CompositeInspectionRenderData } from "./passes/textRun";
 
@@ -115,7 +115,7 @@ export interface CanvasCoordinatorContext {
   getSelectionBoundingRect(): Rect2D | null;
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
   getZoom(): number;
-  getTextRunState(): TextRunRenderState | null;
+  readonly textRunController: TextRunController;
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
   getActiveGlyphName(): string | null;
   getActiveGlyphUnicode(): number | null;
@@ -495,7 +495,7 @@ export class CanvasCoordinator {
     },
     visibleSceneBounds: { minX: number; maxX: number; minY: number; maxY: number },
   ): void {
-    const textRunState = this.#ctx.getTextRunState();
+    const textRunState = this.#ctx.textRunController.state.value;
     if (!textRunState) return;
 
     const metrics = this.#ctx.font.getMetrics();

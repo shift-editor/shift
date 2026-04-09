@@ -76,9 +76,12 @@ describe("KeyboardRouter", () => {
       setPreviewMode: vi.fn(),
       openGlyphFinder: vi.fn(),
       insertTextCodepoint: vi.fn(),
-      recomputeTextRun: vi.fn(),
-      getTextRunCodepoints: vi.fn(() => []),
-      selectAllText: vi.fn(),
+      textRunController: {
+        recompute: vi.fn(),
+        getCodepoints: vi.fn(() => []),
+        selectAll: vi.fn(),
+        state: { value: null },
+      },
     };
 
     toolManager = {

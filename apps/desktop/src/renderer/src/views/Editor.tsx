@@ -40,7 +40,7 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
     (codepoint: number) => {
       if (editor.toolManager.activeToolId === "text") {
         editor.insertTextCodepoint(codepoint);
-        editor.recomputeTextRun();
+        editor.textRunController.recompute();
         editor.requestRedraw();
       } else {
         navigate(`/editor/${codepointToHex(codepoint)}`);

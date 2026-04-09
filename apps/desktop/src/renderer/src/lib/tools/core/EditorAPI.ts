@@ -50,7 +50,7 @@ import type {
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
 import type { Font } from "@/lib/editor/Font";
-import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
+import type { TextRunController } from "@/lib/tools/text/TextRunController";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
@@ -215,32 +215,13 @@ export interface Editing {
 }
 
 /**
- * Text-run editing access.
- *
- * Keeps text-run ownership and mutation APIs explicit, without exposing
- * manager internals to tools.
+ * Text-run access.
  */
 export interface TextRunAccess {
-  getTextRunState(): TextRunRenderState | null;
-  getTextRunLength(): number;
-  ensureTextRunSeed(glyph: GlyphRef | null): void;
-  setTextRunCursorVisible(visible: boolean): void;
-  setTextRunEditingSlot(index: number | null, glyph?: GlyphRef | null): void;
-  resetTextRunEditingContext(): void;
-  setTextRunHovered(index: number | null): void;
-  setTextRunInspectionSlot(index: number | null): void;
-  setTextRunInspectionComponent(index: number | null): void;
-  clearTextRunInspection(): void;
+  readonly textRunController: TextRunController;
+  /** Insert a glyph by unicode codepoint (resolves name via font engine). */
   insertTextCodepoint(codepoint: number): void;
-  insertTextGlyphAt(index: number, glyph: GlyphRef): void;
-  getTextRunCodepoints(): number[];
-  deleteTextCodepoint(): boolean;
-  moveTextCursorLeft(extend?: boolean): boolean;
-  moveTextCursorRight(extend?: boolean): boolean;
-  moveTextCursorToEnd(): void;
-  selectAllText(): void;
-  recomputeTextRun(originX?: number): void;
-  shouldRenderGlyph(): boolean;
+  /** Composite component data for a glyph (font engine query). */
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
 }
 

@@ -74,7 +74,7 @@ export function createTextKeyDownBindings(): KeyBinding[] {
               ctx.editor.insertTextCodepoint(codepoint);
             }
           }
-          ctx.editor.recomputeTextRun();
+          ctx.editor.textRunController.recompute();
           ctx.editor.requestRedraw();
         });
         return true;
@@ -86,7 +86,7 @@ export function createTextKeyDownBindings(): KeyBinding[] {
       when: (ctx) => ctx.activeTool === "text",
       match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
       run: (ctx) => {
-        const codepoints = ctx.editor.getTextRunCodepoints();
+        const codepoints = ctx.editor.textRunController.getCodepoints();
         if (codepoints.length > 0) {
           const text = String.fromCodePoint(...codepoints);
           navigator.clipboard?.writeText(text);
@@ -100,8 +100,8 @@ export function createTextKeyDownBindings(): KeyBinding[] {
       when: (ctx) => ctx.activeTool === "text",
       match: (event) => matchChord(event, { key: "a", primaryModifier: true }),
       run: (ctx) => {
-        ctx.editor.selectAllText();
-        ctx.editor.recomputeTextRun();
+        ctx.editor.textRunController.selectAll();
+        ctx.editor.textRunController.recompute();
         ctx.editor.requestRedraw();
         return true;
       },
