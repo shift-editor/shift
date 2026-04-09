@@ -82,7 +82,7 @@ export class ShiftStateImpl<T> implements ShiftState<T> {
     this.#signal.set(this.#deserialize(json));
   }
 
-  /** @internal Used by persistence kernel for reactive watching. */
+  /** @knipclassignore — used by persistence kernel via registry.all() */
   get signal(): Signal<T> {
     return this.#signal;
   }
