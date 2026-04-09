@@ -366,7 +366,7 @@ export class TextRunController {
     this.#run().cursorVisible = visible;
   }
 
-  /** Return codepoints for the current run (for clipboard copy). */
+  /** @knipclassignore — used via editor.textRunController in keymaps */
   getCodepoints(): number[] {
     return this.#run()
       .glyphs.map((ref) => ref.unicode)
