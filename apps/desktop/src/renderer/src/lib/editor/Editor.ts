@@ -318,7 +318,6 @@ export class Editor implements ShiftEditor {
       deserialize: (json) => {
         const payload = TextRunModulePayloadSchema.parse(json);
         this.#textRunController.hydrateRuns(payload.runsByGlyph);
-        this.#textRunController.recompute();
         return payload;
       },
     });
@@ -915,14 +914,10 @@ export class Editor implements ShiftEditor {
   public startEditSession(glyph: GlyphRef): void {
     const glyphName = glyph.glyphName;
     const currentGlyphName = this.#fontEngine.getEditingGlyphName();
-    if (currentGlyphName === glyphName) {
-      this.#textRunController.recompute();
-      return;
-    }
+    if (currentGlyphName === glyphName) return;
 
     this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.addContour();
-    this.#textRunController.recompute();
   }
 
   public endEditSession(): void {
@@ -1026,7 +1021,6 @@ export class Editor implements ShiftEditor {
     this.#mainGlyphUnicode = unicode;
     const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
     this.#textRunController.setOwnerGlyph(glyphRef);
-    this.#textRunController.recompute();
   }
 
   public getMainGlyphUnicode(): number | null {

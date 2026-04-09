@@ -28,7 +28,7 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
         glyphName: activeName,
         unicode: ctx.editor.getActiveGlyphUnicode(),
       });
-      ctrl.recompute(ctx.editor.getDrawOffset().x);
+      ctrl.setOriginX(ctx.editor.getDrawOffset().x);
       textRunState = ctrl.state.value;
     }
     if (!textRunState) return false;
@@ -73,7 +73,6 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
 
       const insertedIndex = hitIndex + 1;
       ctrl.insertAt(insertedIndex, insertedGlyph);
-      ctrl.recompute();
 
       const nextState = ctrl.state.value;
       const insertedSlot = nextState?.layout.slots[insertedIndex];

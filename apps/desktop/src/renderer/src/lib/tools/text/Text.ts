@@ -59,7 +59,10 @@ export class Text extends BaseTool<TextState> {
     ctrl.resetEditingContext();
     ctrl.setCursorVisible(true);
     this.editor.setPreviewMode(true);
-    this.#recompute();
+    if (this.#pendingOriginX !== null) {
+      ctrl.setOriginX(this.#pendingOriginX);
+      this.#pendingOriginX = null;
+    }
   }
 
   override deactivate(): void {
@@ -141,16 +144,6 @@ export class Text extends BaseTool<TextState> {
     }
 
     return null;
-  }
-
-  #recompute(): void {
-    const ctrl = this.editor.textRunController;
-    if (this.#pendingOriginX !== null) {
-      ctrl.recompute(this.#pendingOriginX);
-      this.#pendingOriginX = null;
-      return;
-    }
-    ctrl.recompute();
   }
 }
 

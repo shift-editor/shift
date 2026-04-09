@@ -3,7 +3,7 @@
  *
  * Handles IME composition, clipboard paste, and special characters natively.
  * The textarea is positioned off-screen but remains focused. Input events
- * feed into the TextRunController; the canvas renders the glyphs.
+ * feed into the TextRunController; rendering updates reactively.
  */
 import { useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
@@ -44,8 +44,6 @@ export function HiddenTextInput() {
       }
     }
 
-    ctrl.recompute();
-    editor.requestRedraw();
     textarea.value = "";
   };
 
@@ -59,18 +57,12 @@ export function HiddenTextInput() {
         return;
 
       case "Backspace":
-        if (ctrl.delete()) {
-          ctrl.recompute();
-          editor.requestRedraw();
-        }
+        ctrl.delete();
         e.preventDefault();
         return;
 
       case "Delete":
-        if (ctrl.deleteForward()) {
-          ctrl.recompute();
-          editor.requestRedraw();
-        }
+        ctrl.deleteForward();
         e.preventDefault();
         return;
 
@@ -80,8 +72,6 @@ export function HiddenTextInput() {
         } else {
           ctrl.moveCursorLeft(extend);
         }
-        ctrl.recompute();
-        editor.requestRedraw();
         e.preventDefault();
         return;
 
@@ -91,16 +81,12 @@ export function HiddenTextInput() {
         } else {
           ctrl.moveCursorRight(extend);
         }
-        ctrl.recompute();
-        editor.requestRedraw();
         e.preventDefault();
         return;
 
       case "a":
         if (e.metaKey || e.ctrlKey) {
           ctrl.selectAll();
-          ctrl.recompute();
-          editor.requestRedraw();
           e.preventDefault();
           return;
         }
@@ -127,8 +113,6 @@ export function HiddenTextInput() {
                 editor.insertTextCodepoint(codepoint);
               }
             }
-            ctrl.recompute();
-            editor.requestRedraw();
           });
           e.preventDefault();
           return;
