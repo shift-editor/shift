@@ -291,7 +291,7 @@ export class Editor implements ShiftEditor {
     this.#snapManager = new SnapManager({
       getGlyph: () => this.#$glyph.value,
       getMetrics: () => this.#fontEngine.getMetrics(),
-      getSnapPreferences: () => this.#settings.value.snap,
+      getSnapPreferences: () => this.settings.snap,
       screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
     this.#isHoveringNode = computed(
@@ -679,8 +679,12 @@ export class Editor implements ShiftEditor {
     this.#currentModifiers.set(modifiers);
   }
 
+  get settings(): AppSettings {
+    return this.#settings.value;
+  }
+
   public getSnapPreferences(): SnapPreferences {
-    return this.#settings.value.snap;
+    return this.settings.snap;
   }
 
   public setSnapPreferences(next: Partial<SnapPreferences>): void {
