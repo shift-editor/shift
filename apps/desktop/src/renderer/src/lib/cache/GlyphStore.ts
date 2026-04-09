@@ -42,9 +42,20 @@ export class GlyphStore {
   constructor(font: FontEngine) {
     this.#font = font;
 
+    let lastGlyphName: string | null = null;
+
     this.#effect = effect(() => {
       const glyph = font.$glyph.value;
-      if (!glyph) return;
+      if (!glyph) {
+        lastGlyphName = null;
+        return;
+      }
+
+      // Only re-fetch when the editing glyph changes (different name).
+      // Position-only changes (translate, drag) don't need a store
+      // re-fetch — the live glyph path handles rendering.
+      if (glyph.name === lastGlyphName) return;
+      lastGlyphName = glyph.name;
 
       const entry = this.#entries.get(glyph.name);
       if (!entry) return;
@@ -52,8 +63,6 @@ export class GlyphStore {
       if (this.#isWritable(entry)) {
         entry.set(this.#fetch(glyph.name));
       } else {
-        // Composite — tear down and recreate on next access.
-        // The fresh computed will read the current component list.
         this.#entries.delete(glyph.name);
       }
     });

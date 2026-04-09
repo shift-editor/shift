@@ -96,20 +96,20 @@ const EMPTY_RUN: RunState = {
 
 export class TextRunController {
   #runs = new Map<string, WritableSignal<RunState>>();
-  #activeKey = DEFAULT_TEXT_RUN_KEY;
-  #font: Font | null = null;
+  #$activeKey: WritableSignal<string>;
+  #$font: WritableSignal<Font | null>;
 
   #$state: ComputedSignal<TextRunRenderState | null>;
 
   constructor() {
+    this.#$activeKey = signal(DEFAULT_TEXT_RUN_KEY);
+    this.#$font = signal<Font | null>(null);
     this.#$state = computed(() => this.#deriveRenderState());
   }
 
   get state(): Signal<TextRunRenderState | null> {
     return this.#$state;
   }
-
-  // ── Derived (read-only) ──────────────────────────────────────────
 
   get length(): number {
     return this.#peek().glyphs.length;
@@ -147,8 +147,6 @@ export class TextRunController {
     return this.#peek().glyphs.slice(sel.start, sel.end);
   }
 
-  // ── Cursor movement ──────────────────────────────────────────────
-
   moveCursorLeft(extend = false): void {
     this.#update((r) => {
       if (!extend && r.anchor !== r.cursor) {
@@ -185,8 +183,6 @@ export class TextRunController {
     }));
   }
 
-  // ── Selection ────────────────────────────────────────────────────
-
   selectAll(): void {
     this.#update((r) => ({ ...r, anchor: 0, cursor: r.glyphs.length }));
   }
@@ -220,8 +216,6 @@ export class TextRunController {
       cursor: Math.max(0, Math.min(index, r.glyphs.length)),
     }));
   }
-
-  // ── Mutation ─────────────────────────────────────────────────────
 
   insert(glyph: GlyphRef): void {
     this.#update((r) => {
@@ -297,8 +291,6 @@ export class TextRunController {
     return true;
   }
 
-  // ── Text run lifecycle ───────────────────────────────────────────
-
   seed(glyph: GlyphRef): void {
     const r = this.#peek();
     if (r.glyphs.length > 0) return;
@@ -314,7 +306,7 @@ export class TextRunController {
   }
 
   setFont(font: Font): void {
-    this.#font = font;
+    this.#$font.set(font);
   }
 
   setOriginX(x: number): void {
@@ -334,8 +326,8 @@ export class TextRunController {
 
   setOwnerGlyph(glyph: GlyphRef | null): void {
     const nextKey = glyph ? glyph.glyphName : DEFAULT_TEXT_RUN_KEY;
-    if (nextKey === this.#activeKey) return;
-    this.#activeKey = nextKey;
+    if (nextKey === this.#$activeKey.peek()) return;
+    this.#$activeKey.set(nextKey);
     this.#update((r) => ({
       ...r,
       hoveredIndex: null,
@@ -451,44 +443,47 @@ export class TextRunController {
       );
     }
 
-    if (!this.#runs.has(this.#activeKey)) {
-      this.#runs.set(this.#activeKey, signal<RunState>(EMPTY_RUN));
+    const key = this.#$activeKey.peek();
+    if (!this.#runs.has(key)) {
+      this.#runs.set(key, signal<RunState>(EMPTY_RUN));
     }
   }
 
-  // ── Private ──────────────────────────────────────────────────────
-
   #signal(): WritableSignal<RunState> {
-    let $r = this.#runs.get(this.#activeKey);
+    const key = this.#$activeKey.peek();
+    let $r = this.#runs.get(key);
     if ($r) return $r;
     $r = signal<RunState>(EMPTY_RUN);
-    this.#runs.set(this.#activeKey, $r);
+    this.#runs.set(key, $r);
     return $r;
   }
 
-  /** Read current state without tracking. */
   #peek(): RunState {
-    return this.#signal().peek();
+    const key = this.#$activeKey.peek();
+    const $r = this.#runs.get(key);
+    return $r ? $r.peek() : EMPTY_RUN;
   }
 
-  /** Replace state (triggers signal). */
   #set(next: RunState): void {
     this.#signal().set(next);
   }
 
-  /** Update state with a function (triggers signal). */
   #update(fn: (current: RunState) => RunState): void {
     const $r = this.#signal();
-    $r.set(fn($r.peek()));
+    const next = fn($r.peek());
+    $r.set(next);
   }
 
   #deriveRenderState(): TextRunRenderState | null {
-    const r = this.#signal().value; // reactive read — tracks dependency
-    if (!this.#font) return null;
+    const key = this.#$activeKey.value; // track active key changes
+    const $run = this.#runs.get(key);
+    const r = $run ? $run.value : EMPTY_RUN; // track run state changes
+    const font = this.#$font.value; // track font changes
+    if (!font) return null;
 
     const layout =
       r.glyphs.length > 0
-        ? computeTextLayout([...r.glyphs], { x: r.originX, y: 0 }, this.#font)
+        ? computeTextLayout([...r.glyphs], { x: r.originX, y: 0 }, font)
         : { slots: [], totalAdvance: 0 };
 
     if (r.glyphs.length === 0 && !r.cursorVisible) return null;
@@ -497,7 +492,7 @@ export class TextRunController {
       r.anchor !== r.cursor
         ? { start: Math.min(r.anchor, r.cursor), end: Math.max(r.anchor, r.cursor) }
         : null;
-    const metrics = this.#font.getMetrics();
+    const metrics = font.getMetrics();
     const selectionRects = sel ? computeSelectionRects(layout.slots, sel, metrics) : [];
 
     const cursorX = r.cursorVisible && !sel ? computeCursorX(r, layout) : null;

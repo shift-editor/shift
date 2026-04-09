@@ -43,6 +43,7 @@ export class Text extends BaseTool<TextState> {
     const activeGlyphName = this.editor.getActiveGlyphName();
     const activeGlyph =
       activeGlyphName !== null ? { glyphName: activeGlyphName, unicode: activeUnicode } : null;
+
     this.#resumeContext = {
       drawOffset: { x: drawOffset.x, y: drawOffset.y },
       editingIndex: previous?.editingIndex ?? null,

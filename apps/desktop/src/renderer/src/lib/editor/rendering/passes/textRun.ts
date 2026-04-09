@@ -17,7 +17,6 @@ import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
-const CURSOR_BAR_HALF_PX = 20;
 const SELECTION_FILL = "rgba(12, 146, 244, 0.2)";
 const HOVER_OUTLINE = "#0C92F4";
 const HOVER_OUTLINE_WIDTH_PX = 3;
@@ -121,20 +120,12 @@ export function renderTextRun(
     const top = metrics.ascender;
     const bottom = metrics.descender;
     const lw = pxToUpm(CURSOR_WIDTH_PX);
-    const barHalf = pxToUpm(CURSOR_BAR_HALF_PX);
 
     ctx.save();
     ctx.strokeStyle = CURSOR_COLOR;
     ctx.lineWidth = lw;
 
-    // Vertical line
     ctx.drawLine(cursorX, bottom, cursorX, top);
-
-    // Top bar
-    ctx.drawLine(cursorX - barHalf, top, cursorX + barHalf, top);
-
-    // Bottom bar
-    ctx.drawLine(cursorX - barHalf, bottom, cursorX + barHalf, bottom);
 
     ctx.restore();
   }
