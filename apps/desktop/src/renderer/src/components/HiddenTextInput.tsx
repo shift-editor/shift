@@ -56,6 +56,11 @@ export function HiddenTextInput() {
         e.preventDefault();
         return;
 
+      case "Enter":
+        ctrl.insert({ glyphName: ".newline", unicode: 10 });
+        e.preventDefault();
+        return;
+
       case "Backspace":
         ctrl.delete();
         e.preventDefault();

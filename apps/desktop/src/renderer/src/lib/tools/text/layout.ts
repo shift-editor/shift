@@ -14,12 +14,15 @@ export interface GlyphSlot {
   glyph: GlyphRef;
   unicode: number | null;
   x: number;
+  y: number;
   advance: number;
   bounds: Bounds | null;
   path2d: Path2D | null;
   svgPath: string | null;
   selected: boolean;
 }
+
+const NEWLINE_GLYPH_NAME = ".newline";
 
 export interface TextLayout {
   slots: GlyphSlot[];
@@ -83,10 +86,30 @@ function getDefaultTextPathHitTester(): TextPathHitTester | null {
 
 export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Font): TextLayout {
   const slots: GlyphSlot[] = [];
+  const metrics = font.getMetrics();
+  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
   let x = origin.x;
+  let y = 0;
   const selected = false;
 
   for (const ref of glyphs) {
+    if (ref.glyphName === NEWLINE_GLYPH_NAME || ref.unicode === 10) {
+      slots.push({
+        glyph: ref,
+        unicode: 10,
+        x,
+        y,
+        advance: 0,
+        bounds: null,
+        path2d: null,
+        svgPath: null,
+        selected,
+      });
+      x = origin.x;
+      y -= lineHeight;
+      continue;
+    }
+
     const resolved = font.getGlyph(ref.glyphName);
     const advance = resolveEditorAdvance(ref, resolved?.advance ?? 0);
 
@@ -94,6 +117,7 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       glyph: ref,
       unicode: ref.unicode,
       x,
+      y,
       advance,
       bounds: resolved?.bbox ?? null,
       path2d: resolved?.path2d ?? null,
@@ -109,6 +133,8 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
     totalAdvance: x - origin.x,
   };
 }
+
+export { NEWLINE_GLYPH_NAME };
 
 function resolveEditorAdvance(glyph: GlyphRef, advance: number): number {
   if (advance > 0) return advance;

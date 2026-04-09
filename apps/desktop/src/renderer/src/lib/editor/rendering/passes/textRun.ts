@@ -63,8 +63,10 @@ export function renderTextRun(
       continue;
     }
 
+    if (!slot.path2d && !shouldUseLiveGlyph) continue;
+
     ctx.save();
-    ctx.translate(slot.x, 0);
+    ctx.translate(slot.x, slot.y);
     ctx.fillStyle = "black";
 
     if (shouldUseLiveGlyph && liveGlyph) {
@@ -101,7 +103,7 @@ export function renderTextRun(
       const lw = pxToUpm(HOVER_OUTLINE_WIDTH_PX);
 
       ctx.save();
-      ctx.translate(slot.x, 0);
+      ctx.translate(slot.x, slot.y);
       ctx.strokeStyle = HOVER_OUTLINE;
       ctx.lineWidth = lw;
 
@@ -117,8 +119,9 @@ export function renderTextRun(
 
   // Draw cursor
   if (cursorX !== null) {
-    const top = metrics.ascender;
-    const bottom = metrics.descender;
+    const cursorY = textRun.cursorY;
+    const top = cursorY + metrics.ascender;
+    const bottom = cursorY + metrics.descender;
     const lw = pxToUpm(CURSOR_WIDTH_PX);
 
     ctx.save();
@@ -144,7 +147,7 @@ function renderCompositeInspection(
   const { ctx, applyStyle } = rc;
 
   ctx.save();
-  ctx.translate(slot.x, 0);
+  ctx.translate(slot.x, slot.y);
 
   if (slot.path2d) {
     ctx.fillStyle = COMPOSITE_ARM_FILL;

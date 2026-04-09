@@ -41,6 +41,7 @@ export interface TextRunCompositeInspection {
 export interface TextRunRenderState {
   layout: TextLayout;
   cursorX: number | null;
+  cursorY: number;
   selection: SelectionRange | null;
   selectionRects: SelectionRect[];
   editingIndex: number | null;
@@ -383,8 +384,6 @@ export class TextRunController {
     }));
   }
 
-  // ── Serialization / Persistence ──────────────────────────────────
-
   snapshot(): TextRunSnapshot {
     const r = this.#peek();
     return {
@@ -495,7 +494,7 @@ export class TextRunController {
     const metrics = font.getMetrics();
     const selectionRects = sel ? computeSelectionRects(layout.slots, sel, metrics) : [];
 
-    const cursorX = r.cursorVisible && !sel ? computeCursorX(r, layout) : null;
+    const cursorPos = r.cursorVisible && !sel ? computeCursorPosition(r, layout) : null;
 
     const compositeInspection =
       r.inspectionSlotIndex !== null
@@ -507,7 +506,8 @@ export class TextRunController {
 
     return {
       layout,
-      cursorX,
+      cursorX: cursorPos?.x ?? null,
+      cursorY: cursorPos?.y ?? 0,
       selection: sel,
       selectionRects,
       editingIndex: r.editingIndex,
@@ -527,14 +527,21 @@ function deleteRange(r: RunState): { glyphs: GlyphRef[]; cursor: number } {
   return { glyphs, cursor: start };
 }
 
-function computeCursorX(r: RunState, layout: TextLayout): number | null {
+function computeCursorPosition(r: RunState, layout: TextLayout): { x: number; y: number } | null {
   if (!r.cursorVisible) return null;
-  if (r.cursor === 0) return r.originX;
+
+  if (r.cursor === 0) {
+    const firstSlot = layout.slots[0];
+    return { x: r.originX, y: firstSlot?.y ?? 0 };
+  }
+
   if (r.cursor <= layout.slots.length) {
     const prevSlot = layout.slots[r.cursor - 1];
-    if (prevSlot) return prevSlot.x + prevSlot.advance;
+    if (prevSlot) return { x: prevSlot.x + prevSlot.advance, y: prevSlot.y };
   }
-  return r.originX + layout.totalAdvance;
+
+  const lastSlot = layout.slots[layout.slots.length - 1];
+  return { x: r.originX + layout.totalAdvance, y: lastSlot?.y ?? 0 };
 }
 
 function computeSelectionRects(
@@ -550,8 +557,8 @@ function computeSelectionRects(
     rects.push({
       x: slot.x,
       width: Math.max(slot.advance, 0),
-      top: metrics.ascender,
-      bottom: metrics.descender,
+      top: slot.y + metrics.ascender,
+      bottom: slot.y + metrics.descender,
     });
   }
 
