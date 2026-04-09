@@ -5,6 +5,7 @@ import type { DrawAPI } from "./DrawAPI";
 import type { Behavior, ToolContext } from "./Behavior";
 import { batch, computed, type ComputedSignal } from "../../reactive/signal";
 import type { CursorType } from "@/types/editor";
+import { renderTextRunInScene } from "../text/renderTextRunScene";
 
 export type { ToolName, ToolState };
 
@@ -64,8 +65,11 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   protected preTransition?(state: S, event: ToolEvent): { state: S } | null;
   protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
-  /** Draw in viewport (scene) space, before the editable glyph. Used for text runs. */
-  renderInScene?(draw: DrawAPI): void;
+  /** Draw in viewport (scene) space, before the editable glyph. Renders text runs by default. */
+  renderInScene(draw: DrawAPI): void {
+    renderTextRunInScene(this.editor, draw);
+  }
+
   /** Draw tool-specific overlays above handles (e.g. pen preview segments). */
   render?(draw: DrawAPI): void;
   /** Draw tool-specific overlays below handles (e.g. marquee rectangle). */

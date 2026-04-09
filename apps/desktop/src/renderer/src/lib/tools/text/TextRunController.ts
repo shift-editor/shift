@@ -494,7 +494,8 @@ export class TextRunController {
     const metrics = font.getMetrics();
     const selectionRects = sel ? computeSelectionRects(layout.slots, sel, metrics) : [];
 
-    const cursorPos = r.cursorVisible && !sel ? computeCursorPosition(r, layout) : null;
+    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const cursorPos = r.cursorVisible && !sel ? computeCursorPosition(r, layout, lineHeight) : null;
 
     const compositeInspection =
       r.inspectionSlotIndex !== null
@@ -527,7 +528,11 @@ function deleteRange(r: RunState): { glyphs: GlyphRef[]; cursor: number } {
   return { glyphs, cursor: start };
 }
 
-function computeCursorPosition(r: RunState, layout: TextLayout): { x: number; y: number } | null {
+function computeCursorPosition(
+  r: RunState,
+  layout: TextLayout,
+  lineHeight: number,
+): { x: number; y: number } | null {
   if (!r.cursorVisible) return null;
 
   if (r.cursor === 0) {
@@ -537,11 +542,23 @@ function computeCursorPosition(r: RunState, layout: TextLayout): { x: number; y:
 
   if (r.cursor <= layout.slots.length) {
     const prevSlot = layout.slots[r.cursor - 1];
-    if (prevSlot) return { x: prevSlot.x + prevSlot.advance, y: prevSlot.y };
+    if (!prevSlot) return { x: r.originX, y: 0 };
+
+    if (prevSlot.unicode === 10) {
+      return { x: r.originX, y: prevSlot.y - lineHeight };
+    }
+
+    return { x: prevSlot.x + prevSlot.advance, y: prevSlot.y };
   }
 
   const lastSlot = layout.slots[layout.slots.length - 1];
-  return { x: r.originX + layout.totalAdvance, y: lastSlot?.y ?? 0 };
+  if (!lastSlot) return { x: r.originX, y: 0 };
+
+  if (lastSlot.unicode === 10) {
+    return { x: r.originX, y: lastSlot.y - lineHeight };
+  }
+
+  return { x: lastSlot.x + lastSlot.advance, y: lastSlot.y };
 }
 
 function computeSelectionRects(

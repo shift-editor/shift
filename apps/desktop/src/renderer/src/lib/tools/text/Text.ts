@@ -4,8 +4,6 @@ import type { CursorType } from "@/types/editor";
 import type { Point2D } from "@shift/types";
 import { TypingBehavior } from "./behaviors/TypingBehaviour";
 import type { GlyphRef } from "./layout";
-import type { DrawAPI } from "../core/DrawAPI";
-import { renderTextRunInScene } from "./renderTextRunScene";
 
 interface ResumeEditContext {
   drawOffset: Point2D;
@@ -24,10 +22,6 @@ export class Text extends BaseTool<TextState> {
 
   override getCursor(_state: TextState): CursorType {
     return { type: "text" };
-  }
-
-  override renderInScene(draw: DrawAPI): void {
-    renderTextRunInScene(this.editor, draw);
   }
 
   initialState(): TextState {
