@@ -5,7 +5,7 @@
  * The textarea is positioned off-screen but remains focused. Input events
  * feed into the TextRunController; rendering updates reactively.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
 import { effect } from "@/lib/reactive/signal";
 import type { TextRunController } from "@/lib/tools/text/TextRunController";
@@ -75,20 +75,23 @@ export function HiddenTextInput() {
     return () => fx.dispose();
   }, [editor]);
 
-  useEffect(() => {
-    if (!isTextTool || !ref.current) return;
-    ref.current.focus();
+  const textareaRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+      if (!node) return;
 
-    // Re-focus textarea when canvas steals focus (e.g. click on canvas)
-    const handleFocusLost = () => {
-      if (editor.getActiveTool() === "text") {
-        setTimeout(() => ref.current?.focus(), 0);
-      }
-    };
+      node.focus();
 
-    ref.current.addEventListener("blur", handleFocusLost);
-    return () => ref.current?.removeEventListener("blur", handleFocusLost);
-  }, [isTextTool, editor]);
+      const handleFocusLost = () => {
+        if (editor.getActiveTool() === "text") {
+          setTimeout(() => node.focus(), 0);
+        }
+      };
+
+      node.addEventListener("blur", handleFocusLost);
+    },
+    [editor],
+  );
 
   if (!isTextTool) return null;
 
@@ -202,7 +205,7 @@ export function HiddenTextInput() {
 
   return (
     <textarea
-      ref={ref}
+      ref={textareaRef}
       onInput={handleInput}
       onKeyDown={handleKeyDown}
       aria-label="Text input"
