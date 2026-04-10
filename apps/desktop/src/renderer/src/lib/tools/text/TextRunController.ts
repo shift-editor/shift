@@ -474,9 +474,8 @@ export class TextRunController {
   }
 
   #deriveRenderState(): TextRunRenderState | null {
-    const key = this.#$activeKey.value; // track active key changes
-    const $run = this.#runs.get(key);
-    const r = $run ? $run.value : EMPTY_RUN; // track run state changes
+    this.#$activeKey.value; // track active key changes
+    const r = this.#signal().value; // track run state changes (creates signal if needed)
     const font = this.#$font.value; // track font changes
     if (!font) return null;
 
