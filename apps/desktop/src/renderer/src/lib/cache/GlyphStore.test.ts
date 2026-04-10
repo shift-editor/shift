@@ -32,7 +32,7 @@ describe("GlyphStore", () => {
     expect(first).toBe(second);
   });
 
-  it("does not re-fetch during edits to the same glyph", () => {
+  it("re-fetches when editing glyph is mutated", () => {
     engine.startEditSession({ glyphName: "A", unicode: 65 });
 
     engine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });
@@ -45,9 +45,7 @@ describe("GlyphStore", () => {
 
     engine.addPoint({ x: 0, y: 100, pointType: "onCurve", smooth: false });
 
-    // Store entry is NOT updated during edits to the current glyph.
-    // The live glyph path handles rendering for the editing glyph.
-    expect(entry.value!.svgPath).toBe(svgBefore);
+    expect(entry.value!.svgPath).not.toBe(svgBefore);
   });
 
   it("clear removes all entries", () => {

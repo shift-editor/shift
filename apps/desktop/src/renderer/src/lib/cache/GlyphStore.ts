@@ -42,20 +42,9 @@ export class GlyphStore {
   constructor(font: FontEngine) {
     this.#font = font;
 
-    let lastGlyphName: string | null = null;
-
     this.#effect = effect(() => {
       const glyph = font.$glyph.value;
-      if (!glyph) {
-        lastGlyphName = null;
-        return;
-      }
-
-      // Only re-fetch when the editing glyph changes (different name).
-      // Position-only changes (translate, drag) don't need a store
-      // re-fetch — the live glyph path handles rendering.
-      if (glyph.name === lastGlyphName) return;
-      lastGlyphName = glyph.name;
+      if (!glyph) return;
 
       const entry = this.#entries.get(glyph.name);
       if (!entry) return;
