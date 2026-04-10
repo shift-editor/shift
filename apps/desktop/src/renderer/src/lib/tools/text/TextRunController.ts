@@ -99,6 +99,7 @@ export class TextRunController {
   #runs = new Map<string, WritableSignal<RunState>>();
   #$activeKey: WritableSignal<string>;
   #$font: WritableSignal<Font | null>;
+  #goalX: number | null = null;
 
   #$state: ComputedSignal<TextRunRenderState | null>;
 
@@ -149,6 +150,7 @@ export class TextRunController {
   }
 
   moveCursorLeft(extend = false): void {
+    this.#goalX = null;
     this.#update((r) => {
       if (!extend && r.anchor !== r.cursor) {
         const start = Math.min(r.anchor, r.cursor);
@@ -161,6 +163,7 @@ export class TextRunController {
   }
 
   moveCursorRight(extend = false): void {
+    this.#goalX = null;
     this.#update((r) => {
       if (!extend && r.anchor !== r.cursor) {
         const end = Math.max(r.anchor, r.cursor);
@@ -172,11 +175,59 @@ export class TextRunController {
     });
   }
 
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorToLineStart(extend = false): void {
+    this.#goalX = null;
+    const state = this.#$state.peek();
+    if (!state) return;
+
+    const r = this.#peek();
+    const slots = state.layout.slots;
+    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
+    const cursorY = cursorSlot?.y ?? 0;
+
+    let lineStart = 0;
+    for (let i = 0; i < slots.length; i++) {
+      if (slots[i].y === cursorY) {
+        lineStart = i;
+        break;
+      }
+    }
+
+    this.#update((r) => ({ ...r, cursor: lineStart, anchor: extend ? r.anchor : lineStart }));
+  }
+
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorToLineEnd(extend = false): void {
+    this.#goalX = null;
+    const state = this.#$state.peek();
+    if (!state) return;
+
+    const r = this.#peek();
+    const slots = state.layout.slots;
+    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
+    const cursorY = cursorSlot?.y ?? 0;
+
+    let lineEnd = slots.length;
+    for (let i = slots.length - 1; i >= 0; i--) {
+      if (slots[i].y === cursorY) {
+        lineEnd = i + 1;
+        // Skip newline at end of line
+        if (slots[i].unicode === 10) lineEnd = i;
+        break;
+      }
+    }
+
+    this.#update((r) => ({ ...r, cursor: lineEnd, anchor: extend ? r.anchor : lineEnd }));
+  }
+
   moveCursorToStart(extend = false): void {
+    this.#goalX = null;
     this.#update((r) => ({ ...r, cursor: 0, anchor: extend ? r.anchor : 0 }));
   }
 
   moveCursorToEnd(extend = false): void {
+    this.#goalX = null;
     this.#update((r) => ({
       ...r,
       cursor: r.glyphs.length,
@@ -184,7 +235,92 @@ export class TextRunController {
     }));
   }
 
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorVertically(direction: 1 | -1, extend = false): void {
+    const state = this.#$state.peek();
+    if (!state) return;
+
+    const { layout } = state;
+    const slots = layout.slots;
+    if (slots.length === 0) return;
+
+    const r = this.#peek();
+    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
+    if (!cursorSlot) return;
+
+    const currentY = cursorSlot.y;
+    const cursorX = r.cursor > 0 ? cursorSlot.x + cursorSlot.advance : cursorSlot.x;
+
+    // Set or reuse goal column
+    if (this.#goalX === null) this.#goalX = cursorX;
+    const goalX = this.#goalX;
+
+    // Find unique line Y values, sorted descending (UPM: higher Y = higher on screen)
+    const lineYs = [...new Set(slots.map((s) => s.y))].sort((a, b) => b - a);
+    const currentLineIdx = lineYs.indexOf(currentY);
+    if (currentLineIdx === -1) return;
+
+    const targetLineIdx = currentLineIdx + direction;
+    if (targetLineIdx < 0 || targetLineIdx >= lineYs.length) return;
+
+    const targetY = lineYs[targetLineIdx];
+
+    // Find closest slot on target line by goal X
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (const [i, slot] of slots.entries()) {
+      if (slot.y !== targetY) continue;
+      const slotMidX = slot.x + slot.advance / 2;
+      const dist = Math.abs(slotMidX - goalX);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i + 1;
+      }
+    }
+
+    // Check if cursor should be before the first slot on the target line
+    const firstOnLine = slots.find((s) => s.y === targetY);
+    if (firstOnLine && goalX <= firstOnLine.x) {
+      bestIdx = slots.indexOf(firstOnLine);
+    }
+
+    if (extend) {
+      this.extendSelection(bestIdx);
+    } else {
+      this.placeCaret(bestIdx);
+    }
+    // Don't reset goalX — preserve it for subsequent vertical movements
+    this.#goalX = goalX;
+  }
+
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorByWord(direction: -1 | 1, extend = false): void {
+    this.#goalX = null;
+    const r = this.#peek();
+    const glyphs = r.glyphs;
+    let pos = r.cursor;
+
+    if (direction === -1) {
+      if (pos <= 0) return;
+      pos--;
+      // Skip whitespace
+      while (pos > 0 && isWhitespace(glyphs[pos - 1])) pos--;
+      // Skip word characters
+      while (pos > 0 && !isWhitespace(glyphs[pos - 1]) && !isPunctuation(glyphs[pos - 1])) pos--;
+    } else {
+      if (pos >= glyphs.length) return;
+      // Skip word characters
+      while (pos < glyphs.length && !isWhitespace(glyphs[pos]) && !isPunctuation(glyphs[pos]))
+        pos++;
+      // Skip whitespace
+      while (pos < glyphs.length && isWhitespace(glyphs[pos])) pos++;
+    }
+
+    this.#update((r) => ({ ...r, cursor: pos, anchor: extend ? r.anchor : pos }));
+  }
+
   selectAll(): void {
+    this.#goalX = null;
     this.#update((r) => ({ ...r, anchor: 0, cursor: r.glyphs.length }));
   }
 
@@ -205,6 +341,7 @@ export class TextRunController {
   }
 
   placeCaret(index: number): void {
+    this.#goalX = null;
     this.#update((r) => {
       const clamped = Math.max(0, Math.min(index, r.glyphs.length));
       return { ...r, cursor: clamped, anchor: clamped };
@@ -599,4 +736,20 @@ function mergeAdjacentRects(rects: SelectionRect[]): SelectionRect[] {
   }
 
   return merged;
+}
+
+function isWhitespace(glyph: GlyphRef): boolean {
+  if (glyph.unicode === null) return false;
+  return glyph.unicode === 32 || glyph.unicode === 9 || glyph.unicode === 10;
+}
+
+function isPunctuation(glyph: GlyphRef): boolean {
+  if (glyph.unicode === null) return false;
+  const cp = glyph.unicode;
+  return (
+    (cp >= 0x21 && cp <= 0x2f) || // !"#$%&'()*+,-./
+    (cp >= 0x3a && cp <= 0x40) || // :;<=>?@
+    (cp >= 0x5b && cp <= 0x60) || // [\]^_`
+    (cp >= 0x7b && cp <= 0x7e) // {|}~
+  );
 }
