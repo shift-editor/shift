@@ -79,12 +79,14 @@ export class Text extends BaseTool<TextState> {
       return;
     }
 
-    this.editor.setDrawOffset(this.#resumeContext.drawOffset);
     const restored = this.#resolveEditingSlot();
     if (restored) {
+      this.editor.setDrawOffset(this.#resumeContext.drawOffset);
       ctrl.setEditingSlot(restored.index, restored.glyph);
       return;
     }
+
+    this.editor.setDrawOffset({ x: 0, y: 0 });
     ctrl.resetEditingContext();
   }
 
