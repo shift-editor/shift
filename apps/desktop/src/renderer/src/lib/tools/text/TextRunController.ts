@@ -299,16 +299,28 @@ export class TextRunController {
 
     const targetY = lineYs[targetLineIdx];
 
-    // Find closest visible slot on target line by goal X (skip newline slots)
+    // Find the slot on the target line where goalX falls, placing cursor
+    // on whichever edge (left or right) is closer — same as VS Code.
     let bestIdx = -1;
     let bestDist = Infinity;
     for (const [i, slot] of slots.entries()) {
       if (slot.y !== targetY || slot.unicode === 10) continue;
-      const slotMidX = slot.x + slot.advance / 2;
-      const dist = Math.abs(slotMidX - goalX);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = i + 1;
+
+      const leftEdge = slot.x;
+      const rightEdge = slot.x + slot.advance;
+
+      // Distance to left edge (cursor before this slot)
+      const leftDist = Math.abs(leftEdge - goalX);
+      if (leftDist < bestDist) {
+        bestDist = leftDist;
+        bestIdx = i; // cursor before this slot
+      }
+
+      // Distance to right edge (cursor after this slot)
+      const rightDist = Math.abs(rightEdge - goalX);
+      if (rightDist < bestDist) {
+        bestDist = rightDist;
+        bestIdx = i + 1; // cursor after this slot
       }
     }
 
@@ -324,12 +336,6 @@ export class TextRunController {
     }
 
     if (bestIdx === -1) return;
-
-    // Check if cursor should be before the first slot on the target line
-    const firstOnLine = slots.find((s) => s.y === targetY && s.unicode !== 10);
-    if (firstOnLine && goalX <= firstOnLine.x) {
-      bestIdx = slots.indexOf(firstOnLine);
-    }
 
     if (extend) {
       this.extendSelection(bestIdx);
