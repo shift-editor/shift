@@ -240,36 +240,70 @@ export class TextRunController {
     const state = this.#$state.peek();
     if (!state) return;
 
+    const font = this.#$font.peek();
+    if (!font) return;
+
     const { layout } = state;
     const slots = layout.slots;
     if (slots.length === 0) return;
 
     const r = this.#peek();
-    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
-    if (!cursorSlot) return;
+    const metrics = font.getMetrics();
+    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const prevSlot = r.cursor > 0 ? slots[r.cursor - 1] : null;
 
-    const currentY = cursorSlot.y;
-    const cursorX = r.cursor > 0 ? cursorSlot.x + cursorSlot.advance : cursorSlot.x;
+    // Determine the cursor's effective Y position.
+    // If the cursor is right after a newline, it's on the NEXT line.
+    let currentY: number;
+    let cursorX: number;
 
-    // Set or reuse goal column
+    if (prevSlot && prevSlot.unicode === 10) {
+      currentY = prevSlot.y - lineHeight;
+      cursorX = r.originX;
+    } else if (prevSlot) {
+      currentY = prevSlot.y;
+      cursorX = prevSlot.x + prevSlot.advance;
+    } else {
+      currentY = slots[0]?.y ?? 0;
+      cursorX = r.originX;
+    }
+
     if (this.#goalX === null) this.#goalX = cursorX;
     const goalX = this.#goalX;
 
-    // Find unique line Y values, sorted descending (UPM: higher Y = higher on screen)
+    // Find unique line Y values, sorted descending (higher Y = higher on screen in UPM)
     const lineYs = [...new Set(slots.map((s) => s.y))].sort((a, b) => b - a);
-    const currentLineIdx = lineYs.indexOf(currentY);
-    if (currentLineIdx === -1) return;
+
+    // Also include the line below the last newline (cursor can be there)
+    for (const slot of slots) {
+      if (slot.unicode === 10) {
+        const belowY = slot.y - lineHeight;
+        if (!lineYs.includes(belowY)) lineYs.push(belowY);
+      }
+    }
+    lineYs.sort((a, b) => b - a);
+
+    // Find closest line to currentY
+    let currentLineIdx = 0;
+    let closestDist = Infinity;
+    for (let i = 0; i < lineYs.length; i++) {
+      const dist = Math.abs(lineYs[i] - currentY);
+      if (dist < closestDist) {
+        closestDist = dist;
+        currentLineIdx = i;
+      }
+    }
 
     const targetLineIdx = currentLineIdx + direction;
     if (targetLineIdx < 0 || targetLineIdx >= lineYs.length) return;
 
     const targetY = lineYs[targetLineIdx];
 
-    // Find closest slot on target line by goal X
-    let bestIdx = 0;
+    // Find closest visible slot on target line by goal X (skip newline slots)
+    let bestIdx = -1;
     let bestDist = Infinity;
     for (const [i, slot] of slots.entries()) {
-      if (slot.y !== targetY) continue;
+      if (slot.y !== targetY || slot.unicode === 10) continue;
       const slotMidX = slot.x + slot.advance / 2;
       const dist = Math.abs(slotMidX - goalX);
       if (dist < bestDist) {
@@ -278,8 +312,21 @@ export class TextRunController {
       }
     }
 
+    // If no visible slots on target line (empty line after newline),
+    // place cursor at the newline that created this line
+    if (bestIdx === -1) {
+      for (const [i, slot] of slots.entries()) {
+        if (slot.unicode === 10 && Math.abs(slot.y - lineHeight - targetY) < 1) {
+          bestIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (bestIdx === -1) return;
+
     // Check if cursor should be before the first slot on the target line
-    const firstOnLine = slots.find((s) => s.y === targetY);
+    const firstOnLine = slots.find((s) => s.y === targetY && s.unicode !== 10);
     if (firstOnLine && goalX <= firstOnLine.x) {
       bestIdx = slots.indexOf(firstOnLine);
     }
@@ -289,7 +336,6 @@ export class TextRunController {
     } else {
       this.placeCaret(bestIdx);
     }
-    // Don't reset goalX — preserve it for subsequent vertical movements
     this.#goalX = goalX;
   }
 
