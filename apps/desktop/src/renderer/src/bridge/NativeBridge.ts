@@ -28,6 +28,11 @@ import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph } from "@/lib/model/Glyph";
 
+export interface InterpolationResult {
+  instance: GlyphSnapshot;
+  errors: Array<{ sourceIndex: number; sourceName: string; message: string }>;
+}
+
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
  * All font queries, session lifecycle, and glyph mutations live here.
@@ -161,6 +166,16 @@ export class NativeBridge {
     const json = this.#raw.getGlyphMasterSnapshots(glyphName);
     if (!json) return null;
     return JSON.parse(json) as MasterSnapshot[];
+  }
+
+  /** @knipclassignore — interpolate a glyph at a designspace location in Rust */
+  interpolateGlyph(
+    glyphName: string,
+    location: Record<string, number>,
+  ): InterpolationResult | null {
+    const json = this.#raw.interpolateGlyph(glyphName, JSON.stringify({ values: location }));
+    if (!json) return null;
+    return JSON.parse(json) as InterpolationResult;
   }
 
   getSnapshot(): GlyphSnapshot {

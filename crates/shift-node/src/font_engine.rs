@@ -10,7 +10,7 @@ use shift_core::{
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
+  snapshot::{CommandResult, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
   AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId, Location,
   NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
@@ -536,16 +536,28 @@ impl FontEngine {
     to_json(&self.font.sources())
   }
 
-  /// Returns a JSON object mapping source IDs to their glyph snapshots,
-  /// including the source location. Used by the TS interpolation engine.
+  /// Returns a JSON array of master snapshots for a glyph.
   #[napi]
   pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
+    let masters = self.build_master_snapshots(&glyph_name)?;
+    Some(to_json(&masters))
+  }
+
+  /// Interpolate a glyph at a given designspace location.
+  #[napi]
+  pub fn interpolate_glyph(&self, glyph_name: String, location_json: String) -> Option<String> {
+    let masters = self.build_master_snapshots(&glyph_name)?;
+    let target: Location = serde_json::from_str(&location_json).expect("Invalid location JSON");
+    let axes = self.font.axes();
+    let result = shift_core::interpolation::interpolate_glyph(&masters, axes, &target)?;
+    Some(to_json(&result))
+  }
+
+  fn build_master_snapshots(&self, glyph_name: &str) -> Option<Vec<MasterSnapshot>> {
     if !self.font.is_variable() {
       return None;
     }
 
-    // The editing glyph is taken out of the font during a session
-    // (and its default layer moved into the EditSession), so reconstruct it.
     let mut temp_glyph;
     let glyph = if let (Some(editing), Some(session), Some(layer_id)) = (
       &self.editing_glyph,
@@ -557,20 +569,11 @@ impl FontEngine {
         temp_glyph.set_layer(*layer_id, session.layer().clone());
         &temp_glyph
       } else {
-        self.font.glyph(&glyph_name)?
+        self.font.glyph(glyph_name)?
       }
     } else {
-      self.font.glyph(&glyph_name)?
+      self.font.glyph(glyph_name)?
     };
-
-    #[derive(serde::Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct MasterSnapshot {
-      source_id: String,
-      source_name: String,
-      location: Location,
-      snapshot: GlyphSnapshot,
-    }
 
     let mut masters: Vec<MasterSnapshot> = Vec::new();
 
@@ -617,7 +620,7 @@ impl FontEngine {
       return None;
     }
 
-    Some(to_json(&masters))
+    Some(masters)
   }
 
   // ═══════════════════════════════════════════════════════════

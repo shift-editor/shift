@@ -28,11 +28,8 @@ export declare class FontEngine {
   isVariable(): boolean
   getAxes(): string
   getSources(): string
-  /**
-   * Returns a JSON object mapping source IDs to their glyph snapshots,
-   * including the source location. Used by the TS interpolation engine.
-   */
   getGlyphMasterSnapshots(glyphName: string): string | null
+  interpolateGlyph(glyphName: string, locationJson: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
   endEditSession(): void
   hasEditSession(): boolean
