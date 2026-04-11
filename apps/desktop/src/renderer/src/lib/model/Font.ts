@@ -1,5 +1,6 @@
 import type { FontMetrics, FontMetadata, CompositeGlyph, Axis, Source, Location } from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
+import type { InterpolationResult } from "@/bridge/NativeBridge";
 import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
@@ -124,6 +125,14 @@ export class Font {
   /** @knipclassignore — used by VariationPanel component */
   getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
     return this.#bridge.getGlyphMasterSnapshots(glyphName);
+  }
+
+  /** @knipclassignore — interpolate a glyph at a designspace location in Rust */
+  interpolateGlyph(
+    glyphName: string,
+    location: Record<string, number>,
+  ): InterpolationResult | null {
+    return this.#bridge.interpolateGlyph(glyphName, location);
   }
 
   composites(glyphName: string): CompositeGlyph | null {
