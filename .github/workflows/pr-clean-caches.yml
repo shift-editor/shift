@@ -23,7 +23,7 @@ jobs:
           BRANCH: ${{ github.head_ref }}
         run: |
           echo "Cleaning caches for branch: $BRANCH"
-          CACHE_KEYS=$(gh cache list --branch "$BRANCH" --json key --jq '.[].key')
+          CACHE_KEYS=$(gh cache list --ref "refs/heads/$BRANCH" --json key --jq '.[].key')
           if [ -z "$CACHE_KEYS" ]; then
             echo "No caches found for branch $BRANCH"
             exit 0
