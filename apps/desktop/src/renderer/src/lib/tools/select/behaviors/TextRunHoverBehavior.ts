@@ -18,7 +18,8 @@ export class TextRunHoverBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const textRunState = ctx.editor.getTextRunState();
+    const ctrl = ctx.editor.textRunController;
+    const textRunState = ctrl.state.value;
     if (!textRunState) return false;
 
     const metrics = ctx.editor.font.getMetrics();
@@ -28,25 +29,24 @@ export class TextRunHoverBehavior implements SelectHandlerBehavior {
       requireShape: true,
     });
 
-    ctx.editor.setTextRunHovered(hitIndex);
+    ctrl.setHovered(hitIndex);
     const inspection = textRunState.compositeInspection;
     if (!inspection || hitIndex !== inspection.slotIndex) {
-      ctx.editor.setTextRunInspectionComponent(null);
+      ctrl.setInspectionHoveredComponent(null);
       return false;
     }
 
     const slot = textRunState.layout.slots[inspection.slotIndex];
     if (!slot) {
-      ctx.editor.setTextRunInspectionComponent(null);
+      ctrl.setInspectionHoveredComponent(null);
       return false;
     }
 
     const composite = ctx.editor.getGlyphCompositeComponents(slot.glyph.glyphName);
     const localPoint = { x: event.point.x - slot.x, y: event.point.y };
     const hitComponent = resolveComponentAtPoint(composite, localPoint);
-    ctx.editor.setTextRunInspectionComponent(hitComponent?.index ?? null);
+    ctrl.setInspectionHoveredComponent(hitComponent?.index ?? null);
 
-    // Do not consume pointerMove -- later behaviors still need it.
     return false;
   }
 }

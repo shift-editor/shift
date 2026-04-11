@@ -54,7 +54,7 @@ describe("ToolManager", () => {
 
     it("returns true when active tool handles keydown", () => {
       toolManager.activate("text");
-      const handled = toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "a" }));
+      const handled = toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Escape" }));
 
       expect(handled).toBe(true);
     });

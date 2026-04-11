@@ -8,6 +8,7 @@ import { InteractiveScene } from "./InteractiveScene";
 import { OverlayScene } from "./OverlayScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "./debug/DebugPanel";
+import { HiddenTextInput } from "./HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 
 interface EditorViewProps {
@@ -105,6 +106,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <OverlayScene />
         <InteractiveScene />
       </CanvasContextProvider>
+      <HiddenTextInput />
       <DebugPanel />
     </div>
   );

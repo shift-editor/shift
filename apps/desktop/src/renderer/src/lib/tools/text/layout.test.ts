@@ -116,6 +116,28 @@ describe("computeTextLayout", () => {
   });
 });
 
+describe("computeTextLayout (multi-line)", () => {
+  it("should place slots on the next line after a newline", () => {
+    const font = createMockFont({ 72: 600, 101: 500 });
+    // H, newline, e
+    const glyphs: GlyphRef[] = [
+      ...toGlyphs([72]),
+      { glyphName: ".newline", unicode: 10 },
+      ...toGlyphs([101]),
+    ];
+    const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
+
+    expect(layout.slots).toHaveLength(3);
+    // Line 1: H at y=0
+    expect(expectAt(layout.slots, 0).y).toBe(0);
+    // Newline slot at y=0
+    expect(expectAt(layout.slots, 1).y).toBe(0);
+    // Line 2: e at y=-1000 (lineHeight = 800 - (-200) + 0 = 1000)
+    expect(expectAt(layout.slots, 2).y).toBe(-1000);
+    expect(expectAt(layout.slots, 2).x).toBe(0);
+  });
+});
+
 describe("hitTestTextSlot", () => {
   const metrics = {
     unitsPerEm: 1000,
@@ -234,6 +256,36 @@ describe("hitTestTextSlot", () => {
     expect(pathHitTester.hitPath).toHaveBeenCalled();
   });
 
+  it("should hit slots on the second line", () => {
+    const font = createMockFont({ 72: 600, 101: 500 });
+    // H, newline, e — "e" is on line 2 at y=-1000
+    const glyphs: GlyphRef[] = [
+      ...toGlyphs([72]),
+      { glyphName: ".newline", unicode: 10 },
+      ...toGlyphs([101]),
+    ];
+    const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
+
+    // Click on line 2 (y=-500 is between descender -1200 and ascender -200)
+    expect(hitTestTextSlot(layout, { x: 250, y: -500 }, metrics)).toBe(2);
+
+    // Click on line 1 still works
+    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics)).toBe(0);
+  });
+
+  it("should not match line 1 slot when clicking on line 2 Y", () => {
+    const font = createMockFont({ 72: 600, 101: 500 });
+    const glyphs: GlyphRef[] = [
+      ...toGlyphs([72]),
+      { glyphName: ".newline", unicode: 10 },
+      ...toGlyphs([101]),
+    ];
+    const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
+
+    // x=100 is within H's advance, but y=-500 is on line 2 — should not hit H
+    expect(hitTestTextSlot(layout, { x: 100, y: -500 }, metrics)).not.toBe(0);
+  });
+
   it("shape hit test should return slot only when path hit succeeds", () => {
     const pathHitTester = {
       hitPath: vi.fn(
@@ -302,5 +354,32 @@ describe("hitTestTextCaret", () => {
     expect(hitTestTextCaret(layout, { x: 400, y: 400 }, metrics)).toBe(1);
     expect(hitTestTextCaret(layout, { x: 700, y: 400 }, metrics)).toBe(1);
     expect(hitTestTextCaret(layout, { x: 1400, y: 400 }, metrics)).toBe(3);
+  });
+
+  it("should place caret on the correct line in multi-line layout", () => {
+    const font = createMockFont({ 72: 600, 101: 500 });
+    // H, newline, e — slots: [H@0, \n@0, e@-1000]
+    const glyphs: GlyphRef[] = [
+      ...toGlyphs([72]),
+      { glyphName: ".newline", unicode: 10 },
+      ...toGlyphs([101]),
+    ];
+    const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
+
+    // Click on line 2 before "e" midpoint (midX = 250) — caret before "e" (index 2)
+    expect(hitTestTextCaret(layout, { x: 100, y: -500 }, metrics)).toBe(2);
+
+    // Click on line 2 after "e" midpoint — caret after "e" (index 3)
+    expect(hitTestTextCaret(layout, { x: 400, y: -500 }, metrics)).toBe(3);
+
+    // Click on line 1 before "H" midpoint — caret before "H" (index 0)
+    expect(hitTestTextCaret(layout, { x: 100, y: 400 }, metrics)).toBe(0);
+  });
+
+  it("should return null for clicks far below all lines", () => {
+    const font = createMockFont({ 72: 600 });
+    const layout = computeTextLayout(toGlyphs([72]), { x: 0, y: 0 }, font);
+
+    expect(hitTestTextCaret(layout, { x: 100, y: -2000 }, metrics)).toBeNull();
   });
 });

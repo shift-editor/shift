@@ -32,7 +32,7 @@ describe("GlyphStore", () => {
     expect(first).toBe(second);
   });
 
-  it("self-heals when editing glyph is mutated", () => {
+  it("re-fetches when editing glyph is mutated", () => {
     engine.startEditSession({ glyphName: "A", unicode: 65 });
 
     engine.addPoint({ x: 0, y: 0, pointType: "onCurve", smooth: false });

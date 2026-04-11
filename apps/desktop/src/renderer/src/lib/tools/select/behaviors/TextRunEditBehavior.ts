@@ -18,16 +18,18 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    let textRunState = ctx.editor.getTextRunState();
+    const ctrl = ctx.editor.textRunController;
+
+    let textRunState = ctrl.state.value;
     if (!textRunState) {
       const activeName = ctx.editor.getActiveGlyphName();
       if (!activeName) return false;
-      ctx.editor.ensureTextRunSeed({
+      ctrl.seed({
         glyphName: activeName,
         unicode: ctx.editor.getActiveGlyphUnicode(),
       });
-      ctx.editor.recomputeTextRun(ctx.editor.getDrawOffset().x);
-      textRunState = ctx.editor.getTextRunState();
+      ctrl.setOriginX(ctx.editor.getDrawOffset().x);
+      textRunState = ctrl.state.value;
     }
     if (!textRunState) return false;
 
@@ -39,7 +41,7 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
     });
     if (hitIndex === null) {
       if (textRunState.compositeInspection !== null) {
-        ctx.editor.clearTextRunInspection();
+        ctrl.clearInspection();
         return true;
       }
       return false;
@@ -53,9 +55,9 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
     const isInspected = textRunState.compositeInspection?.slotIndex === hitIndex;
 
     if (isComposite && !isInspected) {
-      ctx.editor.setTextRunInspectionSlot(hitIndex);
-      ctx.editor.setTextRunInspectionComponent(null);
-      ctx.editor.setTextRunEditingSlot(null);
+      ctrl.setInspectionSlot(hitIndex);
+      ctrl.setInspectionHoveredComponent(null);
+      ctrl.setEditingSlot(null);
       return true;
     }
 
@@ -70,31 +72,30 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
       };
 
       const insertedIndex = hitIndex + 1;
-      ctx.editor.insertTextGlyphAt(insertedIndex, insertedGlyph);
-      ctx.editor.recomputeTextRun();
+      ctrl.insertAt(insertedIndex, insertedGlyph);
 
-      const nextState = ctx.editor.getTextRunState();
+      const nextState = ctrl.state.value;
       const insertedSlot = nextState?.layout.slots[insertedIndex];
       const slotX = insertedSlot?.x ?? slot.x;
 
       ctx.editor.startEditSession(insertedGlyph);
-      ctx.editor.setDrawOffsetForGlyph({ x: slotX, y: 0 }, insertedGlyph);
+      ctx.editor.setDrawOffsetForGlyph({ x: slotX, y: insertedSlot?.y ?? slot.y }, insertedGlyph);
       ctx.editor.setPreviewMode(false);
-      ctx.editor.setTextRunEditingSlot(insertedIndex, insertedGlyph);
-      ctx.editor.clearTextRunInspection();
+      ctrl.setEditingSlot(insertedIndex, insertedGlyph);
+      ctrl.clearInspection();
       return true;
     }
 
     if (isComposite) {
-      ctx.editor.setTextRunInspectionComponent(null);
+      ctrl.setInspectionHoveredComponent(null);
       return true;
     }
 
     ctx.editor.startEditSession(slot.glyph);
-    ctx.editor.setDrawOffsetForGlyph({ x: slot.x, y: 0 }, slot.glyph);
+    ctx.editor.setDrawOffsetForGlyph({ x: slot.x, y: slot.y }, slot.glyph);
     ctx.editor.setPreviewMode(false);
-    ctx.editor.setTextRunEditingSlot(hitIndex, slot.glyph);
-    ctx.editor.clearTextRunInspection();
+    ctrl.setEditingSlot(hitIndex, slot.glyph);
+    ctrl.clearInspection();
     return true;
   }
 }

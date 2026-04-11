@@ -14,12 +14,14 @@ export interface GlyphSlot {
   glyph: GlyphRef;
   unicode: number | null;
   x: number;
+  y: number;
   advance: number;
   bounds: Bounds | null;
   path2d: Path2D | null;
   svgPath: string | null;
-  selected: boolean;
 }
+
+const NEWLINE_GLYPH_NAME = ".newline";
 
 export interface TextLayout {
   slots: GlyphSlot[];
@@ -83,10 +85,28 @@ function getDefaultTextPathHitTester(): TextPathHitTester | null {
 
 export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Font): TextLayout {
   const slots: GlyphSlot[] = [];
+  const metrics = font.getMetrics();
+  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
   let x = origin.x;
-  const selected = false;
+  let y = 0;
 
   for (const ref of glyphs) {
+    if (ref.glyphName === NEWLINE_GLYPH_NAME || ref.unicode === 10) {
+      slots.push({
+        glyph: ref,
+        unicode: 10,
+        x,
+        y,
+        advance: 0,
+        bounds: null,
+        path2d: null,
+        svgPath: null,
+      });
+      x = origin.x;
+      y -= lineHeight;
+      continue;
+    }
+
     const resolved = font.getGlyph(ref.glyphName);
     const advance = resolveEditorAdvance(ref, resolved?.advance ?? 0);
 
@@ -94,11 +114,11 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       glyph: ref,
       unicode: ref.unicode,
       x,
+      y,
       advance,
       bounds: resolved?.bbox ?? null,
       path2d: resolved?.path2d ?? null,
       svgPath: resolved?.svgPath ?? null,
-      selected,
     });
 
     x += advance;
@@ -110,6 +130,8 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
   };
 }
 
+export { NEWLINE_GLYPH_NAME };
+
 function resolveEditorAdvance(glyph: GlyphRef, advance: number): number {
   if (advance > 0) return advance;
   if (!isLikelyNonSpacingGlyphRef(glyph.glyphName, glyph.unicode)) {
@@ -118,10 +140,15 @@ function resolveEditorAdvance(glyph: GlyphRef, advance: number): number {
   return NON_SPACING_EDITOR_ADVANCE;
 }
 
-function isWithinVerticalBounds(pos: Point2D, metrics: FontMetrics): boolean {
-  const top = metrics.ascender;
-  const bottom = metrics.descender;
-  return !(pos.y > top || pos.y < bottom);
+function isWithinSlotVerticalBounds(
+  slot: GlyphSlot,
+  y: number,
+  metrics: FontMetrics,
+  padding: number,
+): boolean {
+  const top = slot.y + metrics.ascender + padding;
+  const bottom = slot.y + metrics.descender - padding;
+  return y <= top && y >= bottom;
 }
 
 function isWithinSlotAdvance(
@@ -152,8 +179,8 @@ function isWithinSlotGlyphBounds(slot: GlyphSlot, pos: Point2D, padding: number)
 
   const minX = slot.x + slot.bounds.min.x - padding;
   const maxX = slot.x + slot.bounds.max.x + padding;
-  const minY = slot.bounds.min.y - padding;
-  const maxY = slot.bounds.max.y + padding;
+  const minY = slot.y + slot.bounds.min.y - padding;
+  const maxY = slot.y + slot.bounds.max.y + padding;
 
   return pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY;
 }
@@ -181,7 +208,6 @@ export function hitTestTextSlot(
 ): number | null {
   const { slots } = layout;
   if (slots.length === 0) return null;
-  if (!isWithinVerticalBounds(pos, metrics)) return null;
 
   const outlineRadius = Math.max(options.outlineRadius ?? 0, 0);
   const includeFill = options.includeFill ?? false;
@@ -190,6 +216,8 @@ export function hitTestTextSlot(
     options.pathHitTester === undefined ? getDefaultTextPathHitTester() : options.pathHitTester;
 
   for (const [i, slot] of slots.entries()) {
+    if (!isWithinSlotVerticalBounds(slot, pos.y, metrics, outlineRadius)) continue;
+
     const withinAdvance = isWithinSlotAdvance(slot, i, slots.length, pos.x, outlineRadius);
 
     if (requireShape && slot.bounds) {
@@ -209,7 +237,7 @@ export function hitTestTextSlot(
       const hit = pathHitTester.hitPath(
         slot.path2d,
         pos.x - slot.x,
-        pos.y,
+        pos.y - slot.y,
         Math.max(outlineRadius * 2, Number.EPSILON),
         includeFill,
       );
@@ -228,6 +256,9 @@ export function hitTestTextSlot(
 /**
  * Returns caret insertion index using midpoint partitioning.
  * Can return `layout.slots.length` when after the final slot midpoint.
+ *
+ * For multi-line layouts, finds the closest line by Y distance
+ * and partitions only among slots on that line.
  */
 export function hitTestTextCaret(
   layout: TextLayout,
@@ -236,12 +267,44 @@ export function hitTestTextCaret(
 ): number | null {
   const { slots } = layout;
   if (slots.length === 0) return null;
-  if (!isWithinVerticalBounds(pos, metrics)) return null;
 
+  const lineY = findClosestLineY(slots, pos.y, metrics);
+  if (lineY === null) return null;
+
+  // Check the click is within reasonable vertical distance of the line
+  const lineHeight = metrics.ascender - metrics.descender;
+  const top = lineY + metrics.ascender;
+  const bottom = lineY + metrics.descender;
+  if (pos.y > top + lineHeight / 2 || pos.y < bottom - lineHeight / 2) return null;
+
+  // Midpoint partitioning among slots on this line only
   for (const [i, slot] of slots.entries()) {
+    if (slot.y !== lineY) continue;
+
     const midX = slot.x + slot.advance / 2;
     if (pos.x < midX) return i;
   }
 
+  // After the last slot on this line
+  for (let i = slots.length - 1; i >= 0; i--) {
+    if (slots[i].y === lineY) return i + 1;
+  }
+
   return slots.length;
+}
+
+function findClosestLineY(slots: GlyphSlot[], y: number, metrics: FontMetrics): number | null {
+  let bestY: number | null = null;
+  let bestDist = Infinity;
+
+  for (const slot of slots) {
+    const lineCenter = slot.y + (metrics.ascender + metrics.descender) / 2;
+    const dist = Math.abs(y - lineCenter);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestY = slot.y;
+    }
+  }
+
+  return bestY;
 }

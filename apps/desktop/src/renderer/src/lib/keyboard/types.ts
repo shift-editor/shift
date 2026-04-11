@@ -21,10 +21,6 @@ export interface KeyboardEditorActions {
   returnFromTemporaryTool(): void;
   isPreviewMode(): boolean;
   setPreviewMode(enabled: boolean): void;
-  insertTextCodepoint(codepoint: number): void;
-  recomputeTextRun(): void;
-  getTextRunCodepoints(): number[];
-  selectAllText(): void;
   openGlyphFinder(): void;
 }
 

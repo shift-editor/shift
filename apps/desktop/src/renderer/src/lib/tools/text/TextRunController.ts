@@ -1,23 +1,28 @@
 /**
- * TextRunController — self-contained text buffer with cursor, selection, and layout.
+ * TextRunController — reactive text buffer with cursor, selection, and layout.
  *
- * Owns the text editing model for the text tool. A hidden <textarea> feeds input
- * into this controller; the render pass reads from its reactive signal.
+ * All state is immutable signals. Mutations replace the state value.
+ * The render state is a computed that derives layout, selection rects,
+ * and cursor position from the buffer state — zero manual recompute calls.
  *
  * Selection uses the anchor/focus model (same as DOM Selection API):
  * - anchor: where the selection started (stays put during shift+arrow)
  * - focus:  where the caret is (moves during shift+arrow)
  * - when anchor === focus, there is no selection (just a caret)
  */
-import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
+import {
+  signal,
+  computed,
+  type Signal,
+  type WritableSignal,
+  type ComputedSignal,
+} from "@/lib/reactive/signal";
 import { computeTextLayout, type GlyphRef, type GlyphSlot, type TextLayout } from "./layout";
 import type { Font } from "@/lib/editor/Font";
 import type { FontMetrics } from "@shift/types";
 
 export interface SelectionRange {
-  /** Inclusive start index. */
   start: number;
-  /** Exclusive end index. */
   end: number;
 }
 
@@ -36,6 +41,7 @@ export interface TextRunCompositeInspection {
 export interface TextRunRenderState {
   layout: TextLayout;
   cursorX: number | null;
+  cursorY: number;
   selection: SelectionRange | null;
   selectionRects: SelectionRect[];
   editingIndex: number | null;
@@ -53,7 +59,6 @@ export interface TextRunSnapshot {
   editingGlyph: GlyphRef | null;
 }
 
-/** Persisted form of a single text run (serializable to JSON). */
 export interface PersistedTextRun {
   glyphs: GlyphRef[];
   cursorPosition: number;
@@ -65,403 +70,622 @@ export interface PersistedTextRun {
 const DEFAULT_TEXT_RUN_KEY = "__default__";
 
 interface RunState {
-  glyphs: GlyphRef[];
-  cursor: number;
-  anchor: number;
-  originX: number;
-  cursorVisible: boolean;
-  editingIndex: number | null;
-  editingGlyph: GlyphRef | null;
-  hoveredIndex: number | null;
-  inspectionSlotIndex: number | null;
-  inspectionHoveredComponentIndex: number | null;
+  readonly glyphs: readonly GlyphRef[];
+  readonly cursor: number;
+  readonly anchor: number;
+  readonly originX: number;
+  readonly cursorVisible: boolean;
+  readonly editingIndex: number | null;
+  readonly editingGlyph: GlyphRef | null;
+  readonly suspendedEditingIndex: number | null;
+  readonly suspendedEditingGlyph: GlyphRef | null;
+  readonly hoveredIndex: number | null;
+  readonly inspectionSlotIndex: number | null;
+  readonly inspectionHoveredComponentIndex: number | null;
 }
 
-function createRunState(): RunState {
-  return {
-    glyphs: [],
-    cursor: 0,
-    anchor: 0,
-    originX: 0,
-    cursorVisible: false,
-    editingIndex: null,
-    editingGlyph: null,
-    hoveredIndex: null,
-    inspectionSlotIndex: null,
-    inspectionHoveredComponentIndex: null,
-  };
+const EMPTY_RUN: RunState = {
+  glyphs: [],
+  cursor: 0,
+  anchor: 0,
+  originX: 0,
+  cursorVisible: false,
+  editingIndex: null,
+  editingGlyph: null,
+  suspendedEditingIndex: null,
+  suspendedEditingGlyph: null,
+  hoveredIndex: null,
+  inspectionSlotIndex: null,
+  inspectionHoveredComponentIndex: null,
+};
+
+/**
+ * Adjusts an index after a delete-then-insert operation on the glyph array.
+ * Returns null if the index falls within the deleted range.
+ */
+function adjustIndex(
+  index: number | null,
+  deleteStart: number,
+  deleteCount: number,
+  insertAt: number,
+  insertCount: number,
+): number | null {
+  if (index === null) return null;
+
+  if (deleteCount > 0) {
+    if (index >= deleteStart && index < deleteStart + deleteCount) return null;
+    if (index >= deleteStart + deleteCount) index -= deleteCount;
+  }
+
+  if (insertCount > 0 && index >= insertAt) {
+    index += insertCount;
+  }
+
+  return index;
 }
 
 export class TextRunController {
-  #runs = new Map<string, RunState>();
-  #activeKey = DEFAULT_TEXT_RUN_KEY;
-  #font: Font | null = null;
+  #runs = new Map<string, WritableSignal<RunState>>();
+  #$activeKey: WritableSignal<string>;
+  #$font: WritableSignal<Font | null>;
+  #goalX: number | null = null;
 
-  #$state: WritableSignal<TextRunRenderState | null>;
+  #$state: ComputedSignal<TextRunRenderState | null>;
 
   constructor() {
-    this.#$state = signal<TextRunRenderState | null>(null);
-  }
-
-  /** Switch which glyph's text run is active. */
-  setOwnerGlyph(glyph: GlyphRef | null): void {
-    const nextKey = glyph ? glyph.glyphName : DEFAULT_TEXT_RUN_KEY;
-    if (nextKey === this.#activeKey) return;
-
-    this.#activeKey = nextKey;
-    const run = this.#run();
-    run.hoveredIndex = null;
-    run.inspectionSlotIndex = null;
-    run.inspectionHoveredComponentIndex = null;
+    this.#$activeKey = signal(DEFAULT_TEXT_RUN_KEY);
+    this.#$font = signal<Font | null>(null);
+    this.#$state = computed(() => this.#deriveRenderState());
   }
 
   get state(): Signal<TextRunRenderState | null> {
     return this.#$state;
   }
 
-  // ── Derived (read-only) ──────────────────────────────────────────
-
   get length(): number {
-    return this.#run().glyphs.length;
+    return this.#peek().glyphs.length;
   }
 
   get cursor(): number {
-    return this.#run().cursor;
+    return this.#peek().cursor;
   }
 
   get anchor(): number {
-    return this.#run().anchor;
+    return this.#peek().anchor;
   }
 
   get hasSelection(): boolean {
-    const r = this.#run();
+    const r = this.#peek();
     return r.anchor !== r.cursor;
   }
 
   get selection(): SelectionRange | null {
-    const r = this.#run();
+    const r = this.#peek();
     if (r.anchor === r.cursor) return null;
-    const start = Math.min(r.anchor, r.cursor);
-    const end = Math.max(r.anchor, r.cursor);
-    return { start, end };
+    return {
+      start: Math.min(r.anchor, r.cursor),
+      end: Math.max(r.anchor, r.cursor),
+    };
   }
 
   get glyphs(): readonly GlyphRef[] {
-    return this.#run().glyphs;
+    return this.#peek().glyphs;
   }
 
   get selectedGlyphs(): GlyphRef[] {
     const sel = this.selection;
     if (!sel) return [];
-    return this.#run().glyphs.slice(sel.start, sel.end);
+    return this.#peek().glyphs.slice(sel.start, sel.end);
   }
 
-  // ── Cursor movement ──────────────────────────────────────────────
-
-  /**
-   * Move cursor left by one position.
-   * @param extend - If true (shift held), keep anchor in place to grow/shrink selection.
-   */
   moveCursorLeft(extend = false): void {
-    const r = this.#run();
+    this.#goalX = null;
+    this.#update((r) => {
+      if (!extend && r.anchor !== r.cursor) {
+        const start = Math.min(r.anchor, r.cursor);
+        return { ...r, cursor: start, anchor: start };
+      }
 
-    if (!extend && this.hasSelection) {
-      const start = Math.min(r.anchor, r.cursor);
-      r.cursor = start;
-      r.anchor = start;
-      return;
-    }
-
-    if (r.cursor > 0) {
-      r.cursor--;
-    }
-
-    if (!extend) {
-      r.anchor = r.cursor;
-    }
+      const cursor = Math.max(0, r.cursor - 1);
+      return { ...r, cursor, anchor: extend ? r.anchor : cursor };
+    });
   }
 
-  /**
-   * Move cursor right by one position.
-   * @param extend - If true (shift held), keep anchor in place to grow/shrink selection.
-   */
   moveCursorRight(extend = false): void {
-    const r = this.#run();
+    this.#goalX = null;
+    this.#update((r) => {
+      if (!extend && r.anchor !== r.cursor) {
+        const end = Math.max(r.anchor, r.cursor);
+        return { ...r, cursor: end, anchor: end };
+      }
 
-    if (!extend && this.hasSelection) {
-      const end = Math.max(r.anchor, r.cursor);
-      r.cursor = end;
-      r.anchor = end;
-      return;
-    }
-
-    if (r.cursor < r.glyphs.length) {
-      r.cursor++;
-    }
-
-    if (!extend) {
-      r.anchor = r.cursor;
-    }
+      const cursor = Math.min(r.glyphs.length, r.cursor + 1);
+      return { ...r, cursor, anchor: extend ? r.anchor : cursor };
+    });
   }
 
-  /** Move cursor to start (Home / Cmd+Left). */
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorToLineStart(extend = false): void {
+    this.#goalX = null;
+    const cursorY = this.#getCursorLineY();
+    if (cursorY === null) return;
+
+    const state = this.#$state.peek()!;
+    const slots = state.layout.slots;
+
+    let lineStart = 0;
+    for (let i = 0; i < slots.length; i++) {
+      if (slots[i].y === cursorY) {
+        lineStart = i;
+        break;
+      }
+    }
+
+    this.#update((r) => ({ ...r, cursor: lineStart, anchor: extend ? r.anchor : lineStart }));
+  }
+
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorToLineEnd(extend = false): void {
+    this.#goalX = null;
+    const cursorY = this.#getCursorLineY();
+    if (cursorY === null) return;
+
+    const state = this.#$state.peek()!;
+    const slots = state.layout.slots;
+
+    let lineEnd = slots.length;
+    for (let i = slots.length - 1; i >= 0; i--) {
+      if (slots[i].y === cursorY) {
+        lineEnd = i + 1;
+        if (slots[i].unicode === 10) lineEnd = i;
+        break;
+      }
+    }
+
+    this.#update((r) => ({ ...r, cursor: lineEnd, anchor: extend ? r.anchor : lineEnd }));
+  }
+
   moveCursorToStart(extend = false): void {
-    const r = this.#run();
-    r.cursor = 0;
-    if (!extend) {
-      r.anchor = 0;
-    }
+    this.#goalX = null;
+    this.#update((r) => ({ ...r, cursor: 0, anchor: extend ? r.anchor : 0 }));
   }
 
-  /** Move cursor to end (End / Cmd+Right). */
   moveCursorToEnd(extend = false): void {
-    const r = this.#run();
-    r.cursor = r.glyphs.length;
-    if (!extend) {
-      r.anchor = r.glyphs.length;
+    this.#goalX = null;
+    this.#update((r) => ({
+      ...r,
+      cursor: r.glyphs.length,
+      anchor: extend ? r.anchor : r.glyphs.length,
+    }));
+  }
+
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorVertically(direction: 1 | -1, extend = false): void {
+    const state = this.#$state.peek();
+    if (!state) return;
+
+    const font = this.#$font.peek();
+    if (!font) return;
+
+    const { layout } = state;
+    const slots = layout.slots;
+    if (slots.length === 0) return;
+
+    const r = this.#peek();
+    const metrics = font.getMetrics();
+    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const prevSlot = r.cursor > 0 ? slots[r.cursor - 1] : null;
+
+    // Determine the cursor's effective Y position.
+    // If the cursor is right after a newline, it's on the NEXT line.
+    let currentY: number;
+    let cursorX: number;
+
+    if (prevSlot && prevSlot.unicode === 10) {
+      currentY = prevSlot.y - lineHeight;
+      cursorX = r.originX;
+    } else if (prevSlot) {
+      currentY = prevSlot.y;
+      cursorX = prevSlot.x + prevSlot.advance;
+    } else {
+      currentY = slots[0]?.y ?? 0;
+      cursorX = r.originX;
     }
+
+    if (this.#goalX === null) this.#goalX = cursorX;
+    const goalX = this.#goalX;
+
+    // Find unique line Y values, sorted descending (higher Y = higher on screen in UPM)
+    const lineYs = [...new Set(slots.map((s) => s.y))].sort((a, b) => b - a);
+
+    // Also include the line below the last newline (cursor can be there)
+    for (const slot of slots) {
+      if (slot.unicode === 10) {
+        const belowY = slot.y - lineHeight;
+        if (!lineYs.includes(belowY)) lineYs.push(belowY);
+      }
+    }
+    lineYs.sort((a, b) => b - a);
+
+    // Find closest line to currentY
+    let currentLineIdx = 0;
+    let closestDist = Infinity;
+    for (let i = 0; i < lineYs.length; i++) {
+      const dist = Math.abs(lineYs[i] - currentY);
+      if (dist < closestDist) {
+        closestDist = dist;
+        currentLineIdx = i;
+      }
+    }
+
+    const targetLineIdx = currentLineIdx + direction;
+    if (targetLineIdx < 0 || targetLineIdx >= lineYs.length) return;
+
+    const targetY = lineYs[targetLineIdx];
+
+    // Find the slot on the target line where goalX falls, placing cursor
+    // on whichever edge (left or right) is closer — same as VS Code.
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (const [i, slot] of slots.entries()) {
+      if (slot.y !== targetY || slot.unicode === 10) continue;
+
+      const leftEdge = slot.x;
+      const rightEdge = slot.x + slot.advance;
+
+      // Distance to left edge (cursor before this slot)
+      const leftDist = Math.abs(leftEdge - goalX);
+      if (leftDist < bestDist) {
+        bestDist = leftDist;
+        bestIdx = i; // cursor before this slot
+      }
+
+      // Distance to right edge (cursor after this slot)
+      const rightDist = Math.abs(rightEdge - goalX);
+      if (rightDist < bestDist) {
+        bestDist = rightDist;
+        bestIdx = i + 1; // cursor after this slot
+      }
+    }
+
+    // If no visible slots on target line (empty line after newline),
+    // place cursor at the newline that created this line
+    if (bestIdx === -1) {
+      for (const [i, slot] of slots.entries()) {
+        if (slot.unicode === 10 && Math.abs(slot.y - lineHeight - targetY) < 1) {
+          bestIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (bestIdx === -1) return;
+
+    if (extend) {
+      this.extendSelection(bestIdx);
+    } else {
+      this.placeCaret(bestIdx);
+    }
+    this.#goalX = goalX;
   }
 
-  // ── Selection ────────────────────────────────────────────────────
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
+  moveCursorByWord(direction: -1 | 1, extend = false): void {
+    this.#goalX = null;
+    const r = this.#peek();
+    const glyphs = r.glyphs;
+    let pos = r.cursor;
 
-  /** Select all glyphs (Cmd+A). */
+    if (direction === -1) {
+      if (pos <= 0) return;
+      pos--;
+      // Skip whitespace
+      while (pos > 0 && isWhitespace(glyphs[pos - 1])) pos--;
+      // Skip word characters
+      while (pos > 0 && !isWhitespace(glyphs[pos - 1]) && !isPunctuation(glyphs[pos - 1])) pos--;
+    } else {
+      if (pos >= glyphs.length) return;
+      // Skip word characters
+      while (pos < glyphs.length && !isWhitespace(glyphs[pos]) && !isPunctuation(glyphs[pos]))
+        pos++;
+      // Skip whitespace
+      while (pos < glyphs.length && isWhitespace(glyphs[pos])) pos++;
+    }
+
+    this.#update((r) => ({ ...r, cursor: pos, anchor: extend ? r.anchor : pos }));
+  }
+
   selectAll(): void {
-    const r = this.#run();
-    r.anchor = 0;
-    r.cursor = r.glyphs.length;
+    this.#goalX = null;
+    this.#update((r) => ({ ...r, anchor: 0, cursor: r.glyphs.length }));
   }
 
-  /** Select a specific range. */
   selectRange(start: number, end: number): void {
-    const r = this.#run();
-    r.anchor = Math.max(0, Math.min(start, r.glyphs.length));
-    r.cursor = Math.max(0, Math.min(end, r.glyphs.length));
+    this.#update((r) => ({
+      ...r,
+      anchor: Math.max(0, Math.min(start, r.glyphs.length)),
+      cursor: Math.max(0, Math.min(end, r.glyphs.length)),
+    }));
   }
 
-  /** Collapse selection to one side. */
   collapseSelection(to: "start" | "end" = "end"): void {
-    const sel = this.selection;
-    if (!sel) return;
-    const r = this.#run();
-    const pos = to === "start" ? sel.start : sel.end;
-    r.cursor = pos;
-    r.anchor = pos;
+    this.#update((r) => {
+      if (r.anchor === r.cursor) return r;
+      const pos = to === "start" ? Math.min(r.anchor, r.cursor) : Math.max(r.anchor, r.cursor);
+      return { ...r, cursor: pos, anchor: pos };
+    });
   }
 
-  // ── Click placement ──────────────────────────────────────────────
-
-  /** Click — collapse any selection and place caret at index. */
   placeCaret(index: number): void {
-    const r = this.#run();
-    const clamped = Math.max(0, Math.min(index, r.glyphs.length));
-    r.cursor = clamped;
-    r.anchor = clamped;
+    this.#goalX = null;
+    this.#update((r) => {
+      const clamped = Math.max(0, Math.min(index, r.glyphs.length));
+      return { ...r, cursor: clamped, anchor: clamped };
+    });
   }
 
-  /** Shift+click — anchor stays, focus moves to index. */
   extendSelection(index: number): void {
-    const r = this.#run();
-    r.cursor = Math.max(0, Math.min(index, r.glyphs.length));
+    this.#update((r) => ({
+      ...r,
+      cursor: Math.max(0, Math.min(index, r.glyphs.length)),
+    }));
   }
 
-  // ── Mutation ─────────────────────────────────────────────────────
-
-  /** Insert a glyph at cursor. Replaces selection if any. */
   insert(glyph: GlyphRef): void {
-    const r = this.#run();
-    this.#deleteSelectionRange(r);
-    r.glyphs.splice(r.cursor, 0, glyph);
-    r.cursor++;
-    r.anchor = r.cursor;
+    this.#update((r) => {
+      const selStart = Math.min(r.anchor, r.cursor);
+      const selCount = Math.abs(r.anchor - r.cursor);
+      const { glyphs, cursor } = deleteRange(r);
+      const next = [...glyphs];
+      next.splice(cursor, 0, glyph);
+      const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, cursor, 1);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: cursor + 1,
+        anchor: cursor + 1,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
+    });
   }
 
-  /** Insert a glyph at a specific index (for composite drill-down). */
   insertAt(index: number, glyph: GlyphRef): void {
-    const r = this.#run();
-    const clamped = Math.max(0, Math.min(index, r.glyphs.length));
-    r.glyphs.splice(clamped, 0, glyph);
-    if (r.cursor >= clamped) r.cursor++;
-    if (r.anchor >= clamped) r.anchor++;
+    this.#update((r) => {
+      const clamped = Math.max(0, Math.min(index, r.glyphs.length));
+      const next = [...r.glyphs];
+      next.splice(clamped, 0, glyph);
+      const sei = adjustIndex(r.suspendedEditingIndex, 0, 0, clamped, 1);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: r.cursor >= clamped ? r.cursor + 1 : r.cursor,
+        anchor: r.anchor >= clamped ? r.anchor + 1 : r.anchor,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
+    });
   }
 
-  /** Insert multiple glyphs at cursor (paste). Replaces selection if any. */
   insertMany(glyphs: GlyphRef[]): void {
-    const r = this.#run();
-    this.#deleteSelectionRange(r);
-    r.glyphs.splice(r.cursor, 0, ...glyphs);
-    r.cursor += glyphs.length;
-    r.anchor = r.cursor;
+    this.#update((r) => {
+      const selStart = Math.min(r.anchor, r.cursor);
+      const selCount = Math.abs(r.anchor - r.cursor);
+      const { glyphs: current, cursor } = deleteRange(r);
+      const next = [...current];
+      next.splice(cursor, 0, ...glyphs);
+      const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, cursor, glyphs.length);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: cursor + glyphs.length,
+        anchor: cursor + glyphs.length,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
+    });
   }
 
-  /** Backspace — delete selection, or the glyph before cursor. */
   delete(): boolean {
-    const r = this.#run();
+    const r = this.#peek();
 
-    if (this.hasSelection) {
-      this.#deleteSelectionRange(r);
+    if (r.anchor !== r.cursor) {
+      this.#update((r) => {
+        const selStart = Math.min(r.anchor, r.cursor);
+        const selCount = Math.abs(r.anchor - r.cursor);
+        const { glyphs, cursor } = deleteRange(r);
+        const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, 0, 0);
+        return {
+          ...r,
+          glyphs,
+          cursor,
+          anchor: cursor,
+          suspendedEditingIndex: sei,
+          suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+        };
+      });
       return true;
     }
 
     if (r.cursor === 0) return false;
-    r.cursor--;
-    r.glyphs.splice(r.cursor, 1);
-    r.anchor = r.cursor;
+
+    this.#update((r) => {
+      const next = [...r.glyphs];
+      next.splice(r.cursor - 1, 1);
+      const sei = adjustIndex(r.suspendedEditingIndex, r.cursor - 1, 1, 0, 0);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: r.cursor - 1,
+        anchor: r.cursor - 1,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
+    });
     return true;
   }
 
-  /** Delete key — delete selection, or the glyph after cursor. */
   deleteForward(): boolean {
-    const r = this.#run();
+    const r = this.#peek();
 
-    if (this.hasSelection) {
-      this.#deleteSelectionRange(r);
+    if (r.anchor !== r.cursor) {
+      this.#update((r) => {
+        const selStart = Math.min(r.anchor, r.cursor);
+        const selCount = Math.abs(r.anchor - r.cursor);
+        const { glyphs, cursor } = deleteRange(r);
+        const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, 0, 0);
+        return {
+          ...r,
+          glyphs,
+          cursor,
+          anchor: cursor,
+          suspendedEditingIndex: sei,
+          suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+        };
+      });
       return true;
     }
 
     if (r.cursor >= r.glyphs.length) return false;
-    r.glyphs.splice(r.cursor, 1);
+
+    this.#update((r) => {
+      const next = [...r.glyphs];
+      next.splice(r.cursor, 1);
+      const sei = adjustIndex(r.suspendedEditingIndex, r.cursor, 1, 0, 0);
+      return {
+        ...r,
+        glyphs: next,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
+    });
     return true;
   }
 
-  // ── Text run lifecycle ───────────────────────────────────────────
-
-  /** Seed with an initial glyph if buffer is empty. */
   seed(glyph: GlyphRef): void {
-    const r = this.#run();
+    const r = this.#peek();
     if (r.glyphs.length > 0) return;
-    r.glyphs.push(glyph);
-    r.cursor = 1;
-    r.anchor = 1;
+    this.#set({ ...r, glyphs: [glyph], cursor: 1, anchor: 1 });
   }
 
   clear(): void {
-    const r = this.#run();
-    r.glyphs = [];
-    r.cursor = 0;
-    r.anchor = 0;
-    r.originX = 0;
-    r.cursorVisible = false;
-    r.editingIndex = null;
-    r.editingGlyph = null;
-    r.hoveredIndex = null;
-    r.inspectionSlotIndex = null;
-    r.inspectionHoveredComponentIndex = null;
-    this.#$state.set(null);
+    this.#set(EMPTY_RUN);
   }
 
   clearAll(): void {
     this.#runs.clear();
-    this.#$state.set(null);
   }
 
   setFont(font: Font): void {
-    this.#font = font;
+    this.#$font.set(font);
   }
 
   setOriginX(x: number): void {
-    this.#run().originX = x;
+    this.#update((r) => ({ ...r, originX: x }));
   }
 
   setCursorVisible(visible: boolean): void {
-    this.#run().cursorVisible = visible;
+    this.#update((r) => ({ ...r, cursorVisible: visible }));
   }
 
-  /** Return codepoints for the current run (for clipboard copy). */
+  /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
   getCodepoints(): number[] {
-    return this.#run()
+    return this.#peek()
       .glyphs.map((ref) => ref.unicode)
       .filter((unicode): unicode is number => unicode !== null);
   }
 
-  /**
-   * Recompute layout and selection rects, then push to the reactive signal.
-   * Call after any mutation or cursor movement.
-   */
-  recompute(originX?: number): void {
-    if (!this.#font) {
-      this.#$state.set(null);
-      return;
-    }
-
-    const r = this.#run();
-    if (originX !== undefined) {
-      r.originX = originX;
-    }
-
-    const layout =
-      r.glyphs.length > 0
-        ? computeTextLayout(r.glyphs, { x: r.originX, y: 0 }, this.#font)
-        : { slots: [], totalAdvance: 0 };
-
-    if (r.glyphs.length === 0 && !r.cursorVisible) {
-      this.#$state.set(null);
-      return;
-    }
-
-    const sel = this.selection;
-    const metrics = this.#font.getMetrics();
-    const selectionRects = sel ? computeSelectionRects(layout.slots, sel, metrics) : [];
-
-    this.#$state.set({
-      layout,
-      cursorX: r.cursorVisible && !this.hasSelection ? this.#computeCursorX(r, layout) : null,
-      selection: sel,
-      selectionRects,
-      editingIndex: r.editingIndex,
-      editingGlyph: r.editingGlyph,
-      hoveredIndex: r.hoveredIndex,
-      compositeInspection: this.#compositeInspection(r),
-    });
+  setOwnerGlyph(glyph: GlyphRef | null): void {
+    const nextKey = glyph ? glyph.glyphName : DEFAULT_TEXT_RUN_KEY;
+    if (nextKey === this.#$activeKey.peek()) return;
+    this.#$activeKey.set(nextKey);
+    this.#update((r) => ({
+      ...r,
+      hoveredIndex: null,
+      inspectionSlotIndex: null,
+      inspectionHoveredComponentIndex: null,
+    }));
   }
 
-  // ── Editing slot ─────────────────────────────────────────────────
-
   setEditingSlot(index: number | null, glyph: GlyphRef | null = null): void {
-    const r = this.#run();
-    r.editingIndex = index;
-    r.editingGlyph = glyph;
+    this.#update((r) => ({ ...r, editingIndex: index, editingGlyph: glyph }));
   }
 
   resetEditingContext(): void {
-    const r = this.#run();
-    r.editingIndex = null;
-    r.editingGlyph = null;
-    r.hoveredIndex = null;
-    r.inspectionSlotIndex = null;
-    r.inspectionHoveredComponentIndex = null;
+    this.#update((r) => ({
+      ...r,
+      editingIndex: null,
+      editingGlyph: null,
+      suspendedEditingIndex: null,
+      suspendedEditingGlyph: null,
+      hoveredIndex: null,
+      inspectionSlotIndex: null,
+      inspectionHoveredComponentIndex: null,
+    }));
   }
 
-  // ── Hover / inspection ───────────────────────────────────────────
+  suspendEditing(): void {
+    this.#update((r) => ({
+      ...r,
+      suspendedEditingIndex: r.editingIndex,
+      suspendedEditingGlyph: r.editingGlyph,
+      editingIndex: null,
+      editingGlyph: null,
+      hoveredIndex: null,
+      inspectionSlotIndex: null,
+      inspectionHoveredComponentIndex: null,
+    }));
+  }
+
+  resumeEditing(): { index: number; glyph: GlyphRef } | null {
+    const r = this.#peek();
+    const index = r.suspendedEditingIndex;
+    const glyph = r.suspendedEditingGlyph;
+    this.#update((r) => ({
+      ...r,
+      editingIndex: r.suspendedEditingIndex,
+      editingGlyph: r.suspendedEditingGlyph,
+      suspendedEditingIndex: null,
+      suspendedEditingGlyph: null,
+    }));
+    if (index === null || glyph === null) return null;
+    return { index, glyph };
+  }
 
   setHovered(index: number | null): void {
-    const r = this.#run();
-    r.hoveredIndex = index;
-    if (r.inspectionSlotIndex !== index) {
-      r.inspectionHoveredComponentIndex = null;
-    }
+    this.#update((r) => ({
+      ...r,
+      hoveredIndex: index,
+      inspectionHoveredComponentIndex:
+        r.inspectionSlotIndex !== index ? null : r.inspectionHoveredComponentIndex,
+    }));
   }
 
   setInspectionSlot(index: number | null): void {
-    const r = this.#run();
-    r.inspectionSlotIndex = index;
-    r.inspectionHoveredComponentIndex = null;
+    this.#update((r) => ({
+      ...r,
+      inspectionSlotIndex: index,
+      inspectionHoveredComponentIndex: null,
+    }));
   }
 
   setInspectionHoveredComponent(index: number | null): void {
-    const r = this.#run();
-    r.inspectionHoveredComponentIndex = r.inspectionSlotIndex === null ? null : index;
+    this.#update((r) => ({
+      ...r,
+      inspectionHoveredComponentIndex: r.inspectionSlotIndex === null ? null : index,
+    }));
   }
 
   clearInspection(): void {
-    const r = this.#run();
-    r.inspectionSlotIndex = null;
-    r.inspectionHoveredComponentIndex = null;
+    this.#update((r) => ({
+      ...r,
+      inspectionSlotIndex: null,
+      inspectionHoveredComponentIndex: null,
+    }));
   }
 
-  // ── Serialization / Persistence ──────────────────────────────────
-
   snapshot(): TextRunSnapshot {
-    const r = this.#run();
+    const r = this.#peek();
     return {
       glyphs: [...r.glyphs],
       cursor: r.cursor,
@@ -473,19 +697,23 @@ export class TextRunController {
   }
 
   restore(snapshot: TextRunSnapshot): void {
-    const r = this.#run();
-    r.glyphs = [...snapshot.glyphs];
-    r.cursor = snapshot.cursor;
-    r.anchor = snapshot.anchor;
-    r.originX = snapshot.originX;
-    r.editingIndex = snapshot.editingIndex;
-    r.editingGlyph = snapshot.editingGlyph;
+    this.#set({
+      ...this.#peek(),
+      glyphs: [...snapshot.glyphs],
+      cursor: snapshot.cursor,
+      anchor: snapshot.anchor,
+      originX: snapshot.originX,
+      editingIndex: snapshot.editingIndex,
+      editingGlyph: snapshot.editingGlyph,
+    });
   }
 
   exportRuns(): Record<string, PersistedTextRun> {
     const out: Record<string, PersistedTextRun> = {};
-    for (const [key, run] of this.#runs.entries()) {
-      if (key === DEFAULT_TEXT_RUN_KEY || run.glyphs.length === 0) continue;
+    for (const [key, $run] of this.#runs.entries()) {
+      if (key === DEFAULT_TEXT_RUN_KEY) continue;
+      const run = $run.peek();
+      if (run.glyphs.length === 0) continue;
       out[key] = {
         glyphs: [...run.glyphs],
         cursorPosition: run.cursor,
@@ -500,60 +728,156 @@ export class TextRunController {
   hydrateRuns(next: Record<string, PersistedTextRun>): void {
     this.#runs.clear();
     for (const [glyphKey, persisted] of Object.entries(next)) {
-      const r = createRunState();
-      r.glyphs = [...persisted.glyphs];
-      r.cursor = persisted.cursorPosition;
-      r.anchor = persisted.cursorPosition;
-      r.originX = persisted.originX;
-      r.editingIndex = persisted.editingIndex;
-      r.editingGlyph = persisted.editingGlyph;
-      this.#runs.set(glyphKey, r);
+      this.#runs.set(
+        glyphKey,
+        signal<RunState>({
+          ...EMPTY_RUN,
+          glyphs: [...persisted.glyphs],
+          cursor: persisted.cursorPosition,
+          anchor: persisted.cursorPosition,
+          originX: persisted.originX,
+          editingIndex: persisted.editingIndex,
+          editingGlyph: persisted.editingGlyph,
+        }),
+      );
     }
 
-    if (!this.#runs.has(this.#activeKey)) {
-      this.#runs.set(this.#activeKey, createRunState());
+    const key = this.#$activeKey.peek();
+    if (!this.#runs.has(key)) {
+      this.#runs.set(key, signal<RunState>(EMPTY_RUN));
     }
   }
 
-  // ── Private ──────────────────────────────────────────────────────
-
-  #run(): RunState {
-    let r = this.#runs.get(this.#activeKey);
-    if (r) return r;
-    r = createRunState();
-    this.#runs.set(this.#activeKey, r);
-    return r;
+  #signal(): WritableSignal<RunState> {
+    const key = this.#$activeKey.peek();
+    let $r = this.#runs.get(key);
+    if ($r) return $r;
+    $r = signal<RunState>(EMPTY_RUN);
+    this.#runs.set(key, $r);
+    return $r;
   }
 
-  #deleteSelectionRange(r: RunState): void {
-    if (r.anchor === r.cursor) return;
-    const start = Math.min(r.anchor, r.cursor);
-    const end = Math.max(r.anchor, r.cursor);
-    r.glyphs.splice(start, end - start);
-    r.cursor = start;
-    r.anchor = start;
+  #peek(): RunState {
+    const key = this.#$activeKey.peek();
+    const $r = this.#runs.get(key);
+    return $r ? $r.peek() : EMPTY_RUN;
   }
 
-  #computeCursorX(r: RunState, layout: TextLayout): number | null {
-    if (!r.cursorVisible) return null;
+  #set(next: RunState): void {
+    this.#signal().set(next);
+  }
 
-    if (r.cursor === 0) return r.originX;
+  #update(fn: (current: RunState) => RunState): void {
+    const $r = this.#signal();
+    const next = fn($r.peek());
+    $r.set(next);
+  }
 
-    if (r.cursor <= layout.slots.length) {
-      const prevSlot = layout.slots[r.cursor - 1];
-      if (prevSlot) return prevSlot.x + prevSlot.advance;
+  #getCursorLineY(): number | null {
+    const state = this.#$state.peek();
+    const font = this.#$font.peek();
+    if (!state || !font) return null;
+
+    const r = this.#peek();
+    const slots = state.layout.slots;
+    if (slots.length === 0) return null;
+
+    const prevSlot = r.cursor > 0 ? slots[r.cursor - 1] : null;
+
+    if (prevSlot && prevSlot.unicode === 10) {
+      const metrics = font.getMetrics();
+      const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+      return prevSlot.y - lineHeight;
     }
 
-    return r.originX + layout.totalAdvance;
+    return (prevSlot ?? slots[0])?.y ?? 0;
   }
 
-  #compositeInspection(r: RunState): TextRunCompositeInspection | null {
-    if (r.inspectionSlotIndex === null) return null;
+  #deriveRenderState(): TextRunRenderState | null {
+    this.#$activeKey.value; // track active key changes
+    const r = this.#signal().value; // track run state changes (creates signal if needed)
+    const font = this.#$font.value; // track font changes
+    if (!font) return null;
+
+    const layout =
+      r.glyphs.length > 0
+        ? computeTextLayout([...r.glyphs], { x: r.originX, y: 0 }, font)
+        : { slots: [], totalAdvance: 0 };
+
+    if (r.glyphs.length === 0 && !r.cursorVisible) return null;
+
+    const sel =
+      r.anchor !== r.cursor
+        ? { start: Math.min(r.anchor, r.cursor), end: Math.max(r.anchor, r.cursor) }
+        : null;
+    const metrics = font.getMetrics();
+    const selectionRects = sel ? computeSelectionRects(layout.slots, sel, metrics) : [];
+
+    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const cursorPos = r.cursorVisible && !sel ? computeCursorPosition(r, layout, lineHeight) : null;
+
+    const compositeInspection =
+      r.inspectionSlotIndex !== null
+        ? {
+            slotIndex: r.inspectionSlotIndex,
+            hoveredComponentIndex: r.inspectionHoveredComponentIndex,
+          }
+        : null;
+
     return {
-      slotIndex: r.inspectionSlotIndex,
-      hoveredComponentIndex: r.inspectionHoveredComponentIndex,
+      layout,
+      cursorX: cursorPos?.x ?? null,
+      cursorY: cursorPos?.y ?? 0,
+      selection: sel,
+      selectionRects,
+      editingIndex: r.editingIndex,
+      editingGlyph: r.editingGlyph,
+      hoveredIndex: r.hoveredIndex,
+      compositeInspection,
     };
   }
+}
+
+function deleteRange(r: RunState): { glyphs: GlyphRef[]; cursor: number } {
+  if (r.anchor === r.cursor) return { glyphs: [...r.glyphs], cursor: r.cursor };
+  const start = Math.min(r.anchor, r.cursor);
+  const end = Math.max(r.anchor, r.cursor);
+  const glyphs = [...r.glyphs];
+  glyphs.splice(start, end - start);
+  return { glyphs, cursor: start };
+}
+
+function computeCursorPosition(
+  r: RunState,
+  layout: TextLayout,
+  lineHeight: number,
+): { x: number; y: number } | null {
+  if (!r.cursorVisible) return null;
+
+  if (r.cursor === 0) {
+    const firstSlot = layout.slots[0];
+    return { x: r.originX, y: firstSlot?.y ?? 0 };
+  }
+
+  if (r.cursor <= layout.slots.length) {
+    const prevSlot = layout.slots[r.cursor - 1];
+    if (!prevSlot) return { x: r.originX, y: 0 };
+
+    if (prevSlot.unicode === 10) {
+      return { x: r.originX, y: prevSlot.y - lineHeight };
+    }
+
+    return { x: prevSlot.x + prevSlot.advance, y: prevSlot.y };
+  }
+
+  const lastSlot = layout.slots[layout.slots.length - 1];
+  if (!lastSlot) return { x: r.originX, y: 0 };
+
+  if (lastSlot.unicode === 10) {
+    return { x: r.originX, y: lastSlot.y - lineHeight };
+  }
+
+  return { x: lastSlot.x + lastSlot.advance, y: lastSlot.y };
 }
 
 function computeSelectionRects(
@@ -566,22 +890,17 @@ function computeSelectionRects(
   for (let i = selection.start; i < selection.end; i++) {
     const slot = slots[i];
     if (!slot) continue;
-
     rects.push({
       x: slot.x,
       width: Math.max(slot.advance, 0),
-      top: metrics.ascender,
-      bottom: metrics.descender,
+      top: slot.y + metrics.ascender,
+      bottom: slot.y + metrics.descender,
     });
   }
 
   return mergeAdjacentRects(rects);
 }
 
-/**
- * Merge consecutive selection rects that share an edge into single rects.
- * Reduces draw calls for contiguous selections.
- */
 function mergeAdjacentRects(rects: SelectionRect[]): SelectionRect[] {
   if (rects.length <= 1) return rects;
 
@@ -590,8 +909,8 @@ function mergeAdjacentRects(rects: SelectionRect[]): SelectionRect[] {
   for (let i = 1; i < rects.length; i++) {
     const prev = merged[merged.length - 1];
     const curr = rects[i];
-
     const prevEnd = prev.x + prev.width;
+
     if (Math.abs(prevEnd - curr.x) < 0.5 && prev.top === curr.top && prev.bottom === curr.bottom) {
       prev.width = curr.x + curr.width - prev.x;
     } else {
@@ -600,4 +919,20 @@ function mergeAdjacentRects(rects: SelectionRect[]): SelectionRect[] {
   }
 
   return merged;
+}
+
+function isWhitespace(glyph: GlyphRef): boolean {
+  if (glyph.unicode === null) return false;
+  return glyph.unicode === 32 || glyph.unicode === 9 || glyph.unicode === 10;
+}
+
+function isPunctuation(glyph: GlyphRef): boolean {
+  if (glyph.unicode === null) return false;
+  const cp = glyph.unicode;
+  return (
+    (cp >= 0x21 && cp <= 0x2f) || // !"#$%&'()*+,-./
+    (cp >= 0x3a && cp <= 0x40) || // :;<=>?@
+    (cp >= 0x5b && cp <= 0x60) || // [\]^_`
+    (cp >= 0x7b && cp <= 0x7e) // {|}~
+  );
 }

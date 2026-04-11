@@ -52,8 +52,6 @@ export class GlyphStore {
       if (this.#isWritable(entry)) {
         entry.set(this.#fetch(glyph.name));
       } else {
-        // Composite — tear down and recreate on next access.
-        // The fresh computed will read the current component list.
         this.#entries.delete(glyph.name);
       }
     });

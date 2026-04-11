@@ -13,11 +13,10 @@ import { buildContourPath, getCachedContourPath } from "../render";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import { getGuides, renderGuides } from ".";
 import { GUIDE_STYLES } from "@/lib/styles/style";
-import { Bounds, type Bounds as BoundsType } from "@shift/geo";
+import { Bounds } from "@shift/geo";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
-const CURSOR_BAR_HALF_PX = 20;
 const SELECTION_FILL = "rgba(12, 146, 244, 0.2)";
 const HOVER_OUTLINE = "#0C92F4";
 const HOVER_OUTLINE_WIDTH_PX = 3;
@@ -59,21 +58,16 @@ export function renderTextRun(
   for (const [i, slot] of layout.slots.entries()) {
     if (i === editingIndex) continue;
 
-    const shouldUseLiveGlyph = isLiveGlyphSlot(slot, liveGlyph);
-    if (!isSlotVisible(slot, metrics, visibleSceneBounds, shouldUseLiveGlyph ? liveGlyph : null)) {
-      continue;
-    }
+    const useLive = isLiveGlyphSlot(slot, liveGlyph);
+    if (!isSlotVisible(slot, metrics, visibleSceneBounds, useLive ? liveGlyph : null)) continue;
+
+    const path = useLive ? getCachedLiveGlyphPath(liveGlyph!).path : slot.path2d;
+    if (!path) continue;
 
     ctx.save();
-    ctx.translate(slot.x, 0);
+    ctx.translate(slot.x, slot.y);
     ctx.fillStyle = "black";
-
-    if (shouldUseLiveGlyph && liveGlyph) {
-      ctx.fillPath(getCachedLiveGlyphPath(liveGlyph).path);
-    } else if (slot.path2d) {
-      ctx.fillPath(slot.path2d);
-    }
-
+    ctx.fillPath(path);
     ctx.restore();
   }
 
@@ -93,48 +87,32 @@ export function renderTextRun(
   if (hoveredIndex !== null && hoveredIndex !== editingIndex) {
     const slot = layout.slots[hoveredIndex];
     if (slot) {
-      const shouldUseLiveGlyph = isLiveGlyphSlot(slot, liveGlyph);
-      if (
-        !isSlotVisible(slot, metrics, visibleSceneBounds, shouldUseLiveGlyph ? liveGlyph : null)
-      ) {
-        return;
+      const useLive = isLiveGlyphSlot(slot, liveGlyph);
+      const path = useLive ? getCachedLiveGlyphPath(liveGlyph!).path : slot.path2d;
+
+      if (path && isSlotVisible(slot, metrics, visibleSceneBounds, useLive ? liveGlyph : null)) {
+        ctx.save();
+        ctx.translate(slot.x, slot.y);
+        ctx.strokeStyle = HOVER_OUTLINE;
+        ctx.lineWidth = pxToUpm(HOVER_OUTLINE_WIDTH_PX);
+        ctx.strokePath(path);
+        ctx.restore();
       }
-      const lw = pxToUpm(HOVER_OUTLINE_WIDTH_PX);
-
-      ctx.save();
-      ctx.translate(slot.x, 0);
-      ctx.strokeStyle = HOVER_OUTLINE;
-      ctx.lineWidth = lw;
-
-      if (shouldUseLiveGlyph && liveGlyph) {
-        ctx.strokePath(getCachedLiveGlyphPath(liveGlyph).path);
-      } else if (slot.path2d) {
-        ctx.strokePath(slot.path2d);
-      }
-
-      ctx.restore();
     }
   }
 
   // Draw cursor
   if (cursorX !== null) {
-    const top = metrics.ascender;
-    const bottom = metrics.descender;
+    const cursorY = textRun.cursorY;
+    const top = cursorY + metrics.ascender;
+    const bottom = cursorY + metrics.descender;
     const lw = pxToUpm(CURSOR_WIDTH_PX);
-    const barHalf = pxToUpm(CURSOR_BAR_HALF_PX);
 
     ctx.save();
     ctx.strokeStyle = CURSOR_COLOR;
     ctx.lineWidth = lw;
 
-    // Vertical line
     ctx.drawLine(cursorX, bottom, cursorX, top);
-
-    // Top bar
-    ctx.drawLine(cursorX - barHalf, top, cursorX + barHalf, top);
-
-    // Bottom bar
-    ctx.drawLine(cursorX - barHalf, bottom, cursorX + barHalf, bottom);
 
     ctx.restore();
   }
@@ -153,7 +131,7 @@ function renderCompositeInspection(
   const { ctx, applyStyle } = rc;
 
   ctx.save();
-  ctx.translate(slot.x, 0);
+  ctx.translate(slot.x, slot.y);
 
   if (slot.path2d) {
     ctx.fillStyle = COMPOSITE_ARM_FILL;
@@ -184,34 +162,31 @@ function isLiveGlyphSlot(
   slot: { glyph: { glyphName: string }; unicode: number | null },
   liveGlyph?: LiveGlyphRenderData | null,
 ): boolean {
-  const slotGlyphName = slot.glyph.glyphName;
-  const liveUnicode = liveGlyph?.unicode;
-  return (
-    liveGlyph !== null &&
-    liveGlyph !== undefined &&
-    (liveGlyph.name === slotGlyphName ||
-      (typeof liveUnicode === "number" && slot.unicode !== null && slot.unicode === liveUnicode)) &&
-    liveGlyph.contours.length + liveGlyph.compositeContours.length > 0
-  );
+  if (!liveGlyph) return false;
+  if (liveGlyph.contours.length + liveGlyph.compositeContours.length === 0) return false;
+
+  if (liveGlyph.name === slot.glyph.glyphName) return true;
+
+  return liveGlyph.unicode !== null && slot.unicode !== null && liveGlyph.unicode === slot.unicode;
 }
 
 const liveGlyphPathCache = new WeakMap<
   LiveGlyphRenderData,
   {
     path: Path2D;
-    bounds: BoundsType | null;
+    bounds: Bounds | null;
   }
 >();
 
 function getCachedLiveGlyphPath(liveGlyph: LiveGlyphRenderData): {
   path: Path2D;
-  bounds: BoundsType | null;
+  bounds: Bounds | null;
 } {
   const cached = liveGlyphPathCache.get(liveGlyph);
   if (cached) return cached;
 
   const path = new Path2D();
-  const bounds: Array<BoundsType | null> = [];
+  const bounds: Array<Bounds | null> = [];
 
   for (const contour of liveGlyph.contours) {
     const contourPath = getCachedContourPath(contour);
@@ -246,8 +221,8 @@ function isSlotVisible(
 
   const minX = slot.x + (bounds?.min.x ?? 0);
   const maxX = slot.x + (bounds?.max.x ?? Math.max(slot.advance, 0));
-  const minY = bounds?.min.y ?? metrics.descender;
-  const maxY = bounds?.max.y ?? metrics.ascender;
+  const minY = slot.y + (bounds?.min.y ?? metrics.descender);
+  const maxY = slot.y + (bounds?.max.y ?? metrics.ascender);
 
   return !(
     maxX < visibleSceneBounds.minX ||

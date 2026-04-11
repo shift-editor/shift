@@ -75,10 +75,6 @@ describe("KeyboardRouter", () => {
       isPreviewMode: vi.fn(() => false),
       setPreviewMode: vi.fn(),
       openGlyphFinder: vi.fn(),
-      insertTextCodepoint: vi.fn(),
-      recomputeTextRun: vi.fn(),
-      getTextRunCodepoints: vi.fn(() => []),
-      selectAllText: vi.fn(),
     };
 
     toolManager = {
@@ -175,41 +171,32 @@ describe("KeyboardRouter", () => {
     expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
   });
 
-  it("captures plain typing in text mode before tool shortcuts", () => {
+  it("does not intercept plain typing in text mode (textarea handles it)", () => {
     activeTool = "text";
     const e = createKeyboardEvent({ key: "s" });
-    (toolManager.handleKeyDown as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
     const handled = router.handleKeyDown(e);
 
-    expect(handled).toBe(true);
-    expect(toolManager.handleKeyDown).toHaveBeenCalledWith(e);
+    expect(handled).toBe(false);
     expect(editor.setActiveTool).not.toHaveBeenCalled();
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it("routes paste to text handler in text mode instead of global paste", () => {
+  it("does not intercept paste in text mode (textarea handles it)", () => {
     activeTool = "text";
     const e = createKeyboardEvent({ key: "v", metaKey: true });
 
-    const handled = router.handleKeyDown(e);
+    router.handleKeyDown(e);
 
-    expect(handled).toBe(true);
     expect(editor.paste).not.toHaveBeenCalled();
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it("routes copy to text handler in text mode instead of global copy", () => {
+  it("does not intercept copy in text mode (textarea handles it)", () => {
     activeTool = "text";
     const e = createKeyboardEvent({ key: "c", metaKey: true });
 
-    const handled = router.handleKeyDown(e);
+    router.handleKeyDown(e);
 
-    expect(handled).toBe(true);
     expect(editor.copy).not.toHaveBeenCalled();
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
   it("inserts space in text mode instead of activating temporary hand", () => {

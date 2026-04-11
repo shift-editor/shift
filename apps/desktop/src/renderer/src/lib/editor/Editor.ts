@@ -99,7 +99,7 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import { TextRunController, type TextRunRenderState } from "@/lib/tools/text/TextRunController";
+import { TextRunController } from "@/lib/tools/text/TextRunController";
 import { SnapPreferencesSchema, TextRunModulePayloadSchema } from "@shift/validation";
 import type { TextRunModulePayload } from "@/persistence/types";
 
@@ -318,7 +318,6 @@ export class Editor implements ShiftEditor {
       deserialize: (json) => {
         const payload = TextRunModulePayloadSchema.parse(json);
         this.#textRunController.hydrateRuns(payload.runsByGlyph);
-        this.#textRunController.recompute();
         return payload;
       },
     });
@@ -482,6 +481,11 @@ export class Editor implements ShiftEditor {
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  public renderToolInScene(draw: DrawAPI): void {
+    this.#toolManager.renderInScene(draw);
+  }
+
   public renderTool(draw: DrawAPI): void {
     this.#toolManager.render(draw);
   }
@@ -910,14 +914,10 @@ export class Editor implements ShiftEditor {
   public startEditSession(glyph: GlyphRef): void {
     const glyphName = glyph.glyphName;
     const currentGlyphName = this.#fontEngine.getEditingGlyphName();
-    if (currentGlyphName === glyphName) {
-      this.#textRunController.recompute();
-      return;
-    }
+    if (currentGlyphName === glyphName) return;
 
     this.#fontEngine.startEditSession(glyph);
     this.#fontEngine.addContour();
-    this.#textRunController.recompute();
   }
 
   public endEditSession(): void {
@@ -928,86 +928,11 @@ export class Editor implements ShiftEditor {
     return this.#textRunController;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public getTextRunState(): TextRunRenderState | null {
-    return this.#textRunController.state.value;
-  }
-
-  public getTextRunLength(): number {
-    return this.#textRunController.length;
-  }
-
-  public ensureTextRunSeed(glyph: GlyphRef | null): void {
-    if (glyph === null) return;
-    this.#textRunController.seed(glyph);
-  }
-
-  public setTextRunCursorVisible(visible: boolean): void {
-    this.#textRunController.setCursorVisible(visible);
-  }
-
-  public setTextRunEditingSlot(index: number | null, glyph?: GlyphRef | null): void {
-    this.#textRunController.setEditingSlot(index, glyph);
-  }
-
-  public resetTextRunEditingContext(): void {
-    this.#textRunController.resetEditingContext();
-  }
-
-  public setTextRunHovered(index: number | null): void {
-    this.#textRunController.setHovered(index);
-  }
-
-  public setTextRunInspectionSlot(index: number | null): void {
-    this.#textRunController.setInspectionSlot(index);
-  }
-
-  public setTextRunInspectionComponent(index: number | null): void {
-    this.#textRunController.setInspectionHoveredComponent(index);
-  }
-
-  public clearTextRunInspection(): void {
-    this.#textRunController.clearInspection();
-  }
-
+  /** Resolve a unicode codepoint to a glyph ref and insert into the text run. */
   public insertTextCodepoint(codepoint: number): void {
     const glyphName = this.#fontEngine.getGlyphNameForUnicode(codepoint);
     if (!glyphName) return;
     this.#textRunController.insert({ glyphName, unicode: codepoint });
-  }
-
-  public insertTextGlyphAt(index: number, glyph: GlyphRef): void {
-    this.#textRunController.insertAt(index, glyph);
-  }
-
-  public getTextRunCodepoints(): number[] {
-    return this.#textRunController.getCodepoints();
-  }
-
-  public deleteTextCodepoint(): boolean {
-    return this.#textRunController.delete();
-  }
-
-  public moveTextCursorLeft(extend = false): boolean {
-    this.#textRunController.moveCursorLeft(extend);
-    return true;
-  }
-
-  public moveTextCursorRight(extend = false): boolean {
-    this.#textRunController.moveCursorRight(extend);
-    return true;
-  }
-
-  public moveTextCursorToEnd(): void {
-    this.#textRunController.moveCursorToEnd();
-  }
-
-  public selectAllText(): void {
-    this.#textRunController.selectAll();
-  }
-
-  public recomputeTextRun(originX?: number): void {
-    this.#textRunController.recompute(originX);
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
@@ -1096,7 +1021,6 @@ export class Editor implements ShiftEditor {
     this.#mainGlyphUnicode = unicode;
     const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
     this.#textRunController.setOwnerGlyph(glyphRef);
-    this.#textRunController.recompute();
   }
 
   public getMainGlyphUnicode(): number | null {
