@@ -11,6 +11,11 @@ import type {
   Location,
 } from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
+
+export interface InterpolationResult {
+  instance: GlyphSnapshot;
+  errors: Array<{ sourceIndex: number; sourceName: string; message: string }>;
+}
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
 import { Bounds as BoundsUtil } from "@shift/geo";
@@ -169,6 +174,11 @@ export class FontEngine {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
+  /** @knipclassignore — used by composite glyph invalidation */
+  getDependentUnicodesByName(glyphName: string): number[] {
+    return this.#raw.getDependentUnicodesByName(glyphName);
+  }
+
   /** @knipclassignore — satisfies Font interface */
   getSvgPath(unicode: number): string | null {
     return this.#raw.getGlyphSvgPath(unicode) ?? null;
@@ -243,6 +253,16 @@ export class FontEngine {
     const json = this.#raw.getGlyphMasterSnapshots(glyphName);
     if (!json) return null;
     return JSON.parse(json) as MasterSnapshot[];
+  }
+
+  /** @knipclassignore — interpolate a glyph at a designspace location in Rust */
+  interpolateGlyph(
+    glyphName: string,
+    location: Record<string, number>,
+  ): InterpolationResult | null {
+    const json = this.#raw.interpolateGlyph(glyphName, JSON.stringify({ values: location }));
+    if (!json) return null;
+    return JSON.parse(json) as InterpolationResult;
   }
 
   getSnapshot(): GlyphSnapshot {

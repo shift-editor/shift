@@ -89,10 +89,11 @@ export const GlyphPreview = memo(function GlyphPreview({
     };
   }, [variationLocation, unicode, fontEngine]);
 
-  const advance = interpolated?.advance ?? engine.getAdvance(unicode) ?? null;
+  const glyph = engine.getGlyphByUnicode(unicode);
+  const advance = interpolated?.advance ?? glyph?.advance ?? null;
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
-  const path = interpolated?.path ?? engine.getSvgPath(unicode) ?? null;
+  const path = interpolated?.path ?? glyph?.svgPath ?? null;
 
   if (!path) {
     return (

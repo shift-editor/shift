@@ -5,6 +5,7 @@ pub mod curve;
 pub mod dependency_graph;
 pub mod edit_session;
 pub mod font_loader;
+pub mod interpolation;
 pub mod snapshot;
 pub mod vec2;
 

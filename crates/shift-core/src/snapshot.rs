@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{edit_session::EditSession, Anchor, Contour, Point, PointId, PointType as IrPointType};
+use crate::{
+    edit_session::EditSession, Anchor, Contour, Location, Point, PointId, PointType as IrPointType,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +220,15 @@ impl CommandResult {
             can_redo: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterSnapshot {
+    pub source_id: String,
+    pub source_name: String,
+    pub location: Location,
+    pub snapshot: GlyphSnapshot,
 }
 
 #[cfg(test)]
