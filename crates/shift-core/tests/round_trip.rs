@@ -755,12 +755,11 @@ fn test_ufo_round_trip_layer_glyph_counts() {
             }
         }
 
-        let reload_layer = reloaded
+        let (&reload_layer_id, _) = reloaded
             .layers()
-            .values()
-            .find(|l| l.name() == orig_name)
+            .iter()
+            .find(|(_, l)| l.name() == orig_name)
             .unwrap_or_else(|| panic!("Layer '{orig_name}' should exist"));
-        let reload_layer_id = reload_layer.id();
 
         let mut reload_glyph_count = 0;
         for glyph in reloaded.glyphs().values() {

@@ -1,3 +1,4 @@
+pub mod designspace;
 pub mod glyphs;
 mod traits;
 pub mod ufo;

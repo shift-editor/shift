@@ -207,8 +207,13 @@ export class AppLifecycle {
 
     ipc.handle(ipcMain, "dialog:openFont", async () => {
       const result = await dialog.showOpenDialog({
-        properties: ["openFile"],
-        filters: [{ name: "Fonts", extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage"] }],
+        properties: ["openFile", "openDirectory"],
+        filters: [
+          {
+            name: "Fonts",
+            extensions: ["ttf", "otf", "ufo", "glyphs", "glyphspackage", "designspace"],
+          },
+        ],
       });
       if (!result.canceled && result.filePaths[0]) {
         return result.filePaths[0];

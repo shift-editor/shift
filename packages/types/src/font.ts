@@ -16,6 +16,9 @@ export type {
   MatchedRule,
   FontMetrics,
   FontMetadata,
+  Axis,
+  Location,
+  Source,
 } from "./generated";
 
 // Domain types (for Editor API)

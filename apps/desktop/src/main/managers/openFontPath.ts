@@ -1,6 +1,13 @@
 import path from "node:path";
 
-const SUPPORTED_FONT_EXTENSIONS = new Set([".ufo", ".ttf", ".otf", ".glyphs", ".glyphspackage"]);
+const SUPPORTED_FONT_EXTENSIONS = new Set([
+  ".ufo",
+  ".ttf",
+  ".otf",
+  ".glyphs",
+  ".glyphspackage",
+  ".designspace",
+]);
 
 export function isSupportedFontPath(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();

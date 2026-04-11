@@ -6,7 +6,11 @@ import type {
   ContourId,
   Point2D,
   AnchorId,
+  Axis,
+  Source,
+  Location,
 } from "@shift/types";
+import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
 import { Bounds as BoundsUtil } from "@shift/geo";
@@ -36,6 +40,7 @@ export class FontEngine {
   readonly #$fontLoaded: WritableSignal<boolean>;
   readonly #$fontUnicodes: WritableSignal<number[]>;
   readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
+  readonly #$variationLocation: WritableSignal<Location | null>;
   #raw: FontEngineAPI;
   #glyphStore: GlyphStore;
 
@@ -46,6 +51,7 @@ export class FontEngine {
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
     this.#glyphStore = new GlyphStore(this);
+    this.#$variationLocation = signal<Location | null>(null);
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
@@ -65,6 +71,16 @@ export class FontEngine {
   /** @knipclassignore */
   get $fontMetrics(): Signal<FontMetrics | null> {
     return this.#$fontMetrics;
+  }
+
+  /** @knipclassignore — used by GlyphPreview for variation interpolation */
+  get $variationLocation(): Signal<Location | null> {
+    return this.#$variationLocation;
+  }
+
+  /** @knipclassignore — used by VariationPanel */
+  setVariationLocation(location: Location | null): void {
+    this.#$variationLocation.set(location);
   }
 
   setFontLoaded(unicodes: number[], metrics: FontMetrics): void {
@@ -205,6 +221,28 @@ export class FontEngine {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
     return JSON.parse(payload) as CompositeComponentsPayload;
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  isVariable(): boolean {
+    return this.#raw.isVariable();
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getAxes(): Axis[] {
+    return JSON.parse(this.#raw.getAxes()) as Axis[];
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getSources(): Source[] {
+    return JSON.parse(this.#raw.getSources()) as Source[];
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
+    const json = this.#raw.getGlyphMasterSnapshots(glyphName);
+    if (!json) return null;
+    return JSON.parse(json) as MasterSnapshot[];
   }
 
   getSnapshot(): GlyphSnapshot {

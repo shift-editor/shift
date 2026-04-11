@@ -37,6 +37,9 @@ export type {
   FontMetadata,
   FontMetrics,
   DecomposedTransform,
+  Axis,
+  Location,
+  Source,
 } from "./font";
 
 // Domain types (for Editor API)

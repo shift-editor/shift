@@ -1,6 +1,10 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
+import { useSignalState } from "@/lib/reactive";
+import { getEditor } from "@/store/store";
+import { interpolateGlyph } from "@/lib/interpolation/interpolate";
+import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 export const CELL_HEIGHT = 75;
 
@@ -58,11 +62,39 @@ export const GlyphPreview = memo(function GlyphPreview({
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  const glyph = engine.getGlyphByUnicode(unicode);
-  const cellWidth = computeCellWidth(fontMetrics, glyph?.advance ?? null, height);
-  const containerStyle = { width: cellWidth, height };
+  const fontEngine = getEditor().fontEngine;
+  const variationLocation = useSignalState(fontEngine.$variationLocation);
 
-  if (!glyph?.svgPath) {
+  const interpolated = useMemo(() => {
+    if (!variationLocation || !fontEngine.isVariable()) return null;
+
+    const glyphName = fontEngine.getGlyphNameForUnicode(unicode);
+    if (!glyphName) return null;
+
+    const masters = fontEngine.getGlyphMasterSnapshots(glyphName);
+    if (!masters || masters.length < 2) return null;
+
+    const axes = fontEngine.getAxes();
+    const target: Record<string, number> = {};
+    for (const axis of axes) {
+      target[axis.tag] = variationLocation.values[axis.tag] ?? axis.default;
+    }
+
+    const result = interpolateGlyph(masters, axes, target);
+    if (!result) return null;
+
+    return {
+      path: snapshotToSvgPath(result.instance),
+      advance: result.instance.xAdvance,
+    };
+  }, [variationLocation, unicode, fontEngine]);
+
+  const advance = interpolated?.advance ?? engine.getAdvance(unicode) ?? null;
+  const cellWidth = computeCellWidth(fontMetrics, advance, height);
+  const containerStyle = { width: cellWidth, height };
+  const path = interpolated?.path ?? engine.getSvgPath(unicode) ?? null;
+
+  if (!path) {
     return (
       <div style={containerStyle} className="flex items-center justify-center text-secondary">
         <span className="text-2xl" style={{ fontSize: height * 0.5 }}>
@@ -72,7 +104,7 @@ export const GlyphPreview = memo(function GlyphPreview({
     );
   }
 
-  const viewBox = glyphPreviewViewBox(fontMetrics, glyph.advance);
+  const viewBox = glyphPreviewViewBox(fontMetrics, advance ?? 0);
 
   return (
     <div style={containerStyle} className="flex items-center justify-center">
@@ -84,7 +116,7 @@ export const GlyphPreview = memo(function GlyphPreview({
         className="overflow-hidden"
       >
         <g transform="scale(1, -1)">
-          <path d={glyph.svgPath} fill="currentColor" fillRule="nonzero" />
+          <path d={path} fill="currentColor" fillRule="nonzero" />
         </g>
       </svg>
     </div>

@@ -4,14 +4,14 @@ use napi_derive::napi;
 use shift_core::{
   composite::{
     flatten_component_contours_for_layer as flatten_component_contours, layer_bbox,
-    layer_complexity, layer_to_svg_path, preferred_layer_for_glyph,
-    resolve_component_instances_for_layer, resolved_to_render_contours, GlyphLayerProvider,
+    layer_to_svg_path, resolve_component_instances_for_layer, resolved_to_render_contours,
+    GlyphLayerProvider,
   },
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
-  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
+  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId, Location,
   NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
@@ -59,10 +59,8 @@ impl GlyphLayerProvider for EngineLayerProvider<'_> {
       }
     }
 
-    self
-      .font
-      .glyph(glyph_name)
-      .and_then(preferred_layer_for_glyph)
+    let glyph = self.font.glyph(glyph_name)?;
+    glyph.layer(self.font.default_layer_id())
   }
 }
 
@@ -233,6 +231,10 @@ impl FontEngine {
     }
   }
 
+  fn default_layer_for_glyph<'a>(&'a self, glyph: &'a Glyph) -> Option<&'a GlyphLayer> {
+    glyph.layer(self.font.default_layer_id())
+  }
+
   fn editing_target_for_unicode(&self, unicode: u32) -> Option<(&str, &GlyphLayer)> {
     if let Some(session) = &self.current_edit_session {
       if session.unicode() == unicode {
@@ -249,7 +251,7 @@ impl FontEngine {
     }
 
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    let layer = preferred_layer_for_glyph(glyph)?;
+    let layer = self.default_layer_for_glyph(glyph)?;
     composite_debug!(
       "editing_target_for_unicode U+{:04X}: from font glyph='{}' (contours={}, components={}, anchors={})",
       unicode,
@@ -269,7 +271,7 @@ impl FontEngine {
     }
 
     let glyph = self.font.glyph(glyph_name)?;
-    let layer = preferred_layer_for_glyph(glyph)?;
+    let layer = self.default_layer_for_glyph(glyph)?;
     Some((glyph.name(), layer))
   }
 
@@ -280,10 +282,8 @@ impl FontEngine {
       }
     }
 
-    self
-      .font
-      .glyph(glyph_name)
-      .and_then(preferred_layer_for_glyph)
+    let glyph = self.font.glyph(glyph_name)?;
+    self.default_layer_for_glyph(glyph)
   }
 
   fn flatten_component_contours_for_layer(
@@ -394,7 +394,7 @@ impl FontEngine {
       }
     }
     let glyph = self.font.glyph_by_unicode(unicode)?;
-    preferred_layer_for_glyph(glyph)
+    self.default_layer_for_glyph(glyph)
   }
 
   #[napi]
@@ -518,6 +518,109 @@ impl FontEngine {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // VARIABLE FONT QUERIES
+  // ═══════════════════════════════════════════════════════════
+
+  #[napi]
+  pub fn is_variable(&self) -> bool {
+    self.font.is_variable()
+  }
+
+  #[napi]
+  pub fn get_axes(&self) -> String {
+    to_json(&self.font.axes())
+  }
+
+  #[napi]
+  pub fn get_sources(&self) -> String {
+    to_json(&self.font.sources())
+  }
+
+  /// Returns a JSON object mapping source IDs to their glyph snapshots,
+  /// including the source location. Used by the TS interpolation engine.
+  #[napi]
+  pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
+    if !self.font.is_variable() {
+      return None;
+    }
+
+    // The editing glyph is taken out of the font during a session
+    // (and its default layer moved into the EditSession), so reconstruct it.
+    let mut temp_glyph;
+    let glyph = if let (Some(editing), Some(session), Some(layer_id)) = (
+      &self.editing_glyph,
+      &self.current_edit_session,
+      &self.editing_layer_id,
+    ) {
+      if editing.name() == glyph_name {
+        temp_glyph = editing.clone();
+        temp_glyph.set_layer(*layer_id, session.layer().clone());
+        &temp_glyph
+      } else {
+        self.font.glyph(&glyph_name)?
+      }
+    } else {
+      self.font.glyph(&glyph_name)?
+    };
+
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct MasterSnapshot {
+      source_id: String,
+      source_name: String,
+      location: Location,
+      snapshot: GlyphSnapshot,
+    }
+
+    let mut masters: Vec<MasterSnapshot> = Vec::new();
+
+    for source in self.font.sources() {
+      let layer_id = source.layer_id();
+      let layer = match glyph.layer(layer_id) {
+        Some(l) if !l.contours().is_empty() => l,
+        _ => continue,
+      };
+
+      let primary_unicode = glyph.primary_unicode().unwrap_or(0);
+
+      let contours: Vec<_> = layer
+        .contours()
+        .values()
+        .filter(|c| !c.points().is_empty())
+        .map(shift_core::snapshot::ContourSnapshot::from)
+        .collect();
+
+      let anchors = layer
+        .anchors_iter()
+        .map(shift_core::snapshot::AnchorSnapshot::from)
+        .collect();
+
+      let snapshot = GlyphSnapshot {
+        unicode: primary_unicode,
+        name: glyph.name().to_string(),
+        x_advance: layer.width(),
+        contours,
+        anchors,
+        composite_contours: Vec::new(),
+        active_contour_id: None,
+      };
+
+      masters.push(MasterSnapshot {
+        source_id: source.id().raw().to_string(),
+        source_name: source.name().to_string(),
+        location: source.location().clone(),
+        snapshot,
+      });
+    }
+
+    if masters.is_empty() {
+      return None;
+    }
+
+    Some(to_json(&masters))
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // EDIT SESSIONS
   // ═══════════════════════════════════════════════════════════
 
@@ -552,19 +655,16 @@ impl FontEngine {
       glyph.layers().len(),
       primary_unicode
     );
-    let (layer_id, layer) = glyph
-      .layers()
-      .iter()
-      .max_by_key(|(_, l)| layer_complexity(l))
-      .map(|(id, _)| *id)
-      .and_then(|id| glyph.remove_layer(id).map(|l| (id, l)))
-      .unwrap_or_else(|| (self.font.default_layer_id(), GlyphLayer::with_width(500.0)));
+    let default_layer_id = self.font.default_layer_id();
+    let layer = glyph
+      .remove_layer(default_layer_id)
+      .unwrap_or_else(|| GlyphLayer::with_width(500.0));
 
     let edit_session = EditSession::new(glyph.name().to_string(), primary_unicode, layer);
 
     self.current_edit_session = Some(edit_session);
     self.editing_glyph = Some(glyph);
-    self.editing_layer_id = Some(layer_id);
+    self.editing_layer_id = Some(default_layer_id);
 
     Ok(())
   }
