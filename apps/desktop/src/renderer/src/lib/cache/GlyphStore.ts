@@ -19,7 +19,9 @@ import {
   type Effect,
 } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
+import type { Location } from "@shift/types";
 import type { FontEngine } from "@/engine/FontEngine";
+import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 export interface GlyphView {
   name: string;
@@ -53,6 +55,17 @@ export class GlyphStore {
         entry.set(this.#fetch(glyph.name));
       } else {
         this.#entries.delete(glyph.name);
+      }
+    });
+
+    // Re-fetch all cached entries when variation location changes.
+    // Only existing entries are updated — no work for glyphs not yet accessed.
+    effect(() => {
+      font.$variationLocation.value;
+      for (const [name, entry] of this.#entries) {
+        if (this.#isWritable(entry)) {
+          entry.set(this.#fetch(name));
+        }
       }
     });
   }
@@ -109,6 +122,45 @@ export class GlyphStore {
   }
 
   #fetch(name: string): GlyphView | null {
+    const location = this.#font.$variationLocation.peek();
+    if (location && this.#font.isVariable()) {
+      return this.#fetchInterpolated(name, location);
+    }
+
+    const svgPath = this.#font.getSvgPathByName(name);
+    const advance = this.#font.getAdvanceByName(name) ?? 0;
+    const bbox = this.#font.getBboxByName(name);
+
+    return {
+      name,
+      advance,
+      bbox,
+      svgPath,
+      path2d: svgPath ? new Path2D(svgPath) : null,
+    };
+  }
+
+  #fetchInterpolated(name: string, location: Location): GlyphView | null {
+    const target: Record<string, number> = {};
+    for (const [tag, value] of Object.entries(location.values)) {
+      if (value !== undefined) target[tag] = value;
+    }
+
+    const result = this.#font.interpolateGlyph(name, target);
+    if (!result) return this.#fetchDefault(name);
+
+    const svgPath = snapshotToSvgPath(result.instance);
+
+    return {
+      name,
+      advance: result.instance.xAdvance,
+      bbox: null,
+      svgPath,
+      path2d: svgPath ? new Path2D(svgPath) : null,
+    };
+  }
+
+  #fetchDefault(name: string): GlyphView | null {
     const svgPath = this.#font.getSvgPathByName(name);
     const advance = this.#font.getAdvanceByName(name) ?? 0;
     const bbox = this.#font.getBboxByName(name);

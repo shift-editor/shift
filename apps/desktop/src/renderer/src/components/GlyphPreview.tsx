@@ -1,9 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
-import { useSignalState } from "@/lib/reactive";
-import { getEditor } from "@/store/store";
-import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 export const CELL_HEIGHT = 75;
 
@@ -61,34 +58,11 @@ export const GlyphPreview = memo(function GlyphPreview({
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  const fontEngine = getEditor().fontEngine;
-  const variationLocation = useSignalState(fontEngine.$variationLocation);
-
-  const interpolated = useMemo(() => {
-    if (!variationLocation || !fontEngine.isVariable()) return null;
-
-    const glyphName = fontEngine.getGlyphNameForUnicode(unicode);
-    if (!glyphName) return null;
-
-    const target: Record<string, number> = {};
-    for (const [tag, value] of Object.entries(variationLocation.values)) {
-      if (value !== undefined) target[tag] = value;
-    }
-
-    const result = fontEngine.interpolateGlyph(glyphName, target);
-    if (!result) return null;
-
-    return {
-      path: snapshotToSvgPath(result.instance),
-      advance: result.instance.xAdvance,
-    };
-  }, [variationLocation, unicode, fontEngine]);
-
   const glyph = engine.getGlyphByUnicode(unicode);
-  const advance = interpolated?.advance ?? glyph?.advance ?? null;
+  const advance = glyph?.advance ?? null;
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
-  const path = interpolated?.path ?? glyph?.svgPath ?? null;
+  const path = glyph?.svgPath ?? null;
 
   if (!path) {
     return (

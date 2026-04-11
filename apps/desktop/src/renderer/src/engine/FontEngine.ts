@@ -55,8 +55,8 @@ export class FontEngine {
     this.#$fontLoaded = signal(false);
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
-    this.#glyphStore = new GlyphStore(this);
     this.#$variationLocation = signal<Location | null>(null);
+    this.#glyphStore = new GlyphStore(this);
   }
 
   get $glyph(): Signal<GlyphSnapshot | null> {
