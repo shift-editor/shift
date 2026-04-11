@@ -7,10 +7,6 @@ import type {
   SelectionMode,
   ToolRegistryItem,
   VisualState,
-  RenderState,
-  StaticRenderState,
-  OverlayRenderState,
-  InteractiveRenderState,
 } from "@/types/editor";
 import type {
   Point2D,
@@ -196,10 +192,6 @@ export class Editor implements ShiftEditor {
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
   #drawOffset: WritableSignal<Point2D>;
-  $renderState: ComputedSignal<RenderState>;
-  $staticState: ComputedSignal<StaticRenderState>;
-  $overlayState: ComputedSignal<OverlayRenderState>;
-  $interactiveState: ComputedSignal<InteractiveRenderState>;
   private $cursor: WritableSignal<string>;
   #currentModifiers: WritableSignal<Modifiers>;
   #isHoveringNode: ComputedSignal<boolean>;
@@ -318,66 +310,42 @@ export class Editor implements ShiftEditor {
     });
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
-    this.$renderState = computed<RenderState>(() => ({
-      glyph: this.#$glyph.value,
-      drawOffset: this.#drawOffset.value,
-      selectedPointIds: this.#selection.selectedPointIds.value,
-      selectedAnchorIds: this.#selection.selectedAnchorIds.value,
-      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
-      hoveredPointId: this.#hover.hoveredPointId.value,
-      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
-      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
-      selectionMode: this.#selection.selectionMode.value,
-      previewMode: this.$previewMode.value,
-    }));
-
-    this.$staticState = computed<StaticRenderState>(() => ({
-      glyph: this.#$glyph.value,
-      drawOffset: this.#drawOffset.value,
-      selectedPointIds: this.#selection.selectedPointIds.value,
-      selectedAnchorIds: this.#selection.selectedAnchorIds.value,
-      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
-      selectionMode: this.#selection.selectionMode.value,
-      previewMode: this.$previewMode.value,
-      handlesVisible: this.$handlesVisible.value,
-      hoveredPointId: this.#hover.hoveredPointId.value,
-      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
-      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
-      hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
-      debugOverlays: this.#debugOverlays.value,
-      gpuHandlesEnabled: this.$gpuHandlesEnabled.value,
-    }));
-
-    this.$overlayState = computed<OverlayRenderState>(() => ({
-      glyph: this.#$glyph.value,
-      drawOffset: this.#drawOffset.value,
-      selectedSegmentIds: this.#selection.selectedSegmentIds.value,
-      hoveredPointId: this.#hover.hoveredPointId.value,
-      hoveredAnchorId: this.#hover.hoveredAnchorId.value,
-      hoveredSegmentId: this.#hover.hoveredSegmentId.value,
-      hoveredBoundingBoxHandle: this.#hover.hoveredBoundingBoxHandle.value,
-      previewMode: this.$previewMode.value,
-      handlesVisible: this.$handlesVisible.value,
-      snapIndicator: this.#snapIndicator.value,
-    }));
-
-    this.$interactiveState = computed<InteractiveRenderState>(() => ({
-      activeToolState: this.$activeToolState.value,
-    }));
 
     this.#staticEffect = effect(() => {
-      this.$staticState.value;
+      this.#$glyph.value;
+      this.#drawOffset.value;
+      this.#selection.selectedPointIds.value;
+      this.#selection.selectedAnchorIds.value;
+      this.#selection.selectedSegmentIds.value;
+      this.#selection.selectionMode.value;
+      this.$previewMode.value;
+      this.$handlesVisible.value;
+      this.#hover.hoveredPointId.value;
+      this.#hover.hoveredAnchorId.value;
+      this.#hover.hoveredSegmentId.value;
+      this.#hover.hoveredBoundingBoxHandle.value;
+      this.#debugOverlays.value;
+      this.$gpuHandlesEnabled.value;
       this.#textRunController.state.value;
       this.#renderer.requestStaticRedraw();
     });
 
     this.#overlayEffect = effect(() => {
-      this.$overlayState.value;
+      this.#$glyph.value;
+      this.#drawOffset.value;
+      this.#selection.selectedSegmentIds.value;
+      this.#hover.hoveredPointId.value;
+      this.#hover.hoveredAnchorId.value;
+      this.#hover.hoveredSegmentId.value;
+      this.#hover.hoveredBoundingBoxHandle.value;
+      this.$previewMode.value;
+      this.$handlesVisible.value;
+      this.#snapIndicator.value;
       this.#renderer.requestOverlayRedraw();
     });
 
     this.#interactiveEffect = effect(() => {
-      this.$interactiveState.value;
+      this.$activeToolState.value;
       this.#renderer.requestInteractiveRedraw();
     });
 
@@ -729,7 +697,6 @@ export class Editor implements ShiftEditor {
     }
 
     const baseSnapshot = glyph.toSnapshot();
-    let lastUpdates: NodePositionUpdateList = [];
     let dirty = false;
     let finished = false;
 
@@ -737,23 +704,21 @@ export class Editor implements ShiftEditor {
       base: baseSnapshot,
       setPositions: (updates) => {
         if (finished) return;
-        lastUpdates = updates;
         dirty = true;
-        this.#fontEngine.applyToGlyph(updates);
+        this.#fontEngine.setNodePositions(updates);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
 
         if (dirty) {
-          this.#fontEngine.syncNodePositions(lastUpdates);
           this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, glyph.toSnapshot()));
         }
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#fontEngine.applyToGlyph(baseSnapshot);
+        this.#fontEngine.restoreSnapshot(baseSnapshot);
       },
     };
   }

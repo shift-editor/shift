@@ -4,16 +4,18 @@
  *
  * Operates in UPM space. Slots whose index matches `editingIndex` are
  * skipped (that glyph is rendered by the normal glyph pipeline via drawOffset).
+ *
+ * Paths are resolved at render time via `font.getGlyphPath()` — always
+ * fresh from Rust, no caching, no live/cached branching.
  */
 import type { FontMetrics } from "@shift/types";
 import type { RenderContext } from "./types";
 import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
-import type { Contour, RenderContour } from "@shift/types";
-import { buildContourPath, getCachedContourPath } from "../render";
+import { buildContourPath } from "../render";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import { getGuides, renderGuides } from ".";
 import { GUIDE_STYLES } from "@/lib/styles/style";
-import { Bounds } from "@shift/geo";
+import type { Font } from "@/lib/editor/Font";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
@@ -30,13 +32,6 @@ const COMPONENT_OVERLAY_HOVER_COLORS = [
   "rgba(255, 151, 186, 0.4)",
 ] as const;
 
-interface LiveGlyphRenderData {
-  name: string;
-  unicode: number | null;
-  contours: readonly Contour[];
-  compositeContours: readonly RenderContour[];
-}
-
 export interface CompositeInspectionRenderData {
   slotIndex: number;
   hoveredComponentIndex: number | null;
@@ -47,21 +42,18 @@ export function renderTextRun(
   rc: RenderContext,
   textRun: TextRunRenderState,
   metrics: FontMetrics,
-  liveGlyph?: LiveGlyphRenderData | null,
+  font: Font,
   inspection?: CompositeInspectionRenderData | null,
-  visibleSceneBounds?: { minX: number; maxX: number; minY: number; maxY: number },
 ): void {
   const { ctx, pxToUpm } = rc;
   const { layout, editingIndex, hoveredIndex, cursorX } = textRun;
 
-  // Draw filled glyph silhouettes
   for (const [i, slot] of layout.slots.entries()) {
     if (i === editingIndex) continue;
 
-    const useLive = isLiveGlyphSlot(slot, liveGlyph);
-    if (!isSlotVisible(slot, metrics, visibleSceneBounds, useLive ? liveGlyph : null)) continue;
+    if (!isSlotVisible(slot, metrics)) continue;
 
-    const path = useLive ? getCachedLiveGlyphPath(liveGlyph!).path : slot.path2d;
+    const path = font.getGlyphPath(slot.glyph.glyphName);
     if (!path) continue;
 
     ctx.save();
@@ -71,7 +63,6 @@ export function renderTextRun(
     ctx.restore();
   }
 
-  // Draw selection highlight
   if (textRun.selectionRects.length > 0) {
     ctx.save();
     ctx.fillStyle = SELECTION_FILL;
@@ -81,16 +72,13 @@ export function renderTextRun(
     ctx.restore();
   }
 
-  renderCompositeInspection(rc, layout, metrics, inspection);
+  renderCompositeInspection(rc, layout, metrics, font, inspection);
 
-  // Draw hover highlight
   if (hoveredIndex !== null && hoveredIndex !== editingIndex) {
     const slot = layout.slots[hoveredIndex];
-    if (slot) {
-      const useLive = isLiveGlyphSlot(slot, liveGlyph);
-      const path = useLive ? getCachedLiveGlyphPath(liveGlyph!).path : slot.path2d;
-
-      if (path && isSlotVisible(slot, metrics, visibleSceneBounds, useLive ? liveGlyph : null)) {
+    if (slot && isSlotVisible(slot, metrics)) {
+      const path = font.getGlyphPath(slot.glyph.glyphName);
+      if (path) {
         ctx.save();
         ctx.translate(slot.x, slot.y);
         ctx.strokeStyle = HOVER_OUTLINE;
@@ -101,7 +89,6 @@ export function renderTextRun(
     }
   }
 
-  // Draw cursor
   if (cursorX !== null) {
     const cursorY = textRun.cursorY;
     const top = cursorY + metrics.ascender;
@@ -111,9 +98,7 @@ export function renderTextRun(
     ctx.save();
     ctx.strokeStyle = CURSOR_COLOR;
     ctx.lineWidth = lw;
-
     ctx.drawLine(cursorX, bottom, cursorX, top);
-
     ctx.restore();
   }
 }
@@ -122,20 +107,22 @@ function renderCompositeInspection(
   rc: RenderContext,
   layout: TextRunRenderState["layout"],
   metrics: FontMetrics,
+  font: Font,
   inspection?: CompositeInspectionRenderData | null,
 ): void {
   if (!inspection) return;
   const slot = layout.slots[inspection.slotIndex];
   if (!slot) return;
-  if (!isSlotVisible(slot, metrics, undefined, null)) return;
+  if (!isSlotVisible(slot, metrics)) return;
   const { ctx, applyStyle } = rc;
 
   ctx.save();
   ctx.translate(slot.x, slot.y);
 
-  if (slot.path2d) {
+  const armPath = font.getGlyphPath(slot.glyph.glyphName);
+  if (armPath) {
     ctx.fillStyle = COMPOSITE_ARM_FILL;
-    ctx.fillPath(slot.path2d);
+    ctx.fillPath(armPath);
   }
 
   for (const [i, component] of inspection.components.entries()) {
@@ -158,67 +145,14 @@ function renderCompositeInspection(
   ctx.restore();
 }
 
-function isLiveGlyphSlot(
-  slot: { glyph: { glyphName: string }; unicode: number | null },
-  liveGlyph?: LiveGlyphRenderData | null,
-): boolean {
-  if (!liveGlyph) return false;
-  if (liveGlyph.contours.length + liveGlyph.compositeContours.length === 0) return false;
-
-  if (liveGlyph.name === slot.glyph.glyphName) return true;
-
-  return liveGlyph.unicode !== null && slot.unicode !== null && liveGlyph.unicode === slot.unicode;
-}
-
-const liveGlyphPathCache = new WeakMap<
-  LiveGlyphRenderData,
-  {
-    path: Path2D;
-    bounds: Bounds | null;
-  }
->();
-
-function getCachedLiveGlyphPath(liveGlyph: LiveGlyphRenderData): {
-  path: Path2D;
-  bounds: Bounds | null;
-} {
-  const cached = liveGlyphPathCache.get(liveGlyph);
-  if (cached) return cached;
-
-  const path = new Path2D();
-  const bounds: Array<Bounds | null> = [];
-
-  for (const contour of liveGlyph.contours) {
-    const contourPath = getCachedContourPath(contour);
-    path.addPath(contourPath.path);
-    bounds.push(contourPath.bounds);
-  }
-
-  for (const contour of liveGlyph.compositeContours) {
-    const contourPath = getCachedContourPath(contour);
-    path.addPath(contourPath.path);
-    bounds.push(contourPath.bounds);
-  }
-
-  const result = {
-    path,
-    bounds: Bounds.unionAll(bounds),
-  };
-  liveGlyphPathCache.set(liveGlyph, result);
-  return result;
-}
-
 function isSlotVisible(
   slot: TextRunRenderState["layout"]["slots"][number],
   metrics: FontMetrics,
   visibleSceneBounds?: { minX: number; maxX: number; minY: number; maxY: number },
-  liveGlyph?: LiveGlyphRenderData | null,
 ): boolean {
   if (!visibleSceneBounds) return true;
 
-  const liveBounds = liveGlyph ? getCachedLiveGlyphPath(liveGlyph).bounds : null;
-  const bounds = liveBounds ?? slot.bounds;
-
+  const bounds = slot.bounds;
   const minX = slot.x + (bounds?.min.x ?? 0);
   const maxX = slot.x + (bounds?.max.x ?? Math.max(slot.advance, 0));
   const minY = slot.y + (bounds?.min.y ?? metrics.descender);

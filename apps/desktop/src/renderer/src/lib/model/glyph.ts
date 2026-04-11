@@ -152,6 +152,7 @@ export class Glyph {
     return this.#anchors.value;
   }
 
+  /** @knipclassignore — part of domain Glyph structural contract */
   get compositeContours(): readonly RenderContour[] {
     return this.#compositeContours.value;
   }

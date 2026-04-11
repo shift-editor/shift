@@ -24,7 +24,7 @@ import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyph, type GlyphChange } from "@/lib/model/glyph";
+import { Glyph } from "@/lib/model/glyph";
 
 export interface GlyphView {
   name: string;
@@ -196,6 +196,14 @@ export class FontEngine {
     const b = this.#raw.getGlyphBboxByName(glyphName);
     if (b == null || b.length !== 4) return null;
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
+  }
+
+  /** @knipclassignore — used by text run rendering via Font interface */
+  getGlyphPath(name: string): Path2D | null {
+    const editing = this.#$glyph.peek();
+    if (editing?.name === name) return editing.path;
+    const svg = this.getSvgPathByName(name);
+    return svg ? new Path2D(svg) : null;
   }
 
   getGlyph(name: string): GlyphView | null {
@@ -392,14 +400,6 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.translateLayer(dx, dy));
   }
 
-  /** Apply a change to the editing glyph and notify subscribers. No Rust sync. */
-  applyToGlyph(change: GlyphChange): void {
-    const glyph = this.#$glyph.peek();
-    if (!glyph) return;
-    glyph.apply(change);
-    this.#$glyph.set(glyph);
-  }
-
   setNodePositions(updates: NodePositionUpdateList): void {
     if (!this.hasSession()) return;
     if (updates.length === 0) return;
@@ -409,18 +409,6 @@ export class FontEngine {
 
     glyph.apply(updates);
     this.#$glyph.set(glyph);
-
-    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
-      node: { kind: update.node.kind, id: update.node.id },
-      x: update.x,
-      y: update.y,
-    }));
-    this.#raw.setNodePositions(nativeUpdates);
-  }
-
-  syncNodePositions(updates: NodePositionUpdateList): void {
-    if (!this.hasSession()) return;
-    if (updates.length === 0) return;
 
     const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
       node: { kind: update.node.kind, id: update.node.id },

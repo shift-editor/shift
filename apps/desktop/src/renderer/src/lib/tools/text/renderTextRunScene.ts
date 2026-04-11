@@ -16,19 +16,6 @@ export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
 
   const ctx = draw.renderer;
   const metrics = editor.font.getMetrics();
-  const glyph = editor.glyph.peek();
-  const activeGlyphName = editor.getActiveGlyphName();
-
-  const liveGlyph =
-    glyph && activeGlyphName
-      ? {
-          name: activeGlyphName,
-          unicode: editor.getActiveGlyphUnicode(),
-          contours: glyph.contours,
-          compositeContours: glyph.compositeContours,
-        }
-      : null;
-
   const inspection = resolveCompositeInspection(editor, textRunState);
 
   renderTextRun(
@@ -43,7 +30,7 @@ export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
     },
     textRunState,
     metrics,
-    liveGlyph,
+    editor.font,
     inspection,
   );
 }
