@@ -1,4 +1,5 @@
-import type { Contour, ContourId, Glyph, Point, PointId } from "@shift/types";
+import type { Contour, ContourId, Point, PointId } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { SegmentId } from "@/types/indicator";

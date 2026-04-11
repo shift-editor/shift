@@ -1,7 +1,8 @@
 import { Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
 import { Validate } from "@shift/validation";
-import type { Glyph, Point2D, PointId } from "@shift/types";
+import type { Point2D, PointId } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type {
   DragSnapSession,
   DragSnapSessionConfig,

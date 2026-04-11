@@ -68,7 +68,7 @@ export class PasteCommand extends BaseCommand<void> {
 
     this.#createdPointIds = result.createdPointIds;
     this.#createdContourIds = result.createdContourIds;
-    this.#afterSnapshot = ctx.fontEngine.$glyph.value;
+    this.#afterSnapshot = ctx.fontEngine.getEditingSnapshot();
   }
 
   undo(ctx: CommandContext): void {

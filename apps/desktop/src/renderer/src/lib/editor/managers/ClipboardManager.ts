@@ -1,4 +1,5 @@
-import type { Glyph, PointId } from "@shift/types";
+import type { PointId } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
 import type { CommandHistory } from "@/lib/commands";

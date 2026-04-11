@@ -33,7 +33,10 @@ type CommandEditingMethods =
 
 /** Minimal editing surface required by command execution. */
 export type CommandEditingAPI = Pick<FontEngine, CommandEditingMethods>;
-export type CommandFontEngine = Pick<FontEngine, CommandEditingMethods | "$glyph">;
+export type CommandFontEngine = Pick<
+  FontEngine,
+  CommandEditingMethods | "$glyph" | "getEditingSnapshot"
+>;
 
 /**
  * Context available to commands during execution.

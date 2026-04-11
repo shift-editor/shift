@@ -18,11 +18,11 @@ import type {
   PointId,
   AnchorId,
   ContourId,
-  Glyph,
   Contour,
   Point,
   PointType,
 } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
@@ -128,7 +128,7 @@ import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
-import { produceGlyph, type GlyphDraft } from "@/engine/draft";
+import type { GlyphDraft } from "@/engine/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -211,21 +211,6 @@ export class Editor implements ShiftEditor {
     document: Map<string, unknown>;
   };
   #toolStateVersion: WritableSignal<number>;
-  #selectionBoundsCache: {
-    glyph: Glyph | null;
-    selectedPointIds: ReadonlySet<PointId>;
-    selectionMode: SelectionMode;
-    rect: Rect2D | null;
-  } | null = null;
-  #segmentAwareSelectionBoundsCache: {
-    glyph: Glyph | null;
-    selectedPointIds: ReadonlySet<PointId>;
-    bounds: Bounds | null;
-  } | null = null;
-  #segmentIndexCache: {
-    glyph: Glyph | null;
-    segmentsById: ReadonlyMap<SegmentId, SegmentHitResult["segment"]>;
-  } | null = null;
   /**
    * Initializes all subsystems, wires signal dependencies, and sets up
    * reactive effects that schedule canvas redraws when state changes.
@@ -240,9 +225,8 @@ export class Editor implements ShiftEditor {
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
-    this.#commandHistory = new CommandHistory(
-      this.#fontEngine,
-      () => this.#fontEngine.$glyph.value,
+    this.#commandHistory = new CommandHistory(this.#fontEngine, () =>
+      this.#fontEngine.getEditingSnapshot(),
     );
 
     this.$previewMode = signal(false);
@@ -329,7 +313,6 @@ export class Editor implements ShiftEditor {
     });
 
     this.#events.on("fontLoaded", () => {
-      this.#fontEngine.glyphStore.clear();
       this.#commandHistory.clear();
       this.#textRunController.clearAll();
     });
@@ -740,36 +723,37 @@ export class Editor implements ShiftEditor {
   }
 
   public createDraft(): GlyphDraft {
-    const base = this.#fontEngine.$glyph.peek();
-    if (!base) {
+    const glyph = this.#fontEngine.$glyph.peek();
+    if (!glyph) {
       throw new Error("Cannot create draft without an active glyph");
     }
 
+    const baseSnapshot = glyph.toSnapshot();
     let lastUpdates: NodePositionUpdateList = [];
-    let current = base;
+    let dirty = false;
     let finished = false;
 
     return {
-      base,
+      base: baseSnapshot,
       setPositions: (updates) => {
         if (finished) return;
         lastUpdates = updates;
-        current = produceGlyph(base, updates);
-        this.#fontEngine.emitGlyph(current);
+        dirty = true;
+        this.#fontEngine.applyToGlyph(updates);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
 
-        if (current !== base) {
+        if (dirty) {
           this.#fontEngine.syncNodePositions(lastUpdates);
-          this.#commandHistory.record(new SnapshotCommand(label, base, current));
+          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, glyph.toSnapshot()));
         }
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#fontEngine.emitGlyph(base);
+        this.#fontEngine.applyToGlyph(baseSnapshot);
       },
     };
   }
@@ -1370,24 +1354,8 @@ export class Editor implements ShiftEditor {
   public getSelectionBounds(): Bounds | null {
     const glyph = this.#$glyph.value;
     const selectedPointIds = this.#selection.selectedPointIds.peek();
-
-    const cached = this.#segmentAwareSelectionBoundsCache;
-    if (cached && cached.glyph === glyph && cached.selectedPointIds === selectedPointIds) {
-      return cached.bounds;
-    }
-
-    const bounds =
-      glyph && selectedPointIds.size > 0
-        ? getSegmentAwareBounds(glyph, Array.from(selectedPointIds))
-        : null;
-
-    this.#segmentAwareSelectionBoundsCache = {
-      glyph,
-      selectedPointIds,
-      bounds,
-    };
-
-    return bounds;
+    if (!glyph || selectedPointIds.size === 0) return null;
+    return getSegmentAwareBounds(glyph, Array.from(selectedPointIds));
   }
 
   public getSelectionCenter(): Point2D | null {
@@ -1755,58 +1723,39 @@ export class Editor implements ShiftEditor {
     const selectedPointIds = this.#selection.selectedPointIds.peek();
     const selectionMode = this.#selection.selectionMode.peek();
 
-    const cached = this.#selectionBoundsCache;
-    if (
-      cached &&
-      cached.glyph === glyph &&
-      cached.selectedPointIds === selectedPointIds &&
-      cached.selectionMode === selectionMode
-    ) {
-      return cached.rect;
+    if (!glyph || selectionMode !== "committed" || selectedPointIds.size <= 1) {
+      return null;
     }
 
-    let rect: Rect2D | null = null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let count = 0;
 
-    if (glyph && selectionMode === "committed" && selectedPointIds.size > 1) {
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      let count = 0;
-
-      for (const contour of glyph.contours) {
-        for (const point of contour.points) {
-          if (!selectedPointIds.has(point.id)) continue;
-          count += 1;
-          if (point.x < minX) minX = point.x;
-          if (point.y < minY) minY = point.y;
-          if (point.x > maxX) maxX = point.x;
-          if (point.y > maxY) maxY = point.y;
-        }
-      }
-
-      if (count > 1) {
-        rect = {
-          x: minX,
-          y: minY,
-          width: maxX - minX,
-          height: maxY - minY,
-          left: minX,
-          top: minY,
-          right: maxX,
-          bottom: maxY,
-        };
+    for (const contour of glyph.contours) {
+      for (const point of contour.points) {
+        if (!selectedPointIds.has(point.id)) continue;
+        count += 1;
+        if (point.x < minX) minX = point.x;
+        if (point.y < minY) minY = point.y;
+        if (point.x > maxX) maxX = point.x;
+        if (point.y > maxY) maxY = point.y;
       }
     }
 
-    this.#selectionBoundsCache = {
-      glyph,
-      selectedPointIds,
-      selectionMode,
-      rect,
+    if (count <= 1) return null;
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      left: minX,
+      top: minY,
+      right: maxX,
+      bottom: maxY,
     };
-
-    return rect;
   }
 
   /**
@@ -1964,21 +1913,10 @@ export class Editor implements ShiftEditor {
   }
 
   #getSegmentIndex(glyph: Glyph): ReadonlyMap<SegmentId, SegmentHitResult["segment"]> {
-    const cached = this.#segmentIndexCache;
-    if (cached?.glyph === glyph) {
-      return cached.segmentsById;
-    }
-
     const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
     for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
       segmentsById.set(Segment.id(segment), segment);
     }
-
-    this.#segmentIndexCache = {
-      glyph,
-      segmentsById,
-    };
-
     return segmentsById;
   }
 

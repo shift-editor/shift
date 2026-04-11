@@ -1,4 +1,5 @@
-import type { Glyph, PointId, PointSnapshot, Rect2D } from "@shift/types";
+import type { PointId, PointSnapshot, Rect2D } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { SegmentId } from "@/types/indicator";
 
 export type { PasteResult } from "@/types/engine";

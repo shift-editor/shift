@@ -1,6 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
-import type { Glyph, Point2D } from "@shift/types";
+import type { GlyphSnapshot, Point2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -163,7 +163,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
 }
 
 function buildRotateUpdates(
-  base: Glyph,
+  base: GlyphSnapshot,
   target: DragTarget,
   origin: Point2D,
   angle: number,

@@ -34,7 +34,7 @@ describe("CommandHistory", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -45,7 +45,7 @@ describe("CommandHistory", () => {
       const pointId = history.execute(cmd);
 
       expect(pointId).toBeDefined();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
     });
 
     it("should add command to undo stack", () => {
@@ -72,12 +72,12 @@ describe("CommandHistory", () => {
   describe("undo", () => {
     it("should undo the last command", () => {
       history.execute(new AddPointCommand(100, 200, "onCurve"));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       const didUndo = history.undo();
 
       expect(didUndo).toBe(true);
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
     });
 
     it("should move command to redo stack", () => {
@@ -99,13 +99,13 @@ describe("CommandHistory", () => {
     it("should undo multiple commands in reverse order", () => {
       history.execute(new AddPointCommand(100, 200, "onCurve"));
       history.execute(new AddPointCommand(150, 250, "onCurve"));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
 
       history.undo(); // Remove second point
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       history.undo(); // Remove first point
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
     });
   });
 
@@ -113,12 +113,12 @@ describe("CommandHistory", () => {
     it("should redo the last undone command", () => {
       history.execute(new AddPointCommand(100, 200, "onCurve"));
       history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
 
       const didRedo = history.redo();
 
       expect(didRedo).toBe(true);
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
     });
 
     it("should move command back to undo stack", () => {
@@ -179,7 +179,7 @@ describe("batching", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -192,11 +192,11 @@ describe("batching", () => {
       history.execute(new AddPointCommand(300, 300, "onCurve"));
       history.endBatch();
 
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(3);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(3);
       expect(history.undoCount.value).toBe(1);
 
       history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
     });
 
     it("should set isBatching to true during batch", () => {
@@ -228,10 +228,10 @@ describe("batching", () => {
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
     });
 
     it("should use batch name as undo label", () => {
@@ -252,7 +252,7 @@ describe("batching", () => {
       history.cancelBatch();
 
       // Points were still added (commands executed)
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
       // But no undo entry
       expect(history.undoCount.value).toBe(0);
     });
@@ -273,11 +273,11 @@ describe("batching", () => {
       });
 
       expect(pointId).toBeDefined();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
       expect(history.undoCount.value).toBe(1);
 
       history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
     });
 
     it("should cancel batch and rethrow when callback throws", () => {
@@ -289,7 +289,7 @@ describe("batching", () => {
       ).toThrow("boom");
 
       expect(history.isBatching).toBe(false);
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
       expect(history.undoCount.value).toBe(0);
     });
   });
@@ -304,11 +304,11 @@ describe("batching", () => {
         pointType: "onCurve",
         smooth: false,
       });
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       // Move point directly
       fontEngine.movePoints([pointId], { x: 50, y: 50 });
-      const points = getAllPoints(fontEngine.$glyph.value);
+      const points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(150);
 
       // Record the move command (already executed)
@@ -318,7 +318,7 @@ describe("batching", () => {
 
       // Undo should reverse the already-executed move
       history.undo();
-      const undonePoints = getAllPoints(fontEngine.$glyph.value);
+      const undonePoints = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(undonePoints, 0).x).toBe(100);
     });
 
@@ -340,11 +340,11 @@ describe("batching", () => {
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
-      const points = getAllPoints(fontEngine.$glyph.value);
+      const points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(130);
 
       history.undo();
-      const undonePoints = getAllPoints(fontEngine.$glyph.value);
+      const undonePoints = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(undonePoints, 0).x).toBe(100);
     });
   });
@@ -358,7 +358,7 @@ describe("onDirty callback", () => {
   beforeEach(() => {
     fontEngine = createFontEngine();
     onDirtyCalled = 0;
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value, {
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot(), {
       onDirty: () => {
         onDirtyCalled++;
       },
@@ -405,7 +405,7 @@ describe("onDirty callback", () => {
   });
 
   it("should allow setting onDirty callback after construction", () => {
-    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     let lateDirtyCalled = 0;
     historyNoCallback.setOnDirty(() => {
       lateDirtyCalled++;
@@ -416,7 +416,7 @@ describe("onDirty callback", () => {
   });
 
   it("should not throw if onDirty is not set", () => {
-    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    const historyNoCallback = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     expect(() => {
       historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
     }).not.toThrow();
@@ -429,7 +429,7 @@ describe("Command integration with history", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -445,11 +445,11 @@ describe("Command integration with history", () => {
       });
 
       history.execute(new NudgePointsCommand([pointId], 10, 0)); // Nudge right
-      const nudgedPoints = getAllPoints(fontEngine.$glyph.value);
+      const nudgedPoints = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(nudgedPoints, 0).x).toBe(110);
 
       history.undo();
-      const restoredPoints = getAllPoints(fontEngine.$glyph.value);
+      const restoredPoints = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(restoredPoints, 0).x).toBe(100);
     });
   });
@@ -464,23 +464,23 @@ describe("Command integration with history", () => {
         pointType: "onCurve",
         smooth: false,
       });
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       // Move point through history
       history.execute(new NudgePointsCommand([pointId], 50, 50));
-      let points = getAllPoints(fontEngine.$glyph.value);
+      let points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(250);
 
       // Undo move
       history.undo();
-      points = getAllPoints(fontEngine.$glyph.value);
+      points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(100);
       expect(expectAt(points, 0).y).toBe(200);
 
       // Redo move
       history.redo();
-      points = getAllPoints(fontEngine.$glyph.value);
+      points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(250);
     });
@@ -488,16 +488,16 @@ describe("Command integration with history", () => {
     it("should handle add undo/redo", () => {
       // Add point through history
       history.execute(new AddPointCommand(100, 200, "onCurve"));
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
       // Undo add
       history.undo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
 
       // Redo add (creates new point, potentially with different ID)
       history.redo();
-      expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-      const points = getAllPoints(fontEngine.$glyph.value);
+      expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
+      const points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(100);
       expect(expectAt(points, 0).y).toBe(200);
     });
@@ -520,7 +520,7 @@ describe("Command integration with history", () => {
 
       // Move both points together
       history.execute(new NudgePointsCommand([p1, p2], 50, 50));
-      let points = getAllPoints(fontEngine.$glyph.value);
+      let points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(150);
       expect(expectAt(points, 0).y).toBe(150);
       expect(expectAt(points, 1).x).toBe(250);
@@ -528,7 +528,7 @@ describe("Command integration with history", () => {
 
       // Undo moves both back
       history.undo();
-      points = getAllPoints(fontEngine.$glyph.value);
+      points = getAllPoints(fontEngine.getEditingSnapshot());
       expect(expectAt(points, 0).x).toBe(100);
       expect(expectAt(points, 0).y).toBe(100);
       expect(expectAt(points, 1).x).toBe(200);

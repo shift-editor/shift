@@ -1,16 +1,21 @@
 /**
  * Pure rendering functions for glyph visualization.
  *
- * These functions take snapshot data and render to a canvas context.
- * No state is maintained - each call renders based on the provided data.
+ * For reactive {@link GlyphContour} instances, callers should read
+ * `contour.path` / `contour.bounds` directly (the computed IS the cache).
+ *
+ * {@link getCachedContourPath} is kept only for plain contour objects
+ * (composite contours, render-only contours) that don't have computed paths.
  */
 
 import type { IRenderer } from "@/types/graphics";
 import { parseContourSegments, segmentToCurve, type SegmentContourLike } from "@shift/font";
 import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
+
 type CachedContourGeometry = { path: Path2D; isClosed: boolean; bounds: BoundsType | null };
 const contourPathCache = new WeakMap<SegmentContourLike, CachedContourGeometry>();
 
+/** Build and cache Path2D for a plain (non-reactive) contour. */
 export function getCachedContourPath(contour: SegmentContourLike): CachedContourGeometry {
   const cached = contourPathCache.get(contour);
   if (cached) return cached;

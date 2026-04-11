@@ -1,4 +1,5 @@
-import type { PointId, Glyph, Point2D, AnchorId } from "@shift/types";
+import type { PointId, Point2D, AnchorId } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { SegmentId, SegmentIndicator } from "./indicator";
 import type { BoundingBoxHitResult } from "./boundingBox";
 import type { SnapIndicator } from "@/lib/editor/snapping/types";

@@ -42,7 +42,7 @@ describe("CutCommand", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -62,12 +62,12 @@ describe("CutCommand", () => {
       pointType: "onCurve",
       smooth: false,
     });
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
 
     history.execute(new CutCommand([p1]));
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-    const remaining = getAllPoints(fontEngine.$glyph.value);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
+    const remaining = getAllPoints(fontEngine.getEditingSnapshot());
     expect(expectAt(remaining, 0).x).toBe(200);
   });
 
@@ -80,12 +80,12 @@ describe("CutCommand", () => {
       smooth: false,
     });
     history.execute(new CutCommand([p1]));
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
 
     history.undo();
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-    const restored = getAllPoints(fontEngine.$glyph.value);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
+    const restored = getAllPoints(fontEngine.getEditingSnapshot());
     expect(expectAt(restored, 0).x).toBe(100);
     expect(expectAt(restored, 0).y).toBe(100);
   });
@@ -100,11 +100,11 @@ describe("CutCommand", () => {
     });
     history.execute(new CutCommand([p1]));
     history.undo();
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
     history.redo();
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
   });
 
   it("should handle multiple points", () => {
@@ -132,8 +132,8 @@ describe("CutCommand", () => {
 
     history.execute(new CutCommand([p1, p2]));
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
-    const remaining = getAllPoints(fontEngine.$glyph.value);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
+    const remaining = getAllPoints(fontEngine.getEditingSnapshot());
     expect(expectAt(remaining, 0).x).toBe(300);
   });
 
@@ -149,7 +149,7 @@ describe("PasteCommand", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -163,7 +163,7 @@ describe("PasteCommand", () => {
     const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
     history.execute(cmd);
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(2);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(2);
     expect(cmd.createdPointIds.length).toBe(2);
   });
 
@@ -173,7 +173,7 @@ describe("PasteCommand", () => {
     const cmd = new PasteCommand(content, { offset: { x: 20, y: -20 } });
     history.execute(cmd);
 
-    const points = getAllPoints(fontEngine.$glyph.value);
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(expectAt(points, 0).x).toBe(120);
     expect(expectAt(points, 0).y).toBe(80);
   });
@@ -182,11 +182,11 @@ describe("PasteCommand", () => {
     const content = createTestContent([{ x: 100, y: 100 }]);
     const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
     history.execute(cmd);
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
     history.undo();
 
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
   });
 
   it("should restore same state on redo (snapshot-based)", () => {
@@ -199,7 +199,7 @@ describe("PasteCommand", () => {
     history.redo();
 
     expect(cmd.createdPointIds).toEqual(originalIds);
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
   });
 
   it("should handle multiple contours", () => {
@@ -235,7 +235,7 @@ describe("Cut + Paste integration", () => {
 
   beforeEach(() => {
     fontEngine = createFontEngine();
-    history = new CommandHistory(fontEngine, () => fontEngine.$glyph.value);
+    history = new CommandHistory(fontEngine, () => fontEngine.getEditingSnapshot());
     fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
     fontEngine.addContour();
   });
@@ -248,17 +248,17 @@ describe("Cut + Paste integration", () => {
       pointType: "onCurve",
       smooth: false,
     });
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
     history.execute(new CutCommand([p1]));
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
 
     const content = createTestContent([{ x: 100, y: 100 }]);
     const pasteCmd = new PasteCommand(content, { offset: { x: 20, y: 20 } });
     history.execute(pasteCmd);
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
 
-    const points = getAllPoints(fontEngine.$glyph.value);
+    const points = getAllPoints(fontEngine.getEditingSnapshot());
     expect(expectAt(points, 0).x).toBe(120);
     expect(expectAt(points, 0).y).toBe(120);
   });
@@ -280,9 +280,9 @@ describe("Cut + Paste integration", () => {
     expect(history.undoCount.value).toBe(2);
 
     history.undo();
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(0);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(0);
 
     history.undo();
-    expect(getPointCount(fontEngine.$glyph.value)).toBe(1);
+    expect(getPointCount(fontEngine.getEditingSnapshot())).toBe(1);
   });
 });

@@ -1,6 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
-import type { AnchorId, Glyph, Point2D, PointId } from "@shift/types";
+import type { AnchorId, GlyphSnapshot, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -299,7 +299,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
 }
 
 function buildTranslateUpdates(
-  base: Glyph,
+  base: GlyphSnapshot,
   target: DragTarget,
   delta: Point2D,
   rules: PreparedConstrainDrag | null,

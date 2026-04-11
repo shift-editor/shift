@@ -1,4 +1,5 @@
-import type { Glyph, AnchorId } from "@shift/types";
+import type { AnchorId } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { HandleState } from "@/types/graphics";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 

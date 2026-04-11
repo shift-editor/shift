@@ -61,7 +61,7 @@ export type RenderContour = Readonly<Omit<RenderContourSnapshot, "points">> & {
  * hit-testing priority.
  * Wraps {@link GlyphSnapshot} with a `readonly` contour array of {@link Contour}.
  */
-export type Glyph = Readonly<Omit<GlyphSnapshot, "contours" | "compositeContours">> & {
+export type Glyph = Readonly<Omit<GlyphSnapshot, "contours" | "anchors" | "compositeContours">> & {
   readonly contours: readonly Contour[];
   readonly anchors: readonly Anchor[];
   readonly compositeContours: readonly RenderContour[];

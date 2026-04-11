@@ -1,4 +1,4 @@
-import type { Glyph } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { Bounds } from "@shift/geo";
 import type { SegmentId } from "@/types/indicator";
 import { Bounds as BoundsUtil } from "@shift/geo";

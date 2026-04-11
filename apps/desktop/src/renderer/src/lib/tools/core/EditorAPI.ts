@@ -25,10 +25,10 @@ import type {
   PointType,
   Point,
   Contour,
-  Glyph,
   Rect2D,
   AnchorId,
 } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";

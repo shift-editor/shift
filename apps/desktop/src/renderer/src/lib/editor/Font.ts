@@ -1,5 +1,5 @@
 import type { FontMetrics, FontMetadata } from "@shift/types";
-import type { GlyphView } from "@/lib/cache/GlyphStore";
+import type { GlyphView } from "@/engine/FontEngine";
 
 /** Read-only font data surface exposed to tools and UI. */
 export interface Font {
