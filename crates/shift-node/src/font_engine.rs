@@ -11,7 +11,7 @@ use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot, RenderContourSnapshot},
-  AnchorId, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
+  AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
   NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
@@ -805,6 +805,34 @@ impl FontEngine {
   }
 
   #[napi]
+  pub fn apply_boolean_op(
+    &mut self,
+    contour_id_a: String,
+    contour_id_b: String,
+    operation: String,
+  ) -> Result<String> {
+    let cid_a = parse_or_err!(contour_id_a, ContourId, "contour ID A");
+    let cid_b = parse_or_err!(contour_id_b, ContourId, "contour ID B");
+
+    let op = match operation.as_str() {
+      "union" => BooleanOp::Union,
+      "subtract" => BooleanOp::Subtract,
+      "intersect" => BooleanOp::Intersect,
+      "difference" => BooleanOp::Difference,
+      _ => {
+        return Ok(to_json(&CommandResult::error(format!(
+          "Unknown boolean operation: {operation}"
+        ))))
+      }
+    };
+
+    self.with_command_result(|session| match session.apply_boolean_op(cid_a, cid_b, op) {
+      Ok(_ids) => CommandResult::success_simple(session),
+      Err(e) => CommandResult::error(e),
+    })
+  }
+
+  #[napi]
   pub fn move_nodes(&mut self, nodes: Vec<JsNodeRef>, dx: f64, dy: f64) -> Result<String> {
     let parsed_nodes: Vec<NodeRef> = nodes.iter().filter_map(parse_node_ref).collect();
 
@@ -833,10 +861,6 @@ impl FontEngine {
     let parsed_id = parse_or_err!(point_id, PointId, "point ID");
     self.command_try(|s| s.toggle_smooth(parsed_id).map(|_| vec![parsed_id]))
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // CLIPBOARD OPERATIONS
-  // ═══════════════════════════════════════════════════════════
 
   #[napi]
   pub fn paste_contours(
@@ -920,10 +944,6 @@ impl FontEngine {
     Ok(true)
   }
 }
-
-// ═══════════════════════════════════════════════════════════
-// LIGHTWEIGHT NATIVE TYPES FOR EDIT/DRAG OPERATIONS
-// ═══════════════════════════════════════════════════════════
 
 /// Tagged node reference for node-based drag/edit operations.
 #[napi(object)]

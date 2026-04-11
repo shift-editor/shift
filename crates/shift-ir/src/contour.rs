@@ -1,6 +1,7 @@
 use crate::entity::{ContourId, PointId};
 use crate::point::{Point, PointType};
 use crate::segment::CurveSegmentIter;
+use kurbo::{BezPath, PathEl};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -157,6 +158,97 @@ impl Contour {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Contours(pub Vec<Contour>);
+
+impl std::ops::Deref for Contours {
+    type Target = Vec<Contour>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<&BezPath> for Contours {
+    fn from(path: &BezPath) -> Self {
+        let mut contours = Vec::new();
+        let mut current: Option<Contour> = None;
+
+        for el in path.elements() {
+            match *el {
+                PathEl::MoveTo(p) => {
+                    if let Some(c) = current.take() {
+                        contours.push(c);
+                    }
+                    let mut c = Contour::new();
+                    c.add_point(p.x, p.y, PointType::OnCurve, false);
+                    current = Some(c);
+                }
+                PathEl::LineTo(p) => {
+                    if let Some(c) = current.as_mut() {
+                        c.add_point(p.x, p.y, PointType::OnCurve, false);
+                    }
+                }
+                PathEl::QuadTo(ctrl, end) => {
+                    if let Some(c) = current.as_mut() {
+                        c.add_point(ctrl.x, ctrl.y, PointType::OffCurve, false);
+                        c.add_point(end.x, end.y, PointType::OnCurve, false);
+                    }
+                }
+                PathEl::CurveTo(c1, c2, end) => {
+                    if let Some(c) = current.as_mut() {
+                        c.add_point(c1.x, c1.y, PointType::OffCurve, false);
+                        c.add_point(c2.x, c2.y, PointType::OffCurve, false);
+                        c.add_point(end.x, end.y, PointType::OnCurve, false);
+                    }
+                }
+                PathEl::ClosePath => {
+                    if let Some(c) = current.as_mut() {
+                        c.close();
+                    }
+                }
+            }
+        }
+
+        if let Some(c) = current {
+            contours.push(c);
+        }
+
+        Contours(contours)
+    }
+}
+
+impl From<&Contour> for BezPath {
+    fn from(contour: &Contour) -> Self {
+        let mut path = BezPath::new();
+
+        if let Some(first) = contour.points().first() {
+            path.move_to((first.x(), first.y()));
+        } else {
+            return path;
+        }
+
+        for segment in contour.segments() {
+            match segment {
+                crate::segment::CurveSegment::Line(_, p2) => {
+                    path.line_to((p2.x(), p2.y()));
+                }
+                crate::segment::CurveSegment::Quad(_, c, p3) => {
+                    path.quad_to((c.x(), c.y()), (p3.x(), p3.y()));
+                }
+                crate::segment::CurveSegment::Cubic(_, c1, c2, p4) => {
+                    path.curve_to((c1.x(), c1.y()), (c2.x(), c2.y()), (p4.x(), p4.y()));
+                }
+            }
+        }
+
+        if contour.is_closed() {
+            path.close_path();
+        }
+
+        path
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +290,204 @@ mod tests {
         assert!(c.is_closed());
         c.open();
         assert!(!c.is_closed());
+    }
+
+    use kurbo::PathEl;
+
+    // -- BezPath conversion tests --
+
+    #[test]
+    fn empty_contour_to_bezpath() {
+        let c = Contour::new();
+        let path = BezPath::from(&c);
+        assert_eq!(path.elements().len(), 0);
+    }
+
+    #[test]
+    fn single_point_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(10.0, 20.0, PointType::OnCurve, false);
+        let path = BezPath::from(&c);
+        assert_eq!(path.elements().len(), 1);
+        assert!(matches!(path.elements()[0], PathEl::MoveTo(_)));
+    }
+
+    #[test]
+    fn open_line_contour_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.add_point(100.0, 0.0, PointType::OnCurve, false);
+        c.add_point(100.0, 100.0, PointType::OnCurve, false);
+
+        let path = BezPath::from(&c);
+        assert_eq!(path.elements().len(), 3);
+        assert!(matches!(path.elements()[0], PathEl::MoveTo(_)));
+        assert!(matches!(path.elements()[1], PathEl::LineTo(_)));
+        assert!(matches!(path.elements()[2], PathEl::LineTo(_)));
+    }
+
+    #[test]
+    fn closed_triangle_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.add_point(100.0, 0.0, PointType::OnCurve, false);
+        c.add_point(50.0, 100.0, PointType::OnCurve, false);
+        c.close();
+
+        let path = BezPath::from(&c);
+        let els = path.elements();
+        assert_eq!(els.len(), 5);
+        assert!(matches!(els[0], PathEl::MoveTo(_)));
+        assert!(matches!(els[1], PathEl::LineTo(_)));
+        assert!(matches!(els[2], PathEl::LineTo(_)));
+        assert!(matches!(els[3], PathEl::LineTo(_)));
+        assert!(matches!(els[4], PathEl::ClosePath));
+    }
+
+    #[test]
+    fn cubic_contour_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.add_point(33.0, 100.0, PointType::OffCurve, false);
+        c.add_point(66.0, 100.0, PointType::OffCurve, false);
+        c.add_point(100.0, 0.0, PointType::OnCurve, false);
+
+        let path = BezPath::from(&c);
+        let els = path.elements();
+        assert_eq!(els.len(), 2);
+        assert!(matches!(els[0], PathEl::MoveTo(_)));
+        assert!(matches!(els[1], PathEl::CurveTo(_, _, _)));
+    }
+
+    #[test]
+    fn quad_contour_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.add_point(50.0, 100.0, PointType::OffCurve, false);
+        c.add_point(100.0, 0.0, PointType::OnCurve, false);
+
+        let path = BezPath::from(&c);
+        let els = path.elements();
+        assert_eq!(els.len(), 2);
+        assert!(matches!(els[0], PathEl::MoveTo(_)));
+        assert!(matches!(els[1], PathEl::QuadTo(_, _)));
+    }
+
+    #[test]
+    fn mixed_segments_to_bezpath() {
+        let mut c = Contour::new();
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.add_point(100.0, 0.0, PointType::OnCurve, false);
+        c.add_point(133.0, 50.0, PointType::OffCurve, false);
+        c.add_point(166.0, 50.0, PointType::OffCurve, false);
+        c.add_point(200.0, 0.0, PointType::OnCurve, false);
+        c.close();
+
+        let path = BezPath::from(&c);
+        let els = path.elements();
+        // MoveTo + LineTo + CurveTo + LineTo(wrap) + ClosePath
+        assert!(matches!(els[0], PathEl::MoveTo(_)));
+        assert!(matches!(els[1], PathEl::LineTo(_)));
+        assert!(matches!(els[2], PathEl::CurveTo(_, _, _)));
+        assert!(matches!(els.last().unwrap(), PathEl::ClosePath));
+    }
+
+    // -- BezPath -> Vec<Contour> tests --
+
+    #[test]
+    fn bezpath_line_to_contour() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        path.line_to((100.0, 100.0));
+        path.close_path();
+
+        let contours = Contours::from(&path);
+        assert_eq!(contours.len(), 1);
+        assert!(contours[0].is_closed());
+        assert_eq!(contours[0].len(), 3);
+    }
+
+    #[test]
+    fn bezpath_cubic_to_contour() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((33.0, 100.0), (66.0, 100.0), (100.0, 0.0));
+
+        let contours = Contours::from(&path);
+        assert_eq!(contours.len(), 1);
+        assert!(!contours[0].is_closed());
+        // MoveTo point + 2 off-curve + 1 on-curve = 4
+        assert_eq!(contours[0].len(), 4);
+        assert_eq!(
+            contours[0].get_point_at(0).unwrap().point_type(),
+            PointType::OnCurve
+        );
+        assert_eq!(
+            contours[0].get_point_at(1).unwrap().point_type(),
+            PointType::OffCurve
+        );
+        assert_eq!(
+            contours[0].get_point_at(2).unwrap().point_type(),
+            PointType::OffCurve
+        );
+        assert_eq!(
+            contours[0].get_point_at(3).unwrap().point_type(),
+            PointType::OnCurve
+        );
+    }
+
+    #[test]
+    fn bezpath_multiple_subpaths_to_contours() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((50.0, 0.0));
+        path.close_path();
+        path.move_to((100.0, 100.0));
+        path.line_to((200.0, 100.0));
+        path.close_path();
+
+        let contours = Contours::from(&path);
+        assert_eq!(contours.len(), 2);
+        assert!(contours[0].is_closed());
+        assert!(contours[1].is_closed());
+    }
+
+    #[test]
+    fn bezpath_open_subpath_to_contour() {
+        let mut path = BezPath::new();
+        path.move_to((10.0, 20.0));
+        path.line_to((30.0, 40.0));
+
+        let contours = Contours::from(&path);
+        assert_eq!(contours.len(), 1);
+        assert!(!contours[0].is_closed());
+    }
+
+    #[test]
+    fn empty_bezpath_to_contours() {
+        let path = BezPath::new();
+        let contours = Contours::from(&path);
+        assert!(contours.is_empty());
+    }
+
+    #[test]
+    fn bezpath_coordinates_are_correct() {
+        let mut c = Contour::new();
+        c.add_point(10.0, 20.0, PointType::OnCurve, false);
+        c.add_point(30.0, 40.0, PointType::OnCurve, false);
+
+        let path = BezPath::from(&c);
+        let els = path.elements();
+
+        let PathEl::MoveTo(p0) = els[0] else {
+            panic!("expected MoveTo");
+        };
+        assert_eq!(p0, kurbo::Point::new(10.0, 20.0));
+
+        let PathEl::LineTo(p1) = els[1] else {
+            panic!("expected LineTo");
+        };
+        assert_eq!(p1, kurbo::Point::new(30.0, 40.0));
     }
 }

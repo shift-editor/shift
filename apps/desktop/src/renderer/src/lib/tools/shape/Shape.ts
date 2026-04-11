@@ -72,7 +72,7 @@ export class Shape extends BaseTool<ShapeState> {
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
     this.batch("Draw Rectangle", () => {
-      const contourId = this.editor.getActiveContourId() ?? this.editor.addContour();
+      const contourId = this.editor.addContour();
 
       this.editor.addPointToContour(contourId, { x: rect.x, y: rect.y }, "onCurve", false);
       this.editor.addPointToContour(

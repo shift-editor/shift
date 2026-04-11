@@ -295,10 +295,10 @@
 
 **Boolean Operations**
 
-- [ ] Union (merge overlapping contours)
-- [ ] Subtract (cut one contour from another)
-- [ ] Intersect (keep only overlapping area)
-- [ ] Difference (XOR - exclude overlap)
+- [x] Union (merge overlapping contours)
+- [x] Subtract (cut one contour from another)
+- [x] Intersect (keep only overlapping area)
+- [x] Difference (XOR - exclude overlap)
 
 **Path Cleanup**
 

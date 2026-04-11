@@ -9,9 +9,9 @@ pub mod snapshot;
 pub mod vec2;
 
 pub use shift_ir::{
-    Anchor, AnchorId, Contour, ContourId, CurveSegment, CurveSegmentIter, Font, FontMetadata,
-    FontMetrics, Glyph, GlyphLayer, GlyphName, GuidelineId, LayerId, Point, PointId, PointType,
-    Transform,
+    Anchor, AnchorId, BooleanOp, Contour, ContourId, CurveSegment, CurveSegmentIter, Font,
+    FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, GuidelineId, LayerId, Point, PointId,
+    PointType, Transform,
 };
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};

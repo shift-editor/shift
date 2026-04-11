@@ -2,6 +2,7 @@ use crate::{
     snapshot::GlyphSnapshot, Anchor, AnchorId, Contour, ContourId, GlyphLayer, GuidelineId,
     PointId, PointType, Transform,
 };
+use shift_ir::{boolean, BooleanOp};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -239,6 +240,37 @@ impl EditSession {
         let contour = self.contour_mut_or_err(contour_id)?;
         contour.reverse();
         Ok(())
+    }
+
+    pub fn apply_boolean_op(
+        &mut self,
+        contour_id_a: ContourId,
+        contour_id_b: ContourId,
+        op: BooleanOp,
+    ) -> Result<Vec<ContourId>, String> {
+        let a = self
+            .layer
+            .contour(contour_id_a)
+            .ok_or_else(|| format!("Contour {contour_id_a:?} not found"))?
+            .clone();
+        let b = self
+            .layer
+            .contour(contour_id_b)
+            .ok_or_else(|| format!("Contour {contour_id_b:?} not found"))?
+            .clone();
+
+        let result = boolean(op, &a, &b).map_err(|e| format!("Boolean operation failed: {e}"))?;
+
+        self.remove_contour(contour_id_a);
+        self.remove_contour(contour_id_b);
+
+        let mut created_ids = Vec::new();
+        for contour in result.0 {
+            let id = self.layer.add_contour(contour);
+            created_ids.push(id);
+        }
+
+        Ok(created_ids)
     }
 
     pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {

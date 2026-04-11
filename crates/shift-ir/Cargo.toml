@@ -9,5 +9,7 @@ license = "MIT OR Apache-2.0"
 crate-type = ["rlib"]
 
 [dependencies]
+kurbo = "0.13.0"
+linesweeper = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 ts-rs = "11.0.1"

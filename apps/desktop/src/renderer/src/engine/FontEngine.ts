@@ -153,6 +153,11 @@ export class FontEngine {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
+  /** @knipclassignore */
+  getDependentUnicodesByName(glyphName: string): number[] {
+    return this.#raw.getDependentUnicodesByName(glyphName);
+  }
+
   /** @knipclassignore — satisfies Font interface */
   getSvgPath(unicode: number): string | null {
     return this.#raw.getGlyphSvgPath(unicode) ?? null;
@@ -344,6 +349,15 @@ export class FontEngine {
   /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
   reverseContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.reverseContour(contourId));
+  }
+
+  /** @knipclassignore — used via Editor delegation */
+  applyBooleanOp(
+    contourIdA: ContourId,
+    contourIdB: ContourId,
+    operation: "union" | "subtract" | "intersect" | "difference",
+  ): void {
+    this.#dispatchVoid(this.#raw.applyBooleanOp(contourIdA, contourIdB, operation));
   }
 
   /** @knipclassignore — used via Editor delegation or CommandEditingAPI */

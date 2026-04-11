@@ -96,6 +96,9 @@ name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ascii_plist_derive"
@@ -491,6 +494,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "euclid"
+version = "0.22.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -557,7 +569,7 @@ dependencies = [
  "fontir",
  "icu_properties",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "ordered-float",
  "parking_lot",
@@ -622,7 +634,7 @@ dependencies = [
  "filetime",
  "fontdrasil",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "ordered-float",
  "parking_lot",
@@ -643,7 +655,7 @@ dependencies = [
  "fontdrasil",
  "fontir",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "ordered-float",
  "serde",
@@ -765,7 +777,7 @@ dependencies = [
  "fontdrasil",
  "icu_properties",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "ordered-float",
  "quick-xml",
@@ -787,7 +799,7 @@ dependencies = [
  "fontir",
  "glyphs-reader",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "ordered-float",
  "smol_str",
@@ -977,6 +989,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kurbo"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7564e90fe3c0d5771e1f0bc95322b21baaeaa0d9213fa6a0b61c99f8b17b3bfb"
+dependencies = [
+ "arrayvec",
+ "euclid",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.174"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1001,6 +1025,19 @@ dependencies = [
  "bitflags",
  "libc",
  "redox_syscall",
+]
+
+[[package]]
+name = "linesweeper"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8421b276e96af0ace5f3d8d2d165d0dea07fe764d2fe94ec06bb1acaf8a1e759"
+dependencies = [
+ "arrayvec",
+ "kurbo 0.13.0",
+ "polycool",
+ "rustc-hash",
+ "smallvec",
 ]
 
 [[package]]
@@ -1238,6 +1275,15 @@ dependencies = [
  "quick-xml",
  "serde",
  "time",
+]
+
+[[package]]
+name = "polycool"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
+dependencies = [
+ "arrayvec",
 ]
 
 [[package]]
@@ -1555,6 +1601,8 @@ dependencies = [
 name = "shift-ir"
 version = "0.1.0"
 dependencies = [
+ "kurbo 0.13.0",
+ "linesweeper",
  "serde",
  "ts-rs",
 ]
@@ -1793,7 +1841,7 @@ dependencies = [
  "fontdrasil",
  "fontir",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "norad 0.15.0",
  "ordered-float",
@@ -2133,7 +2181,7 @@ checksum = "60491c1d7e5873e721607fa05fd9b9fc66b0f0179b2b5f0f26a2022aafdcc61e"
 dependencies = [
  "font-types",
  "indexmap",
- "kurbo",
+ "kurbo 0.11.2",
  "log",
  "read-fonts 0.29.3",
  "serde",

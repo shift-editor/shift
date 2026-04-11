@@ -43,6 +43,7 @@ export declare class FontEngine {
   closeContour(): string
   openContour(contourId: string): string
   reverseContour(contourId: string): string
+  applyBooleanOp(contourIdA: string, contourIdB: string, operation: string): string
   moveNodes(nodes: Array<JsNodeRef>, dx: number, dy: number): string
   removePoints(pointIds: Array<string>): string
   toggleSmooth(pointId: string): string

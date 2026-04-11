@@ -1612,6 +1612,17 @@ export class Editor implements ShiftEditor {
     this.#commandHistory.execute(new ReverseContourCommand(contourId));
   }
 
+  public applyBooleanOp(
+    contourIdA: ContourId,
+    contourIdB: ContourId,
+    operation: "union" | "subtract" | "intersect" | "difference",
+  ): void {
+    const before = this.#fontEngine.getSnapshot();
+    this.#fontEngine.applyBooleanOp(contourIdA, contourIdB, operation);
+    const after = this.#fontEngine.getSnapshot();
+    this.#commandHistory.record(new SnapshotCommand(`Boolean ${operation}`, before, after));
+  }
+
   public getPointAt(coords: Coordinates): Point | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;

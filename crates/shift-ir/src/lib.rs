@@ -1,5 +1,6 @@
 mod anchor;
 mod axis;
+mod boolean;
 pub mod component;
 mod contour;
 mod entity;
@@ -17,8 +18,9 @@ mod source;
 
 pub use anchor::Anchor;
 pub use axis::{Axis, Location};
+pub use boolean::{boolean, BooleanOp};
 pub use component::{Component, DecomposedTransform, Transform};
-pub use contour::Contour;
+pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, ComponentId, ContourId, EntityId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
 };
