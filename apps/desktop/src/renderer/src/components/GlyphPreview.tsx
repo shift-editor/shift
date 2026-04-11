@@ -3,7 +3,6 @@ import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/editor/Font";
 import { useSignalState } from "@/lib/reactive";
 import { getEditor } from "@/store/store";
-import { interpolateGlyph } from "@/lib/interpolation/interpolate";
 import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 export const CELL_HEIGHT = 75;
@@ -71,16 +70,12 @@ export const GlyphPreview = memo(function GlyphPreview({
     const glyphName = fontEngine.getGlyphNameForUnicode(unicode);
     if (!glyphName) return null;
 
-    const masters = fontEngine.getGlyphMasterSnapshots(glyphName);
-    if (!masters || masters.length < 2) return null;
-
-    const axes = fontEngine.getAxes();
     const target: Record<string, number> = {};
-    for (const axis of axes) {
-      target[axis.tag] = variationLocation.values[axis.tag] ?? axis.default;
+    for (const [tag, value] of Object.entries(variationLocation.values)) {
+      if (value !== undefined) target[tag] = value;
     }
 
-    const result = interpolateGlyph(masters, axes, target);
+    const result = fontEngine.interpolateGlyph(glyphName, target);
     if (!result) return null;
 
     return {
