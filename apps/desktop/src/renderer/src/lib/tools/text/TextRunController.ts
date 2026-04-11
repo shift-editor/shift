@@ -77,6 +77,8 @@ interface RunState {
   readonly cursorVisible: boolean;
   readonly editingIndex: number | null;
   readonly editingGlyph: GlyphRef | null;
+  readonly suspendedEditingIndex: number | null;
+  readonly suspendedEditingGlyph: GlyphRef | null;
   readonly hoveredIndex: number | null;
   readonly inspectionSlotIndex: number | null;
   readonly inspectionHoveredComponentIndex: number | null;
@@ -90,10 +92,37 @@ const EMPTY_RUN: RunState = {
   cursorVisible: false,
   editingIndex: null,
   editingGlyph: null,
+  suspendedEditingIndex: null,
+  suspendedEditingGlyph: null,
   hoveredIndex: null,
   inspectionSlotIndex: null,
   inspectionHoveredComponentIndex: null,
 };
+
+/**
+ * Adjusts an index after a delete-then-insert operation on the glyph array.
+ * Returns null if the index falls within the deleted range.
+ */
+function adjustIndex(
+  index: number | null,
+  deleteStart: number,
+  deleteCount: number,
+  insertAt: number,
+  insertCount: number,
+): number | null {
+  if (index === null) return null;
+
+  if (deleteCount > 0) {
+    if (index >= deleteStart && index < deleteStart + deleteCount) return null;
+    if (index >= deleteStart + deleteCount) index -= deleteCount;
+  }
+
+  if (insertCount > 0 && index >= insertAt) {
+    index += insertCount;
+  }
+
+  return index;
+}
 
 export class TextRunController {
   #runs = new Map<string, WritableSignal<RunState>>();
@@ -178,13 +207,11 @@ export class TextRunController {
   /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
   moveCursorToLineStart(extend = false): void {
     this.#goalX = null;
-    const state = this.#$state.peek();
-    if (!state) return;
+    const cursorY = this.#getCursorLineY();
+    if (cursorY === null) return;
 
-    const r = this.#peek();
+    const state = this.#$state.peek()!;
     const slots = state.layout.slots;
-    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
-    const cursorY = cursorSlot?.y ?? 0;
 
     let lineStart = 0;
     for (let i = 0; i < slots.length; i++) {
@@ -200,19 +227,16 @@ export class TextRunController {
   /** @knipclassignore — used via editor.textRunController in HiddenTextInput */
   moveCursorToLineEnd(extend = false): void {
     this.#goalX = null;
-    const state = this.#$state.peek();
-    if (!state) return;
+    const cursorY = this.#getCursorLineY();
+    if (cursorY === null) return;
 
-    const r = this.#peek();
+    const state = this.#$state.peek()!;
     const slots = state.layout.slots;
-    const cursorSlot = r.cursor > 0 ? slots[r.cursor - 1] : slots[0];
-    const cursorY = cursorSlot?.y ?? 0;
 
     let lineEnd = slots.length;
     for (let i = slots.length - 1; i >= 0; i--) {
       if (slots[i].y === cursorY) {
         lineEnd = i + 1;
-        // Skip newline at end of line
         if (slots[i].unicode === 10) lineEnd = i;
         break;
       }
@@ -409,10 +433,20 @@ export class TextRunController {
 
   insert(glyph: GlyphRef): void {
     this.#update((r) => {
+      const selStart = Math.min(r.anchor, r.cursor);
+      const selCount = Math.abs(r.anchor - r.cursor);
       const { glyphs, cursor } = deleteRange(r);
       const next = [...glyphs];
       next.splice(cursor, 0, glyph);
-      return { ...r, glyphs: next, cursor: cursor + 1, anchor: cursor + 1 };
+      const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, cursor, 1);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: cursor + 1,
+        anchor: cursor + 1,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
     });
   }
 
@@ -421,21 +455,34 @@ export class TextRunController {
       const clamped = Math.max(0, Math.min(index, r.glyphs.length));
       const next = [...r.glyphs];
       next.splice(clamped, 0, glyph);
+      const sei = adjustIndex(r.suspendedEditingIndex, 0, 0, clamped, 1);
       return {
         ...r,
         glyphs: next,
         cursor: r.cursor >= clamped ? r.cursor + 1 : r.cursor,
         anchor: r.anchor >= clamped ? r.anchor + 1 : r.anchor,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
       };
     });
   }
 
   insertMany(glyphs: GlyphRef[]): void {
     this.#update((r) => {
+      const selStart = Math.min(r.anchor, r.cursor);
+      const selCount = Math.abs(r.anchor - r.cursor);
       const { glyphs: current, cursor } = deleteRange(r);
       const next = [...current];
       next.splice(cursor, 0, ...glyphs);
-      return { ...r, glyphs: next, cursor: cursor + glyphs.length, anchor: cursor + glyphs.length };
+      const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, cursor, glyphs.length);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: cursor + glyphs.length,
+        anchor: cursor + glyphs.length,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
     });
   }
 
@@ -444,8 +491,18 @@ export class TextRunController {
 
     if (r.anchor !== r.cursor) {
       this.#update((r) => {
+        const selStart = Math.min(r.anchor, r.cursor);
+        const selCount = Math.abs(r.anchor - r.cursor);
         const { glyphs, cursor } = deleteRange(r);
-        return { ...r, glyphs, cursor, anchor: cursor };
+        const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, 0, 0);
+        return {
+          ...r,
+          glyphs,
+          cursor,
+          anchor: cursor,
+          suspendedEditingIndex: sei,
+          suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+        };
       });
       return true;
     }
@@ -455,7 +512,15 @@ export class TextRunController {
     this.#update((r) => {
       const next = [...r.glyphs];
       next.splice(r.cursor - 1, 1);
-      return { ...r, glyphs: next, cursor: r.cursor - 1, anchor: r.cursor - 1 };
+      const sei = adjustIndex(r.suspendedEditingIndex, r.cursor - 1, 1, 0, 0);
+      return {
+        ...r,
+        glyphs: next,
+        cursor: r.cursor - 1,
+        anchor: r.cursor - 1,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
     });
     return true;
   }
@@ -465,8 +530,18 @@ export class TextRunController {
 
     if (r.anchor !== r.cursor) {
       this.#update((r) => {
+        const selStart = Math.min(r.anchor, r.cursor);
+        const selCount = Math.abs(r.anchor - r.cursor);
         const { glyphs, cursor } = deleteRange(r);
-        return { ...r, glyphs, cursor, anchor: cursor };
+        const sei = adjustIndex(r.suspendedEditingIndex, selStart, selCount, 0, 0);
+        return {
+          ...r,
+          glyphs,
+          cursor,
+          anchor: cursor,
+          suspendedEditingIndex: sei,
+          suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+        };
       });
       return true;
     }
@@ -476,7 +551,13 @@ export class TextRunController {
     this.#update((r) => {
       const next = [...r.glyphs];
       next.splice(r.cursor, 1);
-      return { ...r, glyphs: next };
+      const sei = adjustIndex(r.suspendedEditingIndex, r.cursor, 1, 0, 0);
+      return {
+        ...r,
+        glyphs: next,
+        suspendedEditingIndex: sei,
+        suspendedEditingGlyph: sei !== null ? r.suspendedEditingGlyph : null,
+      };
     });
     return true;
   }
@@ -535,10 +616,40 @@ export class TextRunController {
       ...r,
       editingIndex: null,
       editingGlyph: null,
+      suspendedEditingIndex: null,
+      suspendedEditingGlyph: null,
       hoveredIndex: null,
       inspectionSlotIndex: null,
       inspectionHoveredComponentIndex: null,
     }));
+  }
+
+  suspendEditing(): void {
+    this.#update((r) => ({
+      ...r,
+      suspendedEditingIndex: r.editingIndex,
+      suspendedEditingGlyph: r.editingGlyph,
+      editingIndex: null,
+      editingGlyph: null,
+      hoveredIndex: null,
+      inspectionSlotIndex: null,
+      inspectionHoveredComponentIndex: null,
+    }));
+  }
+
+  resumeEditing(): { index: number; glyph: GlyphRef } | null {
+    const r = this.#peek();
+    const index = r.suspendedEditingIndex;
+    const glyph = r.suspendedEditingGlyph;
+    this.#update((r) => ({
+      ...r,
+      editingIndex: r.suspendedEditingIndex,
+      editingGlyph: r.suspendedEditingGlyph,
+      suspendedEditingIndex: null,
+      suspendedEditingGlyph: null,
+    }));
+    if (index === null || glyph === null) return null;
+    return { index, glyph };
   }
 
   setHovered(index: number | null): void {
@@ -660,6 +771,26 @@ export class TextRunController {
     const $r = this.#signal();
     const next = fn($r.peek());
     $r.set(next);
+  }
+
+  #getCursorLineY(): number | null {
+    const state = this.#$state.peek();
+    const font = this.#$font.peek();
+    if (!state || !font) return null;
+
+    const r = this.#peek();
+    const slots = state.layout.slots;
+    if (slots.length === 0) return null;
+
+    const prevSlot = r.cursor > 0 ? slots[r.cursor - 1] : null;
+
+    if (prevSlot && prevSlot.unicode === 10) {
+      const metrics = font.getMetrics();
+      const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+      return prevSlot.y - lineHeight;
+    }
+
+    return (prevSlot ?? slots[0])?.y ?? 0;
   }
 
   #deriveRenderState(): TextRunRenderState | null {

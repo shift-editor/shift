@@ -10,16 +10,6 @@ import { renderTextRun } from "@/lib/editor/rendering/passes/textRun";
 import type { CompositeInspectionRenderData } from "@/lib/editor/rendering/passes/textRun";
 import type { TextRunRenderState } from "./TextRunController";
 
-function resolveDrawStyle(pxToUpm: (px?: number) => number) {
-  return (style: { lineWidth?: number; strokeStyle?: string; fillStyle?: string }) => {
-    return {
-      lineWidth: style.lineWidth ? pxToUpm(style.lineWidth) : undefined,
-      strokeStyle: style.strokeStyle,
-      fillStyle: style.fillStyle,
-    };
-  };
-}
-
 export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
   const textRunState = editor.textRunController.state.value;
   if (!textRunState) return;
@@ -46,10 +36,9 @@ export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
       ctx,
       pxToUpm: (px?: number) => draw.pxToUpm(px),
       applyStyle: (style) => {
-        const resolved = resolveDrawStyle(draw.pxToUpm.bind(draw))(style);
-        if (resolved.lineWidth !== undefined) ctx.lineWidth = resolved.lineWidth;
-        if (resolved.strokeStyle) ctx.strokeStyle = resolved.strokeStyle;
-        if (resolved.fillStyle) ctx.fillStyle = resolved.fillStyle;
+        if (style.lineWidth) ctx.lineWidth = draw.pxToUpm(style.lineWidth);
+        if (style.strokeStyle) ctx.strokeStyle = style.strokeStyle;
+        if (style.fillStyle) ctx.fillStyle = style.fillStyle;
       },
     },
     textRunState,

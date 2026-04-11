@@ -327,4 +327,99 @@ describe("TextRunController", () => {
       expect(ctrl.state.peek()).toBe(null);
     });
   });
+
+  describe("suspendEditing / resumeEditing", () => {
+    it("suspends and resumes editing index", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.setEditingSlot(1, glyph("B"));
+
+      ctrl.suspendEditing();
+
+      const restored = ctrl.resumeEditing();
+      expect(restored).toEqual({ index: 1, glyph: glyph("B") });
+    });
+
+    it("tracks editing index through insert before", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.setEditingSlot(1, glyph("B"));
+
+      ctrl.suspendEditing();
+      ctrl.placeCaret(0);
+      ctrl.insert(glyph("X"));
+
+      const restored = ctrl.resumeEditing();
+      expect(restored?.index).toBe(2);
+      expect(restored?.glyph).toEqual(glyph("B"));
+    });
+
+    it("tracks editing index through insert after", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.setEditingSlot(0, glyph("A"));
+
+      ctrl.suspendEditing();
+      ctrl.insert(glyph("C"));
+
+      const restored = ctrl.resumeEditing();
+      expect(restored?.index).toBe(0);
+    });
+
+    it("nulls editing index when editing glyph is deleted", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.insert(glyph("C"));
+      ctrl.setEditingSlot(1, glyph("B"));
+
+      ctrl.suspendEditing();
+      ctrl.placeCaret(2);
+      ctrl.delete();
+
+      const restored = ctrl.resumeEditing();
+      expect(restored).toBeNull();
+    });
+
+    it("tracks editing index through deleteForward", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.insert(glyph("C"));
+      ctrl.setEditingSlot(2, glyph("C"));
+
+      ctrl.suspendEditing();
+      ctrl.placeCaret(0);
+      ctrl.deleteForward();
+
+      const restored = ctrl.resumeEditing();
+      expect(restored?.index).toBe(1);
+    });
+
+    it("tracks editing index through selection delete", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.insert(glyph("C"));
+      ctrl.insert(glyph("D"));
+      ctrl.setEditingSlot(3, glyph("D"));
+
+      ctrl.suspendEditing();
+      ctrl.selectRange(0, 2);
+      ctrl.delete();
+
+      const restored = ctrl.resumeEditing();
+      expect(restored?.index).toBe(1);
+    });
+
+    it("tracks editing index through insertMany", () => {
+      ctrl.insert(glyph("A"));
+      ctrl.insert(glyph("B"));
+      ctrl.setEditingSlot(1, glyph("B"));
+
+      ctrl.suspendEditing();
+      ctrl.placeCaret(0);
+      ctrl.insertMany([glyph("X"), glyph("Y")]);
+
+      const restored = ctrl.resumeEditing();
+      expect(restored?.index).toBe(3);
+    });
+  });
 });
