@@ -378,6 +378,7 @@ export class NativeBridge {
     this.#raw.setNodePositions(nativeUpdates);
   }
 
+  /** @knipclassignore — used by Editor for smart drag constraints */
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.hasSession()) return [];
     const reactive = this.#$glyph.peek();

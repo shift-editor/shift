@@ -1,61 +1,9 @@
-import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
+import type { PointId, ContourId, Point2D } from "@shift/types";
 import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
-
-/**
- * Inserts a point into an existing contour immediately before a reference point.
- * Used by the pen tool to add on-curve or off-curve points at a specific
- * position in the contour's winding order. Undo removes the inserted point.
- */
-export class InsertPointCommand extends BaseCommand<PointId> {
-  readonly name = "Insert Point";
-
-  #beforePointId: PointId;
-  #x: number;
-  #y: number;
-  #pointType: PointType;
-  #smooth: boolean;
-
-  #resultId: PointId | null = null;
-
-  constructor(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ) {
-    super();
-    this.#beforePointId = beforePointId;
-    this.#x = x;
-    this.#y = y;
-    this.#pointType = pointType;
-    this.#smooth = smooth;
-  }
-
-  execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.bridge.insertPointBefore(this.#beforePointId, {
-      x: this.#x,
-      y: this.#y,
-      pointType: this.#pointType,
-      smooth: this.#smooth,
-    });
-    return this.#resultId;
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#resultId) {
-      ctx.bridge.removePoints([this.#resultId]);
-    }
-  }
-
-  override redo(ctx: CommandContext): PointId {
-    return this.execute(ctx);
-  }
-}
 
 /**
  * Closes the active contour, connecting the last point back to the first.

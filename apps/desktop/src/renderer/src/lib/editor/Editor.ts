@@ -2,16 +2,7 @@ import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem, VisualState } from "@/types/editor";
-import type {
-  Point2D,
-  Rect2D,
-  PointId,
-  AnchorId,
-  ContourId,
-  Contour,
-  Point,
-  PointType,
-} from "@shift/types";
+import type { Point2D, Rect2D, PointId, AnchorId, ContourId, Contour, Point } from "@shift/types";
 import type { Glyph } from "@/lib/model/glyph";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
@@ -29,9 +20,6 @@ import { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
-  AddPointCommand,
-  CloseContourCommand,
-  InsertPointCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
@@ -39,7 +27,6 @@ import {
   SetActiveContourCommand,
   ReverseContourCommand,
   SplitSegmentCommand,
-  ToggleSmoothCommand,
   UpgradeLineToCubicCommand,
 } from "../commands";
 import {
@@ -113,7 +100,6 @@ import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
@@ -1183,9 +1169,12 @@ export class Editor implements ShiftEditor {
   }
 
   public deleteSelectedPoints(): void {
+    const glyph = this.#$glyph.value;
+    if (!glyph) return;
+
     const selectedIds = [...this.selection.pointIds];
     if (selectedIds.length > 0) {
-      this.#bridge.removePoints(selectedIds);
+      glyph.removePoints(selectedIds);
       this.selection.clear();
     }
   }
@@ -1319,57 +1308,6 @@ export class Editor implements ShiftEditor {
     return this.getContourById(activeContourId);
   }
 
-  public addPoint(x: number, y: number, type: PointType, smooth = false): PointId {
-    return this.#bridge.addPoint({
-      x,
-      y,
-      pointType: type,
-      smooth,
-    });
-  }
-
-  public addPointToContour(
-    contourId: ContourId,
-    position: Point2D,
-    type: PointType,
-    smooth?: boolean,
-  ): PointId {
-    return this.#commandHistory.execute(
-      new AddPointCommand(position.x, position.y, type, smooth ?? false, contourId),
-    );
-  }
-
-  public insertPointBefore(
-    beforePointId: PointId,
-    position: Point2D,
-    type: PointType,
-    smooth?: boolean,
-  ): PointId {
-    return this.#commandHistory.execute(
-      new InsertPointCommand(beforePointId, position.x, position.y, type, smooth ?? false),
-    );
-  }
-
-  public movePoints(ids: PointId[], dx: number, dy: number): void {
-    this.#bridge.movePoints(ids, { x: dx, y: dy });
-  }
-
-  public moveAnchors(ids: AnchorId[], delta: Point2D): void {
-    this.#bridge.moveAnchors(ids, delta);
-  }
-
-  public movePointTo(id: PointId, position: Point2D): void {
-    this.#bridge.movePointTo(id, position.x, position.y);
-  }
-
-  public applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
-    return this.#bridge.applySmartEdits(new Set(ids), dx, dy);
-  }
-
-  public setNodePositions(updates: NodePositionUpdateList): void {
-    this.#bridge.setNodePositions(updates);
-  }
-
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
     this.#commandHistory.withBatch("Continue Contour", () => {
       this.#commandHistory.execute(new SetActiveContourCommand(contourId));
@@ -1401,34 +1339,6 @@ export class Editor implements ShiftEditor {
 
   public upgradeLineToCubic(segment: LineSegment): void {
     this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
-  }
-
-  public removePoints(ids: PointId[]): void {
-    this.#bridge.removePoints(ids);
-  }
-
-  public addContour(): ContourId {
-    return this.#bridge.addContour();
-  }
-
-  public closeContour(): void {
-    this.#commandHistory.execute(new CloseContourCommand());
-  }
-
-  public toggleSmooth(id: PointId): void {
-    this.#commandHistory.execute(new ToggleSmoothCommand(id));
-  }
-
-  public setActiveContour(contourId: ContourId): void {
-    this.#bridge.setActiveContour(contourId);
-  }
-
-  public clearActiveContour(): void {
-    this.#bridge.clearActiveContour();
-  }
-
-  public reverseContour(contourId: ContourId): void {
-    this.#commandHistory.execute(new ReverseContourCommand(contourId));
   }
 
   public applyBooleanOp(

@@ -18,16 +18,7 @@
  *
  * @module
  */
-import type {
-  Point2D,
-  PointId,
-  ContourId,
-  PointType,
-  Point,
-  Contour,
-  Rect2D,
-  AnchorId,
-} from "@shift/types";
+import type { Point2D, PointId, ContourId, Point, Contour, Rect2D, AnchorId } from "@shift/types";
 import type { Glyph } from "@/lib/model/glyph";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
@@ -54,7 +45,6 @@ import type { TextRunController } from "@/lib/tools/text/TextRunController";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { GlyphDraft } from "@/types/draft";
 import type { Selection } from "@/types/selection";
 
@@ -168,42 +158,22 @@ export interface Snapping {
 /**
  * Glyph mutation operations.
  *
- * Low-level editing primitives that modify point positions, toggle smoothness,
- * and manage the "active contour" (the contour currently being drawn by the Pen tool).
+ * Higher-level editing operations that involve command history, selection,
+ * or multi-step logic. Low-level point/contour mutations are on the Glyph
+ * model directly (accessed via `editor.glyph`).
  */
 export interface Editing {
-  addContour(): ContourId;
-  addPointToContour(
-    contourId: ContourId,
-    position: Point2D,
-    type: PointType,
-    smooth?: boolean,
-  ): PointId;
-  insertPointBefore(
-    beforePointId: PointId,
-    position: Point2D,
-    type: PointType,
-    smooth?: boolean,
-  ): PointId;
-  movePointTo(id: PointId, position: Point2D): void;
   splitSegment(segment: Segment, t: number): PointId;
   continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void;
-  setNodePositions(updates: NodePositionUpdateList): void;
   createDraft(): GlyphDraft;
   scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void;
   rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void;
   nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void;
   upgradeLineToCubic(segment: LineSegment): void;
-  moveAnchors(ids: AnchorId[], delta: Point2D): void;
-  toggleSmooth(id: PointId): void;
-  closeContour(): void;
   duplicateSelection(): PointId[];
   /** The contour currently being extended by the Pen tool, or null. */
   getActiveContour(): Contour | null;
   getActiveContourId(): ContourId | null;
-  clearActiveContour(): void;
-  setActiveContour(id: ContourId): void;
-  reverseContour(id: ContourId): void;
   /** Open a glyph for editing by canonical glyph reference. */
   startEditSession(glyph: GlyphRef): void;
   /** Return the unicode codepoint of the glyph currently being edited, or null. */

@@ -55,7 +55,8 @@ export class Pen extends BaseTool<PenState> {
   override activate(): void {
     const pos = this.editor.sceneToGlyphLocal(this.editor.getMousePosition());
     this.state = { type: "ready", mousePos: pos };
-    this.editor.clearActiveContour();
+    const glyph = this.editor.glyph.peek();
+    if (glyph) glyph.clearActiveContour();
   }
 
   override deactivate(): void {

@@ -19,7 +19,10 @@ export class ToggleSmoothBehavior implements SelectHandlerBehavior {
     const point = ctx.editor.getAllPoints().find((p) => p.id === pointId);
     if (!point || !Validate.isOnCurve(point)) return false;
 
-    ctx.editor.toggleSmooth(pointId);
+    const glyph = ctx.editor.glyph.peek();
+    if (!glyph) return false;
+
+    glyph.toggleSmooth(pointId);
     return true;
   }
 }
