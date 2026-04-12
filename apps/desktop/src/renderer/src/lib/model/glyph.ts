@@ -43,6 +43,9 @@ import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
+import type { NativeBridge } from "@/bridge";
+import type { PointEdit } from "@/types/engine";
+
 export class Contour {
   readonly id: ContourId;
   readonly #closed: WritableSignal<boolean>;
@@ -118,6 +121,7 @@ export class Contour {
 export class Glyph {
   readonly name: string;
   readonly unicode: number;
+  readonly #bridge: NativeBridge;
 
   readonly #contours: WritableSignal<readonly Contour[]>;
   readonly #xAdvance: WritableSignal<number>;
@@ -127,7 +131,9 @@ export class Glyph {
   readonly #path: ComputedSignal<Path2D>;
   readonly #bbox: ComputedSignal<BoundsType | null>;
 
-  constructor(snapshot: GlyphSnapshot) {
+  constructor(bridge: NativeBridge) {
+    this.#bridge = bridge;
+    const snapshot = bridge.getSnapshot();
     this.name = snapshot.name;
     this.unicode = snapshot.unicode;
     this.#contours = signal<readonly Contour[]>(snapshot.contours.map((c) => new Contour(c)));
@@ -184,6 +190,7 @@ export class Glyph {
     return this.#compositeContours.value;
   }
 
+  /** @knipclassignore */
   get activeContourId(): ContourId | null {
     return this.#activeContourId.value;
   }
@@ -192,6 +199,7 @@ export class Glyph {
     return this.#path.value;
   }
 
+  /** @knipclassignore */
   get bbox(): BoundsType | null {
     return this.#bbox.value;
   }
@@ -214,6 +222,59 @@ export class Glyph {
   /** @knipclassignore */
   getPointAt(pos: Point2D, radius: number): Point | null {
     return Glyphs.getPointAt(this, pos, radius);
+  }
+
+  /** @knipclassignore — callers migrating from bridge → glyph */
+  addPoint(edit: PointEdit): PointId {
+    return this.#bridge.addPoint(edit);
+  }
+  /** @knipclassignore */ addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
+    return this.#bridge.addPointToContour(contourId, edit);
+  }
+  /** @knipclassignore */ insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
+    return this.#bridge.insertPointBefore(beforePointId, edit);
+  }
+  /** @knipclassignore */ movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
+    return this.#bridge.movePoints(pointIds, delta);
+  }
+  /** @knipclassignore */ movePointTo(pointId: PointId, x: number, y: number): void {
+    this.#bridge.movePointTo(pointId, x, y);
+  }
+  /** @knipclassignore */ moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
+    this.#bridge.moveAnchors(anchorIds, delta);
+  }
+  /** @knipclassignore */ removePoints(pointIds: PointId[]): void {
+    this.#bridge.removePoints(pointIds);
+  }
+  /** @knipclassignore */ toggleSmooth(pointId: PointId): void {
+    this.#bridge.toggleSmooth(pointId);
+  }
+  /** @knipclassignore */ addContour(): ContourId {
+    return this.#bridge.addContour();
+  }
+  /** @knipclassignore */ closeContour(): void {
+    this.#bridge.closeContour();
+  }
+  /** @knipclassignore */ openContour(contourId: ContourId): void {
+    this.#bridge.openContour(contourId);
+  }
+  /** @knipclassignore */ reverseContour(contourId: ContourId): void {
+    this.#bridge.reverseContour(contourId);
+  }
+  /** @knipclassignore */ setXAdvance(width: number): void {
+    this.#bridge.setXAdvance(width);
+  }
+  /** @knipclassignore */ setNodePositions(updates: NodePositionUpdateList): void {
+    this.#bridge.setNodePositions(updates);
+  }
+  /** @knipclassignore */ setActiveContour(contourId: ContourId): void {
+    this.#bridge.setActiveContour(contourId);
+  }
+  /** @knipclassignore */ clearActiveContour(): void {
+    this.#bridge.clearActiveContour();
+  }
+  /** @knipclassignore */ restoreSnapshot(snapshot: GlyphSnapshot): void {
+    this.#bridge.restoreSnapshot(snapshot);
   }
 
   /**

@@ -102,7 +102,7 @@ export class NativeBridge {
         : { glyphName: target.glyphName };
     this.#raw.startEditSession(ref);
     const snapshot = this.getSessionGlyph();
-    this.#$glyph.set(snapshot ? new Glyph(snapshot) : null);
+    this.#$glyph.set(snapshot ? new Glyph(this) : null);
   }
 
   endEditSession(): void {
@@ -220,7 +220,7 @@ export class NativeBridge {
       glyph.apply(snapshot);
       this.#$glyph.set(glyph);
     } else {
-      this.#$glyph.set(new Glyph(snapshot));
+      this.#$glyph.set(new Glyph(this));
     }
   }
 
