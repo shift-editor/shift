@@ -79,7 +79,7 @@ import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
 import type { EditorAPI } from "../tools/core/EditorAPI";
-import type { Font } from "./Font";
+import { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
@@ -152,6 +152,7 @@ export class Editor implements ShiftEditor {
   private $gpuHandlesEnabled: WritableSignal<boolean>;
 
   readonly selection: Selection;
+  readonly font: Font;
   #hover: HoverManager;
   #renderer: CanvasCoordinator;
   #edgePan: EdgePanManager;
@@ -205,6 +206,7 @@ export class Editor implements ShiftEditor {
   constructor(options: { bridge: NativeBridge }) {
     this.#viewport = new ViewportManager();
     this.#bridge = options.bridge;
+    this.font = new Font(this.#bridge);
     const glyphInfo = getGlyphInfo();
     this.#glyphNaming = new GlyphNamingService({
       getExistingGlyphNameForUnicode: (unicode) => this.#bridge.nameForUnicode(unicode),
@@ -282,7 +284,7 @@ export class Editor implements ShiftEditor {
       commands: this.#commandHistory,
     });
     this.#textRunController = new TextRunController();
-    this.#textRunController.setFont(this.#bridge);
+    this.#textRunController.setFont(this.font);
 
     const textRunPersistence = this.registerState<TextRunModulePayload>({
       id: "text-run",
@@ -825,10 +827,6 @@ export class Editor implements ShiftEditor {
     this.#bumpToolStateVersion();
   }
 
-  public get font(): Font {
-    return this.#bridge;
-  }
-
   public get glyph(): Signal<Glyph | null> {
     return this.#$glyph;
   }
@@ -1145,7 +1143,7 @@ export class Editor implements ShiftEditor {
     const unicodes = this.#bridge.getGlyphUnicodes();
     const metrics = this.#bridge.getMetrics();
     this.#bridge.setFontLoaded(unicodes, metrics);
-    this.#events.emit("fontLoaded", { font: this.#bridge });
+    this.#events.emit("fontLoaded", { font: this.font });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
     this.startEditSession(glyphRef);

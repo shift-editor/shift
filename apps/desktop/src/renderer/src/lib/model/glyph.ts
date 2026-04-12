@@ -1,16 +1,15 @@
 /**
  * Reactive glyph model.
  *
- * A {@link Glyph} is a reactive mirror of Rust glyph data with per-contour
- * signal granularity. Property getters auto-unwrap signals, so consumers
- * read `glyph.contours`, `glyph.xAdvance`, `contour.points` etc. as plain
- * values — identical to the domain Glyph type from @shift/types. Inside a
- * reactive context (computed/effect) the read auto-tracks the signal.
+ * {@link Glyph} and {@link Contour} are reactive mirrors of Rust glyph data
+ * with per-contour signal granularity. Property getters auto-unwrap signals,
+ * so consumers read `glyph.contours`, `glyph.xAdvance`, `contour.points`
+ * as plain values. Inside a reactive context (computed/effect) the read
+ * auto-tracks the signal.
  *
  * All mutations go through {@link Glyph.apply}, which accepts either a full
  * {@link GlyphSnapshot} (structural edits, undo/redo) or a
- * {@link NodePositionUpdateList} (drag hot path). The glyph optimizes
- * internally — position updates only touch affected contour signals.
+ * {@link NodePositionUpdateList} (drag hot path).
  */
 
 import type {
@@ -31,13 +30,20 @@ import {
   type WritableSignal,
   type ComputedSignal,
 } from "@/lib/reactive/signal";
-import { parseContourSegments, segmentToCurve, type SegmentContourLike } from "@shift/font";
+import {
+  Contours,
+  Glyphs,
+  parseContourSegments,
+  segmentToCurve,
+  type SegmentContourLike,
+  type PointWithNeighbors,
+} from "@shift/font";
 import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
-export class GlyphContour {
+export class Contour {
   readonly id: ContourId;
   readonly #closed: WritableSignal<boolean>;
   readonly #points: WritableSignal<readonly Point[]>;
@@ -75,6 +81,28 @@ export class GlyphContour {
     return this.#bounds.value;
   }
 
+  get firstPoint(): Point | null {
+    return this.#points.value[0] ?? null;
+  }
+
+  get lastPoint(): Point | null {
+    const pts = this.#points.value;
+    return pts[pts.length - 1] ?? null;
+  }
+
+  get isEmpty(): boolean {
+    return this.#points.value.length === 0;
+  }
+
+  /** @knipclassignore */
+  *withNeighbors(): Generator<PointWithNeighbors> {
+    yield* Contours.withNeighbors(this);
+  }
+
+  canClose(position: Point2D, hitRadius: number): boolean {
+    return Contours.canClose(this, position, hitRadius);
+  }
+
   /** @internal Called by Glyph.apply for structural updates. */
   _update(snapshot: ContourSnapshot): void {
     this.#closed.set(snapshot.closed);
@@ -91,19 +119,18 @@ export class Glyph {
   readonly name: string;
   readonly unicode: number;
 
-  readonly #contours: WritableSignal<readonly GlyphContour[]>;
+  readonly #contours: WritableSignal<readonly Contour[]>;
   readonly #xAdvance: WritableSignal<number>;
   readonly #anchors: WritableSignal<readonly Anchor[]>;
   readonly #compositeContours: WritableSignal<readonly RenderContour[]>;
   readonly #activeContourId: WritableSignal<ContourId | null>;
   readonly #path: ComputedSignal<Path2D>;
   readonly #bbox: ComputedSignal<BoundsType | null>;
+
   constructor(snapshot: GlyphSnapshot) {
     this.name = snapshot.name;
     this.unicode = snapshot.unicode;
-    this.#contours = signal<readonly GlyphContour[]>(
-      snapshot.contours.map((c) => new GlyphContour(c)),
-    );
+    this.#contours = signal<readonly Contour[]>(snapshot.contours.map((c) => new Contour(c)));
     this.#xAdvance = signal(snapshot.xAdvance);
     this.#anchors = signal<readonly Anchor[]>(snapshot.anchors);
     this.#compositeContours = signal<readonly RenderContour[]>(snapshot.compositeContours);
@@ -140,7 +167,7 @@ export class Glyph {
     });
   }
 
-  get contours(): readonly GlyphContour[] {
+  get contours(): readonly Contour[] {
     return this.#contours.value;
   }
 
@@ -167,6 +194,26 @@ export class Glyph {
 
   get bbox(): BoundsType | null {
     return this.#bbox.value;
+  }
+
+  /** @knipclassignore */
+  findPoint(pointId: PointId) {
+    return Glyphs.findPoint(this, pointId);
+  }
+
+  /** @knipclassignore */
+  findContour(contourId: ContourId) {
+    return Glyphs.findContour(this, contourId);
+  }
+
+  /** @knipclassignore */
+  get allPoints(): Point[] {
+    return Glyphs.getAllPoints(this);
+  }
+
+  /** @knipclassignore */
+  getPointAt(pos: Point2D, radius: number): Point | null {
+    return Glyphs.getPointAt(this, pos, radius);
   }
 
   /**
@@ -209,18 +256,18 @@ export class Glyph {
       this.#compositeContours.set(snapshot.compositeContours);
       this.#activeContourId.set(snapshot.activeContourId);
 
-      const currentById = new Map<ContourId, GlyphContour>();
+      const currentById = new Map<ContourId, Contour>();
       for (const c of this.#contours.peek()) {
         currentById.set(c.id, c);
       }
 
-      const updated: GlyphContour[] = snapshot.contours.map((cs) => {
+      const updated: Contour[] = snapshot.contours.map((cs) => {
         const existing = currentById.get(cs.id);
         if (existing) {
           existing._update(cs);
           return existing;
         }
-        return new GlyphContour(cs);
+        return new Contour(cs);
       });
 
       this.#contours.set(updated);
