@@ -1,32 +1,37 @@
-import type { FontMetrics, FontMetadata, CompositeGlyph, Axis, Source } from "@shift/types";
+import type {
+  FontMetrics,
+  FontMetadata,
+  CompositeGlyph,
+  Axis,
+  Source,
+  Location,
+} from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import type { InterpolationResult } from "@/bridge/NativeBridge";
 import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import { Variation } from "./Variation";
-import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 /**
  * Reactive font data surface.
  *
- * When a variable font is loaded, `font.variation` provides the
- * interpolation engine. `getPath()` and `getAdvance()` transparently
- * return interpolated results when a variation location is active.
+ * Auto-unwrapping getters (same pattern as Glyph). Reading `font.metrics`,
+ * `font.unicodes`, `font.loaded` inside a computed/effect auto-tracks.
  */
 export class Font {
   readonly #bridge: NativeBridge;
   readonly #$loaded: WritableSignal<boolean>;
   readonly #$unicodes: WritableSignal<number[]>;
   readonly #$metrics: WritableSignal<FontMetrics | null>;
-  variation: Variation | null = null;
+  readonly #$variationLocation: WritableSignal<Location | null>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
     this.#$loaded = signal(false);
     this.#$unicodes = signal<number[]>([]);
     this.#$metrics = signal<FontMetrics | null>(null);
+    this.#$variationLocation = signal<Location | null>(null);
   }
 
   /** @knipclassignore */
@@ -44,18 +49,19 @@ export class Font {
     return this.#$metrics.value;
   }
 
+  /** Raw signals for React hooks that need Signal<T>. */
   /** @knipclassignore */
-  get $loaded(): Signal<boolean> {
+  get $loaded() {
     return this.#$loaded as Signal<boolean>;
   }
 
   /** @knipclassignore */
-  get $unicodes(): Signal<number[]> {
+  get $unicodes() {
     return this.#$unicodes as Signal<number[]>;
   }
 
   /** @knipclassignore */
-  get $metrics(): Signal<FontMetrics | null> {
+  get $metrics() {
     return this.#$metrics as Signal<FontMetrics | null>;
   }
 
@@ -64,26 +70,20 @@ export class Font {
     return this.#bridge.getMetadata();
   }
 
+  /** Sync metrics fetch (non-null, call only when font is loaded). */
   getMetrics(): FontMetrics {
     return this.#bridge.getMetrics();
   }
 
   getPath(name: string): Path2D | null {
-    if (!this.variation) return this.#bridge.getPath(name);
-
-    const snap = this.variation.interpolate(name);
-    if (!snap) return this.#bridge.getPath(name);
-
-    const svg = snapshotToSvgPath(snap);
-    if (!svg) return this.#bridge.getPath(name);
-
-    return new Path2D(svg);
+    return this.#bridge.getPath(name);
   }
 
   nameForUnicode(unicode: number): string | null {
     return this.#bridge.nameForUnicode(unicode);
   }
 
+  /** Resolve unicode to glyph name. Checks font first, then glyph-info DB, then fallback. */
   glyphName(unicode: number): string {
     return (
       this.#bridge.nameForUnicode(unicode) ??
@@ -93,12 +93,7 @@ export class Font {
   }
 
   getAdvance(name: string): number | null {
-    if (!this.variation) return this.#bridge.getAdvance(name);
-
-    const snap = this.variation.interpolate(name);
-    if (!snap) return this.#bridge.getAdvance(name);
-
-    return snap.xAdvance;
+    return this.#bridge.getAdvance(name);
   }
 
   getBbox(name: string): Bounds | null {
@@ -106,35 +101,40 @@ export class Font {
   }
 
   getSvgPath(name: string): string | null {
-    if (!this.variation) return this.#bridge.getSvgPath(name);
-
-    const snap = this.variation.interpolate(name);
-    if (!snap) return this.#bridge.getSvgPath(name);
-
-    return snapshotToSvgPath(snap) || this.#bridge.getSvgPath(name);
+    return this.#bridge.getSvgPath(name);
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by GlyphPreview for variation interpolation */
+  get $variationLocation(): Signal<Location | null> {
+    return this.#$variationLocation;
+  }
+
+  /** @knipclassignore — used by VariationPanel */
+  setVariationLocation(location: Location | null): void {
+    this.#$variationLocation.set(location);
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
     return this.#bridge.isVariable();
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by VariationPanel component */
   getAxes(): Axis[] {
     return this.#bridge.getAxes();
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by VariationPanel component */
   getSources(): Source[] {
     return this.#bridge.getSources();
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by VariationPanel component */
   getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
     return this.#bridge.getGlyphMasterSnapshots(glyphName);
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — interpolate a glyph at a designspace location in Rust */
   interpolateGlyph(
     glyphName: string,
     location: Record<string, number>,
@@ -153,19 +153,16 @@ export class Font {
     this.#$unicodes.set(unicodes);
     this.#$metrics.set(metrics);
     this.#$loaded.set(true);
-
-    this.variation = this.#bridge.isVariable() ? new Variation(this.#bridge) : null;
   }
 
   async save(path: string): Promise<void> {
     return this.#bridge.saveFontAsync(path);
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — called when closing a document */
   reset(): void {
     this.#$loaded.set(false);
     this.#$unicodes.set([]);
     this.#$metrics.set(null);
-    this.variation = null;
   }
 }

@@ -16,7 +16,13 @@ export declare class FontEngine {
    */
   getGlyphSvgPath(unicode: number): string | null
   getGlyphSvgPathByName(glyphName: string): string | null
+  getGlyphAdvance(unicode: number): number | null
   getGlyphAdvanceByName(glyphName: string): number | null
+  /**
+   * Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
+   * including resolved component contours.
+   */
+  getGlyphBbox(unicode: number): Array<number> | null
   getGlyphBboxByName(glyphName: string): Array<number> | null
   getGlyphCompositeComponents(glyphName: string): string | null
   isVariable(): boolean
@@ -24,13 +30,6 @@ export declare class FontEngine {
   getSources(): string
   /** Returns a JSON array of master snapshots for a glyph. */
   getGlyphMasterSnapshots(glyphName: string): string | null
-  /**
-   * Compute variation weights for a designspace location.
-   * Returns per-master scalar weights — glyph-independent, computed once per location.
-   */
-  computeVariationWeights(locationJson: string): string | null
-  /** Compute properly decomposed deltas for a glyph using the VariationModel. */
-  computeGlyphDeltas(glyphName: string): string | null
   /** Interpolate a glyph at a given designspace location. */
   interpolateGlyph(glyphName: string, locationJson: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void

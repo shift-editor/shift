@@ -28,17 +28,6 @@ import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph } from "@/lib/model/Glyph";
 
-export interface VariationWeights {
-  weights: number[];
-  defaultIndex: number;
-  masterIndices: number[];
-}
-
-export interface GlyphDeltas {
-  defaultValues: number[];
-  deltas: number[][];
-}
-
 export interface InterpolationResult {
   instance: GlyphSnapshot;
   errors: Array<{ sourceIndex: number; sourceName: string; message: string }>;
@@ -177,20 +166,6 @@ export class NativeBridge {
     const json = this.#raw.getGlyphMasterSnapshots(glyphName);
     if (!json) return null;
     return JSON.parse(json) as MasterSnapshot[];
-  }
-
-  /** @knipclassignore — compute per-master weights for a designspace location */
-  computeVariationWeights(location: Record<string, number>): VariationWeights | null {
-    const json = this.#raw.computeVariationWeights(JSON.stringify({ values: location }));
-    if (!json) return null;
-    return JSON.parse(json) as VariationWeights;
-  }
-
-  /** @knipclassignore — compute decomposed deltas for a glyph */
-  computeGlyphDeltas(glyphName: string): GlyphDeltas | null {
-    const json = this.#raw.computeGlyphDeltas(glyphName);
-    if (!json) return null;
-    return JSON.parse(json) as GlyphDeltas;
   }
 
   /** @knipclassignore — interpolate a glyph at a designspace location in Rust */

@@ -798,7 +798,6 @@ export class TextRunController {
     const r = this.#signal().value; // track run state changes (creates signal if needed)
     const font = this.#$font.value; // track font changes
     if (!font) return null;
-    if (font.variation) void font.variation.$location.value; // track variation location changes
 
     const layout =
       r.glyphs.length > 0
