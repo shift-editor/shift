@@ -1,6 +1,6 @@
 import type { Contour, Point, PointId, Rect2D } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/reactive/signal";
 import type { Selection } from "@/types/selection";
 import type { CommandHistory } from "@/lib/commands";

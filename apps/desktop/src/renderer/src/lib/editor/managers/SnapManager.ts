@@ -2,7 +2,7 @@ import { Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { Point2D, PointId, FontMetrics } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SnapPreferences } from "@/types/editor";
 import type {

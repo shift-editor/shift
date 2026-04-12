@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { FontMetrics } from "@shift/types";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 
 export const CELL_HEIGHT = 75;
 

@@ -1,6 +1,6 @@
 import type { PointId, ContourId, AnchorId } from "@shift/types";
 import type { SegmentId } from "./indicator";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { SelectionMode } from "./editor";
 import {
   signal,

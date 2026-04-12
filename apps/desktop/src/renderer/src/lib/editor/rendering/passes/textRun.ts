@@ -15,7 +15,7 @@ import { buildContourPath } from "../render";
 import type { CompositeComponent } from "@shift/types";
 import { getGuides, renderGuides } from ".";
 import { GUIDE_STYLES } from "@/lib/styles/style";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;

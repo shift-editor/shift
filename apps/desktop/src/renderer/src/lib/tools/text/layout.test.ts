@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 import type { Bounds } from "@shift/geo";
 import { computeTextLayout, hitTestTextSlot, hitTestTextCaret, type GlyphRef } from "./layout";
 import { expectAt } from "@/testing";

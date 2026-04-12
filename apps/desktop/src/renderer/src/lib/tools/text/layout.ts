@@ -1,6 +1,6 @@
 import type { Point2D, FontMetrics } from "@shift/types";
 import type { Bounds } from "@shift/geo";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 
 const NON_SPACING_EDITOR_ADVANCE = 600;

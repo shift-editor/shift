@@ -4,7 +4,7 @@ import type { SelectHandlerBehavior, SelectState } from "../types";
 import { getPointIdFromHit } from "@/types/hitResult";
 import { Validate } from "@shift/validation";
 
-export class ToggleSmoothBehavior implements SelectHandlerBehavior {
+export class ToggleSmooth implements SelectHandlerBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

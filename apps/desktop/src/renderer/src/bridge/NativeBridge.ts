@@ -23,7 +23,7 @@ import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyph } from "@/lib/model/glyph";
+import { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { Glyph } from "./glyph";
+import type { Glyph } from "./Glyph";
 import { asContourId, asPointId, asAnchorId } from "@shift/types";
 import { effect } from "@/lib/reactive/signal";
 import { createBridge } from "@/testing";

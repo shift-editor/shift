@@ -10,7 +10,7 @@
  */
 
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import { Glyphs } from "@shift/font";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";

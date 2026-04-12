@@ -20,7 +20,7 @@ import {
 } from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 export interface CommandHistoryOptions {
   /** Maximum number of commands to keep in history */

@@ -5,7 +5,7 @@
  * Each command receives a Glyph and calls its mutation methods.
  */
 
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Context available to commands during execution.

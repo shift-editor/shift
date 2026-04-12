@@ -12,7 +12,7 @@ import type { GlyphDraft } from "@/types/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { DragTarget } from "../types";
 
-export class RotateBehavior implements SelectHandlerBehavior {
+export class Rotate implements SelectHandlerBehavior {
   #snap: RotateSnapSession | null = null;
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;

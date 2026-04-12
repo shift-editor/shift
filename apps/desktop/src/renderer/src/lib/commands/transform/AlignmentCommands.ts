@@ -4,7 +4,7 @@ import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Resolves point ids against the reactive glyph, returning lightweight

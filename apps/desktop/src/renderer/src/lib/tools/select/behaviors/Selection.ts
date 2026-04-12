@@ -16,7 +16,7 @@ function nextSelectionStateAfterToggle(
   return nextInTypeCount + selectedInOtherTypesCount > 0 ? "selected" : "ready";
 }
 
-export class SelectionBehavior implements SelectHandlerBehavior {
+export class Selection implements SelectHandlerBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
     const editor = ctx.editor;

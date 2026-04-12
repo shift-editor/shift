@@ -10,7 +10,7 @@ import type { BoundingRectEdge } from "../cursor";
 import type { GlyphDraft } from "@/types/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
-export class ResizeBehavior implements SelectHandlerBehavior {
+export class Resize implements SelectHandlerBehavior {
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;
   #origin: Point2D | null = null;

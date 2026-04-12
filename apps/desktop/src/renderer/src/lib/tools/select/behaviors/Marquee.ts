@@ -4,7 +4,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import { normalizeRect, pointInRect } from "../utils";
 
-export class MarqueeBehavior implements SelectHandlerBehavior {
+export class Marquee implements SelectHandlerBehavior {
   onDragStart(
     state: SelectState,
     ctx: ToolContext<SelectState>,

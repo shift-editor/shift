@@ -574,8 +574,9 @@ export default {
         const BRIDGE_ALLOWED = [
           "bridge/", // bridge internals can import each other
           "Editor.ts", // orchestrator wires bridge to Font/Glyph
-          "lib/editor/Font.ts", // Font wraps bridge
-          "lib/model/glyph.ts", // Glyph wraps bridge
+          "Font.ts", // Font wraps bridge
+          "Glyph.ts", // Glyph wraps bridge
+          "glyph.ts", // Glyph wraps bridge (case insensitive match)
           "testing/", // test helpers create bridge instances
           "store/", // app store creates bridge
           "commands/", // commands access bridge via context

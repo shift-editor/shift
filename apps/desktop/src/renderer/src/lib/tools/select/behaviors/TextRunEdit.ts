@@ -2,7 +2,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import { hitTestTextSlot, type GlyphRef } from "../../text/layout";
-import { resolveComponentAtPoint } from "../compositeHitTest";
+import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
 
 /**
  * Handles double-click on a text run glyph to switch it to in-place editing.
@@ -10,7 +10,7 @@ import { resolveComponentAtPoint } from "../compositeHitTest";
  * Takes priority over the normal double-click-select-contour behavior
  * when a text run is active.
  */
-export class TextRunEditBehavior implements SelectHandlerBehavior {
+export class TextRunEdit implements SelectHandlerBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

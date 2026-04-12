@@ -6,7 +6,7 @@
  */
 
 import type { IRenderer } from "@/types/graphics";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Strokes the glyph's complete path (all contours + composites).

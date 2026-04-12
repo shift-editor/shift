@@ -7,7 +7,7 @@ import type { SegmentId } from "@/types/indicator";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { isSegmentHit } from "@/types/hitResult";
 
-export class SelectContourOnDoubleClickBehavior implements SelectHandlerBehavior {
+export class ContourDoubleClick implements SelectHandlerBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

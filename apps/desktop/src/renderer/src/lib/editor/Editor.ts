@@ -3,7 +3,7 @@ import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, AnchorId, ContourId, Contour, Point } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
@@ -53,19 +53,15 @@ import {
 import { Clipboard, resolveClipboardContent } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
-import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "../tools/select/boundingBoxHitTest";
+import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
 import { pointInRect } from "../tools/select/utils";
 import { HoverManager, EdgePanManager } from "./managers";
-import {
-  CanvasCoordinator,
-  type CanvasCoordinatorContext,
-  type ViewportTransform,
-} from "./rendering/CanvasCoordinator";
+import { CanvasCoordinator, ViewportTransform } from "./rendering/CanvasCoordinator";
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
-import { Font } from "./Font";
+import { Font } from "../model/Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
@@ -127,7 +123,7 @@ import type { GlyphDraft } from "@/types/draft";
  *
  * @knipclassignore
  */
-export class Editor implements CanvasCoordinatorContext {
+export class Editor {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
   private $gpuHandlesEnabled: WritableSignal<boolean>;

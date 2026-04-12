@@ -4,7 +4,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { GlyphDraft } from "@/types/draft";
 
-export class BendCurveBehaviour implements SelectHandlerBehavior {
+export class BendCurve implements SelectHandlerBehavior {
   #draft: GlyphDraft | null = null;
   #hasChanges = false;
 

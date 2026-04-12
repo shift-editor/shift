@@ -1,15 +1,7 @@
-import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Point2D, PointId, AnchorId, Rect2D } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
-import type { Font } from "@/lib/editor/Font";
-import type { Signal } from "@/lib/reactive/signal";
-import type { SegmentId } from "@/types/indicator";
+import type { IGraphicContext, IRenderer } from "@/types/graphics";
+import type { Point2D } from "@shift/types";
+import type { Glyph } from "@/lib/model/Glyph";
 import type { Segment as SegmentType } from "@/types/segments";
-import type { SnapIndicator } from "../snapping/types";
-import type { DebugOverlays } from "@shared/ipc/types";
-import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
-import type { Selection } from "@/types/selection";
 
 import {
   BOUNDING_RECTANGLE_STYLES,
@@ -45,6 +37,7 @@ import {
 } from "./passes";
 import { packHandleInstances } from "./gpu/classifyHandles";
 import { getVisibleSceneBounds } from "./visibleSceneBounds";
+import { Editor } from "../Editor";
 
 const HANDLE_CULL_MARGIN_PX = 64;
 
@@ -70,50 +63,6 @@ export interface ViewportTransform {
   padding: number;
   /** Font descender in UPM units (typically negative), used to offset the baseline vertically. */
   descender: number;
-}
-
-/**
- * Dependency interface that the {@link CanvasCoordinator} uses to read editor state
- * each frame. Keeps the coordinator decoupled from concrete Editor/ToolManager
- * implementations -- callers wire up callbacks at construction time.
- *
- * This contract is intentionally consumed indirectly by the renderer; concrete
- * implementations may require explicit dead-code suppression on members that are
- * only referenced through this interface.
- */
-export interface CanvasCoordinatorContext {
-  /** Sidebearing offset applied before glyph rendering, in UPM units. */
-  getDrawOffset(): Point2D;
-  setDrawOffset(offset: Point2D): void;
-  readonly glyph: Signal<Glyph | null>;
-  readonly font: Font;
-  /** When true, renders filled glyph silhouette without guides or handles. */
-  isPreviewMode(): boolean;
-  isHandlesVisible(): boolean;
-  isGpuHandlesEnabled(): boolean;
-  getHoveredSegmentId(): SegmentId | null;
-  readonly selection: Selection;
-  getSegmentById(segmentId: SegmentId): SegmentType | null;
-  getHandleState(pointId: PointId): HandleState;
-  getAnchorHandleState(anchorId: AnchorId): HandleState;
-  getSnapIndicator(): SnapIndicator | null;
-  getViewportTransform(): ViewportTransform;
-  /** Converts a screen-pixel distance to UPM units at the current zoom level. */
-  screenToUpmDistance(px: number): number;
-  /** Projects a point from UPM space to screen pixels, used for screen-space handle rendering. */
-  projectSceneToScreen(scene: Point2D): Point2D;
-  getDebugOverlays(): DebugOverlays;
-  getVisualGlyphAdvance(glyph: Glyph): number;
-  /** Delegates to the active tool's scene-space render method (static canvas, before glyph). */
-  renderToolInScene(draw: DrawAPI): void;
-  /** Delegates to the active tool's render method (interactive canvas). */
-  renderTool(draw: DrawAPI): void;
-  /** Delegates to the active tool's render-below-handles method (static canvas, drawn before point handles). */
-  renderToolBelowHandles(draw: DrawAPI): void;
-  shouldRenderGlyph(): boolean;
-  getSelectionBoundingRect(): Rect2D | null;
-  getHoveredBoundingBoxHandle(): BoundingBoxHitResult;
-  getZoom(): number;
 }
 
 /**
@@ -144,10 +93,10 @@ export class CanvasCoordinator {
   #overlayFrameHandler: FrameHandler;
   #interactiveFrameHandler: FrameHandler;
   #fpsMonitor: FpsMonitor;
-  #ctx: CanvasCoordinatorContext;
+  #ctx: Editor;
   #packedGpuHandleInstances: Float32Array | null = null;
 
-  constructor(ctx: CanvasCoordinatorContext) {
+  constructor(ctx: Editor) {
     this.#ctx = ctx;
     this.#staticFrameHandler = new FrameHandler();
     this.#overlayFrameHandler = new FrameHandler();

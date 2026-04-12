@@ -3,7 +3,7 @@ import { Selection } from "@/types/selection";
 import { signal } from "@/lib/reactive/signal";
 import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 const asPointId = (id: string): PointId => id as PointId;
 const asSegmentId = (id: string): SegmentId => id as SegmentId;

@@ -21,7 +21,7 @@ import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
-export class TranslateBehavior implements SelectHandlerBehavior {
+export class Translate implements SelectHandlerBehavior {
   #snap: DragSnapSession | null = null;
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;

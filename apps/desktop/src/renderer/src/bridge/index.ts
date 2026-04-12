@@ -6,4 +6,4 @@ export { FontEngineError, NoEditSessionError, NativeOperationError } from "./err
 export type { FontEngineAPI } from "./native";
 
 export type { GlyphDraft } from "@/types/draft";
-export { Glyph, Contour } from "@/lib/model/glyph";
+export { Glyph, Contour } from "@/lib/model/Glyph";
