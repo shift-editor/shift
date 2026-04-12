@@ -5,6 +5,7 @@ import type {
   Axis,
   Source,
   Location,
+  GlyphSnapshot,
 } from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import type { InterpolationResult } from "@/bridge/NativeBridge";
@@ -29,6 +30,8 @@ export class Font {
   readonly #$unicodes: WritableSignal<number[]>;
   readonly #$metrics: WritableSignal<FontMetrics | null>;
   readonly #$variationLocation: WritableSignal<Location | null>;
+  #interpolationMemo = new Map<string, import("@shift/types").GlyphSnapshot>();
+  #memoLocation: Location | null = null;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
@@ -109,15 +112,25 @@ export class Font {
     return this.#bridge.getBbox(name);
   }
 
-  #interpolate(name: string): import("@shift/types").GlyphSnapshot | null {
+  #interpolate(name: string): GlyphSnapshot | null {
     const loc = this.#$variationLocation.peek();
     if (!loc) return null;
+
+    if (this.#memoLocation !== loc) {
+      this.#interpolationMemo.clear();
+      this.#memoLocation = loc;
+    }
+
+    const cached = this.#interpolationMemo.get(name);
+    if (cached) return cached;
 
     const values: Record<string, number> = {};
     for (const [k, v] of Object.entries(loc.values)) {
       if (v !== undefined) values[k] = v;
     }
-    return this.#bridge.interpolateGlyph(name, values)?.instance ?? null;
+    const snapshot = this.#bridge.interpolateGlyph(name, values)?.instance ?? null;
+    if (snapshot) this.#interpolationMemo.set(name, snapshot);
+    return snapshot;
   }
 
   getSvgPath(name: string): string | null {
