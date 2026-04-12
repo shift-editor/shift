@@ -12,7 +12,7 @@ export class ToggleSmoothBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     const pointId = getPointIdFromHit(hit);
     if (pointId === null) return false;
 

@@ -16,7 +16,7 @@ export class PenDownBehaviour implements PenBehavior {
 
     editor.selection.clear();
 
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
 
     if (!activeContour && !hit) {
       const contourId = glyph.addContour();
@@ -70,7 +70,7 @@ export class PenDownBehaviour implements PenBehavior {
     if (state.type !== "ready") return false;
 
     const editor = ctx.editor;
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
 
     if (hit && (hit.type === "segment" || hit.type === "middlePoint")) {
       return false;

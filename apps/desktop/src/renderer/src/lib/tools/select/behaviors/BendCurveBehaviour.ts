@@ -15,7 +15,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
   ): boolean {
     if ((state.type !== "ready" && state.type !== "selected") || !event.metaKey) return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     if (!hit || hit.type !== "segment" || hit.segment.type !== "cubic") return false;
 
     const { t, closestPoint, segmentId, segment } = hit;

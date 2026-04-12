@@ -112,8 +112,8 @@ export class RotateBehavior implements SelectHandlerBehavior {
   }
 
   private tryStartRotate(event: ToolEventOf<"dragStart">, editor: Editor): SelectState | null {
-    const point = editor.getPointAt(event.coords);
-    if (point) return null;
+    const hit = editor.hitTest(event.coords);
+    if (hit?.type === "point") return null;
 
     const bbHit = editor.hitTestBoundingBoxAt(event.coords);
     const corner: CornerHandle | null = bbHit?.type === "rotate" ? bbHit.corner : null;

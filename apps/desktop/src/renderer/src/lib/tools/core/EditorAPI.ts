@@ -16,7 +16,6 @@
 import type { Point2D, PointId, ContourId, Point, Contour, Rect2D, AnchorId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
-import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { FocusZone } from "@/types/focus";
 import type { ToolName } from "./createContext";
@@ -24,7 +23,6 @@ import type { ActiveToolState } from "./ToolStateMap";
 import type { TemporaryToolOptions } from "@/types/editor";
 import type { CommandHistory } from "@/lib/commands";
 import type { Signal } from "@/lib/reactive/signal";
-import type { SegmentHitResult } from "@/lib/geo/Segments";
 import type { LineSegment, Segment } from "@/types/segments";
 import type { HitResult } from "@/types/hitResult";
 import type { Modifiers } from "./GestureDetector";
@@ -116,19 +114,10 @@ export interface SelectionAccess {
  * discriminate via {@link HitResult}.
  */
 export interface HitTesting {
-  /** Return the highest-priority hit at the given position (point > segment > endpoint). */
-  getNodeAt(coords: Coordinates): HitResult;
-  getAnchorAt(
-    coords: Coordinates,
-  ): { id: AnchorId; name: string | null; x: number; y: number } | null;
-  getPointAt(coords: Coordinates): Point | null;
-  getSegmentAt(coords: Coordinates): SegmentHitResult | null;
+  hitTest(coords: Coordinates): HitResult;
   getSegmentById(segmentId: SegmentId): Segment | null;
   getAllPoints(): Point[];
-  getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null;
-  getMiddlePointAt(coords: Coordinates): MiddlePointHit | null;
   getSelectionBoundingRect(): Rect2D | null;
-  /** Hit-test the bounding box resize/rotate handles (not the glyph points). */
   hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult;
 }
 

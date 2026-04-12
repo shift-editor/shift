@@ -134,7 +134,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     event: ToolEventOf<"dragStart">,
     editor: Editor,
   ): SelectState | null {
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
     const pointId = getPointIdFromHit(hit);
     const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
 

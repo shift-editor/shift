@@ -40,7 +40,7 @@ export class Pen extends BaseTool<PenState> {
       return { type: "pen" };
     }
 
-    const hit = this.editor.getNodeAt(this.editor.fromGlyphLocal(pos));
+    const hit = this.editor.hitTest(this.editor.fromGlyphLocal(pos));
     if (isContourEndpointHit(hit) && !hit.contour.closed) return { type: "pen-end" };
     if (isMiddlePointHit(hit)) return { type: "pen-end" };
     if (isSegmentHit(hit)) return { type: "pen-add" };

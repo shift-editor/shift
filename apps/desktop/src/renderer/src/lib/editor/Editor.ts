@@ -1345,14 +1345,14 @@ export class Editor implements CanvasCoordinatorContext {
     this.#commandHistory.record(new SnapshotCommand(`Boolean ${operation}`, before, after));
   }
 
-  public getPointAt(coords: Coordinates): Point | null {
+  private getPointAt(coords: Coordinates): Point | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
     return Glyphs.getPointAt(glyph, coords.glyphLocal, this.hitRadius);
   }
 
-  public getAnchorAt(
+  private getAnchorAt(
     coords: Coordinates,
   ): { id: AnchorId; name: string | null; x: number; y: number } | null {
     const glyph = this.#$glyph.value;
@@ -1367,7 +1367,7 @@ export class Editor implements CanvasCoordinatorContext {
     return null;
   }
 
-  public getSegmentAt(coords: Coordinates): SegmentHitResult | null {
+  private getSegmentAt(coords: Coordinates): SegmentHitResult | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
@@ -1387,7 +1387,7 @@ export class Editor implements CanvasCoordinatorContext {
    * Priority order: contour endpoint > middle point > anchor > any point > segment.
    * Returns `null` if nothing is within `hitRadius`.
    */
-  public getNodeAt(coords: Coordinates): HitResult {
+  public hitTest(coords: Coordinates): HitResult {
     const endpoint = this.getContourEndpointAt(coords);
 
     if (endpoint) {
@@ -1434,7 +1434,7 @@ export class Editor implements CanvasCoordinatorContext {
    * Used by the pen tool to detect when the user clicks an endpoint to close
    * or extend a contour.
    */
-  public getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null {
+  private getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
@@ -1529,7 +1529,7 @@ export class Editor implements CanvasCoordinatorContext {
       }
     }
 
-    // Keep hover precedence aligned with getNodeAt() for click/drag consistency.
+    // Keep hover precedence aligned with hitTest() for click/drag consistency.
     const endpoint = this.getContourEndpointAt(coords);
     if (endpoint) {
       return { type: "point", pointId: endpoint.pointId };
@@ -1599,7 +1599,7 @@ export class Editor implements CanvasCoordinatorContext {
    * Skips the active contour and closed contours. Used by the pen tool to
    * detect mid-contour clicks for splitting or joining.
    */
-  public getMiddlePointAt(coords: Coordinates): MiddlePointHit | null {
+  private getMiddlePointAt(coords: Coordinates): MiddlePointHit | null {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 

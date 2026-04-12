@@ -21,7 +21,7 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     if (state.type !== "ready" && state.type !== "selected") return false;
     const editor = ctx.editor;
 
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
     const pointId = getPointIdFromHit(hit);
     const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
 

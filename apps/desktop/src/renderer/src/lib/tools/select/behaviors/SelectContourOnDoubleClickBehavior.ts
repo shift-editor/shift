@@ -15,7 +15,7 @@ export class SelectContourOnDoubleClickBehavior implements SelectHandlerBehavior
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     if (!isSegmentHit(hit)) return false;
 
     const pointIds = this.findContourPointIdsForSegment(hit.segmentId, ctx.editor);

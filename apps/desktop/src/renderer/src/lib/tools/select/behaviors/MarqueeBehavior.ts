@@ -12,7 +12,7 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     if (hit !== null) return false;
 
     const localPoint = event.coords.glyphLocal;
