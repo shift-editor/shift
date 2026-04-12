@@ -1521,43 +1521,28 @@ export class Editor implements CanvasCoordinatorContext {
   private resolveHover(coords: Coordinates): HoverResult {
     if (this.selection.$pointIds.peek().size > 1) {
       const bbHit = this.hitTestBoundingBoxAt(coords);
-      if (bbHit) {
-        return { type: "boundingBox", handle: bbHit };
-      }
+      if (bbHit) return { type: "boundingBox", handle: bbHit };
     }
 
-    // Keep hover precedence aligned with hitTest() for click/drag consistency.
-    const endpoint = this.getContourEndpointAt(coords);
-    if (endpoint) {
-      return { type: "point", pointId: endpoint.pointId };
-    }
+    const hit = this.hitTest(coords);
+    if (!hit) return { type: "none" };
 
-    const middle = this.getMiddlePointAt(coords);
-    if (middle) {
-      return { type: "point", pointId: middle.pointId };
+    switch (hit.type) {
+      case "point":
+        return { type: "point", pointId: hit.pointId };
+      case "contourEndpoint":
+      case "middlePoint":
+        return { type: "point", pointId: hit.pointId };
+      case "anchor":
+        return { type: "anchor", anchorId: hit.anchorId };
+      case "segment":
+        return {
+          type: "segment",
+          segmentId: hit.segmentId,
+          closestPoint: hit.closestPoint,
+          t: hit.t,
+        };
     }
-
-    const anchor = this.getAnchorAt(coords);
-    if (anchor) {
-      return { type: "anchor", anchorId: anchor.id };
-    }
-
-    const point = this.getPointAt(coords);
-    if (point) {
-      return { type: "point", pointId: point.id };
-    }
-
-    const segmentHit = this.getSegmentAt(coords);
-    if (segmentHit) {
-      return {
-        type: "segment",
-        segmentId: segmentHit.segmentId,
-        closestPoint: segmentHit.point,
-        t: segmentHit.t,
-      };
-    }
-
-    return { type: "none" };
   }
 
   public getAllPoints(): Point[] {
