@@ -89,7 +89,6 @@ const defaultAppSettings: AppSettings = {
     pointRadiusPx: 8,
   },
 };
-import type { GlyphRef } from "@/lib/tools/text/layout";
 import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
@@ -729,14 +728,10 @@ export class Editor {
     return this.#bridge.getEditingGlyphName();
   }
 
-  public glyphRefFromUnicode(unicode: number): GlyphRef {
-    return { glyphName: this.font.glyphName(unicode), unicode };
-  }
-
   public setMainGlyphUnicode(unicode: number | null): void {
     this.#mainGlyphUnicode = unicode;
-    const glyphRef = unicode === null ? null : this.glyphRefFromUnicode(unicode);
-    this.#textRunController.setOwnerGlyph(glyphRef);
+    const ref = unicode === null ? null : { glyphName: this.font.glyphName(unicode), unicode };
+    this.#textRunController.setOwnerGlyph(ref);
   }
 
   public getMainGlyphUnicode(): number | null {
@@ -1011,9 +1006,9 @@ export class Editor {
     this.font.load(filePath);
     this.#events.emit("fontLoaded", { font: this.font });
     this.setMainGlyphUnicode(65);
-    const ref = this.glyphRefFromUnicode(65);
-    this.open(ref.glyphName);
-    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, ref);
+    const name = this.font.glyphName(65);
+    this.open(name);
+    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, name, 65);
   }
 
   public async saveFont(filePath: string): Promise<void> {
@@ -1470,8 +1465,12 @@ export class Editor {
     return this.#drawOffset.value;
   }
 
-  public setDrawOffsetForGlyph(offset: Point2D, glyph: GlyphRef | null): void {
-    this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyph));
+  public setDrawOffsetForGlyph(
+    offset: Point2D,
+    glyphName: string | null,
+    unicode: number | null = null,
+  ): void {
+    this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyphName, unicode));
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
@@ -1517,13 +1516,17 @@ export class Editor {
     return segmentsById;
   }
 
-  #resolveEditorPlacementOffset(offset: Point2D, glyph: GlyphRef | null): Point2D {
-    if (!glyph || !isLikelyNonSpacingGlyphRef(glyph.glyphName, glyph.unicode)) {
+  #resolveEditorPlacementOffset(
+    offset: Point2D,
+    glyphName: string | null,
+    unicode: number | null,
+  ): Point2D {
+    if (!glyphName || !isLikelyNonSpacingGlyphRef(glyphName, unicode)) {
       return offset;
     }
 
     const current = this.#$glyph.peek();
-    if (!current || current.name !== glyph.glyphName) {
+    if (!current || current.name !== glyphName) {
       return offset;
     }
 
@@ -1555,7 +1558,7 @@ export class Editor {
       };
     }
 
-    const bounds = this.font.getBbox(glyph.glyphName);
+    const bounds = this.font.getBbox(glyphName);
     if (!bounds) {
       return offset;
     }

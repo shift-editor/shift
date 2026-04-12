@@ -78,7 +78,11 @@ export class Text extends BaseTool<TextState> {
     const textRunState = ctrl.state.value;
     const slot = textRunState?.layout.slots[restored.index];
     if (slot) {
-      this.editor.setDrawOffsetForGlyph({ x: slot.x, y: slot.y }, restored.glyph);
+      this.editor.setDrawOffsetForGlyph(
+        { x: slot.x, y: slot.y },
+        restored.glyph.glyphName,
+        restored.glyph.unicode,
+      );
     } else {
       this.editor.setDrawOffset({ x: 0, y: 0 });
       ctrl.resetEditingContext();

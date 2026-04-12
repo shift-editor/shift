@@ -59,10 +59,10 @@ export const App = () => {
         if (source === "restore") {
           const unicode = parseEditorUnicodeFromHash(window.location.hash);
           if (unicode !== null) {
-            const ref = editor.glyphRefFromUnicode(unicode);
+            const glyphName = editor.font.glyphName(unicode);
             editor.setMainGlyphUnicode(unicode);
-            editor.open(ref.glyphName);
-            editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, ref);
+            editor.open(glyphName);
+            editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
           }
         } else {
           navigateToHome();
