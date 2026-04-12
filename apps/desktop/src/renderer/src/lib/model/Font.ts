@@ -80,18 +80,12 @@ export class Font {
   }
 
   getPath(name: string): Path2D | null {
-    const loc = this.#$variationLocation.peek();
-    if (!loc) return this.#bridge.getPath(name);
-
-    const values: Record<string, number> = {};
-    for (const [k, v] of Object.entries(loc.values)) {
-      if (v !== undefined) values[k] = v;
+    const interpolated = this.#interpolate(name);
+    if (interpolated) {
+      const svg = snapshotToSvgPath(interpolated);
+      return svg ? new Path2D(svg) : null;
     }
-    const result = this.#bridge.interpolateGlyph(name, values);
-    if (!result) return this.#bridge.getPath(name);
-
-    const svg = snapshotToSvgPath(result.instance);
-    return svg ? new Path2D(svg) : null;
+    return this.#bridge.getPath(name);
   }
 
   nameForUnicode(unicode: number): string | null {
@@ -108,11 +102,22 @@ export class Font {
   }
 
   getAdvance(name: string): number | null {
-    return this.#bridge.getAdvance(name);
+    return this.#interpolate(name)?.xAdvance ?? this.#bridge.getAdvance(name);
   }
 
   getBbox(name: string): Bounds | null {
     return this.#bridge.getBbox(name);
+  }
+
+  #interpolate(name: string): import("@shift/types").GlyphSnapshot | null {
+    const loc = this.#$variationLocation.peek();
+    if (!loc) return null;
+
+    const values: Record<string, number> = {};
+    for (const [k, v] of Object.entries(loc.values)) {
+      if (v !== undefined) values[k] = v;
+    }
+    return this.#bridge.interpolateGlyph(name, values)?.instance ?? null;
   }
 
   getSvgPath(name: string): string | null {
