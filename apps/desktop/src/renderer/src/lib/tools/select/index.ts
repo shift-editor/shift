@@ -3,15 +3,15 @@ export type { SelectionData, TranslateData, ResizeData, SelectBehavior } from ".
 export { edgeToCursor } from "./cursor";
 export { normalizeRect, pointInRect } from "./utils";
 export {
-  SelectionBehavior,
-  MarqueeBehavior,
-  TranslateBehavior,
-  ResizeBehavior,
-  RotateBehavior,
-  NudgeBehavior,
-  EscapeBehavior,
-  ToggleSmoothBehavior,
-  UpgradeSegmentBehavior,
-  BendCurveBehaviour,
-  SelectContourOnDoubleClickBehavior,
+  Selection,
+  Marquee,
+  Translate,
+  Resize,
+  Rotate,
+  Nudge,
+  Escape,
+  ToggleSmooth,
+  UpgradeSegment,
+  BendCurve,
+  ContourDoubleClick,
 } from "./behaviors";

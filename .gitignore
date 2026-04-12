@@ -109,3 +109,6 @@ npm/
 # Generated Glyph Info resources
 packages/glyph-info/resources/*.json
 packages/glyph-info/resources/*.db
+
+
+.claude/schedule*

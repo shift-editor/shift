@@ -19,10 +19,10 @@ const CONTOURS_ALLOWED = [
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them
   "SelectionBounds.ts", // segment-aware bounds needs contour structure
-  "compositeHitTest.ts", // component contour bounds check
+  "hit/composite.ts", // component contour bounds check
   "Editor.ts", // coordinator-level structural traversal
   "clipboard/", // ClipboardContent is not a Glyph, different type
-  "SelectContourOnDoubleClickBehavior.ts", // finds contour by segment match
+  "ContourDoubleClick.ts", // finds contour by segment match
 ];
 
 function checkParam(context, node) {
