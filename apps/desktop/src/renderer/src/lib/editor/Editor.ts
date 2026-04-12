@@ -236,12 +236,12 @@ export class Editor implements CanvasCoordinatorContext {
     this.selection = new Selection(this.#$glyph);
     this.#hover = new HoverManager();
     this.#edgePan = new EdgePanManager(this);
-    this.#snapManager = new SnapManager({
-      getGlyph: () => this.#$glyph.value,
-      getMetrics: () => this.font.getMetrics(),
-      getSnapPreferences: () => this.settings.snap,
-      screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
-    });
+    this.#snapManager = new SnapManager(
+      this.#$glyph,
+      () => this.font.getMetrics(),
+      () => this.settings.snap,
+      (px) => this.#viewport.screenToUpmDistance(px),
+    );
     this.#isHoveringNode = computed(
       () =>
         this.#hover.hoveredPointId.value !== null ||
