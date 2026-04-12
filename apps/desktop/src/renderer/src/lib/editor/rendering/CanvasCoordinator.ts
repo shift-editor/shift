@@ -9,6 +9,7 @@ import type { SnapIndicator } from "../snapping/types";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { DrawAPI } from "@/lib/tools/core/DrawAPI";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
+import type { Selection } from "@/types/selection";
 
 import {
   BOUNDING_RECTANGLE_STYLES,
@@ -91,8 +92,7 @@ export interface CanvasCoordinatorContext {
   isHandlesVisible(): boolean;
   isGpuHandlesEnabled(): boolean;
   getHoveredSegmentId(): SegmentId | null;
-  isSegmentSelected(segmentId: SegmentId): boolean;
-  getSelectedSegmentIds(): ReadonlySet<SegmentId>;
+  readonly selection: Selection;
   getSegmentById(segmentId: SegmentId): SegmentType | null;
   getHandleState(pointId: PointId): HandleState;
   getAnchorHandleState(anchorId: AnchorId): HandleState;
@@ -334,7 +334,7 @@ export class CanvasCoordinator {
       const hoveredSegmentId = this.#ctx.getHoveredSegmentId();
       const hoveredSegment = hoveredSegmentId ? this.#ctx.getSegmentById(hoveredSegmentId) : null;
       const selectedSegments: SegmentType[] = [];
-      for (const selectedSegmentId of this.#ctx.getSelectedSegmentIds()) {
+      for (const selectedSegmentId of this.#ctx.selection.segmentIds) {
         const segment = this.#ctx.getSegmentById(selectedSegmentId);
         if (segment) {
           selectedSegments.push(segment);

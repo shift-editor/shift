@@ -14,7 +14,6 @@ export type { ToolFactory, ToolManifest } from "./ToolManifest";
 export type {
   EditorAPI,
   Viewport,
-  Selection,
   HitTesting,
   Snapping,
   Editing,

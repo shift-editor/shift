@@ -79,7 +79,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     this.#draft = null;
     this.#hasChanges = false;
 
-    ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
   }
 
@@ -88,7 +88,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     this.#draft?.discard();
     this.#draft = null;
     this.#hasChanges = false;
-    ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
   }
 }

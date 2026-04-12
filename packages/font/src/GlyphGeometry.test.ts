@@ -4,7 +4,6 @@ import type { Glyph, Point, PointId, RenderContour } from "@shift/types";
 import {
   deriveGlyphTightBounds,
   deriveGlyphXBounds,
-  iterateRenderableContours,
   parseContourSegments,
   type SegmentContourLike,
 } from "./GlyphGeometry";
@@ -39,23 +38,6 @@ function makeGlyph(input: {
     activeContourId: null,
   };
 }
-
-describe("iterateRenderableContours", () => {
-  it("includes normal and composite contours", () => {
-    const glyph = makeGlyph({
-      contours: [{ id: asContourId("c1"), closed: true, points: [makePoint("p1", 0, 0)] }],
-      compositeContours: [
-        {
-          closed: false,
-          points: [{ x: 1, y: 1, pointType: "onCurve", smooth: false }],
-        },
-      ],
-    });
-
-    const contours = [...iterateRenderableContours(glyph)];
-    expect(contours).toHaveLength(2);
-  });
-});
 
 describe("parseContourSegments", () => {
   it("parses line, quad, and cubic segments", () => {

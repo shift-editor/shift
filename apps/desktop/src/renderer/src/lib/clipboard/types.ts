@@ -1,6 +1,4 @@
-import type { PointId, PointSnapshot, Rect2D } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
-import type { SegmentId } from "@/types/indicator";
+import type { PointSnapshot, Rect2D } from "@shift/types";
 
 export type { PasteResult } from "@/types/engine";
 
@@ -55,11 +53,4 @@ export interface ClipboardState {
 /** Options controlling where pasted content is placed relative to the original. */
 export interface PasteOptions {
   offset: { x: number; y: number };
-}
-
-/** Dependencies injected into the clipboard service to keep it decoupled from the editor. */
-export interface ClipboardServiceDeps {
-  getGlyph: () => Glyph | null;
-  getSelectedPointIds: () => readonly PointId[];
-  getSelectedSegmentIds: () => readonly SegmentId[];
 }

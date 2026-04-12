@@ -26,14 +26,6 @@ import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph } from "@/lib/model/glyph";
 
-export interface GlyphView {
-  name: string;
-  advance: number;
-  bbox: Bounds | null;
-  path2d: Path2D | null;
-  svgPath: string | null;
-}
-
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
  * All font queries, session lifecycle, and glyph mutations live here.
@@ -156,68 +148,36 @@ export class FontEngine {
     return this.#raw.getGlyphUnicodes();
   }
 
-  getGlyphNameForUnicode(unicode: number): string | null {
+  nameForUnicode(unicode: number): string | null {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by glyph grid for dependent lookups */
   getDependentUnicodesByName(glyphName: string): number[] {
     return this.#raw.getDependentUnicodesByName(glyphName);
   }
 
-  /** @knipclassignore — satisfies Font interface */
-  getSvgPath(unicode: number): string | null {
-    return this.#raw.getGlyphSvgPath(unicode) ?? null;
+  getSvgPath(name: string): string | null {
+    return this.#raw.getGlyphSvgPathByName(name) ?? null;
   }
 
   /** @knipclassignore — satisfies Font interface */
-  getSvgPathByName(glyphName: string): string | null {
-    return this.#raw.getGlyphSvgPathByName(glyphName) ?? null;
+  getAdvance(name: string): number | null {
+    return this.#raw.getGlyphAdvanceByName(name) ?? null;
   }
 
-  /** @knipclassignore — satisfies Font interface */
-  getAdvance(unicode: number): number | null {
-    return this.#raw.getGlyphAdvance(unicode) ?? null;
-  }
-
-  /** @knipclassignore — satisfies Font interface */
-  getAdvanceByName(glyphName: string): number | null {
-    return this.#raw.getGlyphAdvanceByName(glyphName) ?? null;
-  }
-
-  /** @knipclassignore — satisfies Font interface */
-  getBbox(unicode: number): Bounds | null {
-    const b = this.#raw.getGlyphBbox(unicode);
+  getBbox(name: string): Bounds | null {
+    const b = this.#raw.getGlyphBboxByName(name);
     if (b == null || b.length !== 4) return null;
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
   }
 
-  getBboxByName(glyphName: string): Bounds | null {
-    const b = this.#raw.getGlyphBboxByName(glyphName);
-    if (b == null || b.length !== 4) return null;
-    return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
-  }
-
-  /** @knipclassignore — used by text run rendering via Font interface */
-  getGlyphPath(name: string): Path2D | null {
+  /** @knipclassignore — satisfies Font interface */
+  getPath(name: string): Path2D | null {
     const editing = this.#$glyph.peek();
     if (editing?.name === name) return editing.path;
-    const svg = this.getSvgPathByName(name);
+    const svg = this.getSvgPath(name);
     return svg ? new Path2D(svg) : null;
-  }
-
-  getGlyph(name: string): GlyphView | null {
-    const svgPath = this.getSvgPathByName(name);
-    const advance = this.getAdvanceByName(name) ?? 0;
-    const bbox = this.getBboxByName(name);
-    return { name, advance, bbox, path2d: svgPath ? new Path2D(svgPath) : null, svgPath };
-  }
-
-  /** @knipclassignore — used by React components via editor.fontEngine */
-  getGlyphByUnicode(unicode: number): GlyphView | null {
-    const name = this.getGlyphNameForUnicode(unicode);
-    if (!name) return null;
-    return this.getGlyph(name);
   }
 
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {

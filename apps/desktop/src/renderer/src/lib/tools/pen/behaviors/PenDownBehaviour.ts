@@ -11,7 +11,7 @@ export class PenDownBehaviour implements PenBehavior {
     const localPoint = event.coords.glyphLocal;
     const activeContour = editor.getActiveContour();
 
-    editor.clearSelection();
+    editor.selection.clear();
 
     const hit = editor.getNodeAt(event.coords);
 

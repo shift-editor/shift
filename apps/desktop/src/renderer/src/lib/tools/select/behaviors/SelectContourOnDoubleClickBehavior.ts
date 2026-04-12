@@ -21,8 +21,7 @@ export class SelectContourOnDoubleClickBehavior implements SelectHandlerBehavior
     const pointIds = this.findContourPointIdsForSegment(hit.segmentId, ctx.editor);
     if (!pointIds) return false;
 
-    ctx.editor.clearSelection();
-    ctx.editor.selectPoints(pointIds);
+    ctx.editor.selection.select(pointIds.map((id) => ({ kind: "point", id })));
     ctx.setState({ type: "selected" });
     return true;
   }

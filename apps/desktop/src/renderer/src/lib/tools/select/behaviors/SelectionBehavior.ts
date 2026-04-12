@@ -27,16 +27,16 @@ export class SelectionBehavior implements SelectHandlerBehavior {
 
     // Anchor hit + shift toggle
     if (anchorId !== null && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.getSelectedPoints();
-      const selectedAnchors = editor.getSelectedAnchors();
-      const selectedSegments = editor.getSelectedSegments();
-      const isSelected = editor.isAnchorSelected(anchorId);
+      const selectedPoints = editor.selection.pointIds;
+      const selectedAnchors = editor.selection.anchorIds;
+      const selectedSegments = editor.selection.segmentIds;
+      const isSelected = editor.selection.isSelected({ kind: "anchor", id: anchorId });
       const type = nextSelectionStateAfterToggle(
         isSelected,
-        selectedAnchors.length,
-        selectedPoints.length + selectedSegments.length,
+        selectedAnchors.size,
+        selectedPoints.size + selectedSegments.size,
       );
-      editor.toggleAnchorSelection(anchorId);
+      editor.selection.toggle({ kind: "anchor", id: anchorId });
       ctx.setState({ type });
       return true;
     }
@@ -49,16 +49,16 @@ export class SelectionBehavior implements SelectHandlerBehavior {
 
     // Point hit + shift toggle
     if (pointId !== null && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.getSelectedPoints();
-      const selectedAnchors = editor.getSelectedAnchors();
-      const selectedSegments = editor.getSelectedSegments();
-      const isSelected = editor.isPointSelected(pointId);
+      const selectedPoints = editor.selection.pointIds;
+      const selectedAnchors = editor.selection.anchorIds;
+      const selectedSegments = editor.selection.segmentIds;
+      const isSelected = editor.selection.isSelected({ kind: "point", id: pointId });
       const type = nextSelectionStateAfterToggle(
         isSelected,
-        selectedPoints.length,
-        selectedAnchors.length + selectedSegments.length,
+        selectedPoints.size,
+        selectedAnchors.size + selectedSegments.size,
       );
-      editor.togglePointSelection(pointId);
+      editor.selection.toggle({ kind: "point", id: pointId });
       ctx.setState({ type });
       return true;
     }
@@ -71,14 +71,14 @@ export class SelectionBehavior implements SelectHandlerBehavior {
 
     // Segment hit + shift toggle
     if (hit !== null && isSegmentHit(hit) && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.getSelectedPoints();
-      const selectedAnchors = editor.getSelectedAnchors();
-      const selectedSegments = editor.getSelectedSegments();
-      const isSelected = editor.isSegmentSelected(hit.segmentId);
+      const selectedPoints = editor.selection.pointIds;
+      const selectedAnchors = editor.selection.anchorIds;
+      const selectedSegments = editor.selection.segmentIds;
+      const isSelected = editor.selection.isSelected({ kind: "segment", id: hit.segmentId });
       const type = nextSelectionStateAfterToggle(
         isSelected,
-        selectedSegments.length,
-        selectedPoints.length + selectedAnchors.length,
+        selectedSegments.size,
+        selectedPoints.size + selectedAnchors.size,
       );
       this.toggleSegment(editor, hit.segmentId);
       ctx.setState({ type });
@@ -93,8 +93,8 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     }
 
     // Clear selection if anything is selected
-    if (state.type === "selected" || editor.hasSelection()) {
-      editor.clearSelection();
+    if (state.type === "selected" || editor.selection.hasSelection()) {
+      editor.selection.clear();
       ctx.setState({ type: "ready" });
       return true;
     }
@@ -104,24 +104,20 @@ export class SelectionBehavior implements SelectHandlerBehavior {
 
   private selectPoint(editor: EditorAPI, pointId: PointId, additive: boolean): void {
     if (additive) {
-      const current = editor.getSelectedPoints();
-      editor.selectPoints([...current, pointId]);
+      editor.selection.add({ kind: "point", id: pointId });
       return;
     }
 
-    editor.clearSelection();
-    editor.selectPoints([pointId]);
+    editor.selection.select([{ kind: "point", id: pointId }]);
   }
 
   private selectAnchor(editor: EditorAPI, anchorId: AnchorId, additive: boolean): void {
     if (additive) {
-      const current = editor.getSelectedAnchors();
-      editor.selectAnchors([...current, anchorId]);
+      editor.selection.add({ kind: "anchor", id: anchorId });
       return;
     }
 
-    editor.clearSelection();
-    editor.selectAnchors([anchorId]);
+    editor.selection.select([{ kind: "anchor", id: anchorId }]);
   }
 
   private selectSegment(editor: EditorAPI, segmentId: SegmentId, additive: boolean): void {
@@ -130,21 +126,22 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     const pointIds = SegmentOps.getPointIds(segment);
 
     if (additive) {
-      editor.addSegmentToSelection(segmentId);
+      editor.selection.add({ kind: "segment", id: segmentId });
       for (const pointId of pointIds) {
-        editor.addPointToSelection(pointId);
+        editor.selection.add({ kind: "point", id: pointId });
       }
       return;
     }
 
-    editor.clearSelection();
-    editor.selectSegments([segmentId]);
-    editor.selectPoints(pointIds);
+    editor.selection.select([
+      { kind: "segment", id: segmentId },
+      ...pointIds.map((id) => ({ kind: "point" as const, id })),
+    ]);
   }
 
   private toggleSegment(editor: EditorAPI, segmentId: SegmentId): void {
-    const wasSelected = editor.isSegmentSelected(segmentId);
-    editor.toggleSegmentInSelection(segmentId);
+    const wasSelected = editor.selection.isSelected({ kind: "segment", id: segmentId });
+    editor.selection.toggle({ kind: "segment", id: segmentId });
 
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
@@ -152,9 +149,9 @@ export class SelectionBehavior implements SelectHandlerBehavior {
 
     for (const pointId of pointIds) {
       if (wasSelected) {
-        editor.removePointFromSelection(pointId);
+        editor.selection.remove({ kind: "point", id: pointId });
       } else {
-        editor.addPointToSelection(pointId);
+        editor.selection.add({ kind: "point", id: pointId });
       }
     }
   }

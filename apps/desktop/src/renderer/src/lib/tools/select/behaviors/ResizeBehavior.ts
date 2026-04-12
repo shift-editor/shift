@@ -109,8 +109,8 @@ export class ResizeBehavior implements SelectHandlerBehavior {
 
     this.#draft = editor.createDraft();
     this.#target = {
-      pointIds: editor.getSelectedPoints(),
-      anchorIds: editor.getSelectedAnchors(),
+      pointIds: [...editor.selection.pointIds],
+      anchorIds: [...editor.selection.anchorIds],
     };
     this.#origin = anchorPoint;
 

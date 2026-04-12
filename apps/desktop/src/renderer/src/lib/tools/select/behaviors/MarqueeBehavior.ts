@@ -17,9 +17,9 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
 
     const localPoint = event.coords.glyphLocal;
     if (state.type === "selected") {
-      ctx.editor.clearSelection();
+      ctx.editor.selection.clear();
     }
-    ctx.editor.setSelectionMode("preview");
+    ctx.editor.selection.setMode("preview");
     ctx.setState({
       type: "selecting",
       selection: { startPos: localPoint, currentPos: localPoint },
@@ -44,15 +44,14 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
 
     const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.clearSelection();
-    ctx.editor.selectPoints([...pointIds]);
+    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
     ctx.setState(pointIds.size > 0 ? { type: "selected" } : { type: "ready" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "selecting") return false;
-    ctx.editor.clearSelection();
+    ctx.editor.selection.clear();
     ctx.setState({ type: "ready" });
     return true;
   }
@@ -66,7 +65,7 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
       editor.setMarqueePreviewRect(null);
     }
     if (prev.type === "selecting" && (next.type === "selected" || next.type === "ready")) {
-      editor.setSelectionMode("committed");
+      editor.selection.setMode("committed");
     }
   }
 

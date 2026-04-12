@@ -17,7 +17,7 @@ export const AnchorSection = () => {
 
   useSignalEffect(() => {
     const glyph = editor.glyph.value;
-    const ids = [...editor.selectedAnchorIds.value];
+    const ids = [...editor.selection.$anchorIds.value];
 
     if (!glyph || ids.length !== 1) {
       setSingleAnchorId(null);

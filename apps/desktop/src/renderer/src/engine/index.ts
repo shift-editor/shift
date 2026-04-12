@@ -7,4 +7,3 @@ export type { FontEngineAPI } from "./native";
 
 export type { GlyphDraft } from "./draft";
 export { Glyph, GlyphContour } from "@/lib/model/glyph";
-export type { GlyphView } from "./FontEngine";

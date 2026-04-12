@@ -99,7 +99,7 @@ export class Select extends BaseTool<SelectState> {
 
   protected override preTransition(state: SelectState, event: ToolEvent) {
     if (event.type === "selectionChanged") {
-      const hasSelection = this.editor.hasSelection();
+      const hasSelection = this.editor.selection.hasSelection();
       if (hasSelection && state.type === "ready") {
         return { state: { type: "selected" as const } };
       }

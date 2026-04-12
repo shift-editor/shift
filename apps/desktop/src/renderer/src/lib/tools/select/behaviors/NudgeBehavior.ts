@@ -11,7 +11,7 @@ export class NudgeBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "selected") return false;
 
-    const pointIds = ctx.editor.getSelectedPoints();
+    const pointIds = [...ctx.editor.selection.pointIds];
     if (pointIds.length === 0) return false;
 
     const modifier: NudgeMagnitude = event.metaKey ? "large" : event.shiftKey ? "medium" : "small";

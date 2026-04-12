@@ -96,8 +96,8 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       continue;
     }
 
-    const resolved = font.getGlyph(ref.glyphName);
-    const advance = resolveEditorAdvance(ref, resolved?.advance ?? 0);
+    const rawAdvance = font.getAdvance(ref.glyphName) ?? 0;
+    const advance = resolveEditorAdvance(ref, rawAdvance);
 
     slots.push({
       glyph: ref,
@@ -105,7 +105,7 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       x,
       y,
       advance,
-      bounds: resolved?.bbox ?? null,
+      bounds: font.getBbox(ref.glyphName) ?? null,
     });
 
     x += advance;
@@ -221,7 +221,7 @@ export function hitTestTextSlot(
       continue;
     }
 
-    const slotPath = font.getGlyphPath(slot.glyph.glyphName);
+    const slotPath = font.getPath(slot.glyph.glyphName);
     if (slotPath && pathHitTester) {
       const hit = pathHitTester.hitPath(
         slotPath,

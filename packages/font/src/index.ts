@@ -4,7 +4,6 @@ export { areGlyphSnapshotsEqual } from "./GlyphEquality";
 export {
   deriveGlyphTightBounds,
   deriveGlyphXBounds,
-  iterateRenderableContours,
   parseContourSegments,
   segmentToCurve,
   type SegmentPointGeometry,

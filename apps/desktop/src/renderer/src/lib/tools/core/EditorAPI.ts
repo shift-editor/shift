@@ -56,6 +56,7 @@ import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { GlyphDraft } from "@/engine/draft";
+import type { Selection } from "@/types/selection";
 
 export interface DragTarget {
   pointIds: PointId[];
@@ -101,7 +102,7 @@ export interface Viewport {
  * to query what the user has selected and to mutate the selection in response
  * to clicks, marquee drags, and keyboard shortcuts.
  */
-export interface Selection {
+export interface SelectionAccess {
   getSelectedPoints(): PointId[];
   getSelectedSegments(): SegmentId[];
   hasSelection(): boolean;
@@ -305,7 +306,6 @@ export interface VisualState {
  * sub-interfaces plus the font and reactive glyph signal.
  */
 export type EditorAPI = Viewport &
-  Selection &
   HitTesting &
   Snapping &
   Editing &
@@ -316,4 +316,5 @@ export type EditorAPI = Viewport &
   VisualState & {
     readonly font: Font;
     readonly glyph: Signal<Glyph | null>;
+    readonly selection: Selection;
   };

@@ -58,11 +58,13 @@ export const GlyphPreview = memo(function GlyphPreview({
   height = CELL_HEIGHT,
   fontMetrics,
 }: GlyphPreviewProps) {
-  const glyph = engine.getGlyphByUnicode(unicode);
-  const cellWidth = computeCellWidth(fontMetrics, glyph?.advance ?? null, height);
+  const name = engine.nameForUnicode(unicode);
+  const svgPath = name ? engine.getSvgPath(name) : null;
+  const advance = name ? engine.getAdvance(name) : null;
+  const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
-  if (!glyph?.svgPath) {
+  if (!svgPath) {
     return (
       <div style={containerStyle} className="flex items-center justify-center text-secondary">
         <span className="text-2xl" style={{ fontSize: height * 0.5 }}>
@@ -72,7 +74,7 @@ export const GlyphPreview = memo(function GlyphPreview({
     );
   }
 
-  const viewBox = glyphPreviewViewBox(fontMetrics, glyph.advance);
+  const viewBox = glyphPreviewViewBox(fontMetrics, advance);
 
   return (
     <div style={containerStyle} className="flex items-center justify-center">
@@ -84,7 +86,7 @@ export const GlyphPreview = memo(function GlyphPreview({
         className="overflow-hidden"
       >
         <g transform="scale(1, -1)">
-          <path d={glyph.svgPath} fill="currentColor" fillRule="nonzero" />
+          <path d={svgPath} fill="currentColor" fillRule="nonzero" />
         </g>
       </svg>
     </div>

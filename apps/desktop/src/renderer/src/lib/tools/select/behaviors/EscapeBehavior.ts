@@ -11,7 +11,7 @@ export class EscapeBehavior implements SelectHandlerBehavior {
     if (event.key !== "Escape") return false;
 
     if (state.type === "selected") {
-      ctx.editor.clearSelection();
+      ctx.editor.selection.clear();
       ctx.setState({ type: "ready" });
       return true;
     }

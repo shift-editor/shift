@@ -133,8 +133,8 @@ export class RotateBehavior implements SelectHandlerBehavior {
 
     this.#draft = editor.createDraft();
     this.#target = {
-      pointIds: editor.getSelectedPoints(),
-      anchorIds: editor.getSelectedAnchors(),
+      pointIds: [...editor.selection.pointIds],
+      anchorIds: [...editor.selection.anchorIds],
     };
     this.#origin = center;
 

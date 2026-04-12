@@ -20,8 +20,8 @@ export const GlyphSidebar = () => {
   const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
 
   useSignalEffect(() => {
-    const pointIds = editor.selectedPointIds.value;
-    const anchorIds = editor.selectedAnchorIds.value;
+    const pointIds = editor.selection.$pointIds.value;
+    const anchorIds = editor.selection.$anchorIds.value;
     const nextPoints = pointIds.size > 0;
     const nextAnchors = anchorIds.size > 0;
     setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
