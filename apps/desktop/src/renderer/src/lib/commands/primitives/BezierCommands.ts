@@ -21,21 +21,21 @@ export class CloseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#contourId = ctx.bridge.getActiveContourId();
+    this.#contourId = ctx.glyph.activeContourId;
 
-    if (ctx.glyph && this.#contourId) {
+    if (this.#contourId) {
       const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
     if (!this.#wasClosed) {
-      ctx.bridge.closeContour();
+      ctx.glyph.closeContour();
     }
   }
 
   undo(ctx: CommandContext): void {
     if (this.#contourId && !this.#wasClosed) {
-      ctx.bridge.openContour(this.#contourId);
+      ctx.glyph.openContour(this.#contourId);
     }
   }
 }
@@ -60,12 +60,12 @@ export class NudgePointsCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.bridge.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.glyph.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 
   undo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.bridge.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+    ctx.glyph.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 }
 
@@ -86,13 +86,13 @@ export class SetActiveContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#previousActiveId = ctx.bridge.getActiveContourId();
-    ctx.bridge.setActiveContour(this.#contourId);
+    this.#previousActiveId = ctx.glyph.activeContourId;
+    ctx.glyph.setActiveContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
     if (this.#previousActiveId) {
-      ctx.bridge.setActiveContour(this.#previousActiveId);
+      ctx.glyph.setActiveContour(this.#previousActiveId);
     }
   }
 }
@@ -113,11 +113,11 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.bridge.reverseContour(this.#contourId);
+    ctx.glyph.reverseContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.bridge.reverseContour(this.#contourId);
+    ctx.glyph.reverseContour(this.#contourId);
   }
 }
 
@@ -161,7 +161,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
 
     const anchor2Id = this.#segment.points.anchor2.id;
 
-    this.#splitPointId = ctx.bridge.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
       y: splitPoint.y,
       pointType: "onCurve",
@@ -189,7 +189,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control.y,
     });
 
-    this.#splitPointId = ctx.bridge.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -197,7 +197,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.bridge.insertPointBefore(anchor2Id, {
+    const cBId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: cB.x,
       y: cB.y,
       pointType: "offCurve",
@@ -205,7 +205,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.bridge.movePointTo(controlId, cA.x, cA.y);
+    ctx.glyph.movePointTo(controlId, cA.x, cA.y);
 
     return this.#splitPointId;
   }
@@ -233,7 +233,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control2.y,
     });
 
-    const c1AId = ctx.bridge.insertPointBefore(control2Id, {
+    const c1AId = ctx.glyph.insertPointBefore(control2Id, {
       x: c1A.x,
       y: c1A.y,
       pointType: "offCurve",
@@ -241,7 +241,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.bridge.insertPointBefore(control2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(control2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -249,7 +249,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.bridge.insertPointBefore(control2Id, {
+    const c0BId = ctx.glyph.insertPointBefore(control2Id, {
       x: c0B.x,
       y: c0B.y,
       pointType: "offCurve",
@@ -257,19 +257,19 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.bridge.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.bridge.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.glyph.movePointTo(control1Id, c0A.x, c0A.y);
+    ctx.glyph.movePointTo(control2Id, c1B.x, c1B.y);
 
     return this.#splitPointId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#insertedPointIds.length > 0) {
-      ctx.bridge.removePoints(this.#insertedPointIds);
+      ctx.glyph.removePoints(this.#insertedPointIds);
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.bridge.movePointTo(pointId, pos.x, pos.y);
+      ctx.glyph.movePointTo(pointId, pos.x, pos.y);
     }
   }
 
@@ -318,13 +318,13 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.bridge.insertPointBefore(this.#anchor2Id, {
+    this.#control2Id = ctx.glyph.insertPointBefore(this.#anchor2Id, {
       x: this.#control2Pos.x,
       y: this.#control2Pos.y,
       pointType: "offCurve",
       smooth: false,
     });
-    this.#control1Id = ctx.bridge.insertPointBefore(this.#control2Id, {
+    this.#control1Id = ctx.glyph.insertPointBefore(this.#control2Id, {
       x: this.#control1Pos.x,
       y: this.#control1Pos.y,
       pointType: "offCurve",
@@ -335,7 +335,7 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   undo(ctx: CommandContext): void {
     const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
     if (toRemove.length > 0) {
-      ctx.bridge.removePoints(toRemove);
+      ctx.glyph.removePoints(toRemove);
     }
   }
 

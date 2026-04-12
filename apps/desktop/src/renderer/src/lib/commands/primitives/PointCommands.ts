@@ -33,11 +33,11 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    const contourId = this.#contourId ?? ctx.bridge.getActiveContourId();
+    const contourId = this.#contourId ?? ctx.glyph.activeContourId;
     if (!contourId) {
       throw new Error("No active contour");
     }
-    this.#resultId = ctx.bridge.addPointToContour(contourId, {
+    this.#resultId = ctx.glyph.addPointToContour(contourId, {
       x: this.#x,
       y: this.#y,
       pointType: this.#pointType,
@@ -48,7 +48,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
 
   undo(ctx: CommandContext): void {
     if (this.#resultId) {
-      ctx.bridge.removePoints([this.#resultId]);
+      ctx.glyph.removePoints([this.#resultId]);
     }
   }
 

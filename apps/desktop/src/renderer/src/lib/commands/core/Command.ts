@@ -1,106 +1,37 @@
 /**
  * Command Pattern Infrastructure
  *
- * Commands encapsulate actions that modify the glyph/document state.
- * Each command knows how to execute, undo, and redo itself.
- *
- * Benefits:
- * - Full undo/redo support
- * - Actions are testable in isolation
- * - Clear separation between UI interaction and data mutation
+ * Commands encapsulate glyph mutations as undoable actions.
+ * Each command receives a Glyph and calls its mutation methods.
  */
 
-import type { NativeBridge } from "@/bridge/NativeBridge";
-import type { GlyphSnapshot } from "@shift/types";
-
-type CommandEditingMethods =
-  | "addPointToContour"
-  | "insertPointBefore"
-  | "movePoints"
-  | "movePointTo"
-  | "setNodePositions"
-  | "removePoints"
-  | "closeContour"
-  | "openContour"
-  | "getActiveContourId"
-  | "setActiveContour"
-  | "reverseContour"
-  | "setXAdvance"
-  | "translateLayer"
-  | "toggleSmooth"
-  | "restoreSnapshot"
-  | "pasteContours";
-
-/** Minimal editing surface required by command execution. */
-export type CommandEditingAPI = Pick<NativeBridge, CommandEditingMethods>;
-export type CommandNativeBridge = Pick<
-  NativeBridge,
-  CommandEditingMethods | "$glyph" | "getEditingSnapshot"
->;
+import type { Glyph } from "@/lib/model/glyph";
 
 /**
  * Context available to commands during execution.
+ * Commands receive the reactive Glyph directly — it has all mutation methods.
  */
 export interface CommandContext {
-  /** The native bridge for performing mutations */
-  readonly bridge: CommandNativeBridge;
-  /** Current glyph data (read-only view of state) */
-  readonly glyph: GlyphSnapshot | null;
+  readonly glyph: Glyph;
 }
 
-/**
- * Base interface for all commands.
- *
- * Commands are executed through CommandHistory, which handles
- * undo/redo stack management.
- *
- * @template TResult - The type returned by execute()
- */
 export interface Command<TResult = void> {
-  /** Human-readable name for debugging/UI */
   readonly name: string;
-
-  /**
-   * Execute the command.
-   * Should store any state needed for undo.
-   */
   execute(ctx: CommandContext): TResult;
-
-  /**
-   * Reverse the effects of execute().
-   * Should restore state to before execute() was called.
-   */
   undo(ctx: CommandContext): void;
-
-  /**
-   * Re-apply the command after an undo.
-   * Default implementation can call execute() again.
-   */
   redo(ctx: CommandContext): TResult;
 }
 
-/**
- * Abstract base class with default redo implementation.
- */
 export abstract class BaseCommand<TResult = void> implements Command<TResult> {
   abstract readonly name: string;
-
   abstract execute(ctx: CommandContext): TResult;
   abstract undo(ctx: CommandContext): void;
 
-  /**
-   * Default redo just calls execute again.
-   * Override if you need different behavior.
-   */
   redo(ctx: CommandContext): TResult {
     return this.execute(ctx);
   }
 }
 
-/**
- * A command that groups multiple commands into one.
- * Useful for complex operations that should undo as a single unit.
- */
 export class CompositeCommand implements Command<void> {
   readonly name: string;
   #commands: Command<unknown>[];
@@ -117,7 +48,6 @@ export class CompositeCommand implements Command<void> {
   }
 
   undo(ctx: CommandContext): void {
-    // Undo in reverse order
     for (const cmd of [...this.#commands].reverse()) {
       cmd.undo(ctx);
     }

@@ -24,7 +24,7 @@ function makeGlyph(input: {
 let bridge: NativeBridge;
 
 function ctx(): CommandContext {
-  return { bridge, glyph: bridge.getEditingSnapshot() };
+  return { glyph: bridge.$glyph.peek()! };
 }
 
 beforeEach(() => {

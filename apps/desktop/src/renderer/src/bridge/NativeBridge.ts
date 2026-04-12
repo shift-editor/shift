@@ -245,7 +245,7 @@ export class NativeBridge {
     return lastPoint.id;
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.addPointToContour(contourId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -255,7 +255,7 @@ export class NativeBridge {
     throw new NativeOperationError("Native addPointToContour returned no point ID");
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.insertPointBefore(beforePointId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -301,7 +301,7 @@ export class NativeBridge {
     this.#dispatchVoid(this.#raw.removePoints(pointIds));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   toggleSmooth(pointId: PointId): void {
     this.#dispatchVoid(this.#raw.toggleSmooth(pointId));
   }
@@ -331,7 +331,7 @@ export class NativeBridge {
     this.#dispatchVoid(this.#raw.clearActiveContour());
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   reverseContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.reverseContour(contourId));
   }
@@ -345,17 +345,17 @@ export class NativeBridge {
     this.#dispatchVoid(this.#raw.applyBooleanOp(contourIdA, contourIdB, operation));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   openContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.openContour(contourId));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#raw.setXAdvance(width));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#raw.translateLayer(dx, dy));
   }
@@ -423,7 +423,7 @@ export class NativeBridge {
     };
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
     if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {

@@ -44,7 +44,8 @@ import type { NodePositionUpdateList } from "@/types/positionUpdate";
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
 import type { NativeBridge } from "@/bridge";
-import type { PointEdit } from "@/types/engine";
+import type { PointEdit, PasteResult } from "@/types/engine";
+import type { ContourContent } from "@/lib/clipboard";
 
 export class Contour {
   readonly id: ContourId;
@@ -275,6 +276,16 @@ export class Glyph {
   }
   /** @knipclassignore */ restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#bridge.restoreSnapshot(snapshot);
+  }
+  /** @knipclassignore */ translateLayer(dx: number, dy: number): void {
+    this.#bridge.translateLayer(dx, dy);
+  }
+  /** @knipclassignore */ pasteContours(
+    contours: ContourContent[],
+    offsetX: number,
+    offsetY: number,
+  ): PasteResult {
+    return this.#bridge.pasteContours(contours, offsetX, offsetY);
   }
 
   /**

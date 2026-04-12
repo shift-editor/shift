@@ -34,7 +34,7 @@ describe("CommandHistory", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });
@@ -179,7 +179,7 @@ describe("batching", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });
@@ -358,7 +358,7 @@ describe("onDirty callback", () => {
   beforeEach(() => {
     bridge = createBridge();
     onDirtyCalled = 0;
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot(), {
+    history = new CommandHistory(bridge.$glyph, {
       onDirty: () => {
         onDirtyCalled++;
       },
@@ -405,7 +405,7 @@ describe("onDirty callback", () => {
   });
 
   it("should allow setting onDirty callback after construction", () => {
-    const historyNoCallback = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    const historyNoCallback = new CommandHistory(bridge.$glyph);
     let lateDirtyCalled = 0;
     historyNoCallback.setOnDirty(() => {
       lateDirtyCalled++;
@@ -416,7 +416,7 @@ describe("onDirty callback", () => {
   });
 
   it("should not throw if onDirty is not set", () => {
-    const historyNoCallback = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    const historyNoCallback = new CommandHistory(bridge.$glyph);
     expect(() => {
       historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
     }).not.toThrow();
@@ -429,7 +429,7 @@ describe("Command integration with history", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });

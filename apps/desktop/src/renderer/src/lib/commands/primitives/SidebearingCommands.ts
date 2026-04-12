@@ -13,15 +13,15 @@ export class SetXAdvanceCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#beforeXAdvance);
+    ctx.glyph.setXAdvance(this.#beforeXAdvance);
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 }
 
@@ -38,15 +38,15 @@ export class SetRightSidebearingCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#beforeXAdvance);
+    ctx.glyph.setXAdvance(this.#beforeXAdvance);
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 }
 
@@ -65,17 +65,17 @@ export class SetLeftSidebearingCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.bridge.translateLayer(this.#deltaX, 0);
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.translateLayer(this.#deltaX, 0);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.bridge.setXAdvance(this.#beforeXAdvance);
-    ctx.bridge.translateLayer(-this.#deltaX, 0);
+    ctx.glyph.setXAdvance(this.#beforeXAdvance);
+    ctx.glyph.translateLayer(-this.#deltaX, 0);
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.bridge.translateLayer(this.#deltaX, 0);
-    ctx.bridge.setXAdvance(this.#afterXAdvance);
+    ctx.glyph.translateLayer(this.#deltaX, 0);
+    ctx.glyph.setXAdvance(this.#afterXAdvance);
   }
 }

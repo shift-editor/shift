@@ -11,11 +11,16 @@
  * during a batch are grouped into a single undo step.
  */
 
-import { signal, computed, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
+import {
+  signal,
+  computed,
+  type WritableSignal,
+  type ComputedSignal,
+  type Signal,
+} from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
-import type { NativeBridge } from "@/bridge/NativeBridge";
-import type { GlyphSnapshot } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 
 export interface CommandHistoryOptions {
   /** Maximum number of commands to keep in history */
@@ -33,24 +38,17 @@ export class CommandHistory {
   #undoStack: Command<unknown>[] = [];
   #redoStack: Command<unknown>[] = [];
   #maxHistory: number;
-  #bridge: NativeBridge;
-  #getSnapshot: () => GlyphSnapshot | null;
+  #$glyph: Signal<Glyph | null>;
   #batch: BatchState | null = null;
   #onDirty: (() => void) | undefined;
 
-  // Reactive signals for UI binding
   readonly undoCount: WritableSignal<number>;
   readonly redoCount: WritableSignal<number>;
   readonly canUndo: ComputedSignal<boolean>;
   readonly canRedo: ComputedSignal<boolean>;
 
-  constructor(
-    bridge: NativeBridge,
-    getSnapshot: () => GlyphSnapshot | null,
-    options: CommandHistoryOptions = {},
-  ) {
-    this.#bridge = bridge;
-    this.#getSnapshot = getSnapshot;
+  constructor($glyph: Signal<Glyph | null>, options: CommandHistoryOptions = {}) {
+    this.#$glyph = $glyph;
     this.#maxHistory = options.maxHistory ?? 100;
     this.#onDirty = options.onDirty;
 
@@ -69,10 +67,7 @@ export class CommandHistory {
   }
 
   #createContext(): CommandContext {
-    return {
-      bridge: this.#bridge,
-      glyph: this.#getSnapshot(),
-    };
+    return { glyph: this.#$glyph.peek()! };
   }
 
   #updateCounts(): void {

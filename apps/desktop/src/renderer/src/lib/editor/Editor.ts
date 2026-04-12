@@ -194,9 +194,7 @@ export class Editor implements CanvasCoordinatorContext {
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
-    this.#commandHistory = new CommandHistory(this.#bridge, () =>
-      this.#bridge.getEditingSnapshot(),
-    );
+    this.#commandHistory = new CommandHistory(this.#$glyph);
 
     this.$previewMode = signal(false);
     this.$cursor = signal("default");

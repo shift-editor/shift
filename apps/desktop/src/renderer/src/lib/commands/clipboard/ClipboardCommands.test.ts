@@ -42,7 +42,7 @@ describe("CutCommand", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });
@@ -149,7 +149,7 @@ describe("PasteCommand", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });
@@ -235,7 +235,7 @@ describe("Cut + Paste integration", () => {
 
   beforeEach(() => {
     bridge = createBridge();
-    history = new CommandHistory(bridge, () => bridge.getEditingSnapshot());
+    history = new CommandHistory(bridge.$glyph);
     bridge.startEditSession({ glyphName: "A", unicode: 65 });
     bridge.addContour();
   });

@@ -23,14 +23,14 @@ export class SnapshotCommand {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.bridge.restoreSnapshot(this.#after);
+    ctx.glyph.restoreSnapshot(this.#after);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.bridge.restoreSnapshot(this.#before);
+    ctx.glyph.restoreSnapshot(this.#before);
   }
 
   redo(ctx: CommandContext): void {
-    ctx.bridge.restoreSnapshot(this.#after);
+    ctx.glyph.restoreSnapshot(this.#after);
   }
 }

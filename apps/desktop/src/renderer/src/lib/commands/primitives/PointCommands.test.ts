@@ -7,7 +7,7 @@ import type { CommandContext } from "../core";
 let bridge: NativeBridge;
 
 function ctx(): CommandContext {
-  return { bridge, glyph: bridge.getEditingSnapshot() };
+  return { glyph: bridge.$glyph.peek()! };
 }
 
 beforeEach(() => {
