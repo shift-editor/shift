@@ -11,18 +11,6 @@ export { DrawAPI, type StrokeStyle, type ShapeStyle, type LastHandlePosition } f
 export { ToolManager } from "./ToolManager";
 export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
 export type { ToolFactory, ToolManifest } from "./ToolManifest";
-export type {
-  Viewport,
-  HitTesting,
-  Snapping,
-  Editing,
-  Commands,
-  ToolLifecycle,
-  TextRunAccess,
-  ToolStateStore,
-  ToolStateScope,
-  VisualState,
-} from "./EditorAPI";
 export type { ToolStateMap, ActiveToolState } from "./ToolStateMap";
 export {
   defineStateDiagram,

@@ -10,7 +10,7 @@ import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/types/draft";
 
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import type { DragTarget } from "../../core/EditorAPI";
+import type { DragTarget } from "../types";
 
 export class RotateBehavior implements SelectHandlerBehavior {
   #snap: RotateSnapSession | null = null;

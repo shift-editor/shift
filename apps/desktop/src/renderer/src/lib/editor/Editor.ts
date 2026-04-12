@@ -96,7 +96,7 @@ const defaultAppSettings: AppSettings = {
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
-import type { ToolStateScope } from "../tools/core/EditorAPI";
+import type { ToolStateScope } from "@/types/editor";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import { EventEmitter } from "./lifecycle";

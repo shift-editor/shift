@@ -1,8 +1,13 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { AnchorId, Point2D, PointId, Rect2D } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { SegmentId } from "@/types/indicator";
+
+export interface DragTarget {
+  pointIds: PointId[];
+  anchorIds: AnchorId[];
+}
 
 /** Tracks the start and current positions of a marquee drag. */
 export interface SelectionData {

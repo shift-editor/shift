@@ -3,7 +3,7 @@ import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
-import type { DragTarget } from "../../core/EditorAPI";
+import type { DragTarget } from "../types";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
