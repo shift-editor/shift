@@ -154,13 +154,7 @@ export class Font {
     this.#$metrics.set(metrics);
     this.#$loaded.set(true);
 
-    if (this.#bridge.isVariable()) {
-      this.variation = new Variation(this.#bridge);
-      const glyphNames = unicodes.map((u) => this.glyphName(u));
-      this.variation.loadMasters(glyphNames);
-    } else {
-      this.variation = null;
-    }
+    this.variation = this.#bridge.isVariable() ? new Variation(this.#bridge) : null;
   }
 
   async save(path: string): Promise<void> {
