@@ -659,8 +659,7 @@ export class Editor {
 
   /** Resolve a unicode codepoint to a glyph ref and insert into the text run. */
   public insertTextCodepoint(codepoint: number): void {
-    const glyphName = this.font.nameForUnicode(codepoint);
-    if (!glyphName) return;
+    const glyphName = this.font.glyphName(codepoint);
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
 
