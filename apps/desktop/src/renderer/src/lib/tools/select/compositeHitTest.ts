@@ -1,10 +1,9 @@
-import type { Point2D } from "@shift/types";
-import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { Point2D, CompositeGlyph, CompositeComponent, RenderContour } from "@shift/types";
 
 export function resolveComponentAtPoint(
-  composite: CompositeComponentsPayload | null,
+  composite: CompositeGlyph | null,
   localPoint: Point2D,
-): { index: number; component: CompositeComponentsPayload["components"][number] } | null {
+): { index: number; component: CompositeComponent } | null {
   if (!composite) return null;
 
   for (const [i, component] of composite.components.entries()) {
@@ -17,7 +16,7 @@ export function resolveComponentAtPoint(
 }
 
 export function isPointInComponentBounds(
-  contours: CompositeComponentsPayload["components"][number]["contours"],
+  contours: readonly RenderContour[],
   point: Point2D,
 ): boolean {
   let minX = Number.POSITIVE_INFINITY;

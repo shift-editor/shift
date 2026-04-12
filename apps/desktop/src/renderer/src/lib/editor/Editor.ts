@@ -94,7 +94,7 @@ const defaultAppSettings: AppSettings = {
   },
 };
 import type { GlyphRef } from "@/lib/tools/text/layout";
-import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "../tools/core/EditorAPI";
 import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
@@ -761,8 +761,8 @@ export class Editor implements CanvasCoordinatorContext {
     return !state || state.editingIndex !== null;
   }
 
-  public getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
-    return this.font.getCompositeComponents(glyphName);
+  public getGlyphCompositeComponents(glyphName: string): CompositeGlyph | null {
+    return this.font.composites(glyphName);
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {

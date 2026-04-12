@@ -37,7 +37,7 @@ import type {
 import type { TextRunController } from "@/lib/tools/text/TextRunController";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
-import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { CompositeGlyph } from "@shift/types";
 import type { GlyphDraft } from "@/types/draft";
 
 export interface DragTarget {
@@ -185,7 +185,7 @@ export interface TextRunAccess {
   /** Insert a glyph by unicode codepoint (resolves name via font engine). */
   insertTextCodepoint(codepoint: number): void;
   /** Composite component data for a glyph (font engine query). */
-  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null;
+  getGlyphCompositeComponents(glyphName: string): CompositeGlyph | null;
 }
 
 export type ToolStateScope = "app" | "document";

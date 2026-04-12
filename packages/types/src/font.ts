@@ -27,4 +27,6 @@ export type {
   RenderContour,
   Glyph,
   DecomposedTransform,
+  CompositeComponent,
+  CompositeGlyph,
 } from "./domain";

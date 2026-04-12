@@ -40,4 +40,13 @@ export type {
 } from "./font";
 
 // Domain types (for Editor API)
-export type { Point, Anchor, RenderPoint, Contour, RenderContour, Glyph } from "./font";
+export type {
+  Point,
+  Anchor,
+  RenderPoint,
+  Contour,
+  RenderContour,
+  Glyph,
+  CompositeComponent,
+  CompositeGlyph,
+} from "./font";
