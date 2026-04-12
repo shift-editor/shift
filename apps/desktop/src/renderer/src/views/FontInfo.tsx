@@ -4,7 +4,7 @@ import { getEditor } from "@/store/store";
 export const FontInfo = () => {
   const editor = getEditor();
   const metrics = editor.font.getMetrics();
-  const metadata = editor.font.getMetadata();
+  const metadata = editor.font.metadata;
 
   return (
     <>

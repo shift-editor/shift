@@ -12,7 +12,7 @@ import { BooleanOps } from "./BooleanOps";
 
 export const GlyphSidebar = () => {
   const editor = getEditor();
-  const { familyName } = editor.font.getMetadata();
+  const { familyName } = editor.font.metadata;
   const zoom = useSignalState(editor.zoom);
   const zoomPercent = Math.round(zoom * 100);
 

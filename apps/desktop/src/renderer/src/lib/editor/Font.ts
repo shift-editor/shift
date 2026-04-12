@@ -1,43 +1,66 @@
 import type { FontMetrics, FontMetadata, CompositeGlyph } from "@shift/types";
 import type { Bounds } from "@shift/geo";
-import type { Signal } from "@/lib/reactive/signal";
+import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
 
 /**
- * Read-only font data surface exposed to tools and UI.
+ * Reactive font data surface.
  *
- * Wraps the internal NativeBridge for font-level queries.
- * Never exposes editing operations — those live on Glyph.
+ * Auto-unwrapping getters (same pattern as Glyph). Reading `font.metrics`,
+ * `font.unicodes`, `font.loaded` inside a computed/effect auto-tracks.
  */
 export class Font {
   readonly #bridge: NativeBridge;
+  readonly #$loaded: WritableSignal<boolean>;
+  readonly #$unicodes: WritableSignal<number[]>;
+  readonly #$metrics: WritableSignal<FontMetrics | null>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
+    this.#$loaded = signal(false);
+    this.#$unicodes = signal<number[]>([]);
+    this.#$metrics = signal<FontMetrics | null>(null);
   }
 
   /** @knipclassignore */
-  get $loaded(): Signal<boolean> {
-    return this.#bridge.$fontLoaded;
+  get loaded(): boolean {
+    return this.#$loaded.value;
   }
 
   /** @knipclassignore */
-  get $unicodes(): Signal<number[]> {
-    return this.#bridge.$fontUnicodes;
+  get unicodes(): number[] {
+    return this.#$unicodes.value;
   }
 
   /** @knipclassignore */
-  get $metrics(): Signal<FontMetrics | null> {
-    return this.#bridge.$fontMetrics;
+  get metrics(): FontMetrics | null {
+    return this.#$metrics.value;
   }
 
+  /** Raw signals for React hooks that need Signal<T>. */
+  /** @knipclassignore */
+  get $loaded() {
+    return this.#$loaded as Signal<boolean>;
+  }
+
+  /** @knipclassignore */
+  get $unicodes() {
+    return this.#$unicodes as Signal<number[]>;
+  }
+
+  /** @knipclassignore */
+  get $metrics() {
+    return this.#$metrics as Signal<FontMetrics | null>;
+  }
+
+  /** @knipclassignore */
+  get metadata(): FontMetadata {
+    return this.#bridge.getMetadata();
+  }
+
+  /** Sync metrics fetch (non-null, call only when font is loaded). */
   getMetrics(): FontMetrics {
     return this.#bridge.getMetrics();
-  }
-
-  /** @knipclassignore — used by UI components */
-  getMetadata(): FontMetadata {
-    return this.#bridge.getMetadata();
   }
 
   getPath(name: string): Path2D | null {
@@ -66,9 +89,21 @@ export class Font {
 
   load(path: string): void {
     this.#bridge.loadFont(path);
+    const unicodes = this.#bridge.getGlyphUnicodes();
+    const metrics = this.#bridge.getMetrics();
+    this.#$unicodes.set(unicodes);
+    this.#$metrics.set(metrics);
+    this.#$loaded.set(true);
   }
 
   async save(path: string): Promise<void> {
     return this.#bridge.saveFontAsync(path);
+  }
+
+  /** @knipclassignore — called when closing a document */
+  reset(): void {
+    this.#$loaded.set(false);
+    this.#$unicodes.set([]);
+    this.#$metrics.set(null);
   }
 }

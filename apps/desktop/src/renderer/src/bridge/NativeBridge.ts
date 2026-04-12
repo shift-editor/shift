@@ -36,49 +36,15 @@ import { Glyph } from "@/lib/model/glyph";
  */
 export class NativeBridge {
   readonly #$glyph: WritableSignal<Glyph | null>;
-  readonly #$fontLoaded: WritableSignal<boolean>;
-  readonly #$fontUnicodes: WritableSignal<number[]>;
-  readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
     this.#$glyph = signal<Glyph | null>(null, { equals: () => false });
-    this.#$fontLoaded = signal(false);
-    this.#$fontUnicodes = signal<number[]>([]);
-    this.#$fontMetrics = signal<FontMetrics | null>(null);
   }
 
   get $glyph(): Signal<Glyph | null> {
     return this.#$glyph;
-  }
-
-  /** @knipclassignore — used by React components via editor.bridge */
-  get $fontLoaded(): Signal<boolean> {
-    return this.#$fontLoaded;
-  }
-
-  /** @knipclassignore */
-  get $fontUnicodes(): Signal<number[]> {
-    return this.#$fontUnicodes;
-  }
-
-  /** @knipclassignore */
-  get $fontMetrics(): Signal<FontMetrics | null> {
-    return this.#$fontMetrics;
-  }
-
-  setFontLoaded(unicodes: number[], metrics: FontMetrics): void {
-    this.#$fontUnicodes.set(unicodes);
-    this.#$fontMetrics.set(metrics);
-    this.#$fontLoaded.set(true);
-  }
-
-  /** @knipclassignore */
-  resetFontMetadata(): void {
-    this.#$fontLoaded.set(false);
-    this.#$fontUnicodes.set([]);
-    this.#$fontMetrics.set(null);
   }
 
   getEditingSnapshot(): GlyphSnapshot | null {

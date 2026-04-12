@@ -206,6 +206,7 @@ export class Editor implements CanvasCoordinatorContext {
       altKey: false,
       metaKey: false,
     });
+
     this.#settings = this.registerState<AppSettings>({
       id: "settings",
       scope: "app",
@@ -218,6 +219,7 @@ export class Editor implements CanvasCoordinatorContext {
         };
       },
     });
+
     this.#snapIndicator = signal<SnapIndicator | null>(null);
     this.#debugOverlays = signal<DebugOverlays>({
       tightBounds: false,
@@ -410,7 +412,6 @@ export class Editor implements CanvasCoordinatorContext {
     return this.#toolManager;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public renderToolInScene(draw: DrawAPI): void {
     this.#toolManager.renderInScene(draw);
@@ -1119,9 +1120,6 @@ export class Editor implements CanvasCoordinatorContext {
       this.close();
     }
     this.font.load(filePath);
-    const unicodes = this.#bridge.getGlyphUnicodes();
-    const metrics = this.font.getMetrics();
-    this.#bridge.setFontLoaded(unicodes, metrics);
     this.#events.emit("fontLoaded", { font: this.font });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
