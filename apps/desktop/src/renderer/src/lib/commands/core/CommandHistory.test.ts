@@ -35,7 +35,7 @@ describe("CommandHistory", () => {
   beforeEach(() => {
     bridge = createBridge();
     history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A", unicode: 65 });
+    bridge.startEditSession("A");
     bridge.addContour();
   });
 
@@ -180,7 +180,7 @@ describe("batching", () => {
   beforeEach(() => {
     bridge = createBridge();
     history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A", unicode: 65 });
+    bridge.startEditSession("A");
     bridge.addContour();
   });
 
@@ -363,7 +363,7 @@ describe("onDirty callback", () => {
         onDirtyCalled++;
       },
     });
-    bridge.startEditSession({ glyphName: "A", unicode: 65 });
+    bridge.startEditSession("A");
     bridge.addContour();
   });
 
@@ -430,7 +430,7 @@ describe("Command integration with history", () => {
   beforeEach(() => {
     bridge = createBridge();
     history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A", unicode: 65 });
+    bridge.startEditSession("A");
     bridge.addContour();
   });
 

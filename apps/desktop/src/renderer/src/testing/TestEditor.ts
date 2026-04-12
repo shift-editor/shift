@@ -25,8 +25,8 @@ export class TestEditor extends Editor {
     registerBuiltInTools(this);
   }
 
-  startSession(glyphName = "A", unicode = 65): this {
-    this.open({ glyphName, unicode });
+  startSession(glyphName = "A"): this {
+    this.open(glyphName);
     return this;
   }
 

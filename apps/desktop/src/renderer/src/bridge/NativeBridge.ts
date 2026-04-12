@@ -21,7 +21,6 @@ import type {
 } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
-import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph } from "@/lib/model/glyph";
@@ -56,19 +55,15 @@ export class NativeBridge {
     return this.#raw.hasEditSession();
   }
 
-  startEditSession(target: GlyphRef): void {
+  startEditSession(glyphName: string, unicode?: number): void {
     if (this.hasSession()) {
       const currentName = this.getEditingGlyphName();
-      if (currentName === target.glyphName) return;
+      if (currentName === glyphName) return;
       this.endEditSession();
     }
-    const ref =
-      target.unicode !== null
-        ? { glyphName: target.glyphName, unicode: target.unicode }
-        : { glyphName: target.glyphName };
+    const ref = unicode !== undefined ? { glyphName, unicode } : { glyphName };
     this.#raw.startEditSession(ref);
-    const snapshot = this.getSessionGlyph();
-    this.#$glyph.set(snapshot ? new Glyph(this) : null);
+    this.#$glyph.set(this.hasSession() ? new Glyph(this) : null);
   }
 
   endEditSession(): void {
@@ -82,15 +77,6 @@ export class NativeBridge {
 
   getEditingGlyphName(): string | null {
     return this.#raw.getEditingGlyphName();
-  }
-
-  getSessionGlyph(): GlyphSnapshot | null {
-    if (!this.hasSession()) return null;
-    try {
-      return this.getSnapshot();
-    } catch {
-      return null;
-    }
   }
 
   loadFont(path: string): void {

@@ -729,13 +729,12 @@ export class Editor implements CanvasCoordinatorContext {
     this.#renderer.setGpuHandleContext(context);
   }
 
-  /** Opens a glyph for editing. */
-  public open(glyph: GlyphRef): void {
+  /** Opens a glyph for editing by name. */
+  public open(glyphName: string): void {
     const currentGlyphName = this.#bridge.getEditingGlyphName();
-    if (currentGlyphName === glyph.glyphName) return;
+    if (currentGlyphName === glyphName) return;
 
-    this.#bridge.startEditSession(glyph);
-    this.#bridge.addContour();
+    this.#bridge.startEditSession(glyphName);
   }
 
   /** Ends the current editing session. */
@@ -1122,9 +1121,9 @@ export class Editor implements CanvasCoordinatorContext {
     this.font.load(filePath);
     this.#events.emit("fontLoaded", { font: this.font });
     this.setMainGlyphUnicode(65);
-    const glyphRef = this.glyphRefFromUnicode(65);
-    this.open(glyphRef);
-    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
+    const ref = this.glyphRefFromUnicode(65);
+    this.open(ref.glyphName);
+    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, ref);
   }
 
   public async saveFont(filePath: string): Promise<void> {

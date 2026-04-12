@@ -16,7 +16,7 @@ function ctx(): CommandContext {
 
 beforeEach(() => {
   bridge = createBridge();
-  bridge.startEditSession({ glyphName: "A", unicode: 65 });
+  bridge.startEditSession("A");
 });
 
 describe("SetXAdvanceCommand", () => {
