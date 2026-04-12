@@ -1,5 +1,6 @@
 import type { FontMetrics, FontMetadata, CompositeGlyph } from "@shift/types";
 import type { Bounds } from "@shift/geo";
+import type { Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
 
 /**
@@ -13,6 +14,21 @@ export class Font {
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
+  }
+
+  /** @knipclassignore */
+  get $loaded(): Signal<boolean> {
+    return this.#bridge.$fontLoaded;
+  }
+
+  /** @knipclassignore */
+  get $unicodes(): Signal<number[]> {
+    return this.#bridge.$fontUnicodes;
+  }
+
+  /** @knipclassignore */
+  get $metrics(): Signal<FontMetrics | null> {
+    return this.#bridge.$fontMetrics;
   }
 
   getMetrics(): FontMetrics {

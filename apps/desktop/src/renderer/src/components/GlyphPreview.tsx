@@ -31,13 +31,6 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
   return metrics.ascender - metrics.descender + marginTop + marginBottom;
 }
 
-export interface GlyphPreviewProps {
-  unicode: number;
-  engine: Font;
-  height?: number;
-  fontMetrics: FontMetrics | null;
-}
-
 export function computeCellWidth(
   metrics: FontMetrics | null,
   advance: number | null,
@@ -52,15 +45,24 @@ export function computeCellWidth(
   return Math.max(cellHeight, width);
 }
 
+interface GlyphPreviewProps {
+  unicode: number;
+  font: Font;
+  height?: number;
+}
 export const GlyphPreview = memo(function GlyphPreview({
   unicode,
-  engine,
+  font,
   height = CELL_HEIGHT,
-  fontMetrics,
 }: GlyphPreviewProps) {
-  const name = engine.nameForUnicode(unicode);
-  const svgPath = name ? engine.getSvgPath(name) : null;
-  const advance = name ? engine.getAdvance(name) : null;
+  const name = font.nameForUnicode(unicode);
+  if (!name) {
+    return null;
+  }
+
+  const svgPath = font.getSvgPath(name);
+  const advance = font.getAdvance(name);
+  const fontMetrics = font.getMetrics();
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 

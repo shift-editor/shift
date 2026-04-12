@@ -117,6 +117,21 @@ export class Selection {
     return this.#$derived.value.fullySelectedContourIds;
   }
 
+  /** @knipclassignore — convenience for callers that need PointId[] */
+  get points(): PointId[] {
+    return [...this.#$pointIds.value];
+  }
+
+  /** @knipclassignore */
+  get anchors(): AnchorId[] {
+    return [...this.#$anchorIds.value];
+  }
+
+  /** @knipclassignore */
+  get segments(): SegmentId[] {
+    return [...this.#$segmentIds.value];
+  }
+
   get hasPoints(): boolean {
     return this.#$pointIds.value.size > 0;
   }
