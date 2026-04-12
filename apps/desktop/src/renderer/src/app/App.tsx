@@ -61,7 +61,7 @@ export const App = () => {
           if (unicode !== null) {
             const glyphRef = editor.glyphRefFromUnicode(unicode);
             editor.setMainGlyphUnicode(unicode);
-            editor.startEditSession(glyphRef);
+            editor.open(glyphRef);
             editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
           }
         } else {
@@ -100,7 +100,7 @@ export const App = () => {
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
-        await editor.saveFontAsync(savePath);
+        await editor.saveFont(savePath);
         setFilePath(savePath);
         clearDirty();
         documentPersistence.onDocumentPathChanged(savePath);

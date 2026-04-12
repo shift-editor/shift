@@ -26,7 +26,7 @@ export class TestEditor extends Editor {
   }
 
   startSession(glyphName = "A", unicode = 65): this {
-    this.startEditSession({ glyphName, unicode });
+    this.open({ glyphName, unicode });
     return this;
   }
 

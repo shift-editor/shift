@@ -195,7 +195,7 @@ export class Editor implements ShiftEditor {
     this.font = new Font(this.#bridge);
     const glyphInfo = getGlyphInfo();
     this.#glyphNaming = new GlyphNamingService({
-      getExistingGlyphNameForUnicode: (unicode) => this.#bridge.nameForUnicode(unicode),
+      getExistingGlyphNameForUnicode: (unicode) => this.font.nameForUnicode(unicode),
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
@@ -245,7 +245,7 @@ export class Editor implements ShiftEditor {
     this.#edgePan = new EdgePanManager(this);
     this.#snapManager = new SnapManager({
       getGlyph: () => this.#$glyph.value,
-      getMetrics: () => this.#bridge.getMetrics(),
+      getMetrics: () => this.font.getMetrics(),
       getSnapPreferences: () => this.settings.snap,
       screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
@@ -735,17 +735,17 @@ export class Editor implements ShiftEditor {
     this.#renderer.setGpuHandleContext(context);
   }
 
-  /** Opens a glyph for editing by canonical glyph reference. */
-  public startEditSession(glyph: GlyphRef): void {
-    const glyphName = glyph.glyphName;
+  /** Opens a glyph for editing. */
+  public open(glyph: GlyphRef): void {
     const currentGlyphName = this.#bridge.getEditingGlyphName();
-    if (currentGlyphName === glyphName) return;
+    if (currentGlyphName === glyph.glyphName) return;
 
     this.#bridge.startEditSession(glyph);
     this.#bridge.addContour();
   }
 
-  public endEditSession(): void {
+  /** Ends the current editing session. */
+  public close(): void {
     this.#bridge.endEditSession();
   }
 
@@ -755,7 +755,7 @@ export class Editor implements ShiftEditor {
 
   /** Resolve a unicode codepoint to a glyph ref and insert into the text run. */
   public insertTextCodepoint(codepoint: number): void {
-    const glyphName = this.#bridge.nameForUnicode(codepoint);
+    const glyphName = this.font.nameForUnicode(codepoint);
     if (!glyphName) return;
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
@@ -767,7 +767,7 @@ export class Editor implements ShiftEditor {
   }
 
   public getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
-    return this.#bridge.getGlyphCompositeComponents(glyphName);
+    return this.font.getCompositeComponents(glyphName);
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -994,7 +994,7 @@ export class Editor implements ShiftEditor {
   }
 
   public updateMetricsFromFont(): void {
-    const metrics = this.#bridge.getMetrics();
+    const metrics = this.font.getMetrics();
     this.#viewport.upm = metrics.unitsPerEm;
     this.#viewport.descender = metrics.descender;
     this.requestRedraw();
@@ -1123,21 +1123,21 @@ export class Editor implements ShiftEditor {
    */
   public loadFont(filePath: string): void {
     if (this.#bridge.hasSession()) {
-      this.#bridge.endEditSession();
+      this.close();
     }
-    this.#bridge.loadFont(filePath);
+    this.font.load(filePath);
     const unicodes = this.#bridge.getGlyphUnicodes();
-    const metrics = this.#bridge.getMetrics();
+    const metrics = this.font.getMetrics();
     this.#bridge.setFontLoaded(unicodes, metrics);
     this.#events.emit("fontLoaded", { font: this.font });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
-    this.startEditSession(glyphRef);
+    this.open(glyphRef);
     this.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
   }
 
-  public async saveFontAsync(filePath: string): Promise<void> {
-    return this.#bridge.saveFontAsync(filePath);
+  public async saveFont(filePath: string): Promise<void> {
+    return this.font.save(filePath);
   }
 
   public setCursor(cursor: CursorType): void {
@@ -1694,7 +1694,7 @@ export class Editor implements ShiftEditor {
       return offset;
     }
 
-    const metrics = this.#bridge.getMetrics();
+    const metrics = this.font.getMetrics();
     const targetX = 300;
     const targetYForAnchorName = (anchorName: string): number => {
       switch (anchorName) {
@@ -1722,7 +1722,7 @@ export class Editor implements ShiftEditor {
       };
     }
 
-    const bounds = this.#bridge.getBbox?.(glyph.glyphName);
+    const bounds = this.font.getBbox(glyph.glyphName);
     if (!bounds) {
       return offset;
     }

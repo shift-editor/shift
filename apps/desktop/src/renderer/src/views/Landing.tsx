@@ -29,7 +29,7 @@ export const Landing = () => {
     const editor = getEditor();
     const glyphRef = editor.glyphRefFromUnicode(65);
     editor.setMainGlyphUnicode(65);
-    editor.startEditSession(glyphRef);
+    editor.open(glyphRef);
     editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
     editor.bridge.resetFontMetadata();
     setFilePath(null);

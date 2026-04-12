@@ -35,7 +35,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     const initEditor = () => {
       editor.setMainGlyphUnicode(unicode);
-      editor.startEditSession(glyphRef);
+      editor.open(glyphRef);
       editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
 
       // Update viewport with actual font metrics (UPM, descender, guides)
@@ -52,7 +52,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     return () => {
       toolManager.reset();
-      editor.endEditSession();
+      editor.close();
     };
   }, [glyphId]);
 

@@ -78,7 +78,7 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
       const insertedSlot = nextState?.layout.slots[insertedIndex];
       const slotX = insertedSlot?.x ?? slot.x;
 
-      ctx.editor.startEditSession(insertedGlyph);
+      ctx.editor.open(insertedGlyph);
       ctx.editor.setDrawOffsetForGlyph({ x: slotX, y: insertedSlot?.y ?? slot.y }, insertedGlyph);
       ctx.editor.setPreviewMode(false);
       ctrl.setEditingSlot(insertedIndex, insertedGlyph);
@@ -91,7 +91,7 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
       return true;
     }
 
-    ctx.editor.startEditSession(slot.glyph);
+    ctx.editor.open(slot.glyph);
     ctx.editor.setDrawOffsetForGlyph({ x: slot.x, y: slot.y }, slot.glyph);
     ctx.editor.setPreviewMode(false);
     ctrl.setEditingSlot(hitIndex, slot.glyph);

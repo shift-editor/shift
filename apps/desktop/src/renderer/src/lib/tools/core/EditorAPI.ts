@@ -175,7 +175,7 @@ export interface Editing {
   getActiveContour(): Contour | null;
   getActiveContourId(): ContourId | null;
   /** Open a glyph for editing by canonical glyph reference. */
-  startEditSession(glyph: GlyphRef): void;
+  open(glyph: GlyphRef): void;
   /** Return the unicode codepoint of the glyph currently being edited, or null. */
   getActiveGlyphUnicode(): number | null;
   /** Return the glyph name currently being edited, or null. */

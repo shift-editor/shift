@@ -1,6 +1,7 @@
 import type { FontMetrics, FontMetadata } from "@shift/types";
 import type { Bounds } from "@shift/geo";
 import type { NativeBridge } from "@/bridge";
+import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 
 /**
  * Read-only font data surface exposed to tools and UI.
@@ -44,7 +45,10 @@ export class Font {
     return this.#bridge.getSvgPath(name);
   }
 
-  /** @knipclassignore — will replace editor.loadFont() */
+  getCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
+    return this.#bridge.getGlyphCompositeComponents(glyphName);
+  }
+
   load(path: string): void {
     this.#bridge.loadFont(path);
   }
