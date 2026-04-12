@@ -63,7 +63,7 @@ const fontEngineAPI = {
 Renderer code accesses the native engine via helper functions:
 
 ```typescript
-import { getNative, hasNative } from "@/engine/native";
+import { getNative, hasNative } from "@/bridge/native";
 
 if (hasNative()) {
   const native = getNative();

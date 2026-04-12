@@ -22,15 +22,15 @@ export class SetNodePositionsCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.setNodePositions(this.#after);
+    ctx.bridge.setNodePositions(this.#after);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.setNodePositions(this.#before);
+    ctx.bridge.setNodePositions(this.#before);
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.fontEngine.setNodePositions(this.#after);
+    ctx.bridge.setNodePositions(this.#after);
   }
 
   static fromBaseGlyphAndUpdates(

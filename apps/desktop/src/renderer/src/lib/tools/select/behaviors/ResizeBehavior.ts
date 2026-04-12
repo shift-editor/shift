@@ -6,7 +6,7 @@ import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
-import type { GlyphDraft } from "@/engine/draft";
+import type { GlyphDraft } from "@/bridge/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export class ResizeBehavior implements SelectHandlerBehavior {

@@ -12,9 +12,9 @@ const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/font/", "packages/
 
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
-  "engine/draft.ts",
-  "engine/FontEngine.ts",
-  "engine/glyph.ts",
+  "bridge/draft.ts",
+  "bridge/NativeBridge.ts",
+  "bridge/glyph.ts",
   "lib/model/",
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them
@@ -49,9 +49,9 @@ function checkParam(context, node) {
   }
 }
 
-/** Files where GlyphSnapshot usage is expected (bridge/engine/generated layers). */
+/** Files where GlyphSnapshot usage is expected (bridge/generated layers). */
 const SNAPSHOT_ALLOWED = [
-  "engine/",
+  "bridge/",
   "shared/bridge/",
   "packages/types/",
   "testing/",

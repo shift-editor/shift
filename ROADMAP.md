@@ -67,7 +67,7 @@
 - [x] Zustand state management
 - [x] React Router navigation
 
-**FontEngine TypeScript Layer**
+**NativeBridge TypeScript Layer**
 
 - [x] EditingManager - point and contour mutations
 - [x] SessionManager - session lifecycle
@@ -761,7 +761,7 @@ interface ShiftScriptContext {
 - [ ] Native module hot reload
 - [ ] State persistence across reloads
 - [ ] Component storybook
-- [ ] Mock FontEngine for frontend dev
+- [ ] Mock NativeBridge for frontend dev
 
 **Code Quality**
 

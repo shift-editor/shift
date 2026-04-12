@@ -21,17 +21,17 @@ export class CutCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     this.#beforeSnapshot = ctx.glyph;
-    ctx.fontEngine.removePoints(this.#pointIds);
+    ctx.bridge.removePoints(this.#pointIds);
   }
 
   undo(ctx: CommandContext): void {
     if (this.#beforeSnapshot) {
-      ctx.fontEngine.restoreSnapshot(this.#beforeSnapshot);
+      ctx.bridge.restoreSnapshot(this.#beforeSnapshot);
     }
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.fontEngine.removePoints(this.#pointIds);
+    ctx.bridge.removePoints(this.#pointIds);
   }
 }
 
@@ -60,7 +60,7 @@ export class PasteCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     this.#beforeSnapshot = ctx.glyph;
 
-    const result = ctx.fontEngine.pasteContours(
+    const result = ctx.bridge.pasteContours(
       this.#content.contours,
       this.#options.offset.x,
       this.#options.offset.y,
@@ -68,18 +68,18 @@ export class PasteCommand extends BaseCommand<void> {
 
     this.#createdPointIds = result.createdPointIds;
     this.#createdContourIds = result.createdContourIds;
-    this.#afterSnapshot = ctx.fontEngine.getEditingSnapshot();
+    this.#afterSnapshot = ctx.bridge.getEditingSnapshot();
   }
 
   undo(ctx: CommandContext): void {
     if (this.#beforeSnapshot) {
-      ctx.fontEngine.restoreSnapshot(this.#beforeSnapshot);
+      ctx.bridge.restoreSnapshot(this.#beforeSnapshot);
     }
   }
 
   override redo(ctx: CommandContext): void {
     if (this.#afterSnapshot) {
-      ctx.fontEngine.restoreSnapshot(this.#afterSnapshot);
+      ctx.bridge.restoreSnapshot(this.#afterSnapshot);
     } else {
       this.execute(ctx);
     }

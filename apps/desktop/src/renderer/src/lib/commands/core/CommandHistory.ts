@@ -14,7 +14,7 @@
 import { signal, computed, type WritableSignal, type ComputedSignal } from "@/lib/reactive/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
-import type { FontEngine } from "@/engine/FontEngine";
+import type { NativeBridge } from "@/bridge/NativeBridge";
 import type { GlyphSnapshot } from "@shift/types";
 
 export interface CommandHistoryOptions {
@@ -33,7 +33,7 @@ export class CommandHistory {
   #undoStack: Command<unknown>[] = [];
   #redoStack: Command<unknown>[] = [];
   #maxHistory: number;
-  #fontEngine: FontEngine;
+  #bridge: NativeBridge;
   #getSnapshot: () => GlyphSnapshot | null;
   #batch: BatchState | null = null;
   #onDirty: (() => void) | undefined;
@@ -45,11 +45,11 @@ export class CommandHistory {
   readonly canRedo: ComputedSignal<boolean>;
 
   constructor(
-    fontEngine: FontEngine,
+    bridge: NativeBridge,
     getSnapshot: () => GlyphSnapshot | null,
     options: CommandHistoryOptions = {},
   ) {
-    this.#fontEngine = fontEngine;
+    this.#bridge = bridge;
     this.#getSnapshot = getSnapshot;
     this.#maxHistory = options.maxHistory ?? 100;
     this.#onDirty = options.onDirty;
@@ -70,7 +70,7 @@ export class CommandHistory {
 
   #createContext(): CommandContext {
     return {
-      fontEngine: this.#fontEngine,
+      bridge: this.#bridge,
       glyph: this.#getSnapshot(),
     };
   }

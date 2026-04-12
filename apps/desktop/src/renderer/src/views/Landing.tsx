@@ -31,7 +31,7 @@ export const Landing = () => {
     editor.setMainGlyphUnicode(65);
     editor.startEditSession(glyphRef);
     editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
-    editor.fontEngine.resetFontMetadata();
+    editor.bridge.resetFontMetadata();
     setFilePath(null);
     clearDirty();
     documentPersistence.closeDocument();

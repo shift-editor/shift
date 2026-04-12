@@ -71,7 +71,8 @@ function computeLayout(width: number) {
 
 export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: GlyphGridProps) {
   const navigate = useNavigate();
-  const engine = getEditor().fontEngine;
+  const editor = getEditor();
+  const engine = editor.bridge;
   const fontLoaded = useSignalState(engine.$fontLoaded);
   const fontUnicodes = useSignalState(engine.$fontUnicodes);
   const fontMetrics = useSignalState(engine.$fontMetrics);

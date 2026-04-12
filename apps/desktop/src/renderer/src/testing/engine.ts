@@ -1,10 +1,10 @@
 import type { GlyphSnapshot, PointSnapshot } from "@shift/types";
-import { FontEngine } from "@/engine/FontEngine";
+import { NativeBridge } from "@/bridge/NativeBridge";
 import { Glyphs } from "@shift/font";
 
-export function createFontEngine(): FontEngine {
+export function createBridge(): NativeBridge {
   const { FontEngine: NativeFontEngine } = require("shift-node");
-  return new FontEngine(new NativeFontEngine());
+  return new NativeBridge(new NativeFontEngine());
 }
 
 export function getAllPoints(snapshot: GlyphSnapshot | null): PointSnapshot[] {

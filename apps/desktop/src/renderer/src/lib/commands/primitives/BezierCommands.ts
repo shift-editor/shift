@@ -37,7 +37,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.fontEngine.insertPointBefore(this.#beforePointId, {
+    this.#resultId = ctx.bridge.insertPointBefore(this.#beforePointId, {
       x: this.#x,
       y: this.#y,
       pointType: this.#pointType,
@@ -48,7 +48,7 @@ export class InsertPointCommand extends BaseCommand<PointId> {
 
   undo(ctx: CommandContext): void {
     if (this.#resultId) {
-      ctx.fontEngine.removePoints([this.#resultId]);
+      ctx.bridge.removePoints([this.#resultId]);
     }
   }
 
@@ -73,7 +73,7 @@ export class CloseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#contourId = ctx.fontEngine.getActiveContourId();
+    this.#contourId = ctx.bridge.getActiveContourId();
 
     if (ctx.glyph && this.#contourId) {
       const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
@@ -81,13 +81,13 @@ export class CloseContourCommand extends BaseCommand<void> {
     }
 
     if (!this.#wasClosed) {
-      ctx.fontEngine.closeContour();
+      ctx.bridge.closeContour();
     }
   }
 
   undo(ctx: CommandContext): void {
     if (this.#contourId && !this.#wasClosed) {
-      ctx.fontEngine.openContour(this.#contourId);
+      ctx.bridge.openContour(this.#contourId);
     }
   }
 }
@@ -112,12 +112,12 @@ export class NudgePointsCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.bridge.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 
   undo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+    ctx.bridge.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 }
 
@@ -138,13 +138,13 @@ export class SetActiveContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#previousActiveId = ctx.fontEngine.getActiveContourId();
-    ctx.fontEngine.setActiveContour(this.#contourId);
+    this.#previousActiveId = ctx.bridge.getActiveContourId();
+    ctx.bridge.setActiveContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
     if (this.#previousActiveId) {
-      ctx.fontEngine.setActiveContour(this.#previousActiveId);
+      ctx.bridge.setActiveContour(this.#previousActiveId);
     }
   }
 }
@@ -165,11 +165,11 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.reverseContour(this.#contourId);
+    ctx.bridge.reverseContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.reverseContour(this.#contourId);
+    ctx.bridge.reverseContour(this.#contourId);
   }
 }
 
@@ -213,7 +213,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
 
     const anchor2Id = this.#segment.points.anchor2.id;
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.bridge.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
       y: splitPoint.y,
       pointType: "onCurve",
@@ -241,7 +241,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control.y,
     });
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.bridge.insertPointBefore(anchor2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -249,7 +249,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    const cBId = ctx.bridge.insertPointBefore(anchor2Id, {
       x: cB.x,
       y: cB.y,
       pointType: "offCurve",
@@ -257,7 +257,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.fontEngine.movePointTo(controlId, cA.x, cA.y);
+    ctx.bridge.movePointTo(controlId, cA.x, cA.y);
 
     return this.#splitPointId;
   }
@@ -285,7 +285,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control2.y,
     });
 
-    const c1AId = ctx.fontEngine.insertPointBefore(control2Id, {
+    const c1AId = ctx.bridge.insertPointBefore(control2Id, {
       x: c1A.x,
       y: c1A.y,
       pointType: "offCurve",
@@ -293,7 +293,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(control2Id, {
+    this.#splitPointId = ctx.bridge.insertPointBefore(control2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -301,7 +301,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.fontEngine.insertPointBefore(control2Id, {
+    const c0BId = ctx.bridge.insertPointBefore(control2Id, {
       x: c0B.x,
       y: c0B.y,
       pointType: "offCurve",
@@ -309,19 +309,19 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.fontEngine.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.fontEngine.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.bridge.movePointTo(control1Id, c0A.x, c0A.y);
+    ctx.bridge.movePointTo(control2Id, c1B.x, c1B.y);
 
     return this.#splitPointId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#insertedPointIds.length > 0) {
-      ctx.fontEngine.removePoints(this.#insertedPointIds);
+      ctx.bridge.removePoints(this.#insertedPointIds);
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.fontEngine.movePointTo(pointId, pos.x, pos.y);
+      ctx.bridge.movePointTo(pointId, pos.x, pos.y);
     }
   }
 
@@ -370,13 +370,13 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.fontEngine.insertPointBefore(this.#anchor2Id, {
+    this.#control2Id = ctx.bridge.insertPointBefore(this.#anchor2Id, {
       x: this.#control2Pos.x,
       y: this.#control2Pos.y,
       pointType: "offCurve",
       smooth: false,
     });
-    this.#control1Id = ctx.fontEngine.insertPointBefore(this.#control2Id, {
+    this.#control1Id = ctx.bridge.insertPointBefore(this.#control2Id, {
       x: this.#control1Pos.x,
       y: this.#control1Pos.y,
       pointType: "offCurve",
@@ -387,7 +387,7 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   undo(ctx: CommandContext): void {
     const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
     if (toRemove.length > 0) {
-      ctx.fontEngine.removePoints(toRemove);
+      ctx.bridge.removePoints(toRemove);
     }
   }
 

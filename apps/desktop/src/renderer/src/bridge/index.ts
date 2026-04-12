@@ -1,4 +1,4 @@
-export { FontEngine } from "./FontEngine";
+export { NativeBridge } from "./NativeBridge";
 export type { FontMetadata, FontMetrics } from "@shift/types";
 
 export { FontEngineError, NoEditSessionError, NativeOperationError } from "./errors";

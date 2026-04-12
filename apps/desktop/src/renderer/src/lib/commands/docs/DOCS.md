@@ -45,7 +45,7 @@ commands/
 ### Key Design Decisions
 
 1. **Two-Stack Pattern**: Separate undo and redo stacks with classic semantics
-2. **Context Injection**: Commands receive FontEngine via CommandContext
+2. **Context Injection**: Commands receive NativeBridge via CommandContext
 3. **Composite Pattern**: Group multiple commands into single undoable unit
 4. **Reactive State**: Signals for canUndo/canRedo enable reactive UI
 
@@ -70,7 +70,7 @@ Provides access to the editing system:
 
 ```typescript
 interface CommandContext {
-  readonly fontEngine: FontEngine;
+  readonly bridge: NativeBridge;
   readonly snapshot: GlyphSnapshot | null;
 }
 ```
@@ -133,7 +133,7 @@ history.undo(); // Undoes all three in reverse order
 ### Basic Undo/Redo
 
 ```typescript
-const history = new CommandHistory(fontEngine, () => snapshot);
+const history = new CommandHistory(bridge, () => snapshot);
 
 // Execute command
 history.execute(new MovePointsCommand([pointId], 50, 0));
@@ -216,7 +216,7 @@ Create Command (MovePointsCommand)
     ↓
 history.execute(command)
     ├── command.execute(ctx)
-    │   ├── Mutate via fontEngine
+    │   ├── Mutate via bridge
     │   └── Store state for undo
     ├── Push to undoStack
     └── Clear redoStack
@@ -229,7 +229,7 @@ history.undo()
 
 ## Related Systems
 
-- [engine](../../engine/docs/DOCS.md) - FontEngine for mutations
+- [bridge](../../bridge/docs/DOCS.md) - NativeBridge for mutations
 - [reactive](../reactive/docs/DOCS.md) - Signals for state
 - [editor](../editor/docs/DOCS.md) - Orchestrates command execution
 - [tools](../tools/docs/DOCS.md) - Tools create commands

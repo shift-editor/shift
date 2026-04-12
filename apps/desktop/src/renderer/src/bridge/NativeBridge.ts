@@ -34,7 +34,7 @@ import { Glyph } from "@/lib/model/glyph";
  * All mutations go through {@link Glyph.apply} — structural edits pass a
  * snapshot, position updates pass a NodePositionUpdateList.
  */
-export class FontEngine {
+export class NativeBridge {
   readonly #$glyph: WritableSignal<Glyph | null>;
   readonly #$fontLoaded: WritableSignal<boolean>;
   readonly #$fontUnicodes: WritableSignal<number[]>;
@@ -53,7 +53,7 @@ export class FontEngine {
     return this.#$glyph;
   }
 
-  /** @knipclassignore — used by React components via editor.fontEngine */
+  /** @knipclassignore — used by React components via editor.bridge */
   get $fontLoaded(): Signal<boolean> {
     return this.#$fontLoaded;
   }

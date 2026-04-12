@@ -15,13 +15,13 @@ import { Glyphs } from "@shift/font";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { createFontEngine } from "./engine";
+import { createBridge } from "./engine";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
 export class TestEditor extends Editor {
   constructor() {
-    super({ fontEngine: createFontEngine() });
+    super({ bridge: createBridge() });
     registerBuiltInTools(this);
   }
 
@@ -80,7 +80,7 @@ export class TestEditor extends Editor {
   }
 
   get snapshot(): GlyphSnapshot | null {
-    return this.fontEngine.getEditingSnapshot();
+    return this.bridge.getEditingSnapshot();
   }
 
   get currentGlyph(): Glyph | null {

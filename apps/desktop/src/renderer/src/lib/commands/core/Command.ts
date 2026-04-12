@@ -10,7 +10,7 @@
  * - Clear separation between UI interaction and data mutation
  */
 
-import type { FontEngine } from "@/engine/FontEngine";
+import type { NativeBridge } from "@/bridge/NativeBridge";
 import type { GlyphSnapshot } from "@shift/types";
 
 type CommandEditingMethods =
@@ -32,9 +32,9 @@ type CommandEditingMethods =
   | "pasteContours";
 
 /** Minimal editing surface required by command execution. */
-export type CommandEditingAPI = Pick<FontEngine, CommandEditingMethods>;
-export type CommandFontEngine = Pick<
-  FontEngine,
+export type CommandEditingAPI = Pick<NativeBridge, CommandEditingMethods>;
+export type CommandNativeBridge = Pick<
+  NativeBridge,
   CommandEditingMethods | "$glyph" | "getEditingSnapshot"
 >;
 
@@ -42,8 +42,8 @@ export type CommandFontEngine = Pick<
  * Context available to commands during execution.
  */
 export interface CommandContext {
-  /** The font engine for performing mutations */
-  readonly fontEngine: CommandFontEngine;
+  /** The native bridge for performing mutations */
+  readonly bridge: CommandNativeBridge;
   /** Current glyph data (read-only view of state) */
   readonly glyph: GlyphSnapshot | null;
 }

@@ -25,7 +25,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
 import { GlyphNamingService, ViewportManager } from "./managers";
-import { FontEngine } from "@/engine";
+import { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
@@ -118,7 +118,7 @@ import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
-import type { GlyphDraft } from "@/engine/draft";
+import type { GlyphDraft } from "@/bridge/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 
@@ -167,7 +167,7 @@ export class Editor implements ShiftEditor {
 
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
-  #fontEngine: FontEngine;
+  #bridge: NativeBridge;
   #glyphNaming: GlyphNamingService;
   #$glyph: ComputedSignal<Glyph | null>;
 
@@ -202,17 +202,17 @@ export class Editor implements ShiftEditor {
    * reactive effects that schedule canvas redraws when state changes.
    *
    */
-  constructor(options: { fontEngine: FontEngine }) {
+  constructor(options: { bridge: NativeBridge }) {
     this.#viewport = new ViewportManager();
-    this.#fontEngine = options.fontEngine;
+    this.#bridge = options.bridge;
     const glyphInfo = getGlyphInfo();
     this.#glyphNaming = new GlyphNamingService({
-      getExistingGlyphNameForUnicode: (unicode) => this.#fontEngine.nameForUnicode(unicode),
+      getExistingGlyphNameForUnicode: (unicode) => this.#bridge.nameForUnicode(unicode),
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
     });
-    this.#$glyph = computed<Glyph | null>(() => this.#fontEngine.$glyph.value as Glyph | null);
-    this.#commandHistory = new CommandHistory(this.#fontEngine, () =>
-      this.#fontEngine.getEditingSnapshot(),
+    this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
+    this.#commandHistory = new CommandHistory(this.#bridge, () =>
+      this.#bridge.getEditingSnapshot(),
     );
 
     this.$previewMode = signal(false);
@@ -257,7 +257,7 @@ export class Editor implements ShiftEditor {
     this.#edgePan = new EdgePanManager(this);
     this.#snapManager = new SnapManager({
       getGlyph: () => this.#$glyph.value,
-      getMetrics: () => this.#fontEngine.getMetrics(),
+      getMetrics: () => this.#bridge.getMetrics(),
       getSnapPreferences: () => this.settings.snap,
       screenToUpmDistance: (px) => this.#viewport.screenToUpmDistance(px),
     });
@@ -282,7 +282,7 @@ export class Editor implements ShiftEditor {
       commands: this.#commandHistory,
     });
     this.#textRunController = new TextRunController();
-    this.#textRunController.setFont(this.#fontEngine);
+    this.#textRunController.setFont(this.#bridge);
 
     const textRunPersistence = this.registerState<TextRunModulePayload>({
       id: "text-run",
@@ -579,7 +579,7 @@ export class Editor implements ShiftEditor {
   }
 
   public createDraft(): GlyphDraft {
-    const glyph = this.#fontEngine.$glyph.peek();
+    const glyph = this.#bridge.$glyph.peek();
     if (!glyph) {
       throw new Error("Cannot create draft without an active glyph");
     }
@@ -593,7 +593,7 @@ export class Editor implements ShiftEditor {
       setPositions: (updates) => {
         if (finished) return;
         dirty = true;
-        this.#fontEngine.setNodePositions(updates);
+        this.#bridge.setNodePositions(updates);
       },
       finish: (label) => {
         if (finished) return;
@@ -606,7 +606,7 @@ export class Editor implements ShiftEditor {
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#fontEngine.restoreSnapshot(baseSnapshot);
+        this.#bridge.restoreSnapshot(baseSnapshot);
       },
     };
   }
@@ -750,15 +750,15 @@ export class Editor implements ShiftEditor {
   /** Opens a glyph for editing by canonical glyph reference. */
   public startEditSession(glyph: GlyphRef): void {
     const glyphName = glyph.glyphName;
-    const currentGlyphName = this.#fontEngine.getEditingGlyphName();
+    const currentGlyphName = this.#bridge.getEditingGlyphName();
     if (currentGlyphName === glyphName) return;
 
-    this.#fontEngine.startEditSession(glyph);
-    this.#fontEngine.addContour();
+    this.#bridge.startEditSession(glyph);
+    this.#bridge.addContour();
   }
 
   public endEditSession(): void {
-    this.#fontEngine.endEditSession();
+    this.#bridge.endEditSession();
   }
 
   public get textRunController(): TextRunController {
@@ -767,7 +767,7 @@ export class Editor implements ShiftEditor {
 
   /** Resolve a unicode codepoint to a glyph ref and insert into the text run. */
   public insertTextCodepoint(codepoint: number): void {
-    const glyphName = this.#fontEngine.nameForUnicode(codepoint);
+    const glyphName = this.#bridge.nameForUnicode(codepoint);
     if (!glyphName) return;
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
@@ -779,7 +779,7 @@ export class Editor implements ShiftEditor {
   }
 
   public getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
-    return this.#fontEngine.getGlyphCompositeComponents(glyphName);
+    return this.#bridge.getGlyphCompositeComponents(glyphName);
   }
 
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
@@ -826,7 +826,7 @@ export class Editor implements ShiftEditor {
   }
 
   public get font(): Font {
-    return this.#fontEngine;
+    return this.#bridge;
   }
 
   public get glyph(): Signal<Glyph | null> {
@@ -834,11 +834,11 @@ export class Editor implements ShiftEditor {
   }
 
   public getActiveGlyphUnicode(): number | null {
-    return this.#fontEngine.getEditingUnicode();
+    return this.#bridge.getEditingUnicode();
   }
 
   public getActiveGlyphName(): string | null {
-    return this.#fontEngine.getEditingGlyphName();
+    return this.#bridge.getEditingGlyphName();
   }
 
   public getActiveGlyphRef(): GlyphRef | null {
@@ -889,8 +889,8 @@ export class Editor implements ShiftEditor {
     return this.#viewport;
   }
 
-  public get fontEngine(): FontEngine {
-    return this.#fontEngine;
+  public get bridge(): NativeBridge {
+    return this.#bridge;
   }
 
   public get hoverManager(): HoverManager {
@@ -1010,7 +1010,7 @@ export class Editor implements ShiftEditor {
   }
 
   public updateMetricsFromFont(): void {
-    const metrics = this.#fontEngine.getMetrics();
+    const metrics = this.#bridge.getMetrics();
     this.#viewport.upm = metrics.unitsPerEm;
     this.#viewport.descender = metrics.descender;
     this.requestRedraw();
@@ -1138,14 +1138,14 @@ export class Editor implements ShiftEditor {
    * descender are NOT updated here -- call `updateMetricsFromFont()` to sync.
    */
   public loadFont(filePath: string): void {
-    if (this.#fontEngine.hasSession()) {
-      this.#fontEngine.endEditSession();
+    if (this.#bridge.hasSession()) {
+      this.#bridge.endEditSession();
     }
-    this.#fontEngine.loadFont(filePath);
-    const unicodes = this.#fontEngine.getGlyphUnicodes();
-    const metrics = this.#fontEngine.getMetrics();
-    this.#fontEngine.setFontLoaded(unicodes, metrics);
-    this.#events.emit("fontLoaded", { font: this.#fontEngine });
+    this.#bridge.loadFont(filePath);
+    const unicodes = this.#bridge.getGlyphUnicodes();
+    const metrics = this.#bridge.getMetrics();
+    this.#bridge.setFontLoaded(unicodes, metrics);
+    this.#events.emit("fontLoaded", { font: this.#bridge });
     this.setMainGlyphUnicode(65);
     const glyphRef = this.glyphRefFromUnicode(65);
     this.startEditSession(glyphRef);
@@ -1153,7 +1153,7 @@ export class Editor implements ShiftEditor {
   }
 
   public async saveFontAsync(filePath: string): Promise<void> {
-    return this.#fontEngine.saveFontAsync(filePath);
+    return this.#bridge.saveFontAsync(filePath);
   }
 
   public setCursor(cursor: CursorType): void {
@@ -1187,7 +1187,7 @@ export class Editor implements ShiftEditor {
   public deleteSelectedPoints(): void {
     const selectedIds = [...this.selection.pointIds];
     if (selectedIds.length > 0) {
-      this.#fontEngine.removePoints(selectedIds);
+      this.#bridge.removePoints(selectedIds);
       this.selection.clear();
     }
   }
@@ -1310,7 +1310,7 @@ export class Editor implements ShiftEditor {
   }
 
   public getActiveContourId(): ContourId | null {
-    const id = this.#fontEngine.getActiveContourId();
+    const id = this.#bridge.getActiveContourId();
     if (id == null) return null;
     return id;
   }
@@ -1322,7 +1322,7 @@ export class Editor implements ShiftEditor {
   }
 
   public addPoint(x: number, y: number, type: PointType, smooth = false): PointId {
-    return this.#fontEngine.addPoint({
+    return this.#bridge.addPoint({
       x,
       y,
       pointType: type,
@@ -1353,23 +1353,23 @@ export class Editor implements ShiftEditor {
   }
 
   public movePoints(ids: PointId[], dx: number, dy: number): void {
-    this.#fontEngine.movePoints(ids, { x: dx, y: dy });
+    this.#bridge.movePoints(ids, { x: dx, y: dy });
   }
 
   public moveAnchors(ids: AnchorId[], delta: Point2D): void {
-    this.#fontEngine.moveAnchors(ids, delta);
+    this.#bridge.moveAnchors(ids, delta);
   }
 
   public movePointTo(id: PointId, position: Point2D): void {
-    this.#fontEngine.movePointTo(id, position.x, position.y);
+    this.#bridge.movePointTo(id, position.x, position.y);
   }
 
   public applySmartEdits(ids: readonly PointId[], dx: number, dy: number): PointId[] {
-    return this.#fontEngine.applySmartEdits(new Set(ids), dx, dy);
+    return this.#bridge.applySmartEdits(new Set(ids), dx, dy);
   }
 
   public setNodePositions(updates: NodePositionUpdateList): void {
-    this.#fontEngine.setNodePositions(updates);
+    this.#bridge.setNodePositions(updates);
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
@@ -1406,11 +1406,11 @@ export class Editor implements ShiftEditor {
   }
 
   public removePoints(ids: PointId[]): void {
-    this.#fontEngine.removePoints(ids);
+    this.#bridge.removePoints(ids);
   }
 
   public addContour(): ContourId {
-    return this.#fontEngine.addContour();
+    return this.#bridge.addContour();
   }
 
   public closeContour(): void {
@@ -1422,11 +1422,11 @@ export class Editor implements ShiftEditor {
   }
 
   public setActiveContour(contourId: ContourId): void {
-    this.#fontEngine.setActiveContour(contourId);
+    this.#bridge.setActiveContour(contourId);
   }
 
   public clearActiveContour(): void {
-    this.#fontEngine.clearActiveContour();
+    this.#bridge.clearActiveContour();
   }
 
   public reverseContour(contourId: ContourId): void {
@@ -1438,9 +1438,9 @@ export class Editor implements ShiftEditor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    const before = this.#fontEngine.getSnapshot();
-    this.#fontEngine.applyBooleanOp(contourIdA, contourIdB, operation);
-    const after = this.#fontEngine.getSnapshot();
+    const before = this.#bridge.getSnapshot();
+    this.#bridge.applyBooleanOp(contourIdA, contourIdB, operation);
+    const after = this.#bridge.getSnapshot();
     this.#commandHistory.record(new SnapshotCommand(`Boolean ${operation}`, before, after));
   }
 
@@ -1683,7 +1683,7 @@ export class Editor implements ShiftEditor {
     );
     if (!content || content.contours.length === 0) return [];
 
-    const result = this.#fontEngine.pasteContours(content.contours, 0, 0);
+    const result = this.#bridge.pasteContours(content.contours, 0, 0);
     return result.success ? result.createdPointIds : [];
   }
 
@@ -1786,7 +1786,7 @@ export class Editor implements ShiftEditor {
       return offset;
     }
 
-    const metrics = this.#fontEngine.getMetrics();
+    const metrics = this.#bridge.getMetrics();
     const targetX = 300;
     const targetYForAnchorName = (anchorName: string): number => {
       switch (anchorName) {
@@ -1814,7 +1814,7 @@ export class Editor implements ShiftEditor {
       };
     }
 
-    const bounds = this.#fontEngine.getBbox?.(glyph.glyphName);
+    const bounds = this.#bridge.getBbox?.(glyph.glyphName);
     if (!bounds) {
       return offset;
     }
