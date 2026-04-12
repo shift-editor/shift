@@ -2,6 +2,7 @@ import type { FontMetrics, FontMetadata, CompositeGlyph } from "@shift/types";
 import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
+import { getGlyphInfo } from "@/store/glyphInfo";
 
 /**
  * Reactive font data surface.
@@ -69,6 +70,15 @@ export class Font {
 
   nameForUnicode(unicode: number): string | null {
     return this.#bridge.nameForUnicode(unicode);
+  }
+
+  /** Resolve unicode to glyph name. Checks font first, then glyph-info DB, then fallback. */
+  glyphName(unicode: number): string {
+    return (
+      this.#bridge.nameForUnicode(unicode) ??
+      getGlyphInfo().getGlyphName(unicode) ??
+      `uni${unicode.toString(16).padStart(4, "0").toUpperCase()}`
+    );
   }
 
   getAdvance(name: string): number | null {

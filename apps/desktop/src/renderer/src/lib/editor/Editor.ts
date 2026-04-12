@@ -16,13 +16,8 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
 import { ViewportManager } from "./managers";
-import {
-  glyphRefFromUnicode,
-  isLikelyNonSpacingGlyphRef,
-  type GlyphNameResolverDeps,
-} from "@/lib/utils/unicode";
+import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { NativeBridge } from "@/bridge";
-import { getGlyphInfo } from "@/store/glyphInfo";
 import {
   CommandHistory,
   SetLeftSidebearingCommand,
@@ -150,7 +145,6 @@ export class Editor {
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
-  #glyphNameDeps: GlyphNameResolverDeps;
   #$glyph: ComputedSignal<Glyph | null>;
 
   #staticEffect: Effect;
@@ -188,11 +182,6 @@ export class Editor {
     this.#viewport = new ViewportManager();
     this.#bridge = options.bridge;
     this.font = new Font(this.#bridge);
-    const glyphInfo = getGlyphInfo();
-    this.#glyphNameDeps = {
-      getExistingGlyphNameForUnicode: (unicode) => this.font.nameForUnicode(unicode),
-      getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
-    };
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
@@ -741,7 +730,7 @@ export class Editor {
   }
 
   public glyphRefFromUnicode(unicode: number): GlyphRef {
-    return glyphRefFromUnicode(unicode, this.#glyphNameDeps);
+    return { glyphName: this.font.glyphName(unicode), unicode };
   }
 
   public setMainGlyphUnicode(unicode: number | null): void {
