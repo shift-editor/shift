@@ -1,5 +1,5 @@
 import { deriveGlyphXBounds as deriveFontGlyphXBounds } from "@shift/font";
-import type { Glyph } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 
 export interface GlyphSidebearings {
   readonly lsb: number | null;

@@ -24,31 +24,40 @@ import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { produceGlyph } from "./draft";
-import { GlyphStore, type GlyphView } from "@/lib/cache/GlyphStore";
+import { Glyph } from "@/lib/model/glyph";
+
+export interface GlyphView {
+  name: string;
+  advance: number;
+  bbox: Bounds | null;
+  path2d: Path2D | null;
+  svgPath: string | null;
+}
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
  * All font queries, session lifecycle, and glyph mutations live here.
+ *
+ * The $glyph signal holds a reactive {@link Glyph} with per-contour signals.
+ * All mutations go through {@link Glyph.apply} — structural edits pass a
+ * snapshot, position updates pass a NodePositionUpdateList.
  */
 export class FontEngine {
-  readonly #$glyph: WritableSignal<GlyphSnapshot | null>;
+  readonly #$glyph: WritableSignal<Glyph | null>;
   readonly #$fontLoaded: WritableSignal<boolean>;
   readonly #$fontUnicodes: WritableSignal<number[]>;
   readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
-  #glyphStore: GlyphStore;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
-    this.#$glyph = signal<GlyphSnapshot | null>(null);
+    this.#$glyph = signal<Glyph | null>(null, { equals: () => false });
     this.#$fontLoaded = signal(false);
     this.#$fontUnicodes = signal<number[]>([]);
     this.#$fontMetrics = signal<FontMetrics | null>(null);
-    this.#glyphStore = new GlyphStore(this);
   }
 
-  get $glyph(): Signal<GlyphSnapshot | null> {
+  get $glyph(): Signal<Glyph | null> {
     return this.#$glyph;
   }
 
@@ -81,11 +90,8 @@ export class FontEngine {
   }
 
   getEditingSnapshot(): GlyphSnapshot | null {
-    return this.#$glyph.value;
-  }
-
-  emitGlyph(glyph: GlyphSnapshot | null): void {
-    this.#$glyph.set(glyph);
+    const glyph = this.#$glyph.peek();
+    return glyph ? glyph.toSnapshot() : null;
   }
 
   hasSession(): boolean {
@@ -103,12 +109,13 @@ export class FontEngine {
         ? { glyphName: target.glyphName, unicode: target.unicode }
         : { glyphName: target.glyphName };
     this.#raw.startEditSession(ref);
-    this.emitGlyph(this.getSessionGlyph());
+    const snapshot = this.getSessionGlyph();
+    this.#$glyph.set(snapshot ? new Glyph(snapshot) : null);
   }
 
   endEditSession(): void {
     this.#raw.endEditSession();
-    this.emitGlyph(null);
+    this.#$glyph.set(null);
   }
 
   getEditingUnicode(): number | null {
@@ -191,19 +198,26 @@ export class FontEngine {
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
   }
 
-  getGlyph(name: string): GlyphView | null {
-    return this.#glyphStore.get(name).value;
+  /** @knipclassignore — used by text run rendering via Font interface */
+  getGlyphPath(name: string): Path2D | null {
+    const editing = this.#$glyph.peek();
+    if (editing?.name === name) return editing.path;
+    const svg = this.getSvgPathByName(name);
+    return svg ? new Path2D(svg) : null;
   }
 
+  getGlyph(name: string): GlyphView | null {
+    const svgPath = this.getSvgPathByName(name);
+    const advance = this.getAdvanceByName(name) ?? 0;
+    const bbox = this.getBboxByName(name);
+    return { name, advance, bbox, path2d: svgPath ? new Path2D(svgPath) : null, svgPath };
+  }
+
+  /** @knipclassignore — used by React components via editor.fontEngine */
   getGlyphByUnicode(unicode: number): GlyphView | null {
     const name = this.getGlyphNameForUnicode(unicode);
     if (!name) return null;
     return this.getGlyph(name);
-  }
-
-  /** @knipclassignore */
-  get glyphStore(): GlyphStore {
-    return this.#glyphStore;
   }
 
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
@@ -230,14 +244,24 @@ export class FontEngine {
   #dispatch(json: string): PointId[] {
     this.#requireSession();
     const response = this.#execute(json);
-    this.emitGlyph(response.snapshot);
+    this.#syncFromResponse(response.snapshot);
     return response.affectedPointIds;
   }
 
   #dispatchVoid(json: string): void {
     this.#requireSession();
     const response = this.#execute(json);
-    this.emitGlyph(response.snapshot);
+    this.#syncFromResponse(response.snapshot);
+  }
+
+  #syncFromResponse(snapshot: GlyphSnapshot): void {
+    const glyph = this.#$glyph.peek();
+    if (glyph) {
+      glyph.apply(snapshot);
+      this.#$glyph.set(glyph);
+    } else {
+      this.#$glyph.set(new Glyph(snapshot));
+    }
   }
 
   #requireSession(): void {
@@ -251,7 +275,8 @@ export class FontEngine {
     const pointId = ids[0];
     if (pointId) return pointId;
 
-    const glyph = this.getEditingSnapshot()!;
+    const glyph = this.#$glyph.peek();
+    if (!glyph) throw new NativeOperationError("Native addPoint returned no point ID");
     const lastContour = glyph.contours[glyph.contours.length - 1];
     const lastPoint = lastContour?.points[lastContour.points.length - 1];
     if (!lastPoint) {
@@ -304,9 +329,9 @@ export class FontEngine {
 
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
-    const glyph = this.getEditingSnapshot();
-    if (!glyph) throw new NativeOperationError("No glyph available");
-    const found = Glyphs.findPoint(glyph, pointId);
+    const snapshot = this.getEditingSnapshot();
+    if (!snapshot) throw new NativeOperationError("No glyph available");
+    const found = Glyphs.findPoint(snapshot, pointId);
     if (!found) throw new NativeOperationError(`Point ${pointId} not found`);
     this.movePoints([pointId], { x: x - found.point.x, y: y - found.point.y });
   }
@@ -324,7 +349,7 @@ export class FontEngine {
   addContour(): ContourId {
     this.#requireSession();
     const response = this.#execute(this.#raw.addContour());
-    this.emitGlyph(response.snapshot);
+    this.#syncFromResponse(response.snapshot);
     return response.snapshot.activeContourId!;
   }
 
@@ -379,23 +404,11 @@ export class FontEngine {
     if (!this.hasSession()) return;
     if (updates.length === 0) return;
 
-    const glyph = this.getEditingSnapshot();
+    const glyph = this.#$glyph.peek();
     if (!glyph) return;
 
-    const updatedGlyph = produceGlyph(glyph, updates);
-    this.emitGlyph(updatedGlyph);
-
-    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
-      node: { kind: update.node.kind, id: update.node.id },
-      x: update.x,
-      y: update.y,
-    }));
-    this.#raw.setNodePositions(nativeUpdates);
-  }
-
-  syncNodePositions(updates: NodePositionUpdateList): void {
-    if (!this.hasSession()) return;
-    if (updates.length === 0) return;
+    glyph.apply(updates);
+    this.#$glyph.set(glyph);
 
     const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
       node: { kind: update.node.kind, id: update.node.id },
@@ -407,8 +420,9 @@ export class FontEngine {
 
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.hasSession()) return [];
-    const glyph = this.getEditingSnapshot();
-    if (!glyph) return [];
+    const reactive = this.#$glyph.peek();
+    if (!reactive) return [];
+    const glyph = reactive.toSnapshot();
 
     const patch = constrainDrag(
       { glyph, selectedIds: selectedPoints, mousePosition: { x: dx, y: dy } },
@@ -438,7 +452,7 @@ export class FontEngine {
     }
 
     const snapshot = this.getSnapshot();
-    this.emitGlyph(snapshot);
+    this.#syncFromResponse(snapshot);
 
     return {
       success: raw.success,
@@ -458,6 +472,6 @@ export class FontEngine {
     if (!success) {
       throw new NativeOperationError("Failed to restore snapshot");
     }
-    this.emitGlyph(snapshot);
+    this.#syncFromResponse(snapshot);
   }
 }

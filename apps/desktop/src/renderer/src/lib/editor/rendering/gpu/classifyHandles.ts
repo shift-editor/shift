@@ -1,4 +1,5 @@
-import type { Glyph, Point2D, PointId, PointType } from "@shift/types";
+import type { Point2D, PointId, PointType } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { HandleState } from "@/types/graphics";
 import { Vec2 } from "@shift/geo";
 import { Validate } from "@shift/validation";

@@ -8,16 +8,14 @@
  */
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = [
-  "packages/validation/",
-  "packages/font/",
-  "packages/rules/",
-];
+const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/font/", "packages/rules/"];
 
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
   "engine/draft.ts",
   "engine/FontEngine.ts",
+  "engine/glyph.ts",
+  "lib/model/",
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them
   "SelectionBounds.ts", // segment-aware bounds needs contour structure
@@ -59,7 +57,9 @@ const SNAPSHOT_ALLOWED = [
   "testing/",
   "draft.ts",
   "commands/", // undo/redo deals with raw snapshots
+  "behaviors/", // tool behaviors capture snapshots for undo via drafts
   "types/engine.ts", // engine response types
+  "lib/model/", // reactive model uses snapshots for sync
 ];
 
 function isAllowedFile(filename, allowList) {
@@ -198,7 +198,7 @@ export default {
         type: "suggestion",
         messages: {
           useValidate:
-            'Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from @shift/validation instead of raw .pointType checks.',
+            "Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from @shift/validation instead of raw .pointType checks.",
         },
         schema: [],
       },
@@ -511,6 +511,44 @@ export default {
           FunctionDeclaration: checkFunction,
           FunctionExpression: checkFunction,
           ArrowFunctionExpression: checkFunction,
+        };
+      },
+    },
+    /**
+     * Ban section divider comments like `// ── Section ──` or `// === Helpers ===`.
+     *
+     * Use JSDoc on the next declaration instead. Section comments add visual
+     * noise and go stale — the code structure should speak for itself.
+     */
+    "no-section-divider-comments": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noSectionDivider:
+            "Do not use section divider comments (// ── ... ──). Add JSDoc to the functions/classes that make up the section instead. See /doc-coauthoring skill for writing guidance.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        const sourceCode = context.getSourceCode();
+        if (!sourceCode) return {};
+
+        return {
+          Program() {
+            const comments = sourceCode.getAllComments ? sourceCode.getAllComments() : [];
+            for (const comment of comments) {
+              if (comment.type !== "Line") continue;
+              const text = comment.value.trim();
+              // Match patterns like: ── Section ──, === Section ===, --- Section ---
+              if (/^[─═\-=~]{2,}/.test(text) || /[─═\-=~]{2,}$/.test(text)) {
+                context.report({ node: comment, messageId: "noSectionDivider" });
+              }
+            }
+          },
         };
       },
     },

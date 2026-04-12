@@ -1,4 +1,4 @@
-import type { Glyph, Point2D, Rect2D } from "@shift/types";
+import type { GlyphSnapshot, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
@@ -222,7 +222,7 @@ function scaleAround(point: Point2D, origin: Point2D, scaleX: number, scaleY: nu
 }
 
 function buildResizeUpdates(
-  base: Glyph,
+  base: GlyphSnapshot,
   target: DragTarget,
   origin: Point2D,
   scaleX: number,

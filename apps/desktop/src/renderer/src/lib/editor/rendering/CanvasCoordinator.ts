@@ -1,5 +1,6 @@
 import type { IGraphicContext, IRenderer, HandleState } from "@/types/graphics";
-import type { Glyph, Point2D, PointId, AnchorId, Rect2D } from "@shift/types";
+import type { Point2D, PointId, AnchorId, Rect2D } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import type { Font } from "@/lib/editor/Font";
 import type { Signal } from "@/lib/reactive/signal";
 import type { SegmentId } from "@/types/indicator";
@@ -322,10 +323,10 @@ export class CanvasCoordinator {
       }
 
       rc.applyStyle(DEFAULT_STYLES);
-      const hasClosed = renderGlyphOutline(ctx, glyph, visibleSceneBounds, drawOffset);
+      const hasClosed = renderGlyphOutline(ctx, glyph);
 
       if (hasClosed && previewMode) {
-        renderGlyphFilled(ctx, glyph, visibleSceneBounds, drawOffset);
+        renderGlyphFilled(ctx, glyph);
       }
     }
 

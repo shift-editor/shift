@@ -54,12 +54,19 @@ export interface WritableSignal<T> extends Signal<T> {
   update(fn: (prev: T) => T): void;
 }
 
+export interface SignalOptions<T> {
+  /** Custom equality check. Return `true` to skip notification. Default: `Object.is`. */
+  equals?: (prev: T, next: T) => boolean;
+}
+
 class SignalImpl<T> implements WritableSignal<T>, SignalNode {
   #value: T;
   #subscribers = new Set<Computation>();
+  #equals: (prev: T, next: T) => boolean;
 
-  constructor(initialValue: T) {
+  constructor(initialValue: T, options?: SignalOptions<T>) {
     this.#value = initialValue;
+    this.#equals = options?.equals ?? Object.is;
   }
 
   get value(): T {
@@ -80,7 +87,7 @@ class SignalImpl<T> implements WritableSignal<T>, SignalNode {
   }
 
   set(newValue: T): void {
-    if (Object.is(this.#value, newValue)) return;
+    if (this.#equals(this.#value, newValue)) return;
 
     this.#value = newValue;
 
@@ -133,9 +140,13 @@ class SignalImpl<T> implements WritableSignal<T>, SignalNode {
 
 /**
  * Create a writable signal with an initial value.
+ *
+ * @param options.equals - Custom equality check. Return `true` to skip
+ *   notification. Pass `() => false` to always notify (useful for stable
+ *   object references that mutate internally).
  */
-export function signal<T>(initialValue: T): WritableSignal<T> {
-  return new SignalImpl(initialValue);
+export function signal<T>(initialValue: T, options?: SignalOptions<T>): WritableSignal<T> {
+  return new SignalImpl(initialValue, options);
 }
 
 /**
@@ -329,10 +340,6 @@ export function effect(fn: () => void | (() => void)): Effect {
   return new EffectImpl(fn);
 }
 
-// ═══════════════════════════════════════════════════════════
-// BATCH
-// ═══════════════════════════════════════════════════════════
-
 /**
  * Batch multiple signal updates into a single notification.
  * Effects are deferred until the batch completes.
@@ -364,10 +371,6 @@ export function batch<T>(fn: () => T): T {
     }
   }
 }
-
-// ═══════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════
 
 /**
  * Run a function without tracking any signal reads as dependencies.

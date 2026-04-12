@@ -67,7 +67,7 @@ describe("SetNodePositionsCommand", () => {
     expect(command).not.toBeNull();
 
     // Load the "after" state into the engine so undo can move it back to "before"
-    fontEngine.emitGlyph(after);
+    fontEngine.restoreSnapshot(after);
     command!.execute(ctx());
 
     // Verify the after positions were applied
@@ -131,7 +131,7 @@ describe("SetNodePositionsCommand", () => {
     expect(command).not.toBeNull();
 
     // Load the base state and apply the "after" updates, then undo
-    fontEngine.emitGlyph(base);
+    fontEngine.restoreSnapshot(base);
     command!.execute(ctx());
 
     const glyph = fontEngine.getEditingSnapshot()!;

@@ -27,10 +27,6 @@ import type { TransformablePoint, ReflectAxis } from "./types";
  * Pure transformation functions for geometry manipulation.
  */
 export const Transform = {
-  // ============================================
-  // Core Transform Operations
-  // ============================================
-
   /**
    * Rotate points around an origin.
    *
@@ -113,10 +109,6 @@ export const Transform = {
     });
   },
 
-  // ============================================
-  // Matrix Builders
-  // ============================================
-
   /**
    * Pre-built transformation matrices for common operations.
    */
@@ -127,10 +119,6 @@ export const Transform = {
     reflectVertical: Mat.ReflectVertical,
     reflectAxis: Mat.ReflectAxis,
   },
-
-  // ============================================
-  // Convenience Functions
-  // ============================================
 
   /**
    * Rotate points by 90 degrees counter-clockwise.

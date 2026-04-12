@@ -34,7 +34,7 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
     if (!textRunState) return false;
 
     const metrics = ctx.editor.font.getMetrics();
-    const hitIndex = hitTestTextSlot(textRunState.layout, event.point, metrics, {
+    const hitIndex = hitTestTextSlot(textRunState.layout, event.point, metrics, ctx.editor.font, {
       outlineRadius: ctx.editor.hitRadius,
       includeFill: true,
       requireShape: true,

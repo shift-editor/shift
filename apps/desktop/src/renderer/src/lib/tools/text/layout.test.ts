@@ -49,6 +49,12 @@ function createMockFont(
     }),
     getGlyphNameForUnicode: (unicode: number) => glyphNameMap[unicode] ?? null,
     getGlyphByUnicode: () => null,
+    getGlyphPath: (name: string) => {
+      const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
+      if (!unicode) return null;
+      const svgPath = svgPaths[Number(unicode)] ?? null;
+      return svgPath ? new Path2D(svgPath) : null;
+    },
     getGlyph: (name: string) => {
       const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
       if (!unicode) return null;
@@ -106,14 +112,6 @@ describe("computeTextLayout", () => {
     expect(expectAt(layout.slots, 0).advance).toBe(0);
     expect(layout.totalAdvance).toBe(0);
   });
-
-  it("should include path2d in slots", () => {
-    const font = createMockFont({ 65: 500 }, { 65: "M0 0L100 100" });
-    const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
-
-    expect(expectAt(layout.slots, 0).svgPath).toBe("M0 0L100 100");
-    expect(expectAt(layout.slots, 0).path2d).toBeInstanceOf(Path2D);
-  });
 });
 
 describe("computeTextLayout (multi-line)", () => {
@@ -139,6 +137,7 @@ describe("computeTextLayout (multi-line)", () => {
 });
 
 describe("hitTestTextSlot", () => {
+  const font = createMockFont();
   const metrics = {
     unitsPerEm: 1000,
     ascender: 800,
@@ -153,19 +152,19 @@ describe("hitTestTextSlot", () => {
 
   it("should return null for empty layout", () => {
     const layout = { slots: [], totalAdvance: 0 };
-    expect(hitTestTextSlot(layout, { x: 50, y: 400 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 50, y: 400 }, metrics, font)).toBeNull();
   });
 
   it("should return null when y is above ascender", () => {
     const font = createMockFont({ 65: 500 });
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
-    expect(hitTestTextSlot(layout, { x: 250, y: 900 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 250, y: 900 }, metrics, font)).toBeNull();
   });
 
   it("should return null when y is below descender", () => {
     const font = createMockFont({ 65: 500 });
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
-    expect(hitTestTextSlot(layout, { x: 250, y: -300 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 250, y: -300 }, metrics, font)).toBeNull();
   });
 
   it("should return slot index only when point is inside slot bounds", () => {
@@ -176,10 +175,10 @@ describe("hitTestTextSlot", () => {
     });
     const layout = computeTextLayout(toGlyphs([72, 101, 108]), { x: 0, y: 0 }, font);
 
-    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics)).toBe(0);
-    expect(hitTestTextSlot(layout, { x: 400, y: 400 }, metrics)).toBe(0);
-    expect(hitTestTextSlot(layout, { x: 700, y: 400 }, metrics)).toBe(1);
-    expect(hitTestTextSlot(layout, { x: 1400, y: 400 }, metrics)).toBeNull();
+    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics, font)).toBe(0);
+    expect(hitTestTextSlot(layout, { x: 400, y: 400 }, metrics, font)).toBe(0);
+    expect(hitTestTextSlot(layout, { x: 700, y: 400 }, metrics, font)).toBe(1);
+    expect(hitTestTextSlot(layout, { x: 1400, y: 400 }, metrics, font)).toBeNull();
   });
 
   it("shape hit test should reject points outside glyph bbox before path hit", () => {
@@ -199,7 +198,7 @@ describe("hitTestTextSlot", () => {
     );
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
 
-    const result = hitTestTextSlot(layout, { x: 5, y: 50 }, metrics, {
+    const result = hitTestTextSlot(layout, { x: 5, y: 50 }, metrics, font, {
       outlineRadius: 0,
       includeFill: true,
       requireShape: true,
@@ -245,7 +244,7 @@ describe("hitTestTextSlot", () => {
     );
 
     expect(
-      hitTestTextSlot(layout, { x: 80, y: 50 }, metrics, {
+      hitTestTextSlot(layout, { x: 80, y: 50 }, metrics, font, {
         outlineRadius: 2,
         includeFill: true,
         requireShape: true,
@@ -267,10 +266,10 @@ describe("hitTestTextSlot", () => {
     const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
 
     // Click on line 2 (y=-500 is between descender -1200 and ascender -200)
-    expect(hitTestTextSlot(layout, { x: 250, y: -500 }, metrics)).toBe(2);
+    expect(hitTestTextSlot(layout, { x: 250, y: -500 }, metrics, font)).toBe(2);
 
     // Click on line 1 still works
-    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics)).toBe(0);
+    expect(hitTestTextSlot(layout, { x: 100, y: 400 }, metrics, font)).toBe(0);
   });
 
   it("should not match line 1 slot when clicking on line 2 Y", () => {
@@ -283,7 +282,7 @@ describe("hitTestTextSlot", () => {
     const layout = computeTextLayout(glyphs, { x: 0, y: 0 }, font);
 
     // x=100 is within H's advance, but y=-500 is on line 2 — should not hit H
-    expect(hitTestTextSlot(layout, { x: 100, y: -500 }, metrics)).not.toBe(0);
+    expect(hitTestTextSlot(layout, { x: 100, y: -500 }, metrics, font)).not.toBe(0);
   });
 
   it("shape hit test should return slot only when path hit succeeds", () => {
@@ -308,7 +307,7 @@ describe("hitTestTextSlot", () => {
     const layout = computeTextLayout(toGlyphs([65]), { x: 0, y: 0 }, font);
 
     expect(
-      hitTestTextSlot(layout, { x: 15, y: 50 }, metrics, {
+      hitTestTextSlot(layout, { x: 15, y: 50 }, metrics, font, {
         outlineRadius: 2,
         includeFill: true,
         requireShape: true,
@@ -317,7 +316,7 @@ describe("hitTestTextSlot", () => {
     ).toBeNull();
 
     expect(
-      hitTestTextSlot(layout, { x: 50, y: 50 }, metrics, {
+      hitTestTextSlot(layout, { x: 50, y: 50 }, metrics, font, {
         outlineRadius: 2,
         includeFill: true,
         requireShape: true,

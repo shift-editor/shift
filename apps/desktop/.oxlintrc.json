@@ -39,7 +39,8 @@
     "shift/no-raw-point-type-check": "error",
     "shift/no-nested-ternary-map": "error",
     "shift/no-inline-coordinate-math": "off",
-    "shift/no-repeated-optional-chain": "warn"
+    "shift/no-repeated-optional-chain": "warn",
+    "shift/no-section-divider-comments": "error"
   },
   "overrides": [
     {

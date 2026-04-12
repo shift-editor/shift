@@ -17,8 +17,6 @@ export interface GlyphSlot {
   y: number;
   advance: number;
   bounds: Bounds | null;
-  path2d: Path2D | null;
-  svgPath: string | null;
 }
 
 const NEWLINE_GLYPH_NAME = ".newline";
@@ -92,16 +90,7 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
 
   for (const ref of glyphs) {
     if (ref.glyphName === NEWLINE_GLYPH_NAME || ref.unicode === 10) {
-      slots.push({
-        glyph: ref,
-        unicode: 10,
-        x,
-        y,
-        advance: 0,
-        bounds: null,
-        path2d: null,
-        svgPath: null,
-      });
+      slots.push({ glyph: ref, unicode: 10, x, y, advance: 0, bounds: null });
       x = origin.x;
       y -= lineHeight;
       continue;
@@ -117,8 +106,6 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       y,
       advance,
       bounds: resolved?.bbox ?? null,
-      path2d: resolved?.path2d ?? null,
-      svgPath: resolved?.svgPath ?? null,
     });
 
     x += advance;
@@ -204,6 +191,7 @@ export function hitTestTextSlot(
   layout: TextLayout,
   pos: Point2D,
   metrics: FontMetrics,
+  font: Font,
   options: TextSlotHitTestOptions = {},
 ): number | null {
   const { slots } = layout;
@@ -233,9 +221,10 @@ export function hitTestTextSlot(
       continue;
     }
 
-    if (slot.path2d && pathHitTester) {
+    const slotPath = font.getGlyphPath(slot.glyph.glyphName);
+    if (slotPath && pathHitTester) {
       const hit = pathHitTester.hitPath(
-        slot.path2d,
+        slotPath,
         pos.x - slot.x,
         pos.y - slot.y,
         Math.max(outlineRadius * 2, Number.EPSILON),

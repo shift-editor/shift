@@ -1,71 +1,12 @@
 /**
- * Pure rendering functions for glyph visualization.
+ * Pure rendering helpers for contour visualization.
  *
- * These functions take snapshot data and render to a canvas context.
- * No state is maintained - each call renders based on the provided data.
+ * {@link buildContourPath} traces a contour's segments onto an IRenderer
+ * context. Used by composite inspection rendering.
  */
 
 import type { IRenderer } from "@/types/graphics";
-import { parseContourSegments, segmentToCurve, type SegmentContourLike } from "@shift/font";
-import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
-type CachedContourGeometry = { path: Path2D; isClosed: boolean; bounds: BoundsType | null };
-const contourPathCache = new WeakMap<SegmentContourLike, CachedContourGeometry>();
-
-export function getCachedContourPath(contour: SegmentContourLike): CachedContourGeometry {
-  const cached = contourPathCache.get(contour);
-  if (cached) return cached;
-
-  const path = new Path2D();
-  if (contour.points.length < 2) {
-    const result = { path, isClosed: false, bounds: null };
-    contourPathCache.set(contour, result);
-    return result;
-  }
-
-  const segments = parseContourSegments(contour);
-  const firstSegment = segments[0];
-  if (!firstSegment) {
-    const result = { path, isClosed: false, bounds: null };
-    contourPathCache.set(contour, result);
-    return result;
-  }
-
-  const bounds = Bounds.unionAll(segments.map((segment) => Curve.bounds(segmentToCurve(segment))));
-
-  path.moveTo(firstSegment.points.anchor1.x, firstSegment.points.anchor1.y);
-
-  for (const segment of segments) {
-    switch (segment.type) {
-      case "line":
-        path.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
-        break;
-      case "quad":
-        path.quadraticCurveTo(
-          segment.points.control.x,
-          segment.points.control.y,
-          segment.points.anchor2.x,
-          segment.points.anchor2.y,
-        );
-        break;
-      case "cubic":
-        path.bezierCurveTo(
-          segment.points.control1.x,
-          segment.points.control1.y,
-          segment.points.control2.x,
-          segment.points.control2.y,
-          segment.points.anchor2.x,
-          segment.points.anchor2.y,
-        );
-        break;
-    }
-  }
-
-  if (contour.closed) path.closePath();
-
-  const result = { path, isClosed: contour.closed, bounds };
-  contourPathCache.set(contour, result);
-  return result;
-}
+import { parseContourSegments, type SegmentContourLike } from "@shift/font";
 
 /**
  * Traces the contour's segments into the current path without stroking or filling.

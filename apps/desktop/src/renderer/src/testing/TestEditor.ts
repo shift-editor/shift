@@ -9,7 +9,8 @@
  *   expect(editor.pointCount).toBe(1);
  */
 
-import type { Point2D, PointId, Glyph, GlyphSnapshot } from "@shift/types";
+import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import type { Glyph } from "@/lib/model/glyph";
 import { Glyphs } from "@shift/font";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
@@ -79,7 +80,7 @@ export class TestEditor extends Editor {
   }
 
   get snapshot(): GlyphSnapshot | null {
-    return this.fontEngine.$glyph.peek();
+    return this.fontEngine.getEditingSnapshot();
   }
 
   get currentGlyph(): Glyph | null {
