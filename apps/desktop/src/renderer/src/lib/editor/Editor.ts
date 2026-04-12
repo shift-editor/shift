@@ -15,7 +15,12 @@ import { Contours, Glyphs } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
-import { GlyphNamingService, ViewportManager } from "./managers";
+import { ViewportManager } from "./managers";
+import {
+  glyphRefFromUnicode,
+  isLikelyNonSpacingGlyphRef,
+  type GlyphNameResolverDeps,
+} from "@/lib/utils/unicode";
 import { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import {
@@ -93,7 +98,6 @@ import type { GlyphRef } from "@/lib/tools/text/layout";
 import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
-import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
 import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
@@ -146,7 +150,7 @@ export class Editor {
   #viewport: ViewportManager;
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
-  #glyphNaming: GlyphNamingService;
+  #glyphNameDeps: GlyphNameResolverDeps;
   #$glyph: ComputedSignal<Glyph | null>;
 
   #staticEffect: Effect;
@@ -185,10 +189,10 @@ export class Editor {
     this.#bridge = options.bridge;
     this.font = new Font(this.#bridge);
     const glyphInfo = getGlyphInfo();
-    this.#glyphNaming = new GlyphNamingService({
+    this.#glyphNameDeps = {
       getExistingGlyphNameForUnicode: (unicode) => this.font.nameForUnicode(unicode),
       getMappedGlyphName: (unicode) => glyphInfo.getGlyphName(unicode),
-    });
+    };
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
@@ -737,7 +741,7 @@ export class Editor {
   }
 
   public glyphRefFromUnicode(unicode: number): GlyphRef {
-    return this.#glyphNaming.glyphRefFromUnicode(unicode);
+    return glyphRefFromUnicode(unicode, this.#glyphNameDeps);
   }
 
   public setMainGlyphUnicode(unicode: number | null): void {
@@ -1365,35 +1369,13 @@ export class Editor {
       return null;
     }
 
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    let count = 0;
+    const points = Glyphs.findPoints(glyph, selectedPointIds);
+    if (points.length <= 1) return null;
 
-    for (const contour of glyph.contours) {
-      for (const point of contour.points) {
-        if (!selectedPointIds.has(point.id)) continue;
-        count += 1;
-        if (point.x < minX) minX = point.x;
-        if (point.y < minY) minY = point.y;
-        if (point.x > maxX) maxX = point.x;
-        if (point.y > maxY) maxY = point.y;
-      }
-    }
+    const bounds = Bounds.fromPoints(points);
+    if (!bounds) return null;
 
-    if (count <= 1) return null;
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-      left: minX,
-      top: minY,
-      right: maxX,
-      bottom: maxY,
-    };
+    return Bounds.toRect(bounds);
   }
 
   /**
