@@ -16,7 +16,7 @@ export const GlyphSection = () => {
 
   const unicode = formatCodepointAsUPlus(glyph.unicode);
   const sidebearings = deriveGlyphSidebearings(glyph);
-  const xAdvance = glyph.xAdvance;
+  const xAdvance = Math.round(glyph.xAdvance);
 
   const lsb = roundSidebearing(sidebearings.lsb);
   const rsb = roundSidebearing(sidebearings.rsb);
