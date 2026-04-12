@@ -35,10 +35,6 @@ export class HoverManager {
     return this.$hoveredBoundingBoxHandle;
   }
 
-  setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
-    this.$hoveredBoundingBoxHandle.set(handle);
-  }
-
   getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
     return this.$hoveredBoundingBoxHandle.peek();
   }

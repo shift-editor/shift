@@ -1,7 +1,7 @@
 import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
-import type { CursorType, SnapPreferences, ToolRegistryItem, VisualState } from "@/types/editor";
+import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, AnchorId, ContourId, Contour, Point } from "@shift/types";
 import type { Glyph } from "@/lib/model/glyph";
 import type { ToolName, ActiveToolState } from "../tools/core";
@@ -440,22 +440,6 @@ export class Editor implements CanvasCoordinatorContext {
     this.toolManager.notifySelectionChanged();
   }
 
-  public get hoveredPointId(): Signal<PointId | null> {
-    return this.#hover.hoveredPointId;
-  }
-
-  public get hoveredAnchorId(): Signal<AnchorId | null> {
-    return this.#hover.hoveredAnchorId;
-  }
-
-  public get hoveredSegmentId(): Signal<SegmentIndicator | null> {
-    return this.#hover.hoveredSegmentId;
-  }
-
-  public get hoveredBoundingBoxHandle(): Signal<BoundingBoxHitResult> {
-    return this.#hover.hoveredBoundingBoxHandle;
-  }
-
   public setHoveredPoint(pointId: PointId | null): void {
     this.#hover.setHoveredPoint(pointId);
   }
@@ -466,10 +450,6 @@ export class Editor implements CanvasCoordinatorContext {
 
   public setHoveredSegment(indicator: SegmentIndicator | null): void {
     this.#hover.setHoveredSegment(indicator);
-  }
-
-  public setHoveredBoundingBoxHandle(handle: BoundingBoxHitResult): void {
-    this.#hover.setHoveredBoundingBoxHandle(handle);
   }
 
   public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
@@ -500,16 +480,8 @@ export class Editor implements CanvasCoordinatorContext {
     this.#hover.clearHover();
   }
 
-  public get isHoveringNode(): Signal<boolean> {
-    return this.#isHoveringNode;
-  }
-
   public getIsHoveringNode(): boolean {
     return this.#isHoveringNode.value;
-  }
-
-  public get currentModifiers(): Signal<Modifiers> {
-    return this.#currentModifiers;
   }
 
   public getCurrentModifiers(): Modifiers {
@@ -522,18 +494,6 @@ export class Editor implements CanvasCoordinatorContext {
 
   get settings(): AppSettings {
     return this.#settings.value;
-  }
-
-  public getSnapPreferences(): SnapPreferences {
-    return this.settings.snap;
-  }
-
-  public setSnapPreferences(next: Partial<SnapPreferences>): void {
-    const current = this.#settings.peek();
-    this.#settings.set({
-      ...current,
-      snap: { ...current.snap, ...next },
-    });
   }
 
   public createDragSnapSession(config: DragSnapSessionConfig): DragSnapSession {
@@ -597,10 +557,6 @@ export class Editor implements CanvasCoordinatorContext {
     return this.#commandHistory.withBatch(label, fn);
   }
 
-  public get debugOverlays(): Signal<DebugOverlays> {
-    return this.#debugOverlays;
-  }
-
   public get toolStateVersion(): Signal<number> {
     return this.#toolStateVersion;
   }
@@ -614,39 +570,11 @@ export class Editor implements CanvasCoordinatorContext {
     this.#debugOverlays.set(overlays);
   }
 
-  public getHoveredPoint(): PointId | null {
-    return this.#hover.hoveredPointId.peek();
-  }
-
-  public getHoveredAnchor(): AnchorId | null {
-    return this.#hover.hoveredAnchorId.peek();
-  }
-
-  public getHoveredSegment(): SegmentIndicator | null {
-    return this.#hover.hoveredSegmentId.peek();
-  }
-
   public getHoveredSegmentId(): SegmentId | null {
-    const hoveredSegment = this.getHoveredSegment();
+    const hoveredSegment = this.#hover.hoveredSegmentId.peek();
     if (hoveredSegment == null) return null;
 
     return hoveredSegment.segmentId;
-  }
-
-  public getPointVisualState(pointId: PointId): VisualState {
-    const isSelected = (id: PointId) =>
-      this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
-    return this.#hover.getPointVisualState(pointId, isSelected);
-  }
-
-  public getAnchorVisualState(anchorId: AnchorId): VisualState {
-    if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
-      return "selected";
-    }
-    if (this.#hover.hoveredAnchorId.value === anchorId) {
-      return "hovered";
-    }
-    return "idle";
   }
 
   public isPointInMarqueePreview(pointId: PointId): boolean {
@@ -654,12 +582,6 @@ export class Editor implements CanvasCoordinatorContext {
     if (marqueePreviewPointIds == null) return false;
 
     return marqueePreviewPointIds.has(pointId);
-  }
-
-  public getSegmentVisualState(segmentId: SegmentId): VisualState {
-    return this.#hover.getSegmentVisualState(segmentId, (id) =>
-      this.selection.isSelected({ kind: "segment", id }),
-    );
   }
 
   public get previewMode(): Signal<boolean> {
@@ -818,15 +740,6 @@ export class Editor implements CanvasCoordinatorContext {
     return this.#bridge.getEditingGlyphName();
   }
 
-  public getActiveGlyphRef(): GlyphRef | null {
-    const glyphName = this.getActiveGlyphName();
-    if (!glyphName) return null;
-    return {
-      glyphName,
-      unicode: this.getActiveGlyphUnicode(),
-    };
-  }
-
   public glyphRefFromUnicode(unicode: number): GlyphRef {
     return this.#glyphNaming.glyphRefFromUnicode(unicode);
   }
@@ -862,20 +775,8 @@ export class Editor implements CanvasCoordinatorContext {
     return this.#commandHistory;
   }
 
-  public get viewportManager(): ViewportManager {
-    return this.#viewport;
-  }
-
   public get bridge(): NativeBridge {
     return this.#bridge;
-  }
-
-  public get hoverManager(): HoverManager {
-    return this.#hover;
-  }
-
-  public get edgePanManager(): EdgePanManager {
-    return this.#edgePan;
   }
 
   public updateEdgePan(screenPos: Point2D, canvasBounds: Rect2D): void {
@@ -884,10 +785,6 @@ export class Editor implements CanvasCoordinatorContext {
 
   public stopEdgePan(): void {
     this.#edgePan.stop();
-  }
-
-  public get focusZone(): FocusZone {
-    return this.#zone;
   }
 
   public getFocusZone(): FocusZone {
@@ -993,10 +890,6 @@ export class Editor implements CanvasCoordinatorContext {
     this.requestRedraw();
   }
 
-  public get mousePosition(): Point2D {
-    return this.#viewport.mousePosition;
-  }
-
   public get screenMousePosition(): Signal<Point2D> {
     return this.#viewport.screenMousePosition;
   }
@@ -1099,12 +992,20 @@ export class Editor implements CanvasCoordinatorContext {
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getHandleState(pointId: PointId): HandleState {
-    return this.getPointVisualState(pointId);
+    const isSelected = (id: PointId) =>
+      this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
+    return this.#hover.getPointVisualState(pointId, isSelected);
   }
 
   /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
   public getAnchorHandleState(anchorId: AnchorId): HandleState {
-    return this.getAnchorVisualState(anchorId);
+    if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
+      return "selected";
+    }
+    if (this.#hover.hoveredAnchorId.value === anchorId) {
+      return "hovered";
+    }
+    return "idle";
   }
 
   /**
@@ -1272,20 +1173,6 @@ export class Editor implements CanvasCoordinatorContext {
     this.#commandHistory.execute(cmd);
   }
 
-  public getPointById(pointId: PointId): Point | null {
-    const glyph = this.#$glyph.value;
-    if (!glyph) return null;
-
-    return Glyphs.findPoint(glyph, pointId)?.point ?? null;
-  }
-
-  public getContourById(contourId: ContourId): Contour | null {
-    const glyph = this.#$glyph.value;
-    if (!glyph) return null;
-
-    return Glyphs.findContour(glyph, contourId) ?? null;
-  }
-
   public getActiveContourId(): ContourId | null {
     const id = this.#bridge.getActiveContourId();
     if (id == null) return null;
@@ -1295,7 +1182,11 @@ export class Editor implements CanvasCoordinatorContext {
   public getActiveContour(): Contour | null {
     const activeContourId = this.getActiveContourId();
     if (!activeContourId) return null;
-    return this.getContourById(activeContourId);
+
+    const glyph = this.#$glyph.value;
+    if (!glyph) return null;
+
+    return Glyphs.findContour(glyph, activeContourId) ?? null;
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {

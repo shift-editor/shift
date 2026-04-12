@@ -163,6 +163,7 @@ export class Glyph {
         .map((c) => {
           if (c.points.length < 2) return null;
           const segs = parseContourSegments({ points: c.points, closed: c.closed });
+
           if (segs.length === 0) return null;
           return Bounds.unionAll(segs.map((s) => Curve.bounds(segmentToCurve(s))));
         })
@@ -229,62 +230,94 @@ export class Glyph {
   addPoint(edit: PointEdit): PointId {
     return this.#bridge.addPoint(edit);
   }
-  /** @knipclassignore */ addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
+
+  /** @knipclassignore */
+  addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     return this.#bridge.addPointToContour(contourId, edit);
   }
-  /** @knipclassignore */ insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
+
+  /** @knipclassignore */
+  insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     return this.#bridge.insertPointBefore(beforePointId, edit);
   }
-  /** @knipclassignore */ movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
+
+  /** @knipclassignore */
+  movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
     return this.#bridge.movePoints(pointIds, delta);
   }
-  /** @knipclassignore */ movePointTo(pointId: PointId, x: number, y: number): void {
+
+  /** @knipclassignore */
+  movePointTo(pointId: PointId, x: number, y: number): void {
     this.#bridge.movePointTo(pointId, x, y);
   }
-  /** @knipclassignore */ moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
+
+  /** @knipclassignore */
+  moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
     this.#bridge.moveAnchors(anchorIds, delta);
   }
-  /** @knipclassignore */ removePoints(pointIds: PointId[]): void {
+
+  /** @knipclassignore */
+  removePoints(pointIds: PointId[]): void {
     this.#bridge.removePoints(pointIds);
   }
-  /** @knipclassignore */ toggleSmooth(pointId: PointId): void {
+
+  /** @knipclassignore */
+  toggleSmooth(pointId: PointId): void {
     this.#bridge.toggleSmooth(pointId);
   }
-  /** @knipclassignore */ addContour(): ContourId {
+
+  /** @knipclassignore */
+  addContour(): ContourId {
     return this.#bridge.addContour();
   }
-  /** @knipclassignore */ closeContour(): void {
+
+  /** @knipclassignore */
+  closeContour(): void {
     this.#bridge.closeContour();
   }
-  /** @knipclassignore */ openContour(contourId: ContourId): void {
+
+  /** @knipclassignore */
+  openContour(contourId: ContourId): void {
     this.#bridge.openContour(contourId);
   }
-  /** @knipclassignore */ reverseContour(contourId: ContourId): void {
+
+  /** @knipclassignore */
+  reverseContour(contourId: ContourId): void {
     this.#bridge.reverseContour(contourId);
   }
-  /** @knipclassignore */ setXAdvance(width: number): void {
+
+  /** @knipclassignore */
+  setXAdvance(width: number): void {
     this.#bridge.setXAdvance(width);
   }
-  /** @knipclassignore */ setNodePositions(updates: NodePositionUpdateList): void {
+
+  /** @knipclassignore */
+  setNodePositions(updates: NodePositionUpdateList): void {
     this.#bridge.setNodePositions(updates);
   }
-  /** @knipclassignore */ setActiveContour(contourId: ContourId): void {
+
+  /** @knipclassignore */
+  setActiveContour(contourId: ContourId): void {
     this.#bridge.setActiveContour(contourId);
   }
-  /** @knipclassignore */ clearActiveContour(): void {
+
+  /** @knipclassignore */
+  clearActiveContour(): void {
     this.#bridge.clearActiveContour();
   }
-  /** @knipclassignore */ restoreSnapshot(snapshot: GlyphSnapshot): void {
+
+  /** @knipclassignore */
+  restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#bridge.restoreSnapshot(snapshot);
   }
-  /** @knipclassignore */ translateLayer(dx: number, dy: number): void {
+
+  /** @knipclassignore */
+  translateLayer(dx: number, dy: number): void {
     this.#bridge.translateLayer(dx, dy);
   }
-  /** @knipclassignore */ pasteContours(
-    contours: ContourContent[],
-    offsetX: number,
-    offsetY: number,
-  ): PasteResult {
+
+  /** @knipclassignore */
+  pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult {
     return this.#bridge.pasteContours(contours, offsetX, offsetY);
   }
 
