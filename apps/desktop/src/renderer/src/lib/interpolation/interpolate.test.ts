@@ -88,8 +88,24 @@ describe("normalizeAxisValue", () => {
 
 describe("checkCompatibility", () => {
   it("returns null for compatible masters", () => {
-    const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }, { x: 100, y: 0 }]), 500);
-    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 10, y: 0 }, { x: 110, y: 0 }]), 600);
+    const light = makeMaster(
+      "Light",
+      { wght: 0 },
+      makeContour([
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ]),
+      500,
+    );
+    const bold = makeMaster(
+      "Bold",
+      { wght: 1000 },
+      makeContour([
+        { x: 10, y: 0 },
+        { x: 110, y: 0 },
+      ]),
+      600,
+    );
     expect(checkCompatibility([light, bold])).toBeNull();
   });
 
@@ -104,7 +120,15 @@ describe("checkCompatibility", () => {
 
   it("reports point count mismatch", () => {
     const light = makeMaster("Light", { wght: 0 }, makeContour([{ x: 0, y: 0 }]), 500);
-    const bold = makeMaster("Bold", { wght: 1000 }, makeContour([{ x: 0, y: 0 }, { x: 100, y: 0 }]), 600);
+    const bold = makeMaster(
+      "Bold",
+      { wght: 1000 },
+      makeContour([
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ]),
+      600,
+    );
     expect(checkCompatibility([light, bold])).toContain("points");
   });
 });
@@ -165,10 +189,30 @@ describe("interpolateGlyph", () => {
     const wdthAxis = makeAxis({ tag: "wdth", name: "Width" });
     const wghtAxis = makeAxis({ tag: "wght", name: "Weight" });
 
-    const lc = makeMaster("LightCondensed", { wdth: 0, wght: 0 }, makeContour([{ x: 0, y: 0 }]), 400);
-    const bc = makeMaster("BoldCondensed", { wdth: 0, wght: 1000 }, makeContour([{ x: 100, y: 0 }]), 500);
-    const lw = makeMaster("LightWide", { wdth: 1000, wght: 0 }, makeContour([{ x: 0, y: 100 }]), 600);
-    const bw = makeMaster("BoldWide", { wdth: 1000, wght: 1000 }, makeContour([{ x: 100, y: 100 }]), 700);
+    const lc = makeMaster(
+      "LightCondensed",
+      { wdth: 0, wght: 0 },
+      makeContour([{ x: 0, y: 0 }]),
+      400,
+    );
+    const bc = makeMaster(
+      "BoldCondensed",
+      { wdth: 0, wght: 1000 },
+      makeContour([{ x: 100, y: 0 }]),
+      500,
+    );
+    const lw = makeMaster(
+      "LightWide",
+      { wdth: 1000, wght: 0 },
+      makeContour([{ x: 0, y: 100 }]),
+      600,
+    );
+    const bw = makeMaster(
+      "BoldWide",
+      { wdth: 1000, wght: 1000 },
+      makeContour([{ x: 100, y: 100 }]),
+      700,
+    );
 
     const { instance, errors } = unwrap(
       interpolateGlyph([lc, bc, lw, bw], [wdthAxis, wghtAxis], { wdth: 500, wght: 500 }),
@@ -225,10 +269,7 @@ describe("interpolateGlyph — incompatible sources", () => {
       sourceId: "Bad",
       sourceName: "Bad",
       location: { values: { wght: 1000 } },
-      snapshot: makeSnapshot(
-        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
-        700,
-      ),
+      snapshot: makeSnapshot([makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])], 700),
     };
 
     const { instance, errors } = unwrap(
@@ -246,17 +287,18 @@ describe("interpolateGlyph — incompatible sources", () => {
       sourceId: "Bad1",
       sourceName: "Bad1",
       location: { values: { wght: 500 } },
-      snapshot: makeSnapshot(
-        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
-        600,
-      ),
+      snapshot: makeSnapshot([makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])], 600),
     };
     const bad2: MasterSnapshot = {
       sourceId: "Bad2",
       sourceName: "Bad2",
       location: { values: { wght: 1000 } },
       snapshot: makeSnapshot(
-        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }]), makeContour([{ x: 99, y: 99 }])],
+        [
+          makeContour([{ x: 0, y: 0 }]),
+          makeContour([{ x: 50, y: 50 }]),
+          makeContour([{ x: 99, y: 99 }]),
+        ],
         700,
       ),
     };
@@ -277,10 +319,7 @@ describe("interpolateGlyph — incompatible sources", () => {
       sourceId: "Wonky",
       sourceName: "Wonky",
       location: { values: { wght: 1000 } },
-      snapshot: makeSnapshot(
-        [makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])],
-        700,
-      ),
+      snapshot: makeSnapshot([makeContour([{ x: 0, y: 0 }]), makeContour([{ x: 50, y: 50 }])], 700),
     };
 
     const { errors } = unwrap(interpolateGlyph([defaultMaster, incompat], axes, { wght: 500 }));

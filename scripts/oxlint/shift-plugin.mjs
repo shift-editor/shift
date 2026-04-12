@@ -579,6 +579,7 @@ export default {
           "Font.ts", // Font wraps bridge
           "Glyph.ts", // Glyph wraps bridge
           "glyph.ts", // Glyph wraps bridge (case insensitive match)
+          "Variation.ts", // Variation engine uses bridge for weights
           "testing/", // test helpers create bridge instances
           "store/", // app store creates bridge
           "commands/", // commands access bridge via context

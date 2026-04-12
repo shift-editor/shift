@@ -240,8 +240,6 @@ fn build_variation_model(
     }
 }
 
-// --- Snapshot flattening ---
-
 fn flatten_snapshot(snap: &GlyphSnapshot) -> Vec<f64> {
     let mut values = vec![snap.x_advance];
     for contour in &snap.contours {
@@ -338,6 +336,71 @@ fn location_to_key(loc: &SparseLocation) -> String {
         .map(|(k, v)| format!("{k}:{v:.10}"))
         .collect::<Vec<_>>()
         .join(",")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VariationWeights {
+    pub weights: Vec<f64>,
+    pub default_index: usize,
+    pub master_indices: Vec<usize>,
+}
+
+pub fn compute_variation_weights(
+    masters: &[MasterSnapshot],
+    axes: &[Axis],
+    target: &Location,
+) -> Option<VariationWeights> {
+    if masters.len() < 2 {
+        return None;
+    }
+
+    let axis_order: Vec<String> = axes.iter().map(|a| a.tag().to_string()).collect();
+
+    let normalized_masters: Vec<(usize, SparseLocation)> = masters
+        .iter()
+        .enumerate()
+        .map(|(i, m)| (i, normalize_location(&m.location, axes)))
+        .collect();
+
+    let has_default = normalized_masters.iter().any(|(_, loc)| loc.is_empty());
+    if !has_default {
+        return None;
+    }
+
+    let mut seen = HashSet::new();
+    let deduped: Vec<(usize, SparseLocation)> = normalized_masters
+        .into_iter()
+        .filter(|(_, loc)| seen.insert(location_to_key(loc)))
+        .collect();
+
+    if deduped.len() < 2 {
+        return None;
+    }
+
+    let default_idx = deduped.iter().position(|(_, loc)| loc.is_empty()).unwrap();
+
+    let model_locations: Vec<SparseLocation> = deduped.iter().map(|(_, loc)| loc.clone()).collect();
+    let model = build_variation_model(&model_locations, &axis_order);
+
+    let target_normalized = normalize_location(target, axes);
+
+    let mut weights = vec![0.0f64; model.supports.len()];
+    for (sorted_idx, support) in model.supports.iter().enumerate() {
+        weights[sorted_idx] = support_scalar(&target_normalized, support);
+    }
+
+    let master_indices: Vec<usize> = model.mapping.iter().map(|&i| deduped[i].0).collect();
+
+    Some(VariationWeights {
+        weights,
+        default_index: model
+            .mapping
+            .iter()
+            .position(|&i| i == default_idx)
+            .unwrap_or(0),
+        master_indices,
+    })
 }
 
 pub fn interpolate_glyph(

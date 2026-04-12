@@ -1,8 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/model/Font";
-import { useSignalState } from "@/lib/reactive";
-import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 export const CELL_HEIGHT = 75;
 
@@ -33,6 +31,12 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
   return metrics.ascender - metrics.descender + marginTop + marginBottom;
 }
 
+interface GlyphPreviewProps {
+  unicode: number;
+  font: Font;
+  height?: number;
+}
+
 export function computeCellWidth(
   metrics: FontMetrics | null,
   advance: number | null,
@@ -47,42 +51,18 @@ export function computeCellWidth(
   return Math.max(cellHeight, width);
 }
 
-interface GlyphPreviewProps {
-  unicode: number;
-  font: Font;
-  height?: number;
-}
 export const GlyphPreview = memo(function GlyphPreview({
   unicode,
   font,
   height = CELL_HEIGHT,
 }: GlyphPreviewProps) {
   const name = font.nameForUnicode(unicode);
-  if (!name) {
-    return null;
-  }
+  if (!name) return null;
 
-  const variationLocation = useSignalState(font.$variationLocation);
-
-  const interpolated = useMemo(() => {
-    if (!variationLocation || !font.isVariable()) return null;
-
-    const target: Record<string, number> = {};
-    for (const [tag, value] of Object.entries(variationLocation.values)) {
-      if (value !== undefined) target[tag] = value;
-    }
-
-    const result = font.interpolateGlyph(name, target);
-    if (!result) return null;
-
-    return {
-      path: snapshotToSvgPath(result.instance),
-      advance: result.instance.xAdvance,
-    };
-  }, [variationLocation, name, font]);
-
-  const svgPath = interpolated?.path ?? font.getSvgPath(name);
-  const advance = interpolated?.advance ?? font.getAdvance(name);
+  // font.getSvgPath and font.getAdvance are now interpolation-aware
+  // via the Variation engine. No manual interpolation needed.
+  const svgPath = font.getSvgPath(name);
+  const advance = font.getAdvance(name);
   const fontMetrics = font.getMetrics();
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };

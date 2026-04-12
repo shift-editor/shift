@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Axis } from "@shift/types";
 import { SidebarSection } from "./sidebar-right/SidebarSection";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
-import { interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/interpolate";
 
 /** Variation axis slider panel — shown when a variable font is loaded. */
 export const VariationPanel = () => {
@@ -13,9 +12,6 @@ export const VariationPanel = () => {
 
   const [axes, setAxes] = useState<Axis[]>([]);
   const [location, setLocation] = useState<Record<string, number>>({});
-  const mastersRef = useRef<MasterSnapshot[] | null>(null);
-  const [isInterpolating, setIsInterpolating] = useState(false);
-  const [editingGlyph, setEditingGlyph] = useState<string | null>(null);
 
   useEffect(() => {
     if (!fontLoaded || !font.isVariable()) {
@@ -33,42 +29,29 @@ export const VariationPanel = () => {
     setLocation(defaults);
   }, [fontLoaded, font]);
 
-  useEffect(() => {
-    setEditingGlyph(editor.getActiveGlyphName());
-  });
-
-  useEffect(() => {
-    if (axes.length === 0 || !editingGlyph) {
-      mastersRef.current = null;
-      return;
-    }
-
-    mastersRef.current = font.getGlyphMasterSnapshots(editingGlyph);
-    setIsInterpolating(false);
-  }, [axes, editingGlyph, font]);
-
   const handleAxisChange = useCallback(
     (tag: string, value: number) => {
       const newLocation = { ...location, [tag]: value };
       setLocation(newLocation);
 
-      const ms = mastersRef.current;
-      if (!ms || ms.length < 2) return;
+      if (!font.variation) return;
+      font.variation.setLocation({ values: newLocation });
 
-      const result = interpolateGlyph(ms, axes, newLocation);
-      if (!result) return;
-
-      setIsInterpolating(true);
+      // Apply interpolated snapshot to the editing glyph
+      const glyphName = editor.getActiveGlyphName();
+      if (!glyphName) return;
+      const snap = font.variation.interpolate(glyphName);
+      if (!snap) return;
       const glyph = editor.glyph.peek();
-      if (glyph) glyph.apply(result.instance);
-      font.setVariationLocation({ values: newLocation });
+      if (glyph) glyph.apply(snap);
     },
-    [location, axes, editor, font],
+    [location, editor, font],
   );
 
   const handleMasterClick = useCallback(
     (sourceName: string) => {
-      const masters = mastersRef.current;
+      if (!font.variation) return;
+      const masters = font.getGlyphMasterSnapshots(editor.getActiveGlyphName() ?? "");
       if (!masters) return;
 
       const master = masters.find((m) => m.sourceName === sourceName);
@@ -80,34 +63,30 @@ export const VariationPanel = () => {
       }
       setLocation(newLocation);
 
-      setIsInterpolating(true);
+      font.variation.setLocation({ values: newLocation });
       const glyph = editor.glyph.peek();
       if (glyph) glyph.apply(master.snapshot);
-      font.setVariationLocation({ values: newLocation });
     },
     [axes, editor, font],
   );
 
-  const handleResetToSession = useCallback(() => {
-    if (!isInterpolating) return;
+  const handleReset = useCallback(() => {
+    if (!font.variation) return;
+    font.variation.setLocation(null);
 
-    setIsInterpolating(false);
-    font.setVariationLocation(null);
     const glyph = editor.glyph.peek();
-    if (glyph) {
-      glyph.restoreSnapshot(glyph.toSnapshot());
-    }
+    if (glyph) glyph.restoreSnapshot(glyph.toSnapshot());
 
     const defaults: Record<string, number> = {};
     for (const axis of axes) {
       defaults[axis.tag] = axis.default;
     }
     setLocation(defaults);
-  }, [isInterpolating, editor, font, axes]);
+  }, [editor, font, axes]);
 
   if (axes.length === 0) return null;
 
-  const masters = mastersRef.current ?? [];
+  const masters = font.getGlyphMasterSnapshots(editor.getActiveGlyphName() ?? "") ?? [];
 
   return (
     <SidebarSection title="Variation">
@@ -134,11 +113,11 @@ export const VariationPanel = () => {
             ))}
           </div>
         )}
-        {isInterpolating && (
+        {font.variation?.location && (
           <button
             type="button"
             className="px-2 py-1 text-[11px] rounded bg-[#e8f0fe] hover:bg-[#d0e0fc] text-[#1a73e8] transition-colors"
-            onClick={handleResetToSession}
+            onClick={handleReset}
           >
             Back to editing
           </button>

@@ -11,8 +11,8 @@ use shift_core::{
   edit_session::EditSession,
   font_loader::FontLoader,
   snapshot::{CommandResult, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
-  AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId, Location,
-  NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
+  AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
+  Location, NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
 
@@ -387,16 +387,6 @@ impl FontEngine {
     sorted
   }
 
-  fn editing_layer_for(&self, unicode: u32) -> Option<&GlyphLayer> {
-    if let Some(session) = &self.current_edit_session {
-      if session.unicode() == unicode {
-        return Some(session.layer());
-      }
-    }
-    let glyph = self.font.glyph_by_unicode(unicode)?;
-    self.default_layer_for_glyph(glyph)
-  }
-
   #[napi]
   /// Returns SVG path data for the glyph, including resolved component
   /// contours from composite dependencies.
@@ -439,35 +429,9 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn get_glyph_advance(&self, unicode: u32) -> Option<f64> {
-    let layer = self.editing_layer_for(unicode)?;
-    Some(layer.width())
-  }
-
-  #[napi]
   pub fn get_glyph_advance_by_name(&self, glyph_name: String) -> Option<f64> {
     let (_, layer) = self.editing_target_for_name(&glyph_name)?;
     Some(layer.width())
-  }
-
-  #[napi]
-  /// Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
-  /// including resolved component contours.
-  pub fn get_glyph_bbox(&self, unicode: u32) -> Option<Vec<f64>> {
-    let (glyph_name, layer) = self.editing_target_for_unicode(unicode)?;
-    let component_contours = self.flatten_component_contours_for_layer(layer, glyph_name);
-    let bbox = layer_bbox(layer, &component_contours);
-    if bbox.is_none() {
-      composite_debug!(
-        "get_glyph_bbox U+{:04X} '{}': empty bbox (contours={}, components={}, flattened_contours={})",
-        unicode,
-        glyph_name,
-        layer.contours().len(),
-        layer.components().len(),
-        component_contours.len()
-      );
-    }
-    bbox.map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 
   #[napi]
@@ -541,6 +505,23 @@ impl FontEngine {
   pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
     let masters = self.build_master_snapshots(&glyph_name)?;
     Some(to_json(&masters))
+  }
+
+  /// Compute variation weights for a designspace location.
+  /// Returns per-master scalar weights — glyph-independent, computed once per location.
+  #[napi]
+  pub fn compute_variation_weights(&self, location_json: String) -> Option<String> {
+    if !self.font.is_variable() {
+      return None;
+    }
+    // We need master snapshots to build the model, but only the locations matter for weights.
+    // Use any glyph's masters — the model is glyph-independent.
+    let any_glyph_name = self.font.glyphs().keys().next()?;
+    let masters = self.build_master_snapshots(any_glyph_name)?;
+    let target: Location = serde_json::from_str(&location_json).expect("Invalid location JSON");
+    let axes = self.font.axes();
+    let result = shift_core::interpolation::compute_variation_weights(&masters, axes, &target)?;
+    Some(to_json(&result))
   }
 
   /// Interpolate a glyph at a given designspace location.
@@ -1229,10 +1210,10 @@ mod tests {
     let path_str = ufo_path.to_str().unwrap();
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
-    let bbox = engine.get_glyph_bbox(65);
+    let bbox = engine.get_glyph_bbox_by_name("A".to_string());
     assert!(
       bbox.is_some(),
-      "get_glyph_bbox(65) should return Some for MutatorSans A"
+      "get_glyph_bbox_by_name('A') should return Some for MutatorSans A"
     );
     let b = bbox.unwrap();
     assert_eq!(b.len(), 4);

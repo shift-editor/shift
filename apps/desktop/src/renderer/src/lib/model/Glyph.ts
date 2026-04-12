@@ -59,6 +59,7 @@ export class Contour {
     this.#closed = signal(snapshot.closed);
     this.#points = signal<readonly Point[]>(snapshot.points);
     this.#path = computed<Path2D>(() => buildPath2D(this.#points.value, this.#closed.value));
+
     this.#bounds = computed<BoundsType | null>(() => {
       const pts = this.#points.value;
       const isClosed = this.#closed.value;
