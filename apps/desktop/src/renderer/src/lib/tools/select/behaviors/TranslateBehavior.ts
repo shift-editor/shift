@@ -9,7 +9,7 @@ import type { SegmentId } from "@/types/indicator";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
-import type { GlyphDraft } from "@/bridge/draft";
+import type { GlyphDraft } from "@/types/draft";
 
 import {
   constrainPreparedDrag,

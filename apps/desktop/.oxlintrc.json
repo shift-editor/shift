@@ -40,7 +40,8 @@
     "shift/no-nested-ternary-map": "error",
     "shift/no-inline-coordinate-math": "off",
     "shift/no-repeated-optional-chain": "warn",
-    "shift/no-section-divider-comments": "error"
+    "shift/no-section-divider-comments": "error",
+    "shift/no-bridge-import": "error"
   },
   "overrides": [
     {

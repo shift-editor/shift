@@ -55,7 +55,7 @@ import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import type { GlyphDraft } from "@/bridge/draft";
+import type { GlyphDraft } from "@/types/draft";
 import type { Selection } from "@/types/selection";
 
 export interface DragTarget {

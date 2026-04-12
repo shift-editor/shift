@@ -118,7 +118,7 @@ import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
-import type { GlyphDraft } from "@/bridge/draft";
+import type { GlyphDraft } from "@/types/draft";
 
 export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
 

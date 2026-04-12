@@ -7,7 +7,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
-import type { GlyphDraft } from "@/bridge/draft";
+import type { GlyphDraft } from "@/types/draft";
 
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { DragTarget } from "../../core/EditorAPI";
