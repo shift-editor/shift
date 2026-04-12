@@ -1,4 +1,4 @@
-import type { EditorAPI } from "./EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
 import type { DrawAPI } from "./DrawAPI";
@@ -36,9 +36,9 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   state: S;
   /** @knipclassignore */
   settings: Settings;
-  protected editor: EditorAPI;
+  protected editor: Editor;
 
-  constructor(editor: EditorAPI) {
+  constructor(editor: Editor) {
     this.editor = editor;
     this.state = this.initialState();
     this.settings = this.defaultSettings();

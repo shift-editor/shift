@@ -2,7 +2,8 @@ import type { GlyphSnapshot, Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
+import type { DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
@@ -92,7 +93,7 @@ export class ResizeBehavior implements SelectHandlerBehavior {
     };
   }
 
-  private tryStartResize(event: ToolEventOf<"dragStart">, editor: EditorAPI): SelectState | null {
+  private tryStartResize(event: ToolEventOf<"dragStart">, editor: Editor): SelectState | null {
     const point = editor.getPointAt(event.coords);
     if (point) return null;
 

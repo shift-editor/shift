@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/types";
-import type { EditorAPI } from "./EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
@@ -14,7 +14,7 @@ export class ToolManager implements ToolSwitchHandler {
   private primaryTool: ToolInstance | null = null;
   private overrideTool: ToolInstance | null = null;
   private gesture = new GestureDetector();
-  private editor: EditorAPI;
+  private editor: Editor;
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
@@ -26,7 +26,7 @@ export class ToolManager implements ToolSwitchHandler {
   private frameId: number | null = null;
   private lastScreenPoint: Point2D | null = null;
 
-  constructor(editor: EditorAPI) {
+  constructor(editor: Editor) {
     this.editor = editor;
   }
 

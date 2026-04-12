@@ -1,6 +1,6 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { PointId, AnchorId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
@@ -102,7 +102,7 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     return false;
   }
 
-  private selectPoint(editor: EditorAPI, pointId: PointId, additive: boolean): void {
+  private selectPoint(editor: Editor, pointId: PointId, additive: boolean): void {
     if (additive) {
       editor.selection.add({ kind: "point", id: pointId });
       return;
@@ -111,7 +111,7 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     editor.selection.select([{ kind: "point", id: pointId }]);
   }
 
-  private selectAnchor(editor: EditorAPI, anchorId: AnchorId, additive: boolean): void {
+  private selectAnchor(editor: Editor, anchorId: AnchorId, additive: boolean): void {
     if (additive) {
       editor.selection.add({ kind: "anchor", id: anchorId });
       return;
@@ -120,7 +120,7 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     editor.selection.select([{ kind: "anchor", id: anchorId }]);
   }
 
-  private selectSegment(editor: EditorAPI, segmentId: SegmentId, additive: boolean): void {
+  private selectSegment(editor: Editor, segmentId: SegmentId, additive: boolean): void {
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
     const pointIds = SegmentOps.getPointIds(segment);
@@ -139,7 +139,7 @@ export class SelectionBehavior implements SelectHandlerBehavior {
     ]);
   }
 
-  private toggleSegment(editor: EditorAPI, segmentId: SegmentId): void {
+  private toggleSegment(editor: Editor, segmentId: SegmentId): void {
     const wasSelected = editor.selection.isSelected({ kind: "segment", id: segmentId });
     editor.selection.toggle({ kind: "segment", id: segmentId });
 

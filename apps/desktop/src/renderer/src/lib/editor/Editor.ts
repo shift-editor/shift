@@ -65,7 +65,6 @@ import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
-import type { EditorAPI } from "../tools/core/EditorAPI";
 import { Font } from "./Font";
 import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
@@ -106,16 +105,14 @@ import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/st
 import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
 import type { GlyphDraft } from "@/types/draft";
 
-export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
-
 /**
  * Central orchestrator for the glyph editing surface.
  *
  * Editor owns and wires together every subsystem: viewport (UPM/screen
  * transforms), selection, hover, command history, snapping, clipboard,
  * tool management, and rendering (via CanvasCoordinator). It implements
- * both `EditorAPI` (the facade tools interact with) and
- * `CanvasCoordinatorContext` (the data the renderer reads).
+ * `CanvasCoordinatorContext` (the data the renderer reads) and is passed
+ * directly to tools and behaviors.
  *
  * Subsystems communicate through reactive signals. Effects watch composite
  * render-state signals and schedule redraws on the appropriate canvas layer
@@ -128,11 +125,9 @@ export interface ShiftEditor extends EditorAPI, CanvasCoordinatorContext {}
  * 4. Call `setActiveTool()` to begin interaction.
  * 5. Call `destroy()` on teardown to dispose effects and the renderer.
  *
- * Most members satisfy `EditorAPI`, `CanvasCoordinatorContext`, or the
- * `ShiftEditor` composite type and are consumed through those interfaces.
  * @knipclassignore
  */
-export class Editor implements ShiftEditor {
+export class Editor implements CanvasCoordinatorContext {
   private $previewMode: WritableSignal<boolean>;
   private $handlesVisible: WritableSignal<boolean>;
   private $gpuHandlesEnabled: WritableSignal<boolean>;

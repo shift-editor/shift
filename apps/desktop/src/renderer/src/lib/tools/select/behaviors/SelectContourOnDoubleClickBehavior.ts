@@ -1,6 +1,6 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
@@ -26,7 +26,7 @@ export class SelectContourOnDoubleClickBehavior implements SelectHandlerBehavior
     return true;
   }
 
-  private findContourPointIdsForSegment(segmentId: SegmentId, editor: EditorAPI): PointId[] | null {
+  private findContourPointIdsForSegment(segmentId: SegmentId, editor: Editor): PointId[] | null {
     const glyph = editor.glyph.peek();
     if (!glyph) return null;
 

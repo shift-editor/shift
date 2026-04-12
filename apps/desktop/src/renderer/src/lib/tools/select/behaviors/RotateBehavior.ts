@@ -2,7 +2,7 @@ import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import type { GlyphSnapshot, Point2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
@@ -70,7 +70,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
     }
   }
 
-  #cleanup(editor: EditorAPI): void {
+  #cleanup(editor: Editor): void {
     this.#draft = null;
     this.#target = null;
     this.#origin = null;
@@ -111,7 +111,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
     };
   }
 
-  private tryStartRotate(event: ToolEventOf<"dragStart">, editor: EditorAPI): SelectState | null {
+  private tryStartRotate(event: ToolEventOf<"dragStart">, editor: Editor): SelectState | null {
     const point = editor.getPointAt(event.coords);
     if (point) return null;
 
@@ -151,7 +151,7 @@ export class RotateBehavior implements SelectHandlerBehavior {
     };
   }
 
-  private startSnap(editor: EditorAPI): void {
+  private startSnap(editor: Editor): void {
     this.clearSnap();
     this.#snap = editor.createRotateSnapSession();
   }

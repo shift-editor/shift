@@ -12,7 +12,6 @@ export { ToolManager } from "./ToolManager";
 export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
 export type { ToolFactory, ToolManifest } from "./ToolManifest";
 export type {
-  EditorAPI,
   Viewport,
   HitTesting,
   Snapping,

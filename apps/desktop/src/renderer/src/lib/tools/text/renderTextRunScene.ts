@@ -5,12 +5,12 @@
  * outlines, and composite inspection overlays in viewport (scene) space.
  */
 import type { DrawAPI } from "../core/DrawAPI";
-import type { EditorAPI } from "../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import { renderTextRun } from "@/lib/editor/rendering/passes/textRun";
 import type { CompositeInspectionRenderData } from "@/lib/editor/rendering/passes/textRun";
 import type { TextRunRenderState } from "./TextRunController";
 
-export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
+export function renderTextRunInScene(editor: Editor, draw: DrawAPI): void {
   const textRunState = editor.textRunController.state.value;
   if (!textRunState) return;
 
@@ -36,7 +36,7 @@ export function renderTextRunInScene(editor: EditorAPI, draw: DrawAPI): void {
 }
 
 function resolveCompositeInspection(
-  editor: EditorAPI,
+  editor: Editor,
   textRunState: TextRunRenderState,
 ): CompositeInspectionRenderData | null {
   const inspection = textRunState.compositeInspection;

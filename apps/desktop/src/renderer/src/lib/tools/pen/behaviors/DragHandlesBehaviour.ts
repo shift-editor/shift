@@ -3,7 +3,7 @@ import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
@@ -73,7 +73,7 @@ export class HandleBehavior implements PenBehavior {
   #nextAnchoredState(
     state: PenState & { type: "anchored" },
     event: ToolEventOf<"drag">,
-    editor: EditorAPI,
+    editor: Editor,
   ): (PenState & { type: "dragging" }) | null {
     const localPoint = event.coords.glyphLocal;
     if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD) return null;
@@ -103,7 +103,7 @@ export class HandleBehavior implements PenBehavior {
   #nextDraggingState(
     state: PenState & { type: "dragging" },
     event: ToolEventOf<"drag">,
-    editor: EditorAPI,
+    editor: Editor,
   ): PenState & { type: "dragging" } {
     const localPoint = event.coords.glyphLocal;
 
@@ -123,7 +123,7 @@ export class HandleBehavior implements PenBehavior {
     };
   }
 
-  #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: EditorAPI): HandleData {
+  #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: Editor): HandleData {
     const glyph = editor.glyph.peek();
     if (!glyph) return {};
 
@@ -197,7 +197,7 @@ export class HandleBehavior implements PenBehavior {
     anchor: AnchorData,
     handles: HandleData,
     snappedPos: Point2D,
-    editor: EditorAPI,
+    editor: Editor,
   ): void {
     const glyph = editor.glyph.peek();
     if (!glyph) return;
@@ -212,7 +212,7 @@ export class HandleBehavior implements PenBehavior {
     }
   }
 
-  #startSnap(editor: EditorAPI, anchor: AnchorData): void {
+  #startSnap(editor: Editor, anchor: AnchorData): void {
     if (!anchor.pointId) return;
 
     this.#clearSnap();

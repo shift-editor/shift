@@ -1,15 +1,10 @@
 /**
- * Editor API — interface-sliced surface for tools.
+ * Editor sub-interfaces — interface-sliced surface for tools.
  *
- * Instead of handing every tool a monolithic Editor reference, the API is
- * decomposed into focused sub-interfaces (Viewport, Selection, HitTesting,
- * Snapping, Editing, Commands, ToolLifecycle, TextRunAccess, VisualState). Each sub-interface
- * groups a single responsibility so that behaviors and tools only depend on the
- * slice they actually use, while the composite {@link EditorAPI} type provides
- * the full surface when needed.
- *
- * The composite type also exposes `font` ({@link Font}) and `glyph`
- * (reactive signal) directly, since nearly every tool requires them.
+ * The API is decomposed into focused sub-interfaces (Viewport, Selection,
+ * HitTesting, Snapping, Editing, Commands, ToolLifecycle, TextRunAccess,
+ * VisualState). Each sub-interface groups a single responsibility.
+ * Tools and behaviors receive the concrete {@link Editor} class directly.
  *
  * Notes for dead-code tooling:
  * members in this contract are often used through interface slices and
@@ -19,7 +14,6 @@
  * @module
  */
 import type { Point2D, PointId, ContourId, Point, Contour, Rect2D, AnchorId } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { SelectionMode, SnapPreferences } from "@/types/editor";
 import type { ContourEndpointHit, MiddlePointHit } from "@/types/hitResult";
@@ -40,13 +34,11 @@ import type {
   RotateSnapSession,
   SnapIndicator,
 } from "@/lib/editor/snapping/types";
-import type { Font } from "@/lib/editor/Font";
 import type { TextRunController } from "@/lib/tools/text/TextRunController";
 import type { Coordinates } from "@/types/coordinates";
 import type { GlyphRef } from "../text/layout";
 import { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { GlyphDraft } from "@/types/draft";
-import type { Selection } from "@/types/selection";
 
 export interface DragTarget {
   pointIds: PointId[];
@@ -270,21 +262,3 @@ export interface VisualState {
   /** Switch to a different tool by name. */
   setActiveTool(toolName: ToolName): void;
 }
-
-/**
- * Full editor surface available to tools — the intersection of all
- * sub-interfaces plus the font and reactive glyph signal.
- */
-export type EditorAPI = Viewport &
-  HitTesting &
-  Snapping &
-  Editing &
-  Commands &
-  ToolLifecycle &
-  TextRunAccess &
-  ToolStateStore &
-  VisualState & {
-    readonly font: Font;
-    readonly glyph: Signal<Glyph | null>;
-    readonly selection: Selection;
-  };

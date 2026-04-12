@@ -2,7 +2,8 @@ import { Vec2 } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import type { AnchorId, GlyphSnapshot, Point2D, PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI, DragTarget } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
+import type { DragTarget } from "../../core/EditorAPI";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { SegmentId } from "@/types/indicator";
@@ -77,7 +78,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     }
   }
 
-  #cleanup(editor: EditorAPI): void {
+  #cleanup(editor: Editor): void {
     this.#draft = null;
     this.#target = null;
     this.#rules = null;
@@ -99,7 +100,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
   private nextTranslatingState(
     state: TranslatingState,
     event: ToolEventOf<"drag">,
-    editor: EditorAPI,
+    editor: Editor,
   ): TranslatingState {
     let newLastPos = event.point;
 
@@ -131,7 +132,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
   private tryStartDrag(
     state: SelectState & { type: "ready" | "selected" },
     event: ToolEventOf<"dragStart">,
-    editor: EditorAPI,
+    editor: Editor,
   ): SelectState | null {
     const hit = editor.getNodeAt(event.coords);
     const pointId = getPointIdFromHit(hit);
@@ -204,7 +205,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     return null;
   }
 
-  private startDuplicateDrag(editor: EditorAPI, startPos: Point2D): SelectState | null {
+  private startDuplicateDrag(editor: Editor, startPos: Point2D): SelectState | null {
     const newPointIds = editor.duplicateSelection();
     const firstPointId = newPointIds[0];
     if (!firstPointId) return null;
@@ -215,7 +216,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
   }
 
   private beginTranslating(
-    editor: EditorAPI,
+    editor: Editor,
     startPointer: Point2D,
     draggedPointIds: PointId[],
     draggedAnchorIds: AnchorId[],
@@ -241,7 +242,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
   }
 
   private startSnap(
-    editor: EditorAPI,
+    editor: Editor,
     anchorPointId: PointId,
     dragStart: Point2D,
     excludedPointIds: PointId[],
@@ -262,7 +263,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     this.#snap = null;
   }
 
-  private selectPoint(editor: EditorAPI, pointId: PointId, additive: boolean): void {
+  private selectPoint(editor: Editor, pointId: PointId, additive: boolean): void {
     if (additive) {
       editor.selection.add({ kind: "point", id: pointId });
       return;
@@ -271,7 +272,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     editor.selection.select([{ kind: "point", id: pointId }]);
   }
 
-  private selectAnchor(editor: EditorAPI, anchorId: AnchorId, additive: boolean): void {
+  private selectAnchor(editor: Editor, anchorId: AnchorId, additive: boolean): void {
     if (additive) {
       editor.selection.add({ kind: "anchor", id: anchorId });
       return;
@@ -280,7 +281,7 @@ export class TranslateBehavior implements SelectHandlerBehavior {
     editor.selection.select([{ kind: "anchor", id: anchorId }]);
   }
 
-  private selectSegment(editor: EditorAPI, segmentId: SegmentId, additive: boolean): void {
+  private selectSegment(editor: Editor, segmentId: SegmentId, additive: boolean): void {
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
     const pointIds = SegmentOps.getPointIds(segment);
