@@ -27,11 +27,11 @@ export const Landing = () => {
 
   const handleNewFont = () => {
     const editor = getEditor();
-    const glyphRef = editor.glyphRefFromUnicode(65);
+    const name = editor.font.glyphName(65);
     editor.setMainGlyphUnicode(65);
-    editor.startEditSession(glyphRef);
-    editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
-    editor.fontEngine.resetFontMetadata();
+    editor.open(name);
+    editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, name, 65);
+    editor.font.reset();
     setFilePath(null);
     clearDirty();
     documentPersistence.closeDocument();

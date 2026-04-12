@@ -12,8 +12,8 @@
             "message": "Import from @shift/types, not from generated/ directly."
           },
           {
-            "group": ["@/engine/native"],
-            "message": "Do not import getNative() directly. Use FontEngine instead."
+            "group": ["@/bridge/native"],
+            "message": "Do not import getNative() directly. Use NativeBridge instead."
           }
         ]
       }
@@ -40,7 +40,8 @@
     "shift/no-nested-ternary-map": "error",
     "shift/no-inline-coordinate-math": "off",
     "shift/no-repeated-optional-chain": "warn",
-    "shift/no-section-divider-comments": "error"
+    "shift/no-section-divider-comments": "error",
+    "shift/no-bridge-import": "error"
   },
   "overrides": [
     {

@@ -17,7 +17,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
 
       editor.click(100, 200);
-      expect(editor.getSelectedPoints().length).toBeGreaterThan(0);
+      expect(editor.selection.pointIds.size).toBeGreaterThan(0);
     });
 
     it("clears selection when clicking empty space", () => {
@@ -27,7 +27,7 @@ describe("Select tool", () => {
 
       editor.click(100, 200);
       editor.click(9999, 9999);
-      expect(editor.getSelectedPoints().length).toBe(0);
+      expect(editor.selection.pointIds.size).toBe(0);
     });
   });
 });

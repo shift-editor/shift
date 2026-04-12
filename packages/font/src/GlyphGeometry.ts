@@ -51,15 +51,6 @@ function isOffCurve(point: SegmentPointGeometry): boolean {
   return point.pointType === "offCurve";
 }
 
-export function* iterateRenderableContours(glyph: Glyph): Iterable<SegmentContourLike> {
-  for (const contour of glyph.contours ?? []) {
-    yield contour;
-  }
-  for (const contour of glyph.compositeContours ?? []) {
-    yield contour;
-  }
-}
-
 export function parseContourSegments(contour: SegmentContourLike): SegmentGeometry[] {
   const { points, closed } = contour;
   if (points.length < 2) {
@@ -158,7 +149,13 @@ export function segmentToCurve(segment: SegmentGeometry): CurveType {
 export function deriveGlyphTightBounds(glyph: Glyph): Bounds | null {
   const bounds: Bounds[] = [];
 
-  for (const contour of iterateRenderableContours(glyph)) {
+  for (const contour of glyph.contours ?? []) {
+    for (const segment of parseContourSegments(contour)) {
+      bounds.push(Curve.bounds(segmentToCurve(segment)));
+    }
+  }
+
+  for (const contour of glyph.compositeContours ?? []) {
     for (const segment of parseContourSegments(contour)) {
       bounds.push(Curve.bounds(segmentToCurve(segment)));
     }

@@ -17,7 +17,7 @@ export const AnchorSection = () => {
 
   useSignalEffect(() => {
     const glyph = editor.glyph.value;
-    const ids = [...editor.selectedAnchorIds.value];
+    const ids = [...editor.selection.$anchorIds.value];
 
     if (!glyph || ids.length !== 1) {
       setSingleAnchorId(null);
@@ -46,9 +46,12 @@ export const AnchorSection = () => {
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {
     if (!singleAnchorId) return;
+    const glyph = editor.glyph.peek();
+    if (!glyph) return;
+
     const nextX = axis === "x" ? value : anchorX;
     const nextY = axis === "y" ? value : anchorY;
-    editor.setNodePositions([{ node: { kind: "anchor", id: singleAnchorId }, x: nextX, y: nextY }]);
+    glyph.setNodePositions([{ node: { kind: "anchor", id: singleAnchorId }, x: nextX, y: nextY }]);
     editor.requestRedraw();
   };
 

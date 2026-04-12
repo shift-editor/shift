@@ -5,17 +5,17 @@
  * Operates in UPM space. Slots whose index matches `editingIndex` are
  * skipped (that glyph is rendered by the normal glyph pipeline via drawOffset).
  *
- * Paths are resolved at render time via `font.getGlyphPath()` — always
+ * Paths are resolved at render time via `font.getPath()` — always
  * fresh from Rust, no caching, no live/cached branching.
  */
 import type { FontMetrics } from "@shift/types";
 import type { RenderContext } from "./types";
 import type { TextRunRenderState } from "@/lib/tools/text/TextRunController";
 import { buildContourPath } from "../render";
-import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
+import type { CompositeComponent } from "@shift/types";
 import { getGuides, renderGuides } from ".";
 import { GUIDE_STYLES } from "@/lib/styles/style";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 
 const CURSOR_COLOR = "#0C92F4";
 const CURSOR_WIDTH_PX = 1.25;
@@ -35,7 +35,7 @@ const COMPONENT_OVERLAY_HOVER_COLORS = [
 export interface CompositeInspectionRenderData {
   slotIndex: number;
   hoveredComponentIndex: number | null;
-  components: CompositeComponentsPayload["components"];
+  components: readonly CompositeComponent[];
 }
 
 export function renderTextRun(
@@ -53,7 +53,7 @@ export function renderTextRun(
 
     if (!isSlotVisible(slot, metrics)) continue;
 
-    const path = font.getGlyphPath(slot.glyph.glyphName);
+    const path = font.getPath(slot.glyph.glyphName);
     if (!path) continue;
 
     ctx.save();
@@ -77,7 +77,7 @@ export function renderTextRun(
   if (hoveredIndex !== null && hoveredIndex !== editingIndex) {
     const slot = layout.slots[hoveredIndex];
     if (slot && isSlotVisible(slot, metrics)) {
-      const path = font.getGlyphPath(slot.glyph.glyphName);
+      const path = font.getPath(slot.glyph.glyphName);
       if (path) {
         ctx.save();
         ctx.translate(slot.x, slot.y);
@@ -119,7 +119,7 @@ function renderCompositeInspection(
   ctx.save();
   ctx.translate(slot.x, slot.y);
 
-  const armPath = font.getGlyphPath(slot.glyph.glyphName);
+  const armPath = font.getPath(slot.glyph.glyphName);
   if (armPath) {
     ctx.fillStyle = COMPOSITE_ARM_FILL;
     ctx.fillPath(armPath);

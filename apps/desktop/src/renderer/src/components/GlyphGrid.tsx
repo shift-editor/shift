@@ -71,10 +71,10 @@ function computeLayout(width: number) {
 
 export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: GlyphGridProps) {
   const navigate = useNavigate();
-  const engine = getEditor().fontEngine;
-  const fontLoaded = useSignalState(engine.$fontLoaded);
-  const fontUnicodes = useSignalState(engine.$fontUnicodes);
-  const fontMetrics = useSignalState(engine.$fontMetrics);
+  const editor = getEditor();
+  const fontLoaded = useSignalState(editor.font.$loaded);
+  const fontUnicodes = useSignalState(editor.font.$unicodes);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const fallbackUnicodes = useMemo(
@@ -170,12 +170,7 @@ export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: Gly
                       style={{ height: CELL_HEIGHT }}
                       onClick={() => handleCellClick(unicode)}
                     >
-                      <GlyphPreview
-                        unicode={unicode}
-                        engine={engine}
-                        height={CELL_HEIGHT}
-                        fontMetrics={fontMetrics}
-                      />
+                      <GlyphPreview unicode={unicode} font={editor.font} height={CELL_HEIGHT} />
                     </Button>
                     <span className="w-full truncate text-center text-xs text-muted-foreground">
                       {glyphInfo.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}

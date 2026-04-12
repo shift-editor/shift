@@ -11,7 +11,6 @@ export {
 // Primitive commands (point, bezier operations)
 export {
   AddPointCommand,
-  InsertPointCommand,
   CloseContourCommand,
   SetActiveContourCommand,
   ReverseContourCommand,
@@ -22,7 +21,6 @@ export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
-  ToggleSmoothCommand,
 } from "./primitives";
 
 // Clipboard commands

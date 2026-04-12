@@ -1,5 +1,5 @@
 import type { PersistenceScope } from "./types";
-import type { ToolStateScope } from "@/lib/tools/core";
+import type { ToolStateScope } from "@/types/editor";
 
 export interface PersistenceEditorAPI {
   exportToolState(scope: ToolStateScope): Record<string, unknown>;

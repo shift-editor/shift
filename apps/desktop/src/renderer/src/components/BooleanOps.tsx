@@ -15,7 +15,7 @@ export const BooleanOps = () => {
   if (!glyph) return null;
 
   const selectedContourIds = new Set<ContourId>();
-  for (const pointId of editor.selectedPointIds.value) {
+  for (const pointId of editor.selection.$pointIds.value) {
     const found = Glyphs.findPoint(glyph, pointId);
     if (found) selectedContourIds.add(found.contour.id);
   }

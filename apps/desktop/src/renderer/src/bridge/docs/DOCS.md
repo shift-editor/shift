@@ -1,6 +1,6 @@
-# Engine
+# Bridge
 
-TypeScript facade wrapping the native Rust FontEngine with reactive state management.
+TypeScript facade wrapping the native Rust NativeBridge with reactive state management.
 
 ## Overview
 
@@ -9,21 +9,21 @@ The engine layer provides a high-level TypeScript API for font editing, organizi
 ## Architecture
 
 ```
-FontEngine implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
+NativeBridge implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
 ├── $glyph: Signal<GlyphSnapshot | null>
 ├── editing: EditingManager      (point/contour mutations, smart edits)
 ├── session: SessionManager      (edit session lifecycle)
 ├── info: InfoManager            (font metadata)
 └── io: IOManager                (file operations)
     ↓
-Per-manager dep interfaces (focused slices of FontEngine)
+Per-manager dep interfaces (focused slices of NativeBridge)
     ↓
 window.shiftFont (Native NAPI via contextBridge)
 ```
 
 ### Key Design Decisions
 
-1. **Per-Manager Dep Interfaces**: Each manager declares a focused deps interface (`EditingEngineDeps`, `SessionEngineDeps`, etc.) for exactly the methods it uses. `FontEngine` implements all of them and passes `this` to each manager.
+1. **Per-Manager Dep Interfaces**: Each manager declares a focused deps interface (`EditingEngineDeps`, `SessionEngineDeps`, etc.) for exactly the methods it uses. `NativeBridge` implements all of them and passes `this` to each manager.
 2. **Centralized Commit**: All native mutations flow through `commit()`, which parses JSON, checks for errors (throws `NativeOperationError` on failure), and updates the glyph signal. Callers never check `result.success`.
 3. **Reactive Signal**: Single `$glyph` signal as source of truth for glyph state.
 4. **Session Validation**: All editing managers validate session before operations.
@@ -40,12 +40,12 @@ Each manager declares a focused deps interface for exactly the methods it uses:
 - `InfoEngineDeps` — metadata, metrics, glyph queries
 - `IOEngineDeps` — load/save
 
-### FontEngine Class
+### NativeBridge Class
 
 Central orchestrator implementing all dep interfaces:
 
 ```typescript
-const engine = new FontEngine();
+const engine = new NativeBridge();
 
 // Reactive state - auto-updates UI
 effect(() => {
@@ -84,7 +84,7 @@ return this.#engine.commit(
 Native types are imported from the shared bridge:
 
 ```typescript
-import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
+import type { NativeBridgeAPI } from "@shared/bridge/NativeBridgeAPI";
 ```
 
 See [bridge docs](../../../shared/bridge/docs/DOCS.md) for type-safe bridge architecture.
@@ -100,7 +100,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ## API Reference
 
-### FontEngine
+### NativeBridge
 
 - `$glyph: Signal<GlyphSnapshot | null>` - Reactive glyph state
 - `editing: EditingManager` - Point/contour operations and smart edits
@@ -135,7 +135,7 @@ const segments = parseSegments(contour.points, contour.closed);
 
 ### Errors
 
-- `FontEngineError` - Base error class
+- `NativeBridgeError` - Base error class
 - `NoEditSessionError` - Operation requires session
 - `NativeOperationError` - Rust operation failed (thrown by `commit()`)
 
@@ -144,7 +144,7 @@ const segments = parseSegments(contour.points, contour.closed);
 ### Basic Workflow
 
 ```typescript
-const engine = createFontEngine();
+const engine = createNativeBridge();
 
 // Load and start editing
 engine.io.loadFont("/path/to/font.ufo");

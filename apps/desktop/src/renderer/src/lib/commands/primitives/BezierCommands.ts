@@ -1,61 +1,9 @@
-import type { PointId, ContourId, PointType, Point2D } from "@shift/types";
+import type { PointId, ContourId, Point2D } from "@shift/types";
 import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
 import { Segments as SegmentOps } from "@/lib/geo/Segments";
-
-/**
- * Inserts a point into an existing contour immediately before a reference point.
- * Used by the pen tool to add on-curve or off-curve points at a specific
- * position in the contour's winding order. Undo removes the inserted point.
- */
-export class InsertPointCommand extends BaseCommand<PointId> {
-  readonly name = "Insert Point";
-
-  #beforePointId: PointId;
-  #x: number;
-  #y: number;
-  #pointType: PointType;
-  #smooth: boolean;
-
-  #resultId: PointId | null = null;
-
-  constructor(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean = false,
-  ) {
-    super();
-    this.#beforePointId = beforePointId;
-    this.#x = x;
-    this.#y = y;
-    this.#pointType = pointType;
-    this.#smooth = smooth;
-  }
-
-  execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.fontEngine.insertPointBefore(this.#beforePointId, {
-      x: this.#x,
-      y: this.#y,
-      pointType: this.#pointType,
-      smooth: this.#smooth,
-    });
-    return this.#resultId;
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#resultId) {
-      ctx.fontEngine.removePoints([this.#resultId]);
-    }
-  }
-
-  override redo(ctx: CommandContext): PointId {
-    return this.execute(ctx);
-  }
-}
 
 /**
  * Closes the active contour, connecting the last point back to the first.
@@ -73,21 +21,21 @@ export class CloseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#contourId = ctx.fontEngine.getActiveContourId();
+    this.#contourId = ctx.glyph.activeContourId;
 
-    if (ctx.glyph && this.#contourId) {
+    if (this.#contourId) {
       const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
     if (!this.#wasClosed) {
-      ctx.fontEngine.closeContour();
+      ctx.glyph.closeContour();
     }
   }
 
   undo(ctx: CommandContext): void {
     if (this.#contourId && !this.#wasClosed) {
-      ctx.fontEngine.openContour(this.#contourId);
+      ctx.glyph.openContour(this.#contourId);
     }
   }
 }
@@ -112,12 +60,12 @@ export class NudgePointsCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    ctx.glyph.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
   }
 
   undo(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    ctx.fontEngine.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+    ctx.glyph.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
   }
 }
 
@@ -138,13 +86,13 @@ export class SetActiveContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#previousActiveId = ctx.fontEngine.getActiveContourId();
-    ctx.fontEngine.setActiveContour(this.#contourId);
+    this.#previousActiveId = ctx.glyph.activeContourId;
+    ctx.glyph.setActiveContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
     if (this.#previousActiveId) {
-      ctx.fontEngine.setActiveContour(this.#previousActiveId);
+      ctx.glyph.setActiveContour(this.#previousActiveId);
     }
   }
 }
@@ -165,11 +113,11 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.fontEngine.reverseContour(this.#contourId);
+    ctx.glyph.reverseContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.fontEngine.reverseContour(this.#contourId);
+    ctx.glyph.reverseContour(this.#contourId);
   }
 }
 
@@ -213,7 +161,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
 
     const anchor2Id = this.#segment.points.anchor2.id;
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
       y: splitPoint.y,
       pointType: "onCurve",
@@ -241,7 +189,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control.y,
     });
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -249,7 +197,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.fontEngine.insertPointBefore(anchor2Id, {
+    const cBId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: cB.x,
       y: cB.y,
       pointType: "offCurve",
@@ -257,7 +205,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.fontEngine.movePointTo(controlId, cA.x, cA.y);
+    ctx.glyph.movePointTo(controlId, cA.x, cA.y);
 
     return this.#splitPointId;
   }
@@ -285,7 +233,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
       y: segment.points.control2.y,
     });
 
-    const c1AId = ctx.fontEngine.insertPointBefore(control2Id, {
+    const c1AId = ctx.glyph.insertPointBefore(control2Id, {
       x: c1A.x,
       y: c1A.y,
       pointType: "offCurve",
@@ -293,7 +241,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.fontEngine.insertPointBefore(control2Id, {
+    this.#splitPointId = ctx.glyph.insertPointBefore(control2Id, {
       x: mid.x,
       y: mid.y,
       pointType: "onCurve",
@@ -301,7 +249,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.fontEngine.insertPointBefore(control2Id, {
+    const c0BId = ctx.glyph.insertPointBefore(control2Id, {
       x: c0B.x,
       y: c0B.y,
       pointType: "offCurve",
@@ -309,19 +257,19 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.fontEngine.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.fontEngine.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.glyph.movePointTo(control1Id, c0A.x, c0A.y);
+    ctx.glyph.movePointTo(control2Id, c1B.x, c1B.y);
 
     return this.#splitPointId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#insertedPointIds.length > 0) {
-      ctx.fontEngine.removePoints(this.#insertedPointIds);
+      ctx.glyph.removePoints(this.#insertedPointIds);
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.fontEngine.movePointTo(pointId, pos.x, pos.y);
+      ctx.glyph.movePointTo(pointId, pos.x, pos.y);
     }
   }
 
@@ -370,13 +318,13 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.fontEngine.insertPointBefore(this.#anchor2Id, {
+    this.#control2Id = ctx.glyph.insertPointBefore(this.#anchor2Id, {
       x: this.#control2Pos.x,
       y: this.#control2Pos.y,
       pointType: "offCurve",
       smooth: false,
     });
-    this.#control1Id = ctx.fontEngine.insertPointBefore(this.#control2Id, {
+    this.#control1Id = ctx.glyph.insertPointBefore(this.#control2Id, {
       x: this.#control1Pos.x,
       y: this.#control1Pos.y,
       pointType: "offCurve",
@@ -387,7 +335,7 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   undo(ctx: CommandContext): void {
     const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
     if (toRemove.length > 0) {
-      ctx.fontEngine.removePoints(toRemove);
+      ctx.glyph.removePoints(toRemove);
     }
   }
 

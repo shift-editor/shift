@@ -13,7 +13,7 @@ export const ScaleSection = () => {
   const editor = getEditor();
   const { anchor, setAnchor } = useTransformOrigin();
   const glyph = useSignalState(editor.glyph);
-  const selectedPointIds = useSignalState(editor.selectedPointIds);
+  const selectedPointIds = useSignalState(editor.selection.$pointIds);
   const selectionBounds = useMemo(
     () => editor.getSelectionBounds(),
     [editor, glyph, selectedPointIds],

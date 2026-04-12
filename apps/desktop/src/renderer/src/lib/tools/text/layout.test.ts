@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 import type { Bounds } from "@shift/geo";
 import { computeTextLayout, hitTestTextSlot, hitTestTextCaret, type GlyphRef } from "./layout";
 import { expectAt } from "@/testing";
@@ -47,26 +47,27 @@ function createMockFont(
       description: null,
       note: null,
     }),
-    getGlyphNameForUnicode: (unicode: number) => glyphNameMap[unicode] ?? null,
-    getGlyphByUnicode: () => null,
-    getGlyphPath: (name: string) => {
+    nameForUnicode: (unicode: number) => glyphNameMap[unicode] ?? null,
+    getPath: (name: string) => {
       const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
       if (!unicode) return null;
       const svgPath = svgPaths[Number(unicode)] ?? null;
       return svgPath ? new Path2D(svgPath) : null;
     },
-    getGlyph: (name: string) => {
+    getAdvance: (name: string) => {
       const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
       if (!unicode) return null;
-      const u = Number(unicode);
-      const svgPath = svgPaths[u] ?? null;
-      return {
-        name,
-        advance: advances[u] ?? 0,
-        bbox: bboxes[u] ?? null,
-        svgPath,
-        path2d: svgPath ? new Path2D(svgPath) : null,
-      };
+      return advances[Number(unicode)] ?? null;
+    },
+    getBbox: (name: string) => {
+      const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
+      if (!unicode) return null;
+      return bboxes[Number(unicode)] ?? null;
+    },
+    getSvgPath: (name: string) => {
+      const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
+      if (!unicode) return null;
+      return svgPaths[Number(unicode)] ?? null;
     },
   };
 }

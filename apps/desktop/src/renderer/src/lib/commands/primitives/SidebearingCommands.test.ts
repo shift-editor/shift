@@ -4,19 +4,19 @@ import {
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
 } from "./SidebearingCommands";
-import { createFontEngine, getAllPoints } from "@/testing";
-import type { FontEngine } from "@/engine";
+import { createBridge, getAllPoints } from "@/testing";
+import type { NativeBridge } from "@/bridge";
 import type { CommandContext } from "../core";
 
-let fontEngine: FontEngine;
+let bridge: NativeBridge;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
+  return { glyph: bridge.$glyph.peek()! };
 }
 
 beforeEach(() => {
-  fontEngine = createFontEngine();
-  fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
+  bridge = createBridge();
+  bridge.startEditSession("A");
 });
 
 describe("SetXAdvanceCommand", () => {
@@ -25,7 +25,7 @@ describe("SetXAdvanceCommand", () => {
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(530);
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -34,7 +34,7 @@ describe("SetXAdvanceCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
   });
 });
 
@@ -44,7 +44,7 @@ describe("SetRightSidebearingCommand", () => {
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(530);
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
@@ -53,47 +53,47 @@ describe("SetRightSidebearingCommand", () => {
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
   });
 });
 
 describe("SetLeftSidebearingCommand", () => {
   it("translates geometry then sets advance on execute", () => {
-    fontEngine.addContour();
-    fontEngine.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
+    bridge.addContour();
+    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
     const cmd = new SetLeftSidebearingCommand(500, 520, 20);
 
     cmd.execute(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(520);
-    const points = getAllPoints(fontEngine.getEditingSnapshot());
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(520);
+    const points = getAllPoints(bridge.getEditingSnapshot());
     expect(points[0]!.x).toBe(120);
   });
 
   it("reverts advance and translation on undo", () => {
-    fontEngine.addContour();
-    fontEngine.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
+    bridge.addContour();
+    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
     const cmd = new SetLeftSidebearingCommand(500, 520, 20);
 
     cmd.execute(ctx());
     cmd.undo(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(500);
-    const points = getAllPoints(fontEngine.getEditingSnapshot());
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
+    const points = getAllPoints(bridge.getEditingSnapshot());
     expect(points[0]!.x).toBe(100);
   });
 
   it("reapplies translation and advance on redo", () => {
-    fontEngine.addContour();
-    fontEngine.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
+    bridge.addContour();
+    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
     const cmd = new SetLeftSidebearingCommand(500, 520, 20);
 
     cmd.execute(ctx());
     cmd.undo(ctx());
     cmd.redo(ctx());
 
-    expect(fontEngine.getEditingSnapshot()!.xAdvance).toBe(520);
-    const points = getAllPoints(fontEngine.getEditingSnapshot());
+    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(520);
+    const points = getAllPoints(bridge.getEditingSnapshot());
     expect(points[0]!.x).toBe(120);
   });
 });

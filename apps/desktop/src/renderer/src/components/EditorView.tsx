@@ -31,12 +31,12 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   useEffect(() => {
     const parsed = Number.parseInt(glyphId, 16);
     const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
-    const glyphRef = editor.glyphRefFromUnicode(unicode);
+    const glyphName = editor.font.glyphName(unicode);
 
     const initEditor = () => {
       editor.setMainGlyphUnicode(unicode);
-      editor.startEditSession(glyphRef);
-      editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphRef);
+      editor.open(glyphName);
+      editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
 
       // Update viewport with actual font metrics (UPM, descender, guides)
       editor.updateMetricsFromFont();
@@ -52,7 +52,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
     return () => {
       toolManager.reset();
-      editor.endEditSession();
+      editor.close();
     };
   }, [glyphId]);
 

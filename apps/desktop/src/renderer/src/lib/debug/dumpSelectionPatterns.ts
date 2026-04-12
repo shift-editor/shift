@@ -4,7 +4,7 @@ import { getEditor } from "@/store/store";
 export function dumpSelectionPatternsToConsole(): void {
   const editor = getEditor();
   const glyph = editor.glyph.peek();
-  const selectedPointIds = editor.getSelectedPoints();
+  const selectedPointIds = [...editor.selection.pointIds];
 
   if (!glyph) {
     console.warn("[rules] Cannot dump selection patterns: no active glyph");

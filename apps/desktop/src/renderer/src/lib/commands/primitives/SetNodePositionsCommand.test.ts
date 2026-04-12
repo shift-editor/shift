@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { SetNodePositionsCommand } from "./SetNodePositionsCommand";
-import { createFontEngine } from "@/testing";
+import { createBridge } from "@/testing";
 import type { GlyphSnapshot } from "@shift/types";
 import { asAnchorId, asContourId, asPointId } from "@shift/types";
-import type { FontEngine } from "@/engine";
+import type { NativeBridge } from "@/bridge";
 import type { CommandContext } from "../core";
 
 function makeGlyph(input: {
@@ -21,16 +21,16 @@ function makeGlyph(input: {
   };
 }
 
-let fontEngine: FontEngine;
+let bridge: NativeBridge;
 
 function ctx(): CommandContext {
-  return { fontEngine, glyph: fontEngine.getEditingSnapshot() };
+  return { glyph: bridge.$glyph.peek()! };
 }
 
 beforeEach(() => {
-  fontEngine = createFontEngine();
-  fontEngine.startEditSession({ glyphName: "A", unicode: 65 });
-  fontEngine.addContour();
+  bridge = createBridge();
+  bridge.startEditSession("A");
+  bridge.addContour();
 });
 
 describe("SetNodePositionsCommand", () => {
@@ -67,11 +67,11 @@ describe("SetNodePositionsCommand", () => {
     expect(command).not.toBeNull();
 
     // Load the "after" state into the engine so undo can move it back to "before"
-    fontEngine.restoreSnapshot(after);
+    bridge.restoreSnapshot(after);
     command!.execute(ctx());
 
     // Verify the after positions were applied
-    const glyph = fontEngine.getEditingSnapshot()!;
+    const glyph = bridge.getEditingSnapshot()!;
     const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1.x).toBe(15);
     expect(p1.y).toBe(25);
@@ -79,7 +79,7 @@ describe("SetNodePositionsCommand", () => {
     command!.undo(ctx());
 
     // Verify the before positions were restored
-    const undoGlyph = fontEngine.getEditingSnapshot()!;
+    const undoGlyph = bridge.getEditingSnapshot()!;
     const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1Undo.x).toBe(10);
     expect(p1Undo.y).toBe(20);
@@ -131,17 +131,17 @@ describe("SetNodePositionsCommand", () => {
     expect(command).not.toBeNull();
 
     // Load the base state and apply the "after" updates, then undo
-    fontEngine.restoreSnapshot(base);
+    bridge.restoreSnapshot(base);
     command!.execute(ctx());
 
-    const glyph = fontEngine.getEditingSnapshot()!;
+    const glyph = bridge.getEditingSnapshot()!;
     const p1 = glyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1.x).toBe(15);
     expect(p1.y).toBe(25);
 
     command!.undo(ctx());
 
-    const undoGlyph = fontEngine.getEditingSnapshot()!;
+    const undoGlyph = bridge.getEditingSnapshot()!;
     const p1Undo = undoGlyph.contours[0]!.points.find((p) => p.id === asPointId("point-1"))!;
     expect(p1Undo.x).toBe(10);
     expect(p1Undo.y).toBe(20);

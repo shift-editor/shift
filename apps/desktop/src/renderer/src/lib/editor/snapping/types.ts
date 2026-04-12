@@ -14,8 +14,7 @@
  * Screen-space conversion (e.g. snap radius) is handled by
  * {@link Snap.screenToUpmDistance}.
  */
-import type { FontMetrics, Point2D, PointId } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Point2D, PointId } from "@shift/types";
 import type { SnapPreferences } from "@/types/editor";
 
 /** Visual feedback for an active snap: guide lines and optional target markers, both in UPM space. */
@@ -151,16 +150,4 @@ export interface DragSnapSession {
 export interface RotateSnapSession {
   snap(delta: number, modifiers: { shiftKey: boolean }): RotateSnapResult;
   clear(): void;
-}
-
-/**
- * Dependency interface for {@link SnapManager}. Provides access to the
- * current glyph, font metrics, user preferences, and a screen-to-UPM distance
- * converter for resolving pixel-based snap radii into UPM units.
- */
-export interface Snap {
-  getGlyph(): Glyph | null;
-  getMetrics(): FontMetrics;
-  getSnapPreferences(): SnapPreferences;
-  screenToUpmDistance(px: number): number;
 }

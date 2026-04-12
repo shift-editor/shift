@@ -1,7 +1,7 @@
 import { Segment } from "@/lib/geo/Segment";
 import { Bounds } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Compute a tight bounding box for the current selection that accounts for

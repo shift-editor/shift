@@ -21,18 +21,9 @@ import type {
 } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
-import type { GlyphRef } from "@/lib/tools/text/layout";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyph } from "@/lib/model/glyph";
-
-export interface GlyphView {
-  name: string;
-  advance: number;
-  bbox: Bounds | null;
-  path2d: Path2D | null;
-  svgPath: string | null;
-}
+import { Glyph } from "@/lib/model/Glyph";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -42,51 +33,17 @@ export interface GlyphView {
  * All mutations go through {@link Glyph.apply} — structural edits pass a
  * snapshot, position updates pass a NodePositionUpdateList.
  */
-export class FontEngine {
+export class NativeBridge {
   readonly #$glyph: WritableSignal<Glyph | null>;
-  readonly #$fontLoaded: WritableSignal<boolean>;
-  readonly #$fontUnicodes: WritableSignal<number[]>;
-  readonly #$fontMetrics: WritableSignal<FontMetrics | null>;
   #raw: FontEngineAPI;
 
   constructor(raw?: FontEngineAPI) {
     this.#raw = raw ?? getNative();
     this.#$glyph = signal<Glyph | null>(null, { equals: () => false });
-    this.#$fontLoaded = signal(false);
-    this.#$fontUnicodes = signal<number[]>([]);
-    this.#$fontMetrics = signal<FontMetrics | null>(null);
   }
 
   get $glyph(): Signal<Glyph | null> {
     return this.#$glyph;
-  }
-
-  /** @knipclassignore — used by React components via editor.fontEngine */
-  get $fontLoaded(): Signal<boolean> {
-    return this.#$fontLoaded;
-  }
-
-  /** @knipclassignore */
-  get $fontUnicodes(): Signal<number[]> {
-    return this.#$fontUnicodes;
-  }
-
-  /** @knipclassignore */
-  get $fontMetrics(): Signal<FontMetrics | null> {
-    return this.#$fontMetrics;
-  }
-
-  setFontLoaded(unicodes: number[], metrics: FontMetrics): void {
-    this.#$fontUnicodes.set(unicodes);
-    this.#$fontMetrics.set(metrics);
-    this.#$fontLoaded.set(true);
-  }
-
-  /** @knipclassignore */
-  resetFontMetadata(): void {
-    this.#$fontLoaded.set(false);
-    this.#$fontUnicodes.set([]);
-    this.#$fontMetrics.set(null);
   }
 
   getEditingSnapshot(): GlyphSnapshot | null {
@@ -98,19 +55,15 @@ export class FontEngine {
     return this.#raw.hasEditSession();
   }
 
-  startEditSession(target: GlyphRef): void {
+  startEditSession(glyphName: string, unicode?: number): void {
     if (this.hasSession()) {
       const currentName = this.getEditingGlyphName();
-      if (currentName === target.glyphName) return;
+      if (currentName === glyphName) return;
       this.endEditSession();
     }
-    const ref =
-      target.unicode !== null
-        ? { glyphName: target.glyphName, unicode: target.unicode }
-        : { glyphName: target.glyphName };
+    const ref = unicode !== undefined ? { glyphName, unicode } : { glyphName };
     this.#raw.startEditSession(ref);
-    const snapshot = this.getSessionGlyph();
-    this.#$glyph.set(snapshot ? new Glyph(snapshot) : null);
+    this.#$glyph.set(this.hasSession() ? new Glyph(this) : null);
   }
 
   endEditSession(): void {
@@ -124,15 +77,6 @@ export class FontEngine {
 
   getEditingGlyphName(): string | null {
     return this.#raw.getEditingGlyphName();
-  }
-
-  getSessionGlyph(): GlyphSnapshot | null {
-    if (!this.hasSession()) return null;
-    try {
-      return this.getSnapshot();
-    } catch {
-      return null;
-    }
   }
 
   loadFont(path: string): void {
@@ -156,68 +100,36 @@ export class FontEngine {
     return this.#raw.getGlyphUnicodes();
   }
 
-  getGlyphNameForUnicode(unicode: number): string | null {
+  nameForUnicode(unicode: number): string | null {
     return this.#raw.getGlyphNameForUnicode(unicode);
   }
 
-  /** @knipclassignore */
+  /** @knipclassignore — used by glyph grid for dependent lookups */
   getDependentUnicodesByName(glyphName: string): number[] {
     return this.#raw.getDependentUnicodesByName(glyphName);
   }
 
-  /** @knipclassignore — satisfies Font interface */
-  getSvgPath(unicode: number): string | null {
-    return this.#raw.getGlyphSvgPath(unicode) ?? null;
+  getSvgPath(name: string): string | null {
+    return this.#raw.getGlyphSvgPathByName(name) ?? null;
   }
 
   /** @knipclassignore — satisfies Font interface */
-  getSvgPathByName(glyphName: string): string | null {
-    return this.#raw.getGlyphSvgPathByName(glyphName) ?? null;
+  getAdvance(name: string): number | null {
+    return this.#raw.getGlyphAdvanceByName(name) ?? null;
   }
 
-  /** @knipclassignore — satisfies Font interface */
-  getAdvance(unicode: number): number | null {
-    return this.#raw.getGlyphAdvance(unicode) ?? null;
-  }
-
-  /** @knipclassignore — satisfies Font interface */
-  getAdvanceByName(glyphName: string): number | null {
-    return this.#raw.getGlyphAdvanceByName(glyphName) ?? null;
-  }
-
-  /** @knipclassignore — satisfies Font interface */
-  getBbox(unicode: number): Bounds | null {
-    const b = this.#raw.getGlyphBbox(unicode);
+  getBbox(name: string): Bounds | null {
+    const b = this.#raw.getGlyphBboxByName(name);
     if (b == null || b.length !== 4) return null;
     return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
   }
 
-  getBboxByName(glyphName: string): Bounds | null {
-    const b = this.#raw.getGlyphBboxByName(glyphName);
-    if (b == null || b.length !== 4) return null;
-    return BoundsUtil.create({ x: b[0], y: b[1] }, { x: b[2], y: b[3] });
-  }
-
-  /** @knipclassignore — used by text run rendering via Font interface */
-  getGlyphPath(name: string): Path2D | null {
+  /** @knipclassignore — satisfies Font interface */
+  getPath(name: string): Path2D | null {
     const editing = this.#$glyph.peek();
     if (editing?.name === name) return editing.path;
-    const svg = this.getSvgPathByName(name);
+    const svg = this.getSvgPath(name);
     return svg ? new Path2D(svg) : null;
-  }
-
-  getGlyph(name: string): GlyphView | null {
-    const svgPath = this.getSvgPathByName(name);
-    const advance = this.getAdvanceByName(name) ?? 0;
-    const bbox = this.getBboxByName(name);
-    return { name, advance, bbox, path2d: svgPath ? new Path2D(svgPath) : null, svgPath };
-  }
-
-  /** @knipclassignore — used by React components via editor.fontEngine */
-  getGlyphByUnicode(unicode: number): GlyphView | null {
-    const name = this.getGlyphNameForUnicode(unicode);
-    if (!name) return null;
-    return this.getGlyph(name);
   }
 
   getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
@@ -260,7 +172,7 @@ export class FontEngine {
       glyph.apply(snapshot);
       this.#$glyph.set(glyph);
     } else {
-      this.#$glyph.set(new Glyph(snapshot));
+      this.#$glyph.set(new Glyph(this));
     }
   }
 
@@ -285,7 +197,7 @@ export class FontEngine {
     return lastPoint.id;
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.addPointToContour(contourId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -295,7 +207,7 @@ export class FontEngine {
     throw new NativeOperationError("Native addPointToContour returned no point ID");
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
     const ids = this.#dispatch(
       this.#raw.insertPointBefore(beforePointId, edit.x, edit.y, edit.pointType, edit.smooth),
@@ -341,7 +253,7 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.removePoints(pointIds));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   toggleSmooth(pointId: PointId): void {
     this.#dispatchVoid(this.#raw.toggleSmooth(pointId));
   }
@@ -371,7 +283,7 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.clearActiveContour());
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   reverseContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.reverseContour(contourId));
   }
@@ -385,17 +297,17 @@ export class FontEngine {
     this.#dispatchVoid(this.#raw.applyBooleanOp(contourIdA, contourIdB, operation));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   openContour(contourId: ContourId): void {
     this.#dispatchVoid(this.#raw.openContour(contourId));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   setXAdvance(width: number): void {
     this.#dispatchVoid(this.#raw.setXAdvance(width));
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   translateLayer(dx: number, dy: number): void {
     this.#dispatchVoid(this.#raw.translateLayer(dx, dy));
   }
@@ -418,6 +330,7 @@ export class FontEngine {
     this.#raw.setNodePositions(nativeUpdates);
   }
 
+  /** @knipclassignore — used by Editor for smart drag constraints */
   applySmartEdits(selectedPoints: ReadonlySet<PointId>, dx: number, dy: number): PointId[] {
     if (!this.hasSession()) return [];
     const reactive = this.#$glyph.peek();
@@ -462,7 +375,7 @@ export class FontEngine {
     };
   }
 
-  /** @knipclassignore — used via Editor delegation or CommandEditingAPI */
+  /** @knipclassignore — used via Editor delegation or Glyph */
   restoreSnapshot(snapshot: GlyphSnapshot): void {
     this.#requireSession();
     if (!ValidateSnapshot.isGlyphSnapshot(snapshot)) {

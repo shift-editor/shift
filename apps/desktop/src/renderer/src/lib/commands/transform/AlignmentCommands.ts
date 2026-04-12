@@ -1,21 +1,17 @@
-import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
+import type { Point2D, PointId } from "@shift/types";
 import { Bounds } from "@shift/geo";
 import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Alignment } from "../../transform/Alignment";
 import type { TransformablePoint, AlignmentType, DistributeType } from "@/types/transform";
+import type { Glyph } from "@/lib/model/Glyph";
 
 /**
- * Resolves point ids against a glyph snapshot, returning lightweight
+ * Resolves point ids against the reactive glyph, returning lightweight
  * {@link TransformablePoint} objects suitable for alignment math.
- * Returns an empty array if the snapshot is null or no ids match.
  */
-function getPointsFromSnapshot(
-  snapshot: GlyphSnapshot | null,
-  pointIds: PointId[],
-): TransformablePoint[] {
-  if (!snapshot) return [];
-  return Glyphs.findPoints(snapshot, pointIds).map((p) => ({
+function getTransformablePoints(glyph: Glyph, pointIds: PointId[]): TransformablePoint[] {
+  return Glyphs.findPoints(glyph, pointIds).map((p) => ({
     id: p.id,
     x: p.x,
     y: p.y,
@@ -44,7 +40,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = getPointsFromSnapshot(ctx.glyph, this.#pointIds);
+    const points = getTransformablePoints(ctx.glyph, this.#pointIds);
     if (points.length === 0) return;
 
     if (this.#originalPositions.size === 0) {
@@ -58,13 +54,13 @@ export class AlignPointsCommand extends BaseCommand<void> {
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
     for (const p of aligned) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
+      ctx.glyph.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -79,7 +75,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
 
     const aligned = Alignment.alignPoints(points, this.#alignment, bounds);
     for (const p of aligned) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 }
@@ -106,7 +102,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length < 3) return;
 
-    const points = getPointsFromSnapshot(ctx.glyph, this.#pointIds);
+    const points = getTransformablePoints(ctx.glyph, this.#pointIds);
     if (points.length < 3) return;
 
     if (this.#originalPositions.size === 0) {
@@ -117,13 +113,13 @@ export class DistributePointsCommand extends BaseCommand<void> {
 
     const distributed = Alignment.distributePoints(points, this.#type);
     for (const p of distributed) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
+      ctx.glyph.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -135,7 +131,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
 
     const distributed = Alignment.distributePoints(points, this.#type);
     for (const p of distributed) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 }

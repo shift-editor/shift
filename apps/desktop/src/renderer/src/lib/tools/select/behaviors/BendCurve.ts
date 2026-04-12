@@ -2,9 +2,9 @@ import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
-import type { GlyphDraft } from "@/engine/draft";
+import type { GlyphDraft } from "@/types/draft";
 
-export class BendCurveBehaviour implements SelectHandlerBehavior {
+export class BendCurve implements SelectHandlerBehavior {
   #draft: GlyphDraft | null = null;
   #hasChanges = false;
 
@@ -15,7 +15,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
   ): boolean {
     if ((state.type !== "ready" && state.type !== "selected") || !event.metaKey) return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     if (!hit || hit.type !== "segment" || hit.segment.type !== "cubic") return false;
 
     const { t, closestPoint, segmentId, segment } = hit;
@@ -79,7 +79,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     this.#draft = null;
     this.#hasChanges = false;
 
-    ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
   }
 
@@ -88,7 +88,7 @@ export class BendCurveBehaviour implements SelectHandlerBehavior {
     this.#draft?.discard();
     this.#draft = null;
     this.#hasChanges = false;
-    ctx.setState(ctx.editor.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
     return true;
   }
 }

@@ -26,7 +26,6 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
-    if (!ctx.glyph) return;
 
     const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
     if (points.length === 0) return;
@@ -39,13 +38,13 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
     const transformed = this.transformPoints(points);
     for (const p of transformed) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.fontEngine.movePointTo(id, pos.x, pos.y);
+      ctx.glyph.movePointTo(id, pos.x, pos.y);
     }
   }
 
@@ -59,7 +58,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
 
     const transformed = this.transformPoints(points);
     for (const p of transformed) {
-      ctx.fontEngine.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(p.id, p.x, p.y);
     }
   }
 }

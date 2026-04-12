@@ -66,3 +66,16 @@ export type Glyph = Readonly<Omit<GlyphSnapshot, "contours" | "anchors" | "compo
   readonly anchors: readonly Anchor[];
   readonly compositeContours: readonly RenderContour[];
 };
+
+/** A single component of a composite glyph. */
+export type CompositeComponent = {
+  readonly componentGlyphName: string;
+  readonly sourceUnicodes: readonly number[];
+  readonly contours: readonly RenderContour[];
+};
+
+/** Composite glyph data — the component breakdown of a composite/reference glyph. */
+export type CompositeGlyph = {
+  readonly glyphName: string;
+  readonly components: readonly CompositeComponent[];
+};

@@ -1,6 +1,5 @@
 export { AddPointCommand } from "./PointCommands";
 export {
-  InsertPointCommand,
   CloseContourCommand,
   SetActiveContourCommand,
   ReverseContourCommand,
@@ -10,7 +9,6 @@ export {
 } from "./BezierCommands";
 export { SnapshotCommand } from "./SnapshotCommand";
 export { SetNodePositionsCommand } from "./SetNodePositionsCommand";
-export { ToggleSmoothCommand } from "./ToggleSmoothCommand";
 export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,

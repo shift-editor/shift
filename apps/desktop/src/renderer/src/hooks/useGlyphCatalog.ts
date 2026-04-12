@@ -20,9 +20,9 @@ export interface GlyphCatalogState {
 
 export const useGlyphCatalog = (): GlyphCatalogState => {
   const glyphInfo = getGlyphInfo();
-  const engine = getEditor().fontEngine;
-  const fontLoaded = useSignalState(engine.$fontLoaded);
-  const fontUnicodes = useSignalState(engine.$fontUnicodes);
+  const font = getEditor().font;
+  const fontLoaded = useSignalState(font.$loaded);
+  const fontUnicodes = useSignalState(font.$unicodes);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);

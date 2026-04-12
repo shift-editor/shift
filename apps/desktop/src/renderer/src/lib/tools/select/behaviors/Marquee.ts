@@ -4,7 +4,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import { normalizeRect, pointInRect } from "../utils";
 
-export class MarqueeBehavior implements SelectHandlerBehavior {
+export class Marquee implements SelectHandlerBehavior {
   onDragStart(
     state: SelectState,
     ctx: ToolContext<SelectState>,
@@ -12,14 +12,14 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     if (hit !== null) return false;
 
     const localPoint = event.coords.glyphLocal;
     if (state.type === "selected") {
-      ctx.editor.clearSelection();
+      ctx.editor.selection.clear();
     }
-    ctx.editor.setSelectionMode("preview");
+    ctx.editor.selection.setMode("preview");
     ctx.setState({
       type: "selecting",
       selection: { startPos: localPoint, currentPos: localPoint },
@@ -44,15 +44,14 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
 
     const rect = normalizeRect(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.clearSelection();
-    ctx.editor.selectPoints([...pointIds]);
+    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
     ctx.setState(pointIds.size > 0 ? { type: "selected" } : { type: "ready" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "selecting") return false;
-    ctx.editor.clearSelection();
+    ctx.editor.selection.clear();
     ctx.setState({ type: "ready" });
     return true;
   }
@@ -66,7 +65,7 @@ export class MarqueeBehavior implements SelectHandlerBehavior {
       editor.setMarqueePreviewRect(null);
     }
     if (prev.type === "selecting" && (next.type === "selected" || next.type === "ready")) {
-      editor.setSelectionMode("committed");
+      editor.selection.setMode("committed");
     }
   }
 

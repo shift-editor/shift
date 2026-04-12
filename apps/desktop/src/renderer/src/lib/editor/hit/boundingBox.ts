@@ -1,7 +1,7 @@
 import type { Point2D, Rect2D } from "@shift/types";
 import { Vec2 } from "@shift/geo";
 import type { BoundingBoxHitResult, CornerHandle } from "@/types/boundingBox";
-import type { BoundingRectEdge } from "./cursor";
+import type { BoundingRectEdge } from "@/lib/tools/select/cursor";
 
 type YAxisDirection = "up" | "down";
 export const BOUNDING_BOX_MIN_VISIBLE_ZOOM = 0.15;

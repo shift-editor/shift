@@ -13,11 +13,11 @@
  *
  * @module
  */
-import type { EditorAPI } from "./EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEvent, ToolEventOf } from "./GestureDetector";
 
 export interface ToolContext<S> {
-  readonly editor: EditorAPI;
+  readonly editor: Editor;
   getState(): S;
   setState(next: S): void;
 }
@@ -26,7 +26,7 @@ export interface ToolContext<S> {
  * A composable state-transition rule.
  *
  * Behaviors are stateless objects — all mutable context lives in the tool
- * state `S` and the {@link EditorAPI}. Implement `canHandle` as a fast guard
+ * state `S` and the {@link Editor}. Implement `canHandle` as a fast guard
  * (typically a state-type + event-type check) and `transition` as the pure
  * state computation. Use `onTransition` for post-transition side effects
  * that need both the previous and next states (e.g. starting a snap session).

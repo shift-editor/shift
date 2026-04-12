@@ -3,7 +3,7 @@ import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { ToolContext } from "../../core/Behavior";
-import type { EditorAPI } from "../../core/EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
@@ -32,9 +32,15 @@ export class HandleBehavior implements PenBehavior {
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
     if (state.type === "anchored" && !state.anchor.pointId) {
+      const glyph = ctx.editor.glyph.peek();
       const contour = ctx.editor.getActiveContour();
-      if (contour) {
-        ctx.editor.addPointToContour(contour.id, state.anchor.position, "onCurve", false);
+      if (glyph && contour) {
+        glyph.addPointToContour(contour.id, {
+          x: state.anchor.position.x,
+          y: state.anchor.position.y,
+          pointType: "onCurve",
+          smooth: false,
+        });
       }
     }
 
@@ -67,7 +73,7 @@ export class HandleBehavior implements PenBehavior {
   #nextAnchoredState(
     state: PenState & { type: "anchored" },
     event: ToolEventOf<"drag">,
-    editor: EditorAPI,
+    editor: Editor,
   ): (PenState & { type: "dragging" }) | null {
     const localPoint = event.coords.glyphLocal;
     if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD) return null;
@@ -97,7 +103,7 @@ export class HandleBehavior implements PenBehavior {
   #nextDraggingState(
     state: PenState & { type: "dragging" },
     event: ToolEventOf<"drag">,
-    editor: EditorAPI,
+    editor: Editor,
   ): PenState & { type: "dragging" } {
     const localPoint = event.coords.glyphLocal;
 
@@ -117,7 +123,10 @@ export class HandleBehavior implements PenBehavior {
     };
   }
 
-  #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: EditorAPI): HandleData {
+  #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: Editor): HandleData {
+    const glyph = editor.glyph.peek();
+    if (!glyph) return {};
+
     const { position } = anchor;
     const contour = editor.getActiveContour();
 
@@ -127,11 +136,21 @@ export class HandleBehavior implements PenBehavior {
     const prevOnCurve = Contours.lastOnCurvePoint(contour);
     const isFirstPoint = Contours.isEmpty(contour);
 
-    const anchorId = editor.addPointToContour(contour.id, position, "onCurve", true);
+    const anchorId = glyph.addPointToContour(contour.id, {
+      x: position.x,
+      y: position.y,
+      pointType: "onCurve",
+      smooth: true,
+    });
     anchor.pointId = anchorId;
 
     if (isFirstPoint) {
-      const cpOutId = editor.addPointToContour(contour.id, snappedPos, "offCurve", false);
+      const cpOutId = glyph.addPointToContour(contour.id, {
+        x: snappedPos.x,
+        y: snappedPos.y,
+        pointType: "offCurve",
+        smooth: false,
+      });
       return { cpOut: cpOutId };
     }
 
@@ -139,18 +158,38 @@ export class HandleBehavior implements PenBehavior {
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(snappedPos, position);
-      const cpInId = editor.insertPointBefore(anchorId, cpInPos, "offCurve", false);
-      const cpOutId = editor.addPointToContour(contour.id, snappedPos, "offCurve", false);
+      const cpInId = glyph.insertPointBefore(anchorId, {
+        x: cpInPos.x,
+        y: cpInPos.y,
+        pointType: "offCurve",
+        smooth: false,
+      });
+      const cpOutId = glyph.addPointToContour(contour.id, {
+        x: snappedPos.x,
+        y: snappedPos.y,
+        pointType: "offCurve",
+        smooth: false,
+      });
       return { cpIn: cpInId, cpOut: cpOutId };
     }
 
     if (prevOnCurve) {
       const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
-      editor.insertPointBefore(anchorId, cp1Pos, "offCurve", false);
+      glyph.insertPointBefore(anchorId, {
+        x: cp1Pos.x,
+        y: cp1Pos.y,
+        pointType: "offCurve",
+        smooth: false,
+      });
     }
 
     const cpInPos = Vec2.mirror(snappedPos, position);
-    const cpInId = editor.insertPointBefore(anchorId, cpInPos, "offCurve", false);
+    const cpInId = glyph.insertPointBefore(anchorId, {
+      x: cpInPos.x,
+      y: cpInPos.y,
+      pointType: "offCurve",
+      smooth: false,
+    });
     return { cpIn: cpInId };
   }
 
@@ -158,18 +197,22 @@ export class HandleBehavior implements PenBehavior {
     anchor: AnchorData,
     handles: HandleData,
     snappedPos: Point2D,
-    editor: EditorAPI,
+    editor: Editor,
   ): void {
+    const glyph = editor.glyph.peek();
+    if (!glyph) return;
+
     if (handles.cpOut) {
-      editor.movePointTo(handles.cpOut, snappedPos);
+      glyph.movePointTo(handles.cpOut, snappedPos.x, snappedPos.y);
     }
 
     if (handles.cpIn) {
-      editor.movePointTo(handles.cpIn, Vec2.mirror(snappedPos, anchor.position));
+      const mirror = Vec2.mirror(snappedPos, anchor.position);
+      glyph.movePointTo(handles.cpIn, mirror.x, mirror.y);
     }
   }
 
-  #startSnap(editor: EditorAPI, anchor: AnchorData): void {
+  #startSnap(editor: Editor, anchor: AnchorData): void {
     if (!anchor.pointId) return;
 
     this.#clearSnap();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asContourId } from "@shift/types";
 import type { Point, RenderContour } from "@shift/types";
-import type { Glyph } from "@/lib/model/glyph";
+import type { Glyph } from "@shift/types";
 import { deriveGlyphSidebearings, deriveGlyphXBounds } from "./sidebearings";
 
 function makePoint(

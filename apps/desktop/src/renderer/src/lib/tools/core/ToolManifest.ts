@@ -1,9 +1,9 @@
 import type { BaseTool } from "./BaseTool";
-import type { EditorAPI } from "./EditorAPI";
+import type { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "./createContext";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ToolFactory = (editor: EditorAPI) => BaseTool<any, any>;
+export type ToolFactory = (editor: Editor) => BaseTool<any, any>;
 
 export interface ToolManifest {
   id: ToolName;

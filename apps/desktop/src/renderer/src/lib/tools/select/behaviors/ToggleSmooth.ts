@@ -4,7 +4,7 @@ import type { SelectHandlerBehavior, SelectState } from "../types";
 import { getPointIdFromHit } from "@/types/hitResult";
 import { Validate } from "@shift/validation";
 
-export class ToggleSmoothBehavior implements SelectHandlerBehavior {
+export class ToggleSmooth implements SelectHandlerBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,
@@ -12,14 +12,17 @@ export class ToggleSmoothBehavior implements SelectHandlerBehavior {
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
 
-    const hit = ctx.editor.getNodeAt(event.coords);
+    const hit = ctx.editor.hitTest(event.coords);
     const pointId = getPointIdFromHit(hit);
     if (pointId === null) return false;
 
     const point = ctx.editor.getAllPoints().find((p) => p.id === pointId);
     if (!point || !Validate.isOnCurve(point)) return false;
 
-    ctx.editor.toggleSmooth(pointId);
+    const glyph = ctx.editor.glyph.peek();
+    if (!glyph) return false;
+
+    glyph.toggleSmooth(pointId);
     return true;
   }
 }

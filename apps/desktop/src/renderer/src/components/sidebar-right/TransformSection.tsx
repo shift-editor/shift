@@ -91,7 +91,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
-  const selectedPointIds = useSignalState(editor.selectedPointIds);
+  const selectedPointIds = useSignalState(editor.selection.$pointIds);
   const glyph = useSignalState(editor.glyph);
   const selectionBounds = useMemo(
     () => editor.getSelectionBounds(),

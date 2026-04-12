@@ -2,23 +2,23 @@ import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } 
 import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import {
-  SelectionBehavior,
-  MarqueeBehavior,
-  TranslateBehavior,
-  ResizeBehavior,
-  RotateBehavior,
-  NudgeBehavior,
-  EscapeBehavior,
-  ToggleSmoothBehavior,
-  UpgradeSegmentBehavior,
-  SelectContourOnDoubleClickBehavior,
-  BendCurveBehaviour,
+  Selection,
+  Marquee,
+  Translate,
+  Resize,
+  Rotate,
+  Nudge,
+  Escape,
+  ToggleSmooth,
+  UpgradeSegment,
+  BendCurve,
+  ContourDoubleClick,
 } from "./behaviors";
-import { TextRunEditBehavior } from "./behaviors/TextRunEditBehavior";
-import { TextRunHoverBehavior } from "./behaviors/TextRunHoverBehavior";
+import { TextRunHover } from "./behaviors/TextRunHover";
 import { normalizeRect } from "./utils";
 import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
+import { TextRunEdit } from "./behaviors/TextRunEdit";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -50,19 +50,19 @@ export class Select extends BaseTool<SelectState> {
   readonly id: ToolName = "select";
 
   readonly behaviors: SelectBehavior[] = [
-    new ToggleSmoothBehavior(),
-    new SelectContourOnDoubleClickBehavior(),
-    new TextRunHoverBehavior(),
-    new TextRunEditBehavior(),
-    new UpgradeSegmentBehavior(),
-    new SelectionBehavior(),
-    new NudgeBehavior(),
-    new EscapeBehavior(),
-    new ResizeBehavior(),
-    new RotateBehavior(),
-    new BendCurveBehaviour(),
-    new TranslateBehavior(),
-    new MarqueeBehavior(),
+    new ToggleSmooth(),
+    new ContourDoubleClick(),
+    new TextRunHover(),
+    new TextRunEdit(),
+    new UpgradeSegment(),
+    new Selection(),
+    new Nudge(),
+    new Escape(),
+    new Resize(),
+    new Rotate(),
+    new BendCurve(),
+    new Translate(),
+    new Marquee(),
   ];
 
   override getCursor(state: SelectState): CursorType {
@@ -99,7 +99,7 @@ export class Select extends BaseTool<SelectState> {
 
   protected override preTransition(state: SelectState, event: ToolEvent) {
     if (event.type === "selectionChanged") {
-      const hasSelection = this.editor.hasSelection();
+      const hasSelection = this.editor.selection.hasSelection();
       if (hasSelection && state.type === "ready") {
         return { state: { type: "selected" as const } };
       }

@@ -15,7 +15,7 @@ Editor
 ├── #viewport: Viewport                  (coordinate transforms)
 ├── #scene: Scene                        (path building from snapshots)
 ├── #frameHandler: FrameHandler          (RAF scheduling)
-├── #fontEngine: FontEngine              (state source)
+├── #bridge: NativeBridge              (state source)
 ├── #commandHistory: CommandHistory      (undo/redo)
 ├── #selection: SelectionManager         (point selection)
 └── #snapshotEffect: Effect              (reactive redraw trigger)
@@ -199,7 +199,7 @@ type SelectionMode = "preview" | "committed";
 const editor = new Editor({
   staticContext,
   interactiveContext,
-  fontEngine,
+  bridge,
   commandHistory,
 });
 
@@ -211,7 +211,7 @@ editor.setViewportRect(canvasBounds);
 ```typescript
 // Editor internally sets up:
 effect(() => {
-  const snapshot = fontEngine.snapshot.value;
+  const snapshot = bridge.snapshot.value;
   scene.setSnapshot(snapshot);
   requestRedraw();
 });
@@ -243,7 +243,7 @@ const state = editor.getHandleState(pointId);
 ## Data Flow
 
 ```
-FontEngine.snapshot changes
+NativeBridge.snapshot changes
     ↓
 Effect triggers (#snapshotEffect)
     ↓
@@ -318,7 +318,7 @@ ctx.stroke(); // or ctx.fill()
 
 ## Related Systems
 
-- [engine](../../engine/docs/DOCS.md) - FontEngine state source
+- [bridge](../../bridge/docs/DOCS.md) - NativeBridge state source
 - [graphics](../graphics/docs/DOCS.md) - IRenderer abstraction
 - [tools](../tools/docs/DOCS.md) - Tool implementations
 - [commands](../commands/docs/DOCS.md) - Undo/redo integration

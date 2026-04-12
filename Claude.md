@@ -24,7 +24,7 @@ When completing a feature, check ROADMAP.md and check any box if we have complet
 
 ### Use TestEditor for tool tests
 
-Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with MockFontEngine as the NAPI backend. Tests break at compile time when APIs change.
+Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with the real NAPI backend. Tests break at compile time when APIs change.
 
 ```typescript
 const editor = new TestEditor();
@@ -48,7 +48,7 @@ expect(ctx.mocks.edit.addPoint).toHaveBeenCalledWith(100, 200, "onCurve", false)
 expect(editor.pointCount).toBe(1);
 ```
 
-For command tests, asserting that `ctx.fontEngine.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
+For command tests, asserting that `ctx.bridge.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
 
 ### Never create mock renderer tests
 
@@ -178,10 +178,10 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ## Architectural Constraints
 
-- **NEVER create Manager, Store, or Cache wrapper classes.** FontEngine is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
-- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createFontEngine()` (real FontEngine). No `vi.fn()` stubs for engine methods.
+- **NEVER create Manager, Store, or Cache wrapper classes.** NativeBridge is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
+- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createBridge()` (real NativeBridge). No `vi.fn()` stubs for engine methods.
 - **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
-- **NEVER import from `@/engine/native`.** Use `FontEngine` — `getNative()` is internal. Enforced by lint.
+- \*\*NEVER import from `@/bridge/native`. Use `NativeBridge` — `getNative()` is internal. Enforced by lint.
 
 ## Anti-Slop Rules
 
@@ -189,10 +189,10 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 
 - **Use Vec2 for all coordinate math.** Never `{ x: a.x - b.x, y: a.y - b.y }` — use `Vec2.sub(a, b)`.
 - **Use Point2D in function signatures.** Never create `(x, y)` / `(Point2D)` overloads with `typeof` resolution code.
-- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `engine/draft.ts`, `engine/mock.ts`.
+- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `bridge/draft.ts`.
 - **No nested ternaries with map chains.** Break into named variables.
 - **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
-- **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on FontEngine?
+- **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on NativeBridge?
 
 ## Architecture References
 

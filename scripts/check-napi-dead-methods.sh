@@ -1,13 +1,13 @@
 #!/bin/bash
 # check-napi-dead-methods.sh — finds Rust NAPI methods with no TypeScript caller.
 #
-# Compares #[napi] methods in font_engine.rs against actual usage in FontEngine.ts.
+# Compares #[napi] methods in font_engine.rs against actual usage in NativeBridge.ts.
 # Run: ./scripts/check-napi-dead-methods.sh
 
 set -euo pipefail
 
 RUST_FILE="crates/shift-node/src/font_engine.rs"
-TS_FILE="apps/desktop/src/renderer/src/engine/FontEngine.ts"
+TS_FILE="apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
 NATIVE_TESTS="crates/shift-node/__test__"
 
 # Extract Rust pub fn names (napi methods), convert snake_case to camelCase via python
@@ -32,7 +32,7 @@ if [ ${#dead[@]} -eq 0 ]; then
   exit 0
 fi
 
-echo "Dead Rust NAPI methods (no TypeScript caller in FontEngine.ts):"
+echo "Dead Rust NAPI methods (no TypeScript caller in NativeBridge.ts):"
 for m in "${dead[@]}"; do
   echo "  - $m"
 done

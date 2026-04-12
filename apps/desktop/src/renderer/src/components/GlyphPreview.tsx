@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { FontMetrics } from "@shift/types";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 
 export const CELL_HEIGHT = 75;
 
@@ -31,13 +31,6 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
   return metrics.ascender - metrics.descender + marginTop + marginBottom;
 }
 
-export interface GlyphPreviewProps {
-  unicode: number;
-  engine: Font;
-  height?: number;
-  fontMetrics: FontMetrics | null;
-}
-
 export function computeCellWidth(
   metrics: FontMetrics | null,
   advance: number | null,
@@ -52,17 +45,28 @@ export function computeCellWidth(
   return Math.max(cellHeight, width);
 }
 
+interface GlyphPreviewProps {
+  unicode: number;
+  font: Font;
+  height?: number;
+}
 export const GlyphPreview = memo(function GlyphPreview({
   unicode,
-  engine,
+  font,
   height = CELL_HEIGHT,
-  fontMetrics,
 }: GlyphPreviewProps) {
-  const glyph = engine.getGlyphByUnicode(unicode);
-  const cellWidth = computeCellWidth(fontMetrics, glyph?.advance ?? null, height);
+  const name = font.nameForUnicode(unicode);
+  if (!name) {
+    return null;
+  }
+
+  const svgPath = font.getSvgPath(name);
+  const advance = font.getAdvance(name);
+  const fontMetrics = font.getMetrics();
+  const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
-  if (!glyph?.svgPath) {
+  if (!svgPath) {
     return (
       <div style={containerStyle} className="flex items-center justify-center text-secondary">
         <span className="text-2xl" style={{ fontSize: height * 0.5 }}>
@@ -72,7 +76,7 @@ export const GlyphPreview = memo(function GlyphPreview({
     );
   }
 
-  const viewBox = glyphPreviewViewBox(fontMetrics, glyph.advance);
+  const viewBox = glyphPreviewViewBox(fontMetrics, advance);
 
   return (
     <div style={containerStyle} className="flex items-center justify-center">
@@ -84,7 +88,7 @@ export const GlyphPreview = memo(function GlyphPreview({
         className="overflow-hidden"
       >
         <g transform="scale(1, -1)">
-          <path d={glyph.svgPath} fill="currentColor" fillRule="nonzero" />
+          <path d={svgPath} fill="currentColor" fillRule="nonzero" />
         </g>
       </svg>
     </div>

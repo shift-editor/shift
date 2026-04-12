@@ -2,7 +2,7 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import { hitTestTextSlot, type GlyphRef } from "../../text/layout";
-import { resolveComponentAtPoint } from "../compositeHitTest";
+import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
 
 /**
  * Handles double-click on a text run glyph to switch it to in-place editing.
@@ -10,7 +10,7 @@ import { resolveComponentAtPoint } from "../compositeHitTest";
  * Takes priority over the normal double-click-select-contour behavior
  * when a text run is active.
  */
-export class TextRunEditBehavior implements SelectHandlerBehavior {
+export class TextRunEdit implements SelectHandlerBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,
@@ -78,8 +78,12 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
       const insertedSlot = nextState?.layout.slots[insertedIndex];
       const slotX = insertedSlot?.x ?? slot.x;
 
-      ctx.editor.startEditSession(insertedGlyph);
-      ctx.editor.setDrawOffsetForGlyph({ x: slotX, y: insertedSlot?.y ?? slot.y }, insertedGlyph);
+      ctx.editor.open(insertedGlyph.glyphName);
+      ctx.editor.setDrawOffsetForGlyph(
+        { x: slotX, y: insertedSlot?.y ?? slot.y },
+        insertedGlyph.glyphName,
+        insertedGlyph.unicode,
+      );
       ctx.editor.setPreviewMode(false);
       ctrl.setEditingSlot(insertedIndex, insertedGlyph);
       ctrl.clearInspection();
@@ -91,8 +95,12 @@ export class TextRunEditBehavior implements SelectHandlerBehavior {
       return true;
     }
 
-    ctx.editor.startEditSession(slot.glyph);
-    ctx.editor.setDrawOffsetForGlyph({ x: slot.x, y: slot.y }, slot.glyph);
+    ctx.editor.open(slot.glyph.glyphName);
+    ctx.editor.setDrawOffsetForGlyph(
+      { x: slot.x, y: slot.y },
+      slot.glyph.glyphName,
+      slot.glyph.unicode,
+    );
     ctx.editor.setPreviewMode(false);
     ctrl.setEditingSlot(hitIndex, slot.glyph);
     ctrl.clearInspection();

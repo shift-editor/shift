@@ -1,5 +1,5 @@
 import type { PersistenceModule } from "../module";
-import type { ToolStateScope } from "@/lib/tools/core";
+import type { ToolStateScope } from "@/types/editor";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

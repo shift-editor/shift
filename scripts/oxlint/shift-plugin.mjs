@@ -12,17 +12,17 @@ const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/font/", "packages/
 
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
-  "engine/draft.ts",
-  "engine/FontEngine.ts",
-  "engine/glyph.ts",
+  "bridge/draft.ts",
+  "bridge/NativeBridge.ts",
+  "bridge/glyph.ts",
   "lib/model/",
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them
   "SelectionBounds.ts", // segment-aware bounds needs contour structure
-  "compositeHitTest.ts", // component contour bounds check
+  "hit/composite.ts", // component contour bounds check
   "Editor.ts", // coordinator-level structural traversal
   "clipboard/", // ClipboardContent is not a Glyph, different type
-  "SelectContourOnDoubleClickBehavior.ts", // finds contour by segment match
+  "ContourDoubleClick.ts", // finds contour by segment match
 ];
 
 function checkParam(context, node) {
@@ -49,9 +49,9 @@ function checkParam(context, node) {
   }
 }
 
-/** Files where GlyphSnapshot usage is expected (bridge/engine/generated layers). */
+/** Files where GlyphSnapshot usage is expected (bridge/generated layers). */
 const SNAPSHOT_ALLOWED = [
-  "engine/",
+  "bridge/",
   "shared/bridge/",
   "packages/types/",
   "testing/",
@@ -547,6 +547,49 @@ export default {
               if (/^[─═\-=~]{2,}/.test(text) || /[─═\-=~]{2,}$/.test(text)) {
                 context.report({ node: comment, messageId: "noSectionDivider" });
               }
+            }
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban direct imports from @/bridge in app code.
+     *
+     * The bridge is internal plumbing. App code should use Font and Glyph.
+     * Only Editor, Font class, testing, store, and commands may import bridge.
+     */
+    "no-bridge-import": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noBridge:
+            "Do not import from @/bridge directly. Use Font and Glyph instead. The bridge is internal.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        const BRIDGE_ALLOWED = [
+          "bridge/", // bridge internals can import each other
+          "Editor.ts", // orchestrator wires bridge to Font/Glyph
+          "Font.ts", // Font wraps bridge
+          "Glyph.ts", // Glyph wraps bridge
+          "glyph.ts", // Glyph wraps bridge (case insensitive match)
+          "testing/", // test helpers create bridge instances
+          "store/", // app store creates bridge
+          "commands/", // commands access bridge via context
+        ];
+
+        if (isAllowedFile(filename, BRIDGE_ALLOWED)) return {};
+        if (filename.includes(".test.")) return {};
+
+        return {
+          ImportDeclaration(node) {
+            const source = node.source && node.source.value;
+            if (typeof source === "string" && source.startsWith("@/bridge")) {
+              context.report({ node, messageId: "noBridge" });
             }
           },
         };

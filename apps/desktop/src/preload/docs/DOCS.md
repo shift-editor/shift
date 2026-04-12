@@ -136,7 +136,7 @@ See [bridge docs](../../shared/bridge/docs/DOCS.md) for details.
 
 ```typescript
 // engine/native.ts provides safe access
-import { getNative, hasNative } from "@/engine/native";
+import { getNative, hasNative } from "@/bridge/native";
 
 if (hasNative()) {
   const native = getNative();

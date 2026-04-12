@@ -1,5 +1,5 @@
-import { deriveGlyphXBounds as deriveFontGlyphXBounds } from "@shift/font";
-import type { Glyph } from "@/lib/model/glyph";
+import { deriveGlyphTightBounds } from "@shift/font";
+import type { Glyph } from "@shift/types";
 
 export interface GlyphSidebearings {
   readonly lsb: number | null;
@@ -7,7 +7,9 @@ export interface GlyphSidebearings {
 }
 
 export function deriveGlyphXBounds(glyph: Glyph): { minX: number; maxX: number } | null {
-  return deriveFontGlyphXBounds(glyph);
+  const bounds = deriveGlyphTightBounds(glyph);
+  if (!bounds) return null;
+  return { minX: bounds.min.x, maxX: bounds.max.x };
 }
 
 export function deriveGlyphSidebearings(glyph: Glyph | null): GlyphSidebearings {

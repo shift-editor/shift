@@ -18,7 +18,7 @@ import {
   type ComputedSignal,
 } from "@/lib/reactive/signal";
 import { computeTextLayout, type GlyphRef, type GlyphSlot, type TextLayout } from "./layout";
-import type { Font } from "@/lib/editor/Font";
+import type { Font } from "@/lib/model/Font";
 import type { FontMetrics } from "@shift/types";
 
 export interface SelectionRange {

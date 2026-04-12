@@ -8,22 +8,30 @@ export class PenDownBehaviour implements PenBehavior {
     if (state.type !== "ready") return false;
 
     const editor = ctx.editor;
+    const glyph = editor.glyph.peek();
+    if (!glyph) return false;
+
     const localPoint = event.coords.glyphLocal;
     const activeContour = editor.getActiveContour();
 
-    editor.clearSelection();
+    editor.selection.clear();
 
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
 
     if (!activeContour && !hit) {
-      const contourId = editor.addContour();
-      editor.addPointToContour(contourId, localPoint, "onCurve", false);
+      const contourId = glyph.addContour();
+      glyph.addPointToContour(contourId, {
+        x: localPoint.x,
+        y: localPoint.y,
+        pointType: "onCurve",
+        smooth: false,
+      });
       ctx.setState({ type: "ready", mousePos: localPoint });
       return true;
     }
 
     if (activeContour && Contours.canClose(activeContour, localPoint, editor.hitRadius)) {
-      editor.closeContour();
+      glyph.closeContour();
       ctx.setState({ type: "ready", mousePos: localPoint });
       return true;
     }
@@ -44,7 +52,12 @@ export class PenDownBehaviour implements PenBehavior {
 
     if (!activeContour) return false;
 
-    editor.addPointToContour(activeContour.id, localPoint, "onCurve", false);
+    glyph.addPointToContour(activeContour.id, {
+      x: localPoint.x,
+      y: localPoint.y,
+      pointType: "onCurve",
+      smooth: false,
+    });
     ctx.setState({ type: "ready", mousePos: localPoint });
     return true;
   }
@@ -57,7 +70,7 @@ export class PenDownBehaviour implements PenBehavior {
     if (state.type !== "ready") return false;
 
     const editor = ctx.editor;
-    const hit = editor.getNodeAt(event.coords);
+    const hit = editor.hitTest(event.coords);
 
     if (hit && (hit.type === "segment" || hit.type === "middlePoint")) {
       return false;

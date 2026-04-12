@@ -12,7 +12,7 @@ import type { IRenderer } from "@/types/graphics";
 import type { Rect2D } from "@shift/types";
 import { BOUNDING_BOX_HANDLE_STYLES, resolveDrawStyle } from "@/lib/styles/style";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
-import { getHandlePositions, type HandlePositions } from "@/lib/tools/select/boundingBoxHitTest";
+import { getHandlePositions, type HandlePositions } from "@/lib/editor/hit/boundingBox";
 import type { RenderContext } from "./types";
 
 /** Strokes the selection bounding rectangle in UPM space. */

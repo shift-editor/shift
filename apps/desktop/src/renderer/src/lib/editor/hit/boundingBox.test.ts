@@ -4,7 +4,7 @@ import {
   getHandlePositions,
   isBoundingBoxVisibleAtZoom,
   BOUNDING_BOX_MIN_VISIBLE_ZOOM,
-} from "./boundingBoxHitTest";
+} from "./boundingBox";
 import type { Rect2D } from "@shift/types";
 
 const createRect = (x: number, y: number, width: number, height: number): Rect2D => ({

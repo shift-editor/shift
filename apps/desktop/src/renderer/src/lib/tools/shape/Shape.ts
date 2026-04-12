@@ -71,29 +71,24 @@ export class Shape extends BaseTool<ShapeState> {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    this.batch("Draw Rectangle", () => {
-      const contourId = this.editor.addContour();
+    const glyph = this.editor.glyph.peek();
+    if (!glyph) return;
 
-      this.editor.addPointToContour(contourId, { x: rect.x, y: rect.y }, "onCurve", false);
-      this.editor.addPointToContour(
-        contourId,
-        { x: rect.x + rect.width, y: rect.y },
-        "onCurve",
-        false,
-      );
-      this.editor.addPointToContour(
-        contourId,
-        { x: rect.x + rect.width, y: rect.y + rect.height },
-        "onCurve",
-        false,
-      );
-      this.editor.addPointToContour(
-        contourId,
-        { x: rect.x, y: rect.y + rect.height },
-        "onCurve",
-        false,
-      );
-      this.editor.closeContour();
+    this.batch("Draw Rectangle", () => {
+      const contourId = glyph.addContour();
+
+      const edit = (x: number, y: number) => ({
+        x,
+        y,
+        pointType: "onCurve" as const,
+        smooth: false,
+      });
+
+      glyph.addPointToContour(contourId, edit(rect.x, rect.y));
+      glyph.addPointToContour(contourId, edit(rect.x + rect.width, rect.y));
+      glyph.addPointToContour(contourId, edit(rect.x + rect.width, rect.y + rect.height));
+      glyph.addPointToContour(contourId, edit(rect.x, rect.y + rect.height));
+      glyph.closeContour();
     });
   }
 }
