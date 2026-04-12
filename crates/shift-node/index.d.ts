@@ -29,6 +29,8 @@ export declare class FontEngine {
    * Returns per-master scalar weights — glyph-independent, computed once per location.
    */
   computeVariationWeights(locationJson: string): string | null
+  /** Compute properly decomposed deltas for a glyph using the VariationModel. */
+  computeGlyphDeltas(glyphName: string): string | null
   /** Interpolate a glyph at a given designspace location. */
   interpolateGlyph(glyphName: string, locationJson: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void

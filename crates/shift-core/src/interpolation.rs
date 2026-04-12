@@ -346,6 +346,78 @@ pub struct VariationWeights {
     pub master_indices: Vec<usize>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphDeltas {
+    pub default_values: Vec<f64>,
+    pub deltas: Vec<Vec<f64>>,
+}
+
+pub fn compute_glyph_deltas(masters: &[MasterSnapshot], axes: &[Axis]) -> Option<GlyphDeltas> {
+    if masters.len() < 2 {
+        return None;
+    }
+
+    let axis_order: Vec<String> = axes.iter().map(|a| a.tag().to_string()).collect();
+
+    let normalized_masters: Vec<(usize, SparseLocation)> = masters
+        .iter()
+        .enumerate()
+        .map(|(i, m)| (i, normalize_location(&m.location, axes)))
+        .collect();
+
+    let has_default = normalized_masters.iter().any(|(_, loc)| loc.is_empty());
+    if !has_default {
+        return None;
+    }
+
+    let mut seen = HashSet::new();
+    let deduped: Vec<(usize, SparseLocation)> = normalized_masters
+        .into_iter()
+        .filter(|(_, loc)| seen.insert(location_to_key(loc)))
+        .collect();
+
+    if deduped.len() < 2 {
+        return None;
+    }
+
+    let default_idx = deduped.iter().position(|(_, loc)| loc.is_empty()).unwrap();
+    let default_master = &masters[deduped[default_idx].0];
+
+    let model_locations: Vec<SparseLocation> = deduped.iter().map(|(_, loc)| loc.clone()).collect();
+    let model = build_variation_model(&model_locations, &axis_order);
+
+    let default_values = flatten_snapshot(&default_master.snapshot);
+    let value_len = default_values.len();
+
+    let mut deltas: Vec<Vec<f64>> = Vec::with_capacity(model.mapping.len());
+
+    for (sorted_idx, &orig_model_idx) in model.mapping.iter().enumerate() {
+        let master_idx = deduped[orig_model_idx].0;
+        let master = &masters[master_idx];
+
+        match check_compatibility(&default_master.snapshot, &master.snapshot) {
+            Ok(()) => {
+                let master_values = flatten_snapshot(&master.snapshot);
+                let mut delta = sub_values(&master_values, &zero_values(value_len));
+                for &(prev_sorted, weight) in &model.delta_weights[sorted_idx] {
+                    let contribution = mul_scalar_values(&deltas[prev_sorted], weight);
+                    delta = sub_values(&delta, &contribution);
+                }
+                deltas.push(delta);
+            }
+            Err(_) => {
+                deltas.push(zero_values(value_len));
+            }
+        }
+    }
+
+    Some(GlyphDeltas {
+        default_values,
+        deltas,
+    })
+}
+
 pub fn compute_variation_weights(
     masters: &[MasterSnapshot],
     axes: &[Axis],

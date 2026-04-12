@@ -524,6 +524,15 @@ impl FontEngine {
     Some(to_json(&result))
   }
 
+  /// Compute properly decomposed deltas for a glyph using the VariationModel.
+  #[napi]
+  pub fn compute_glyph_deltas(&self, glyph_name: String) -> Option<String> {
+    let masters = self.build_master_snapshots(&glyph_name)?;
+    let axes = self.font.axes();
+    let result = shift_core::interpolation::compute_glyph_deltas(&masters, axes)?;
+    Some(to_json(&result))
+  }
+
   /// Interpolate a glyph at a given designspace location.
   #[napi]
   pub fn interpolate_glyph(&self, glyph_name: String, location_json: String) -> Option<String> {

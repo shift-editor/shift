@@ -25,8 +25,8 @@ import {
 } from "@/lib/reactive/signal";
 
 interface MasterDeltas {
+  defaultValues: Float64Array;
   deltas: Float64Array[];
-  valueLength: number;
 }
 
 export class Variation {
@@ -65,44 +65,30 @@ export class Variation {
   loadMasters(glyphNames: string[]): void {
     for (const name of glyphNames) {
       if (this.#deltas.has(name)) continue;
+
+      // Get properly decomposed deltas from Rust (forward differencing)
+      const glyphDeltas = this.#bridge.computeGlyphDeltas(name);
+      if (!glyphDeltas) continue;
+
+      // Also need a default snapshot for unflatten template
       const masters = this.#bridge.getGlyphMasterSnapshots(name);
       if (!masters || masters.length < 2) continue;
-
       const defaultIdx = findDefaultMaster(masters);
+
       this.#defaults.set(name, masters[defaultIdx].snapshot);
-      this.#deltas.set(name, computeDeltas(masters, defaultIdx));
+      this.#deltas.set(name, {
+        defaultValues: new Float64Array(glyphDeltas.defaultValues),
+        deltas: glyphDeltas.deltas.map((d) => new Float64Array(d)),
+      });
     }
   }
 
-  /** @knipclassignore */
-  updateEditingDeltas(glyphName: string, currentSnapshot: GlyphSnapshot): void {
-    const existing = this.#deltas.get(glyphName);
-    if (!existing) return;
-
-    const defaultVec = flattenSnapshot(currentSnapshot);
-    const oldDefault = this.#defaults.get(glyphName);
-    if (!oldDefault) return;
-
-    this.#defaults.set(glyphName, currentSnapshot);
-
-    // Recompute deltas relative to new default
-    // delta[i] = master[i] - newDefault
-    // We have: old delta[i] = master[i] - oldDefault
-    // So: new delta[i] = old delta[i] + (oldDefault - newDefault)
-    const oldDefaultVec = flattenSnapshot(oldDefault);
-    const diff = new Float64Array(defaultVec.length);
-    for (let j = 0; j < diff.length; j++) {
-      diff[j] = oldDefaultVec[j] - defaultVec[j];
-    }
-
-    for (let i = 0; i < existing.deltas.length; i++) {
-      const d = existing.deltas[i];
-      const updated = new Float64Array(d.length);
-      for (let j = 0; j < d.length; j++) {
-        updated[j] = d[j] + diff[j];
-      }
-      existing.deltas[i] = updated;
-    }
+  /** @knipclassignore — re-fetch deltas from Rust after editing a glyph */
+  updateEditingDeltas(glyphName: string, _currentSnapshot: GlyphSnapshot): void {
+    // Re-fetch from Rust which has the updated master data
+    this.#deltas.delete(glyphName);
+    this.#defaults.delete(glyphName);
+    this.loadMasters([glyphName]);
   }
 
   interpolate(name: string): GlyphSnapshot | null {
@@ -131,55 +117,13 @@ function findDefaultMaster(masters: MasterSnapshot[]): number {
   return 0;
 }
 
-function computeDeltas(masters: MasterSnapshot[], defaultIdx: number): MasterDeltas {
-  const defaultVec = flattenSnapshot(masters[defaultIdx].snapshot);
-  const deltas: Float64Array[] = masters.map((m) => {
-    const vec = flattenSnapshot(m.snapshot);
-    const delta = new Float64Array(vec.length);
-    for (let i = 0; i < vec.length; i++) {
-      delta[i] = vec[i] - defaultVec[i];
-    }
-    return delta;
-  });
-
-  return { deltas, valueLength: defaultVec.length };
-}
-
-function flattenSnapshot(snap: GlyphSnapshot): Float64Array {
-  let pointCount = 0;
-  for (const c of snap.contours) {
-    pointCount += c.points.length;
-  }
-  const anchorCount = snap.anchors.length;
-  const len = 1 + pointCount * 2 + anchorCount * 2;
-  const arr = new Float64Array(len);
-
-  let idx = 0;
-  arr[idx++] = snap.xAdvance;
-
-  for (const contour of snap.contours) {
-    for (const point of contour.points) {
-      arr[idx++] = point.x;
-      arr[idx++] = point.y;
-    }
-  }
-
-  for (const anchor of snap.anchors) {
-    arr[idx++] = anchor.x;
-    arr[idx++] = anchor.y;
-  }
-
-  return arr;
-}
-
 function applyWeightsToDeltas(
   defaultSnap: GlyphSnapshot,
   deltas: MasterDeltas,
   weights: number[],
 ): GlyphSnapshot {
-  const defaultVec = flattenSnapshot(defaultSnap);
-  const result = new Float64Array(defaultVec.length);
-  result.set(defaultVec);
+  const result = new Float64Array(deltas.defaultValues.length);
+  result.set(deltas.defaultValues);
 
   for (let i = 0; i < weights.length && i < deltas.deltas.length; i++) {
     const w = weights[i];
