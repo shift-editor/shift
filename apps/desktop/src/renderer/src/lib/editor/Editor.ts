@@ -281,7 +281,8 @@ export class Editor {
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
 
     this.#staticEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) void glyph.path; // track contour changes via computed path
       this.#drawOffset.value;
       this.selection.pointIds;
       this.selection.anchorIds;

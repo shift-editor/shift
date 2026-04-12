@@ -26,8 +26,6 @@ export interface SourceError {
   message: string;
 }
 
-// ── Axis normalization ──────────────────────────────────────────────
-
 export function normalizeAxisValue(value: number, axis: Axis): number {
   if (value < axis.default) {
     const range = axis.default - axis.minimum;
@@ -60,8 +58,6 @@ function normalizeLocation(
   return out;
 }
 
-// ── Compatibility check ─────────────────────────────────────────────
-
 export function checkCompatibility(masters: MasterSnapshot[]): string | null {
   if (masters.length < 2) return null;
 
@@ -84,7 +80,6 @@ export function checkCompatibility(masters: MasterSnapshot[]): string | null {
   return null;
 }
 
-// ── Itemwise arithmetic on GlyphSnapshot (matches Fontra) ───────────
 //
 // These operate on the structured glyph data directly. If two snapshots
 // have different contour/point counts, the operation throws — callers
@@ -171,8 +166,6 @@ function mulScalarSnapshot(snap: GlyphSnapshot, s: number): GlyphSnapshot {
 function zeroSnapshot(ref: GlyphSnapshot): GlyphSnapshot {
   return mulScalarSnapshot(ref, 0);
 }
-
-// ── OpenType VariationModel (ported from Fontra/fonttools) ──────────
 
 function supportScalar(location: SparseLocation, support: Support): number {
   let scalar = 1.0;
@@ -371,8 +364,6 @@ function buildVariationModel(
 
   return { mapping, reverseMapping, supports, deltaWeights };
 }
-
-// ── Public API ──────────────────────────────────────────────────────
 
 export interface InterpolationResult {
   instance: GlyphSnapshot;

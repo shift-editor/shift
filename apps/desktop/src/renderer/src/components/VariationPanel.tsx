@@ -8,8 +8,8 @@ import { interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/inter
 /** Variation axis slider panel — shown when a variable font is loaded. */
 export const VariationPanel = () => {
   const editor = getEditor();
-  const engine = editor.fontEngine;
-  const fontLoaded = useSignalState(engine.$fontLoaded);
+  const font = editor.font;
+  const fontLoaded = useSignalState(font.$loaded);
 
   const [axes, setAxes] = useState<Axis[]>([]);
   const [location, setLocation] = useState<Record<string, number>>({});
@@ -17,14 +17,13 @@ export const VariationPanel = () => {
   const [isInterpolating, setIsInterpolating] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<string | null>(null);
 
-  // Load axes when font is loaded
   useEffect(() => {
-    if (!fontLoaded || !engine.isVariable()) {
+    if (!fontLoaded || !font.isVariable()) {
       setAxes([]);
       return;
     }
 
-    const fontAxes = engine.getAxes();
+    const fontAxes = font.getAxes();
     setAxes(fontAxes);
 
     const defaults: Record<string, number> = {};
@@ -32,11 +31,10 @@ export const VariationPanel = () => {
       defaults[axis.tag] = axis.default;
     }
     setLocation(defaults);
-  }, [fontLoaded, engine]);
+  }, [fontLoaded, font]);
 
-  // Track the current glyph and reload masters when it changes
   useEffect(() => {
-    setEditingGlyph(engine.getEditingGlyphName());
+    setEditingGlyph(editor.getActiveGlyphName());
   });
 
   useEffect(() => {
@@ -45,9 +43,9 @@ export const VariationPanel = () => {
       return;
     }
 
-    mastersRef.current = engine.getGlyphMasterSnapshots(editingGlyph);
+    mastersRef.current = font.getGlyphMasterSnapshots(editingGlyph);
     setIsInterpolating(false);
-  }, [axes, editingGlyph, engine]);
+  }, [axes, editingGlyph, font]);
 
   const handleAxisChange = useCallback(
     (tag: string, value: number) => {
@@ -61,10 +59,11 @@ export const VariationPanel = () => {
       if (!result) return;
 
       setIsInterpolating(true);
-      engine.emitGlyph(result.instance);
-      engine.setVariationLocation({ values: newLocation });
+      const glyph = editor.glyph.peek();
+      if (glyph) glyph.apply(result.instance);
+      font.setVariationLocation({ values: newLocation });
     },
-    [location, axes, engine],
+    [location, axes, editor, font],
   );
 
   const handleMasterClick = useCallback(
@@ -82,20 +81,21 @@ export const VariationPanel = () => {
       setLocation(newLocation);
 
       setIsInterpolating(true);
-      engine.emitGlyph(master.snapshot);
-      engine.setVariationLocation({ values: newLocation });
+      const glyph = editor.glyph.peek();
+      if (glyph) glyph.apply(master.snapshot);
+      font.setVariationLocation({ values: newLocation });
     },
-    [axes, engine],
+    [axes, editor, font],
   );
 
   const handleResetToSession = useCallback(() => {
     if (!isInterpolating) return;
 
     setIsInterpolating(false);
-    engine.setVariationLocation(null);
-    const sessionGlyph = engine.getSessionGlyph();
-    if (sessionGlyph) {
-      engine.emitGlyph(sessionGlyph);
+    font.setVariationLocation(null);
+    const glyph = editor.glyph.peek();
+    if (glyph) {
+      glyph.restoreSnapshot(glyph.toSnapshot());
     }
 
     const defaults: Record<string, number> = {};
@@ -103,7 +103,7 @@ export const VariationPanel = () => {
       defaults[axis.tag] = axis.default;
     }
     setLocation(defaults);
-  }, [isInterpolating, engine, axes]);
+  }, [isInterpolating, editor, font, axes]);
 
   if (axes.length === 0) return null;
 
