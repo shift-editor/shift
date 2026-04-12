@@ -1,16 +1,27 @@
-import type { FontMetrics, FontMetadata, CompositeGlyph, Axis, Source, Location } from "@shift/types";
+import type {
+  FontMetrics,
+  FontMetadata,
+  CompositeGlyph,
+  Axis,
+  Source,
+  Location,
+} from "@shift/types";
 import type { MasterSnapshot } from "@/lib/interpolation/interpolate";
 import type { InterpolationResult } from "@/bridge/NativeBridge";
 import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
+import { snapshotToSvgPath } from "@/lib/interpolation/svg";
 
 /**
  * Reactive font data surface.
  *
  * Auto-unwrapping getters (same pattern as Glyph). Reading `font.metrics`,
  * `font.unicodes`, `font.loaded` inside a computed/effect auto-tracks.
+ *
+ * When a variation location is active, getPath() returns interpolated
+ * paths transparently — all callers (text run, preview) get the right thing.
  */
 export class Font {
   readonly #bridge: NativeBridge;
@@ -69,7 +80,18 @@ export class Font {
   }
 
   getPath(name: string): Path2D | null {
-    return this.#bridge.getPath(name);
+    const loc = this.#$variationLocation.peek();
+    if (!loc) return this.#bridge.getPath(name);
+
+    const values: Record<string, number> = {};
+    for (const [k, v] of Object.entries(loc.values)) {
+      if (v !== undefined) values[k] = v;
+    }
+    const result = this.#bridge.interpolateGlyph(name, values);
+    if (!result) return this.#bridge.getPath(name);
+
+    const svg = snapshotToSvgPath(result.instance);
+    return svg ? new Path2D(svg) : null;
   }
 
   nameForUnicode(unicode: number): string | null {
