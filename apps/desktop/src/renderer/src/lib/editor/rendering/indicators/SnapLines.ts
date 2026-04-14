@@ -1,5 +1,11 @@
+import type { Point2D } from "@shift/types";
 import type { Canvas } from "../Canvas";
 import type { SnapIndicator } from "../../snapping/types";
+
+interface SnapLine {
+  from: Point2D;
+  to: Point2D;
+}
 
 export class SnapLines {
   draw(canvas: Canvas, indicator: SnapIndicator): void {
@@ -30,10 +36,8 @@ export class SnapLines {
   }
 }
 
-function collectEndpoints(
-  lines: ReadonlyArray<{ from: { x: number; y: number }; to: { x: number; y: number } }>,
-): Array<{ x: number; y: number }> {
-  const markers: Array<{ x: number; y: number }> = [];
+function collectEndpoints(lines: ReadonlyArray<SnapLine>): Point2D[] {
+  const markers: Point2D[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
     for (const endpoint of [line.from, line.to]) {

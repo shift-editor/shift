@@ -18,7 +18,10 @@ export const CanvasContext = createContext<CanvasContext>({
   backgroundCanvasRef: { current: null },
 });
 
-function init2DContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+function scaledContext(canvas: HTMLCanvasElement): {
+  ctx: CanvasRenderingContext2D;
+  rect: DOMRect;
+} {
   const dpr = window.devicePixelRatio;
   const rect = canvas.getBoundingClientRect();
   canvas.width = Math.floor(rect.width * dpr);
@@ -26,17 +29,11 @@ function init2DContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Failed to get 2D context");
   ctx.scale(dpr, dpr);
-  return ctx;
+  return { ctx, rect };
 }
 
 function resize2DCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
-  const dpr = window.devicePixelRatio;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = Math.floor(rect.width * dpr);
-  canvas.height = Math.floor(rect.height * dpr);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Failed to get 2D context");
-  ctx.scale(dpr, dpr);
+  const { ctx, rect } = scaledContext(canvas);
 
   const editor = getEditor();
   editor.setViewportRect({
@@ -75,9 +72,9 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
     }) => {
       const gpuHandleContext = new ReglHandleContext();
 
-      const bgCtx = init2DContext(backgroundCanvas);
-      const sceneCtx = init2DContext(sceneCanvas);
-      const overlayCtx = init2DContext(overlayCanvas);
+      const bgCtx = scaledContext(backgroundCanvas).ctx;
+      const sceneCtx = scaledContext(sceneCanvas).ctx;
+      const overlayCtx = scaledContext(overlayCanvas).ctx;
 
       gpuHandleContext.resizeCanvas(gpuHandlesCanvas);
 
@@ -110,14 +107,19 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       const resizeCanvasObserver = (entries: ResizeObserverEntry[]) => {
         for (const entry of entries) {
           const canvas = entry.target as HTMLCanvasElement;
-          if (canvas === gpuHandlesCanvas) {
-            gpuHandleContext.resizeCanvas(canvas);
-          } else if (canvas === backgroundCanvas) {
-            editor.setBackgroundContext(resize2DCanvas(canvas));
-          } else if (canvas === sceneCanvas) {
-            editor.setSceneContext(resize2DCanvas(canvas));
-          } else if (canvas === overlayCanvas) {
-            editor.setOverlayContext(resize2DCanvas(canvas));
+          switch (canvas) {
+            case gpuHandlesCanvas:
+              gpuHandleContext.resizeCanvas(canvas);
+              break;
+            case backgroundCanvas:
+              editor.setBackgroundContext(resize2DCanvas(canvas));
+              break;
+            case sceneCanvas:
+              editor.setSceneContext(resize2DCanvas(canvas));
+              break;
+            case overlayCanvas:
+              editor.setOverlayContext(resize2DCanvas(canvas));
+              break;
           }
         }
         editor.requestImmediateRedraw();
