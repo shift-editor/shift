@@ -409,7 +409,8 @@ export class Glyph {
 
     batch(() => {
       if (pointMoves.size > 0) {
-        for (const contour of this.#contours.peek()) {
+        const contours = this.#contours.peek();
+        for (const contour of contours) {
           const pts = contour.points;
           if (!pts.some((p) => pointMoves.has(p.id))) continue;
 
@@ -420,6 +421,7 @@ export class Glyph {
             }),
           );
         }
+        this.#contours.set([...contours]);
       }
 
       if (anchorMoves.size > 0) {

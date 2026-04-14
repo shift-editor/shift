@@ -310,7 +310,11 @@ export class Editor {
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
 
     this.#staticEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
       this.selection.pointIds;
       this.selection.anchorIds;
@@ -330,7 +334,11 @@ export class Editor {
     });
 
     this.#overlayEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
       this.selection.segmentIds;
       this.#hover.hoveredPointId.value;
@@ -666,20 +674,22 @@ export class Editor {
       setPositions: (updates) => {
         if (finished) return;
         dirty = true;
-        this.#bridge.setNodePositions(updates);
+        glyph.apply(updates);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
 
         if (dirty) {
-          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, glyph.toSnapshot()));
+          const finalSnapshot = glyph.toSnapshot();
+          this.#bridge.restoreSnapshot(finalSnapshot);
+          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, finalSnapshot));
         }
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#bridge.restoreSnapshot(baseSnapshot);
+        if (dirty) glyph.apply(baseSnapshot);
       },
     };
   }
@@ -1657,7 +1667,6 @@ export class Editor {
   #toolStateKey(toolId: string, key: string): string {
     return `${toolId}:${key}`;
   }
-
 
   #resolveEditorPlacementOffset(
     offset: Point2D,
