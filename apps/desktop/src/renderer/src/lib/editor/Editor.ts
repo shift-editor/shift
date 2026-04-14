@@ -682,7 +682,7 @@ export class Editor {
 
         if (dirty) {
           const finalSnapshot = glyph.toSnapshot();
-          this.#bridge.restoreSnapshot(finalSnapshot);
+          this.#bridge.syncToNative(finalSnapshot);
           this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, finalSnapshot));
         }
       },

@@ -387,4 +387,16 @@ export class NativeBridge {
     }
     this.#syncFromResponse(snapshot);
   }
+
+  /**
+   * Push a snapshot to Rust without updating the JS reactive model.
+   * Used by GlyphDraft.finish() where the JS model is already correct.
+   */
+  syncToNative(snapshot: GlyphSnapshot): void {
+    this.#requireSession();
+    const success = this.#raw.restoreSnapshot(JSON.stringify(snapshot));
+    if (!success) {
+      throw new NativeOperationError("Failed to sync snapshot to native");
+    }
+  }
 }

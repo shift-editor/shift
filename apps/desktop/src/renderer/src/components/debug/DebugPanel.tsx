@@ -41,6 +41,19 @@ export function DebugPanel() {
     return `${Glyphs.getAllPoints(glyph).length}`;
   });
 
+  const glyphMemoryRef = useSignalText(() => {
+    const glyph = editor.glyph.value;
+    if (!glyph) return "—";
+
+    const snapshot = glyph.toSnapshot();
+    const json = JSON.stringify(snapshot);
+    const bytes = new Blob([json]).size;
+
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  });
+
   const upmRef = useRef<HTMLTableCellElement>(null);
   const screenRef = useRef<HTMLTableCellElement>(null);
   const worldRef = useRef<HTMLTableCellElement>(null);
@@ -88,6 +101,10 @@ export function DebugPanel() {
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Total Points</span>
             <span ref={pointCountRef} className="font-mono tabular-nums" />
+          </div>
+          <div className="flex items-center justify-between gap-4 text-ui text-muted">
+            <span>Snapshot Size</span>
+            <span ref={glyphMemoryRef} className="font-mono tabular-nums" />
           </div>
         </div>
         <Separator className="bg-gray-300" />
