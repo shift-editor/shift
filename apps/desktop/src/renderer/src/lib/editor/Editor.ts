@@ -8,6 +8,8 @@ import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
 import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
+import { SetNodePositionsCommand } from "../commands/primitives/SetNodePositionsCommand";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Bounds, Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
@@ -665,31 +667,31 @@ export class Editor {
       throw new Error("Cannot create draft without an active glyph");
     }
 
-    const baseSnapshot = glyph.toSnapshot();
-    let dirty = false;
+    const base = glyph.toSnapshot();
+    let updates: NodePositionUpdateList = [];
     let finished = false;
 
     return {
-      base: baseSnapshot,
-      setPositions: (updates) => {
+      base,
+      setPositions: (u) => {
         if (finished) return;
-        dirty = true;
-        glyph.apply(updates);
+        updates = u;
+        glyph.apply(u);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
+        if (updates.length === 0) return;
 
-        if (dirty) {
-          const finalSnapshot = glyph.toSnapshot();
-          this.#bridge.syncToNative(finalSnapshot);
-          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, finalSnapshot));
-        }
+        this.#bridge.sync(updates);
+        this.#commandHistory.record(
+          SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, base, updates)!,
+        );
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        if (dirty) glyph.apply(baseSnapshot);
+        if (updates.length > 0) glyph.apply(base);
       },
     };
   }

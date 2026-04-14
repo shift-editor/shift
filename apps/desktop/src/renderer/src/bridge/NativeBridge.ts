@@ -15,15 +15,12 @@ import { NoEditSessionError, NativeOperationError } from "./errors";
 import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
-import type {
-  FontEngineAPI,
-  NodePositionUpdate as BridgeNodePositionUpdate,
-} from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyph } from "@/lib/model/Glyph";
+import { Glyph, type GlyphChange } from "@/lib/model/Glyph";
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -321,13 +318,7 @@ export class NativeBridge {
 
     glyph.apply(updates);
     this.#$glyph.set(glyph);
-
-    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
-      node: { kind: update.node.kind, id: update.node.id },
-      x: update.x,
-      y: update.y,
-    }));
-    this.#raw.setNodePositions(nativeUpdates);
+    this.#syncPositions(updates);
   }
 
   /** @knipclassignore — used by Editor for smart drag constraints */
@@ -389,14 +380,50 @@ export class NativeBridge {
   }
 
   /**
-   * Push a snapshot to Rust without updating the JS reactive model.
-   * Used by GlyphDraft.finish() where the JS model is already correct.
+   * Rust-side mirror of glyph.apply(). Syncs a change to Rust without
+   * updating the JS reactive model. Position updates use Float64Array
+   * (zero-copy), snapshots use JSON.
    */
-  syncToNative(snapshot: GlyphSnapshot): void {
+  sync(change: GlyphChange): void {
     this.#requireSession();
-    const success = this.#raw.restoreSnapshot(JSON.stringify(snapshot));
+
+    if (Array.isArray(change)) {
+      this.#syncPositions(change);
+      return;
+    }
+
+    const success = this.#raw.restoreSnapshot(JSON.stringify(change));
     if (!success) {
       throw new NativeOperationError("Failed to sync snapshot to native");
     }
+  }
+
+  #syncPositions(updates: NodePositionUpdateList): void {
+    if (updates.length === 0) return;
+
+    const pointIds: number[] = [];
+    const pointCoords: number[] = [];
+    const anchorIds: number[] = [];
+    const anchorCoords: number[] = [];
+
+    for (const u of updates) {
+      switch (u.node.kind) {
+        case "point":
+          pointIds.push(Number(u.node.id));
+          pointCoords.push(u.x, u.y);
+          break;
+        case "anchor":
+          anchorIds.push(Number(u.node.id));
+          anchorCoords.push(u.x, u.y);
+          break;
+      }
+    }
+
+    this.#raw.setPositions(
+      new Float64Array(pointIds),
+      new Float64Array(pointCoords),
+      new Float64Array(anchorIds),
+      new Float64Array(anchorCoords),
+    );
   }
 }

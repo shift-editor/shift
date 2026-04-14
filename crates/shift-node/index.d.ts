@@ -16,13 +16,7 @@ export declare class FontEngine {
    */
   getGlyphSvgPath(unicode: number): string | null
   getGlyphSvgPathByName(glyphName: string): string | null
-  getGlyphAdvance(unicode: number): number | null
   getGlyphAdvanceByName(glyphName: string): number | null
-  /**
-   * Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
-   * including resolved component contours.
-   */
-  getGlyphBbox(unicode: number): Array<number> | null
   getGlyphBboxByName(glyphName: string): Array<number> | null
   getGlyphCompositeComponents(glyphName: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
@@ -49,6 +43,12 @@ export declare class FontEngine {
   toggleSmooth(pointId: string): string
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
   setNodePositions(moves: Array<JsNodePositionUpdate>): boolean
+  /**
+   * Bulk position update via zero-copy Float64Arrays.
+   * IDs are PointId/AnchorId u64 values packed as f64.
+   * Coords are interleaved [x0, y0, x1, y1, ...].
+   */
+  setPositions(pointIds: Float64Array, pointCoords: Float64Array, anchorIds: Float64Array, anchorCoords: Float64Array): boolean
   restoreSnapshot(snapshotJson: string): boolean
 }
 
