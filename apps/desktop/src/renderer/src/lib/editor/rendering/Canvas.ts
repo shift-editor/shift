@@ -29,8 +29,6 @@ export class Canvas {
     return px / (this.viewport.upmScale * this.viewport.zoom);
   }
 
-  // ── Primitives ──
-
   line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
     this.ctx.save();
     this.ctx.strokeStyle = stroke;
@@ -43,6 +41,7 @@ export class Canvas {
     this.ctx.restore();
   }
 
+  /** @knipclassignore */
   dashedLine(from: Point2D, to: Point2D, stroke: string, widthPx: number, dashPx: number[]): void {
     this.ctx.save();
     this.ctx.strokeStyle = stroke;
@@ -87,6 +86,7 @@ export class Canvas {
     this.ctx.restore();
   }
 
+  /** @knipclassignore */
   circle(center: Point2D, radiusPx: number, fill: string): void {
     const r = this.pxToUpm(radiusPx);
     this.ctx.save();
@@ -97,6 +97,7 @@ export class Canvas {
     this.ctx.restore();
   }
 
+  /** @knipclassignore */
   strokeCircle(center: Point2D, radiusPx: number, stroke: string, widthPx: number): void {
     const r = this.pxToUpm(radiusPx);
     this.ctx.save();
@@ -122,7 +123,7 @@ export class Canvas {
     this.ctx.restore();
   }
 
-  /** Draw a screen-space circle (no pxToUpm conversion — for bounding box handles etc.). */
+  /** @knipclassignore Draw a screen-space circle (no pxToUpm conversion — for bounding box handles etc.). */
   screenCircle(center: Point2D, radius: number, fill: string, stroke: string, widthPx: number): void {
     this.ctx.save();
     this.ctx.lineWidth = widthPx;
@@ -135,26 +136,32 @@ export class Canvas {
     this.ctx.restore();
   }
 
+  /** @knipclassignore */
   save(): void {
     this.ctx.save();
   }
 
+  /** @knipclassignore */
   restore(): void {
     this.ctx.restore();
   }
 
+  /** @knipclassignore */
   translate(x: number, y: number): void {
     this.ctx.translate(x, y);
   }
 
+  /** @knipclassignore */
   rotate(angle: number): void {
     this.ctx.rotate(angle);
   }
 
+  /** @knipclassignore */
   scale(x: number, y: number): void {
     this.ctx.scale(x, y);
   }
 
+  /** @knipclassignore */
   clear(): void {
     const { width, height } = this.ctx.canvas;
     this.ctx.clearRect(0, 0, width, height);

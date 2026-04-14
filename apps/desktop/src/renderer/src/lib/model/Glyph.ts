@@ -207,12 +207,12 @@ export class Glyph {
     return this.#bbox.value;
   }
 
-  /** Fill the glyph's complete path using the theme's glyph fill color. */
+  /** @knipclassignore Fill the glyph's complete path using the theme's glyph fill color. */
   draw(canvas: Canvas): void {
     canvas.fillPath(this.path, canvas.theme.glyph.fill);
   }
 
-  /** Stroke the glyph's complete path using the theme's glyph stroke style. */
+  /** @knipclassignore Stroke the glyph's complete path using the theme's glyph stroke style. */
   drawOutline(canvas: Canvas): void {
     canvas.strokePath(this.path, canvas.theme.glyph.stroke, canvas.theme.glyph.widthPx);
   }
