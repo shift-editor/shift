@@ -57,6 +57,18 @@ import { pointInRect } from "../tools/select/utils";
 import { HoverManager, EdgePanManager } from "./managers";
 import { Viewport, type ViewportTransform } from "./rendering/Viewport";
 import type { Canvas } from "./rendering/Canvas";
+import { Handles } from "./rendering/Handles";
+import {
+  Guides,
+  BoundingBox,
+  ControlLines,
+  Segments,
+  SnapLines,
+  DebugOverlays as DebugOverlaysIndicator,
+  Anchors,
+} from "./rendering/indicators";
+import { SCREEN_HIT_RADIUS } from "./rendering/constants";
+import { getVisibleSceneBounds } from "./rendering/visibleSceneBounds";
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
@@ -130,6 +142,15 @@ export class Editor {
   #renderer: Viewport;
   #edgePan: EdgePanManager;
   #snapManager: SnapManager;
+
+  #guides = new Guides();
+  #boundingBox = new BoundingBox();
+  #controlLines = new ControlLines();
+  #segments = new Segments();
+  #snapLines = new SnapLines();
+  #debugOverlaysIndicator = new DebugOverlaysIndicator();
+  #anchors = new Anchors();
+  #handles = new Handles();
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -401,15 +422,129 @@ export class Editor {
   }
 
   public renderToolBackground(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.isPreviewMode();
+
+    if (glyph && this.shouldRenderGlyph() && !previewMode) {
+      const advance = this.getVisualGlyphAdvance(glyph);
+      this.#guides.draw(canvas, this.font.getMetrics(), advance);
+    }
+
     this.#toolManager.renderBackground(canvas);
+
+    if (!previewMode && this.shouldRenderGlyph()) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) this.#boundingBox.drawRect(canvas, rect);
+    }
   }
 
   public renderToolScene(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.isPreviewMode();
+    const handlesVisible = this.isHandlesVisible();
+
+    if (glyph && this.shouldRenderGlyph()) {
+      glyph.drawOutline(canvas);
+      if (previewMode) glyph.draw(canvas);
+    }
+
+    if (!previewMode && glyph && this.shouldRenderGlyph()) {
+      const hoveredSegmentId = this.getHoveredSegmentId();
+      const hoveredSegment = hoveredSegmentId ? this.getSegmentById(hoveredSegmentId) : null;
+      const selectedSegments: GlyphSegment[] = [];
+      for (const segId of this.selection.segmentIds) {
+        const seg = this.getSegmentById(segId);
+        if (seg) selectedSegments.push(seg);
+      }
+      this.#segments.draw(canvas, hoveredSegment ?? null, selectedSegments);
+
+      const debugOverlays = this.getDebugOverlays();
+      this.#debugOverlaysIndicator.draw(
+        canvas,
+        glyph,
+        debugOverlays,
+        hoveredSegmentId,
+        this.screenToUpmDistance(SCREEN_HIT_RADIUS),
+      );
+    }
+
     this.#toolManager.renderScene(canvas);
+
+    if (!previewMode && handlesVisible && glyph && this.shouldRenderGlyph()) {
+      const viewport = this.getViewportTransform();
+      const drawOffset = this.getDrawOffset();
+      const sceneBounds = getVisibleSceneBounds(viewport, 64);
+
+      this.#controlLines.draw(canvas, glyph, (from, to) => {
+        const minX = Math.min(from.x, to.x) + drawOffset.x;
+        const maxX = Math.max(from.x, to.x) + drawOffset.x;
+        const minY = Math.min(from.y, to.y) + drawOffset.y;
+        const maxY = Math.max(from.y, to.y) + drawOffset.y;
+        return !(
+          maxX < sceneBounds.minX ||
+          minX > sceneBounds.maxX ||
+          maxY < sceneBounds.minY ||
+          minY > sceneBounds.maxY
+        );
+      });
+
+      const renderedOnGpu = this.#handles.draw(
+        glyph,
+        { getHandleState: (id) => this.getHandleState(id) },
+        viewport,
+        drawOffset,
+        this.isGpuHandlesEnabled(),
+      );
+      if (!renderedOnGpu) {
+        this.#handles.drawCpu(canvas, glyph, {
+          getHandleState: (id) => this.getHandleState(id),
+        });
+      }
+
+      this.#anchors.draw(canvas, glyph, (id) => this.getAnchorHandleState(id));
+    } else {
+      this.#handles.clear();
+    }
   }
 
-  public renderToolOverlay(canvas: Canvas): void {
+  public renderOverlay(canvas: Canvas): void {
+    // Screen-space pass: bounding box handles
+    if (!this.isPreviewMode() && this.isHandlesVisible() && this.shouldRenderGlyph()) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) {
+        const offset = this.getDrawOffset();
+        const topLeft = this.projectSceneToScreen({
+          x: rect.x + offset.x,
+          y: rect.y + rect.height + offset.y,
+        });
+        const bottomRight = this.projectSceneToScreen({
+          x: rect.x + rect.width + offset.x,
+          y: rect.y + offset.y,
+        });
+        const screenRect: Rect2D = {
+          x: topLeft.x,
+          y: topLeft.y,
+          width: bottomRight.x - topLeft.x,
+          height: bottomRight.y - topLeft.y,
+          left: topLeft.x,
+          top: topLeft.y,
+          right: bottomRight.x,
+          bottom: bottomRight.y,
+        };
+        canvas.ctx.save();
+        this.#boundingBox.drawHandles(canvas, screenRect);
+        canvas.ctx.restore();
+      }
+    }
+
+    // UPM-space pass: snap lines + tool overlay
+    this.#renderer.beginUpmSpace(canvas);
+    const indicator = this.getSnapIndicator();
+    if (indicator) {
+      this.#snapLines.draw(canvas, indicator);
+    }
     this.#toolManager.renderOverlay(canvas);
+    canvas.ctx.restore();
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -635,6 +770,7 @@ export class Editor {
 
   public setGpuHandleContext(context: ReglHandleContext) {
     this.#renderer.setGpuHandleContext(context);
+    this.#handles.setGpu(context);
   }
 
   public get gpuHandleContext(): ReglHandleContext | null {

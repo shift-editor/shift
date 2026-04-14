@@ -12,7 +12,7 @@ import type { ViewportTransform } from "./Viewport";
 export class Canvas {
   readonly ctx: CanvasRenderingContext2D;
   readonly theme: Theme;
-  readonly viewport: ViewportTransform;
+  viewport: ViewportTransform;
 
   constructor(
     ctx: CanvasRenderingContext2D,
@@ -61,7 +61,15 @@ export class Canvas {
     this.ctx.restore();
   }
 
-  strokeRect(x: number, y: number, w: number, h: number, stroke: string, widthPx: number, dashPx: number[] = []): void {
+  strokeRect(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    stroke: string,
+    widthPx: number,
+    dashPx: number[] = [],
+  ): void {
     this.ctx.save();
     this.ctx.strokeStyle = stroke;
     this.ctx.lineWidth = this.pxToUpm(widthPx);
@@ -110,7 +118,13 @@ export class Canvas {
     this.ctx.restore();
   }
 
-  filledStrokeCircle(center: Point2D, radiusPx: number, fill: string, stroke: string, widthPx: number): void {
+  filledStrokeCircle(
+    center: Point2D,
+    radiusPx: number,
+    fill: string,
+    stroke: string,
+    widthPx: number,
+  ): void {
     const r = this.pxToUpm(radiusPx);
     this.ctx.save();
     this.ctx.lineWidth = this.pxToUpm(widthPx);
@@ -124,7 +138,13 @@ export class Canvas {
   }
 
   /** @knipclassignore Draw a screen-space circle (no pxToUpm conversion — for bounding box handles etc.). */
-  screenCircle(center: Point2D, radius: number, fill: string, stroke: string, widthPx: number): void {
+  screenCircle(
+    center: Point2D,
+    radius: number,
+    fill: string,
+    stroke: string,
+    widthPx: number,
+  ): void {
     this.ctx.save();
     this.ctx.lineWidth = widthPx;
     this.ctx.beginPath();

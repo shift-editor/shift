@@ -45,11 +45,7 @@ export class Handles {
   }
 
   /** CPU fallback: draw handles on 2D canvas. */
-  drawCpu(
-    canvas: Canvas,
-    glyph: Glyph,
-    states: HandleStates,
-  ): void {
+  drawCpu(canvas: Canvas, glyph: Glyph, states: HandleStates): void {
     for (const contour of glyph.contours) {
       const numPoints = contour.points.length;
       if (numPoints === 0) continue;

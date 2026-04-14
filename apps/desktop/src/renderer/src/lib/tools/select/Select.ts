@@ -114,13 +114,7 @@ export class Select extends BaseTool<SelectState> {
   override renderOverlay(canvas: Canvas): void {
     if (this.state.type !== "selecting") return;
     const rect = normalizeRect(this.state.selection.startPos, this.state.selection.currentPos);
-    canvas.fillRect(
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      canvas.theme.selection.fill,
-    );
+    canvas.fillRect(rect.x, rect.y, rect.width, rect.height, canvas.theme.selection.fill);
     canvas.strokeRect(
       rect.x,
       rect.y,

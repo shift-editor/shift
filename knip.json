@@ -3,13 +3,7 @@
   "include": ["files", "exports"],
   "entry": [],
   "project": [],
-  "ignore": [
-    "apps/desktop/src/renderer/src/testing/setup.ts",
-    "apps/desktop/src/renderer/src/lib/editor/rendering/indicators/**",
-    "apps/desktop/src/renderer/src/lib/editor/rendering/Handles.ts",
-    "apps/desktop/src/renderer/src/lib/editor/rendering/gpu/**",
-    "apps/desktop/src/renderer/src/lib/editor/rendering/visibleSceneBounds.ts"
-  ],
+  "ignore": ["apps/desktop/src/renderer/src/testing/setup.ts"],
   "includeEntryExports": true,
   "ignoreWorkspaces": ["crates/shift-node"],
   "ignoreExportsUsedInFile": true,

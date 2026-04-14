@@ -37,7 +37,12 @@ export interface Theme {
     last: HandleStateStyles;
   };
   snap: { color: string; widthPx: number; crossSizePx: number };
-  segment: { hoverColor: string; selectedColor: string; hoverWidthPx: number; selectedWidthPx: number };
+  segment: {
+    hoverColor: string;
+    selectedColor: string;
+    hoverWidthPx: number;
+    selectedWidthPx: number;
+  };
   preview: { color: string; widthPx: number };
   penReady: { fill: string; stroke: string; size: number; widthPx: number };
   debug: {
@@ -75,42 +80,105 @@ export const DEFAULT_THEME: Theme = {
   handle: {
     corner: {
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
-      hovered: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 1, overlayColor: hover(0.75) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 6,
+        lineWidth: 1,
+        overlayColor: hover(0.75),
+      },
       selected: { fill: "#0C92F4", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     smooth: {
       idle: { fill: "#ffffff", stroke: "#03D211", size: 2.5, lineWidth: 3 },
-      hovered: { fill: "#ffffff", stroke: "#03D211", size: 3, lineWidth: 3, overlayColor: hover(0.5) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#03D211",
+        size: 3,
+        lineWidth: 3,
+        overlayColor: hover(0.5),
+      },
       selected: { fill: "#03D211", stroke: "#ffffff", size: 4, lineWidth: 4 },
     },
     control: {
       idle: { fill: "#ffffff", stroke: "#B0B0B0", size: 2.5, lineWidth: 3 },
-      hovered: { fill: "#ffffff", stroke: "#B0B0B0", size: 3, lineWidth: 3, overlayColor: hover(0.5) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#B0B0B0",
+        size: 3,
+        lineWidth: 3,
+        overlayColor: hover(0.5),
+      },
       selected: { fill: "#B0B0B0", stroke: "#ffffff", size: 4, lineWidth: 4 },
     },
     anchor: {
       idle: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 1 },
-      hovered: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 1, overlayColor: hover(0.75) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#6B15EC",
+        size: 6,
+        lineWidth: 1,
+        overlayColor: hover(0.75),
+      },
       selected: { fill: "#6B15EC", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     direction: {
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 1 },
-      hovered: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 1, overlayColor: hover(0.5) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 6,
+        lineWidth: 1,
+        overlayColor: hover(0.5),
+      },
       selected: { fill: "#0C92F4", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     first: {
-      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5, barSize: 18, barStroke: "#0C92F4" },
-      hovered: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 1, barSize: 18, barStroke: "#0C92F4", overlayColor: hover(0.75) },
-      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 8, lineWidth: 1, barSize: 20, barStroke: "#0C92F4" },
+      idle: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 6,
+        lineWidth: 0.5,
+        barSize: 18,
+        barStroke: "#0C92F4",
+      },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 6,
+        lineWidth: 1,
+        barSize: 18,
+        barStroke: "#0C92F4",
+        overlayColor: hover(0.75),
+      },
+      selected: {
+        fill: "#0C92F4",
+        stroke: "#ffffff",
+        size: 8,
+        lineWidth: 1,
+        barSize: 20,
+        barStroke: "#0C92F4",
+      },
     },
     last: {
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 0.5 },
-      hovered: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 1, overlayColor: hover(0.5) },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 12,
+        lineWidth: 1,
+        overlayColor: hover(0.5),
+      },
       selected: { fill: "#ffffff", stroke: "#0C92F4", size: 14, lineWidth: 2 },
     },
   },
   snap: { color: "#ff3b30", widthPx: 1, crossSizePx: 2 },
-  segment: { hoverColor: "#1886D7", selectedColor: "#1886D7", hoverWidthPx: 1, selectedWidthPx: 1.5 },
+  segment: {
+    hoverColor: "#1886D7",
+    selectedColor: "#1886D7",
+    hoverWidthPx: 1,
+    selectedWidthPx: 1.5,
+  },
   preview: { color: "#1886D7", widthPx: 1 },
   penReady: { fill: "#ffffff", stroke: "#3b82f6", size: 3, widthPx: 1 },
   debug: {

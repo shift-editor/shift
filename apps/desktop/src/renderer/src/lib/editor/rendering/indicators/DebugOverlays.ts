@@ -9,7 +9,12 @@ export class DebugOverlays {
   draw(
     canvas: Canvas,
     glyph: Glyph,
-    overlays: { segmentBounds: boolean; tightBounds: boolean; hitRadii: boolean; glyphBbox: boolean },
+    overlays: {
+      segmentBounds: boolean;
+      tightBounds: boolean;
+      hitRadii: boolean;
+      glyphBbox: boolean;
+    },
     hoveredSegmentId: SegmentId | null,
     hitRadiusUpm: number,
   ): void {
@@ -38,7 +43,12 @@ export class DebugOverlays {
     }
   }
 
-  #drawTightBounds(canvas: Canvas, glyph: Glyph, hoveredSegmentId: SegmentId | null, color: string): void {
+  #drawTightBounds(
+    canvas: Canvas,
+    glyph: Glyph,
+    hoveredSegmentId: SegmentId | null,
+    color: string,
+  ): void {
     if (hoveredSegmentId === null) return;
     for (const { segment } of Segments.iterateGlyph(glyph.contours)) {
       if (Segments.id(segment) !== hoveredSegmentId) continue;
@@ -52,7 +62,12 @@ export class DebugOverlays {
 
   #drawHitRadii(canvas: Canvas, glyph: Glyph, hitRadiusUpm: number, color: string): void {
     for (const { point } of Glyphs.points(glyph)) {
-      canvas.strokeCircle({ x: point.x, y: point.y }, hitRadiusUpm * canvas.viewport.upmScale * canvas.viewport.zoom, color, 1);
+      canvas.strokeCircle(
+        { x: point.x, y: point.y },
+        hitRadiusUpm * canvas.viewport.upmScale * canvas.viewport.zoom,
+        color,
+        1,
+      );
     }
   }
 

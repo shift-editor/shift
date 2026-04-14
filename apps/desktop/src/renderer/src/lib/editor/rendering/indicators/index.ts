@@ -5,9 +5,4 @@ export { Segments } from "./Segments";
 export { DebugOverlays } from "./DebugOverlays";
 export { ControlLines } from "./ControlLines";
 export { Anchors } from "./Anchors";
-export {
-  drawHandle,
-  drawHandleFirst,
-  drawHandleDirection,
-  drawHandleLast,
-} from "./handleDrawing";
+export { drawHandle, drawHandleFirst, drawHandleDirection, drawHandleLast } from "./handleDrawing";

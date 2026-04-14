@@ -23,19 +23,25 @@ export interface ViewportTransform {
 
 /**
  * Manages canvas layers, viewport transforms, and RAF scheduling.
- * Does NOT decide what to draw — tools own their rendering.
+ * Does NOT decide what to draw — Editor owns the render pipeline.
  *
  * Four stacked HTML canvas elements (CSS composited):
- * - background (2D) → tool.renderBackground(canvas)
- * - scene (2D)      → tool.renderScene(canvas)
- * - handles (WebGL) → handles.draw()
- * - overlay (2D)    → tool.renderOverlay(canvas)
+ * - background (2D)
+ * - scene (2D)
+ * - handles (WebGL)
+ * - overlay (2D)
  */
 export class Viewport {
   #layers: {
     background: CanvasRenderingContext2D | null;
     scene: CanvasRenderingContext2D | null;
     overlay: CanvasRenderingContext2D | null;
+  } = { background: null, scene: null, overlay: null };
+
+  #canvases: {
+    background: Canvas | null;
+    scene: Canvas | null;
+    overlay: Canvas | null;
   } = { background: null, scene: null, overlay: null };
 
   #gpuHandleContext: ReglHandleContext | null = null;
@@ -58,14 +64,17 @@ export class Viewport {
 
   setBackgroundContext(ctx: CanvasRenderingContext2D): void {
     this.#layers.background = ctx;
+    this.#canvases.background = null;
   }
 
   setSceneContext(ctx: CanvasRenderingContext2D): void {
     this.#layers.scene = ctx;
+    this.#canvases.scene = null;
   }
 
   setOverlayContext(ctx: CanvasRenderingContext2D): void {
     this.#layers.overlay = ctx;
+    this.#canvases.overlay = null;
   }
 
   setGpuHandleContext(context: ReglHandleContext): void {
@@ -107,43 +116,50 @@ export class Viewport {
   }
 
   #renderBackground(): void {
-    const ctx = this.#layers.background;
-    if (!ctx) return;
-    this.#renderLayer(ctx, (canvas) => {
-      this.#editor.renderToolBackground(canvas);
-    });
+    const canvas = this.#getCanvas("background");
+    if (!canvas) return;
+    this.#beginUpmSpace(canvas);
+    this.#editor.renderToolBackground(canvas);
+    canvas.ctx.restore();
   }
 
   #renderScene(): void {
-    const ctx = this.#layers.scene;
-    if (!ctx) return;
-    this.#renderLayer(ctx, (canvas) => {
-      this.#editor.renderToolScene(canvas);
-    });
+    const canvas = this.#getCanvas("scene");
+    if (!canvas) return;
+    this.#beginUpmSpace(canvas);
+    this.#editor.renderToolScene(canvas);
+    canvas.ctx.restore();
   }
 
   #renderOverlay(): void {
-    const ctx = this.#layers.overlay;
-    if (!ctx) return;
-    this.#renderLayer(ctx, (canvas) => {
-      this.#editor.renderToolOverlay(canvas);
-    });
+    const canvas = this.#getCanvas("overlay");
+    if (!canvas) return;
+    this.#editor.renderOverlay(canvas);
   }
 
-  #renderLayer(ctx: CanvasRenderingContext2D, draw: (canvas: Canvas) => void): void {
+  #getCanvas(layer: "background" | "scene" | "overlay"): Canvas | null {
+    const ctx = this.#layers[layer];
+    if (!ctx) return null;
+
+    const vt = this.#editor.getViewportTransform();
     const { width, height } = ctx.canvas;
     ctx.clearRect(0, 0, width, height);
-    ctx.save();
-    this.#applyViewportTransform(ctx);
-    const vt = this.#editor.getViewportTransform();
-    const { x, y } = this.#editor.getDrawOffset();
-    ctx.translate(x, y);
-    draw(new Canvas(ctx, vt, this.#theme));
-    ctx.restore();
+
+    let canvas = this.#canvases[layer];
+    if (!canvas || canvas.ctx !== ctx) {
+      canvas = new Canvas(ctx, vt, this.#theme);
+      this.#canvases[layer] = canvas;
+    } else {
+      canvas.viewport = vt;
+    }
+    return canvas;
   }
 
-  #applyViewportTransform(ctx: CanvasRenderingContext2D): void {
-    const vt = this.#editor.getViewportTransform();
+  /** Set up UPM-space transform on the canvas context. Caller must restore(). */
+  #beginUpmSpace(canvas: Canvas): void {
+    const ctx = canvas.ctx;
+    const vt = canvas.viewport;
+    ctx.save();
     ctx.transform(
       vt.zoom,
       0,
@@ -154,6 +170,13 @@ export class Viewport {
     );
     const baselineY = vt.logicalHeight - vt.padding - vt.descender * vt.upmScale;
     ctx.transform(vt.upmScale, 0, 0, -vt.upmScale, vt.padding, baselineY);
+    const { x, y } = this.#editor.getDrawOffset();
+    ctx.translate(x, y);
+  }
+
+  /** Enter UPM space on the given canvas. Public for overlay two-pass rendering. */
+  beginUpmSpace(canvas: Canvas): void {
+    this.#beginUpmSpace(canvas);
   }
 
   destroy(): void {

@@ -109,7 +109,12 @@ export class Pen extends BaseTool<PenState> {
     if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
       if (lastPoint) {
-        canvas.line(lastPoint, this.state.mousePos, canvas.theme.preview.color, canvas.theme.preview.widthPx);
+        canvas.line(
+          lastPoint,
+          this.state.mousePos,
+          canvas.theme.preview.color,
+          canvas.theme.preview.widthPx,
+        );
       }
       // Draw pen ready circle
       const { fill, stroke, size, widthPx } = canvas.theme.penReady;
@@ -128,8 +133,20 @@ export class Pen extends BaseTool<PenState> {
 
       // Draw control handle previews
       const controlStyle = canvas.theme.handle.control.idle;
-      canvas.filledStrokeCircle(effectivePos, controlStyle.size, controlStyle.fill, controlStyle.stroke, controlStyle.lineWidth);
-      canvas.filledStrokeCircle(mirrorPos, controlStyle.size, controlStyle.fill, controlStyle.stroke, controlStyle.lineWidth);
+      canvas.filledStrokeCircle(
+        effectivePos,
+        controlStyle.size,
+        controlStyle.fill,
+        controlStyle.stroke,
+        controlStyle.lineWidth,
+      );
+      canvas.filledStrokeCircle(
+        mirrorPos,
+        controlStyle.size,
+        controlStyle.fill,
+        controlStyle.stroke,
+        controlStyle.lineWidth,
+      );
     }
   }
 }
