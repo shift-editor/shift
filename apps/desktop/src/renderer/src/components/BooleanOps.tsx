@@ -5,24 +5,13 @@ import UnionIcon from "@/assets/sidebar-right/union.svg";
 import IntersectIcon from "@/assets/sidebar-right/intersect.svg";
 import SubtractIcon from "@/assets/sidebar-right/subtract.svg";
 import { getEditor } from "@/store/store";
-import { Glyphs } from "@shift/font";
-import { ContourId } from "@shift/types";
-import { useSignalState } from "@/lib/reactive/useSignal";
 
 export const BooleanOps = () => {
   const editor = getEditor();
-  const glyph = useSignalState(editor.glyph);
-  if (!glyph) return null;
+  const selectedContourIds = editor.selection.contourIds;
 
-  const selectedContourIds = new Set<ContourId>();
-  for (const pointId of editor.selection.$pointIds.value) {
-    const found = Glyphs.findPoint(glyph, pointId);
-    if (found) selectedContourIds.add(found.contour.id);
-  }
-
-  const selectedContourIdsArray = Array.from(selectedContourIds);
-  if (selectedContourIdsArray.length < 2) return null;
-  const [contourIdA, contourIdB] = selectedContourIdsArray;
+  if (selectedContourIds.size < 2) return null;
+  const [contourIdA, contourIdB] = selectedContourIds;
 
   return (
     <SidebarSection title="Boolean">
