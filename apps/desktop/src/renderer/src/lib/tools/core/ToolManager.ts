@@ -4,7 +4,7 @@ import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import type { BaseTool } from "./BaseTool";
-import type { DrawAPI } from "./DrawAPI";
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any>;
@@ -74,7 +74,7 @@ export class ToolManager implements ToolSwitchHandler {
     if (this.primaryTool.activate) this.primaryTool.activate();
     this.editor.setActiveToolState(this.primaryTool.getState());
     if (this.needsStaticRedrawOnActivation()) {
-      this.editor.requestStaticRedraw();
+      this.editor.requestSceneRedraw();
     }
   }
 
@@ -154,8 +154,8 @@ export class ToolManager implements ToolSwitchHandler {
       this.editor.updateHover(coords);
     }
 
-    if (this.activeTool?.renderBelowHandles) {
-      this.editor.requestStaticRedraw();
+    if (this.activeTool?.renderOverlay) {
+      this.editor.requestOverlayRedraw();
     }
   }
 
@@ -208,16 +208,16 @@ export class ToolManager implements ToolSwitchHandler {
     );
   }
 
-  renderInScene(draw: DrawAPI): void {
-    this.activeTool?.renderInScene(draw);
+  renderBackground(canvas: Canvas): void {
+    if (this.activeTool?.renderBackground) this.activeTool.renderBackground(canvas);
   }
 
-  render(draw: DrawAPI): void {
-    if (this.activeTool?.render) this.activeTool.render(draw);
+  renderScene(canvas: Canvas): void {
+    if (this.activeTool?.renderScene) this.activeTool.renderScene(canvas);
   }
 
-  renderBelowHandles(draw: DrawAPI): void {
-    if (this.activeTool?.renderBelowHandles) this.activeTool.renderBelowHandles(draw);
+  renderOverlay(canvas: Canvas): void {
+    if (this.activeTool?.renderOverlay) this.activeTool.renderOverlay(canvas);
   }
 
   private dispatchEvents(events: ToolEvent[]): void {
@@ -256,6 +256,6 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   private needsStaticRedrawOnActivation(): boolean {
-    return !!this.primaryTool?.renderBelowHandles;
+    return !!this.primaryTool?.renderScene;
   }
 }

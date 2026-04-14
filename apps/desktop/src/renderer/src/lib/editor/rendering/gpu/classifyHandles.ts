@@ -6,7 +6,7 @@ import { Validate } from "@shift/validation";
 import { STYLES, type CachedInstanceStyle } from "./handleStyles";
 import { GPU_HANDLE_INSTANCE_FLOATS } from "./types";
 import { getVisibleSceneBounds } from "../visibleSceneBounds";
-import type { ViewportTransform } from "../CanvasCoordinator";
+import type { ViewportTransform } from "../Viewport";
 
 const HANDLE_CULL_MARGIN_PX = 64;
 

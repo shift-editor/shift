@@ -1,4 +1,3 @@
-import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
@@ -52,17 +51,17 @@ import {
 } from "../reactive/signal";
 import { Clipboard, resolveClipboardContent } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
+import { DEFAULT_THEME } from "./rendering/Theme";
 import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
 import { pointInRect } from "../tools/select/utils";
 import { HoverManager, EdgePanManager } from "./managers";
-import { CanvasCoordinator, ViewportTransform } from "./rendering/CanvasCoordinator";
+import { Viewport, type ViewportTransform } from "./rendering/Viewport";
+import type { Canvas } from "./rendering/Canvas";
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
 import { Font } from "../model/Font";
-import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
   DragSnapSession,
@@ -104,8 +103,7 @@ import type { GlyphDraft } from "@/types/draft";
  *
  * Editor owns and wires together every subsystem: viewport (UPM/screen
  * transforms), selection, hover, command history, snapping, clipboard,
- * tool management, and rendering (via CanvasCoordinator). It implements
- * `CanvasCoordinatorContext` (the data the renderer reads) and is passed
+ * tool management, and rendering (via Viewport). It is passed
  * directly to tools and behaviors.
  *
  * Subsystems communicate through reactive signals. Effects watch composite
@@ -129,7 +127,7 @@ export class Editor {
   readonly selection: Selection;
   readonly font: Font;
   #hover: HoverManager;
-  #renderer: CanvasCoordinator;
+  #renderer: Viewport;
   #edgePan: EdgePanManager;
   #snapManager: SnapManager;
 
@@ -246,7 +244,7 @@ export class Editor {
 
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
-    this.#renderer = new CanvasCoordinator(this);
+    this.#renderer = new Viewport(this);
     this.#clipboard = new Clipboard({
       glyph: this.#$glyph,
       selection: this.selection,
@@ -296,7 +294,8 @@ export class Editor {
       this.#debugOverlays.value;
       this.$gpuHandlesEnabled.value;
       this.#textRunController.state.value;
-      this.#renderer.requestStaticRedraw();
+      this.#renderer.requestSceneRedraw();
+      this.#renderer.requestBackgroundRedraw();
     });
 
     this.#overlayEffect = effect(() => {
@@ -310,12 +309,13 @@ export class Editor {
       this.$previewMode.value;
       this.$handlesVisible.value;
       this.#snapIndicator.value;
+      this.$activeToolState.value;
       this.#renderer.requestOverlayRedraw();
     });
 
     this.#interactiveEffect = effect(() => {
       this.$activeToolState.value;
-      this.#renderer.requestInteractiveRedraw();
+      this.#renderer.requestOverlayRedraw();
     });
 
     this.#cursorEffect = effect(() => {
@@ -400,18 +400,16 @@ export class Editor {
     return this.#toolManager;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolInScene(draw: DrawAPI): void {
-    this.#toolManager.renderInScene(draw);
+  public renderToolBackground(canvas: Canvas): void {
+    this.#toolManager.renderBackground(canvas);
   }
 
-  public renderTool(draw: DrawAPI): void {
-    this.#toolManager.render(draw);
+  public renderToolScene(canvas: Canvas): void {
+    this.#toolManager.renderScene(canvas);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolBelowHandles(draw: DrawAPI): void {
-    this.#toolManager.renderBelowHandles(draw);
+  public renderToolOverlay(canvas: Canvas): void {
+    this.#toolManager.renderOverlay(canvas);
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -446,9 +444,9 @@ export class Editor {
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const handleOffset = this.screenToUpmDistance(DEFAULT_THEME.boundingBox.handle.offset);
     const rotationZoneOffset = this.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+      DEFAULT_THEME.boundingBox.rotationZoneOffset,
     );
 
     return hitTestBoundingBox(
@@ -503,7 +501,7 @@ export class Editor {
     this.#snapIndicator.set(indicator);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getSnapIndicator(): SnapIndicator | null {
     return this.#snapIndicator.peek();
   }
@@ -549,7 +547,7 @@ export class Editor {
     return this.#toolStateVersion;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getDebugOverlays(): DebugOverlays {
     return this.#debugOverlays.value;
   }
@@ -576,7 +574,7 @@ export class Editor {
     return this.$previewMode;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isPreviewMode(): boolean {
     return this.$previewMode.peek();
   }
@@ -594,14 +592,14 @@ export class Editor {
     const points = this.getAllPoints();
     const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
     this.#marqueePreviewPointIds.set(new Set(ids));
-    this.requestStaticRedraw();
+    this.requestSceneRedraw();
   }
 
   public get handlesVisible(): Signal<boolean> {
     return this.$handlesVisible;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isHandlesVisible(): boolean {
     return this.$handlesVisible.peek();
   }
@@ -614,7 +612,7 @@ export class Editor {
     return this.$gpuHandlesEnabled;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isGpuHandlesEnabled(): boolean {
     return this.$gpuHandlesEnabled.peek();
   }
@@ -623,20 +621,24 @@ export class Editor {
     this.$gpuHandlesEnabled.set(enabled);
   }
 
-  public setStaticContext(context: IGraphicContext) {
-    this.#renderer.setStaticContext(context);
+  public setBackgroundContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setBackgroundContext(ctx);
   }
 
-  public setOverlayContext(context: IGraphicContext) {
-    this.#renderer.setOverlayContext(context);
+  public setSceneContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setSceneContext(ctx);
   }
 
-  public setInteractiveContext(context: IGraphicContext) {
-    this.#renderer.setInteractiveContext(context);
+  public setOverlayContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setOverlayContext(ctx);
   }
 
   public setGpuHandleContext(context: ReglHandleContext) {
     this.#renderer.setGpuHandleContext(context);
+  }
+
+  public get gpuHandleContext(): ReglHandleContext | null {
+    return this.#renderer.gpuHandleContext;
   }
 
   /** Opens a glyph for editing by name. */
@@ -663,7 +665,7 @@ export class Editor {
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public shouldRenderGlyph(): boolean {
     const state = this.#textRunController.state.peek();
     return !state || state.editingIndex !== null;
@@ -811,7 +813,7 @@ export class Editor {
     return this.glyph.value?.xAdvance ?? 0;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getVisualGlyphAdvance(glyph: Glyph): number {
     if (glyph.xAdvance > 0) return glyph.xAdvance;
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
@@ -912,12 +914,12 @@ export class Editor {
     return this.#viewport.hitRadius;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public screenToUpmDistance(pixels: number): number {
     return this.#viewport.screenToUpmDistance(pixels);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getViewportTransform(): ViewportTransform {
     return {
       zoom: this.#viewport.zoomLevel,
@@ -931,7 +933,7 @@ export class Editor {
     };
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public projectSceneToScreen(scene: Point2D): Point2D {
     return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
@@ -974,14 +976,14 @@ export class Editor {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getHandleState(pointId: PointId): HandleState {
     const isSelected = (id: PointId) =>
       this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
     return this.#hover.getPointVisualState(pointId, isSelected);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getAnchorHandleState(anchorId: AnchorId): HandleState {
     if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
       return "selected";
@@ -1460,7 +1462,7 @@ export class Editor {
     return null;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getDrawOffset(): Point2D {
     return this.#drawOffset.value;
   }
@@ -1473,7 +1475,7 @@ export class Editor {
     this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyphName, unicode));
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public setDrawOffset(offset: Point2D): void {
     this.#drawOffset.set(offset);
   }
@@ -1482,8 +1484,12 @@ export class Editor {
     this.#renderer.requestRedraw();
   }
 
-  public requestStaticRedraw() {
-    this.#renderer.requestStaticRedraw();
+  public requestSceneRedraw() {
+    this.#renderer.requestSceneRedraw();
+  }
+
+  public requestOverlayRedraw() {
+    this.#renderer.requestOverlayRedraw();
   }
 
   public requestImmediateRedraw() {

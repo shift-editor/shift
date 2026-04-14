@@ -1,12 +1,12 @@
 import { Vec2 } from "@shift/geo";
 import { Contours } from "@shift/font";
 import type { Point2D } from "@shift/types";
-import { BaseTool, type ToolName, defineStateDiagram, DrawAPI, ToolEvent } from "../core";
+import { BaseTool, type ToolName, defineStateDiagram, type ToolEvent } from "../core";
 import type { PenState } from "./types";
 import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
-import { DEFAULT_STYLES, PEN_READY_STYLE, PREVIEW_LINE_STYLE } from "../../styles/style";
 import type { CursorType } from "@/types/editor";
 import { isContourEndpointHit, isMiddlePointHit, isSegmentHit } from "@/types/hitResult";
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 
 export type { PenState };
 
@@ -102,52 +102,34 @@ export class Pen extends BaseTool<PenState> {
     return { x: lastOnCurve.x, y: lastOnCurve.y };
   }
 
-  override renderBelowHandles(draw: DrawAPI): void {
+  override renderOverlay(canvas: Canvas): void {
     if (this.editor.getFocusZone() !== "canvas") return;
 
+    // Preview line from last point to cursor
     if (this.state.type === "ready") {
       const lastPoint = this.getLastOnCurvePoint();
-      if (!lastPoint) return;
-
-      draw.line(lastPoint, this.state.mousePos, {
-        strokeStyle: PREVIEW_LINE_STYLE.strokeStyle,
-        strokeWidth: PREVIEW_LINE_STYLE.lineWidth,
-      });
+      if (lastPoint) {
+        canvas.line(lastPoint, this.state.mousePos, canvas.theme.preview.color, canvas.theme.preview.widthPx);
+      }
+      // Draw pen ready circle
+      const { fill, stroke, size, widthPx } = canvas.theme.penReady;
+      canvas.filledStrokeCircle(this.state.mousePos, size, fill, stroke, widthPx);
     }
 
+    // Control handle preview during drag
     if (this.state.type === "dragging") {
       const { anchor, mousePos, snappedPos } = this.state;
       const effectivePos = snappedPos ?? mousePos;
       const mirrorPos = Vec2.mirror(effectivePos, anchor.position);
 
-      const style = {
-        strokeStyle: DEFAULT_STYLES.strokeStyle,
-        strokeWidth: DEFAULT_STYLES.lineWidth,
-      };
+      const { stroke, widthPx } = canvas.theme.glyph;
+      canvas.line(effectivePos, anchor.position, stroke, widthPx);
+      canvas.line(anchor.position, mirrorPos, stroke, widthPx);
 
-      draw.line(effectivePos, anchor.position, style);
-      draw.line(anchor.position, mirrorPos, style);
-    }
-  }
-
-  override render(draw: DrawAPI): void {
-    if (this.editor.getFocusZone() !== "canvas") return;
-
-    if (this.state.type === "ready") {
-      draw.circle(this.state.mousePos, PEN_READY_STYLE.size, {
-        strokeStyle: PEN_READY_STYLE.strokeStyle,
-        strokeWidth: PEN_READY_STYLE.lineWidth,
-        fillStyle: PEN_READY_STYLE.fillStyle,
-      });
-    }
-
-    if (this.state.type === "dragging") {
-      const { anchor, mousePos, snappedPos } = this.state;
-      const effectivePos = snappedPos ?? mousePos;
-      const mirrorPos = Vec2.mirror(effectivePos, anchor.position);
-
-      draw.handle(effectivePos, "control", "idle");
-      draw.handle(mirrorPos, "control", "idle");
+      // Draw control handle previews
+      const controlStyle = canvas.theme.handle.control.idle;
+      canvas.filledStrokeCircle(effectivePos, controlStyle.size, controlStyle.fill, controlStyle.stroke, controlStyle.lineWidth);
+      canvas.filledStrokeCircle(mirrorPos, controlStyle.size, controlStyle.fill, controlStyle.stroke, controlStyle.lineWidth);
     }
   }
 }

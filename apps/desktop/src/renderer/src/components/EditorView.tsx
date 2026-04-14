@@ -5,7 +5,6 @@ import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
-import { OverlayScene } from "./OverlayScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "./debug/DebugPanel";
 import { HiddenTextInput } from "./HiddenTextInput";
@@ -103,7 +102,6 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     >
       <CanvasContextProvider>
         <StaticScene />
-        <OverlayScene />
         <InteractiveScene />
       </CanvasContextProvider>
       <HiddenTextInput />
