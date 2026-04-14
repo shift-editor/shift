@@ -164,6 +164,7 @@ export class Editor {
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
   #$glyph: ComputedSignal<Glyph | null>;
+  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, SegmentHitResult["segment"]>>;
 
   #staticEffect: Effect;
   #overlayEffect: Effect;
@@ -201,6 +202,15 @@ export class Editor {
     this.#bridge = options.bridge;
     this.font = new Font(this.#bridge);
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
+    this.#$segmentIndex = computed(() => {
+      const glyph = this.#$glyph.value;
+      if (!glyph) return new Map();
+      const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
+      for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+        segmentsById.set(Segment.id(segment), segment);
+      }
+      return segmentsById;
+    });
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
     this.$previewMode = signal(false);
@@ -1562,9 +1572,7 @@ export class Editor {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const glyph = this.#$glyph.value;
-    if (!glyph) return null;
-    return this.#getSegmentIndex(glyph).get(segmentId) ?? null;
+    return this.#$segmentIndex.value.get(segmentId) ?? null;
   }
 
   /**
@@ -1650,13 +1658,6 @@ export class Editor {
     return `${toolId}:${key}`;
   }
 
-  #getSegmentIndex(glyph: Glyph): ReadonlyMap<SegmentId, SegmentHitResult["segment"]> {
-    const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      segmentsById.set(Segment.id(segment), segment);
-    }
-    return segmentsById;
-  }
 
   #resolveEditorPlacementOffset(
     offset: Point2D,
