@@ -4,6 +4,19 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 7 * * 1"
+  pull_request:
+    paths:
+      - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
+      - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
+      - "apps/desktop/src/renderer/src/lib/editor/hit/**"
+      - "apps/desktop/src/renderer/src/lib/editor/managers/**"
+      - "apps/desktop/src/renderer/src/lib/tools/**"
+      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
+      - "apps/desktop/src/renderer/src/lib/commands/**"
+      - "apps/desktop/src/renderer/src/perf/**"
+      - "crates/shift-core/src/**"
+      - "crates/shift-node/src/**"
 
 permissions: {}
 
@@ -28,5 +41,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Run scheduled perf lane
+      - name: Build native modules
+        run: pnpm build:native
+
+      - name: Run perf benchmarks
         run: pnpm test:perf
