@@ -26,4 +26,16 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
+
+  projects: [
+    {
+      name: "visual",
+      testIgnore: /perf\.spec/,
+    },
+    {
+      name: "perf",
+      testMatch: /perf\.spec/,
+      timeout: 120_000,
+    },
+  ],
 });
