@@ -58,7 +58,19 @@ jobs:
         with:
           shared-key: shift-rust
 
-      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Cache node_modules
+        id: modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        if: steps.modules-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Cache native module binary
         id: native-cache
@@ -98,9 +110,29 @@ jobs:
         with:
           shared-key: shift-rust-macos
 
-      - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Cache node_modules
+        id: modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Install Playwright
+      - name: Install dependencies
+        if: steps.modules-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/@playwright/test/package.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @shift/desktop exec playwright install
 
       - name: Cache native module binary
