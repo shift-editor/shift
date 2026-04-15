@@ -1,11 +1,10 @@
 import type { Canvas } from "../Canvas";
 import type { Glyph } from "@/lib/model/Glyph";
-import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 
 /**
  * Draws tether lines connecting off-curve control points to their on-curve anchors.
- * Renders on the 2D scene layer.
+ * Uses direct index iteration (no generator) for 70K-point glyph perf.
  */
 export class ControlLines {
   draw(
@@ -24,8 +23,16 @@ export class ControlLines {
     let hasLines = false;
 
     for (const contour of glyph.contours) {
-      for (const { current, prev, next } of Contours.withNeighbors(contour)) {
+      const points = contour.points;
+      const len = points.length;
+      if (len === 0) continue;
+
+      for (let i = 0; i < len; i++) {
+        const current = points[i]!;
         if (!Validate.isOffCurve(current)) continue;
+
+        const next = i + 1 < len ? points[i + 1] : contour.closed ? points[0] : undefined;
+        const prev = i > 0 ? points[i - 1] : contour.closed ? points[len - 1] : undefined;
 
         const anchor = next && Validate.isOffCurve(next) ? prev : next;
         if (!anchor || Validate.isOffCurve(anchor)) continue;

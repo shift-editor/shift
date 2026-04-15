@@ -6,7 +6,6 @@ import type { ViewportTransform } from "./Viewport";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import { packHandleInstances } from "./gpu/classifyHandles";
 import { Vec2 } from "@shift/geo";
-import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import {
   drawHandle,
@@ -44,13 +43,17 @@ export class Handles {
     return false;
   }
 
-  /** CPU fallback: draw handles on 2D canvas. */
+  /** CPU fallback: draw handles on 2D canvas. Direct index iteration for perf. */
   drawCpu(canvas: Canvas, glyph: Glyph, states: HandleStates): void {
     for (const contour of glyph.contours) {
-      const numPoints = contour.points.length;
+      const points = contour.points;
+      const numPoints = points.length;
       if (numPoints === 0) continue;
 
-      for (const { current, prev, next, isFirst, isLast } of Contours.withNeighbors(contour)) {
+      for (let i = 0; i < numPoints; i++) {
+        const current = points[i]!;
+        const prev = i > 0 ? points[i - 1] : contour.closed ? points[numPoints - 1] : undefined;
+        const next = i + 1 < numPoints ? points[i + 1] : contour.closed ? points[0] : undefined;
         const pos = { x: current.x, y: current.y };
         const handleState = states.getHandleState(current.id);
 
@@ -59,7 +62,7 @@ export class Handles {
           continue;
         }
 
-        if (isFirst) {
+        if (i === 0) {
           const segmentAngle = Vec2.angleTo(current, next!);
           if (contour.closed) {
             drawHandleDirection(canvas, pos, segmentAngle, handleState);
@@ -69,7 +72,7 @@ export class Handles {
           continue;
         }
 
-        if (isLast && !contour.closed) {
+        if (i === numPoints - 1 && !contour.closed) {
           drawHandleLast(canvas, pos, { x: prev!.x, y: prev!.y }, handleState);
           continue;
         }
