@@ -1,4 +1,3 @@
-import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
@@ -9,6 +8,8 @@ import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
 import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
+import { SetNodePositionsCommand } from "../commands/primitives/SetNodePositionsCommand";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Segment, type SegmentHitResult } from "../geo/Segment";
 import { Bounds, Vec2 } from "@shift/geo";
 import { Contours, Glyphs } from "@shift/font";
@@ -52,17 +53,29 @@ import {
 } from "../reactive/signal";
 import { Clipboard, resolveClipboardContent } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
+import { DEFAULT_THEME } from "./rendering/Theme";
 import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
 import { pointInRect } from "../tools/select/utils";
 import { HoverManager, EdgePanManager } from "./managers";
-import { CanvasCoordinator, ViewportTransform } from "./rendering/CanvasCoordinator";
+import { Viewport, type ViewportTransform } from "./rendering/Viewport";
+import type { Canvas } from "./rendering/Canvas";
+import { Handles } from "./rendering/Handles";
+import {
+  Guides,
+  BoundingBox,
+  ControlLines,
+  Segments,
+  SnapLines,
+  DebugOverlays as DebugOverlaysIndicator,
+  Anchors,
+} from "./rendering/indicators";
+import { SCREEN_HIT_RADIUS } from "./rendering/constants";
+import { getVisibleSceneBounds } from "./rendering/visibleSceneBounds";
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
 import { Font } from "../model/Font";
-import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
   DragSnapSession,
@@ -104,8 +117,7 @@ import type { GlyphDraft } from "@/types/draft";
  *
  * Editor owns and wires together every subsystem: viewport (UPM/screen
  * transforms), selection, hover, command history, snapping, clipboard,
- * tool management, and rendering (via CanvasCoordinator). It implements
- * `CanvasCoordinatorContext` (the data the renderer reads) and is passed
+ * tool management, and rendering (via Viewport). It is passed
  * directly to tools and behaviors.
  *
  * Subsystems communicate through reactive signals. Effects watch composite
@@ -129,9 +141,18 @@ export class Editor {
   readonly selection: Selection;
   readonly font: Font;
   #hover: HoverManager;
-  #renderer: CanvasCoordinator;
+  #renderer: Viewport;
   #edgePan: EdgePanManager;
   #snapManager: SnapManager;
+
+  #guides = new Guides();
+  #boundingBox = new BoundingBox();
+  #controlLines = new ControlLines();
+  #segments = new Segments();
+  #snapLines = new SnapLines();
+  #debugOverlaysIndicator = new DebugOverlaysIndicator();
+  #anchors = new Anchors();
+  #handles = new Handles();
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -145,6 +166,7 @@ export class Editor {
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
   #$glyph: ComputedSignal<Glyph | null>;
+  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, SegmentHitResult["segment"]>>;
 
   #staticEffect: Effect;
   #overlayEffect: Effect;
@@ -182,6 +204,15 @@ export class Editor {
     this.#bridge = options.bridge;
     this.font = new Font(this.#bridge);
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
+    this.#$segmentIndex = computed(() => {
+      const glyph = this.#$glyph.value;
+      if (!glyph) return new Map();
+      const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
+      for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
+        segmentsById.set(Segment.id(segment), segment);
+      }
+      return segmentsById;
+    });
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
     this.$previewMode = signal(false);
@@ -246,7 +277,7 @@ export class Editor {
 
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
-    this.#renderer = new CanvasCoordinator(this);
+    this.#renderer = new Viewport(this);
     this.#clipboard = new Clipboard({
       glyph: this.#$glyph,
       selection: this.selection,
@@ -281,8 +312,13 @@ export class Editor {
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
 
     this.#staticEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
+      this.$activeToolState.value;
       this.selection.pointIds;
       this.selection.anchorIds;
       this.selection.segmentIds;
@@ -296,11 +332,16 @@ export class Editor {
       this.#debugOverlays.value;
       this.$gpuHandlesEnabled.value;
       this.#textRunController.state.value;
-      this.#renderer.requestStaticRedraw();
+      this.#renderer.requestSceneRedraw();
+      this.#renderer.requestBackgroundRedraw();
     });
 
     this.#overlayEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
       this.selection.segmentIds;
       this.#hover.hoveredPointId.value;
@@ -310,12 +351,13 @@ export class Editor {
       this.$previewMode.value;
       this.$handlesVisible.value;
       this.#snapIndicator.value;
+      this.$activeToolState.value;
       this.#renderer.requestOverlayRedraw();
     });
 
     this.#interactiveEffect = effect(() => {
       this.$activeToolState.value;
-      this.#renderer.requestInteractiveRedraw();
+      this.#renderer.requestOverlayRedraw();
     });
 
     this.#cursorEffect = effect(() => {
@@ -388,6 +430,17 @@ export class Editor {
     this.$activeToolState.set(state);
   }
 
+  static readonly #DRAG_STATES: ReadonlySet<string> = new Set([
+    "translating",
+    "resizing",
+    "rotating",
+    "bending",
+  ]);
+
+  #isDragging(): boolean {
+    return Editor.#DRAG_STATES.has(this.$activeToolState.peek().type);
+  }
+
   public setActiveTool(toolName: ToolName): void {
     const currentToolName = this.$activeTool.value;
     if (currentToolName === toolName) return;
@@ -400,18 +453,135 @@ export class Editor {
     return this.#toolManager;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolInScene(draw: DrawAPI): void {
-    this.#toolManager.renderInScene(draw);
+  public renderToolBackground(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.isPreviewMode();
+
+    if (glyph && this.shouldRenderGlyph() && !previewMode) {
+      const advance = this.getVisualGlyphAdvance(glyph);
+      this.#guides.draw(canvas, this.font.getMetrics(), advance);
+    }
+
+    this.#toolManager.renderBackground(canvas);
+
+    if (!previewMode && !this.#isDragging() && this.shouldRenderGlyph()) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) this.#boundingBox.drawRect(canvas, rect);
+    }
   }
 
-  public renderTool(draw: DrawAPI): void {
-    this.#toolManager.render(draw);
+  public renderToolScene(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.isPreviewMode();
+    const handlesVisible = this.isHandlesVisible();
+
+    if (glyph && this.shouldRenderGlyph()) {
+      glyph.drawOutline(canvas);
+      if (previewMode) glyph.draw(canvas);
+    }
+
+    if (!previewMode && glyph && this.shouldRenderGlyph()) {
+      const hoveredSegmentId = this.getHoveredSegmentId();
+      const hoveredSegment = hoveredSegmentId ? this.getSegmentById(hoveredSegmentId) : null;
+      const selectedSegments: GlyphSegment[] = [];
+      for (const segId of this.selection.segmentIds) {
+        const seg = this.getSegmentById(segId);
+        if (seg) selectedSegments.push(seg);
+      }
+      this.#segments.draw(canvas, hoveredSegment ?? null, selectedSegments);
+
+      const debugOverlays = this.getDebugOverlays();
+      this.#debugOverlaysIndicator.draw(
+        canvas,
+        glyph,
+        debugOverlays,
+        hoveredSegmentId,
+        this.screenToUpmDistance(SCREEN_HIT_RADIUS),
+      );
+    }
+
+    this.#toolManager.renderScene(canvas);
+
+    if (!previewMode && handlesVisible && glyph && this.shouldRenderGlyph()) {
+      const viewport = this.getViewportTransform();
+      const drawOffset = this.getDrawOffset();
+      const sceneBounds = getVisibleSceneBounds(viewport, 64);
+
+      this.#controlLines.draw(canvas, glyph, (from, to) => {
+        const minX = Math.min(from.x, to.x) + drawOffset.x;
+        const maxX = Math.max(from.x, to.x) + drawOffset.x;
+        const minY = Math.min(from.y, to.y) + drawOffset.y;
+        const maxY = Math.max(from.y, to.y) + drawOffset.y;
+        return !(
+          maxX < sceneBounds.minX ||
+          minX > sceneBounds.maxX ||
+          maxY < sceneBounds.minY ||
+          minY > sceneBounds.maxY
+        );
+      });
+
+      const renderedOnGpu = this.#handles.draw(
+        glyph,
+        { getHandleState: (id) => this.getHandleState(id) },
+        viewport,
+        drawOffset,
+        this.isGpuHandlesEnabled(),
+      );
+      if (!renderedOnGpu) {
+        this.#handles.drawCpu(canvas, glyph, {
+          getHandleState: (id) => this.getHandleState(id),
+        });
+      }
+
+      this.#anchors.draw(canvas, glyph, (id) => this.getAnchorHandleState(id));
+    } else {
+      this.#handles.clear();
+    }
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolBelowHandles(draw: DrawAPI): void {
-    this.#toolManager.renderBelowHandles(draw);
+  public renderOverlay(canvas: Canvas): void {
+    // Screen-space pass: bounding box handles (skip during drag — handles aren't interactive)
+    if (
+      !this.isPreviewMode() &&
+      !this.#isDragging() &&
+      this.isHandlesVisible() &&
+      this.shouldRenderGlyph()
+    ) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) {
+        const offset = this.getDrawOffset();
+        const topLeft = this.projectSceneToScreen({
+          x: rect.x + offset.x,
+          y: rect.y + rect.height + offset.y,
+        });
+        const bottomRight = this.projectSceneToScreen({
+          x: rect.x + rect.width + offset.x,
+          y: rect.y + offset.y,
+        });
+        const screenRect: Rect2D = {
+          x: topLeft.x,
+          y: topLeft.y,
+          width: bottomRight.x - topLeft.x,
+          height: bottomRight.y - topLeft.y,
+          left: topLeft.x,
+          top: topLeft.y,
+          right: bottomRight.x,
+          bottom: bottomRight.y,
+        };
+        canvas.ctx.save();
+        this.#boundingBox.drawHandles(canvas, screenRect);
+        canvas.ctx.restore();
+      }
+    }
+
+    // UPM-space pass: snap lines + tool overlay
+    this.#renderer.beginUpmSpace(canvas);
+    const indicator = this.getSnapIndicator();
+    if (indicator) {
+      this.#snapLines.draw(canvas, indicator);
+    }
+    this.#toolManager.renderOverlay(canvas);
+    canvas.ctx.restore();
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -446,9 +616,9 @@ export class Editor {
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const handleOffset = this.screenToUpmDistance(DEFAULT_THEME.boundingBox.handle.offset);
     const rotationZoneOffset = this.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+      DEFAULT_THEME.boundingBox.rotationZoneOffset,
     );
 
     return hitTestBoundingBox(
@@ -503,7 +673,7 @@ export class Editor {
     this.#snapIndicator.set(indicator);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getSnapIndicator(): SnapIndicator | null {
     return this.#snapIndicator.peek();
   }
@@ -514,29 +684,31 @@ export class Editor {
       throw new Error("Cannot create draft without an active glyph");
     }
 
-    const baseSnapshot = glyph.toSnapshot();
-    let dirty = false;
+    const base = glyph.toSnapshot();
+    let updates: NodePositionUpdateList = [];
     let finished = false;
 
     return {
-      base: baseSnapshot,
-      setPositions: (updates) => {
+      base,
+      setPositions: (u) => {
         if (finished) return;
-        dirty = true;
-        this.#bridge.setNodePositions(updates);
+        updates = u;
+        glyph.apply(u);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
+        if (updates.length === 0) return;
 
-        if (dirty) {
-          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, glyph.toSnapshot()));
-        }
+        this.#bridge.sync(updates);
+        this.#commandHistory.record(
+          SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, base, updates)!,
+        );
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#bridge.restoreSnapshot(baseSnapshot);
+        if (updates.length > 0) glyph.apply(base);
       },
     };
   }
@@ -549,7 +721,7 @@ export class Editor {
     return this.#toolStateVersion;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getDebugOverlays(): DebugOverlays {
     return this.#debugOverlays.value;
   }
@@ -576,7 +748,7 @@ export class Editor {
     return this.$previewMode;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isPreviewMode(): boolean {
     return this.$previewMode.peek();
   }
@@ -594,14 +766,14 @@ export class Editor {
     const points = this.getAllPoints();
     const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
     this.#marqueePreviewPointIds.set(new Set(ids));
-    this.requestStaticRedraw();
+    this.requestSceneRedraw();
   }
 
   public get handlesVisible(): Signal<boolean> {
     return this.$handlesVisible;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isHandlesVisible(): boolean {
     return this.$handlesVisible.peek();
   }
@@ -614,7 +786,7 @@ export class Editor {
     return this.$gpuHandlesEnabled;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public isGpuHandlesEnabled(): boolean {
     return this.$gpuHandlesEnabled.peek();
   }
@@ -623,20 +795,25 @@ export class Editor {
     this.$gpuHandlesEnabled.set(enabled);
   }
 
-  public setStaticContext(context: IGraphicContext) {
-    this.#renderer.setStaticContext(context);
+  public setBackgroundContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setBackgroundContext(ctx);
   }
 
-  public setOverlayContext(context: IGraphicContext) {
-    this.#renderer.setOverlayContext(context);
+  public setSceneContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setSceneContext(ctx);
   }
 
-  public setInteractiveContext(context: IGraphicContext) {
-    this.#renderer.setInteractiveContext(context);
+  public setOverlayContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setOverlayContext(ctx);
   }
 
   public setGpuHandleContext(context: ReglHandleContext) {
     this.#renderer.setGpuHandleContext(context);
+    this.#handles.setGpu(context);
+  }
+
+  public get gpuHandleContext(): ReglHandleContext | null {
+    return this.#renderer.gpuHandleContext;
   }
 
   /** Opens a glyph for editing by name. */
@@ -663,7 +840,7 @@ export class Editor {
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public shouldRenderGlyph(): boolean {
     const state = this.#textRunController.state.peek();
     return !state || state.editingIndex !== null;
@@ -811,7 +988,7 @@ export class Editor {
     return this.glyph.value?.xAdvance ?? 0;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getVisualGlyphAdvance(glyph: Glyph): number {
     if (glyph.xAdvance > 0) return glyph.xAdvance;
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
@@ -912,12 +1089,12 @@ export class Editor {
     return this.#viewport.hitRadius;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public screenToUpmDistance(pixels: number): number {
     return this.#viewport.screenToUpmDistance(pixels);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getViewportTransform(): ViewportTransform {
     return {
       zoom: this.#viewport.zoomLevel,
@@ -931,7 +1108,7 @@ export class Editor {
     };
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public projectSceneToScreen(scene: Point2D): Point2D {
     return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
@@ -974,14 +1151,14 @@ export class Editor {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getHandleState(pointId: PointId): HandleState {
     const isSelected = (id: PointId) =>
       this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
     return this.#hover.getPointVisualState(pointId, isSelected);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getAnchorHandleState(anchorId: AnchorId): HandleState {
     if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
       return "selected";
@@ -1424,9 +1601,7 @@ export class Editor {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const glyph = this.#$glyph.value;
-    if (!glyph) return null;
-    return this.#getSegmentIndex(glyph).get(segmentId) ?? null;
+    return this.#$segmentIndex.value.get(segmentId) ?? null;
   }
 
   /**
@@ -1460,7 +1635,7 @@ export class Editor {
     return null;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getDrawOffset(): Point2D {
     return this.#drawOffset.value;
   }
@@ -1473,7 +1648,7 @@ export class Editor {
     this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyphName, unicode));
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public setDrawOffset(offset: Point2D): void {
     this.#drawOffset.set(offset);
   }
@@ -1482,8 +1657,12 @@ export class Editor {
     this.#renderer.requestRedraw();
   }
 
-  public requestStaticRedraw() {
-    this.#renderer.requestStaticRedraw();
+  public requestSceneRedraw() {
+    this.#renderer.requestSceneRedraw();
+  }
+
+  public requestOverlayRedraw() {
+    this.#renderer.requestOverlayRedraw();
   }
 
   public requestImmediateRedraw() {
@@ -1506,14 +1685,6 @@ export class Editor {
 
   #toolStateKey(toolId: string, key: string): string {
     return `${toolId}:${key}`;
-  }
-
-  #getSegmentIndex(glyph: Glyph): ReadonlyMap<SegmentId, SegmentHitResult["segment"]> {
-    const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      segmentsById.set(Segment.id(segment), segment);
-    }
-    return segmentsById;
   }
 
   #resolveEditorPlacementOffset(

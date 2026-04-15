@@ -1,5 +1,3 @@
-import type { ResolvedDrawStyle } from "@/lib/styles/style";
-
 /**
  * Discriminated union of drawing instructions that describe a path.
  * Used for serializing and replaying vector outlines independently of the canvas API.
@@ -22,89 +20,7 @@ export type PathCommand =
 /** RGBA colour as a four-element tuple (0-255 per channel). */
 export type Colour = [number, number, number, number];
 
-/** Minimal path-building interface for constructing line/move segments. */
-export interface IPath {
-  moveTo(x: number, y: number): void;
-  lineTo(x: number, y: number): void;
-  closePath(): void;
-}
-
-/**
- * Low-level rendering abstraction over an HTML canvas context.
- *
- * All coordinates are in whichever space the caller has established via
- * `save()`/`transform()`. Render passes typically operate in UPM space;
- * bounding-box handles render in screen space.
- *
- * Path-building sequence: `beginPath()` -> `moveTo()` -> curve commands
- * (`lineTo`, `quadTo`, `cubicTo`) -> optionally `closePath()` -> `stroke()` or `fill()`.
- */
-export interface IRenderer {
-  save(): void;
-  restore(): void;
-  clear(): void;
-
-  lineWidth: number;
-  strokeStyle: string;
-  fillStyle: string;
-  antiAlias: boolean;
-  dashPattern: number[];
-
-  setStyle(style: ResolvedDrawStyle): void;
-
-  drawLine(x0: number, y0: number, x1: number, y1: number): void;
-  fillRect(x: number, y: number, width: number, height: number): void;
-  strokeRect(x: number, y: number, width: number, height: number): void;
-  fillCircle(x: number, y: number, radius: number): void;
-  strokeCircle(x: number, y: number, radius: number): void;
-  createPath(): IPath;
-  beginPath(): void;
-  moveTo(x: number, y: number): void;
-
-  lineTo(x: number, y: number): void;
-  quadTo(cpx: number, cpy: number, x: number, y: number): void;
-  drawLine(x0: number, y0: number, x1: number, y1: number): void;
-  cubicTo(cpx1: number, cpy1: number, cpx2: number, cpy2: number, x: number, y: number): void;
-  arcTo(
-    x: number,
-    y: number,
-    radius: number,
-    startAngle: number,
-    endAngle: number,
-    isCounterClockwise?: boolean,
-  ): void;
-
-  closePath(): void;
-
-  stroke(): void;
-  fill(): void;
-  fillPath(path: Path2D): void;
-  strokePath(path: Path2D): void;
-
-  scale(x: number, y: number): void;
-  translate(x: number, y: number): void;
-  rotate(angle: number): void;
-
-  /** Applies a 2D affine transform matrix `[a b c d e f]` to the current state. */
-  transform(a: number, b: number, c: number, d: number, e: number, f: number): void;
-}
-
-/**
- * Owns a canvas element and its associated {@link IRenderer}.
- * Handles resizing and teardown for a single canvas layer.
- */
-export interface IGraphicContext {
-  resizeCanvas(canvas: HTMLCanvasElement, rect: DOMRectReadOnly): void;
-
-  getContext(): IRenderer;
-
-  isReady(): boolean;
-
-  destroy(): void;
-}
-
 export type CanvasRef = React.RefObject<HTMLCanvasElement | null>;
-export type GraphicsContextRef = React.RefObject<IGraphicContext | null>;
 
 /** Converts screen-pixel measurements into UPM-space distances. */
 export interface ScreenConverter {

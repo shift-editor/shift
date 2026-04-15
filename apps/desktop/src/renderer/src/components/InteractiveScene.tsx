@@ -4,14 +4,14 @@ import { CanvasContext } from "@/context/CanvasContext";
 import { getEditor } from "@/store/store";
 
 export const InteractiveScene = () => {
-  const { interactiveCanvasRef } = useContext(CanvasContext);
+  const { overlayCanvasRef } = useContext(CanvasContext);
   const editor = getEditor();
   const toolManager = editor.toolManager;
 
   const getScreenPoint = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       editor.updateMousePosition(e.clientX, e.clientY);
-      const bounds = interactiveCanvasRef.current?.getBoundingClientRect();
+      const bounds = overlayCanvasRef.current?.getBoundingClientRect();
       if (bounds) {
         return {
           x: e.clientX - bounds.left,
@@ -31,7 +31,7 @@ export const InteractiveScene = () => {
   });
 
   const getCanvasBounds = useCallback(() => {
-    const canvas = interactiveCanvasRef.current;
+    const canvas = overlayCanvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     return {
@@ -44,7 +44,7 @@ export const InteractiveScene = () => {
       right: rect.right,
       bottom: rect.bottom,
     };
-  }, [interactiveCanvasRef]);
+  }, [overlayCanvasRef]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -70,7 +70,7 @@ export const InteractiveScene = () => {
   return (
     <canvas
       id="interactive-canvas"
-      ref={interactiveCanvasRef}
+      ref={overlayCanvasRef}
       className="absolute inset-0 h-full w-full"
       onMouseDown={(e) => {
         toolManager.handlePointerDown(getScreenPoint(e), getModifiers(e));

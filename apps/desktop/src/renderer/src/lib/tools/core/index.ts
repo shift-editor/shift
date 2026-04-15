@@ -7,7 +7,6 @@ export {
   type Modifiers,
 } from "./GestureDetector";
 export { BaseTool, type ToolState } from "./BaseTool";
-export { DrawAPI, type StrokeStyle, type ShapeStyle, type LastHandlePosition } from "./DrawAPI";
 export { ToolManager } from "./ToolManager";
 export { type ToolName, type BuiltInToolId, BUILT_IN_TOOL_IDS } from "./createContext";
 export type { ToolFactory, ToolManifest } from "./ToolManifest";

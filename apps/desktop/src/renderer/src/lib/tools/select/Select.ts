@@ -1,4 +1,4 @@
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import {
@@ -16,9 +16,9 @@ import {
 } from "./behaviors";
 import { TextRunHover } from "./behaviors/TextRunHover";
 import { normalizeRect } from "./utils";
-import { SELECTION_RECTANGLE_STYLES } from "@/lib/styles/style";
 import type { CursorType } from "@/types/editor";
 import { TextRunEdit } from "./behaviors/TextRunEdit";
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -111,17 +111,17 @@ export class Select extends BaseTool<SelectState> {
     return null;
   }
 
-  override render(draw: DrawAPI): void {
+  override renderOverlay(canvas: Canvas): void {
     if (this.state.type !== "selecting") return;
     const rect = normalizeRect(this.state.selection.startPos, this.state.selection.currentPos);
-    draw.rect(
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      {
-        fillStyle: SELECTION_RECTANGLE_STYLES.fillStyle,
-        strokeStyle: SELECTION_RECTANGLE_STYLES.strokeStyle,
-        strokeWidth: SELECTION_RECTANGLE_STYLES.lineWidth,
-      },
+    canvas.fillRect(rect.x, rect.y, rect.width, rect.height, canvas.theme.selection.fill);
+    canvas.strokeRect(
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      canvas.theme.selection.stroke,
+      canvas.theme.selection.widthPx,
     );
   }
 }

@@ -42,7 +42,8 @@ export class CloseContourCommand extends BaseCommand<void> {
 
 /**
  * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
- * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
+ * Uses setNodePositions (Float64Array path) instead of movePoints to avoid
+ * per-struct NAPI marshaling + full snapshot round-trip.
  */
 export class NudgePointsCommand extends BaseCommand<void> {
   readonly name = "Nudge Points";
@@ -59,13 +60,20 @@ export class NudgePointsCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-    ctx.glyph.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    this.#apply(ctx, this.#dx, this.#dy);
   }
 
   undo(ctx: CommandContext): void {
+    this.#apply(ctx, -this.#dx, -this.#dy);
+  }
+
+  #apply(ctx: CommandContext, dx: number, dy: number): void {
     if (this.#pointIds.length === 0) return;
-    ctx.glyph.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+
+    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
+    ctx.glyph.setNodePositions(
+      points.map((p) => ({ node: { kind: "point", id: p.id }, x: p.x + dx, y: p.y + dy })),
+    );
   }
 }
 

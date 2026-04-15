@@ -26,6 +26,7 @@ export class ReglHandleContext {
     this.#regl.poll();
   }
 
+  /** @knipclassignore */
   isAvailable(): boolean {
     return this.#available;
   }
@@ -35,6 +36,7 @@ export class ReglHandleContext {
     this.#regl.clear({ color: [0, 0, 0, 0], depth: 1 });
   }
 
+  /** @knipclassignore */
   draw(frame: GpuHandleFrame): boolean {
     if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;

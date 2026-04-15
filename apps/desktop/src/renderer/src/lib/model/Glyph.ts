@@ -43,6 +43,7 @@ import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { NativeBridge } from "@/bridge";
 import type { PointEdit, PasteResult } from "@/types/engine";
 import type { ContourContent } from "@/lib/clipboard";
@@ -204,6 +205,16 @@ export class Glyph {
   /** @knipclassignore */
   get bbox(): BoundsType | null {
     return this.#bbox.value;
+  }
+
+  /** @knipclassignore Fill the glyph's complete path using the theme's glyph fill color. */
+  draw(canvas: Canvas): void {
+    canvas.fillPath(this.path, canvas.theme.glyph.fill);
+  }
+
+  /** @knipclassignore Stroke the glyph's complete path using the theme's glyph stroke style. */
+  drawOutline(canvas: Canvas): void {
+    canvas.strokePath(this.path, canvas.theme.glyph.stroke, canvas.theme.glyph.widthPx);
   }
 
   /** @knipclassignore */
@@ -398,7 +409,8 @@ export class Glyph {
 
     batch(() => {
       if (pointMoves.size > 0) {
-        for (const contour of this.#contours.peek()) {
+        const contours = this.#contours.peek();
+        for (const contour of contours) {
           const pts = contour.points;
           if (!pts.some((p) => pointMoves.has(p.id))) continue;
 
@@ -409,6 +421,7 @@ export class Glyph {
             }),
           );
         }
+        this.#contours.set([...contours]);
       }
 
       if (anchorMoves.size > 0) {

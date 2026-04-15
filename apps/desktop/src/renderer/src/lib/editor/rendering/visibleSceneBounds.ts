@@ -1,4 +1,4 @@
-import type { ViewportTransform } from "./CanvasCoordinator";
+import type { ViewportTransform } from "./Viewport";
 
 export type VisibleSceneBounds = {
   minX: number;
