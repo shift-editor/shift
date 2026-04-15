@@ -76,7 +76,7 @@ export const DEFAULT_THEME: Theme = {
     handle: { radius: 4, offset: 15, stroke: "#000000", widthPx: 1 },
     rotationZoneOffset: 20,
   },
-  glyph: { fill: "#ffffff", stroke: "#171717", widthPx: 0.75 },
+  glyph: { fill: "#000000", stroke: "#00000000", widthPx: 0.75 },
   handle: {
     corner: {
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
