@@ -18,9 +18,11 @@
         "vitest.config.ts",
         "vite.main.config.ts",
         "vite.preload.config.ts",
-        "vite.renderer.config.ts"
+        "vite.renderer.config.ts",
+        "playwright.config.ts",
+        "e2e/**/*.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "*.config.ts", "!src/**/*.d.ts"]
+      "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"]
     },
     "packages/font": {
       "project": ["src/**/*.ts"]

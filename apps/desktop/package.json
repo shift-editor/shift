@@ -14,7 +14,9 @@
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:e2e": "tsx e2e/build.ts",
+    "test:e2e": "pnpm build:e2e && pnpm exec playwright test"
   },
   "author": {
     "name": "Kostya Farber",
@@ -32,6 +34,7 @@
     "@electron-forge/plugin-vite": "^7.8.1",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@electron/fuses": "^1.8.0",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.1.11",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/node": "^25.3.0",

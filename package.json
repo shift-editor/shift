@@ -19,7 +19,7 @@
     "test:lint": "pnpm --filter @shift/desktop run lint:check",
     "test:typecheck": "pnpm typecheck",
     "test:perf": "echo 'Performance lane is scheduled-only and will be expanded with benchmarks.'",
-    "test:playwright": "echo 'Playwright lane is intentionally deferred in this phase. Add specs under apps/desktop/e2e when ready.'",
+    "test:playwright": "pnpm --filter @shift/desktop test:e2e",
     "test:ci": "pnpm test:lint && pnpm format:check && pnpm test:typecheck && pnpm test:unit && pnpm test:native && cargo test --workspace && pnpm deadcode:strict",
     "test:native": "pnpm --filter shift-node run test",
     "typecheck": "pnpm run generate:types && turbo run typecheck",
