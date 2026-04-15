@@ -44,11 +44,10 @@ export declare class FontEngine {
   pasteContours(contoursJson: string, offsetX: number, offsetY: number): string
   setNodePositions(moves: Array<JsNodePositionUpdate>): boolean
   /**
-   * Bulk position update via zero-copy Float64Arrays.
-   * IDs are PointId/AnchorId u64 values packed as f64.
+   * Bulk position update. IDs are PointId/AnchorId u64 values as f64.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  setPositions(pointIds: Float64Array, pointCoords: Float64Array, anchorIds: Float64Array, anchorCoords: Float64Array): boolean
+  setPositions(pointIds: Array<number>, pointCoords: Array<number>, anchorIds: Array<number>, anchorCoords: Array<number>): boolean
   restoreSnapshot(snapshotJson: string): boolean
 }
 

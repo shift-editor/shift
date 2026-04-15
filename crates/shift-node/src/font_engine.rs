@@ -891,54 +891,40 @@ impl FontEngine {
     Ok(session.set_node_positions(&updates))
   }
 
-  /// Bulk position update via zero-copy Float64Arrays.
-  /// IDs are PointId/AnchorId u64 values packed as f64.
+  /// Bulk position update. IDs are PointId/AnchorId u64 values as f64.
   /// Coords are interleaved [x0, y0, x1, y1, ...].
   #[napi]
   pub fn set_positions(
     &mut self,
-    point_ids: Float64Array,
-    point_coords: Float64Array,
-    anchor_ids: Float64Array,
-    anchor_coords: Float64Array,
+    point_ids: Vec<f64>,
+    point_coords: Vec<f64>,
+    anchor_ids: Vec<f64>,
+    anchor_coords: Vec<f64>,
   ) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
 
-    let point_count = point_ids.len();
-    let anchor_count = anchor_ids.len();
-
-    if point_count == 0 && anchor_count == 0 {
+    if point_ids.is_empty() && anchor_ids.is_empty() {
       return Ok(true);
     }
 
-    let mut updates = Vec::with_capacity(point_count + anchor_count);
+    let mut updates = Vec::with_capacity(point_ids.len() + anchor_ids.len());
 
-    if point_count > 0 {
-      let pid_slice: &[f64] = &point_ids;
-      let pcoord_slice: &[f64] = &point_coords;
-
-      for (i, &id) in pid_slice.iter().enumerate() {
-        updates.push(NodePositionUpdate {
-          node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
-          x: pcoord_slice[i * 2],
-          y: pcoord_slice[i * 2 + 1],
-        });
-      }
+    for (i, &id) in point_ids.iter().enumerate() {
+      updates.push(NodePositionUpdate {
+        node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
+        x: point_coords[i * 2],
+        y: point_coords[i * 2 + 1],
+      });
     }
 
-    if anchor_count > 0 {
-      let aid_slice: &[f64] = &anchor_ids;
-      let acoord_slice: &[f64] = &anchor_coords;
-
-      for (i, &id) in aid_slice.iter().enumerate() {
-        updates.push(NodePositionUpdate {
-          node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
-          x: acoord_slice[i * 2],
-          y: acoord_slice[i * 2 + 1],
-        });
-      }
+    for (i, &id) in anchor_ids.iter().enumerate() {
+      updates.push(NodePositionUpdate {
+        node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
+        x: anchor_coords[i * 2],
+        y: anchor_coords[i * 2 + 1],
+      });
     }
 
     Ok(session.set_node_positions(&updates))
