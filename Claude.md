@@ -194,6 +194,18 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 - **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
 - **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on NativeBridge?
 
+## GlyphDraft — Immer-style two-tier mutations
+
+`editor.createDraft()` returns a `GlyphDraft` for drag operations (translate, rotate, resize, bend). The draft separates JS preview (every frame) from Rust persistence (once at end):
+
+- **`setPositions(updates)`** — calls `glyph.apply()` directly. JS-only, no NAPI, no Rust. Fires internal Glyph signals which trigger render effects.
+- **`finish(label)`** — syncs final state to Rust via `restoreSnapshot` once, records undo.
+- **`discard()`** — restores JS model from base snapshot. Rust was never modified.
+
+**NEVER call `bridge.setNodePositions()` inside the draft hot path.** That sends N individual NAPI struct marshals to Rust per frame. For glyphs with thousands of points this causes ~450ms frames + GC pressure. The draft exists specifically to avoid this.
+
+**Render effects track `glyph.contours` and `glyph.anchors`**, not `$glyph`. The `$glyph` signal on NativeBridge is for glyph identity (loaded/unloaded). Glyph data changes propagate through the Glyph model's internal signals. `#patchPositions` fires `#contours` with a new array reference so glyph-level effects see the change.
+
 ## Architecture References
 
 - **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments

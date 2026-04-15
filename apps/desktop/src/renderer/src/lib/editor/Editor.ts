@@ -318,6 +318,7 @@ export class Editor {
         glyph.anchors;
       }
       this.#drawOffset.value;
+      this.$activeToolState.value;
       this.selection.pointIds;
       this.selection.anchorIds;
       this.selection.segmentIds;
@@ -429,6 +430,17 @@ export class Editor {
     this.$activeToolState.set(state);
   }
 
+  static readonly #DRAG_STATES: ReadonlySet<string> = new Set([
+    "translating",
+    "resizing",
+    "rotating",
+    "bending",
+  ]);
+
+  #isDragging(): boolean {
+    return Editor.#DRAG_STATES.has(this.$activeToolState.peek().type);
+  }
+
   public setActiveTool(toolName: ToolName): void {
     const currentToolName = this.$activeTool.value;
     if (currentToolName === toolName) return;
@@ -452,7 +464,7 @@ export class Editor {
 
     this.#toolManager.renderBackground(canvas);
 
-    if (!previewMode && this.shouldRenderGlyph()) {
+    if (!previewMode && !this.#isDragging() && this.shouldRenderGlyph()) {
       const rect = this.getSelectionBoundingRect();
       if (rect) this.#boundingBox.drawRect(canvas, rect);
     }
@@ -528,8 +540,13 @@ export class Editor {
   }
 
   public renderOverlay(canvas: Canvas): void {
-    // Screen-space pass: bounding box handles
-    if (!this.isPreviewMode() && this.isHandlesVisible() && this.shouldRenderGlyph()) {
+    // Screen-space pass: bounding box handles (skip during drag — handles aren't interactive)
+    if (
+      !this.isPreviewMode() &&
+      !this.#isDragging() &&
+      this.isHandlesVisible() &&
+      this.shouldRenderGlyph()
+    ) {
       const rect = this.getSelectionBoundingRect();
       if (rect) {
         const offset = this.getDrawOffset();
