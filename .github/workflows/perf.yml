@@ -6,12 +6,30 @@ on:
     paths:
       - "crates/**"
       - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
+      - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
+      - "apps/desktop/src/renderer/src/lib/editor/hit/**"
+      - "apps/desktop/src/renderer/src/lib/editor/managers/**"
+      - "apps/desktop/src/renderer/src/lib/tools/**"
+      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
       - "apps/desktop/src/renderer/src/bridge/**"
-      - "apps/desktop/src/renderer/src/lib/model/**"
       - "apps/desktop/src/renderer/src/lib/commands/**"
+      - "apps/desktop/src/renderer/src/perf/**"
       - "apps/desktop/e2e/**"
       - ".github/workflows/perf.yml"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
+      - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
+      - "apps/desktop/src/renderer/src/lib/editor/hit/**"
+      - "apps/desktop/src/renderer/src/lib/editor/managers/**"
+      - "apps/desktop/src/renderer/src/lib/tools/**"
+      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
+      - "apps/desktop/src/renderer/src/lib/commands/**"
+      - "apps/desktop/src/renderer/src/perf/**"
+      - "crates/shift-core/src/**"
+      - "crates/shift-node/src/**"
 
 permissions: {}
 
