@@ -906,31 +906,39 @@ impl FontEngine {
       return Ok(false);
     };
 
-    let pid_slice: &[f64] = &point_ids;
-    let pcoord_slice: &[f64] = &point_coords;
-    let aid_slice: &[f64] = &anchor_ids;
-    let acoord_slice: &[f64] = &anchor_coords;
+    let point_count = point_ids.len();
+    let anchor_count = anchor_ids.len();
 
-    let mut updates = Vec::with_capacity(pid_slice.len() + aid_slice.len());
-
-    for (i, &id) in pid_slice.iter().enumerate() {
-      updates.push(NodePositionUpdate {
-        node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
-        x: pcoord_slice[i * 2],
-        y: pcoord_slice[i * 2 + 1],
-      });
-    }
-
-    for (i, &id) in aid_slice.iter().enumerate() {
-      updates.push(NodePositionUpdate {
-        node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
-        x: acoord_slice[i * 2],
-        y: acoord_slice[i * 2 + 1],
-      });
-    }
-
-    if updates.is_empty() {
+    if point_count == 0 && anchor_count == 0 {
       return Ok(true);
+    }
+
+    let mut updates = Vec::with_capacity(point_count + anchor_count);
+
+    if point_count > 0 {
+      let pid_slice: &[f64] = &point_ids;
+      let pcoord_slice: &[f64] = &point_coords;
+
+      for (i, &id) in pid_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
+          x: pcoord_slice[i * 2],
+          y: pcoord_slice[i * 2 + 1],
+        });
+      }
+    }
+
+    if anchor_count > 0 {
+      let aid_slice: &[f64] = &anchor_ids;
+      let acoord_slice: &[f64] = &anchor_coords;
+
+      for (i, &id) in aid_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
+          x: acoord_slice[i * 2],
+          y: acoord_slice[i * 2 + 1],
+        });
+      }
     }
 
     Ok(session.set_node_positions(&updates))
