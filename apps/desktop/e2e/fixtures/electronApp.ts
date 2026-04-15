@@ -4,10 +4,8 @@ import {
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import * as path from "path";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
 const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");

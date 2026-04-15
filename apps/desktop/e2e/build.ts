@@ -8,10 +8,8 @@
  */
 
 import { build } from "vite";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import * as path from "path";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 
 async function buildMain() {
