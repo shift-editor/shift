@@ -1,3 +1,8 @@
+---
+name: dead-code
+description: Find and remove dead code (unused files, exports, class members) using Knip as a candidate generator, then verify each candidate through AST-level analysis and interface tracing before removing anything. Use when the user asks to clean up unused code, find dead code, or reduce the codebase.
+---
+
 # /dead-code — Find and Remove Dead Code
 
 Use this skill to find unused files, exports, and class members in the codebase. It uses Knip as a candidate generator, then verifies each candidate through AST-level analysis and interface tracing before removing anything.
