@@ -65,5 +65,11 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
 const AppState = create<AppState>()(createStore);
 
 export const getEditor = () => AppState.getState().editor;
+
+// Expose editor on window for Playwright E2E tests.
+declare const __PLAYWRIGHT__: boolean | undefined;
+if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
+  (window as unknown as Record<string, unknown>).__shift = { getEditor };
+}
 export const setFilePath = (path: string | null) => AppState.getState().setFilePath(path);
 export const clearDirty = () => AppState.getState().clearDirty();

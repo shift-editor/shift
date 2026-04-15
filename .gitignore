@@ -90,6 +90,7 @@ typings/
 
 # Playwright
 apps/desktop/e2e/test-results/
+apps/desktop/e2e/perf-results/
 
 # Electron-Forge
 out/

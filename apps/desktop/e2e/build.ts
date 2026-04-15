@@ -9,8 +9,15 @@
 
 import { build } from "vite";
 import * as path from "path";
+import { builtinModules } from "module";
 
 const appRoot = path.resolve(__dirname, "..");
+
+/**
+ * Node builtins + electron must be external for main/preload —
+ * they run in Node, not the browser.
+ */
+const nodeExternals = ["electron", ...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 async function buildMain() {
   await build({
@@ -24,6 +31,9 @@ async function buildMain() {
       outDir: path.join(appRoot, ".vite/build"),
       emptyOutDir: true,
       minify: false,
+      rollupOptions: {
+        external: nodeExternals,
+      },
     },
     define: {
       // Empty string is falsy — the app falls through to loadFile()
@@ -44,6 +54,9 @@ async function buildPreload() {
       outDir: path.join(appRoot, ".vite/build"),
       emptyOutDir: false,
       minify: false,
+      rollupOptions: {
+        external: nodeExternals,
+      },
     },
   });
 }
@@ -51,10 +64,16 @@ async function buildPreload() {
 async function buildRenderer() {
   await build({
     configFile: path.join(appRoot, "vite.renderer.config.ts"),
+    // Relative base so loadFile() can resolve assets without a server.
+    base: "./",
     build: {
       outDir: path.join(appRoot, ".vite/renderer"),
       emptyOutDir: true,
       minify: false,
+    },
+    define: {
+      // Expose editor on window for Playwright perf/interaction tests.
+      __PLAYWRIGHT__: JSON.stringify(true),
     },
   });
 }

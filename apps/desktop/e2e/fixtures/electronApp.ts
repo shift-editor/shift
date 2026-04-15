@@ -52,12 +52,24 @@ export const test = base.extend<ShiftFixtures>({
     );
 
     await use(app);
+
+    // Clear dirty state to prevent native save dialog from blocking app.close().
+    // The before-quit handler shows a native dialog when dirty — can't be dismissed by Playwright.
+    const page = await app.firstWindow();
+    await page.evaluate(() => {
+      window.electronAPI?.setDocumentDirty(false);
+    });
+
     await app.close();
   },
 
   page: async ({ electronApp }, use) => {
     const page = await electronApp.firstWindow();
     await page.waitForLoadState("domcontentloaded");
+
+    // Auto-dismiss native save dialogs that interrupt tests.
+    page.on("dialog", (dialog) => dialog.dismiss());
+
     await use(page);
   },
 });
