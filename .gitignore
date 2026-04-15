@@ -88,6 +88,9 @@ typings/
 # Vite
 .vite/
 
+# Playwright
+apps/desktop/e2e/test-results/
+
 # Electron-Forge
 out/
 
