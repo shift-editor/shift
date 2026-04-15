@@ -124,7 +124,13 @@ test.describe("Performance — 50K points", () => {
       ).toBeLessThanOrEqual(ceiling);
     }
 
-    // 2. Baseline comparison.
+    // 2. Baseline comparison — only when explicitly enabled.
+    // Baselines are hardware-specific: a local M-series baseline doesn't apply
+    // to CI runners. Set PERF_BASELINE_CHECK=1 when comparing against a
+    // baseline recorded on the same hardware (e.g. CI comparing against its
+    // own prior run).
+    if (process.env.PERF_BASELINE_CHECK !== "1") return;
+
     const baseline = loadBaseline();
     if (!baseline || !baseline[stats.label]) return;
 
