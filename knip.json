@@ -3,7 +3,12 @@
   "include": ["files", "exports"],
   "entry": [],
   "project": [],
-  "ignore": ["apps/desktop/src/renderer/src/testing/setup.ts"],
+  "ignore": [
+    "apps/desktop/src/renderer/src/testing/setup.ts",
+    "apps/desktop/src/renderer/src/perf/**",
+    "apps/desktop/src/renderer/src/testing/pointMark.ts",
+    "apps/desktop/src/renderer/src/testing/stubCanvas.ts"
+  ],
   "includeEntryExports": true,
   "ignoreWorkspaces": ["crates/shift-node"],
   "ignoreExportsUsedInFile": true,
