@@ -104,7 +104,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Install Playwright
-        run: npx playwright install
+        run: pnpm --filter @shift/desktop exec playwright install
 
       - name: Cache native module binary
         id: native-cache
