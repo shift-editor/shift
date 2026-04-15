@@ -891,40 +891,57 @@ impl FontEngine {
     Ok(session.set_node_positions(&updates))
   }
 
-  /// Bulk position update. IDs are PointId/AnchorId u64 values as f64.
+  /// Bulk position update via Float64Array.
+  /// IDs are PointId/AnchorId u64 values packed as f64.
   /// Coords are interleaved [x0, y0, x1, y1, ...].
+  /// Bulk position update via zero-copy Float64Array.
+  /// IDs are PointId/AnchorId u64 values packed as f64.
+  /// Coords are interleaved [x0, y0, x1, y1, ...].
+  /// Pass null for empty arrays (napi-rs panics on zero-length Float64Array).
   #[napi]
   pub fn set_positions(
     &mut self,
-    point_ids: Vec<f64>,
-    point_coords: Vec<f64>,
-    anchor_ids: Vec<f64>,
-    anchor_coords: Vec<f64>,
+    point_ids: Option<Float64Array>,
+    point_coords: Option<Float64Array>,
+    anchor_ids: Option<Float64Array>,
+    anchor_coords: Option<Float64Array>,
   ) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
       return Ok(false);
     };
 
-    if point_ids.is_empty() && anchor_ids.is_empty() {
+    let mut updates = Vec::new();
+
+    if let (Some(pids), Some(pcoords)) = (&point_ids, &point_coords) {
+      let id_slice: &[f64] = pids;
+      let coord_slice: &[f64] = pcoords;
+
+      updates.reserve(id_slice.len());
+      for (i, &id) in id_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
+          x: coord_slice[i * 2],
+          y: coord_slice[i * 2 + 1],
+        });
+      }
+    }
+
+    if let (Some(aids), Some(acoords)) = (&anchor_ids, &anchor_coords) {
+      let id_slice: &[f64] = aids;
+      let coord_slice: &[f64] = acoords;
+
+      updates.reserve(id_slice.len());
+      for (i, &id) in id_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
+          x: coord_slice[i * 2],
+          y: coord_slice[i * 2 + 1],
+        });
+      }
+    }
+
+    if updates.is_empty() {
       return Ok(true);
-    }
-
-    let mut updates = Vec::with_capacity(point_ids.len() + anchor_ids.len());
-
-    for (i, &id) in point_ids.iter().enumerate() {
-      updates.push(NodePositionUpdate {
-        node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
-        x: point_coords[i * 2],
-        y: point_coords[i * 2 + 1],
-      });
-    }
-
-    for (i, &id) in anchor_ids.iter().enumerate() {
-      updates.push(NodePositionUpdate {
-        node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
-        x: anchor_coords[i * 2],
-        y: anchor_coords[i * 2 + 1],
-      });
     }
 
     Ok(session.set_node_positions(&updates))

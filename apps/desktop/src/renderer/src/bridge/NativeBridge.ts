@@ -419,6 +419,11 @@ export class NativeBridge {
       }
     }
 
-    this.#raw.setPositions(pointIds, pointCoords, anchorIds, anchorCoords);
+    this.#raw.setPositions(
+      pointIds.length > 0 ? new Float64Array(pointIds) : null,
+      pointCoords.length > 0 ? new Float64Array(pointCoords) : null,
+      anchorIds.length > 0 ? new Float64Array(anchorIds) : null,
+      anchorCoords.length > 0 ? new Float64Array(anchorCoords) : null,
+    );
   }
 }
