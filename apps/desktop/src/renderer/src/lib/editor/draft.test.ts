@@ -1,21 +1,18 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { createBridge } from "@/testing";
-import type { NativeBridge } from "@/bridge";
+import { TestEditor } from "@/testing/TestEditor";
+import { Glyphs } from "@shift/font";
 import type { PointId } from "@shift/types";
-import { Editor } from "./Editor";
 
-let bridge: NativeBridge;
-let editor: Editor;
+let editor: TestEditor;
 
 beforeEach(() => {
-  bridge = createBridge();
-  editor = new Editor({ bridge });
-  bridge.startEditSession("A");
-  bridge.addContour();
+  editor = new TestEditor();
+  editor.startSession();
+  editor.bridge.addContour();
 });
 
 function addPoint(x: number, y: number): PointId {
-  return bridge.addPoint({ x, y, pointType: "onCurve", smooth: false });
+  return editor.bridge.addPoint({ x, y, pointType: "onCurve", smooth: false });
 }
 
 describe("GlyphDraft", () => {
@@ -32,15 +29,8 @@ describe("GlyphDraft", () => {
 
     draft.finish("Move Points");
 
-    const snapshot = bridge.getSnapshot();
-    const points = snapshot.contours.flatMap((c) => c.points);
-    const movedP1 = points.find((p) => p.id === p1)!;
-    const movedP2 = points.find((p) => p.id === p2)!;
-
-    expect(movedP1.x).toBe(150);
-    expect(movedP1.y).toBe(250);
-    expect(movedP2.x).toBe(350);
-    expect(movedP2.y).toBe(450);
+    expect(editor.getPointPosition(p1)).toEqual({ x: 150, y: 250 });
+    expect(editor.getPointPosition(p2)).toEqual({ x: 350, y: 450 });
   });
 
   it("restores positions on undo after finish", () => {
@@ -52,10 +42,7 @@ describe("GlyphDraft", () => {
 
     editor.undo();
 
-    const snapshot = bridge.getSnapshot();
-    const point = snapshot.contours.flatMap((c) => c.points).find((p) => p.id === p1)!;
-    expect(point.x).toBe(100);
-    expect(point.y).toBe(200);
+    expect(editor.getPointPosition(p1)).toEqual({ x: 100, y: 200 });
   });
 
   it("restores positions on redo after undo", () => {
@@ -68,10 +55,7 @@ describe("GlyphDraft", () => {
     editor.undo();
     editor.redo();
 
-    const snapshot = bridge.getSnapshot();
-    const point = snapshot.contours.flatMap((c) => c.points).find((p) => p.id === p1)!;
-    expect(point.x).toBe(999);
-    expect(point.y).toBe(888);
+    expect(editor.getPointPosition(p1)).toEqual({ x: 999, y: 888 });
   });
 
   it("does not modify Rust on discard", () => {
@@ -81,10 +65,7 @@ describe("GlyphDraft", () => {
     draft.setPositions([{ node: { kind: "point", id: p1 }, x: 999, y: 888 }]);
     draft.discard();
 
-    const snapshotAfter = bridge.getSnapshot();
-    const point = snapshotAfter.contours.flatMap((c) => c.points).find((p) => p.id === p1)!;
-    expect(point.x).toBe(100);
-    expect(point.y).toBe(200);
+    expect(editor.getPointPosition(p1)).toEqual({ x: 100, y: 200 });
   });
 
   it("JS model matches Rust after finish", () => {
@@ -94,14 +75,10 @@ describe("GlyphDraft", () => {
     draft.setPositions([{ node: { kind: "point", id: p1 }, x: 50, y: 75 }]);
     draft.finish("Move");
 
-    const jsGlyph = bridge.$glyph.peek()!;
-    const jsPoint = jsGlyph.contours.flatMap((c) => c.points).find((p) => p.id === p1)!;
+    const jsPosition = editor.getPointPosition(p1);
+    const rustPoint = Glyphs.findPoint(editor.bridge.getSnapshot(), p1)!.point;
 
-    const rustSnapshot = bridge.getSnapshot();
-    const rustPoint = rustSnapshot.contours.flatMap((c) => c.points).find((p) => p.id === p1)!;
-
-    expect(jsPoint.x).toBe(rustPoint.x);
-    expect(jsPoint.y).toBe(rustPoint.y);
-    expect(jsPoint.x).toBe(50);
+    expect(jsPosition).toEqual({ x: rustPoint.x, y: rustPoint.y });
+    expect(jsPosition).toEqual({ x: 50, y: 75 });
   });
 });

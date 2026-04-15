@@ -554,6 +554,39 @@ export default {
     },
 
     /**
+     * Ban direct Editor construction in test files.
+     *
+     * Tests should use TestEditor from @/testing/TestEditor, which creates
+     * a real Editor with the real NAPI backend and registers built-in tools.
+     * Direct `new Editor({bridge: createBridge()})` bypasses tool registration
+     * and drifts from the real setup.
+     */
+    "no-raw-editor-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useTestEditor:
+            "Use TestEditor from @/testing/TestEditor instead of constructing Editor directly in tests.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (!filename.includes(".test.")) return {};
+        if (filename.includes("testing/")) return {};
+
+        return {
+          NewExpression(node) {
+            if (node.callee && node.callee.type === "Identifier" && node.callee.name === "Editor") {
+              context.report({ node, messageId: "useTestEditor" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
      * Ban direct imports from @/bridge in app code.
      *
      * The bridge is internal plumbing. App code should use Font and Glyph.

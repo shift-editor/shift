@@ -17,12 +17,15 @@
 import type { Point2D, PointId } from "@shift/types";
 import type { SnapPreferences } from "@/types/editor";
 
+/** A line segment between two points in UPM space. */
+export interface SnapLine {
+  from: Point2D;
+  to: Point2D;
+}
+
 /** Visual feedback for an active snap: guide lines and optional target markers, both in UPM space. */
 export interface SnapIndicator {
-  lines: Array<{
-    from: Point2D;
-    to: Point2D;
-  }>;
+  lines: SnapLine[];
   markers?: Point2D[];
 }
 
