@@ -1,5 +1,4 @@
 import { useRef, useEffect } from "react";
-import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
@@ -11,18 +10,14 @@ function formatCoords(x: number, y: number): string {
 }
 
 export function DebugPanel() {
-  const debug = useDebugSafe();
   const editor = getEditor();
-  const isOpen = debug?.debugPanelOpen ?? false;
 
   useEffect(() => {
-    if (isOpen) {
-      editor.startFpsMonitor();
-    }
+    editor.startFpsMonitor();
     return () => {
       editor.stopFpsMonitor();
     };
-  }, [isOpen, editor]);
+  }, [editor]);
 
   const toolStateRef = useSignalText(() => {
     const name = editor.getActiveTool();
@@ -59,7 +54,6 @@ export function DebugPanel() {
   const worldRef = useRef<HTMLTableCellElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
       const coords = editor.fromScreen(screen);
@@ -69,11 +63,7 @@ export function DebugPanel() {
         worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
     });
     return () => fx.dispose();
-  }, [isOpen, editor]);
-
-  if (!isOpen) {
-    return null;
-  }
+  }, [editor]);
 
   const cellClass = "px-2 py-1 border border-line-subtle";
 

@@ -1,6 +1,7 @@
 import { FC, useEffect, useRef, useState } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
+import { useDebugSafe } from "@/context/DebugContext";
 import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
@@ -16,6 +17,7 @@ interface EditorViewProps {
 
 export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
+  const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [cursorStyle, setCursorStyle] = useState(() => editor.getCursor());
@@ -105,7 +107,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <InteractiveScene />
       </CanvasContextProvider>
       <HiddenTextInput />
-      <DebugPanel />
+      {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );
 };
