@@ -206,8 +206,15 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 
 **Render effects track `glyph.contours` and `glyph.anchors`**, not `$glyph`. The `$glyph` signal on NativeBridge is for glyph identity (loaded/unloaded). Glyph data changes propagate through the Glyph model's internal signals. `#patchPositions` fires `#contours` with a new array reference so glyph-level effects see the change.
 
+## Documentation Routing
+
+Before creating new documentation or exploring unfamiliar subsystems, consult `docs/architecture/index.md`. It maps every repo area to its canonical `DOCS.md` and lists API boundaries. Use `/docs` to update module documentation following the standard format.
+
+Run `python3 scripts/context-drift-check.py` to validate doc freshness and link integrity.
+
 ## Architecture References
 
+- **Documentation routing & API boundaries:** Read `docs/architecture/index.md`
 - **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments
 - **Tool structure & behavior system:** Read `lib/tools/core/BaseTool.ts`
 - **Command organization:** Read `lib/commands/core/Command.ts`
