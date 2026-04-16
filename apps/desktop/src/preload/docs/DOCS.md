@@ -69,10 +69,10 @@ Nothing to do in the preload. `buildBridgeAPI` auto-discovers prototype methods.
 
 ```bash
 # Type-check (catches mismatches between ElectronAPI interface and preload wiring)
-pnpm --filter desktop typecheck
+pnpm --filter @shift/desktop typecheck
 
 # Lint
-pnpm --filter desktop lint
+pnpm --filter @shift/desktop lint
 ```
 
 ## Related
