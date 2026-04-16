@@ -185,12 +185,9 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ## Anti-Slop Rules
 
-These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.oxlintrc.json` lint rules.
+Rules enforced by `scripts/oxlint/shift-plugin.mjs` are omitted here — the linter catches them. The rules below are conventions not covered by lint:
 
-- **Use Vec2 for all coordinate math.** Never `{ x: a.x - b.x, y: a.y - b.y }` — use `Vec2.sub(a, b)`.
 - **Use Point2D in function signatures.** Never create `(x, y)` / `(Point2D)` overloads with `typeof` resolution code.
-- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `bridge/draft.ts`.
-- **No nested ternaries with map chains.** Break into named variables.
 - **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
 - **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on NativeBridge?
 
