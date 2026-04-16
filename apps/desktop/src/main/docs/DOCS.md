@@ -1,127 +1,114 @@
 # Main
 
-Electron main process managing application lifecycle, windows, menus, and document state.
+Electron main process: application lifecycle, window management, menus, document state, and external file opening.
 
-## Overview
+## Architecture Invariants
 
-The main process is the entry point for the Shift Electron application. It uses a modular manager architecture to separate concerns: app lifecycle events, window management, menu creation, and document state tracking.
+- **Architecture Invariant:** All managers receive dependencies via constructor injection in `main.ts`. `DocumentState` is the root dependency; `WindowManager` depends on it; `MenuManager` depends on both; `AppLifecycle` depends on all three.
+- **Architecture Invariant:** `DocumentState` is the single source of truth for dirty state and file path. All save/close dialogs flow through `DocumentState.confirmClose`. No manager may show its own save dialog.
+- **Architecture Invariant:** IPC channels are type-safe. All `ipcMain.handle` calls use the typed `ipc.handle` wrapper from `shared/ipc/main`, and all `webContents.send` calls use the typed `ipc.send` wrapper. Channel names and payload types are defined in `IpcCommands` (renderer-to-main) and `IpcEvents` (main-to-renderer).
+- **Architecture Invariant: CRITICAL:** `main.ts` enforces a single-instance lock via `app.requestSingleInstanceLock()`. The second instance forwards its argv to the first instance via the `second-instance` event and then quits. Removing this breaks file-association double-click on all platforms.
+- **Architecture Invariant: CRITICAL:** The `before-quit` handler in `AppLifecycle` must call `event.preventDefault()` before the async `confirmClose` check. If the guard is removed, the app quits before the save dialog can appear.
+- **Architecture Invariant:** Only `.ufo` is a writable format (`DocumentState.isWritableFormat`). Saving a non-UFO file always triggers Save As. Autosave skips non-UFO files silently.
 
-## Architecture
+## Codemap
 
 ```
 src/main/
-├── main.ts                 # Entry point, wires managers together
-└── managers/
-    ├── AppLifecycle.ts     # App events (ready, quit, activate)
-    ├── WindowManager.ts    # Window creation and IPC handlers
-    ├── DocumentState.ts    # Dirty tracking, save dialogs, autosave
-    ├── MenuManager.ts      # Menu creation and theme management
-    └── index.ts            # Re-exports
+  main.ts                       # Entry point: single-instance lock, manager wiring
+  managers/
+    AppLifecycle.ts              # App events, quit flow, external file open queue, IPC for theme/dialog/debug/fs
+    WindowManager.ts             # BrowserWindow creation, close handling, IPC for window/document channels
+    DocumentState.ts             # Dirty tracking, file path, save/confirmClose dialogs, autosave
+    MenuManager.ts               # Application menu (File/Edit/View/Debug), theme switching, zoom, debug overlays
+    openFontPath.ts              # Font path validation and argv extraction
+    openFontPath.test.ts         # Tests for openFontPath
+    index.ts                     # Re-exports
 ```
 
-### Manager Responsibilities
+## Key Types
 
-| Manager       | Responsibility                                          |
-| ------------- | ------------------------------------------------------- |
-| AppLifecycle  | App events, quit coordination, dock icon, dev shortcuts |
-| WindowManager | BrowserWindow creation, IPC handlers, title updates     |
-| DocumentState | Dirty state, file path, save dialogs, autosave          |
-| MenuManager   | Application menu, theme switching                       |
+- `ThemeName` -- `"light" | "dark" | "system"`, stored in `MenuManager.currentTheme`
+- `DebugState` -- aggregates `reactScanEnabled`, `debugPanelOpen`, and `DebugOverlays`; only used in dev builds
+- `DebugOverlays` -- per-overlay booleans (`tightBounds`, `hitRadii`, `segmentBounds`, `glyphBbox`)
+- `IpcCommands` -- renderer-to-main request/response channels (invoke/handle)
+- `IpcEvents` -- main-to-renderer broadcast channels (send/on)
+- `SUPPORTED_FONT_EXTENSIONS` -- the set of file extensions accepted for opening (`.ufo`, `.ttf`, `.otf`, `.glyphs`, `.glyphspackage`)
 
-### Data Flow
+## How it works
 
-```
-App Launch
-    ↓
-main.ts (wire managers)
-    ↓
-AppLifecycle.initialize()
-    ├── app.on("ready") → MenuManager.create() + WindowManager.create()
-    ├── app.on("before-quit") → DocumentState.confirmClose()
-    └── app.on("will-quit") → cleanup shortcuts
-    ↓
-User Interaction
-    ├── Menu actions → DocumentState (save/open)
-    ├── Window close → DocumentState.confirmClose()
-    └── Cmd+Q → triggers before-quit → DocumentState.confirmClose()
-```
+### Startup
 
-## Key Design Decisions
+`main.ts` checks `electron-squirrel-startup` (Windows installer events), then acquires a single-instance lock. If this is the second instance, it quits and the first instance receives `second-instance` with the new argv. Otherwise, it constructs the four managers and calls `AppLifecycle.handleLaunchArgs` (to queue any CLI font path) then `AppLifecycle.initialize`.
 
-1. **No Global Cmd+Q Shortcut**: Uses standard macOS app menu quit instead. The `before-quit` event intercepts all quit attempts and checks for unsaved changes.
+### Window creation
 
-2. **Centralized Document State**: All dirty tracking and save dialogs go through `DocumentState`, ensuring consistent behavior regardless of how quit is triggered.
+`WindowManager.create` builds a frameless `BrowserWindow` (hidden traffic lights, custom title bar), maximizes it, wires `DocumentState` for title updates, starts autosave, and loads the Vite dev server URL or the built `index.html`. The window's `close` event delegates to `DocumentState.confirmClose` when dirty.
 
-3. **Proper Quit Flow**: The `before-quit` handler prevents quit if document is dirty and user cancels. This fixes the zombie app state issue.
+### Quit flow
 
-4. **Manager Dependencies**: Managers are instantiated with their dependencies via constructor injection, making the architecture testable.
+Any quit trigger (Cmd+Q, menu, window close button) eventually hits `AppLifecycle`'s `before-quit` handler. It calls `event.preventDefault()`, runs the async `DocumentState.confirmClose` dialog, and only if the user confirms does it set `isQuitting = true`, mark `WindowManager` as quitting (to skip the per-window close dialog), stop autosave, and call `app.quit()` again.
 
-## Key Concepts
+### External file opening
 
-### Quit Flow
+Files arrive via three paths: CLI launch args (`handleLaunchArgs`), second-instance argv (`handleSecondInstance`), and macOS `open-file` events. All three funnel through `enqueueExternalOpenPath`, which validates via `normalizeFontPath` and pushes to `pendingExternalOpenPaths`. The queue is drained serially by `processPendingExternalOpenPaths`, which waits for the window to finish loading, then calls `openExternalFont`. If the current document is dirty, `confirmClose` runs first; on confirmation the path is sent to the renderer via the `external:open-font` IPC event.
 
-When user triggers quit (Cmd+Q, menu, or window close):
+### Save and autosave
 
-1. `before-quit` event fires
-2. `AppLifecycle` calls `DocumentState.confirmClose()`
-3. If dirty, shows save dialog
-4. User chooses: Save, Don't Save, or Cancel
-5. Cancel prevents quit; others allow it
+`DocumentState.save` checks `isWritableFormat` -- only `.ufo` can be saved in-place. Non-UFO files and Save As always show the save dialog with a UFO filter. On save, the main process sends `menu:save-font` to the renderer, which does the actual write and calls back `document:saveCompleted`. Autosave runs on a 30-second interval (`AUTOSAVE_INTERVAL_MS`) and only fires if dirty and the file is writable UFO.
 
-### Window Close vs App Quit
+### Menu
 
-- **Window close** (red button): Handled by `WindowManager`, delegates to `DocumentState.confirmClose()`
-- **App quit** (Cmd+Q): Handled by `AppLifecycle.before-quit`, same dialog flow
+`MenuManager.create` rebuilds the entire menu template each time it is called (to update radio/checkbox state). It includes File (open/save), Edit (undo/redo/delete/select-all forwarded to renderer), View (zoom, theme, devtools), and a Debug menu (only in dev builds) for React Scan, debug panel, snapshot dumps, and overlay toggles.
 
-### Autosave
+### IPC registration
 
-`DocumentState` manages a 30-second autosave interval. Autosave only triggers if:
+IPC handlers are split across managers. `WindowManager` registers window-control and document-state channels in its constructor. `AppLifecycle` registers theme, debug, dialog, and filesystem channels in `registerIpcHandlers`.
 
-- Document is dirty
-- File path exists (not untitled)
+## Workflow recipes
 
-## API Reference
+### Add a new IPC command (renderer calls main)
 
-### AppLifecycle
+1. Add the channel signature to `IpcCommands` in `shared/ipc/channels.ts`.
+2. Add the handler using `ipc.handle(ipcMain, "your:channel", ...)` in whichever manager owns the domain.
+3. Expose it in the preload layer (see preload DOCS.md).
 
-- `initialize()` - Register all app event handlers
+### Add a new main-to-renderer event
 
-### WindowManager
+1. Add the channel signature to `IpcEvents` in `shared/ipc/channels.ts`.
+2. Send via `ipc.send(webContents, "your:channel", ...)` from a manager.
+3. Listen in the renderer via the preload bridge.
 
-- `create()` - Create and configure main window
-- `getWindow()` - Get current BrowserWindow
-- `setQuitting(boolean)` - Mark app as quitting to skip close dialogs
-- `destroy()` - Clean up and destroy window
+### Add a menu item
 
-### DocumentState
+1. Add a new entry in `MenuManager.create`'s template array under the appropriate submenu.
+2. If it triggers a renderer action, add a channel to `IpcEvents` and call `this.sendToRenderer(...)`.
+3. Call `this.create()` if the menu item state needs to update after clicking (checkboxes, radios).
 
-- `isDirty()` / `setDirty(boolean)` - Dirty state
-- `getFilePath()` / `setFilePath(string)` - Current file
-- `save(saveAs?: boolean)` - Save document
-- `confirmClose()` - Show save dialog if dirty, returns whether to proceed
-- `startAutosave()` / `stopAutosave()` - Autosave management
+### Support a new writable format
 
-### MenuManager
+1. Update `DocumentState.isWritableFormat` to accept the new extension.
+2. Update the save dialog filter in `DocumentState.save`.
+3. Update `SUPPORTED_FONT_EXTENSIONS` in `openFontPath.ts` if the format should also be openable.
 
-- `create()` - Build and set application menu
-- `getTheme()` / `setTheme(theme)` - Theme management
+## Gotchas
 
-## IPC Handlers
+- `MenuManager.create` rebuilds the entire Electron menu from scratch. This is intentional -- Electron menus are immutable once built. Mutating the template object has no effect; you must call `Menu.setApplicationMenu` again.
+- The `before-quit` handler uses a re-entrant pattern: it prevents quit, does async work, then calls `app.quit()` again with `isQuitting = true` to skip the guard on the second pass. Breaking this flag logic causes an infinite quit loop.
+- `WindowManager` registers its IPC handlers in the constructor, before `create` is called. This means `this.window` is null during handler registration and handlers must null-check it.
+- The Debug menu is conditionally included only when `!app.isPackaged`. Debug IPC handlers are always registered regardless, but they are harmless in production since no menu triggers them.
+- `processPendingExternalOpenPaths` is designed to be re-entrant safe via the `processingExternalOpenPath` flag. It processes one file at a time and recurses through `.finally()`.
 
-| Channel                  | Handler       | Description            |
-| ------------------------ | ------------- | ---------------------- |
-| `window:close`           | WindowManager | Close main window      |
-| `window:minimize`        | WindowManager | Minimize window        |
-| `window:maximize`        | WindowManager | Toggle maximize        |
-| `window:isMaximized`     | WindowManager | Check maximize state   |
-| `document:setDirty`      | WindowManager | Update dirty state     |
-| `document:setFilePath`   | WindowManager | Update file path       |
-| `document:saveCompleted` | WindowManager | Handle save completion |
-| `theme:get`              | AppLifecycle  | Get current theme      |
-| `theme:set`              | AppLifecycle  | Set theme              |
-| `dialog:openFont`        | AppLifecycle  | Show open dialog       |
+## Verification
 
-## Related Systems
+- `npx vitest run apps/desktop/src/main/managers/openFontPath.test.ts` -- openFontPath unit tests
+- Manual: launch with a font path argument, verify it opens
+- Manual: edit a document, Cmd+Q, verify save dialog appears
+- Manual: open a .ttf, Cmd+S, verify Save As dialog forces .ufo
 
-- [preload](../../preload/docs/DOCS.md) - Native API bridge
-- [engine](../../renderer/src/engine/docs/DOCS.md) - Uses exposed APIs
+## Related
+
+- `IpcCommands`, `IpcEvents` -- type-safe IPC channel definitions in `shared/ipc/channels.ts`
+- `ipc.send`, `ipc.handle` -- typed wrappers in `shared/ipc/main.ts`
+- `ThemeName`, `DebugState`, `DebugOverlays` -- shared types in `shared/ipc/types.ts`
+- Preload bridge -- exposes IPC to renderer (see preload DOCS.md)

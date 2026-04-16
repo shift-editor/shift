@@ -1,169 +1,117 @@
 # shift-node
 
-NAPI bindings exposing the Rust shift-core library to Node.js/Electron.
+NAPI bindings that expose `shift-core` to the Node.js/Electron renderer process as a single `FontEngine` class.
 
-## Overview
+## Architecture Invariants
 
-shift-node provides a JavaScript-accessible FontEngine class that wraps shift-core's editing functionality. It uses NAPI-RS for efficient native bindings and supports both JSON serialization and native object passing for optimal performance.
+**Architecture Invariant:** Only one `EditSession` may be active at a time. Starting a second session returns an error. **WHY:** The session borrows the glyph out of the `Font` (via `take_glyph`), so concurrent sessions would leave the font in an inconsistent state.
 
-## Architecture
+**Architecture Invariant:** All mutation methods return a JSON-serialized `CommandResult`, never raw values. **WHY:** The JS side parses a uniform `{success, snapshot, error, affectedPointIds, canUndo, canRedo}` shape, so the bridge never needs per-method return-type handling.
 
-```
-JavaScript/TypeScript (Renderer)
-         ↓
-    window.shiftFont (contextBridge)
-         ↓
-    Preload Script
-         ↓
-    shift-node (NAPI)
-         ↓
-    FontEngine class
-         ↓
-    shift-core (Rust)
-```
+**Architecture Invariant: CRITICAL:** Entity IDs are stringified `u128` values when crossing the NAPI boundary. Parsing failures are returned as `CommandResult::error`, not NAPI exceptions. **WHY:** NAPI has no native u128 type, and bubbling parse failures as exceptions would crash the renderer process.
 
-### Key Design Decisions
+**Architecture Invariant:** `EngineLayerProvider` gives session-first layer resolution: the in-progress edit session layer shadows the persisted font layer for the currently-edited glyph. **WHY:** Composite glyphs that reference the glyph being edited must see unsaved changes (e.g. Aacute sees in-session edits to A), otherwise the canvas shows stale composites.
 
-1. **Dual Serialization**: JSON strings for complex results, native objects for snapshots
-2. **String IDs**: Entity IDs converted to strings for JavaScript interop
-3. **Session-Based API**: All editing requires an active session
-4. **CommandResult Pattern**: All mutations return success/error with affected state
+**Architecture Invariant:** `DependencyGraph` is rebuilt from scratch at the end of every edit session (`end_edit_session`), not incrementally. **WHY:** Component references may have changed during the session; a full rebuild is simple and correct for the current glyph count.
 
-## Key Concepts
+**Architecture Invariant: CRITICAL:** `set_positions` accepts `Option<Float64Array>` -- callers must pass `null` for empty arrays, not zero-length typed arrays. **WHY:** napi-rs panics on zero-length `Float64Array`.
 
-### FontEngine Class
-
-The main NAPI-exported class managing font state:
-
-```typescript
-class FontEngine {
-  loadFont(path: string): void;
-  startEditSession(unicode: number): void;
-  endEditSession(): void;
-  getSnapshot(): string | null; // JSON
-  getSnapshotData(): NativeGlyphSnapshot; // Native object
-  addPoint(x, y, pointType, smooth): string;
-  movePoints(pointIds, dx, dy): string;
-  applyEditsUnified(pointIds, dx, dy): string;
-}
-```
-
-### Native vs JSON Serialization
-
-Two approaches for different use cases:
-
-| Method              | Return Type   | Use Case                  |
-| ------------------- | ------------- | ------------------------- |
-| `getSnapshot()`     | JSON string   | Full serialization needed |
-| `getSnapshotData()` | Native object | Efficient frequent reads  |
-
-### CommandResult Format
-
-All mutations return JSON with consistent structure:
-
-```typescript
-{
-  success: boolean,
-  snapshot: GlyphSnapshot | null,
-  error: string | null,
-  affectedPointIds: string[],
-  canUndo: boolean,
-  canRedo: boolean
-}
-```
-
-## API Reference
-
-### Font Loading
-
-- `loadFont(path: string)` - Load font from filesystem
-
-### Session Management
-
-- `startEditSession(unicode: number)` - Begin editing glyph
-- `endEditSession()` - Save and close session
-- `hasEditSession(): boolean` - Check session state
-- `getEditingUnicode(): number | null` - Current glyph
-
-### Font Info
-
-- `getMetadata(): FontMetadata` - Family, style, version
-- `getMetrics(): FontMetrics` - UPM, ascender, descender, etc.
-- `getGlyphCount(): number` - Total glyphs
-- `getGlyphUnicodes(): number[]` - Sorted unique unicodes
-- `getGlyphSvgPath(unicode: number): string | null` - SVG path d for glyph
-- `getGlyphAdvance(unicode: number): number | null` - Glyph advance width
-- `getGlyphBbox(unicode: number): [number, number, number, number] | null` - [minX, minY, maxX, maxY] for glyph outline
-
-### Contour Operations
-
-- `addEmptyContour(): string` - Create contour, set active
-- `addContour(): string` - Create contour
-- `getActiveContourId(): string | null` - Current active
-- `closeContour(): string` - Close active contour
-
-### Point Operations
-
-- `addPoint(x, y, pointType, smooth): string`
-- `addPointToContour(contourId, x, y, pointType, smooth): string`
-- `insertPointBefore(beforePointId, x, y, pointType, smooth): string`
-- `movePoints(pointIds, dx, dy): string`
-- `removePoints(pointIds): string`
-- `toggleSmooth(pointId): string`
-
-### Unified Edit
-
-- `applyEditsUnified(pointIds, dx, dy): string` - Move + rule matching + application
-
-## Usage Examples
-
-### Basic Editing Flow
-
-```typescript
-const engine = new FontEngine();
-engine.loadFont("/path/to/font.ufo");
-engine.startEditSession(65); // 'A'
-
-const result = JSON.parse(engine.addPoint(100, 200, "onCurve", false));
-if (result.success) {
-  console.log("Added point:", result.affectedPointIds[0]);
-}
-
-engine.endEditSession();
-```
-
-### Moving Points with Rules
-
-```typescript
-const result = JSON.parse(engine.applyEditsUnified(["point-id-1", "point-id-2"], 50, 0));
-
-// Result includes:
-// - snapshot: updated glyph state
-// - affectedPointIds: all moved points including rule-affected handles
-// - matchedRules: which rules were applied
-```
-
-## Data Flow
+## Codemap
 
 ```
-JavaScript: engine.movePoints(['id1'], 10, 5)
-    ↓
-NAPI: FontEngine::move_points(vec!["id1"], 10.0, 5.0)
-    ↓
-Parse IDs: PointId::from_raw(id.parse::<u128>())
-    ↓
-shift-core: session.move_points(ids, dx, dy)
-    ↓
-Create snapshot: GlyphSnapshot::from_edit_session()
-    ↓
-Serialize: serde_json::to_string(&CommandResult { ... })
-    ↓
-Return JSON string to JavaScript
+crates/shift-node/
+  src/
+    lib.rs               -- crate root, re-exports font_engine module
+    font_engine.rs       -- FontEngine struct, NAPI bindings, command helpers, tests
+  Cargo.toml             -- cdylib crate; depends on shift-core, napi, serde_json
 ```
 
-## Related Systems
+## Key Types
 
-- [shift-core](../../shift-core/docs/DOCS.md) - Underlying Rust implementation
-- [Composite Anchors and Dependency Graph](../../shift-core/docs/composite-anchors-and-dependency-graph.md) - Detailed anchor/offset and dependency-graph behavior used by FontEngine
-- [preload](../../../src/preload/docs/DOCS.md) - Electron bridge exposing this module
-- [engine](../../../src/renderer/src/engine/docs/DOCS.md) - TypeScript wrapper layer
+- `FontEngine` -- the single `#[napi]` class holding `Font`, `EditSession`, `DependencyGraph`
+- `EngineLayerProvider` -- implements `GlyphLayerProvider` with session-first semantics for composite resolution
+- `SaveFontTask` -- NAPI `Task` impl for async font saving (`save_font_async`)
+- `JsNodeRef` -- tagged union (`kind` + `id` string) representing a point, anchor, or guideline across the NAPI boundary
+- `JsNodePositionUpdate` -- pairs a `JsNodeRef` with `(x, y)` for batch position updates
+- `JsGlyphRef` -- glyph name + optional unicode for session start
+- `CommandResult` (from shift-core) -- uniform JSON result shape returned by all mutations
+- `parse_or_err!` -- macro that parses a string ID into a typed ID or returns a `CommandResult::error`
+
+## How it works
+
+### Command pattern
+
+Four internal helpers centralize the mutation-to-JSON pipeline. Each acquires the `EditSession`, runs a closure, builds a `CommandResult`, enriches it with composite contours, and serializes to JSON:
+
+| Helper              | Closure signature                                     | Use when                                   |
+|---------------------|-------------------------------------------------------|--------------------------------------------|
+| `command`           | `&mut EditSession -> Vec<PointId>`                    | mutation returns affected point IDs        |
+| `command_simple`    | `&mut EditSession -> ()`                              | mutation has no meaningful return           |
+| `command_try`       | `&mut EditSession -> Result<Vec<PointId>, String>`    | mutation can fail with a domain error       |
+| `command_try_simple`| `&mut EditSession -> Result<(), String>`              | fallible mutation, no affected IDs          |
+
+All four delegate to `with_command_result`, which calls `serialize_enriched_result` to attach resolved composite contours before returning the JSON string.
+
+### Session lifecycle
+
+1. JS calls `start_edit_session(JsGlyphRef)`.
+2. `FontEngine` calls `font.take_glyph()`, removing the glyph from the font store. It picks the most complex layer and creates an `EditSession` over it.
+3. Mutations flow through the command helpers above.
+4. `end_edit_session` moves the edited layer back into the glyph, puts the glyph back into the font, and rebuilds the `DependencyGraph`.
+
+### Composite enrichment
+
+Every `CommandResult` and `GlyphSnapshot` is enriched before leaving the NAPI boundary: `enrich_snapshot_with_composites` uses `EngineLayerProvider` to resolve component contours (session-first), then sets `snapshot.composite_contours`. This means the JS side always receives fully-flattened composite geometry without a second round-trip.
+
+### Save path
+
+`save_font` and `save_font_async` temporarily splice the in-session layer back into the font, clone it, then restore the original so the session is undisturbed. `save_font_async` wraps this in a `SaveFontTask` for non-blocking I/O.
+
+### Zero-copy bulk updates
+
+`set_positions` accepts `Float64Array` buffers (point IDs packed as f64, interleaved xy coords) for high-frequency drag operations, avoiding per-node NAPI object overhead.
+
+## Workflow recipes
+
+### Adding a new mutation method
+
+1. Add the method to `EditSession` in shift-core.
+2. In `font_engine.rs`, add a `#[napi]` method on `FontEngine`.
+3. Choose the right command helper (`command`, `command_try`, etc.).
+4. Parse any string IDs with `parse_or_err!`.
+5. Run `cargo build -p shift-node` to verify.
+
+### Adding a new read-only query
+
+1. Add a `#[napi]` method that calls through to `Font` or `EditSession`.
+2. For JSON results, use `to_json(...)`. For native returns, use NAPI-compatible types directly.
+3. If the query needs to see in-session state, use `editing_target_for_unicode` or `editing_target_for_name` which implement session-first resolution.
+
+## Gotchas
+
+- **Glyph removed during session**: `take_glyph` removes the glyph from the font while a session is active. Code that iterates `font.glyphs()` during a session will not see the currently-edited glyph. `editing_target_for_unicode` and `glyph_layer_by_name` handle this by checking the session first.
+- **Float64Array zero-length panic**: Passing a zero-length `Float64Array` to `set_positions` causes a napi-rs panic. Always pass `null` instead.
+- **ID round-tripping precision**: IDs are `u128` cast through `u64` then `f64` in `set_positions`. This is safe for current ID ranges but would silently corrupt IDs above `2^53`.
+- **Composite debug logging is compiled out**: The `composite_debug!` macro expands to nothing. To enable, change the macro body to `eprintln!`.
+
+## Verification
+
+```bash
+# Build the native module
+cargo build -p shift-node
+
+# Run unit tests
+cargo test -p shift-node
+
+# Type-check the generated TS declarations (after napi build)
+npx tsc --noEmit --project apps/desktop/tsconfig.json
+```
+
+## Related
+
+- `EditSession` (shift-core) -- the Rust editing session this crate wraps
+- `CommandResult`, `GlyphSnapshot` (shift-core snapshot) -- the serialization types returned across the boundary
+- `GlyphLayerProvider` (shift-core composite) -- trait implemented by `EngineLayerProvider`
+- `DependencyGraph` (shift-core) -- composite dependency tracking, rebuilt on session end
+- `FontLoader`, `UfoWriter` (shift-core) -- font I/O used by `load_font` / `save_font`
+- Preload bridge (`apps/desktop/src/preload/`) -- Electron contextBridge that exposes `FontEngine` to the renderer

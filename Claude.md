@@ -10,21 +10,15 @@
 - **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `GlyphData`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.
 - **Avoid `-Data`, `-Info`, `-State` suffixes** on types unless it genuinely represents transient mutable state (e.g. `TextRunRenderState` for a signal value consumed by a render pass). If the type represents a domain concept, name it after the concept.
 
-## Documentation
-
-Always keep it up to date after completing a large feature
-
 ## Roadmap
 
-When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature.
-
-- ALWAYS add tests to verify behaviour after completing a feature
+When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature. Always add tests to verify behaviour.
 
 ## Testing
 
-### Use TestEditor for tool tests
+### TestEditor pattern
 
-Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with the real NAPI backend. Tests break at compile time when APIs change.
+Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. No mock context builders, no mock renderers. Enforced by oxlint `no-raw-editor-in-tests`.
 
 ```typescript
 const editor = new TestEditor();
@@ -34,32 +28,11 @@ editor.click(100, 200);
 expect(editor.pointCount).toBe(1);
 ```
 
-### Never create mock context builders
-
-Do not create functions like `createMockToolContext()` that return objects with `vi.fn()` stubs mirroring the Editor API. These create a parallel universe where tests pass even when real APIs are deleted.
-
-### Assert on state, not mock calls
-
-```typescript
-// BAD — tests mock wiring, not behavior
-expect(ctx.mocks.edit.addPoint).toHaveBeenCalledWith(100, 200, "onCurve", false);
-
-// GOOD — tests actual outcome
-expect(editor.pointCount).toBe(1);
-```
-
-For command tests, asserting that `ctx.bridge.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
-
-### Never create mock renderer tests
-
-Do not create `createMockRenderer()` factories that return `vi.fn()` stubs for `IRenderer` methods. These tests assert on draw call sequences (`expect(renderer.moveTo).toHaveBeenCalledWith(...)`) which break on any refactor and don't verify visual correctness. Use snapshot tests or Playwright e2e instead for rendering verification.
-
 ### Keep tests lean
 
 - 5-15 lines per test
 - beforeEach under 5 lines (`new TestEditor()` + `startSession()` + `selectTool()`)
 - No wrapper factories around TestEditor
-- No tests for test infrastructure
 
 ## Frontend
 
@@ -130,9 +103,9 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ## Project Structure
 
-- `/src` - Electron app source (main, preload, renderer)
-- `/crates` - Rust workspace (shift-core, shift-node)
-- `/packages` - TypeScript packages
+- `apps/desktop/src/` - Electron app (main, preload, renderer, shared)
+- `crates/` - Rust workspace (shift-core, shift-backends, shift-ir, shift-node)
+- `packages/` - TypeScript packages (types, geo, font, ui)
 
 ## Code Organization Rules
 
@@ -141,11 +114,10 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - Geometry utilities (Vec2, Curve, Polygon) → import from `@shift/geo`
 - Glyph-domain geometry (contour traversal, segment parsing, tight/x bounds) → import from `@shift/font`
 - Core types (Point2D, Rect2D, PointId, ContourId) → import from `@shift/types`
-- Snapshot utilities (findPointInSnapshot, etc.) → import from `@/lib/utils/snapshot`
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
 - Do not synthesize fake point IDs for geometry-only operations
-- Canonical glyph geometry APIs: `iterateRenderableContours`, `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
+- Canonical glyph geometry APIs: `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
 
 ### Import Conventions
 
@@ -179,18 +151,13 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 ## Architectural Constraints
 
 - **NEVER create Manager, Store, or Cache wrapper classes.** NativeBridge is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
-- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createBridge()` (real NativeBridge). No `vi.fn()` stubs for engine methods.
 - **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
-- \*\*NEVER import from `@/bridge/native`. Use `NativeBridge` — `getNative()` is internal. Enforced by lint.
 
 ## Anti-Slop Rules
 
-These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.oxlintrc.json` lint rules.
+Rules enforced by `scripts/oxlint/shift-plugin.mjs` are omitted here — the linter catches them. The rules below are conventions not covered by lint:
 
-- **Use Vec2 for all coordinate math.** Never `{ x: a.x - b.x, y: a.y - b.y }` — use `Vec2.sub(a, b)`.
 - **Use Point2D in function signatures.** Never create `(x, y)` / `(Point2D)` overloads with `typeof` resolution code.
-- **Use Glyphs/Contours packages for glyph traversal.** Never raw `for (const contour of glyph.contours) { for (const point ...) }` — use `Glyphs.findPoints` / `Glyphs.points` from `@shift/font`. Direct `.contours` access only in `packages/font/`, `bridge/draft.ts`.
-- **No nested ternaries with map chains.** Break into named variables.
 - **Blank lines between logical blocks.** Separate guard clauses, branches, and return statements with blank lines.
 - **Do not add methods to Editor without justification.** Editor.ts is a facade with 150+ delegation methods. Ask: does it add logic? Can it be a pure function? Does it belong on NativeBridge?
 
@@ -206,8 +173,15 @@ These patterns are BANNED. Enforced by `scripts/oxlint/shift-plugin.mjs` and `.o
 
 **Render effects track `glyph.contours` and `glyph.anchors`**, not `$glyph`. The `$glyph` signal on NativeBridge is for glyph identity (loaded/unloaded). Glyph data changes propagate through the Glyph model's internal signals. `#patchPositions` fires `#contours` with a new array reference so glyph-level effects see the change.
 
+## Documentation Routing
+
+Before creating new documentation or exploring unfamiliar subsystems, consult `docs/architecture/index.md`. It maps every repo area to its canonical `DOCS.md` and lists API boundaries. Use `/docs` to update module documentation following the standard format.
+
+Run `python3 scripts/context-drift-check.py` to validate doc freshness and link integrity.
+
 ## Architecture References
 
+- **Documentation routing & API boundaries:** Read `docs/architecture/index.md`
 - **Signal patterns & Editor conventions:** Read `lib/editor/Editor.ts` header comments
 - **Tool structure & behavior system:** Read `lib/tools/core/BaseTool.ts`
 - **Command organization:** Read `lib/commands/core/Command.ts`
