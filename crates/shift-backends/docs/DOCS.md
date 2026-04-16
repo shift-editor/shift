@@ -1,297 +1,106 @@
 # shift-backends
 
-Font format backends for reading and writing various font formats.
+Font format backends that convert between on-disk font files and the `Font` IR used throughout the editor.
 
-## Overview
+## Architecture Invariants
 
-shift-backends provides a trait-based abstraction for font I/O operations. It decouples shift-core from specific file formats, allowing the editor to work with UFO, TTF, OTF, and potentially other formats through a unified interface.
+**Architecture Invariant:** All backends convert to/from `Font` (the shift-ir representation), never exposing format-specific types (norad, glyphs-reader) to callers. WHY: The rest of the editor operates on a single IR; leaking format types would couple the editor to specific file formats.
 
-Currently implements:
+**Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
-- **UFO**: Full read/write support via `norad`
+**Architecture Invariant:** Backends are stateless unit structs (no fields). WHY: They are pure converters with no caching or mutable state, making them trivially thread-safe and cheap to construct.
 
-Planned:
+**CRITICAL:** `UfoWriter::save` calls `remove_dir_all` on the target path before writing. This is a destructive overwrite -- if the save fails partway through, the previous file is already gone. Callers must handle save errors with this in mind (e.g. write to a temp path first, then rename).
 
-- **TTF/OTF**: Read via `skrifa`, compile via `fontc`
+**Architecture Invariant:** The `UfoWriter` rounds all coordinates and widths to integers via the `UfoRound` trait (calls `f64::round()`). WHY: UFO files conventionally store integer coordinates; sub-unit precision is discarded on save. Empty contours are also skipped on write.
 
-## Architecture
+**Architecture Invariant:** `GlyphsReader` converts Glyphs-format kerning group prefixes (`@MMK_L_`, `@MMK_R_`) to UFO-convention prefixes (`public.kern1.`, `public.kern2.`) at load time. WHY: The IR stores kerning in UFO conventions; all backends must normalize to this format.
+
+**Architecture Invariant:** `GlyphsReader` only loads kerning from the default master. WHY: The IR currently stores a single static kerning table, not per-master kerning.
+
+## Codemap
 
 ```
-Traits
-├── FontReader - Load font from path
-├── FontWriter - Save font to path
-└── FontBackend - Combined reader + writer
-
-UFO Backend
-├── UfoBackend - Convenience struct implementing FontBackend
-├── UfoReader - norad::Font → shift_ir::Font
-└── UfoWriter - shift_ir::Font → norad::Font
+src/
+  lib.rs           -- re-exports FontReader, FontWriter, FontBackend, and sub-modules
+  traits.rs        -- FontReader, FontWriter, FontBackend trait definitions
+  ufo/
+    mod.rs         -- UfoBackend convenience struct combining reader+writer; round-trip tests
+    reader.rs      -- UfoReader: norad::Font -> shift_ir::Font
+    writer.rs      -- UfoWriter: shift_ir::Font -> norad::Font (with coordinate rounding)
+  glyphs/
+    mod.rs         -- GlyphsReader re-export; fixture-based integration tests
+    reader.rs      -- GlyphsReader: glyphs_reader::Font -> shift_ir::Font (read-only)
 ```
 
-### Key Design Decisions
+## Key Types
 
-1. **Trait-Based**: Backends implement traits, enabling polymorphism
-2. **Format-Agnostic IR**: Backends convert to/from shift-ir types
-3. **Send + Sync**: All backends must be thread-safe
-4. **String Errors**: Simple error handling via Result<\_, String>
-5. **Stateless**: Reader/Writer structs have no internal state
+- `FontReader` -- trait with `load(&self, path) -> Result<Font, String>` plus default methods for extracting glyphs, kerning, features from a loaded `Font`
+- `FontWriter` -- trait with `save(&self, font, path) -> Result<(), String>`
+- `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
+- `UfoReader` -- loads `.ufo` bundles via `norad`
+- `UfoWriter` -- writes `.ufo` bundles via `norad`; rounds coordinates to integers
+- `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
+- `GlyphsReader` -- loads `.glyphs` and `.glyphspackage` files via `glyphs-reader`; read-only (no writer)
 
-## Key Concepts
+## How it works
 
-### FontReader Trait
+**Loading a font:** `FontLoader` (in shift-core) dispatches by file extension to the appropriate backend. The backend reads the file using a format-specific library (`norad` for UFO, `glyphs-reader` for Glyphs), then walks the parsed data to build a `Font`. This involves converting point types, contours, components, anchors, guidelines, kerning groups/pairs, OpenType features, and lib data into their IR equivalents.
 
-The primary interface for loading fonts:
+**Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 
-```rust
-pub trait FontReader: Send + Sync {
-    fn load(&self, path: &str) -> Result<Font, String>;
+**Multi-layer support:** `UfoReader` iterates all norad layers. The `public.default` layer maps to the IR's default layer; other layers are added via `Font::add_layer`. Glyphs in non-default layers are merged into existing `Glyph` entries when the glyph already exists from another layer.
 
-    // Default implementations
-    fn get_glyph(&self, font: &Font, name: &GlyphName) -> Option<Glyph>;
-    fn get_kerning(&self, font: &Font) -> KerningData;
-    fn get_features(&self, font: &Font) -> FeatureData;
-}
+**Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
+
+**Saving:** Only UFO write is supported. `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, then converts each glyph per layer. `features.fea` is written as a standalone file before calling `norad::Font::save`.
+
+## Workflow recipes
+
+### Add a new read-only backend
+1. Create `src/<format>/mod.rs` and `src/<format>/reader.rs`
+2. Implement `FontReader` for your struct -- the `load` method must return `Font`
+3. Export from `lib.rs` with `pub mod <format>`
+4. Register the new adaptor in `FontLoader::new()` in `shift-core/src/font_loader.rs`
+5. Add the file extension mapping in `format_from_extension` in the same file
+
+### Add write support to an existing backend
+1. Implement `FontWriter` on the backend struct
+2. The `FontBackend` blanket impl kicks in automatically
+3. Update `FontLoader::write_font` to allow the new format
+
+### Modify point type conversion
+1. Read conversion: `UfoReader::convert_point_type` (norad -> IR)
+2. Write conversion: `UfoWriter::convert_point_type` (IR -> norad), which uses positional context
+3. Run the `round_trip_ufo` test to verify fidelity
+4. Run `writer_rounds_coordinates_and_skips_empty_contours` to check formatting
+
+## Gotchas
+
+- **Destructive save:** `UfoWriter::save` deletes the entire target directory before writing. A crash mid-save means data loss. No atomic-rename strategy is in place yet.
+- **Coordinate rounding:** All coordinates are rounded to nearest integer on UFO write. If you need sub-unit precision preserved, this will silently discard it.
+- **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
+- **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
+- **features.fea written before norad save:** The writer creates the output directory and writes `features.fea` before calling `norad_font.save()`. If the path already existed, it was already deleted by `remove_dir_all`, so the directory is recreated for the .fea file.
+
+## Verification
+
+```bash
+# Run all backend tests (UFO round-trip, coordinate rounding, Glyphs loading)
+cargo test -p shift-backends
+
+# Specific tests
+cargo test -p shift-backends round_trip_ufo
+cargo test -p shift-backends writer_rounds_coordinates_and_skips_empty_contours
+cargo test -p shift-backends loads_homenaje_glyphs_file
+cargo test -p shift-backends loads_glyphs_package
 ```
 
-### FontWriter Trait
+## Related
 
-The primary interface for saving fonts:
-
-```rust
-pub trait FontWriter: Send + Sync {
-    fn save(&self, font: &Font, path: &str) -> Result<(), String>;
-}
-```
-
-### FontBackend Trait
-
-Combines reader and writer for formats that support both:
-
-```rust
-pub trait FontBackend: FontReader + FontWriter {}
-
-// Auto-implemented for any type with both traits
-impl<T: FontReader + FontWriter> FontBackend for T {}
-```
-
-## UFO Backend
-
-### UfoReader
-
-Converts from norad's representation to shift-ir:
-
-```rust
-use shift_backends::ufo::UfoReader;
-use shift_backends::FontReader;
-
-let reader = UfoReader::new();
-let font = reader.load("/path/to/font.ufo")?;
-```
-
-The reader handles:
-
-- Font metadata (family name, style, version, etc.)
-- Font metrics (UPM, ascender, descender, etc.)
-- All layers (default and named layers)
-- Glyphs with all layer data
-- Contours, components, anchors, guidelines
-- Kerning groups and pairs
-- OpenType features (features.fea)
-- Lib data (arbitrary plist storage)
-
-### UfoWriter
-
-Converts from shift-ir to norad and saves:
-
-```rust
-use shift_backends::ufo::UfoWriter;
-use shift_backends::FontWriter;
-
-let writer = UfoWriter::new();
-writer.save(&font, "/path/to/output.ufo")?;
-```
-
-The writer handles the same data in reverse, ensuring round-trip fidelity.
-
-### UfoBackend
-
-Convenience struct combining both:
-
-```rust
-use shift_backends::ufo::UfoBackend;
-use shift_backends::FontBackend;
-
-let backend = UfoBackend;
-let font = backend.load("/path/to/font.ufo")?;
-// ... modify font ...
-backend.save(&font, "/path/to/font.ufo")?;
-```
-
-## Type Conversions
-
-### Point Types
-
-| norad      | shift-ir   | Notes                       |
-| ---------- | ---------- | --------------------------- |
-| `Move`     | `OnCurve`  | First point of open contour |
-| `Line`     | `OnCurve`  | Straight line segment       |
-| `Curve`    | `OnCurve`  | End of cubic bezier         |
-| `OffCurve` | `OffCurve` | Cubic bezier handle         |
-| `QCurve`   | `QCurve`   | Quadratic curve point       |
-
-When writing, the OnCurve type is disambiguated based on context:
-
-- First point of open contour → `Move`
-- Point following OffCurve → `Curve`
-- Otherwise → `Line`
-
-### Kerning
-
-Groups are identified by naming convention:
-
-- `public.kern1.*` → First side (left) kerning groups
-- `public.kern2.*` → Second side (right) kerning groups
-
-```rust
-// Reading
-for (key, members) in norad_font.groups.iter() {
-    if key.starts_with("public.kern1.") {
-        kerning.set_group1(key, members);
-    } else if key.starts_with("public.kern2.") {
-        kerning.set_group2(key, members);
-    }
-}
-
-// Writing
-for (group_name, members) in font.kerning().groups1() {
-    norad_font.groups.insert(group_name, members);
-}
-```
-
-### Lib Data
-
-Arbitrary plist data is preserved through `LibData` and `LibValue`:
-
-```rust
-pub enum LibValue {
-    String(String),
-    Integer(i64),
-    Float(f64),
-    Boolean(bool),
-    Array(Vec<LibValue>),
-    Dict(HashMap<String, LibValue>),
-    Data(Vec<u8>),
-}
-```
-
-## Usage Examples
-
-### Basic Load/Save
-
-```rust
-use shift_backends::ufo::{UfoReader, UfoWriter};
-use shift_backends::{FontReader, FontWriter};
-
-// Load
-let reader = UfoReader::new();
-let font = reader.load("input.ufo")?;
-
-// Modify
-font.metadata_mut().style_name = Some("Bold".to_string());
-
-// Save
-let writer = UfoWriter::new();
-writer.save(&font, "output.ufo")?;
-```
-
-### Round-Trip Test
-
-```rust
-let original = create_test_font();
-let writer = UfoWriter::new();
-writer.save(&original, "/tmp/test.ufo")?;
-
-let reader = UfoReader::new();
-let loaded = reader.load("/tmp/test.ufo")?;
-
-assert_eq!(loaded.metadata().family_name, original.metadata().family_name);
-assert_eq!(loaded.glyph_count(), original.glyph_count());
-```
-
-### Using Trait Objects
-
-```rust
-fn process_font(reader: &dyn FontReader, writer: &dyn FontWriter, input: &str, output: &str) -> Result<(), String> {
-    let font = reader.load(input)?;
-    // ... process font ...
-    writer.save(&font, output)?;
-    Ok(())
-}
-
-let reader = UfoReader::new();
-let writer = UfoWriter::new();
-process_font(&reader, &writer, "in.ufo", "out.ufo")?;
-```
-
-## Adding New Backends
-
-To add support for a new format:
-
-1. Create a new module (e.g., `src/otf/`)
-2. Implement `FontReader` for loading
-3. Implement `FontWriter` for saving (if applicable)
-4. Add conversion functions between format types and shift-ir types
-5. Export from `lib.rs`
-
-Example skeleton:
-
-```rust
-// src/otf/mod.rs
-mod reader;
-pub use reader::OtfReader;
-
-// src/otf/reader.rs
-use crate::traits::FontReader;
-use shift_ir::Font;
-
-pub struct OtfReader;
-
-impl FontReader for OtfReader {
-    fn load(&self, path: &str) -> Result<Font, String> {
-        // Use skrifa to read, convert to shift-ir types
-        todo!()
-    }
-}
-```
-
-## Data Flow
-
-```
-UFO File System
-├── metainfo.plist
-├── fontinfo.plist
-├── kerning.plist
-├── groups.plist
-├── features.fea
-├── lib.plist
-└── glyphs/
-    └── *.glif
-        ↓
-    norad::Font::load()
-        ↓
-    UfoReader (conversion)
-        ↓
-    shift_ir::Font
-        ↓
-    UfoWriter (conversion)
-        ↓
-    norad::Font::save()
-        ↓
-UFO File System
-```
-
-## Related Systems
-
-- [shift-ir](../../shift-ir/docs/DOCS.md) - The IR types this crate converts to/from
-- [shift-core](../../shift-core/docs/DOCS.md) - Uses backends for font loading
-- [shift-node](../../shift-node/docs/DOCS.md) - Exposes backend functionality to JS
+- `Font`, `Glyph`, `GlyphLayer`, `Contour`, `PointType` -- IR types this crate converts to/from (shift-ir)
+- `FontLoader`, `FontAdaptor` -- shift-core dispatcher that selects backends by file extension
+- `KerningData`, `KerningSide`, `KerningPair` -- IR kerning types that backends populate
+- `FeatureData` -- IR feature storage, populated from `features.fea` or Glyphs feature snippets
+- `LibData`, `LibValue` -- arbitrary plist data preserved through round-trips
+- `Axis`, `Source`, `Location` -- designspace types populated by `GlyphsReader` for multi-master fonts

@@ -32,6 +32,12 @@ EXPECTED_DOCS = [
     "apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/commands/docs/DOCS.md",
     "apps/desktop/src/renderer/src/lib/reactive/docs/DOCS.md",
+    "packages/types/docs/DOCS.md",
+    "packages/geo/docs/DOCS.md",
+    "packages/font/docs/DOCS.md",
+    "packages/ui/docs/DOCS.md",
+    "packages/validation/docs/DOCS.md",
+    "packages/rules/docs/DOCS.md",
 ]
 
 ROUTING_INDEX = "docs/architecture/index.md"

@@ -42,12 +42,14 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Packages
 
-| Path pattern | Canonical doc | When to read |
+| Path pattern | Canonical doc | Purpose |
 |---|---|---|
-| `packages/types/**` | See `Claude.md` "Generated and domain types" section | Changing type definitions or adding new Rust-generated types |
-| `packages/geo/**` | — | Geometry utilities (Vec2, Curve, Polygon) |
-| `packages/font/**` | — | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
-| `packages/ui/**` | See `Claude.md` "Base UI Components" section | Creating or modifying UI components |
+| `packages/types/**` | [`packages/types/docs/DOCS.md`](../../packages/types/docs/DOCS.md) | Generated + domain types (API boundary) |
+| `packages/geo/**` | [`packages/geo/docs/DOCS.md`](../../packages/geo/docs/DOCS.md) | Geometry utilities (Vec2, Curve, Polygon, Mat) |
+| `packages/font/**` | [`packages/font/docs/DOCS.md`](../../packages/font/docs/DOCS.md) | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
+| `packages/ui/**` | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md) | UI component library wrapping Base UI primitives |
+| `packages/validation/**` | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md) | Point sequence validation and persistence schemas |
+| `packages/rules/**` | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md) | Point editing rules engine for geometric constraints |
 
 ## API Boundaries
 

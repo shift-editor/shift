@@ -1,325 +1,192 @@
 # Editor
 
-Canvas-based glyph editor with dual rendering layers, viewport transforms, and selection management.
+Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, snapping, hit testing, and tool management into a single facade.
 
-## Overview
+## Architecture Invariants
 
-The editor library provides the core visual editing experience for the Shift font editor. It implements a dual-canvas system (static and interactive layers), UPM coordinate transforms, point selection, and reactive rendering triggered by snapshot changes.
+**Architecture Invariant:** `Editor` is a facade -- it delegates to managers (`ViewportManager`, `HoverManager`, `EdgePanManager`, `SnapManager`) and a renderer (`Viewport`). Tools receive `Editor` directly but must not reach into private managers.
 
-## Architecture
+**Architecture Invariant:** Three coordinate spaces flow through every interaction: `screen` (canvas pixels, Y-down), `scene` (UPM with viewport transform applied), and `glyphLocal` (scene minus draw offset). All three are bundled in the `Coordinates` type; build one via `Editor.fromScreen()` / `fromScene()` / `fromGlyphLocal()` -- never compute one space from another manually.
 
-```
-Editor
-├── #staticContext: IGraphicContext      (outlines, guides, handles)
-├── #interactiveContext: IGraphicContext (tool overlays)
-├── #viewport: Viewport                  (coordinate transforms)
-├── #scene: Scene                        (path building from snapshots)
-├── #frameHandler: FrameHandler          (RAF scheduling)
-├── #bridge: NativeBridge              (state source)
-├── #commandHistory: CommandHistory      (undo/redo)
-├── #selection: SelectionManager         (point selection)
-└── #snapshotEffect: Effect              (reactive redraw trigger)
-```
+**Architecture Invariant: CRITICAL:** `ViewportManager` owns the affine matrices (`$upmToScreenMatrix`, `$screenToUpmMatrix`) as lazily computed signals. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 
-### Key Design Decisions
+**Architecture Invariant: CRITICAL:** Rendering is driven by four reactive effects (`#staticEffect`, `#overlayEffect`, `#interactiveEffect`, `#cursorEffect`). Each effect reads the specific signals it depends on, then calls the corresponding `Viewport.request*Redraw()`. If you add new editor state that should trigger a redraw, you must read that signal inside the correct effect -- otherwise the canvas will not update.
 
-1. **Dual Canvas**: Static layer for glyph, interactive layer for tools
-2. **Matrix Transforms**: 2D affine matrices for all coordinate transformations
-3. **Reactive Matrices**: Computed signals auto-invalidate when dependencies change
-4. **UPM Coordinates**: Font design space with Y-axis inversion
-5. **Reactive Rendering**: Effects watch snapshot signal for redraws
-6. **Functional Rendering**: Pure functions render from immutable snapshots
+**Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Never call rendering functions directly; always go through `requestRedraw()` / `requestSceneRedraw()` / `requestOverlayRedraw()`.
 
-## Key Concepts
+**Architecture Invariant:** `GlyphDraft` is the only way to perform continuous point manipulations (drags). Call `createDraft()` at drag start, `setPositions()` on each move, and either `finish(label)` or `discard()` at drag end. Draft internally records a single undo command from the base snapshot. Calling `finish` twice is a no-op; forgetting to call `finish`/`discard` leaks the draft.
 
-### Dual Canvas System
+**Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
 
-Two overlapping canvases for performance:
+**Architecture Invariant:** `Selection` uses discriminated `Selectable` unions (`{ kind: "point" | "anchor" | "segment", id }`). Mutations go through `select()`, `add()`, `remove()`, `toggle()`. Derived contour queries (`contourIds`, `fullySelectedContourIds`) are computed signals rebuilt when selection or glyph changes.
 
-| Canvas      | Content                       | Redraw Frequency   |
-| ----------- | ----------------------------- | ------------------ |
-| Static      | Guides, outlines, handles     | On snapshot change |
-| Interactive | Tool overlays, selection rect | On mouse events    |
+**Architecture Invariant:** Hit testing follows strict priority: contour endpoint > middle point > anchor > any point > segment. This order is hardcoded in `Editor.hitTest()`. Bounding box handle hits are checked separately (before hit test) in `updateHover()` only when multi-selected.
 
-### Coordinate Systems
+**Architecture Invariant:** `Handles` uses GPU-first rendering via `ReglHandleContext`. It falls back to CPU canvas drawing if WebGL is unavailable or `gpuHandlesEnabled` is false. The GPU path packs all handle instances into a `Float32Array` for a single draw call.
 
-Four coordinate spaces with transforms between them:
+## Codemap
 
 ```
-Screen (canvas pixels)
-    ↓ DPR scaling
-Device (physical pixels)
-    ↓ Viewport transforms
-Logical (canvas units)
-    ↓ UPM transforms
-UPM (font design units, Y-up)
+editor/
+  Editor.ts              -- Facade (~1750 lines), wires all subsystems
+  lifecycle.ts           -- EventEmitter for fontLoaded/fontSaved/destroying
+  sidebearings.ts        -- deriveGlyphSidebearings, roundSidebearing
+  managers/
+    ViewportManager.ts   -- UPM<->screen affine matrices, zoom, pan
+    HoverManager.ts      -- Hover state (point/anchor/segment/bounding box)
+    EdgePanManager.ts    -- Auto-pan when dragging near canvas edges
+    SnapManager.ts       -- Creates DragSnapSession / RotateSnapSession
+  rendering/
+    Viewport.ts          -- Canvas layer orchestration and RAF scheduling
+    Canvas.ts            -- 2D drawing API wrapping CanvasRenderingContext2D
+    Handles.ts           -- GPU-first handle rendering with CPU fallback
+    FrameHandler.ts      -- RAF deduplication per render target
+    FpsMonitor.ts        -- Rolling-window FPS measurement
+    Theme.ts             -- DEFAULT_THEME, all visual constants
+    constants.ts         -- SCREEN_HIT_RADIUS (8px)
+    visibleSceneBounds.ts -- Frustum culling for off-screen elements
+    gpu/                 -- WebGL handle shaders and instance packing
+    indicators/          -- Guides, BoundingBox, ControlLines, Segments,
+                            SnapLines, Anchors, DebugOverlays, handleDrawing
+  hit/
+    boundingBox.ts       -- hitTestBoundingBox, getHandlePositions
+    composite.ts         -- Composite glyph hit testing
+  snapping/
+    SnapPipelineRunner.ts -- Ordered step pipeline for snap resolution
+    steps.ts             -- pointToPoint, metrics, angle snap steps
+    types.ts             -- DragSnapSession, RotateSnapSession, SnapIndicator
 ```
 
-### Viewport Transforms
+## Key Types
 
-```typescript
-// Screen → UPM (for mouse events)
-projectScreenToUpm(screenX, screenY): Point2D
+- **`Editor`** -- Facade class (~1750 lines). Owns `Selection`, `ViewportManager`, `HoverManager`, `SnapManager`, `EdgePanManager`, `Viewport` (renderer), `ToolManager`, `CommandHistory`, `Clipboard`, `EventEmitter`. Passed directly to tools.
+- **`ViewportManager`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
+- **`Viewport`** -- Manages four stacked canvas layers (background, scene, handles/WebGL, overlay) and their `FrameHandler` instances. Calls back into `Editor.renderToolBackground()` / `renderToolScene()` / `renderOverlay()`.
+- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `ViewportTransform` and `Theme`.
+- **`ViewportTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
+- **`Selection`** -- Unified selection state for points, anchors, and segments. Computed `DerivedSelection` tracks which contours are (fully) selected. Exposes both raw signals (`$pointIds`) and unwrapped getters.
+- **`Selectable`** -- Discriminated union: `{ kind: "point" | "anchor" | "segment", id }`.
+- **`Coordinates`** -- Triple of `{ screen, scene, glyphLocal }` for a single position. Built via `Editor.fromScreen()` etc.
+- **`GlyphDraft`** -- Transactional interface for continuous point manipulation: `setPositions()` during drag, `finish(label)` or `discard()` at end.
+- **`HoverManager`** -- Tracks which entity (point/anchor/segment/bounding box handle) is hovered. `applyHoverResult()` sets the right signal and clears others. `getPointVisualState()` / `getSegmentVisualState()` return `VisualState` (`"idle" | "hovered" | "selected"`).
+- **`SnapManager`** -- Stateless factory for `DragSnapSession` and `RotateSnapSession`. Sessions freeze snap targets at creation, then run `SnapPipelineRunner` on each mouse move.
+- **`SnapPipelineRunner`** -- Executes ordered snap steps. Point pipeline: point-to-point wins immediately, otherwise closest result wins. Rotate pipeline: first match wins.
+- **`Handles`** -- GPU-first handle rendering. Packs instances via `packHandleInstances()`, falls back to `drawCpu()`.
+- **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
+- **`EdgePanManager`** -- During drags, auto-pans when the cursor is within 50px of canvas edges, using velocity proportional to distance from edge.
+- **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (`fontLoaded`, `fontSaved`, `destroying`).
+- **`Theme`** -- Full visual config: colors, sizes, line widths for guides, handles, selection, snapping, bounding box, debug overlays, text run.
 
-// UPM → Screen (for rendering)
-projectUpmToScreen(upmX, upmY): Point2D
-```
+## How it works
 
-### Matrix Transform System
+### Construction and wiring
 
-The Shift editor uses **2D affine transformation matrices** (3x2 representation) for all coordinate transformations. This provides a solid foundation for current features and future transforms (rotation, reflection, skew).
+`new Editor({ bridge })` creates all managers and wires reactive effects. The four rendering effects each read a specific set of signals and schedule the matching canvas layer for redraw. A cursor effect reads tool/hover state and updates the CSS cursor.
 
-#### Overview
-
-```typescript
-// 2D Affine Matrix (3x2 representation)
-// Represents: | a  c  e |
-//             | b  d  f |
-//             | 0  0  1 | (implicit)
-
-const m = Mat.Identity() // Create identity matrix
-  .translate(100, 50) // Translate
-  .scale(2, 3) // Scale
-  .rotate(Math.PI / 4); // Rotate (future)
-
-// Transform a point
-const point = Mat.applyToPoint(m, { x: 10, y: 20 });
-
-// Compose matrices
-const composed = Mat.Compose(m1, m2);
-
-// Invert matrix
-const inverse = Mat.Inverse(m);
-```
-
-#### Transformation Pipeline
-
-**UPM → Screen Transform:**
-
-1. Scale to canvas space and flip Y-axis
-2. Position baseline at padding
-3. Apply zoom around canvas center
-4. Apply pan offset
-
-```typescript
-// Example: baseline at 600px, scale 0.4 UPM/px, zoom 1.5, pan (50, 0)
-upmTransform = Identity.translate(300, 600) // Position baseline
-  .scale(0.4, -0.4); // Scale and flip Y
-
-screenTransform = Identity.translate(50, 0) // Pan
-  .scale(1.5, 1.5); // Zoom
-
-result = Compose(screenTransform, upmTransform);
-```
-
-**Screen → UPM Transform:**
-
-- Inverse of UPM → Screen
-- Applied to mouse events to convert screen coordinates to UPM space
-
-#### Zoom-to-Cursor
-
-The `zoomToPoint(screenX, screenY, zoomDelta)` algorithm maintains the UPM coordinate under the cursor:
-
-```typescript
-1. Record UPM at cursor BEFORE zoom
-2. Apply zoom factor to viewport
-3. Calculate UPM at cursor AFTER zoom (matrices recompute automatically)
-4. Adjust pan to compensate for UPM drift
-```
-
-This ensures smooth zooming that "follows" the cursor, creating an intuitive zoom experience.
-
-#### Future Transform Support
-
-The matrix system already supports additional transforms needed for future features:
-
-```typescript
-// Rotation (already implemented in Mat.rotate)
-const rotated = Mat.Rotate(Math.PI / 4);
-
-// Reflection (via negative scale)
-const flipX = Mat.Scale(-1, 1);
-const flipY = Mat.Scale(1, -1);
-
-// Skew (modify matrix components)
-const skewed = Mat.Identity();
-skewed.c = Math.tan(angleX); // X-axis skew
-```
-
-### Selection Management
-
-Three handle states based on selection:
-
-```typescript
-type HandleState = "idle" | "hovered" | "selected";
-type SelectionMode = "preview" | "committed";
-```
-
-## API Reference
-
-### Editor
-
-- `snapshot: GlyphSnapshot | null` - Current glyph state
-- `selectedPoints: ReadonlySet<PointId>` - Selected point IDs
-- `requestRedraw()` - Schedule redraw
-- `projectScreenToUpm(x, y): Point2D` - Coordinate transform
-
-### Viewport
-
-- `pan(dx, dy)` - Pan canvas
-- `zoomIn() / zoomOut()` - Zoom to canvas center (1.25x / 0.8x)
-- `zoomToPoint(screenX, screenY, zoomDelta)` - Zoom toward cursor position
-- `projectScreenToUpm(x, y): Point2D` - Screen to UPM transform
-- `projectUpmToScreen(x, y): Point2D` - UPM to screen transform
-- `getUpmToScreenMatrix(): Mat` - Get transformation matrix
-- `getScreenToUpmMatrix(): Mat` - Get inverse transformation matrix
-- `setViewportRect(rect)` - Set canvas bounds
-- `setViewportUpm(upm)` - Set units per em
-
-### SelectionManager
-
-- `select(id)` - Single selection
-- `selectMultiple(ids)` - Multi-select
-- `addToSelection(id)` - Add to selection
-- `clearSelection()` - Deselect all
-- `setHovered(id)` - Hover state
-
-### Scene
-
-- `setSnapshot(snapshot)` - Update glyph data
-- `rebuildGlyphPath()` - Reconstruct path
-- `glyphPath: Path2D` - Cached path
-
-## Usage Examples
-
-### Initialize Editor
-
-```typescript
-const editor = new Editor({
-  staticContext,
-  interactiveContext,
-  bridge,
-  commandHistory,
-});
-
-editor.setViewportRect(canvasBounds);
-```
-
-### Reactive Updates
-
-```typescript
-// Editor internally sets up:
-effect(() => {
-  const snapshot = bridge.snapshot.value;
-  scene.setSnapshot(snapshot);
-  requestRedraw();
-});
-```
-
-### Coordinate Conversion
-
-```typescript
-canvas.onMouseMove = (e) => {
-  const upmPos = editor.projectScreenToUpm(e.clientX, e.clientY);
-  console.log(`Mouse at UPM: ${upmPos.x}, ${upmPos.y}`);
-};
-```
-
-### Selection
-
-```typescript
-// Single select
-editor.setSelectedPoints(new Set([pointId]));
-
-// Add to selection (shift-click)
-editor.addToSelection(pointId);
-
-// Check state for rendering
-const state = editor.getHandleState(pointId);
-// 'idle' | 'hovered' | 'selected'
-```
-
-## Data Flow
+### Coordinate pipeline
 
 ```
-NativeBridge.snapshot changes
-    ↓
-Effect triggers (#snapshotEffect)
-    ↓
-Scene.setSnapshot(snapshot)
-    ↓
-Scene invalidates path cache
-    ↓
-Editor.requestRedraw()
-    ↓
-FrameHandler schedules RAF
-    ↓
-#draw() executes
-    ├── #drawStatic()
-    │   ├── Clear canvas
-    │   ├── Apply transforms
-    │   ├── Draw guides
-    │   ├── Draw glyph outline
-    │   ├── Draw bounding rect
-    │   └── Draw handles
-    └── #drawInteractive()
-        └── tool.drawInteractive(ctx)
+Screen (canvas pixels, Y-down)
+  -> ViewportManager.projectScreenToScene() [affine matrix inverse]
+Scene (UPM space, Y-up, viewport-relative)
+  -> Editor.sceneToGlyphLocal() [subtract drawOffset]
+GlyphLocal (origin at glyph baseline-left)
 ```
 
-## Winding and Fill Rules
+`ViewportManager` computes the UPM-to-screen matrix as: baseline positioning + Y-flip + scale, composed with pan + zoom. The inverse is lazily computed. Both are `ComputedSignal<Mat>` so any dependent computed/effect auto-invalidates.
 
-Font glyphs use the **nonzero winding rule** for fills. This determines how overlapping contours create holes (like the inside of an "O").
+### Four canvas layers
 
-### Winding Conventions
+| Layer | Technology | Content | Redraw trigger |
+|-------|-----------|---------|----------------|
+| background | Canvas 2D | Guides, tool backgrounds | `#staticEffect` |
+| scene | Canvas 2D | Glyph outline, segments, handles (CPU), anchors, tool scene | `#staticEffect` |
+| handles | WebGL (regl) | GPU-rendered point handles | `#staticEffect` (via scene render) |
+| overlay | Canvas 2D | Bounding box handles, snap lines, tool overlays | `#overlayEffect` |
 
-In font coordinate space (Y-up):
+Background and scene are drawn in UPM space (`Viewport.#beginUpmSpace()` applies the affine transform and draw offset). Overlay has a two-pass render: screen-space (bounding box handles) then UPM-space (snap lines, tool overlay).
 
-- **Outer contours**: counter-clockwise winding
-- **Inner contours (holes)**: clockwise winding
+### Rendering pipeline
 
-The editor applies a Y-axis flip (`-scale`) to convert from font coords to screen coords. This reverses the visual winding direction, but the nonzero rule still works correctly.
+`Viewport.#renderScene()` calls `Editor.renderToolScene(canvas)` which:
+1. Draws glyph outline (and fill in preview mode)
+2. Draws hovered/selected segments
+3. Draws debug overlays if enabled
+4. Delegates to `ToolManager.renderScene()`
+5. Draws control lines with frustum culling via `getVisibleSceneBounds()`
+6. Attempts GPU handle rendering; falls back to CPU if unavailable
+7. Draws anchors
 
-### Path Building Pattern
+### Zoom-to-cursor
 
-All contours must be built into a **single path** before calling `fill()`:
+`ViewportManager.zoomToPoint()` records UPM at cursor before zoom, applies new zoom, re-projects, and adjusts pan to compensate for drift. Because matrices are computed signals, the second projection automatically uses the updated zoom.
 
-```typescript
-// Correct: single path, single fill
-ctx.beginPath();
-for (const contour of snapshot.contours) {
-  buildContourPath(ctx, contour);
-}
-ctx.fill();
+### Snapping
 
-// Wrong: fills each contour separately (holes render as solid)
-for (const contour of snapshot.contours) {
-  ctx.beginPath();
-  buildContourPath(ctx, contour);
-  ctx.fill();
-}
-```
+`SnapManager.createDragSession()` freezes snap targets (other points, font metrics) at drag start. Each mouse move calls `session.snap(cursor, modifiers)` which runs `SnapPipelineRunner` through ordered steps (point-to-point, metrics, angle). Point-to-point short-circuits; otherwise closest wins. The session returns a `SnapIndicator` that Editor renders on the overlay layer.
 
-### API Design
+### Draft pattern (continuous manipulation)
 
-`buildContourPath(ctx, contour)` is a pure path-building function:
+`Editor.createDraft()` captures a base `GlyphSnapshot`. During drag, `draft.setPositions(updates)` applies position deltas directly to the glyph model. On finish, it syncs with the bridge and records a single `SetNodePositionsCommand`. On discard, it restores the base snapshot.
 
-- Does **not** call `beginPath()` - caller owns path lifecycle
-- Adds contour segments to the current path via `moveTo`, `lineTo`, `cubicTo`, `closePath`
-- Returns `true` if contour is closed
+### Hit testing
 
-Higher-level functions like `renderGlyph()` handle the full lifecycle:
+`Editor.hitTest(coords)` checks in priority order: contour endpoints (open contour first/last), middle points, anchors, any point, segments. Returns a discriminated `HitResult`. `Editor.updateHover(coords)` checks bounding box handles first (when multi-selected), then delegates to `hitTest()`.
 
-```typescript
-ctx.beginPath();
-// ... build all contours
-ctx.stroke(); // or ctx.fill()
-```
+## Workflow recipes
 
-## Related Systems
+### Add a new signal that triggers scene redraw
 
-- [bridge](../../bridge/docs/DOCS.md) - NativeBridge state source
-- [graphics](../graphics/docs/DOCS.md) - IRenderer abstraction
-- [tools](../tools/docs/DOCS.md) - Tool implementations
-- [commands](../commands/docs/DOCS.md) - Undo/redo integration
-- [reactive](../reactive/docs/DOCS.md) - Signal-based updates
+1. Declare a `WritableSignal<T>` field on `Editor`.
+2. Initialize it in the constructor.
+3. Read the signal in `#staticEffect` (just reference `.value`).
+4. The `FrameHandler` coalesces the redraw automatically.
+
+### Add a new rendering indicator
+
+1. Create a class under `rendering/indicators/` with a `draw(canvas: Canvas, ...)` method.
+2. Instantiate it as a field on `Editor` (e.g. `#myIndicator = new MyIndicator()`).
+3. Call `#myIndicator.draw(canvas, ...)` from `renderToolScene()` or `renderOverlay()`.
+4. If it depends on new state, read that state in the appropriate effect.
+
+### Add a new snap step
+
+1. Create a function returning `PointSnapStep` in `snapping/steps.ts`.
+2. Add it to the `steps` array in `SnapManager.createDragSession()`.
+3. Pipeline ordering matters: point-to-point short-circuits, so place it correctly.
+
+### Add a new selectable entity kind
+
+1. Extend the `Selectable` discriminated union.
+2. Add a `WritableSignal<ReadonlySet<NewId>>` to `Selection`.
+3. Update `select()`, `add()`, `remove()`, `toggle()`, `isSelected()`, `clear()`, `isEmpty`.
+4. Read the new signal in the appropriate rendering effect.
+
+## Gotchas
+
+- **Forgetting to read a signal in an effect** -- The canvas will not redraw when that state changes. Each effect must explicitly read `.value` of every signal it depends on.
+- **Caching `ViewportTransform` across frames** -- `getViewportTransform()` returns a snapshot object. It is correct for one frame but stale after zoom/pan changes. Rendering code gets a fresh one via `Viewport.#getCanvas()`.
+- **Snap indicator cleanup** -- Tools must call `setSnapIndicator(null)` when a drag ends or the tool deactivates, or a stale indicator remains on screen.
+- **Draft lifecycle** -- A `GlyphDraft` must be finished or discarded. Calling `finish()` twice is safe (no-op), but forgetting both leaks the intermediate state.
+- **Hover mutual exclusion** -- `HoverManager.setHoveredPoint()` clears hovered anchor and segment. `setHoveredAnchor()` clears point and segment. This prevents multiple hover highlights.
+- **GPU handle fallback** -- `Handles.draw()` returns `false` if GPU rendering failed or was disabled. The caller must check the return value and fall back to `drawCpu()`.
+- **Three-space coordinates** -- Never convert between screen/scene/glyphLocal manually. Always use `Editor.fromScreen()` / `fromScene()` / `fromGlyphLocal()` which guarantee all three are consistent.
+
+## Verification
+
+- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, drafts.
+- `npx vitest run --testPathPattern="draft"` -- draft-specific tests.
+- `npx vitest run --testPathPattern="EdgePanManager|HoverManager|ViewportManager|SnapManager"` -- manager unit tests.
+- Manual: open a font, zoom/pan, select points, drag with snapping, toggle preview mode, verify GPU/CPU handle rendering toggle.
+
+## Related
+
+- `NativeBridge` -- State source; `Editor.#bridge` provides `$glyph`, snapshot sync, boolean ops.
+- `CommandHistory` -- Undo/redo stack; `Editor.#commandHistory` records all mutations.
+- `ToolManager` -- Tool lifecycle and dispatch; `Editor.#toolManager`. Tools receive `Editor` to access all subsystems.
+- `Clipboard` -- Copy/cut/paste via `Editor.#clipboard`.
+- `Font` -- Font model access; `Editor.font` for metrics, glyph names, composites.
+- `Selection` -- `Editor.selection` (public). Point/anchor/segment selection with computed contour queries.
+- `Mat` (from `@shift/geo`) -- 2D affine matrix used by `ViewportManager` for coordinate transforms.
+- `Segment` (from `../geo/Segment`) -- Segment iteration and hit testing used by `Editor.getSegmentAt()`.
+- `ReglHandleContext` (from `graphics/backends`) -- WebGL context for GPU handle rendering.
