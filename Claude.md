@@ -10,21 +10,15 @@
 - **Domain types are plain nouns.** `Glyph`, `Contour`, `Point`, `Anchor` — not `GlyphData`, `GlyphInfo`, `GlyphState`, `GlyphRenderData`. If you need a modifier, it should describe the _kind_ of thing (`EditableGlyph`, `RenderContour`), not append generic suffixes.
 - **Avoid `-Data`, `-Info`, `-State` suffixes** on types unless it genuinely represents transient mutable state (e.g. `TextRunRenderState` for a signal value consumed by a render pass). If the type represents a domain concept, name it after the concept.
 
-## Documentation
-
-Always keep it up to date after completing a large feature
-
 ## Roadmap
 
-When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature.
-
-- ALWAYS add tests to verify behaviour after completing a feature
+When completing a feature, check ROADMAP.md and check any box if we have completed it in the new feature. Always add tests to verify behaviour.
 
 ## Testing
 
-### Use TestEditor for tool tests
+### TestEditor pattern
 
-Tool and integration tests use `TestEditor` from `@/testing/TestEditor`. It creates a real Editor with the real NAPI backend. Tests break at compile time when APIs change.
+Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. No mock context builders, no mock renderers. Enforced by oxlint `no-raw-editor-in-tests`.
 
 ```typescript
 const editor = new TestEditor();
@@ -34,32 +28,11 @@ editor.click(100, 200);
 expect(editor.pointCount).toBe(1);
 ```
 
-### Never create mock context builders
-
-Do not create functions like `createMockToolContext()` that return objects with `vi.fn()` stubs mirroring the Editor API. These create a parallel universe where tests pass even when real APIs are deleted.
-
-### Assert on state, not mock calls
-
-```typescript
-// BAD — tests mock wiring, not behavior
-expect(ctx.mocks.edit.addPoint).toHaveBeenCalledWith(100, 200, "onCurve", false);
-
-// GOOD — tests actual outcome
-expect(editor.pointCount).toBe(1);
-```
-
-For command tests, asserting that `ctx.bridge.addPoint` was called IS testing the command's behavior — but the test should also verify the command name, undo behavior, etc.
-
-### Never create mock renderer tests
-
-Do not create `createMockRenderer()` factories that return `vi.fn()` stubs for `IRenderer` methods. These tests assert on draw call sequences (`expect(renderer.moveTo).toHaveBeenCalledWith(...)`) which break on any refactor and don't verify visual correctness. Use snapshot tests or Playwright e2e instead for rendering verification.
-
 ### Keep tests lean
 
 - 5-15 lines per test
 - beforeEach under 5 lines (`new TestEditor()` + `startSession()` + `selectTool()`)
 - No wrapper factories around TestEditor
-- No tests for test infrastructure
 
 ## Frontend
 
@@ -130,9 +103,9 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 
 ## Project Structure
 
-- `/src` - Electron app source (main, preload, renderer)
-- `/crates` - Rust workspace (shift-core, shift-node)
-- `/packages` - TypeScript packages
+- `apps/desktop/src/` - Electron app (main, preload, renderer, shared)
+- `crates/` - Rust workspace (shift-core, shift-backends, shift-ir, shift-node)
+- `packages/` - TypeScript packages (types, geo, font, ui)
 
 ## Code Organization Rules
 
@@ -141,11 +114,10 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 - Geometry utilities (Vec2, Curve, Polygon) → import from `@shift/geo`
 - Glyph-domain geometry (contour traversal, segment parsing, tight/x bounds) → import from `@shift/font`
 - Core types (Point2D, Rect2D, PointId, ContourId) → import from `@shift/types`
-- Snapshot utilities (findPointInSnapshot, etc.) → import from `@/lib/utils/snapshot`
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
 - Do not synthesize fake point IDs for geometry-only operations
-- Canonical glyph geometry APIs: `iterateRenderableContours`, `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
+- Canonical glyph geometry APIs: `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
 
 ### Import Conventions
 
@@ -179,9 +151,7 @@ This project uses **pnpm** (v9.0.0) as its package manager.
 ## Architectural Constraints
 
 - **NEVER create Manager, Store, or Cache wrapper classes.** NativeBridge is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
-- **NEVER create mock context builders** like `createMockToolContext()` or `createMockEditing()`. Tests use `TestEditor` (real Editor + real Rust) or `createBridge()` (real NativeBridge). No `vi.fn()` stubs for engine methods.
 - **NEVER create CONTEXT.md files.** These are agent-generated dumps that go stale. Use `docs/architecture/` for architecture docs.
-- \*\*NEVER import from `@/bridge/native`. Use `NativeBridge` — `getNative()` is internal. Enforced by lint.
 
 ## Anti-Slop Rules
 
