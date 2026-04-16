@@ -82,6 +82,7 @@ Rust structs in `shift-core` (snapshot.rs) and `shift-ir` (metrics.rs, font.rs, 
 The generated types use mutable `Array<T>` fields (matching Rust `Vec<T>`). The domain layer (`domain.ts`) wraps each generated type with `Readonly<>` and converts `Array<T>` to `readonly T[]`, producing deeply frozen views. This prevents accidental mutation of font engine state in the renderer.
 
 The two-layer design:
+
 1. **Generated types** (`*Snapshot`) -- used only inside `domain.ts` and in the NAPI bridge layer.
 2. **Domain types** (`Point`, `Contour`, `Glyph`, etc.) -- used everywhere else. Same shape, just immutable.
 
@@ -92,6 +93,7 @@ The two-layer design:
 ### Package exports
 
 Two export paths exist:
+
 - `@shift/types` -- the main barrel: domain types, generated types, math types, and IDs.
 - `@shift/types/generated` -- direct access to raw generated types (used by the NAPI bridge).
 

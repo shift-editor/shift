@@ -95,7 +95,7 @@ const result = Transform.applyMatrix(points, matrix, origin);
 - `reflectPoints("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
 - `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must compute the center themselves (typically via `Bounds.center(Bounds.fromPoints(points))`).
 - `distributePoints` with fewer than 3 points is a no-op -- no error is thrown, the input is returned unchanged.
-- `getSegmentAwareBounds` only uses curve bounds when *all* points of a segment are selected. A single unselected control point causes fallback to raw point coordinates, which can produce a visibly smaller bounding box.
+- `getSegmentAwareBounds` only uses curve bounds when _all_ points of a segment are selected. A single unselected control point causes fallback to raw point coordinates, which can produce a visibly smaller bounding box.
 
 ## Verification
 

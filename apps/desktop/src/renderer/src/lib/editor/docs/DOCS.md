@@ -97,18 +97,19 @@ GlyphLocal (origin at glyph baseline-left)
 
 ### Four canvas layers
 
-| Layer | Technology | Content | Redraw trigger |
-|-------|-----------|---------|----------------|
-| background | Canvas 2D | Guides, tool backgrounds | `#staticEffect` |
-| scene | Canvas 2D | Glyph outline, segments, handles (CPU), anchors, tool scene | `#staticEffect` |
-| handles | WebGL (regl) | GPU-rendered point handles | `#staticEffect` (via scene render) |
-| overlay | Canvas 2D | Bounding box handles, snap lines, tool overlays | `#overlayEffect` |
+| Layer      | Technology   | Content                                                     | Redraw trigger                     |
+| ---------- | ------------ | ----------------------------------------------------------- | ---------------------------------- |
+| background | Canvas 2D    | Guides, tool backgrounds                                    | `#staticEffect`                    |
+| scene      | Canvas 2D    | Glyph outline, segments, handles (CPU), anchors, tool scene | `#staticEffect`                    |
+| handles    | WebGL (regl) | GPU-rendered point handles                                  | `#staticEffect` (via scene render) |
+| overlay    | Canvas 2D    | Bounding box handles, snap lines, tool overlays             | `#overlayEffect`                   |
 
 Background and scene are drawn in UPM space (`Viewport.#beginUpmSpace()` applies the affine transform and draw offset). Overlay has a two-pass render: screen-space (bounding box handles) then UPM-space (snap lines, tool overlay).
 
 ### Rendering pipeline
 
 `Viewport.#renderScene()` calls `Editor.renderToolScene(canvas)` which:
+
 1. Draws glyph outline (and fill in preview mode)
 2. Draws hovered/selected segments
 3. Draws debug overlays if enabled

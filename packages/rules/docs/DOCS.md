@@ -5,7 +5,7 @@ Point editing rules engine that enforces geometric constraints (tangency, collin
 ## Architecture Invariants
 
 - **Architecture Invariant:** The rule table is a singleton built lazily by `getRuleTable`. All concrete patterns are expanded and collision-checked at build time; duplicate patterns throw unless the overriding spec sets `allowPatternOverride: true` with higher precedence.
-- **Architecture Invariant:** The center point (offset 0) is always encoded by its type token (`C`, `S`, `H`), never as `@`. The `@` token only appears for *other* selected points in the window. This means `@` at offset 0 in a template is a semantic error.
+- **Architecture Invariant:** The center point (offset 0) is always encoded by its type token (`C`, `S`, `H`), never as `@`. The `@` token only appears for _other_ selected points in the window. This means `@` at offset 0 in a template is a semantic error.
 - **Architecture Invariant:** `constrainDrag` operates on a **base glyph snapshot** (positions before the drag started). The drag delta (`mousePosition`) is applied internally. Callers must not pre-apply the delta to the glyph.
 - **Architecture Invariant:** Rule moves override selected-point moves in the final `DragPatch`. If a rule computes a position for a point that is also selected, the rule position wins.
 - **Architecture Invariant:** Precedence score is `patternLength * 1000 + priority`. Window size dominates by default (5-char patterns outscore 3-char patterns); `priority` breaks ties within the same length.

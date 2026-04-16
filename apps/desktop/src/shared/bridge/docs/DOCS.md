@@ -6,7 +6,7 @@ Type-safe API boundary between the Rust `FontEngine` (via NAPI) and the TypeScri
 
 - **Architecture Invariant:** `FontEngineAPI` is derived as `Omit<FontEngine, "constructor">` -- it is never hand-maintained. When a `#[napi]` method is added in Rust and rebuilt, `FontEngineAPI` picks it up automatically.
 - **Architecture Invariant:** The `Window.shiftFont` global declaration lives here, making this module the single source of truth for the bridge contract. Both the preload (producer) and renderer (consumer) import from this file.
-- **Architecture Invariant: CRITICAL:** `buildBridgeAPI` in the preload reflects *all* prototype methods of the `FontEngine` instance at runtime. If `FontEngineAPI` drifts from the actual `FontEngine` class (e.g., shift-node is not rebuilt), the TypeScript types will lie -- calls will fail at runtime with no compile-time warning.
+- **Architecture Invariant: CRITICAL:** `buildBridgeAPI` in the preload reflects _all_ prototype methods of the `FontEngine` instance at runtime. If `FontEngineAPI` drifts from the actual `FontEngine` class (e.g., shift-node is not rebuilt), the TypeScript types will lie -- calls will fail at runtime with no compile-time warning.
 - **Architecture Invariant:** `NodeRef` and `NodePositionUpdate` are re-exported aliases for `JsNodeRef` and `JsNodePositionUpdate` from shift-node. Renderer code should import these aliases, not the `Js`-prefixed originals.
 
 ## Codemap

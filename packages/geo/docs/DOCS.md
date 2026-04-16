@@ -55,12 +55,14 @@ src/
 ## Workflow recipes
 
 ### Add a new Vec2 function
+
 1. Add the function to the `Vec2` object in `Vec2.ts` -- maintain the section grouping (Construction, Basic Operations, etc.).
 2. Add tests in `Vec2.test.ts`.
 3. No index.ts change needed -- `Vec2` is already exported as a namespace.
 4. Run `pnpm --filter @shift/geo test`.
 
 ### Add a new curve type
+
 1. Add the curve interface in `Curve.ts` near the existing types.
 2. Add it to the `CurveType` union.
 3. Add a case to every `switch (curve.type)` in `Curve` -- the compiler will flag missing cases.
@@ -69,6 +71,7 @@ src/
 6. Run `pnpm --filter @shift/geo test`.
 
 ### Use Mat for a Canvas2D transform
+
 ```typescript
 const mat = Mat.Identity().translate(cx, cy).rotate(angle).scale(sx, sy).translate(-cx, -cy);
 ctx.setTransform(...mat.toCanvasTransform());
