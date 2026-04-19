@@ -1,11 +1,4 @@
-import type { Point2D, PointId } from "@shift/types";
-
-/** A point with a stable identity that can be fed into transform operations. */
-export interface TransformablePoint {
-  readonly id: PointId;
-  readonly x: number;
-  readonly y: number;
-}
+import type { Point2D } from "@shift/types";
 
 /**
  * Axis or arbitrary angle for reflection transforms.

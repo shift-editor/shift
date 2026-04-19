@@ -1,64 +1,30 @@
 import type { Point2D, PointId } from "@shift/types";
-import { Vec2 } from "@shift/geo";
-import { BaseCommand, type CommandContext } from "../core/Command";
-import { Transform } from "../../transform/Transform";
-import type { ReflectAxis, TransformablePoint } from "@/types/transform";
 import { Glyphs } from "@shift/font";
+import { BaseCommand, type CommandContext } from "../core/Command";
+import type { ReflectAxis } from "@/types/transform";
 
-/**
- * Template for point-set transform commands. Captures original positions on
- * first execute, delegates to {@link transformPoints} for the actual math,
- * and writes results back via the font engine. Subclasses only need to
- * implement `transformPoints`.
- */
 abstract class BaseTransformCommand extends BaseCommand<void> {
   abstract override readonly name: string;
 
-  #pointIds: PointId[];
+  protected readonly pointIds: PointId[];
   #originalPositions: Map<PointId, Point2D> = new Map();
 
   constructor(pointIds: PointId[]) {
     super();
-    this.#pointIds = [...pointIds];
+    this.pointIds = [...pointIds];
   }
 
-  protected abstract transformPoints(points: readonly TransformablePoint[]): TransformablePoint[];
+  protected captureOriginalPositions(ctx: CommandContext): void {
+    if (this.#originalPositions.size > 0 || this.pointIds.length === 0) return;
 
-  execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
-    if (points.length === 0) return;
-
-    if (this.#originalPositions.size === 0) {
-      for (const p of points) {
-        this.#originalPositions.set(p.id, { x: p.x, y: p.y });
-      }
-    }
-
-    const transformed = this.transformPoints(points);
-    for (const p of transformed) {
-      ctx.glyph.movePointTo(p.id, p.x, p.y);
+    for (const point of Glyphs.findPoints(ctx.glyph, this.pointIds)) {
+      this.#originalPositions.set(point.id, { x: point.x, y: point.y });
     }
   }
 
-  undo(ctx: CommandContext): void {
+  protected restoreOriginalPositions(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(id, pos.x, pos.y);
-    }
-  }
-
-  override redo(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-
-    const points: TransformablePoint[] = [];
-    for (const [id, pos] of this.#originalPositions) {
-      points.push({ id, x: pos.x, y: pos.y });
-    }
-
-    const transformed = this.transformPoints(points);
-    for (const p of transformed) {
-      ctx.glyph.movePointTo(p.id, p.x, p.y);
+      ctx.glyph.movePointTo(id, pos);
     }
   }
 }
@@ -79,8 +45,17 @@ export class RotatePointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
-    return Transform.rotatePoints(points, this.#angle, this.#origin);
+  execute(ctx: CommandContext): void {
+    this.captureOriginalPositions(ctx);
+    ctx.glyph.rotate(this.pointIds, this.#angle, this.#origin);
+  }
+
+  undo(ctx: CommandContext): void {
+    this.restoreOriginalPositions(ctx);
+  }
+
+  override redo(ctx: CommandContext): void {
+    ctx.glyph.rotate(this.pointIds, this.#angle, this.#origin);
   }
 }
 
@@ -102,8 +77,17 @@ export class ScalePointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
-    return Transform.scalePoints(points, this.#sx, this.#sy, this.#origin);
+  execute(ctx: CommandContext): void {
+    this.captureOriginalPositions(ctx);
+    ctx.glyph.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
+  }
+
+  undo(ctx: CommandContext): void {
+    this.restoreOriginalPositions(ctx);
+  }
+
+  override redo(ctx: CommandContext): void {
+    ctx.glyph.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
   }
 }
 
@@ -123,8 +107,17 @@ export class ReflectPointsCommand extends BaseTransformCommand {
     this.#origin = origin;
   }
 
-  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
-    return Transform.reflectPoints(points, this.#axis, this.#origin);
+  execute(ctx: CommandContext): void {
+    this.captureOriginalPositions(ctx);
+    ctx.glyph.reflect(this.pointIds, this.#axis, this.#origin);
+  }
+
+  undo(ctx: CommandContext): void {
+    this.restoreOriginalPositions(ctx);
+  }
+
+  override redo(ctx: CommandContext): void {
+    ctx.glyph.reflect(this.pointIds, this.#axis, this.#origin);
   }
 }
 
@@ -145,12 +138,16 @@ export class MoveSelectionToCommand extends BaseTransformCommand {
     this.#anchor = anchor;
   }
 
-  protected transformPoints(points: readonly TransformablePoint[]): TransformablePoint[] {
-    const delta = Vec2.sub(this.#target, this.#anchor);
+  execute(ctx: CommandContext): void {
+    this.captureOriginalPositions(ctx);
+    ctx.glyph.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
+  }
 
-    return points.map((p) => {
-      const newPos = Vec2.add(p, delta);
-      return { id: p.id, x: newPos.x, y: newPos.y };
-    });
+  undo(ctx: CommandContext): void {
+    this.restoreOriginalPositions(ctx);
+  }
+
+  override redo(ctx: CommandContext): void {
+    ctx.glyph.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
   }
 }

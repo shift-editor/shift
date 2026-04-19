@@ -21,7 +21,8 @@
 
 import { Mat, type MatModel } from "@shift/geo";
 import type { Point2D } from "@shift/types";
-import type { TransformablePoint, ReflectAxis } from "./types";
+import type { ReflectAxis } from "./types";
+import type { PointPosition } from "./PointPosition";
 
 /**
  * Pure transformation functions for geometry manipulation.
@@ -36,10 +37,10 @@ export const Transform = {
    * @returns New array of transformed points (original unchanged)
    */
   rotatePoints(
-    points: readonly TransformablePoint[],
+    points: readonly PointPosition[],
     angle: number,
     origin: Point2D,
-  ): TransformablePoint[] {
+  ): PointPosition[] {
     return Transform.applyMatrix(points, Mat.Rotate(angle), origin);
   },
 
@@ -53,11 +54,11 @@ export const Transform = {
    * @returns New array of transformed points (original unchanged)
    */
   scalePoints(
-    points: readonly TransformablePoint[],
+    points: readonly PointPosition[],
     sx: number,
     sy: number,
     origin: Point2D,
-  ): TransformablePoint[] {
+  ): PointPosition[] {
     return Transform.applyMatrix(points, Mat.Scale(sx, sy), origin);
   },
 
@@ -70,10 +71,10 @@ export const Transform = {
    * @returns New array of transformed points (original unchanged)
    */
   reflectPoints(
-    points: readonly TransformablePoint[],
+    points: readonly PointPosition[],
     axis: ReflectAxis,
     origin: Point2D,
-  ): TransformablePoint[] {
+  ): PointPosition[] {
     const matrix =
       axis === "horizontal"
         ? Mat.ReflectHorizontal()
@@ -93,10 +94,10 @@ export const Transform = {
    * @returns New array of transformed points (original unchanged)
    */
   applyMatrix(
-    points: readonly TransformablePoint[],
+    points: readonly PointPosition[],
     matrix: MatModel,
     origin: Point2D = { x: 0, y: 0 },
-  ): TransformablePoint[] {
+  ): PointPosition[] {
     // Build composite: Translate(-origin) → Matrix → Translate(origin)
     // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
     const toOrigin = Mat.Translate(-origin.x, -origin.y);
@@ -123,21 +124,21 @@ export const Transform = {
   /**
    * Rotate points by 90 degrees counter-clockwise.
    */
-  rotate90CCW(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
+  rotate90CCW(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
     return Transform.rotatePoints(points, Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 90 degrees clockwise.
    */
-  rotate90CW(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
+  rotate90CW(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
     return Transform.rotatePoints(points, -Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 180 degrees.
    */
-  rotate180(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
+  rotate180(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
     return Transform.rotatePoints(points, Math.PI, origin);
   },
 
@@ -145,24 +146,24 @@ export const Transform = {
    * Scale uniformly (same factor for X and Y).
    */
   scaleUniform(
-    points: readonly TransformablePoint[],
+    points: readonly PointPosition[],
     factor: number,
     origin: Point2D,
-  ): TransformablePoint[] {
+  ): PointPosition[] {
     return Transform.scalePoints(points, factor, factor, origin);
   },
 
   /**
    * Flip horizontally (mirror across horizontal axis through origin).
    */
-  flipHorizontal(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
+  flipHorizontal(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
     return Transform.reflectPoints(points, "horizontal", origin);
   },
 
   /**
    * Flip vertically (mirror across vertical axis through origin).
    */
-  flipVertical(points: readonly TransformablePoint[], origin: Point2D): TransformablePoint[] {
+  flipVertical(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
     return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;
