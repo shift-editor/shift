@@ -70,10 +70,7 @@ export class NudgePointsCommand extends BaseCommand<void> {
   #apply(ctx: CommandContext, dx: number, dy: number): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
-    ctx.glyph.setNodePositions(
-      points.map((p) => ({ node: { kind: "point", id: p.id }, x: p.x + dx, y: p.y + dy })),
-    );
+    ctx.glyph.translate(this.#pointIds, { x: dx, y: dy });
   }
 }
 

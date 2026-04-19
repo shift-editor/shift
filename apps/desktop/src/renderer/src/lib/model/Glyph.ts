@@ -38,8 +38,8 @@ import {
   type SegmentContourLike,
   type PointWithNeighbors,
 } from "@shift/font";
-import { Bounds, Curve, type Bounds as BoundsType } from "@shift/geo";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import { Bounds, Curve, Vec2, type Bounds as BoundsType } from "@shift/geo";
+import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
@@ -47,6 +47,14 @@ import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { NativeBridge } from "@/bridge";
 import type { PointEdit, PasteResult } from "@/types/engine";
 import type { ContourContent } from "@/lib/clipboard";
+import { Transform } from "@/lib/transform/Transform";
+import { Alignment } from "@/lib/transform/Alignment";
+import type {
+  AlignmentType,
+  DistributeType,
+  ReflectAxis,
+  TransformablePoint,
+} from "@/types/transform";
 
 export class Contour {
   readonly id: ContourId;
@@ -228,6 +236,11 @@ export class Glyph {
   }
 
   /** @knipclassignore */
+  findPoints(pointIds: readonly PointId[]): Point[] {
+    return Glyphs.findPoints(this, [...pointIds]);
+  }
+
+  /** @knipclassignore */
   get allPoints(): Point[] {
     return Glyphs.getAllPoints(this);
   }
@@ -258,8 +271,13 @@ export class Glyph {
   }
 
   /** @knipclassignore */
-  movePointTo(pointId: PointId, x: number, y: number): void {
-    this.#bridge.movePointTo(pointId, x, y);
+  movePointTo(pointId: PointId, positionOrX: Point2D | number, y?: number): void {
+    if (typeof positionOrX === "number") {
+      this.#bridge.movePointTo(pointId, positionOrX, y ?? 0);
+      return;
+    }
+
+    this.#bridge.movePointTo(pointId, positionOrX.x, positionOrX.y);
   }
 
   /** @knipclassignore */
@@ -302,9 +320,94 @@ export class Glyph {
     this.#bridge.setXAdvance(width);
   }
 
-  /** @knipclassignore */
+  /** @internal High-throughput position write primitive used by domain verbs. */
   setNodePositions(updates: NodePositionUpdateList): void {
     this.#bridge.setNodePositions(updates);
+  }
+
+  /** @knipclassignore */
+  translate(pointIds: readonly PointId[], delta: Point2D): void {
+    if (pointIds.length === 0 || (delta.x === 0 && delta.y === 0)) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    this.#applyPointUpdates(
+      points.map((point) => {
+        const next = Vec2.add(point, delta);
+        return { node: { kind: "point", id: point.id }, x: next.x, y: next.y };
+      }),
+    );
+  }
+
+  /** @knipclassignore */
+  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
+    if (pointIds.length === 0) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    const delta = Vec2.sub(target, anchor);
+
+    this.#applyPointUpdates(
+      points.map((point) => {
+        const next = Vec2.add(point, delta);
+        return { node: { kind: "point", id: point.id }, x: next.x, y: next.y };
+      }),
+    );
+  }
+
+  /** @knipclassignore */
+  rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
+    if (pointIds.length === 0 || angle === 0) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    this.#applyTransformedPoints(Transform.rotatePoints(points, angle, origin));
+  }
+
+  /** @knipclassignore */
+  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
+    if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    this.#applyTransformedPoints(Transform.scalePoints(points, sx, sy, origin));
+  }
+
+  /** @knipclassignore */
+  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
+    if (pointIds.length === 0) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    this.#applyTransformedPoints(Transform.reflectPoints(points, axis, origin));
+  }
+
+  /** @knipclassignore */
+  align(pointIds: readonly PointId[], alignment: AlignmentType): void {
+    if (pointIds.length === 0) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length === 0) return;
+
+    const bounds = Bounds.fromPoints(points);
+    if (!bounds) return;
+
+    this.#applyTransformedPoints(Alignment.alignPoints(points, alignment, bounds));
+  }
+
+  /** @knipclassignore */
+  distribute(pointIds: readonly PointId[], type: DistributeType): void {
+    if (pointIds.length < 3) return;
+
+    const points = this.#resolveTransformablePoints(pointIds);
+    if (points.length < 3) return;
+
+    this.#applyTransformedPoints(Alignment.distributePoints(points, type));
   }
 
   /** @knipclassignore */
@@ -363,6 +466,25 @@ export class Glyph {
       })),
       activeContourId: this.#activeContourId.peek(),
     };
+  }
+
+  #resolveTransformablePoints(pointIds: readonly PointId[]): TransformablePoint[] {
+    return Glyphs.findPoints(this, [...pointIds]).map((point) => ({
+      id: point.id,
+      x: point.x,
+      y: point.y,
+    }));
+  }
+
+  #applyTransformedPoints(points: readonly TransformablePoint[]): void {
+    this.#applyPointUpdates(
+      points.map((point) => ({ node: { kind: "point", id: point.id }, x: point.x, y: point.y })),
+    );
+  }
+
+  #applyPointUpdates(updates: readonly NodePositionUpdate[]): void {
+    if (updates.length === 0) return;
+    this.setNodePositions(updates);
   }
 
   #syncFromSnapshot(snapshot: GlyphSnapshot): void {
