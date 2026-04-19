@@ -232,11 +232,6 @@ export class Glyph {
   }
 
   /** @knipclassignore */
-  findPoints(pointIds: readonly PointId[]): Point[] {
-    return Glyphs.findPoints(this, [...pointIds]);
-  }
-
-  /** @knipclassignore */
   get allPoints(): Point[] {
     return Glyphs.getAllPoints(this);
   }
@@ -267,13 +262,8 @@ export class Glyph {
   }
 
   /** @knipclassignore */
-  movePointTo(pointId: PointId, positionOrX: Point2D | number, y?: number): void {
-    if (typeof positionOrX === "number") {
-      this.#bridge.movePointTo(pointId, positionOrX, y ?? 0);
-      return;
-    }
-
-    this.#bridge.movePointTo(pointId, positionOrX.x, positionOrX.y);
+  movePointTo(pointId: PointId, position: Point2D): void {
+    this.#bridge.movePointTo(pointId, position.x, position.y);
   }
 
   /** @knipclassignore */

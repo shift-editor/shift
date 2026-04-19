@@ -210,7 +210,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.glyph.movePointTo(controlId, cA.x, cA.y);
+    ctx.glyph.movePointTo(controlId, cA);
 
     return this.#splitPointId;
   }
@@ -262,8 +262,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.glyph.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.glyph.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.glyph.movePointTo(control1Id, c0A);
+    ctx.glyph.movePointTo(control2Id, c1B);
 
     return this.#splitPointId;
   }
@@ -274,7 +274,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(pointId, pos.x, pos.y);
+      ctx.glyph.movePointTo(pointId, pos);
     }
   }
 
