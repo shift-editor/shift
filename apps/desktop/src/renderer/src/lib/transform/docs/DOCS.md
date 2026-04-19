@@ -25,7 +25,7 @@ transform/
 
 ## Key Types
 
-- `TransformablePoint` -- `{ id: PointId; x: number; y: number }`. The minimal point shape every transform function accepts.
+- `PointPosition` (internal) -- `{ id: PointId; x: number; y: number }`. Local helper shape used inside transform/model internals for stable point identity plus absolute position.
 - `ReflectAxis` -- `"horizontal" | "vertical" | { angle: number }`. Named axes or arbitrary angle for reflection.
 - `AlignmentType` -- `"left" | "center-h" | "right" | "top" | "center-v" | "bottom"`. Edge or center to align against.
 - `DistributeType` -- `"horizontal" | "vertical"`. Axis along which to space points evenly.
@@ -38,7 +38,7 @@ transform/
 
 ### Pure functions layer
 
-`Transform` is a namespace object with pure functions. All three geometric operations -- `rotatePoints`, `scalePoints`, `reflectPoints` -- build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
+`Transform` is a namespace object with pure functions. All three geometric operations -- `rotatePoints`, `scalePoints`, `reflectPoints` -- build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. These helpers operate on a small internal `PointPosition` shape rather than exporting transform-specific point vocabulary into the wider app. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
 
 The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scale`, etc.) for callers that need to compose custom transforms.
 
@@ -46,7 +46,7 @@ The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scal
 
 Undo/redo is handled by command classes in `commands/transform/`, re-exported through the barrel `index.ts`:
 
-- `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand` all extend `BaseTransformCommand`. The base class captures original positions on first execute and delegates the math to a `transformPoints` abstract method that each subclass implements with the corresponding `Transform.*` call.
+- `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand` all extend `BaseTransformCommand`. The base class captures original positions on first execute; subclasses now call glyph-domain verbs (`glyph.rotate`, `glyph.scale`, etc.) instead of manually iterating point writes.
 - `AlignPointsCommand` and `DistributePointsCommand` extend `BaseCommand` directly and call `Alignment.alignPoints` / `Alignment.distributePoints`.
 
 ### Alignment

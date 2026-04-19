@@ -49,12 +49,8 @@ import type { PointEdit, PasteResult } from "@/types/engine";
 import type { ContourContent } from "@/lib/clipboard";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
-import type {
-  AlignmentType,
-  DistributeType,
-  ReflectAxis,
-  TransformablePoint,
-} from "@/types/transform";
+import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
+import type { PointPosition } from "@/lib/transform/PointPosition";
 
 export class Contour {
   readonly id: ContourId;
@@ -329,7 +325,7 @@ export class Glyph {
   translate(pointIds: readonly PointId[], delta: Point2D): void {
     if (pointIds.length === 0 || (delta.x === 0 && delta.y === 0)) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
     this.#applyPointUpdates(
@@ -344,7 +340,7 @@ export class Glyph {
   moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
     if (pointIds.length === 0) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
     const delta = Vec2.sub(target, anchor);
@@ -361,53 +357,53 @@ export class Glyph {
   rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
     if (pointIds.length === 0 || angle === 0) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
-    this.#applyTransformedPoints(Transform.rotatePoints(points, angle, origin));
+    this.#applyPointPositions(Transform.rotatePoints(points, angle, origin));
   }
 
   /** @knipclassignore */
   scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
     if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
-    this.#applyTransformedPoints(Transform.scalePoints(points, sx, sy, origin));
+    this.#applyPointPositions(Transform.scalePoints(points, sx, sy, origin));
   }
 
   /** @knipclassignore */
   reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
     if (pointIds.length === 0) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
-    this.#applyTransformedPoints(Transform.reflectPoints(points, axis, origin));
+    this.#applyPointPositions(Transform.reflectPoints(points, axis, origin));
   }
 
   /** @knipclassignore */
   align(pointIds: readonly PointId[], alignment: AlignmentType): void {
     if (pointIds.length === 0) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length === 0) return;
 
     const bounds = Bounds.fromPoints(points);
     if (!bounds) return;
 
-    this.#applyTransformedPoints(Alignment.alignPoints(points, alignment, bounds));
+    this.#applyPointPositions(Alignment.alignPoints(points, alignment, bounds));
   }
 
   /** @knipclassignore */
   distribute(pointIds: readonly PointId[], type: DistributeType): void {
     if (pointIds.length < 3) return;
 
-    const points = this.#resolveTransformablePoints(pointIds);
+    const points = this.#resolvePointPositions(pointIds);
     if (points.length < 3) return;
 
-    this.#applyTransformedPoints(Alignment.distributePoints(points, type));
+    this.#applyPointPositions(Alignment.distributePoints(points, type));
   }
 
   /** @knipclassignore */
@@ -468,7 +464,7 @@ export class Glyph {
     };
   }
 
-  #resolveTransformablePoints(pointIds: readonly PointId[]): TransformablePoint[] {
+  #resolvePointPositions(pointIds: readonly PointId[]): PointPosition[] {
     return Glyphs.findPoints(this, [...pointIds]).map((point) => ({
       id: point.id,
       x: point.x,
@@ -476,7 +472,7 @@ export class Glyph {
     }));
   }
 
-  #applyTransformedPoints(points: readonly TransformablePoint[]): void {
+  #applyPointPositions(points: readonly PointPosition[]): void {
     this.#applyPointUpdates(
       points.map((point) => ({ node: { kind: "point", id: point.id }, x: point.x, y: point.y })),
     );

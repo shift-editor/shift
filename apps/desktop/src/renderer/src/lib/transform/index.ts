@@ -22,7 +22,6 @@
 
 // Types (re-export from centralized types)
 export type {
-  TransformablePoint,
   ReflectAxis,
   TransformOptions,
   ScaleOptions,
