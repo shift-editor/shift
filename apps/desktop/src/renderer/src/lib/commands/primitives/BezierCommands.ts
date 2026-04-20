@@ -1,5 +1,4 @@
 import type { PointId, ContourId, Point2D } from "@shift/types";
-import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
 import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
@@ -24,7 +23,7 @@ export class CloseContourCommand extends BaseCommand<void> {
     this.#contourId = ctx.glyph.activeContourId;
 
     if (this.#contourId) {
-      const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
+      const contour = ctx.glyph.contour(this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
@@ -70,10 +69,7 @@ export class NudgePointsCommand extends BaseCommand<void> {
   #apply(ctx: CommandContext, dx: number, dy: number): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
-    ctx.glyph.setNodePositions(
-      points.map((p) => ({ node: { kind: "point", id: p.id }, x: p.x + dx, y: p.y + dy })),
-    );
+    ctx.glyph.translate(this.#pointIds, { x: dx, y: dy });
   }
 }
 
@@ -213,7 +209,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.glyph.movePointTo(controlId, cA.x, cA.y);
+    ctx.glyph.movePointTo(controlId, cA);
 
     return this.#splitPointId;
   }
@@ -265,8 +261,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.glyph.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.glyph.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.glyph.movePointTo(control1Id, c0A);
+    ctx.glyph.movePointTo(control2Id, c1B);
 
     return this.#splitPointId;
   }
@@ -277,7 +273,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(pointId, pos.x, pos.y);
+      ctx.glyph.movePointTo(pointId, pos);
     }
   }
 

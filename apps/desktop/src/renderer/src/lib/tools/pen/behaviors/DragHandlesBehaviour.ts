@@ -203,12 +203,12 @@ export class HandleBehavior implements PenBehavior {
     if (!glyph) return;
 
     if (handles.cpOut) {
-      glyph.movePointTo(handles.cpOut, snappedPos.x, snappedPos.y);
+      glyph.movePointTo(handles.cpOut, snappedPos);
     }
 
     if (handles.cpIn) {
       const mirror = Vec2.mirror(snappedPos, anchor.position);
-      glyph.movePointTo(handles.cpIn, mirror.x, mirror.y);
+      glyph.movePointTo(handles.cpIn, mirror);
     }
   }
 

@@ -1347,7 +1347,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
-    return Glyphs.findContour(glyph, activeContourId) ?? null;
+    return glyph.contour(activeContourId) ?? null;
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
