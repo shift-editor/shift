@@ -27,10 +27,7 @@ export const Alignment = {
     }
   },
 
-  distributePoints(
-    points: readonly PointPosition[],
-    type: DistributeType,
-  ): PointPosition[] {
+  distributePoints(points: readonly PointPosition[], type: DistributeType): PointPosition[] {
     if (points.length < 3) return [...points];
 
     const sorted = [...points].sort((a, b) => (type === "horizontal" ? a.x - b.x : a.y - b.y));

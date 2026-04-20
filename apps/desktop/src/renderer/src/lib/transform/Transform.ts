@@ -36,11 +36,7 @@ export const Transform = {
    * @param origin - Center of rotation
    * @returns New array of transformed points (original unchanged)
    */
-  rotatePoints(
-    points: readonly PointPosition[],
-    angle: number,
-    origin: Point2D,
-  ): PointPosition[] {
+  rotatePoints(points: readonly PointPosition[], angle: number, origin: Point2D): PointPosition[] {
     return Transform.applyMatrix(points, Mat.Rotate(angle), origin);
   },
 
@@ -145,11 +141,7 @@ export const Transform = {
   /**
    * Scale uniformly (same factor for X and Y).
    */
-  scaleUniform(
-    points: readonly PointPosition[],
-    factor: number,
-    origin: Point2D,
-  ): PointPosition[] {
+  scaleUniform(points: readonly PointPosition[], factor: number, origin: Point2D): PointPosition[] {
     return Transform.scalePoints(points, factor, factor, origin);
   },
 
