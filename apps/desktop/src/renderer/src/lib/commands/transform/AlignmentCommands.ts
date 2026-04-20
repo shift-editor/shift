@@ -1,5 +1,4 @@
 import type { Point2D, PointId } from "@shift/types";
-import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { AlignmentType, DistributeType } from "@/types/transform";
 
@@ -25,7 +24,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
+    const points = ctx.glyph.points(this.#pointIds);
     if (points.length === 0) return;
 
     if (this.#originalPositions.size === 0) {
@@ -70,7 +69,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length < 3) return;
 
-    const points = Glyphs.findPoints(ctx.glyph, this.#pointIds);
+    const points = ctx.glyph.points(this.#pointIds);
     if (points.length < 3) return;
 
     if (this.#originalPositions.size === 0) {

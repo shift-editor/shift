@@ -1,5 +1,4 @@
 import type { Point2D, PointId } from "@shift/types";
-import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { ReflectAxis } from "@/types/transform";
 
@@ -17,7 +16,7 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   protected captureOriginalPositions(ctx: CommandContext): void {
     if (this.#originalPositions.size > 0 || this.pointIds.length === 0) return;
 
-    for (const point of Glyphs.findPoints(ctx.glyph, this.pointIds)) {
+    for (const point of ctx.glyph.points(this.pointIds)) {
       this.#originalPositions.set(point.id, { x: point.x, y: point.y });
     }
   }

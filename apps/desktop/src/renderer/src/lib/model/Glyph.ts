@@ -222,12 +222,17 @@ export class Glyph {
   }
 
   /** @knipclassignore */
-  findPoint(pointId: PointId) {
+  point(pointId: PointId) {
     return Glyphs.findPoint(this, pointId);
   }
 
   /** @knipclassignore */
-  findContour(contourId: ContourId) {
+  points(pointIds: readonly PointId[]): Point[] {
+    return Glyphs.findPoints(this, [...pointIds]);
+  }
+
+  /** @knipclassignore */
+  contour(contourId: ContourId) {
     return Glyphs.findContour(this, contourId);
   }
 
@@ -455,7 +460,7 @@ export class Glyph {
   }
 
   #resolvePointPositions(pointIds: readonly PointId[]): PointPosition[] {
-    return Glyphs.findPoints(this, [...pointIds]).map((point) => ({
+    return this.points(pointIds).map((point) => ({
       id: point.id,
       x: point.x,
       y: point.y,
