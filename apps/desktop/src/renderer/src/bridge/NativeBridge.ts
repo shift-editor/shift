@@ -238,10 +238,13 @@ export class NativeBridge {
 
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
+
     const snapshot = this.getEditingSnapshot();
     if (!snapshot) throw new NativeOperationError("No glyph available");
+
     const found = Glyphs.findPoint(snapshot, pointId);
     if (!found) throw new NativeOperationError(`Point ${pointId} not found`);
+
     this.movePoints([pointId], { x: x - found.point.x, y: y - found.point.y });
   }
 
