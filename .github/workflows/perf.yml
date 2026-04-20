@@ -73,7 +73,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Cache native module binary
@@ -126,7 +125,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Cache Playwright browsers

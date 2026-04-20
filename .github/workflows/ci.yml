@@ -85,7 +85,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Lint (oxlint)
@@ -123,7 +122,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - uses: Swatinem/rust-cache@v2
@@ -163,7 +161,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - uses: Swatinem/rust-cache@v2
@@ -214,7 +211,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Dead code check (knip)
@@ -307,7 +303,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Build native module
@@ -356,7 +351,6 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Cache Playwright browsers
