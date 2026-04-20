@@ -1,12 +1,12 @@
 import type { Point2D, PointId } from "@shift/types";
 import type { Behavior } from "../core/Behavior";
 
-export interface AnchorData {
+export interface Anchor {
   position: Point2D;
   pointId?: PointId;
 }
 
-export interface HandleData {
+export interface Handles {
   cpIn?: PointId;
   cpOut?: PointId;
 }
@@ -14,11 +14,11 @@ export interface HandleData {
 export type PenState =
   | { type: "idle" }
   | { type: "ready"; mousePos: Point2D }
-  | { type: "anchored"; anchor: AnchorData }
+  | { type: "anchored"; anchor: Anchor }
   | {
       type: "dragging";
-      anchor: AnchorData;
-      handles: HandleData;
+      anchor: Anchor;
+      handles: Handles;
       mousePos: Point2D;
       snappedPos?: Point2D;
     };

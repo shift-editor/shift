@@ -8,7 +8,7 @@ import { Shape } from "../shape/Shape";
 import { Pen } from "../pen/Pen";
 import { Select } from "../select/Select";
 import { asPointId } from "@shift/types";
-import type { HandleData } from "../pen/types";
+import type { Handles } from "../pen/types";
 
 const p = { x: 0, y: 0 };
 const coordsP = makeTestCoordinates(p);
@@ -188,7 +188,7 @@ describe("State diagram compliance", () => {
       const draggingState = {
         type: "dragging" as const,
         anchor: anchor.anchor,
-        handles: {} as HandleData,
+        handles: {} as Handles,
         mousePos: p,
       };
 

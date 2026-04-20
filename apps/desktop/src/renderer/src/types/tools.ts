@@ -1,6 +1,6 @@
-import type { ToolManifest, ToolName } from "@/lib/tools/core";
+import type { ToolName } from "@/lib/tools/core";
 
-export type ToolDescriptor = ToolManifest;
+export type { ToolManifest } from "@/lib/tools/core";
 
 export type ToolShortcutEntry = {
   toolId: ToolName;

@@ -5,7 +5,7 @@ import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { DragTarget } from "../types";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { SegmentId } from "@/types/indicator";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
@@ -20,7 +20,7 @@ import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
-export class Translate implements SelectHandlerBehavior {
+export class Translate implements SelectBehavior {
   #snap: DragSnapSession | null = null;
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;

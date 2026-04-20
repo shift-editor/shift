@@ -203,7 +203,7 @@ export class AppLifecycle {
       this.menuManager.setTheme(theme);
     });
 
-    ipc.handle(ipcMain, "debug:getState", () => this.menuManager.getDebugState());
+    ipc.handle(ipcMain, "debug:getState", () => this.menuManager.getDebug());
 
     ipc.handle(ipcMain, "dialog:openFont", async () => {
       const result = await dialog.showOpenDialog({

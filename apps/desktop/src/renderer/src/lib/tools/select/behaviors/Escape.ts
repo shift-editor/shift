@@ -1,8 +1,8 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 
-export class Escape implements SelectHandlerBehavior {
+export class Escape implements SelectBehavior {
   onKeyDown(
     state: SelectState,
     ctx: ToolContext<SelectState>,

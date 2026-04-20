@@ -1,6 +1,6 @@
 import type { ContourId, GlyphSnapshot, PointId, PointType } from "@shift/types";
 
-export interface CommandResponse {
+export interface CommandResult {
   snapshot: GlyphSnapshot;
   affectedPointIds: PointId[];
 }

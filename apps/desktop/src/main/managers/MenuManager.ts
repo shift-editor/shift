@@ -1,7 +1,7 @@
 import { Menu, dialog, nativeTheme, app } from "electron";
 import type { DocumentState } from "./DocumentState";
 import type { WindowManager } from "./WindowManager";
-import type { ThemeName, DebugOverlays, DebugState } from "../../shared/ipc/types";
+import type { ThemeName, DebugOverlays, Debug } from "../../shared/ipc/types";
 import type { IpcEvents } from "../../shared/ipc/channels";
 import * as ipc from "../../shared/ipc/main";
 
@@ -9,7 +9,7 @@ export class MenuManager {
   private documentState: DocumentState;
   private windowManager: WindowManager;
   private currentTheme: ThemeName = "light";
-  private debugState: DebugState = {
+  private debugState: Debug = {
     reactScanEnabled: false,
     debugPanelOpen: false,
     overlays: {
@@ -29,7 +29,7 @@ export class MenuManager {
     return this.currentTheme;
   }
 
-  getDebugState(): DebugState {
+  getDebug(): Debug {
     return { ...this.debugState };
   }
 
@@ -42,7 +42,7 @@ export class MenuManager {
     ipc.send(webContents, channel, ...args);
   }
 
-  private setDebugState<K extends keyof DebugState>(key: K, value: DebugState[K]) {
+  private setDebug<K extends keyof Debug>(key: K, value: Debug[K]) {
     this.debugState[key] = value;
     switch (key) {
       case "reactScanEnabled":
@@ -263,14 +263,14 @@ export class MenuManager {
                   type: "checkbox" as const,
                   checked: this.debugState.reactScanEnabled,
                   click: () =>
-                    this.setDebugState("reactScanEnabled", !this.debugState.reactScanEnabled),
+                    this.setDebug("reactScanEnabled", !this.debugState.reactScanEnabled),
                 },
                 {
                   label: "Debug Panel",
                   type: "checkbox" as const,
                   checked: this.debugState.debugPanelOpen,
                   click: () =>
-                    this.setDebugState("debugPanelOpen", !this.debugState.debugPanelOpen),
+                    this.setDebug("debugPanelOpen", !this.debugState.debugPanelOpen),
                 },
                 { type: "separator" as const },
                 {

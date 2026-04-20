@@ -1,4 +1,4 @@
-import type { ThemeName, DebugState, DebugOverlays } from "./types";
+import type { ThemeName, Debug, DebugOverlays } from "./types";
 
 /** Main -> Renderer broadcasts (webContents.send / ipcRenderer.on) */
 export type IpcEvents = {
@@ -24,7 +24,7 @@ export type IpcCommands = {
   "dialog:openFont": () => string | null;
   "theme:get": () => ThemeName;
   "theme:set": (theme: ThemeName) => void;
-  "debug:getState": () => DebugState;
+  "debug:getState": () => Debug;
   "window:close": () => void;
   "window:minimize": () => void;
   "window:maximize": () => void;

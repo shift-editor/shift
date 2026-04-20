@@ -29,7 +29,7 @@ renderer/src/bridge/
 - **`FontEngineAPI`** -- `Omit<FontEngine, "constructor">`. The complete method surface exposed to the renderer. Derived, not hand-written.
 - **`NodeRef`** -- alias for `JsNodeRef`. Tagged union `{ kind: "point" | "anchor" | "guideline", id: string }`.
 - **`NodePositionUpdate`** -- alias for `JsNodePositionUpdate`. `{ node: NodeRef, x: number, y: number }`.
-- **`CompositeComponentPayload`** / **`CompositeComponentsPayload`** -- shapes for composite glyph component data (component glyph name, source unicodes, contours).
+- **`CompositeComponent`** / **`CompositeComponents`** -- shapes for composite glyph component data (component glyph name, source unicodes, contours).
 - **`Window.shiftFont`** -- global declaration (`FontEngineAPI | undefined`) that both preload and renderer rely on.
 
 ## How it works

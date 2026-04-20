@@ -1,6 +1,6 @@
 export type FocusZone = "canvas" | "sidebar" | "toolbar" | "modal";
 
-export interface FocusZoneState {
+export interface FocusZoneFocus {
   activeZone: FocusZone;
   focusLock: boolean;
 }

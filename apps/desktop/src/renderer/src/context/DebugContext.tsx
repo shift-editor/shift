@@ -56,7 +56,7 @@ export function DebugProvider({ children }: DebugProviderProps) {
   useEffect(() => {
     if (!isDev) return undefined;
 
-    window.electronAPI?.getDebugState().then((state) => {
+    window.electronAPI?.getDebug().then((state) => {
       setReactScanEnabled(state.reactScanEnabled);
       setDebugPanelOpen(state.debugPanelOpen);
       if (state.overlays) {

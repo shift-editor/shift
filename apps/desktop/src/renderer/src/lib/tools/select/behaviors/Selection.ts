@@ -1,7 +1,7 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor/Editor";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { PointId, AnchorId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
@@ -15,7 +15,7 @@ function nextSelectionStateAfterToggle(
   return nextInTypeCount + selectedInOtherTypesCount > 0 ? "selected" : "ready";
 }
 
-export class Selection implements SelectHandlerBehavior {
+export class Selection implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
     const editor = ctx.editor;

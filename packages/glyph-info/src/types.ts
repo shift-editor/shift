@@ -1,4 +1,4 @@
-// TODO: Derive GlyphSubCategory and GlyphScript unions from GlyphData.xml during the generate step.
+// TODO: Derive GlyphSubCategory and GlyphScript unions from Glyph.xml during the generate step.
 
 /** Known Unicode general categories used for glyph classification. */
 export const GLYPH_CATEGORIES = [
@@ -13,7 +13,7 @@ export const GLYPH_CATEGORIES = [
 
 export type GlyphCategory = (typeof GLYPH_CATEGORIES)[number];
 
-export interface GlyphData {
+export interface Glyph {
   codepoint: number;
   name: string;
   category: GlyphCategory;
@@ -84,14 +84,14 @@ export interface GlyphCategoryCatalog {
   filter(filter?: GlyphCodepointFilter): number[];
 }
 
-export interface DecompositionData {
+export interface Decomposition {
   decomposed: Record<string, number[]>;
   usedBy: Record<string, number[]>;
 }
 
 export interface GlyphInfoResources {
-  glyphData: GlyphData[];
-  decomposition: DecompositionData;
+  glyphData: Glyph[];
+  decomposition: Decomposition;
   charsets: CharsetDefinition[];
   searchData: Record<string, unknown>[];
 }

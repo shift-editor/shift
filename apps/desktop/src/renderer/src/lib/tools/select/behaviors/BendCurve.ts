@@ -1,10 +1,10 @@
 import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { GlyphDraft } from "@/types/draft";
 
-export class BendCurve implements SelectHandlerBehavior {
+export class BendCurve implements SelectBehavior {
   #draft: GlyphDraft | null = null;
   #hasChanges = false;
 

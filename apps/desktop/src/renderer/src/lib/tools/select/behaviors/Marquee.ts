@@ -1,10 +1,10 @@
 import type { PointId, Rect2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { normalizeRect, pointInRect } from "../utils";
 
-export class Marquee implements SelectHandlerBehavior {
+export class Marquee implements SelectBehavior {
   onDragStart(
     state: SelectState,
     ctx: ToolContext<SelectState>,

@@ -32,9 +32,9 @@ validation/src/
 - `ValidateSnapshot` -- namespace object with type guards for `PointSnapshot`, `ContourSnapshot`, `AnchorSnapshot`, `RenderPointSnapshot`, `RenderContourSnapshot`, `GlyphSnapshot`. Also provides `glyphSnapshot` which returns `ValidationResult<GlyphSnapshot>` with detailed field-level errors.
 - `ValidateClipboard` -- namespace object with `isClipboardContent` (validates contour array shape) and `isClipboardPayload` (validates full `shift/glyph-data` envelope with format, version, metadata, content).
 - `PersistedRootSchema` -- top-level Zod schema for the entire persisted state file (registry, app modules, documents).
-- `PersistedDocumentStateSchema` -- Zod schema for a single document's persisted state (docId, updatedAt, modules map).
+- `PersistedDocumentSchema` -- Zod schema for a single document's persisted state (docId, updatedAt, modules map).
 - `SnapPreferencesSchema` / `UserPreferencesSchema` -- Zod schemas for user snap/preference settings.
-- `TextRunModulePayloadSchema` -- Zod schema for the text-run persistence module payload.
+- `TextRunModuleSchema` -- Zod schema for the text-run persistence module payload.
 
 ## How it works
 
@@ -103,6 +103,6 @@ cd packages/validation && npx tsc --noEmit
 - `NativeBridge` -- calls `ValidateSnapshot.isGlyphSnapshot` before Rust snapshot restore
 - `Segments` / `Segment` -- uses `Validate.isOnCurve` / `Validate.isOffCurve` for segment decomposition
 - `SnapManager` -- uses `Validate.isOnCurve` / `Validate.isOffCurve` for snap target classification
-- `Editor` -- parses `SnapPreferencesSchema` and `TextRunModulePayloadSchema` from persisted state
+- `Editor` -- parses `SnapPreferencesSchema` and `TextRunModuleSchema` from persisted state
 - `persistence/kernel` -- parses `PersistedRootSchema` on app startup
 - `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve"`) that `PointLike` wraps

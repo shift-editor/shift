@@ -49,7 +49,7 @@ The bridge separates JS-side reactivity from Rust-side persistence. Not every mu
 `#dispatch` / `#dispatchVoid` are the standard Rust command path for structural mutations (addPoint, removePoints, closeContour, etc.):
 
 1. Call NAPI method, receive JSON string
-2. `#execute` parses JSON, checks `success`, extracts `CommandResponse` (snapshot + affectedPointIds)
+2. `#execute` parses JSON, checks `success`, extracts `CommandResult` (snapshot + affectedPointIds)
 3. `#syncFromResponse` applies the returned snapshot to the reactive `Glyph` via `Glyph.apply`
 
 ### NAPI position sync

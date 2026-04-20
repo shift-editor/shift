@@ -4,7 +4,7 @@ import type { GlyphSnapshot, Point2D } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { RotateSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/types/draft";
@@ -12,7 +12,7 @@ import type { GlyphDraft } from "@/types/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import type { DragTarget } from "../types";
 
-export class Rotate implements SelectHandlerBehavior {
+export class Rotate implements SelectBehavior {
   #snap: RotateSnapSession | null = null;
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;

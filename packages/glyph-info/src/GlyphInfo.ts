@@ -8,7 +8,7 @@ import type {
   GlyphCodepointFilter,
   GlyphCategoryOptions,
   GlyphCodepointCategory,
-  GlyphData,
+  Glyph,
   GlyphInfoResources,
   SearchResult,
 } from "./types.js";
@@ -125,7 +125,7 @@ function toSortedCategorySummaries(
  * when done (currently a no-op, but present for future resource cleanup).
  */
 export class GlyphInfo {
-  #glyphData: Map<number, GlyphData>;
+  #glyphData: Map<number, Glyph>;
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
@@ -155,7 +155,7 @@ export class GlyphInfo {
   // --- Glyph Data (Map lookups) ---
 
   /** Look up the full metadata record for a codepoint, or `null` if unknown. */
-  getGlyphData(cp: number): GlyphData | null {
+  getGlyph(cp: number): Glyph | null {
     return this.#glyphData.get(cp) ?? null;
   }
 
@@ -167,7 +167,7 @@ export class GlyphInfo {
     return data.name;
   }
 
-  getAllGlyphData(): GlyphData[] {
+  getAllGlyph(): Glyph[] {
     return Array.from(this.#glyphData.values());
   }
 
@@ -179,8 +179,8 @@ export class GlyphInfo {
     return Array.from(categories).sort();
   }
 
-  getGlyphsByCategory(category: GlyphCategory): GlyphData[] {
-    const results: GlyphData[] = [];
+  getGlyphsByCategory(category: GlyphCategory): Glyph[] {
+    const results: Glyph[] = [];
     for (const g of this.#glyphData.values()) {
       if (g.category === category) {
         results.push(g);

@@ -1,9 +1,9 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 
-export class Nudge implements SelectHandlerBehavior {
+export class Nudge implements SelectBehavior {
   onKeyDown(
     state: SelectState,
     ctx: ToolContext<SelectState>,
