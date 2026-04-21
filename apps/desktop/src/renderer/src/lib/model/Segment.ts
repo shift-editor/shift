@@ -1,7 +1,13 @@
 import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
 import { parseContourSegments, segmentToCurve } from "@shift/font";
 import type { PointId, Point } from "@shift/types";
-import type { SegmentPoint, SegmentType } from "@/types/segments";
+import type {
+  SegmentPoint,
+  SegmentType,
+  LineSegment,
+  QuadSegment,
+  CubicSegment,
+} from "@/types/segments";
 import type { SegmentId } from "@/types/indicator";
 import { asSegmentId } from "@/types/indicator";
 
@@ -90,6 +96,11 @@ export class Segment {
     return Curve.bounds(this.toCurve());
   }
 
+  /** @knipclassignore */
+  get length(): number {
+    return Curve.length(this.toCurve());
+  }
+
   /** @internal Raw discriminated data for rendering / clipboard interop. */
   get raw(): SegmentType {
     return this.#data;
@@ -97,6 +108,41 @@ export class Segment {
 
   toCurve(): CurveType {
     return segmentToCurve(this.#data);
+  }
+
+  /** @knipclassignore */
+  pointAt(t: number): Point2D {
+    return Curve.pointAt(this.toCurve(), t);
+  }
+
+  /** @knipclassignore */
+  closestPoint(pos: Point2D) {
+    return Curve.closestPoint(this.toCurve(), pos);
+  }
+
+  /** @knipclassignore */
+  splitAt(t: number): [CurveType, CurveType] {
+    return Curve.splitAt(this.toCurve(), t);
+  }
+
+  /** @knipclassignore */
+  sample(count: number): Point2D[] {
+    return Curve.sample(this.toCurve(), count);
+  }
+
+  /** @knipclassignore Narrow to a line segment, or null if this isn't one. */
+  asLine(): LineSegment | null {
+    return this.#data.type === "line" ? this.#data : null;
+  }
+
+  /** Narrow to a quad segment, or null if this isn't one. */
+  asQuad(): QuadSegment | null {
+    return this.#data.type === "quad" ? this.#data : null;
+  }
+
+  /** Narrow to a cubic segment, or null if this isn't one. */
+  asCubic(): CubicSegment | null {
+    return this.#data.type === "cubic" ? this.#data : null;
   }
 
   hitTest(pos: Point2D, radius: number): SegmentHitResult | null {

@@ -3,7 +3,6 @@ import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { GlyphDraft } from "@/types/draft";
-import type { CubicSegment } from "@/types/segments";
 
 export class BendCurve implements SelectHandlerBehavior {
   #draft: GlyphDraft | null = null;
@@ -20,7 +19,9 @@ export class BendCurve implements SelectHandlerBehavior {
     if (!hit || hit.type !== "segment" || hit.segment.type !== "cubic") return false;
 
     const { t, closestPoint, segmentId, segment } = hit;
-    const { control1, control2 } = (segment.raw as CubicSegment).points;
+    const cubic = segment.asCubic();
+    if (!cubic) return true;
+    const { control1, control2 } = cubic.points;
 
     this.#draft = ctx.editor.createDraft();
     this.#hasChanges = false;
@@ -58,7 +59,9 @@ export class BendCurve implements SelectHandlerBehavior {
     const { initialControlOne, initialControlTwo } = state.bend;
     const newCp1 = Vec2.add(initialControlOne, delta1);
     const newCp2 = Vec2.add(initialControlTwo, delta2);
-    const { control1, control2 } = (segment.raw as CubicSegment).points;
+    const cubic = segment.asCubic();
+    if (!cubic) return true;
+    const { control1, control2 } = cubic.points;
 
     const updates = [
       { node: { kind: "point" as const, id: control1.id }, x: newCp1.x, y: newCp1.y },

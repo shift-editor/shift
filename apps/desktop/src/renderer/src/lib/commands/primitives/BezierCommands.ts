@@ -1,7 +1,7 @@
 import type { PointId, ContourId, Point2D } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
-import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
+import { type CubicCurve, type QuadraticCurve } from "@shift/geo";
+import type { LineSegment } from "@/types/segments";
 import type { Segment } from "@/lib/model/Segment";
 
 /**
@@ -160,8 +160,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitLine(ctx: CommandContext): PointId {
-    const curve = this.#segment.toCurve();
-    const splitPoint = Curve.pointAt(curve, this.#t);
+    const splitPoint = this.#segment.pointAt(this.#t);
 
     const anchor2Id = this.#segment.anchor2.id;
 
@@ -177,9 +176,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const data = this.#segment.raw as QuadSegment;
-    const curve = this.#segment.toCurve() as QuadraticCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [QuadraticCurve, QuadraticCurve];
+    const data = this.#segment.asQuad()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [QuadraticCurve, QuadraticCurve];
 
     const cA = curveA.c;
     const mid = curveA.p1;
@@ -215,9 +213,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const data = this.#segment.raw as CubicSegment;
-    const curve = this.#segment.toCurve() as CubicCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [CubicCurve, CubicCurve];
+    const data = this.#segment.asCubic()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [CubicCurve, CubicCurve];
 
     const c0A = curveA.c0;
     const c1A = curveA.c1;
