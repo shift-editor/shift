@@ -92,11 +92,7 @@ export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
   const selectedPointIds = useSignalState(editor.selection.$pointIds);
-  const glyph = useSignalState(editor.glyph);
-  const selectionBounds = useMemo(
-    () => editor.getSelectionBounds(),
-    [editor, glyph, selectedPointIds],
-  );
+  const selectionBounds = useSignalState(editor.selection.$bounds);
   const [rotation, setRotation] = useState(0);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);

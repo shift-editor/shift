@@ -10,9 +10,9 @@ import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
 import { SetNodePositionsCommand } from "../commands/primitives/SetNodePositionsCommand";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Segment, type SegmentHitResult } from "../geo/Segment";
+import { Segment, type SegmentHitResult } from "@/lib/model/Segment";
 import { Bounds, Vec2 } from "@shift/geo";
-import { Contours, Glyphs } from "@shift/font";
+import { Contours } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
@@ -37,7 +37,6 @@ import {
   MoveSelectionToCommand,
   AlignPointsCommand,
   DistributePointsCommand,
-  getSegmentAwareBounds,
   type ReflectAxis,
   type AlignmentType,
   type DistributeType,
@@ -109,7 +108,7 @@ import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
-import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
+import type { LineSegment } from "@/types/segments";
 import type { GlyphDraft } from "@/types/draft";
 
 /**
@@ -166,7 +165,7 @@ export class Editor {
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
   #$glyph: ComputedSignal<Glyph | null>;
-  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, SegmentHitResult["segment"]>>;
+  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, Segment>>;
 
   #staticEffect: Effect;
   #overlayEffect: Effect;
@@ -207,9 +206,9 @@ export class Editor {
     this.#$segmentIndex = computed(() => {
       const glyph = this.#$glyph.value;
       if (!glyph) return new Map();
-      const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
-      for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-        segmentsById.set(Segment.id(segment), segment);
+      const segmentsById = new Map<SegmentId, Segment>();
+      for (const { segment } of glyph.segments()) {
+        segmentsById.set(segment.id, segment);
       }
       return segmentsById;
     });
@@ -483,7 +482,7 @@ export class Editor {
     if (!previewMode && glyph && this.shouldRenderGlyph()) {
       const hoveredSegmentId = this.getHoveredSegmentId();
       const hoveredSegment = hoveredSegmentId ? this.getSegmentById(hoveredSegmentId) : null;
-      const selectedSegments: GlyphSegment[] = [];
+      const selectedSegments: Segment[] = [];
       for (const segId of this.selection.segmentIds) {
         const seg = this.getSegmentById(segId);
         if (seg) selectedSegments.push(seg);
@@ -1243,17 +1242,9 @@ export class Editor {
     return this.#clipboard.paste();
   }
 
-  public getSelectionBounds(): Bounds | null {
-    const glyph = this.#$glyph.value;
-    const pointIds = this.selection.$pointIds.peek();
-    if (!glyph || pointIds.size === 0) return null;
-    return getSegmentAwareBounds(glyph, Array.from(pointIds));
-  }
-
-  public getSelectionCenter(): Point2D | null {
-    const bounds = this.getSelectionBounds();
-    if (!bounds) return null;
-    return Bounds.center(bounds);
+  #selectionCenter(): Point2D | null {
+    const bounds = this.selection.bounds;
+    return bounds ? Bounds.center(bounds) : null;
   }
 
   /** @param angle - Rotation in radians. */
@@ -1261,7 +1252,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const center = origin ?? this.getSelectionCenter();
+    const center = origin ?? this.#selectionCenter();
     if (!center) return;
 
     const cmd = new RotatePointsCommand([...pointIds], angle, center);
@@ -1272,7 +1263,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const o = origin ?? this.getSelectionCenter();
+    const o = origin ?? this.#selectionCenter();
     if (!o) return;
 
     const cmd = new ScalePointsCommand([...pointIds], sx, sy, o);
@@ -1283,7 +1274,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const center = origin ?? this.getSelectionCenter();
+    const center = origin ?? this.#selectionCenter();
     if (!center) return;
 
     const cmd = new ReflectPointsCommand([...pointIds], axis, center);
@@ -1360,7 +1351,7 @@ export class Editor {
     });
   }
 
-  public splitSegment(segment: GlyphSegment, t: number): PointId {
+  public splitSegment(segment: Segment, t: number): PointId {
     return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
@@ -1379,8 +1370,8 @@ export class Editor {
     this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
   }
 
-  public upgradeLineToCubic(segment: LineSegment): void {
-    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
+  public upgradeLineToCubic(segment: Segment): void {
+    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment.raw as LineSegment));
   }
 
   public applyBooleanOp(
@@ -1398,7 +1389,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
-    return Glyphs.getPointAt(glyph, coords.glyphLocal, this.hitRadius);
+    return glyph.getPointAt(coords.glyphLocal, this.hitRadius);
   }
 
   private getAnchorAt(
@@ -1421,8 +1412,8 @@ export class Editor {
     if (!glyph) return null;
 
     let bestHit: SegmentHitResult | null = null;
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      const hit = Segment.hitTest(segment, coords.glyphLocal, this.hitRadius);
+    for (const { segment } of glyph.segments()) {
+      const hit = segment.hitTest(coords.glyphLocal, this.hitRadius);
       if (hit && (!bestHit || hit.distance < bestHit.distance)) {
         bestHit = hit;
       }
@@ -1530,7 +1521,7 @@ export class Editor {
       return null;
     }
 
-    const points = Glyphs.findPoints(glyph, selectedPointIds);
+    const points = glyph.points([...selectedPointIds]);
     if (points.length <= 1) return null;
 
     const bounds = Bounds.fromPoints(points);
@@ -1579,7 +1570,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return [];
 
-    return Glyphs.getAllPoints(glyph);
+    return glyph.allPoints;
   }
 
   public duplicateSelection(): PointId[] {

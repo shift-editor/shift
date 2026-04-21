@@ -1,8 +1,8 @@
 import type { PointId, ContourId, Point2D } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
-import { Segments as SegmentOps } from "@/lib/geo/Segments";
+import type { QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
+import type { Segment } from "@/lib/model/Segment";
 
 /**
  * Closes the active contour, connecting the last point back to the first.
@@ -160,10 +160,10 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitLine(ctx: CommandContext): PointId {
-    const curve = SegmentOps.toCurve(this.#segment);
+    const curve = this.#segment.toCurve();
     const splitPoint = Curve.pointAt(curve, this.#t);
 
-    const anchor2Id = this.#segment.points.anchor2.id;
+    const anchor2Id = this.#segment.anchor2.id;
 
     this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
@@ -177,20 +177,20 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const segment = this.#segment as QuadSegment;
-    const curve = SegmentOps.toCurve(segment) as QuadraticCurve;
+    const data = this.#segment.raw as QuadSegment;
+    const curve = this.#segment.toCurve() as QuadraticCurve;
     const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [QuadraticCurve, QuadraticCurve];
 
     const cA = curveA.c;
     const mid = curveA.p1;
     const cB = curveB.c;
 
-    const controlId = segment.points.control.id;
-    const anchor2Id = segment.points.anchor2.id;
+    const controlId = data.points.control.id;
+    const anchor2Id = data.points.anchor2.id;
 
     this.#originalPositions.set(controlId, {
-      x: segment.points.control.x,
-      y: segment.points.control.y,
+      x: data.points.control.x,
+      y: data.points.control.y,
     });
 
     this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
@@ -215,8 +215,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const segment = this.#segment as CubicSegment;
-    const curve = SegmentOps.toCurve(segment) as CubicCurve;
+    const data = this.#segment.raw as CubicSegment;
+    const curve = this.#segment.toCurve() as CubicCurve;
     const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [CubicCurve, CubicCurve];
 
     const c0A = curveA.c0;
@@ -225,16 +225,16 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const c0B = curveB.c0;
     const c1B = curveB.c1;
 
-    const control1Id = segment.points.control1.id;
-    const control2Id = segment.points.control2.id;
+    const control1Id = data.points.control1.id;
+    const control2Id = data.points.control2.id;
 
     this.#originalPositions.set(control1Id, {
-      x: segment.points.control1.x,
-      y: segment.points.control1.y,
+      x: data.points.control1.x,
+      y: data.points.control1.y,
     });
     this.#originalPositions.set(control2Id, {
-      x: segment.points.control2.x,
-      y: segment.points.control2.y,
+      x: data.points.control2.x,
+      y: data.points.control2.y,
     });
 
     const c1AId = ctx.glyph.insertPointBefore(control2Id, {

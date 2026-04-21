@@ -4,7 +4,6 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { isSegmentHit } from "@/types/hitResult";
 
 export class ContourDoubleClick implements SelectHandlerBehavior {
@@ -31,9 +30,8 @@ export class ContourDoubleClick implements SelectHandlerBehavior {
     if (!glyph) return null;
 
     for (const contour of glyph.contours) {
-      const segments = SegmentOps.parse(contour.points, contour.closed);
-      for (const seg of segments) {
-        if (SegmentOps.id(seg) === segmentId) {
+      for (const segment of contour.segments()) {
+        if (segment.id === segmentId) {
           return contour.points.map((point) => point.id);
         }
       }

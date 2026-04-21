@@ -3,7 +3,8 @@ import { CloseContourCommand, NudgePointsCommand, SplitSegmentCommand } from "./
 import { createBridge, getAllPoints, getPointCount } from "@/testing";
 import type { NativeBridge } from "@/bridge";
 import type { CommandContext } from "../core";
-import type { LineSegment, QuadSegment, CubicSegment } from "@/types/segments";
+import { Segment } from "@/lib/model/Segment";
+import type { QuadSegment, CubicSegment } from "@/types/segments";
 import type { PointId } from "@shift/types";
 
 let bridge: NativeBridge;
@@ -93,18 +94,18 @@ describe("NudgePointsCommand", () => {
 });
 
 describe("SplitSegmentCommand", () => {
-  function makeLineSegment(p1Id: PointId, p2Id: PointId): LineSegment {
+  function makeLineSegment(p1Id: PointId, p2Id: PointId): Segment {
     const points = getAllPoints(bridge.getEditingSnapshot());
     const p1 = points.find((p) => p.id === p1Id)!;
     const p2 = points.find((p) => p.id === p2Id)!;
 
-    return {
+    return new Segment({
       type: "line",
       points: {
         anchor1: { id: p1.id, x: p1.x, y: p1.y, pointType: "onCurve", smooth: false },
         anchor2: { id: p2.id, x: p2.x, y: p2.y, pointType: "onCurve", smooth: false },
       },
-    };
+    });
   }
 
   describe("line segment", () => {
@@ -173,7 +174,7 @@ describe("SplitSegmentCommand", () => {
           anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
-      const cmd = new SplitSegmentCommand(segment, 0.5);
+      const cmd = new SplitSegmentCommand(new Segment(segment), 0.5);
 
       cmd.execute(ctx());
 
@@ -201,7 +202,7 @@ describe("SplitSegmentCommand", () => {
           anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
-      const cmd = new SplitSegmentCommand(segment, 0.5);
+      const cmd = new SplitSegmentCommand(new Segment(segment), 0.5);
 
       cmd.execute(ctx());
       cmd.undo(ctx());
@@ -233,7 +234,7 @@ describe("SplitSegmentCommand", () => {
           anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
-      const cmd = new SplitSegmentCommand(segment, 0.5);
+      const cmd = new SplitSegmentCommand(new Segment(segment), 0.5);
 
       const result = cmd.execute(ctx());
 
@@ -264,7 +265,7 @@ describe("SplitSegmentCommand", () => {
           anchor2: { id: p2, x: 100, y: 0, pointType: "onCurve", smooth: false },
         },
       };
-      const cmd = new SplitSegmentCommand(segment, 0.5);
+      const cmd = new SplitSegmentCommand(new Segment(segment), 0.5);
 
       cmd.execute(ctx());
       cmd.undo(ctx());

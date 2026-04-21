@@ -9,7 +9,7 @@ import {
   type Signal,
   type ComputedSignal,
 } from "@/lib/reactive/signal";
-import { Glyphs } from "@shift/font";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 
 /** Discriminated reference to any selectable entity. */
 export type Selectable =
@@ -47,6 +47,7 @@ export class Selection {
   readonly #$segmentIds: WritableSignal<ReadonlySet<SegmentId>>;
   readonly #$mode: WritableSignal<SelectionMode>;
   readonly #$derived: ComputedSignal<DerivedSelection>;
+  readonly #$bounds: ComputedSignal<BoundsType | null>;
 
   constructor(glyph: Signal<Glyph | null>) {
     this.#$pointIds = signal<ReadonlySet<PointId>>(new Set());
@@ -65,17 +66,19 @@ export class Selection {
       const contourIds = new Set<ContourId>();
       const contourTotalCounts = new Map<ContourId, number>();
 
-      for (const { point, contour } of Glyphs.points(g)) {
-        pointToContour.set(point.id, contour.id);
-        contourTotalCounts.set(contour.id, (contourTotalCounts.get(contour.id) ?? 0) + 1);
+      for (const contour of g.contours) {
+        for (const point of contour.points) {
+          pointToContour.set(point.id, contour.id);
+          contourTotalCounts.set(contour.id, (contourTotalCounts.get(contour.id) ?? 0) + 1);
 
-        if (pointIds.has(point.id)) {
-          contourIds.add(contour.id);
-          const list = contourToPoints.get(contour.id);
-          if (list) {
-            list.push(point.id);
-          } else {
-            contourToPoints.set(contour.id, [point.id]);
+          if (pointIds.has(point.id)) {
+            contourIds.add(contour.id);
+            const list = contourToPoints.get(contour.id);
+            if (list) {
+              list.push(point.id);
+            } else {
+              contourToPoints.set(contour.id, [point.id]);
+            }
           }
         }
       }
@@ -88,6 +91,15 @@ export class Selection {
       }
 
       return { contourIds, fullySelectedContourIds, pointToContour, contourToPoints };
+    });
+
+    this.#$bounds = computed<BoundsType | null>(() => {
+      const ids = this.#$pointIds.value;
+      const g = glyph.value;
+
+      if (ids.size === 0 || !g) return null;
+
+      return Bounds.unionAll(g.contours.map((c) => c.selectionBounds(ids)));
     });
   }
 
@@ -151,6 +163,16 @@ export class Selection {
   /** @knipclassignore */
   get contourCount(): number {
     return this.#$derived.value.contourIds.size;
+  }
+
+  /** Tight bounds of the selected points, accounting for curve geometry. */
+  get bounds(): BoundsType | null {
+    return this.#$bounds.value;
+  }
+
+  /** @knipclassignore — subscribed by TransformSection/ScaleSection via useSignalState */
+  get $bounds(): Signal<BoundsType | null> {
+    return this.#$bounds;
   }
 
   /** Raw signals for React hooks that need Signal<T>. */

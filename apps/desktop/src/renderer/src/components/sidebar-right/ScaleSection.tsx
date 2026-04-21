@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
@@ -12,12 +12,7 @@ import { useSignalState } from "@/lib/reactive";
 export const ScaleSection = () => {
   const editor = getEditor();
   const { anchor, setAnchor } = useTransformOrigin();
-  const glyph = useSignalState(editor.glyph);
-  const selectedPointIds = useSignalState(editor.selection.$pointIds);
-  const selectionBounds = useMemo(
-    () => editor.getSelectionBounds(),
-    [editor, glyph, selectedPointIds],
-  );
+  const selectionBounds = useSignalState(editor.selection.$bounds);
 
   const widthRef = useRef<EditableSidebarInputHandle>(null);
   const heightRef = useRef<EditableSidebarInputHandle>(null);

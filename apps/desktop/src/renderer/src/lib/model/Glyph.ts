@@ -40,6 +40,7 @@ import {
 } from "@shift/font";
 import { Bounds, Curve, Vec2, type Bounds as BoundsType } from "@shift/geo";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import { Segment } from "@/lib/model/Segment";
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
@@ -106,6 +107,29 @@ export class Contour {
   /** @knipclassignore */
   *withNeighbors(): Generator<PointWithNeighbors> {
     yield* Contours.withNeighbors(this);
+  }
+
+  *segments(): Generator<Segment> {
+    yield* Segment.parse(this.#points.value, this.#closed.value);
+  }
+
+  /**
+   * Tight bounds for the subset of this contour's points in `ids`.
+   * Fully-selected segments contribute their bezier envelope; partially-selected
+   * segments contribute the raw points of their selected endpoints.
+   */
+  selectionBounds(ids: ReadonlySet<PointId>): BoundsType | null {
+    const parts: (BoundsType | null)[] = [];
+
+    for (const segment of this.segments()) {
+      if (segment.pointIds.every((id) => ids.has(id))) {
+        parts.push(segment.bounds);
+      }
+    }
+
+    parts.push(Bounds.fromPoints(this.#points.value.filter((p) => ids.has(p.id))));
+
+    return Bounds.unionAll(parts);
   }
 
   canClose(position: Point2D, hitRadius: number): boolean {
@@ -239,6 +263,15 @@ export class Glyph {
   /** @knipclassignore */
   get allPoints(): Point[] {
     return Glyphs.getAllPoints(this);
+  }
+
+  /** @knipclassignore */
+  *segments(): Generator<{ segment: Segment; contourId: ContourId }> {
+    for (const contour of this.#contours.value) {
+      for (const segment of contour.segments()) {
+        yield { segment, contourId: contour.id };
+      }
+    }
   }
 
   /** @knipclassignore */
