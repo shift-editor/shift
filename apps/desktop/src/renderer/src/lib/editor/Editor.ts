@@ -1247,6 +1247,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     const pointIds = this.selection.$pointIds.peek();
     if (!glyph || pointIds.size === 0) return null;
+
     return getSegmentAwareBounds(glyph, Array.from(pointIds));
   }
 

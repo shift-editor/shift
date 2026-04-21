@@ -103,16 +103,20 @@ export const TransformSection = () => {
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
   useEffect(() => {
+    if (!xRef.current || !yRef.current) return;
+    const x = xRef.current;
+    const y = yRef.current;
+
     if (selectedPointIds.size === 0) {
-      xRef.current?.setValue(0);
-      yRef.current?.setValue(0);
+      x.setValue(0);
+      y.setValue(0);
       return;
     }
 
     if (!selectionBounds) return;
 
-    xRef.current?.setValue(Math.round(selectionBounds.min.x));
-    yRef.current?.setValue(Math.round(selectionBounds.min.y));
+    x.setValue(Math.round(selectionBounds.min.x));
+    y.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
 
   const canDistribute = selectedPointIds.size >= 3;
@@ -160,8 +164,10 @@ export const TransformSection = () => {
   const handlePositionChange = useCallback(
     (axis: "x" | "y", value: number) => {
       if (!selectionBounds) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
+
       editor.moveSelectionTo(target, anchorPoint);
       editor.requestRedraw();
     },

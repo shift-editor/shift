@@ -3,6 +3,7 @@ import PenIcon from "@/assets/toolbar/pen.svg";
 import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
 import TextIcon from "@/assets/toolbar/text.svg";
+import RulerIcon from "@/assets/toolbar/ruler.svg";
 
 import { Editor } from "@/lib/editor/Editor";
 
@@ -11,6 +12,7 @@ import { Pen } from "./pen";
 import { Select } from "./select";
 import { Shape } from "./shape";
 import TextTool from "./text/Text";
+import { Ruler } from "./ruler/Ruler";
 
 export function registerBuiltInTools(editor: Editor): void {
   editor.registerTool({
@@ -47,5 +49,12 @@ export function registerBuiltInTools(editor: Editor): void {
     icon: TextIcon,
     tooltip: "Text Tool (T)",
     shortcut: "t",
+  });
+  editor.registerTool({
+    id: "ruler",
+    create: (api) => new Ruler(api),
+    icon: RulerIcon,
+    tooltip: "Ruler Tool (R)",
+    shortcut: "r",
   });
 }
