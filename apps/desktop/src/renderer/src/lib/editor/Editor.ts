@@ -17,7 +17,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
 import { ViewportManager } from "./managers";
-import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
+import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
 import { NativeBridge } from "@/bridge";
 import {
   CommandHistory,
@@ -104,7 +104,6 @@ const defaultAppSettings: AppSettings = {
 import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
-import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
@@ -457,7 +456,8 @@ export class Editor {
     const previewMode = this.isPreviewMode();
 
     if (glyph && this.shouldRenderGlyph() && !previewMode) {
-      const advance = this.getVisualGlyphAdvance(glyph);
+      const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
+      const advance = displayAdvance(glyph.xAdvance, glyph.name, unicode);
       this.#guides.draw(canvas, this.font.getMetrics(), advance);
     }
 
@@ -987,16 +987,6 @@ export class Editor {
     return this.glyph.value?.xAdvance ?? 0;
   }
 
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public getVisualGlyphAdvance(glyph: Glyph): number {
-    if (glyph.xAdvance > 0) return glyph.xAdvance;
-    const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
-    if (!isLikelyNonSpacingGlyphRef(glyph.name, unicode)) {
-      return glyph.xAdvance;
-    }
-    return 600;
-  }
-
   public setXAdvance(width: number): void {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
@@ -1009,19 +999,15 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const sidebearings = deriveGlyphSidebearings(glyph);
-    if (sidebearings.lsb === null) return;
+    const { lsb } = glyph.sidebearings;
+    if (lsb === null) return;
 
-    const current = roundSidebearing(sidebearings.lsb)!;
-    const target = roundSidebearing(value)!;
-    const delta = target - current;
+    const delta = Math.round(value) - Math.round(lsb);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
-    const afterXAdvance = beforeXAdvance + delta;
-
     this.#commandHistory.execute(
-      new SetLeftSidebearingCommand(beforeXAdvance, afterXAdvance, delta),
+      new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
     );
   }
 
@@ -1029,18 +1015,16 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const sidebearings = deriveGlyphSidebearings(glyph);
-    if (sidebearings.rsb === null) return;
+    const { rsb } = glyph.sidebearings;
+    if (rsb === null) return;
 
-    const current = roundSidebearing(sidebearings.rsb)!;
-    const target = roundSidebearing(value)!;
-    const delta = target - current;
+    const delta = Math.round(value) - Math.round(rsb);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
-    const afterXAdvance = beforeXAdvance + delta;
-
-    this.#commandHistory.execute(new SetRightSidebearingCommand(beforeXAdvance, afterXAdvance));
+    this.#commandHistory.execute(
+      new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta),
+    );
   }
 
   public updateMetricsFromFont(): void {
@@ -1683,7 +1667,7 @@ export class Editor {
     glyphName: string | null,
     unicode: number | null,
   ): Point2D {
-    if (!glyphName || !isLikelyNonSpacingGlyphRef(glyphName, unicode)) {
+    if (!glyphName || !isNonSpacingGlyph(glyphName, unicode)) {
       return offset;
     }
 

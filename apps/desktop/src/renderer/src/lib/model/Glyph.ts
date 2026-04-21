@@ -29,6 +29,7 @@ import {
   batch,
   type WritableSignal,
   type ComputedSignal,
+  type Signal,
 } from "@/lib/reactive/signal";
 import {
   Contours,
@@ -41,6 +42,11 @@ import {
 import { Bounds, Curve, Vec2, type Bounds as BoundsType } from "@shift/geo";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
 import { Segment } from "@/lib/model/Segment";
+
+export interface GlyphSidebearings {
+  readonly lsb: number | null;
+  readonly rsb: number | null;
+}
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
@@ -160,6 +166,7 @@ export class Glyph {
   readonly #activeContourId: WritableSignal<ContourId | null>;
   readonly #path: ComputedSignal<Path2D>;
   readonly #bbox: ComputedSignal<BoundsType | null>;
+  readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
@@ -202,6 +209,15 @@ export class Glyph {
       if (all.length === 0) return null;
       return Bounds.unionAll(all);
     });
+
+    this.#sidebearings = computed<GlyphSidebearings>(() => {
+      const bbox = this.#bbox.value;
+      if (!bbox) return { lsb: null, rsb: null };
+      return {
+        lsb: bbox.min.x,
+        rsb: this.#xAdvance.value - bbox.max.x,
+      };
+    });
   }
 
   get contours(): readonly Contour[] {
@@ -233,6 +249,20 @@ export class Glyph {
   /** @knipclassignore */
   get bbox(): BoundsType | null {
     return this.#bbox.value;
+  }
+
+  get sidebearings(): GlyphSidebearings {
+    return this.#sidebearings.value;
+  }
+
+  /** @knipclassignore */
+  get $sidebearings(): Signal<GlyphSidebearings> {
+    return this.#sidebearings;
+  }
+
+  /** @knipclassignore */
+  get $xAdvance(): Signal<number> {
+    return this.#xAdvance;
   }
 
   /** @knipclassignore Fill the glyph's complete path using the theme's glyph fill color. */
