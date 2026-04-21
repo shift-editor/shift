@@ -5,7 +5,7 @@ import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState, useSignalTrigger } from "@/lib/reactive";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar-right/rotate-cw.svg";
@@ -92,7 +92,12 @@ export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
   const selectedPointIds = useSignalState(editor.selection.$pointIds);
-  const selectionBounds = useSignalState(editor.selection.$bounds);
+  // Subscribe to coarse "glyph changed" signal for re-render, then pull
+  // bounds on demand. Avoids forcing the bounds computed graph to run
+  // in the hot path of every signal fire.
+  const glyph = useSignalState(editor.glyph);
+  useSignalTrigger(glyph?.$contours);
+  const selectionBounds = editor.selection.bounds;
   const [rotation, setRotation] = useState(0);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);

@@ -224,6 +224,16 @@ export class Glyph {
     return this.#contours.value;
   }
 
+  /**
+   * Signal that fires once per structural/position change — use this to
+   * subscribe to "something about the glyph changed" without forcing the
+   * bounds / path / bbox computeds to eagerly recompute. Consumers pull
+   * derived values on demand after the signal fires.
+   */
+  get $contours(): Signal<readonly Contour[]> {
+    return this.#contours;
+  }
+
   get xAdvance(): number {
     return this.#xAdvance.value;
   }
