@@ -75,10 +75,10 @@ export class Select extends BaseTool<SelectState> {
       });
     }
 
-    const bbHandle = this.editor.getHoveredBoundingBoxHandle();
+    const bbHandle = this.editor.hoveredBoundingBoxHandle;
     if (bbHandle) return boundingBoxHitResultToCursor(bbHandle);
 
-    if (this.editor.getCurrentModifiers().altKey && this.editor.getIsHoveringNode()) {
+    if (this.editor.currentModifiers.altKey && this.editor.isHoveringNode) {
       return { type: "copy" };
     }
 

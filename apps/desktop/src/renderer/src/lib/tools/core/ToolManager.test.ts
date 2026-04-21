@@ -80,12 +80,12 @@ describe("ToolManager", () => {
 
     it("should not interfere with zoom operations", () => {
       toolManager.activate("pen");
-      const initialCursor = editor.getCursor();
+      const initialCursor = editor.cursor;
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Meta" }));
 
-      expect(editor.getCursor()).toBe(initialCursor);
+      expect(editor.cursor).toBe(initialCursor);
       expect(toolManager.activeToolId).toBe("pen");
     });
   });
@@ -255,7 +255,7 @@ describe("ToolManager", () => {
 
       toolManager.handlePointerDown({ x: 0, y: 0 }, mods);
 
-      expect(editor.getCurrentModifiers()).toEqual(mods);
+      expect(editor.currentModifiers).toEqual(mods);
     });
 
     it("updates currentModifiers on flushPointerMove", () => {
@@ -270,7 +270,7 @@ describe("ToolManager", () => {
 
         toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
 
-        expect(editor.getCurrentModifiers()).toEqual(mods);
+        expect(editor.currentModifiers).toEqual(mods);
       } finally {
         vi.stubGlobal("requestAnimationFrame", originalRAF);
       }
@@ -283,7 +283,7 @@ describe("ToolManager", () => {
         createKeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: false }),
       );
 
-      expect(editor.getCurrentModifiers()).toEqual({
+      expect(editor.currentModifiers).toEqual({
         shiftKey: false,
         altKey: true,
         metaKey: false,
@@ -296,7 +296,7 @@ describe("ToolManager", () => {
 
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Alt", altKey: false }));
 
-      expect(editor.getCurrentModifiers()).toEqual({
+      expect(editor.currentModifiers).toEqual({
         shiftKey: false,
         altKey: false,
         metaKey: false,

@@ -170,7 +170,7 @@ export class Viewport {
     );
     const baselineY = vt.logicalHeight - vt.padding - vt.descender * vt.upmScale;
     ctx.transform(vt.upmScale, 0, 0, -vt.upmScale, vt.padding, baselineY);
-    const { x, y } = this.#editor.getDrawOffset();
+    const { x, y } = this.#editor.drawOffset;
     ctx.translate(x, y);
   }
 

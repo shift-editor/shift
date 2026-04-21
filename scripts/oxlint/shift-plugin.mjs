@@ -110,6 +110,89 @@ export default {
     },
 
     /**
+     * Ban `getFoo()` / `isFoo()` methods that just return `this.#signal.value`
+     * (or `.peek()`). Use a value getter + optional `$foo` signal getter
+     * instead — matches the Glyph/Contour convention:
+     *
+     *   // ❌
+     *   public getIsHoveringNode(): boolean {
+     *     return this.#isHoveringNode.value;
+     *   }
+     *
+     *   // ✅
+     *   public get isHoveringNode(): boolean {
+     *     return this.#isHoveringNode.value;
+     *   }
+     *   public get $isHoveringNode(): Signal<boolean> {
+     *     return this.#isHoveringNode;
+     *   }
+     */
+    "no-get-signal-value-method": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useGetter:
+            "Method `{{name}}` just reads a signal value. Use `get {{suggested}}(): T` + optional `get ${{suggested}}(): Signal<T>` instead.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        function suggestedName(methodName) {
+          if (/^get[A-Z]/.test(methodName)) {
+            return methodName.charAt(3).toLowerCase() + methodName.slice(4);
+          }
+          if (/^is[A-Z]/.test(methodName)) {
+            // keep "is" prefix for boolean getters: isPreviewMode → previewMode? or isHoveringNode stays?
+            // The Editor rename uses: isPreviewMode (was method) → previewMode (is getter)
+            // But isHoveringNode stays as isHoveringNode.
+            // Heuristic: if what follows "is" is a noun/phrase, drop "is". Can't tell statically.
+            // Just return as-is and let humans decide.
+            return methodName;
+          }
+          return methodName;
+        }
+
+        function isSignalValueReturn(body) {
+          if (!body || body.type !== "BlockStatement") return false;
+          if (body.body.length !== 1) return false;
+          const stmt = body.body[0];
+          if (stmt.type !== "ReturnStatement" || !stmt.argument) return false;
+          const ret = stmt.argument;
+          if (ret.type !== "MemberExpression") return false;
+          if (!ret.property || ret.property.type !== "Identifier") return false;
+          if (ret.property.name !== "value" && ret.property.name !== "peek") return false;
+          // Return object must itself be a MemberExpression (this.#foo or this.$foo)
+          return ret.object && ret.object.type === "MemberExpression";
+        }
+
+        return {
+          MethodDefinition(node) {
+            if (node.kind !== "method") return; // skip get/set accessors
+            if (!node.key || node.key.type !== "Identifier") return;
+
+            const name = node.key.name;
+            if (!/^(get|is)[A-Z]/.test(name)) return;
+
+            const fn = node.value;
+            if (!fn || !fn.body) return;
+
+            if (!isSignalValueReturn(fn.body)) return;
+
+            context.report({
+              node: node.key,
+              messageId: "useGetter",
+              data: { name, suggested: suggestedName(name) },
+            });
+          },
+        };
+      },
+    },
+
+    /**
      * Prefer instance methods on the Glyph / Contour domain classes over the
      * static namespaces from @shift/font when the receiver is a class instance.
      *

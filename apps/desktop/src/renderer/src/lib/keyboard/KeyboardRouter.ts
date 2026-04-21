@@ -107,7 +107,7 @@ export class KeyboardRouter {
       return true;
     }
 
-    const wasPreview = ctx.editor.isPreviewMode();
+    const wasPreview = ctx.editor.previewMode;
     this.#spacePreviewBeforeTemporary = wasPreview;
     ctx.editor.requestTemporaryTool("hand", {
       onActivate: () => {
