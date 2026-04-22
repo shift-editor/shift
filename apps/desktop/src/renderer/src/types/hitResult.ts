@@ -14,7 +14,7 @@
  * @module
  */
 import type { Point2D, PointId, ContourId, Point, Contour, AnchorId } from "@shift/types";
-import type { Segment } from "./segments";
+import type { Segment } from "@/lib/model/Segment";
 import type { SegmentId } from "./indicator";
 import type { BoundingBoxHitResult } from "./boundingBox";
 

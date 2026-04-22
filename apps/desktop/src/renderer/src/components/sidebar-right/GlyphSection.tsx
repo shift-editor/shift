@@ -1,26 +1,25 @@
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
-import Glyph from "@/assets/sidebar-right/placeholder-glyph.svg";
+import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import { deriveGlyphSidebearings, roundSidebearing } from "@/lib/editor/sidebearings";
+import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
+import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
 
 export const GlyphSection = () => {
   const editor = getEditor();
   const glyph = useSignalState(editor.glyph);
+  const sidebearings = useGlyphSidebearings();
+  const xAdvance = useGlyphXAdvance();
   const glyphInfo = getGlyphInfo();
 
   if (!glyph) return null;
 
   const unicode = formatCodepointAsUPlus(glyph.unicode);
-  const sidebearings = deriveGlyphSidebearings(glyph);
-  const xAdvance = glyph.xAdvance;
-
-  const lsb = roundSidebearing(sidebearings.lsb);
-  const rsb = roundSidebearing(sidebearings.rsb);
-
+  const lsb = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
+  const rsb = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEnabled = lsb !== null && rsb !== null;
 
   return (
@@ -38,7 +37,7 @@ export const GlyphSection = () => {
             onValueChange={(next) => editor.setLeftSidebearing(next)}
           />
           <div className="px-2">
-            <Glyph />
+            <PlaceholderGlyph />
           </div>
           <EditableSidebarInput
             label="RSB"
@@ -54,10 +53,9 @@ export const GlyphSection = () => {
             className="text-center"
             value={xAdvance}
             onValueChange={(width) => editor.setXAdvance(width)}
-            disabled={!glyph}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph?.unicode ?? 0)}</div>
+        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph.unicode)}</div>
       </main>
     </SidebarSection>
   );

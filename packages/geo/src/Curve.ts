@@ -155,10 +155,6 @@ export const Curve = {
     return Vec2.perp(tangent);
   },
 
-  // ============================================
-  // Closest Point (for hit testing)
-  // ============================================
-
   /**
    * Find closest point on curve to a test point.
    * Uses Newton-Raphson refinement for accuracy.
@@ -180,10 +176,6 @@ export const Curve = {
   distanceTo(curve: CurveType, point: Point2D): number {
     return Curve.closestPoint(curve, point).distance;
   },
-
-  // ============================================
-  // Properties
-  // ============================================
 
   startPoint(curve: CurveType): Point2D {
     return curve.p0;
@@ -219,10 +211,6 @@ export const Curve = {
         return cubicBounds(curve);
     }
   },
-
-  // ============================================
-  // Subdivision
-  // ============================================
 
   /**
    * Split curve at parameter t using De Casteljau's algorithm.
@@ -260,10 +248,6 @@ export const Curve = {
     return points;
   },
 
-  // ============================================
-  // Type Guards
-  // ============================================
-
   isLine(curve: CurveType): curve is LineCurve {
     return curve.type === "line";
   },
@@ -276,10 +260,6 @@ export const Curve = {
     return curve.type === "cubic";
   },
 } as const;
-
-// ============================================
-// Quadratic Implementation
-// ============================================
 
 function quadraticPointAt(curve: QuadraticCurve, t: number): Point2D {
   const mt = 1 - t;
@@ -379,10 +359,6 @@ function newtonRaphsonQuadratic(curve: QuadraticCurve, point: Point2D, initialT:
 
   return t;
 }
-
-// ============================================
-// Cubic Implementation
-// ============================================
 
 function cubicPointAt(curve: CubicCurve, t: number): Point2D {
   const mt = 1 - t;
@@ -532,10 +508,6 @@ function cubicSplitAt(curve: CubicCurve, t: number): [CubicCurve, CubicCurve] {
   return [Curve.cubic(curve.p0, p01, p012, p0123), Curve.cubic(p0123, p123, p23, curve.p1)];
 }
 
-// ============================================
-// Line Implementation
-// ============================================
-
 function lineClosestPoint(curve: LineCurve, point: Point2D): ClosestPointResult {
   const v = Vec2.sub(curve.p1, curve.p0);
   const w = Vec2.sub(point, curve.p0);
@@ -554,10 +526,6 @@ function lineClosestPoint(curve: LineCurve, point: Point2D): ClosestPointResult 
   const closest = Vec2.lerp(curve.p0, curve.p1, t);
   return { t, point: closest, distance: Vec2.dist(point, closest) };
 }
-
-// ============================================
-// Utility
-// ============================================
 
 function curveLength(curve: QuadraticCurve | CubicCurve, subdivisions: number): number {
   let length = 0;

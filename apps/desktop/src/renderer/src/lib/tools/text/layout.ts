@@ -1,9 +1,7 @@
 import type { Point2D, FontMetrics } from "@shift/types";
 import type { Bounds } from "@shift/geo";
 import type { Font } from "@/lib/model/Font";
-import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
-
-const NON_SPACING_EDITOR_ADVANCE = 600;
+import { displayAdvance } from "@/lib/utils/unicode";
 
 export interface GlyphRef {
   glyphName: string;
@@ -120,11 +118,7 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
 export { NEWLINE_GLYPH_NAME };
 
 function resolveEditorAdvance(glyph: GlyphRef, advance: number): number {
-  if (advance > 0) return advance;
-  if (!isLikelyNonSpacingGlyphRef(glyph.glyphName, glyph.unicode)) {
-    return advance;
-  }
-  return NON_SPACING_EDITOR_ADVANCE;
+  return displayAdvance(advance, glyph.glyphName, glyph.unicode);
 }
 
 function isWithinSlotVerticalBounds(

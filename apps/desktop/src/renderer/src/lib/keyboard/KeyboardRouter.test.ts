@@ -72,7 +72,7 @@ describe("KeyboardRouter", () => {
       ]),
       requestTemporaryTool: vi.fn((_tool, options) => options?.onActivate?.()),
       returnFromTemporaryTool: vi.fn(),
-      isPreviewMode: vi.fn(() => false),
+      previewMode: false,
       setPreviewMode: vi.fn(),
       openGlyphFinder: vi.fn(),
     };

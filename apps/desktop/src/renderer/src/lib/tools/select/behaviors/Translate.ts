@@ -7,7 +7,6 @@ import type { DragTarget } from "../types";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { SegmentId } from "@/types/indicator";
-import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 import type { GlyphDraft } from "@/types/draft";
@@ -179,7 +178,7 @@ export class Translate implements SelectHandlerBehavior {
     }
 
     if (isSegmentHit(hit)) {
-      const pointIds = SegmentOps.getPointIds(hit.segment);
+      const pointIds = hit.segment.pointIds;
       const isSelected =
         state.type === "selected" &&
         editor.selection.isSelected({ kind: "segment", id: hit.segmentId });
@@ -284,7 +283,7 @@ export class Translate implements SelectHandlerBehavior {
   private selectSegment(editor: Editor, segmentId: SegmentId, additive: boolean): void {
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
-    const pointIds = SegmentOps.getPointIds(segment);
+    const pointIds = segment.pointIds;
 
     if (additive) {
       editor.selection.add({ kind: "segment", id: segmentId });

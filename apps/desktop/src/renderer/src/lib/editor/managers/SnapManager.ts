@@ -1,5 +1,5 @@
 import { Vec2 } from "@shift/geo";
-import { Contours, Glyphs } from "@shift/font";
+import { Contours } from "@shift/font";
 import { Validate } from "@shift/validation";
 import type { Point2D, PointId, FontMetrics } from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
@@ -125,7 +125,7 @@ export class SnapManager {
       const excluded = new Set(query.excludedPointIds ?? []);
       const glyph = this.#$glyph.peek();
       if (glyph) {
-        for (const { point } of Glyphs.points(glyph)) {
+        for (const point of glyph.allPoints) {
           if (excluded.has(point.id)) continue;
           result.push({
             kind: "pointTarget",
@@ -145,7 +145,7 @@ export class SnapManager {
 
   #getAnchorPosition(snapshot: Glyph | null, pointId: PointId, fallback: Point2D): Point2D {
     if (!snapshot) return fallback;
-    const result = Glyphs.findPoint(snapshot, pointId);
+    const result = snapshot.point(pointId);
     if (result) return { x: result.point.x, y: result.point.y };
     return fallback;
   }
@@ -153,7 +153,7 @@ export class SnapManager {
   #resolveSnapReference(snapshot: Glyph | null, pointId: PointId, fallback: Point2D): Point2D {
     if (!snapshot) return fallback;
 
-    const found = Glyphs.findPoint(snapshot, pointId);
+    const found = snapshot.point(pointId);
     if (found) {
       const { point, contour, index: idx } = found;
       if (Validate.isOnCurve(point)) {

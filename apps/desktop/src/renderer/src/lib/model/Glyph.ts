@@ -29,6 +29,7 @@ import {
   batch,
   type WritableSignal,
   type ComputedSignal,
+  type Signal,
 } from "@/lib/reactive/signal";
 import {
   Contours,
@@ -40,6 +41,12 @@ import {
 } from "@shift/font";
 import { Bounds, Curve, Vec2, type Bounds as BoundsType } from "@shift/geo";
 import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
+import { Segment } from "@/lib/model/Segment";
+
+export interface GlyphSidebearings {
+  readonly lsb: number | null;
+  readonly rsb: number | null;
+}
 
 export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
 
@@ -108,6 +115,29 @@ export class Contour {
     yield* Contours.withNeighbors(this);
   }
 
+  *segments(): Generator<Segment> {
+    yield* Segment.parse(this.#points.value, this.#closed.value);
+  }
+
+  /**
+   * Tight bounds for the subset of this contour's points in `ids`.
+   * Fully-selected segments contribute their bezier envelope; partially-selected
+   * segments contribute the raw points of their selected endpoints.
+   */
+  selectionBounds(ids: ReadonlySet<PointId>): BoundsType | null {
+    const parts: (BoundsType | null)[] = [];
+
+    for (const segment of this.segments()) {
+      if (segment.pointIds.every((id) => ids.has(id))) {
+        parts.push(segment.bounds);
+      }
+    }
+
+    parts.push(Bounds.fromPoints(this.#points.value.filter((p) => ids.has(p.id))));
+
+    return Bounds.unionAll(parts);
+  }
+
   canClose(position: Point2D, hitRadius: number): boolean {
     return Contours.canClose(this, position, hitRadius);
   }
@@ -136,6 +166,7 @@ export class Glyph {
   readonly #activeContourId: WritableSignal<ContourId | null>;
   readonly #path: ComputedSignal<Path2D>;
   readonly #bbox: ComputedSignal<BoundsType | null>;
+  readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
@@ -178,10 +209,39 @@ export class Glyph {
       if (all.length === 0) return null;
       return Bounds.unionAll(all);
     });
+
+    // Point-based x-range — cheap, matches integer-rounded sidebar display.
+    // Avoids warming the bezier #bbox chain which transitively computes
+    // every contour's bezier bounds. Consumers use `useGlyphSidebearings`
+    // React hook to subscribe; not exposed as a `$sidebearings` signal to
+    // prevent accidental subscription-driven recomputation.
+    this.#sidebearings = computed<GlyphSidebearings>(() => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (const contour of this.#contours.value) {
+        for (const p of contour.points) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+        }
+      }
+      if (minX === Infinity) return { lsb: null, rsb: null };
+      return { lsb: minX, rsb: this.#xAdvance.value - maxX };
+    });
   }
 
   get contours(): readonly Contour[] {
     return this.#contours.value;
+  }
+
+  /**
+   * @knipclassignore — used by purpose-specific React hooks in `@/hooks/`
+   * Signal that fires once per structural/position change — use this to
+   * subscribe to "something about the glyph changed" without forcing the
+   * bounds / path / bbox computeds to eagerly recompute. Consumers pull
+   * derived values on demand after the signal fires.
+   */
+  get $contours(): Signal<readonly Contour[]> {
+    return this.#contours;
   }
 
   get xAdvance(): number {
@@ -209,6 +269,20 @@ export class Glyph {
   /** @knipclassignore */
   get bbox(): BoundsType | null {
     return this.#bbox.value;
+  }
+
+  /**
+   * @knipclassignore — used by Editor command path and `useGlyphSidebearings`
+   * Sidebearings (point-based x-range) — pull at read time; for React live
+   * display use `useGlyphSidebearings()`.
+   */
+  get sidebearings(): GlyphSidebearings {
+    return this.#sidebearings.value;
+  }
+
+  /** @knipclassignore — subscribed by `useGlyphXAdvance` hook */
+  get $xAdvance(): Signal<number> {
+    return this.#xAdvance;
   }
 
   /** @knipclassignore Fill the glyph's complete path using the theme's glyph fill color. */
@@ -239,6 +313,15 @@ export class Glyph {
   /** @knipclassignore */
   get allPoints(): Point[] {
     return Glyphs.getAllPoints(this);
+  }
+
+  /** @knipclassignore */
+  *segments(): Generator<{ segment: Segment; contourId: ContourId }> {
+    for (const contour of this.#contours.value) {
+      for (const segment of contour.segments()) {
+        yield { segment, contourId: contour.id };
+      }
+    }
   }
 
   /** @knipclassignore */

@@ -18,7 +18,7 @@ const CONTOURS_ALLOWED = [
   "lib/model/",
   "packages/font/",
   "rendering/", // render passes iterate contours to draw them
-  "SelectionBounds.ts", // segment-aware bounds needs contour structure
+  "types/selection.ts", // selection-bounds computed unions per-contour bounds
   "hit/composite.ts", // component contour bounds check
   "Editor.ts", // coordinator-level structural traversal
   "clipboard/", // ClipboardContent is not a Glyph, different type
@@ -74,15 +74,19 @@ export default {
     /**
      * Ban direct .contours iteration in app code.
      *
-     * Use Glyphs.findPoints / Glyphs.points from @shift/font instead
-     * of raw `for (const contour of glyph.contours)` loops.
+     * Use instance methods on the Glyph / Contour domain classes:
+     *   - glyph.allPoints / glyph.point(id) / glyph.points(ids)
+     *   - glyph.segments() / contour.segments()
+     *   - glyph.contour(id)
+     * Raw `glyph.contours.map(...)` / `for (const c of glyph.contours)` usually
+     * hides a reduction that belongs on the class.
      */
     "no-raw-contour-access": {
       meta: {
         type: "suggestion",
         messages: {
           noRawContours:
-            "Do not iterate .contours directly. Use Glyphs.findPoints / Glyphs.points from @shift/font.",
+            "Do not iterate .contours directly. Use glyph.allPoints / glyph.point(id) / glyph.segments() / contour.segments() on the domain classes.",
         },
         schema: [],
       },
@@ -100,6 +104,238 @@ export default {
           // Catch: y.contours.map / .filter / .find / .flatMap / .some / .every / .reduce / .forEach
           'CallExpression > MemberExpression > MemberExpression[property.name="contours"]'(node) {
             context.report({ node, messageId: "noRawContours" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `getFoo()` / `isFoo()` methods that just return `this.#signal.value`
+     * (or `.peek()`). Use a value getter + optional `$foo` signal getter
+     * instead — matches the Glyph/Contour convention:
+     *
+     *   // ❌
+     *   public getIsHoveringNode(): boolean {
+     *     return this.#isHoveringNode.value;
+     *   }
+     *
+     *   // ✅
+     *   public get isHoveringNode(): boolean {
+     *     return this.#isHoveringNode.value;
+     *   }
+     *   public get $isHoveringNode(): Signal<boolean> {
+     *     return this.#isHoveringNode;
+     *   }
+     */
+    "no-get-signal-value-method": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useGetter:
+            "Method `{{name}}` just reads a signal value. Use `get {{suggested}}(): T` + optional `get ${{suggested}}(): Signal<T>` instead.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        function suggestedName(methodName) {
+          if (/^get[A-Z]/.test(methodName)) {
+            return methodName.charAt(3).toLowerCase() + methodName.slice(4);
+          }
+          if (/^is[A-Z]/.test(methodName)) {
+            // keep "is" prefix for boolean getters: isPreviewMode → previewMode? or isHoveringNode stays?
+            // The Editor rename uses: isPreviewMode (was method) → previewMode (is getter)
+            // But isHoveringNode stays as isHoveringNode.
+            // Heuristic: if what follows "is" is a noun/phrase, drop "is". Can't tell statically.
+            // Just return as-is and let humans decide.
+            return methodName;
+          }
+          return methodName;
+        }
+
+        function isSignalValueReturn(body) {
+          if (!body || body.type !== "BlockStatement") return false;
+          if (body.body.length !== 1) return false;
+          const stmt = body.body[0];
+          if (stmt.type !== "ReturnStatement" || !stmt.argument) return false;
+          const ret = stmt.argument;
+          if (ret.type !== "MemberExpression") return false;
+          if (!ret.property || ret.property.type !== "Identifier") return false;
+          if (ret.property.name !== "value" && ret.property.name !== "peek") return false;
+          // Return object must itself be a MemberExpression (this.#foo or this.$foo)
+          return ret.object && ret.object.type === "MemberExpression";
+        }
+
+        return {
+          MethodDefinition(node) {
+            if (node.kind !== "method") return; // skip get/set accessors
+            if (!node.key || node.key.type !== "Identifier") return;
+
+            const name = node.key.name;
+            if (!/^(get|is)[A-Z]/.test(name)) return;
+
+            const fn = node.value;
+            if (!fn || !fn.body) return;
+
+            if (!isSignalValueReturn(fn.body)) return;
+
+            context.report({
+              node: node.key,
+              messageId: "useGetter",
+              data: { name, suggested: suggestedName(name) },
+            });
+          },
+        };
+      },
+    },
+
+    /**
+     * Prefer instance methods on the Glyph / Contour domain classes over the
+     * static namespaces from @shift/font when the receiver is a class instance.
+     *
+     * Swaps:
+     *   Glyphs.findPoint(glyph, id)     → glyph.point(id)
+     *   Glyphs.findPoints(glyph, ids)   → glyph.points(ids)
+     *   Glyphs.findContour(glyph, id)   → glyph.contour(id)
+     *   Glyphs.getAllPoints(glyph)      → glyph.allPoints
+     *   Glyphs.points(glyph)            → iterate glyph.allPoints (or glyph.segments())
+     *   Contours.withNeighbors(contour) → contour.withNeighbors()
+     *   Contours.canClose(c, pos, r)    → c.canClose(pos, r)
+     *
+     * Static calls are still correct when operating on plain snapshots (e.g.
+     * drag handlers reading from a GlyphSnapshot), so the allowlist covers
+     * bridge/commands/behaviors that work with snapshot data.
+     */
+    "prefer-instance-method-on-glyph": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useInstance:
+            "`{{callee}}` operates on Glyph/Contour domain instances. Call the instance method instead: {{suggestion}}.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        const PREFER_INSTANCE_ALLOWED = [
+          "lib/model/", // domain classes delegate to these internally
+          "packages/font/", // implementation
+          "bridge/", // operates on GlyphSnapshot, not class instances
+          "commands/", // undo/redo snapshots
+          "behaviors/", // drag handlers read base snapshots
+          "testing/",
+          "types/engine.ts",
+        ];
+
+        if (isAllowedFile(filename, PREFER_INSTANCE_ALLOWED)) return {};
+        if (filename.includes(".test.")) return {};
+
+        const SWAPS = {
+          Glyphs: {
+            findPoint: "glyph.point(id)",
+            findPoints: "glyph.points(ids)",
+            findContour: "glyph.contour(id)",
+            getAllPoints: "glyph.allPoints",
+            getPointAt: "glyph.getPointAt(pos, radius)",
+            points: "iterate glyph.allPoints / glyph.segments()",
+          },
+          Contours: {
+            withNeighbors: "contour.withNeighbors()",
+            canClose: "contour.canClose(pos, radius)",
+          },
+        };
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== "MemberExpression") return;
+            const obj = callee.object;
+            const prop = callee.property;
+            if (!obj || obj.type !== "Identifier") return;
+            if (!prop || prop.type !== "Identifier") return;
+
+            const swaps = SWAPS[obj.name];
+            if (!swaps) return;
+
+            const suggestion = swaps[prop.name];
+            if (!suggestion) return;
+
+            context.report({
+              node: callee,
+              messageId: "useInstance",
+              data: { callee: `${obj.name}.${prop.name}`, suggestion },
+            });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban raw segment parsing in app code.
+     *
+     * `Segment.parse(points, closed)` and `parseContourSegments({...})` are
+     * the low-level parser primitives. App code should use the reactive
+     * generators instead:
+     *   - contour.segments() for a single contour
+     *   - glyph.segments()   for all contours in a glyph
+     *
+     * The generators wrap `parseContourSegments` and yield `Segment` class
+     * instances, which is what callers actually want.
+     */
+    "no-raw-segment-parse": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useGenerator:
+            "Do not call `{{callee}}` directly. Use contour.segments() / glyph.segments() generators on the domain classes.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        const SEGMENT_PARSE_ALLOWED = [
+          "lib/model/", // Segment.parse + Contour.segments wrap parseContourSegments here
+          "packages/font/", // parseContourSegments lives here
+          "testing/",
+        ];
+
+        if (isAllowedFile(filename, SEGMENT_PARSE_ALLOWED)) return {};
+        if (filename.includes(".test.")) return {};
+
+        return {
+          // Segment.parse(...)
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee) return;
+
+            if (
+              callee.type === "MemberExpression" &&
+              callee.object?.type === "Identifier" &&
+              callee.object.name === "Segment" &&
+              callee.property?.type === "Identifier" &&
+              callee.property.name === "parse"
+            ) {
+              context.report({
+                node: callee,
+                messageId: "useGenerator",
+                data: { callee: "Segment.parse" },
+              });
+              return;
+            }
+
+            // parseContourSegments(...)
+            if (callee.type === "Identifier" && callee.name === "parseContourSegments") {
+              context.report({
+                node: callee,
+                messageId: "useGenerator",
+                data: { callee: "parseContourSegments" },
+              });
+            }
           },
         };
       },

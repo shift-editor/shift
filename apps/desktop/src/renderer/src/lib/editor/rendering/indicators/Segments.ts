@@ -1,9 +1,8 @@
 import type { Canvas } from "../Canvas";
-import type { Segment as SegmentType } from "@/types/segments";
-import { Segment } from "@/lib/geo/Segment";
+import type { Segment } from "@/lib/model/Segment";
 
 export class Segments {
-  draw(canvas: Canvas, hovered: SegmentType | null, selected: readonly SegmentType[]): void {
+  draw(canvas: Canvas, hovered: Segment | null, selected: readonly Segment[]): void {
     if (!hovered && selected.length === 0) return;
 
     const theme = canvas.theme.segment;
@@ -22,7 +21,7 @@ export class Segments {
       canvas.ctx.restore();
     }
 
-    if (hovered && !selected.some((s) => Segment.id(s) === Segment.id(hovered))) {
+    if (hovered && !selected.some((s) => s.id === hovered.id)) {
       const lw = canvas.pxToUpm(theme.hoverWidthPx);
       canvas.ctx.save();
       canvas.ctx.strokeStyle = theme.hoverColor;
@@ -36,8 +35,8 @@ export class Segments {
   }
 }
 
-function appendSegmentCurve(ctx: CanvasRenderingContext2D, segment: SegmentType): void {
-  const curve = Segment.toCurve(segment);
+function appendSegmentCurve(ctx: CanvasRenderingContext2D, segment: Segment): void {
+  const curve = segment.toCurve();
   ctx.moveTo(curve.p0.x, curve.p0.y);
 
   switch (curve.type) {

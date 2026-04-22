@@ -12,7 +12,6 @@
  */
 
 import { bench, describe } from "vitest";
-import { Glyphs } from "@shift/font";
 import { createPointMark, type PointScale } from "@/testing/pointMark";
 
 const DRAG_FRAMES = 30;
@@ -22,7 +21,7 @@ function setupDrag(scale: PointScale) {
   pm.editor.selectTool("select");
 
   const glyph = pm.editor.currentGlyph!;
-  const firstPoint = Glyphs.getAllPoints(glyph)[0];
+  const firstPoint = glyph.allPoints[0];
   const startX = firstPoint.x;
   const startY = firstPoint.y;
 

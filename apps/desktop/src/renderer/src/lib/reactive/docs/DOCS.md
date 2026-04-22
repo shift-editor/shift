@@ -11,16 +11,23 @@ Fine-grained reactivity system providing automatic dependency tracking and effic
 - **Architecture Invariant: CRITICAL:** The module-level `currentComputation` variable is the sole mechanism for dependency tracking. Any code that saves/restores it incorrectly will silently break the entire reactive graph. `untracked` and the internal `#recompute`/`execute` methods carefully save and restore this variable.
 - **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
 - **Architecture Invariant:** Classes expose `WritableSignal` fields with a `$` prefix (e.g., `$zoom`). Public getters return the read-only `Signal<T>` type. Use `private` (not `#`) for `$`-prefixed fields to avoid `#$` awkwardness.
+- **Architecture Invariant: Convention:** `$foo` public accessors are for **raw state** — writable signals or cheap computeds — safe to subscribe to via `useSignalState`/`useSignalTrigger`. **Derived values** (bounds, paths, sidebearings) are exposed only as plain getters (`.foo`) and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time. Subscribing directly to an expensive ComputedSignal forces it to re-run on every input fire — that's the footgun to avoid.
 
 ## Codemap
 
 ```
 reactive/
   signal.ts          — signal, computed, effect, batch, untracked, isTracking
-  useSignal.ts       — useSignalState (React bridge via useSyncExternalStore)
+  useSignal.ts       — useSignalState, useSignalTrigger (React bridges)
   index.ts           — public re-exports
   signal.test.ts     — unit tests (vitest)
 ```
+
+Purpose-specific hooks for derived values live under `hooks/`:
+
+- `useSelectionBounds` — current selection bounds, pulled at render time.
+- `useGlyphSidebearings` — current LSB/RSB, pulled at render time.
+- `useGlyphXAdvance` — current xAdvance.
 
 ## Key Types
 
