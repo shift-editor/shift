@@ -44,11 +44,11 @@ export interface ClipboardImporter {
 }
 
 /**
- * The boundary between the Clipboard class and the system clipboard
- * (Electron's `clipboard` module, via preload). Production wiring uses
- * {@link ElectronClipboardAdapter}; tests inject an in-memory fake.
+ * The OS-level clipboard — the boundary between the {@link Clipboard}
+ * orchestrator and Electron's `clipboard` module (via preload). Production
+ * wiring uses {@link electronSystemClipboard}; tests inject an in-memory fake.
  */
-export interface ClipboardAdapter {
+export interface SystemClipboard {
   writeText(text: string): void;
   readText(): string;
 }

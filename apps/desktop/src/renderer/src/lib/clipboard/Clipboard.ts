@@ -10,7 +10,7 @@ import { Polygon } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import { ValidateClipboard } from "@shift/validation";
 import type {
-  ClipboardAdapter,
+  SystemClipboard,
   ClipboardContent,
   ClipboardImporter,
   ClipboardPayload,
@@ -36,7 +36,7 @@ export interface ClipboardDeps {
   readonly glyph: Signal<Glyph | null>;
   readonly selection: Selection;
   readonly commands: CommandHistory;
-  readonly adapter: ClipboardAdapter;
+  readonly systemClipboard: SystemClipboard;
 }
 
 /**
@@ -116,7 +116,7 @@ export class Clipboard {
         content,
         metadata: { bounds, timestamp: Date.now(), ...(sourceGlyph ? { sourceGlyph } : {}) },
       };
-      this.#deps.adapter.writeText(JSON.stringify(payload));
+      this.#deps.systemClipboard.writeText(JSON.stringify(payload));
       return true;
     } catch {
       return false;
@@ -125,7 +125,7 @@ export class Clipboard {
 
   async #read(): Promise<{ content: ClipboardContent | null }> {
     try {
-      const text = this.#deps.adapter.readText();
+      const text = this.#deps.systemClipboard.readText();
 
       const native = tryDeserialize(text);
       if (native) return { content: native };

@@ -16,16 +16,16 @@ import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { createBridge } from "./engine";
-import type { ClipboardAdapter } from "@/lib/clipboard";
+import type { SystemClipboard } from "@/lib/clipboard";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
 /**
- * In-memory {@link ClipboardAdapter} for tests. The buffer is directly
+ * In-memory {@link SystemClipboard} for tests. The buffer is directly
  * readable via {@link TestEditor.clipboardBuffer} so tests can assert on
  * what the Editor wrote without needing a round-trip.
  */
-class FakeClipboardAdapter implements ClipboardAdapter {
+class InMemorySystemClipboard implements SystemClipboard {
   buffer = "";
   writeText(text: string): void {
     this.buffer = text;
@@ -36,17 +36,17 @@ class FakeClipboardAdapter implements ClipboardAdapter {
 }
 
 export class TestEditor extends Editor {
-  readonly #clipboardAdapter: FakeClipboardAdapter;
+  readonly #systemClipboard: InMemorySystemClipboard;
 
   constructor() {
-    const clipboardAdapter = new FakeClipboardAdapter();
-    super({ bridge: createBridge(), clipboardAdapter });
-    this.#clipboardAdapter = clipboardAdapter;
+    const systemClipboard = new InMemorySystemClipboard();
+    super({ bridge: createBridge(), systemClipboard });
+    this.#systemClipboard = systemClipboard;
     registerBuiltInTools(this);
   }
 
   get clipboardBuffer(): string {
-    return this.#clipboardAdapter.buffer;
+    return this.#systemClipboard.buffer;
   }
 
   startSession(glyphName = "A"): this {

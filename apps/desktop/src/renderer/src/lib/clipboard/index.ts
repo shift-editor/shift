@@ -1,8 +1,8 @@
 export { Clipboard, resolveClipboardContent, type ClipboardDeps } from "./Clipboard";
 export { SvgImporter } from "./importers/SvgImporter";
-export { electronClipboardAdapter } from "./electronAdapter";
+export { electronSystemClipboard } from "./electronSystemClipboard";
 export type {
-  ClipboardAdapter,
+  SystemClipboard,
   ClipboardContent,
   ClipboardImporter,
   ClipboardPayload,
