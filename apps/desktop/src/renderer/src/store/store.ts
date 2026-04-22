@@ -26,7 +26,7 @@ function getFileNameFromPath(path: string | null): string | null {
 const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
   const editor = new Editor({
     bridge: new NativeBridge(),
-    systemClipboard: electronSystemClipboard,
+    clipboard: electronSystemClipboard,
   });
   registerBuiltInTools(editor);
 

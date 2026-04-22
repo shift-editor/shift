@@ -110,6 +110,11 @@ import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/st
 import type { LineSegment } from "@/types/segments";
 import type { GlyphDraft } from "@/types/draft";
 
+interface EditorOptions {
+  bridge: NativeBridge;
+  clipboard: SystemClipboard;
+}
+
 /**
  * Central orchestrator for the glyph editing surface.
  *
@@ -197,11 +202,14 @@ export class Editor {
    * reactive effects that schedule canvas redraws when state changes.
    *
    */
-  constructor(options: { bridge: NativeBridge; systemClipboard: SystemClipboard }) {
+  constructor(options: EditorOptions) {
     this.#viewport = new ViewportManager();
+
     this.#bridge = options.bridge;
+
     this.font = new Font(this.#bridge);
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
+
     this.#$segmentIndex = computed(() => {
       const glyph = this.#$glyph.value;
       if (!glyph) return new Map();
@@ -211,6 +219,7 @@ export class Editor {
       }
       return segmentsById;
     });
+
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
     this.#previewMode = signal(false);
@@ -280,7 +289,7 @@ export class Editor {
       glyph: this.#$glyph,
       selection: this.selection,
       commands: this.#commandHistory,
-      systemClipboard: options.systemClipboard,
+      clipboard: options.clipboard,
     });
     this.#textRunController = new TextRunController();
     this.#textRunController.setFont(this.font);

@@ -36,7 +36,13 @@ export interface ClipboardDeps {
   readonly glyph: Signal<Glyph | null>;
   readonly selection: Selection;
   readonly commands: CommandHistory;
-  readonly systemClipboard: SystemClipboard;
+  readonly clipboard: SystemClipboard;
+}
+
+interface ClipboardState {
+  content: ClipboardContent | null;
+  bounds: Rect2D | null;
+  timestamp: number;
 }
 
 /**
@@ -46,7 +52,7 @@ export interface ClipboardDeps {
 export class Clipboard {
   readonly #deps: ClipboardDeps;
   readonly #importers: ClipboardImporter[] = [];
-  #internalState: { content: ClipboardContent | null; bounds: Rect2D | null; timestamp: number } = {
+  #internalState: ClipboardState = {
     content: null,
     bounds: null,
     timestamp: 0,
@@ -116,7 +122,7 @@ export class Clipboard {
         content,
         metadata: { bounds, timestamp: Date.now(), ...(sourceGlyph ? { sourceGlyph } : {}) },
       };
-      this.#deps.systemClipboard.writeText(JSON.stringify(payload));
+      this.#deps.clipboard.writeText(JSON.stringify(payload));
       return true;
     } catch {
       return false;
@@ -125,7 +131,7 @@ export class Clipboard {
 
   async #read(): Promise<{ content: ClipboardContent | null }> {
     try {
-      const text = this.#deps.systemClipboard.readText();
+      const text = this.#deps.clipboard.readText();
 
       const native = tryDeserialize(text);
       if (native) return { content: native };

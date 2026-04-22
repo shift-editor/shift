@@ -36,17 +36,17 @@ class InMemorySystemClipboard implements SystemClipboard {
 }
 
 export class TestEditor extends Editor {
-  readonly #systemClipboard: InMemorySystemClipboard;
+  readonly #clipboard: InMemorySystemClipboard;
 
   constructor() {
-    const systemClipboard = new InMemorySystemClipboard();
-    super({ bridge: createBridge(), systemClipboard });
-    this.#systemClipboard = systemClipboard;
+    const clipboard = new InMemorySystemClipboard();
+    super({ bridge: createBridge(), clipboard });
+    this.#clipboard = clipboard;
     registerBuiltInTools(this);
   }
 
   get clipboardBuffer(): string {
-    return this.#systemClipboard.buffer;
+    return this.#clipboard.buffer;
   }
 
   startSession(glyphName = "A"): this {
