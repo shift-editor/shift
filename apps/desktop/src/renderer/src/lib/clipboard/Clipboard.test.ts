@@ -64,4 +64,24 @@ describe("Clipboard (via Editor)", () => {
 
     expect(editor.pointCount).toBe(pointsBefore);
   });
+
+  it("repeated pastes compound the offset", async () => {
+    editor.selectAll();
+    await editor.copy();
+    await editor.paste();
+    await editor.paste();
+
+    const contours = editor.currentGlyph?.contours ?? [];
+    expect(contours).toHaveLength(3);
+
+    // Each paste translates the original by DEFAULT_PASTE_OFFSET (20) *
+    // pasteIndex. Sort by minX so the assertion is independent of the
+    // contour array's insertion order.
+    const sortedMinX = contours
+      .map((c) => Math.min(...c.points.map((p) => p.x)))
+      .sort((a, b) => a - b);
+
+    expect(sortedMinX[1]! - sortedMinX[0]!).toBe(20);
+    expect(sortedMinX[2]! - sortedMinX[0]!).toBe(40);
+  });
 });
