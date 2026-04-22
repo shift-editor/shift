@@ -16,12 +16,10 @@ describe("TestEditor", () => {
       // Two distinct moves must both register synchronously — a single-flush
       // rAF implementation would coalesce them and only the latest would land.
       editor.pointerMove(100, 100);
-      const first = (editor.getActiveToolState() as { mousePos?: { x: number; y: number } })
-        .mousePos;
+      const first = editor.getActiveToolState().mousePos;
 
       editor.pointerMove(200, 200);
-      const second = (editor.getActiveToolState() as { mousePos?: { x: number; y: number } })
-        .mousePos;
+      const second = editor.getActiveToolState().mousePos;
 
       expect(first).toBeDefined();
       expect(second).toBeDefined();

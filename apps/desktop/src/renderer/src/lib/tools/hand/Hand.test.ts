@@ -30,7 +30,7 @@ describe("Hand tool", () => {
 
     editor.escape();
 
-    const state = editor.getActiveToolState() as { type?: string };
+    const state = editor.getActiveToolState();
     expect(state.type).toBe("ready");
 
     // After cancel, further moves without a new pointerDown must not pan.
