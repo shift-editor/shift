@@ -16,13 +16,37 @@ import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { createBridge } from "./engine";
+import type { SystemClipboard } from "@/lib/clipboard";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
+/**
+ * In-memory {@link SystemClipboard} for tests. The buffer is directly
+ * readable via {@link TestEditor.clipboardBuffer} so tests can assert on
+ * what the Editor wrote without needing a round-trip.
+ */
+class InMemorySystemClipboard implements SystemClipboard {
+  buffer = "";
+  writeText(text: string): void {
+    this.buffer = text;
+  }
+  readText(): string {
+    return this.buffer;
+  }
+}
+
 export class TestEditor extends Editor {
+  readonly #clipboard: InMemorySystemClipboard;
+
   constructor() {
-    super({ bridge: createBridge() });
+    const clipboard = new InMemorySystemClipboard();
+    super({ bridge: createBridge(), clipboard });
+    this.#clipboard = clipboard;
     registerBuiltInTools(this);
+  }
+
+  get clipboardBuffer(): string {
+    return this.#clipboard.buffer;
   }
 
   startSession(glyphName = "A"): this {
@@ -48,6 +72,7 @@ export class TestEditor extends Editor {
       { ...DEFAULT_MODIFIERS, ...options },
       { force: true },
     );
+    this.toolManager.flushPointerMoves();
     return this;
   }
 

@@ -8,7 +8,6 @@
  * @module
  */
 import type { Point, Contour, Glyph, PointId, ContourId, Point2D } from "@shift/types";
-import { Vec2 } from "@shift/geo";
 
 /**
  * A point together with the contour it belongs to and its index within that
@@ -73,11 +72,20 @@ export const Glyphs = {
   /**
    * Find the first point within `radius` of `pos` (linear scan).
    * @returns The matching point, or `null` if none is close enough.
+   *
+   * Hot path — called on every pointer-move from the cursor computed.
+   * Iterates contour points inline (no `points()` generator allocation)
+   * and uses squared-distance comparison (no `Math.sqrt`).
    */
   getPointAt(glyph: Glyph, pos: Point2D, radius: number): Point | null {
-    for (const { point } of Glyphs.points(glyph)) {
-      if (Vec2.dist(point, pos) < radius) {
-        return point;
+    const r2 = radius * radius;
+    const px = pos.x;
+    const py = pos.y;
+    for (const contour of glyph.contours) {
+      for (const point of contour.points) {
+        const dx = point.x - px;
+        const dy = point.y - py;
+        if (dx * dx + dy * dy < r2) return point;
       }
     }
     return null;

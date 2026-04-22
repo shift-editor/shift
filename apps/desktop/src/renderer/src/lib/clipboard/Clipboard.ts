@@ -10,6 +10,7 @@ import { Polygon } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import { ValidateClipboard } from "@shift/validation";
 import type {
+  SystemClipboard,
   ClipboardContent,
   ClipboardImporter,
   ClipboardPayload,
@@ -35,6 +36,13 @@ export interface ClipboardDeps {
   readonly glyph: Signal<Glyph | null>;
   readonly selection: Selection;
   readonly commands: CommandHistory;
+  readonly clipboard: SystemClipboard;
+}
+
+interface ClipboardState {
+  content: ClipboardContent | null;
+  bounds: Rect2D | null;
+  timestamp: number;
 }
 
 /**
@@ -44,7 +52,7 @@ export interface ClipboardDeps {
 export class Clipboard {
   readonly #deps: ClipboardDeps;
   readonly #importers: ClipboardImporter[] = [];
-  #internalState: { content: ClipboardContent | null; bounds: Rect2D | null; timestamp: number } = {
+  #internalState: ClipboardState = {
     content: null,
     bounds: null,
     timestamp: 0,
@@ -108,14 +116,13 @@ export class Clipboard {
     this.#pasteCount = 0;
 
     try {
-      if (!window.electronAPI) return false;
       const payload: ClipboardPayload = {
         version: 1,
         format: "shift/glyph-data",
         content,
         metadata: { bounds, timestamp: Date.now(), ...(sourceGlyph ? { sourceGlyph } : {}) },
       };
-      window.electronAPI.clipboardWriteText(JSON.stringify(payload));
+      this.#deps.clipboard.writeText(JSON.stringify(payload));
       return true;
     } catch {
       return false;
@@ -124,8 +131,7 @@ export class Clipboard {
 
   async #read(): Promise<{ content: ClipboardContent | null }> {
     try {
-      if (!window.electronAPI) return this.#internalState;
-      const text = window.electronAPI.clipboardReadText();
+      const text = this.#deps.clipboard.readText();
 
       const native = tryDeserialize(text);
       if (native) return { content: native };
