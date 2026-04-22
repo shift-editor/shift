@@ -46,7 +46,8 @@
     "shift/no-section-divider-comments": "error",
     "shift/no-bridge-import": "error",
     "shift/no-raw-editor-in-tests": "error",
-    "shift/no-vi-stub-global-in-tests": "error"
+    "shift/no-vi-stub-global-in-tests": "error",
+    "shift/no-vitest-mock-primitives": "error"
   },
   "overrides": [
     {

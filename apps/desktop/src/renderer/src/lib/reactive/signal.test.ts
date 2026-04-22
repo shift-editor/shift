@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { signal, computed, effect, batch, untracked, isTracking } from "./signal";
 
 describe("signal", () => {
@@ -27,9 +27,7 @@ describe("signal", () => {
 
   it("should return value without tracking via peek()", () => {
     const s = signal(10);
-    const fn = vi.fn(() => s.peek());
-
-    const c = computed(fn);
+    const c = computed(() => s.peek());
     expect(c.value).toBe(10);
 
     s.value = 20;
@@ -39,35 +37,35 @@ describe("signal", () => {
 
   it("should not notify if value is the same (Object.is)", () => {
     const s = signal(1);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     s.value = 1; // Same value
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     s.value = 2; // Different value
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
   });
 
   it("should handle NaN correctly", () => {
     const s = signal(NaN);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     s.value = NaN; // NaN === NaN via Object.is
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
   });
 });
 
@@ -91,17 +89,20 @@ describe("computed", () => {
   });
 
   it("should be lazy (only compute when accessed)", () => {
-    const fn = vi.fn(() => 42);
-    const c = computed(fn);
+    let computes = 0;
+    const c = computed(() => {
+      computes++;
+      return 42;
+    });
 
-    expect(fn).not.toHaveBeenCalled();
+    expect(computes).toBe(0);
 
     c.value;
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(computes).toBe(1);
 
     // Accessing again should not recompute (not dirty)
     c.value;
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(computes).toBe(1);
   });
 
   it("should chain computed values", () => {
@@ -131,41 +132,40 @@ describe("computed", () => {
     const a = signal(1);
     const b = signal(2);
 
-    const fn = vi.fn();
+    let computes = 0;
     const c = computed(() => {
-      fn();
+      computes++;
       return condition.value ? a.value : b.value;
     });
 
     c.value; // Initial compute, depends on condition + a
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(computes).toBe(1);
 
     a.value = 10; // Should trigger recompute
     c.value;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(computes).toBe(2);
 
     b.value = 20; // Should NOT trigger recompute (not a dependency)
     c.value;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(computes).toBe(2);
 
     // Switch condition
     condition.value = false;
     c.value;
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(computes).toBe(3);
 
     // Now a should NOT trigger, but b should
     a.value = 100;
     c.value;
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(computes).toBe(3);
 
     b.value = 200;
     c.value;
-    expect(fn).toHaveBeenCalledTimes(4);
+    expect(computes).toBe(4);
   });
 
   it("should support invalidate()", () => {
-    const fn = vi.fn(() => Math.random());
-    const c = computed(fn);
+    const c = computed(() => Math.random());
 
     const v1 = c.value;
     const v2 = c.value;
@@ -179,84 +179,90 @@ describe("computed", () => {
 
 describe("effect", () => {
   it("should run immediately", () => {
-    const fn = vi.fn();
-    effect(fn);
-    expect(fn).toHaveBeenCalledTimes(1);
+    let fires = 0;
+    effect(() => {
+      fires++;
+    });
+    expect(fires).toBe(1);
   });
 
   it("should re-run when dependencies change", () => {
     const s = signal(1);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     s.value = 2;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
 
     s.value = 3;
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(fires).toBe(3);
   });
 
   it("should stop running after dispose()", () => {
     const s = signal(1);
-    const fn = vi.fn();
+    let fires = 0;
 
     const fx = effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     fx.dispose();
 
     s.value = 2;
-    expect(fn).toHaveBeenCalledTimes(1); // No additional calls
+    expect(fires).toBe(1); // No additional calls
   });
 
   it("should run cleanup function before re-execution", () => {
     const s = signal(1);
-    const cleanup = vi.fn();
-    const executed = vi.fn();
+    let cleaned = 0;
+    let executed = 0;
 
     effect(() => {
       s.value; // Subscribe to signal
-      executed();
-      return cleanup;
+      executed++;
+      return () => {
+        cleaned++;
+      };
     });
 
-    expect(executed).toHaveBeenCalledTimes(1);
-    expect(cleanup).not.toHaveBeenCalled(); // No cleanup on first run
+    expect(executed).toBe(1);
+    expect(cleaned).toBe(0); // No cleanup on first run
 
     s.value = 2;
-    expect(executed).toHaveBeenCalledTimes(2);
-    expect(cleanup).toHaveBeenCalledTimes(1); // Cleanup called before re-execution
+    expect(executed).toBe(2);
+    expect(cleaned).toBe(1); // Cleanup called before re-execution
 
     s.value = 3;
-    expect(executed).toHaveBeenCalledTimes(3);
-    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(executed).toBe(3);
+    expect(cleaned).toBe(2);
   });
 
   it("should run cleanup on dispose", () => {
-    const cleanup = vi.fn();
-    const fx = effect(() => cleanup);
+    let cleaned = 0;
+    const fx = effect(() => () => {
+      cleaned++;
+    });
 
-    expect(cleanup).not.toHaveBeenCalled();
+    expect(cleaned).toBe(0);
 
     fx.dispose();
-    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(cleaned).toBe(1);
   });
 
   it("should update dependencies on re-run", () => {
     const condition = signal(true);
     const a = signal(1);
     const b = signal(2);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       if (condition.value) {
@@ -264,45 +270,45 @@ describe("effect", () => {
       } else {
         b.value;
       }
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     // a is a dependency
     a.value = 10;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
 
     // b is NOT a dependency yet
     b.value = 20;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
 
     // Switch condition
     condition.value = false;
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(fires).toBe(3);
 
     // Now b IS a dependency, a is NOT
     b.value = 30;
-    expect(fn).toHaveBeenCalledTimes(4);
+    expect(fires).toBe(4);
 
     a.value = 100;
-    expect(fn).toHaveBeenCalledTimes(4);
+    expect(fires).toBe(4);
   });
 
   it("should react to computed dependencies", () => {
     const s = signal(2);
     const doubled = computed(() => s.value * 2);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       doubled.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     s.value = 3;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
   });
 });
 
@@ -310,15 +316,15 @@ describe("batch", () => {
   it("should defer effect execution until batch completes", () => {
     const a = signal(1);
     const b = signal(2);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       a.value;
       b.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     batch(() => {
       a.value = 10;
@@ -326,26 +332,24 @@ describe("batch", () => {
     });
 
     // Effect should only run once, not twice
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
   });
 
   it("should return the value from the batch function", () => {
-    const result = batch(() => {
-      return 42;
-    });
+    const result = batch(() => 42);
     expect(result).toBe(42);
   });
 
   it("should handle nested batches", () => {
     const s = signal(0);
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     batch(() => {
       s.value = 1;
@@ -357,7 +361,7 @@ describe("batch", () => {
     });
 
     // Should only run once after all batches complete
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
     expect(s.value).toBe(4);
   });
 
@@ -381,24 +385,29 @@ describe("untracked", () => {
   it("should read signals without creating dependencies", () => {
     const a = signal(1);
     const b = signal(2);
-    const fn = vi.fn();
+    const calls: Array<[number, number]> = [];
 
     effect(() => {
       const aVal = a.value; // Tracked
       const bVal = untracked(() => b.value); // NOT tracked
-      fn(aVal, bVal);
+      calls.push([aVal, bVal]);
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenCalledWith(1, 2);
+    expect(calls).toEqual([[1, 2]]);
 
     // Changing a should trigger effect
     a.value = 10;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual([
+      [1, 2],
+      [10, 2],
+    ]);
 
     // Changing b should NOT trigger effect
     b.value = 20;
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual([
+      [1, 2],
+      [10, 2],
+    ]);
   });
 
   it("should return the value from the function", () => {
@@ -457,49 +466,49 @@ describe("edge cases", () => {
 
   it("should handle object values", () => {
     const obj = signal({ count: 0 });
-    const fn = vi.fn();
+    let fires = 0;
 
     effect(() => {
       obj.value.count;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     // Mutating the object doesn't trigger (same reference)
     obj.value.count = 1;
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     // Replacing the object triggers
     obj.value = { count: 2 };
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fires).toBe(2);
   });
 
   it("should handle multiple effects on same signal", () => {
     const s = signal(0);
-    const fn1 = vi.fn();
-    const fn2 = vi.fn();
+    let fires1 = 0;
+    let fires2 = 0;
 
     effect(() => {
       s.value;
-      fn1();
+      fires1++;
     });
     effect(() => {
       s.value;
-      fn2();
+      fires2++;
     });
 
-    expect(fn1).toHaveBeenCalledTimes(1);
-    expect(fn2).toHaveBeenCalledTimes(1);
+    expect(fires1).toBe(1);
+    expect(fires2).toBe(1);
 
     s.value = 1;
-    expect(fn1).toHaveBeenCalledTimes(2);
-    expect(fn2).toHaveBeenCalledTimes(2);
+    expect(fires1).toBe(2);
+    expect(fires2).toBe(2);
   });
 
   it("should handle effect disposal during another effect execution", () => {
     const s = signal(0);
-    const fn = vi.fn();
+    let fires = 0;
 
     let fx2: ReturnType<typeof effect> | null = null;
 
@@ -512,17 +521,17 @@ describe("edge cases", () => {
 
     fx2 = effect(() => {
       s.value;
-      fn();
+      fires++;
     });
 
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     // This should dispose fx2 via fx1
     s.value = 1;
 
     // fx2 should not run again after being disposed
     s.value = 2;
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fires).toBe(1);
 
     fx1.dispose();
   });

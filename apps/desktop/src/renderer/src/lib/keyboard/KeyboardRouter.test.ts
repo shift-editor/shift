@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { KeyboardRouter } from "./KeyboardRouter";
-import type { KeyboardEditorActions, KeyboardToolManagerActions } from "./types";
-import type { ToolName } from "@/lib/tools/core";
+import { TestEditor } from "@/testing";
 
 type KeyboardEventOptions = Partial<
   Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
@@ -26,8 +25,8 @@ function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent 
     ctrlKey: options.ctrlKey ?? false,
     shiftKey: options.shiftKey ?? false,
     altKey: options.altKey ?? false,
-    preventDefault: vi.fn(),
-    stopPropagation: vi.fn(),
+    preventDefault: () => {},
+    stopPropagation: () => {},
     target: options.target ?? null,
   };
 
@@ -35,216 +34,188 @@ function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent 
 }
 
 describe("KeyboardRouter", () => {
-  let activeTool: ToolName;
+  let editor: TestEditor;
   let canvasActive: boolean;
-  let editor: KeyboardEditorActions;
-  let toolManager: KeyboardToolManagerActions;
   let router: KeyboardRouter;
 
   beforeEach(() => {
-    activeTool = "select";
+    editor = new TestEditor();
+    editor.startSession();
+    // setActiveTool short-circuits if the target matches the current $activeTool,
+    // and $activeTool defaults to "select" without actually activating a tool
+    // instance. Force activation directly so primaryTool is populated.
+    editor.toolManager.activate("select");
     canvasActive = true;
-
-    Object.defineProperty(globalThis, "navigator", {
-      value: { clipboard: { readText: vi.fn(() => Promise.resolve("")) } },
-      writable: true,
-      configurable: true,
-    });
-
-    editor = {
-      zoomIn: vi.fn(),
-      zoomOut: vi.fn(),
-      requestRedraw: vi.fn(),
-      copy: vi.fn(),
-      cut: vi.fn(),
-      paste: vi.fn(),
-      undo: vi.fn(),
-      redo: vi.fn(),
-      selectAll: vi.fn(),
-      deleteSelectedPoints: vi.fn(),
-      setActiveTool: vi.fn(),
-      getToolShortcuts: vi.fn(() => [
-        { toolId: "select", shortcut: "v" },
-        { toolId: "pen", shortcut: "p" },
-        { toolId: "hand", shortcut: "h" },
-        { toolId: "shape", shortcut: "s" },
-        { toolId: "text", shortcut: "t" },
-      ]),
-      requestTemporaryTool: vi.fn((_tool, options) => options?.onActivate?.()),
-      returnFromTemporaryTool: vi.fn(),
-      previewMode: false,
-      setPreviewMode: vi.fn(),
-      openGlyphFinder: vi.fn(),
-    };
-
-    toolManager = {
-      handleKeyDown: vi.fn(() => false),
-      handleKeyUp: vi.fn(() => false),
-    };
 
     router = new KeyboardRouter(() => ({
       canvasActive,
-      activeTool,
+      activeTool: editor.getActiveTool(),
       editor,
-      toolManager,
+      toolManager: editor.toolManager,
     }));
   });
 
-  it("runs global paste shortcut even when canvas is inactive", () => {
-    canvasActive = false;
-    const e = createKeyboardEvent({ key: "v", ctrlKey: true });
+  describe("zoom shortcuts", () => {
+    it("zooms in on command/control + equal without shift", () => {
+      const zoomBefore = editor.zoom;
+      const e = createKeyboardEvent({ key: "=", code: "Equal", metaKey: true });
 
-    const handled = router.handleKeyDown(e);
+      const handled = router.handleKeyDown(e);
 
-    expect(handled).toBe(true);
-    expect(editor.paste).toHaveBeenCalledTimes(1);
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
+      expect(handled).toBe(true);
+      expect(editor.zoom).toBeGreaterThan(zoomBefore);
+    });
+
+    it("zooms out on command/control + minus without shift", () => {
+      const zoomBefore = editor.zoom;
+      const e = createKeyboardEvent({ key: "-", code: "Minus", ctrlKey: true });
+
+      const handled = router.handleKeyDown(e);
+
+      expect(handled).toBe(true);
+      expect(editor.zoom).toBeLessThan(zoomBefore);
+    });
+
+    it("does not intercept shift+equal (leaves it for native UI zoom)", () => {
+      canvasActive = false;
+      const zoomBefore = editor.zoom;
+      const e = createKeyboardEvent({ key: "+", code: "Equal", metaKey: true, shiftKey: true });
+
+      const handled = router.handleKeyDown(e);
+
+      expect(handled).toBe(false);
+      expect(editor.zoom).toBe(zoomBefore);
+    });
+
+    it("does not intercept shift+minus (leaves it for native UI zoom)", () => {
+      canvasActive = false;
+      const zoomBefore = editor.zoom;
+      const e = createKeyboardEvent({ key: "_", code: "Minus", ctrlKey: true, shiftKey: true });
+
+      const handled = router.handleKeyDown(e);
+
+      expect(handled).toBe(false);
+      expect(editor.zoom).toBe(zoomBefore);
+    });
   });
 
-  it("applies canvas zoom in for command/control + equal without shift", () => {
-    const e = createKeyboardEvent({ key: "=", code: "Equal", metaKey: true, shiftKey: false });
+  describe("tool shortcuts", () => {
+    it("switches tools from canvas shortcuts for non-text tools", () => {
+      const e = createKeyboardEvent({ key: "s" });
 
-    const handled = router.handleKeyDown(e);
+      const handled = router.handleKeyDown(e);
 
-    expect(handled).toBe(true);
-    expect(editor.zoomIn).toHaveBeenCalledTimes(1);
-    expect(editor.requestRedraw).toHaveBeenCalledTimes(1);
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
+      expect(handled).toBe(true);
+      expect(editor.getActiveTool()).toBe("shape");
+    });
+
+    it("does not run tool shortcuts outside the canvas context", () => {
+      canvasActive = false;
+      const e = createKeyboardEvent({ key: "s" });
+
+      const handled = router.handleKeyDown(e);
+
+      expect(handled).toBe(false);
+      expect(editor.getActiveTool()).toBe("select");
+    });
+
+    it("does not intercept plain typing while the text tool is active", () => {
+      editor.selectTool("text");
+      const e = createKeyboardEvent({ key: "s" });
+
+      const handled = router.handleKeyDown(e);
+
+      expect(handled).toBe(false);
+      expect(editor.getActiveTool()).toBe("text");
+    });
   });
 
-  it("applies canvas zoom out for command/control + minus without shift", () => {
-    const e = createKeyboardEvent({ key: "-", code: "Minus", ctrlKey: true, shiftKey: false });
+  describe("clipboard shortcuts", () => {
+    beforeEach(() => {
+      editor.selectTool("pen");
+      editor.click(100, 100);
+      editor.click(200, 100);
+      editor.click(200, 200);
+      editor.click(100, 200);
+      editor.selectTool("select");
+      editor.selectAll();
+    });
 
-    const handled = router.handleKeyDown(e);
+    it("runs paste even when canvas is inactive", async () => {
+      await editor.copy();
+      const pointsBefore = editor.pointCount;
+      canvasActive = false;
+      const e = createKeyboardEvent({ key: "v", ctrlKey: true });
 
-    expect(handled).toBe(true);
-    expect(editor.zoomOut).toHaveBeenCalledTimes(1);
-    expect(editor.requestRedraw).toHaveBeenCalledTimes(1);
-    expect(e.preventDefault).toHaveBeenCalledTimes(1);
+      const handled = router.handleKeyDown(e);
+      // Clipboard paste is async; wait for the microtask to settle.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(handled).toBe(true);
+      expect(editor.pointCount).toBeGreaterThan(pointsBefore);
+    });
+
+    it("does not intercept paste while the text tool is active", async () => {
+      await editor.copy();
+      editor.selectTool("text");
+      const pointsBefore = editor.pointCount;
+      const e = createKeyboardEvent({ key: "v", metaKey: true });
+
+      router.handleKeyDown(e);
+      await Promise.resolve();
+
+      expect(editor.pointCount).toBe(pointsBefore);
+    });
+
+    it("does not intercept copy while the text tool is active", async () => {
+      editor.selectTool("text");
+      const bufferBefore = editor.clipboardBuffer;
+      const e = createKeyboardEvent({ key: "c", metaKey: true });
+
+      router.handleKeyDown(e);
+      await Promise.resolve();
+
+      expect(editor.clipboardBuffer).toBe(bufferBefore);
+    });
   });
 
-  it("does not intercept command/control + shift + equal (allows native UI zoom)", () => {
-    canvasActive = false;
-    const e = createKeyboardEvent({ key: "+", code: "Equal", metaKey: true, shiftKey: true });
+  describe("temporary hand tool (space)", () => {
+    it("activates the hand tool on space and returns to the previous tool on keyup", () => {
+      const down = createKeyboardEvent({ key: " ", code: "Space" });
+      const up = createKeyboardEvent({ key: " ", code: "Space" });
 
-    const handled = router.handleKeyDown(e);
+      router.handleKeyDown(down);
+      // Temporary tools are tracked as toolManager overrides; activeToolId
+      // reflects the override while primaryToolId stays on the base tool.
+      expect(editor.toolManager.activeToolId).toBe("hand");
+      expect(editor.toolManager.primaryToolId).toBe("select");
+      expect(editor.previewMode).toBe(true);
 
-    expect(handled).toBe(false);
-    expect(editor.zoomIn).not.toHaveBeenCalled();
-    expect(editor.requestRedraw).not.toHaveBeenCalled();
-    expect(e.preventDefault).not.toHaveBeenCalled();
+      router.handleKeyUp(up);
+      expect(editor.toolManager.activeToolId).toBe("select");
+      expect(editor.previewMode).toBe(false);
+    });
+
+    it("does not activate the hand tool on space while the text tool is active", () => {
+      editor.selectTool("text");
+      const e = createKeyboardEvent({ key: " ", code: "Space" });
+
+      router.handleKeyDown(e);
+
+      expect(editor.getActiveTool()).toBe("text");
+    });
   });
 
-  it("does not intercept command/control + shift + minus (allows native UI zoom)", () => {
-    canvasActive = false;
-    const e = createKeyboardEvent({ key: "_", code: "Minus", ctrlKey: true, shiftKey: true });
+  describe("focus handling", () => {
+    it("does not intercept shortcuts while an editable input has focus", () => {
+      const input = { tagName: "INPUT" } as EventTarget & { tagName: string };
+      const e = createKeyboardEvent({ key: "a", metaKey: true, target: input });
 
-    const handled = router.handleKeyDown(e);
+      const handled = router.handleKeyDown(e);
 
-    expect(handled).toBe(false);
-    expect(editor.zoomOut).not.toHaveBeenCalled();
-    expect(editor.requestRedraw).not.toHaveBeenCalled();
-    expect(e.preventDefault).not.toHaveBeenCalled();
-  });
-
-  it("does not run tool shortcuts outside canvas context", () => {
-    canvasActive = false;
-    const e = createKeyboardEvent({ key: "s" });
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(false);
-    expect(editor.setActiveTool).not.toHaveBeenCalled();
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-  });
-
-  it("switches tools from canvas shortcuts for non-text tools", () => {
-    activeTool = "select";
-    const e = createKeyboardEvent({ key: "s" });
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(true);
-    expect(editor.setActiveTool).toHaveBeenCalledWith("shape");
-    expect(editor.requestRedraw).toHaveBeenCalledTimes(1);
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-  });
-
-  it("does not intercept plain typing in text mode (textarea handles it)", () => {
-    activeTool = "text";
-    const e = createKeyboardEvent({ key: "s" });
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(false);
-    expect(editor.setActiveTool).not.toHaveBeenCalled();
-  });
-
-  it("does not intercept paste in text mode (textarea handles it)", () => {
-    activeTool = "text";
-    const e = createKeyboardEvent({ key: "v", metaKey: true });
-
-    router.handleKeyDown(e);
-
-    expect(editor.paste).not.toHaveBeenCalled();
-  });
-
-  it("does not intercept copy in text mode (textarea handles it)", () => {
-    activeTool = "text";
-    const e = createKeyboardEvent({ key: "c", metaKey: true });
-
-    router.handleKeyDown(e);
-
-    expect(editor.copy).not.toHaveBeenCalled();
-  });
-
-  it("inserts space in text mode instead of activating temporary hand", () => {
-    activeTool = "text";
-    const e = createKeyboardEvent({ key: " ", code: "Space" });
-    (toolManager.handleKeyDown as ReturnType<typeof vi.fn>).mockReturnValue(true);
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(true);
-    expect(editor.requestTemporaryTool).not.toHaveBeenCalled();
-    expect(toolManager.handleKeyDown).toHaveBeenCalledWith(e);
-  });
-
-  it("activates temporary hand on space and releases it on keyup", () => {
-    activeTool = "select";
-    const down = createKeyboardEvent({ key: " ", code: "Space" });
-    const up = createKeyboardEvent({ key: " ", code: "Space" });
-
-    const downHandled = router.handleKeyDown(down);
-    const upHandled = router.handleKeyUp(up);
-
-    expect(downHandled).toBe(true);
-    expect(editor.requestTemporaryTool).toHaveBeenCalledTimes(1);
-    expect(editor.setPreviewMode).toHaveBeenCalledWith(true);
-    expect(upHandled).toBe(true);
-    expect(editor.returnFromTemporaryTool).toHaveBeenCalledTimes(1);
-  });
-
-  it("falls back to tool manager when no keymap matches in canvas", () => {
-    const e = createKeyboardEvent({ key: "q" });
-    (toolManager.handleKeyDown as ReturnType<typeof vi.fn>).mockReturnValue(true);
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(true);
-    expect(toolManager.handleKeyDown).toHaveBeenCalledWith(e);
-  });
-
-  it("does not intercept shortcuts when an editable input has focus", () => {
-    const input = { tagName: "INPUT" } as EventTarget & { tagName: string };
-    const e = createKeyboardEvent({ key: "a", metaKey: true, target: input });
-
-    const handled = router.handleKeyDown(e);
-
-    expect(handled).toBe(false);
-    expect(editor.selectAll).not.toHaveBeenCalled();
-    expect(toolManager.handleKeyDown).not.toHaveBeenCalled();
-    expect(e.preventDefault).not.toHaveBeenCalled();
+      expect(handled).toBe(false);
+      expect(editor.selection.pointIds.size).toBe(0);
+    });
   });
 });
