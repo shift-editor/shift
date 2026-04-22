@@ -1,28 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-
-/**
- * Stubs the Electron clipboard IPC with an in-memory buffer so copy/cut/paste
- * can round-trip in the test process. Real electronAPI is undefined in Node.
- */
-function stubElectronClipboard() {
-  let buffer = "";
-  vi.stubGlobal("window", {
-    ...globalThis.window,
-    electronAPI: {
-      clipboardWriteText: (text: string) => {
-        buffer = text;
-      },
-      clipboardReadText: () => buffer,
-    },
-  });
-}
 
 describe("Clipboard (via Editor)", () => {
   let editor: TestEditor;
 
   beforeEach(() => {
-    stubElectronClipboard();
     editor = new TestEditor();
     editor.startSession();
     editor.selectTool("pen");
@@ -34,19 +16,28 @@ describe("Clipboard (via Editor)", () => {
     editor.click(100, 200);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("copy on empty selection returns false and writes nothing", async () => {
+  it("copy on empty selection returns false", async () => {
     editor.selection.clear();
 
     const ok = await editor.copy();
 
     expect(ok).toBe(false);
+    expect(editor.clipboardBuffer).toBe("");
   });
 
-  it("copy + paste duplicates the selected contour with the default paste offset", async () => {
+  it("copy writes a shift/glyph-data payload to the clipboard", async () => {
+    editor.selectAll();
+
+    const ok = await editor.copy();
+
+    expect(ok).toBe(true);
+    const payload = JSON.parse(editor.clipboardBuffer);
+    expect(payload.format).toBe("shift/glyph-data");
+    expect(payload.content.contours).toHaveLength(1);
+    expect(payload.content.contours[0].points).toHaveLength(4);
+  });
+
+  it("copy + paste duplicates the selected contour", async () => {
     editor.selectAll();
     const pointsBefore = editor.pointCount;
 
@@ -58,15 +49,14 @@ describe("Clipboard (via Editor)", () => {
 
   it("cut removes the selected points from the glyph", async () => {
     editor.selectAll();
-    const pointsBefore = editor.pointCount;
-    expect(pointsBefore).toBeGreaterThan(0);
+    expect(editor.pointCount).toBeGreaterThan(0);
 
     await editor.cut();
 
     expect(editor.pointCount).toBe(0);
   });
 
-  it("paste with nothing on the clipboard is a no-op", async () => {
+  it("paste with an empty clipboard is a no-op", async () => {
     editor.selection.clear();
     const pointsBefore = editor.pointCount;
 
