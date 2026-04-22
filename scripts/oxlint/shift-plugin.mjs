@@ -866,5 +866,53 @@ export default {
         };
       },
     },
+
+    /**
+     * Ban `vi.stubGlobal(...)` in test files.
+     *
+     * Global stubbing (`vi.stubGlobal("window", ...)`, `vi.stubGlobal("requestAnimationFrame", ...)`)
+     * papers over unmanaged global dependencies. Leaks across tests if unstub
+     * is forgotten, order-sensitive, and hides that the production code has
+     * a hard-coded global that should be an injected boundary.
+     *
+     * - For rAF-backed pipelines, use `toolManager.flushPointerMoves()`
+     *   (TestEditor.pointerMove already does this).
+     * - For `window.electronAPI` / IPC, inject an adapter through the
+     *   constructor (see `SystemClipboard` in `lib/clipboard/`).
+     *
+     * See `/writing-tests` skill for the full rationale.
+     */
+    "no-vi-stub-global-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noStubGlobal:
+            "Do not use vi.stubGlobal in tests. Inject the boundary via a constructor adapter (SystemClipboard pattern) or use the synchronous seam (toolManager.flushPointerMoves). See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+        if (!filename.includes(".test.")) return {};
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee &&
+              callee.type === "MemberExpression" &&
+              callee.object &&
+              callee.object.type === "Identifier" &&
+              callee.object.name === "vi" &&
+              callee.property &&
+              callee.property.type === "Identifier" &&
+              callee.property.name === "stubGlobal"
+            ) {
+              context.report({ node, messageId: "noStubGlobal" });
+            }
+          },
+        };
+      },
+    },
   },
 };

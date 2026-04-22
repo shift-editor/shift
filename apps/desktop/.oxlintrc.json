@@ -45,7 +45,8 @@
     "shift/no-repeated-optional-chain": "warn",
     "shift/no-section-divider-comments": "error",
     "shift/no-bridge-import": "error",
-    "shift/no-raw-editor-in-tests": "error"
+    "shift/no-raw-editor-in-tests": "error",
+    "shift/no-vi-stub-global-in-tests": "error"
   },
   "overrides": [
     {
