@@ -43,6 +43,16 @@ export interface ClipboardImporter {
   import(text: string): ClipboardContent | null;
 }
 
+/**
+ * The OS-level clipboard — the boundary between the {@link Clipboard}
+ * orchestrator and Electron's `clipboard` module (via preload). Production
+ * wiring uses {@link electronSystemClipboard}; tests inject an in-memory fake.
+ */
+export interface SystemClipboard {
+  writeText(text: string): void;
+  readText(): string;
+}
+
 /** Current in-memory clipboard state held by the clipboard service. */
 export interface ClipboardState {
   content: ClipboardContent | null;
