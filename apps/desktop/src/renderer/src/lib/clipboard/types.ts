@@ -43,6 +43,16 @@ export interface ClipboardImporter {
   import(text: string): ClipboardContent | null;
 }
 
+/**
+ * The boundary between the Clipboard class and the system clipboard
+ * (Electron's `clipboard` module, via preload). Production wiring uses
+ * {@link ElectronClipboardAdapter}; tests inject an in-memory fake.
+ */
+export interface ClipboardAdapter {
+  writeText(text: string): void;
+  readText(): string;
+}
+
 /** Current in-memory clipboard state held by the clipboard service. */
 export interface ClipboardState {
   content: ClipboardContent | null;

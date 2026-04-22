@@ -50,7 +50,12 @@ import {
   type Signal,
   type WritableSignal,
 } from "../reactive/signal";
-import { Clipboard, resolveClipboardContent } from "../clipboard";
+import {
+  Clipboard,
+  resolveClipboardContent,
+  electronClipboardAdapter,
+  type ClipboardAdapter,
+} from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { DEFAULT_THEME } from "./rendering/Theme";
 import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
@@ -197,7 +202,7 @@ export class Editor {
    * reactive effects that schedule canvas redraws when state changes.
    *
    */
-  constructor(options: { bridge: NativeBridge }) {
+  constructor(options: { bridge: NativeBridge; clipboardAdapter?: ClipboardAdapter }) {
     this.#viewport = new ViewportManager();
     this.#bridge = options.bridge;
     this.font = new Font(this.#bridge);
@@ -280,6 +285,7 @@ export class Editor {
       glyph: this.#$glyph,
       selection: this.selection,
       commands: this.#commandHistory,
+      adapter: options.clipboardAdapter ?? electronClipboardAdapter,
     });
     this.#textRunController = new TextRunController();
     this.#textRunController.setFont(this.font);
