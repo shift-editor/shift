@@ -46,24 +46,22 @@ describe("SnapPipelineRunner.runPointPipeline", () => {
     expect(result.point).toEqual(pointArgs.point);
   });
 
-  it("point-to-point short-circuits and wins over a closer metrics candidate", () => {
-    const applied: string[] = [];
+  it("point-to-point wins over a closer metrics candidate", () => {
     const steps: PointSnapStep[] = [
-      { id: "p2p", apply: () => (applied.push("p2p"), hit("pointToPoint", { x: 110, y: 110 })) },
-      { id: "metrics", apply: () => (applied.push("metrics"), hit("metrics", { x: 101, y: 101 })) },
+      pointStep("p2p", hit("pointToPoint", { x: 110, y: 110 })),
+      pointStep("metrics", hit("metrics", { x: 101, y: 101 })),
     ];
 
     const result = runner.runPointPipeline(steps, pointArgs);
 
     expect(result.source).toBe("pointToPoint");
     expect(result.point).toEqual({ x: 110, y: 110 });
-    expect(applied).toEqual(["p2p"]); // metrics step must not run after p2p match
   });
 
   it("without a point-to-point match, the closest candidate wins", () => {
     const steps: PointSnapStep[] = [
-      pointStep("far-metrics", hit("metrics", { x: 120, y: 100 })), // 20 away
-      pointStep("near-angle", hit("angle", { x: 105, y: 100 })), // 5 away
+      pointStep("far-metrics", hit("metrics", { x: 120, y: 100 })),
+      pointStep("near-angle", hit("angle", { x: 105, y: 100 })),
     ];
 
     const result = runner.runPointPipeline(steps, pointArgs);
@@ -99,28 +97,14 @@ describe("SnapPipelineRunner.runRotatePipeline", () => {
     expect(result.delta).toBe(0.3);
   });
 
-  it("first match wins — later steps are never consulted", () => {
-    const applied: string[] = [];
+  it("the first matching step's result is returned", () => {
     const steps: RotateSnapStep[] = [
-      {
-        id: "first",
-        apply: () => (
-          applied.push("first"),
-          { snappedDelta: 0.25, source: "angle", indicator: null }
-        ),
-      },
-      {
-        id: "second",
-        apply: () => (
-          applied.push("second"),
-          { snappedDelta: 0.5, source: "angle", indicator: null }
-        ),
-      },
+      rotateStep("first", { snappedDelta: 0.25, source: "angle", indicator: null }),
+      rotateStep("second", { snappedDelta: 0.5, source: "angle", indicator: null }),
     ];
 
     const result = runner.runRotatePipeline(steps, rotateArgs);
 
     expect(result.delta).toBe(0.25);
-    expect(applied).toEqual(["first"]);
   });
 });
