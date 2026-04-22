@@ -210,13 +210,22 @@ export class Glyph {
       return Bounds.unionAll(all);
     });
 
+    // Point-based x-range — cheap, matches integer-rounded sidebar display.
+    // Avoids warming the bezier #bbox chain which transitively computes
+    // every contour's bezier bounds. Consumers use `useGlyphSidebearings`
+    // React hook to subscribe; not exposed as a `$sidebearings` signal to
+    // prevent accidental subscription-driven recomputation.
     this.#sidebearings = computed<GlyphSidebearings>(() => {
-      const bbox = this.#bbox.value;
-      if (!bbox) return { lsb: null, rsb: null };
-      return {
-        lsb: bbox.min.x,
-        rsb: this.#xAdvance.value - bbox.max.x,
-      };
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (const contour of this.#contours.value) {
+        for (const p of contour.points) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+        }
+      }
+      if (minX === Infinity) return { lsb: null, rsb: null };
+      return { lsb: minX, rsb: this.#xAdvance.value - maxX };
     });
   }
 
@@ -225,6 +234,7 @@ export class Glyph {
   }
 
   /**
+   * @knipclassignore — used by purpose-specific React hooks in `@/hooks/`
    * Signal that fires once per structural/position change — use this to
    * subscribe to "something about the glyph changed" without forcing the
    * bounds / path / bbox computeds to eagerly recompute. Consumers pull
@@ -261,16 +271,16 @@ export class Glyph {
     return this.#bbox.value;
   }
 
+  /**
+   * @knipclassignore — used by Editor command path and `useGlyphSidebearings`
+   * Sidebearings (point-based x-range) — pull at read time; for React live
+   * display use `useGlyphSidebearings()`.
+   */
   get sidebearings(): GlyphSidebearings {
     return this.#sidebearings.value;
   }
 
-  /** @knipclassignore */
-  get $sidebearings(): Signal<GlyphSidebearings> {
-    return this.#sidebearings;
-  }
-
-  /** @knipclassignore */
+  /** @knipclassignore — subscribed by `useGlyphXAdvance` hook */
   get $xAdvance(): Signal<number> {
     return this.#xAdvance;
   }

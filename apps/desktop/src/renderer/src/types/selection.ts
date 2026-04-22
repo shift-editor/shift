@@ -1,4 +1,4 @@
-import type { PointId, ContourId, AnchorId } from "@shift/types";
+import type { PointId, ContourId, AnchorId, Point2D } from "@shift/types";
 import type { SegmentId } from "./indicator";
 import type { Glyph } from "@/lib/model/Glyph";
 import type { SelectionMode } from "./editor";
@@ -93,13 +93,25 @@ export class Selection {
       return { contourIds, fullySelectedContourIds, pointToContour, contourToPoints };
     });
 
+    // Point-based bounds. Cheap per call (single pass over contour points),
+    // cached via ComputedSignal so repeated reads within a frame are free.
+    // Not exposed as `$bounds` — consumers that want live updates use the
+    // `useSelectionBounds` React hook, which subscribes to raw inputs and
+    // pulls this value at render time. Subscribing directly to this
+    // computed would force the iteration to run on every input signal
+    // fire (every drag frame), which is the footgun we're avoiding.
     this.#$bounds = computed<BoundsType | null>(() => {
       const ids = this.#$pointIds.value;
       const g = glyph.value;
-
       if (ids.size === 0 || !g) return null;
 
-      return Bounds.unionAll(g.contours.map((c) => c.selectionBounds(ids)));
+      const selected: Point2D[] = [];
+      for (const contour of g.contours) {
+        for (const point of contour.points) {
+          if (ids.has(point.id)) selected.push(point);
+        }
+      }
+      return Bounds.fromPoints(selected);
     });
   }
 
@@ -165,14 +177,12 @@ export class Selection {
     return this.#$derived.value.contourIds.size;
   }
 
-  /** Tight bounds of the selected points, accounting for curve geometry. */
+  /**
+   * Axis-aligned bounding box of the currently selected points.
+   * Pull at read time; for React live display use `useSelectionBounds()`.
+   */
   get bounds(): BoundsType | null {
     return this.#$bounds.value;
-  }
-
-  /** @knipclassignore — subscribed by TransformSection/ScaleSection via useSignalState */
-  get $bounds(): Signal<BoundsType | null> {
-    return this.#$bounds;
   }
 
   /** Raw signals for React hooks that need Signal<T>. */

@@ -7,14 +7,12 @@ import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
 import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
-import { useSignalState, useSignalTrigger } from "@/lib/reactive";
+import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 export const ScaleSection = () => {
   const editor = getEditor();
   const { anchor, setAnchor } = useTransformOrigin();
-  const glyph = useSignalState(editor.glyph);
-  useSignalTrigger(glyph?.$contours);
-  const selectionBounds = editor.selection.bounds;
+  const selectionBounds = useSelectionBounds();
 
   const widthRef = useRef<EditableSidebarInputHandle>(null);
   const heightRef = useRef<EditableSidebarInputHandle>(null);

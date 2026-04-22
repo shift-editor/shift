@@ -3,27 +3,19 @@ import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { getEditor } from "@/store/store";
-import { useSignalState, useSignalTrigger } from "@/lib/reactive";
+import { useSignalState } from "@/lib/reactive";
 import { getGlyphInfo } from "@/store/glyphInfo";
-import type { Editor } from "@/lib/editor/Editor";
-import type { Glyph } from "@/lib/model/Glyph";
+import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
+import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
 
 export const GlyphSection = () => {
   const editor = getEditor();
   const glyph = useSignalState(editor.glyph);
-  if (!glyph) return null;
-
-  return <GlyphSectionView editor={editor} glyph={glyph} />;
-};
-
-const GlyphSectionView = ({ editor, glyph }: { editor: Editor; glyph: Glyph }) => {
-  // Subscribe to coarse "glyph changed" + pull derived values on demand.
-  // Keeps the expensive sidebearings computed out of the drag hot path.
-  useSignalTrigger(glyph.$contours);
-  useSignalTrigger(glyph.$xAdvance);
-  const sidebearings = glyph.sidebearings;
-  const xAdvance = glyph.xAdvance;
+  const sidebearings = useGlyphSidebearings();
+  const xAdvance = useGlyphXAdvance();
   const glyphInfo = getGlyphInfo();
+
+  if (!glyph) return null;
 
   const unicode = formatCodepointAsUPlus(glyph.unicode);
   const lsb = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);

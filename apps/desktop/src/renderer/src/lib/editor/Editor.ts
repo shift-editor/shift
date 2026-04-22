@@ -1012,10 +1012,13 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const { lsb } = glyph.sidebearings;
-    if (lsb === null) return;
+    // Command path — use bezier-accurate bbox so the delta reflects the true
+    // current LSB including curve extension, not the cheap point-based
+    // approximation used for sidebar display.
+    const bbox = glyph.bbox;
+    if (!bbox) return;
 
-    const delta = Math.round(value) - Math.round(lsb);
+    const delta = Math.round(value) - Math.round(bbox.min.x);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
@@ -1028,10 +1031,11 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const { rsb } = glyph.sidebearings;
-    if (rsb === null) return;
+    const bbox = glyph.bbox;
+    if (!bbox) return;
 
-    const delta = Math.round(value) - Math.round(rsb);
+    const currentRsb = glyph.xAdvance - bbox.max.x;
+    const delta = Math.round(value) - Math.round(currentRsb);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
