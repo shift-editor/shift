@@ -134,6 +134,22 @@ export class ToolManager implements ToolSwitchHandler {
     }
   }
 
+  /**
+   * Drain any pending pointer-move synchronously.
+   *
+   * `handlePointerMove` normally coalesces calls via `requestAnimationFrame`.
+   * Tests and automation that need the full move pipeline (gesture → tool
+   * event → state signal → cursor effect → hover update) to complete before
+   * the next action call this to bypass rAF.
+   */
+  flushPointerMoves(): void {
+    if (this.frameId !== null) {
+      cancelAnimationFrame(this.frameId);
+      this.frameId = null;
+    }
+    this.flushPointerMove();
+  }
+
   private flushPointerMove(): void {
     this.frameId = null;
 

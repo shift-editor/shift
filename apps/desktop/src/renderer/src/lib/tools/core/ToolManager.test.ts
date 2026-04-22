@@ -184,67 +184,67 @@ describe("ToolManager", () => {
     });
 
     it("drag (down, move, up) drives tool with dragStart, drag, dragEnd and does not emit click", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("hand");
-        toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
-        toolManager.handlePointerUp({ x: 120, y: 100 });
+      toolManager.activate("hand");
+      toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+      toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
+      toolManager.flushPointerMoves();
+      toolManager.handlePointerUp({ x: 120, y: 100 });
 
-        expect(toolManager.isDragging).toBe(false);
-        const lastState = editor.getActiveToolState() as { type?: string };
-        expect(lastState?.type).toBe("ready");
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      expect(toolManager.isDragging).toBe(false);
+      const lastState = editor.getActiveToolState() as { type?: string };
+      expect(lastState?.type).toBe("ready");
     });
 
     it("deduplicates pointer move when screen point unchanged (no force)", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
+      toolManager.activate("select");
+      const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
 
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
+      toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
+      toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
+      toolManager.flushPointerMoves();
 
-        const pointerMoveCalls = handleEventSpy.mock.calls.filter(
-          (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
-        );
-        expect(pointerMoveCalls).toHaveLength(1);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      const pointerMoveCalls = handleEventSpy.mock.calls.filter(
+        (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
+      );
+      expect(pointerMoveCalls).toHaveLength(1);
     });
 
     it("processes pointer move when screen point unchanged if force: true (e.g. wheel pan)", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
+      toolManager.activate("select");
+      const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
 
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers, { force: true });
+      toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
+      toolManager.flushPointerMoves();
+      toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers, { force: true });
+      toolManager.flushPointerMoves();
 
-        const pointerMoveCalls = handleEventSpy.mock.calls.filter(
-          (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
-        );
-        expect(pointerMoveCalls).toHaveLength(2);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      const pointerMoveCalls = handleEventSpy.mock.calls.filter(
+        (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
+      );
+      expect(pointerMoveCalls).toHaveLength(2);
+    });
+
+    it("flushPointerMoves drains the pending move synchronously and cancels the pending frame", () => {
+      toolManager.activate("select");
+      const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
+      const cancelSpy = vi.spyOn(globalThis, "cancelAnimationFrame");
+
+      toolManager.handlePointerMove({ x: 10, y: 10 }, modifiers);
+
+      const before = handleEventSpy.mock.calls.filter(
+        (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
+      ).length;
+      expect(before).toBe(0);
+
+      toolManager.flushPointerMoves();
+
+      const after = handleEventSpy.mock.calls.filter(
+        (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
+      ).length;
+      expect(after).toBe(1);
+      expect(cancelSpy).toHaveBeenCalledTimes(1);
+
+      cancelSpy.mockRestore();
     });
   });
 
@@ -259,21 +259,13 @@ describe("ToolManager", () => {
     });
 
     it("updates currentModifiers on flushPointerMove", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
+      toolManager.activate("select");
+      const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
 
-        toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
+      toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
+      toolManager.flushPointerMoves();
 
-        expect(editor.currentModifiers).toEqual(mods);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      expect(editor.currentModifiers).toEqual(mods);
     });
 
     it("updates currentModifiers on handleKeyDown", () => {
