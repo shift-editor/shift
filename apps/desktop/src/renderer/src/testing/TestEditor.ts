@@ -48,6 +48,7 @@ export class TestEditor extends Editor {
       { ...DEFAULT_MODIFIERS, ...options },
       { force: true },
     );
+    this.toolManager.flushPointerMoves();
     return this;
   }
 
