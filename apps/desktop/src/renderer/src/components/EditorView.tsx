@@ -1,11 +1,11 @@
 import { FC, useEffect, useRef, useState } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
+import { useDebugSafe } from "@/context/DebugContext";
 import { effect } from "@/lib/reactive/signal";
 import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
-import { OverlayScene } from "./OverlayScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "./debug/DebugPanel";
 import { HiddenTextInput } from "./HiddenTextInput";
@@ -17,13 +17,14 @@ interface EditorViewProps {
 
 export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
+  const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [cursorStyle, setCursorStyle] = useState(() => editor.getCursor());
+  const [cursorStyle, setCursorStyle] = useState(() => editor.cursor);
 
   useEffect(() => {
     const fx = effect(() => {
-      setCursorStyle(editor.getCursor());
+      setCursorStyle(editor.cursor);
     });
     return () => fx.dispose();
   }, [editor]);
@@ -103,11 +104,10 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     >
       <CanvasContextProvider>
         <StaticScene />
-        <OverlayScene />
         <InteractiveScene />
       </CanvasContextProvider>
       <HiddenTextInput />
-      <DebugPanel />
+      {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );
 };

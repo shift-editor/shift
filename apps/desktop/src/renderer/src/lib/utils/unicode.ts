@@ -72,9 +72,27 @@ export function isNonSpacingMarkCodepoint(codepoint: number | null): boolean {
 }
 
 /**
- * Heuristic detection for non-spacing glyph refs used in editor-only visual layout.
+ * Heuristic check for non-spacing glyphs (combining marks) — combines the
+ * Unicode Mn/Me categories with a glyph-name token match (`comb` / `mark`).
+ * Used in editor-only visual layout to give combining glyphs a visible advance.
  */
-export function isLikelyNonSpacingGlyphRef(glyphName: string, unicode: number | null): boolean {
+export function isNonSpacingGlyph(glyphName: string, unicode: number | null): boolean {
   if (isNonSpacingMarkCodepoint(unicode)) return true;
   return /(?:^|[._-])(comb|mark)(?:$|[._-])/i.test(glyphName);
+}
+
+/**
+ * Editor-only advance used when a non-spacing glyph reports zero xAdvance —
+ * without this, combining marks would render with no visible width.
+ */
+export const NON_SPACING_EDITOR_ADVANCE = 600;
+
+/**
+ * Advance used for on-canvas layout (guides, text runs). Matches the glyph's
+ * xAdvance except for non-spacing glyphs at zero, which get a visible fallback.
+ */
+export function displayAdvance(advance: number, glyphName: string, unicode: number | null): number {
+  if (advance > 0) return advance;
+  if (!isNonSpacingGlyph(glyphName, unicode)) return advance;
+  return NON_SPACING_EDITOR_ADVANCE;
 }

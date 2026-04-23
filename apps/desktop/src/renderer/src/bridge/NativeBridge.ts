@@ -18,15 +18,12 @@ import { NoEditSessionError, NativeOperationError } from "./errors";
 import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
-import type {
-  FontEngineAPI,
-  NodePositionUpdate as BridgeNodePositionUpdate,
-} from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
 import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyph } from "@/lib/model/Glyph";
+import { Glyph, type GlyphChange } from "@/lib/model/Glyph";
 
 export interface InterpolationResult {
   instance: GlyphSnapshot;
@@ -281,10 +278,13 @@ export class NativeBridge {
 
   movePointTo(pointId: PointId, x: number, y: number): void {
     this.#requireSession();
+
     const snapshot = this.getEditingSnapshot();
     if (!snapshot) throw new NativeOperationError("No glyph available");
+
     const found = Glyphs.findPoint(snapshot, pointId);
     if (!found) throw new NativeOperationError(`Point ${pointId} not found`);
+
     this.movePoints([pointId], { x: x - found.point.x, y: y - found.point.y });
   }
 
@@ -361,13 +361,7 @@ export class NativeBridge {
 
     glyph.apply(updates);
     this.#$glyph.set(glyph);
-
-    const nativeUpdates: BridgeNodePositionUpdate[] = updates.map((update) => ({
-      node: { kind: update.node.kind, id: update.node.id },
-      x: update.x,
-      y: update.y,
-    }));
-    this.#raw.setNodePositions(nativeUpdates);
+    this.#syncPositions(updates);
   }
 
   /** @knipclassignore — used by Editor for smart drag constraints */
@@ -426,5 +420,53 @@ export class NativeBridge {
       throw new NativeOperationError("Failed to restore snapshot");
     }
     this.#syncFromResponse(snapshot);
+  }
+
+  /**
+   * Rust-side mirror of glyph.apply(). Syncs a change to Rust without
+   * updating the JS reactive model. Position updates use Float64Array
+   * (zero-copy), snapshots use JSON.
+   */
+  sync(change: GlyphChange): void {
+    this.#requireSession();
+
+    if (Array.isArray(change)) {
+      this.#syncPositions(change);
+      return;
+    }
+
+    const success = this.#raw.restoreSnapshot(JSON.stringify(change));
+    if (!success) {
+      throw new NativeOperationError("Failed to sync snapshot to native");
+    }
+  }
+
+  #syncPositions(updates: NodePositionUpdateList): void {
+    if (updates.length === 0) return;
+
+    const pointIds: number[] = [];
+    const pointCoords: number[] = [];
+    const anchorIds: number[] = [];
+    const anchorCoords: number[] = [];
+
+    for (const u of updates) {
+      switch (u.node.kind) {
+        case "point":
+          pointIds.push(Number(u.node.id));
+          pointCoords.push(u.x, u.y);
+          break;
+        case "anchor":
+          anchorIds.push(Number(u.node.id));
+          anchorCoords.push(u.x, u.y);
+          break;
+      }
+    }
+
+    this.#raw.setPositions(
+      pointIds.length > 0 ? new Float64Array(pointIds) : null,
+      pointCoords.length > 0 ? new Float64Array(pointCoords) : null,
+      anchorIds.length > 0 ? new Float64Array(anchorIds) : null,
+      anchorCoords.length > 0 ? new Float64Array(anchorCoords) : null,
+    );
   }
 }

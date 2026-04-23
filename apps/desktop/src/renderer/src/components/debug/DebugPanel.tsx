@@ -1,28 +1,22 @@
 import { useRef, useEffect } from "react";
-import { useDebugSafe } from "@/context/DebugContext";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
 import { effect } from "@/lib/reactive";
-import { Glyphs } from "@shift/font";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
 }
 
 export function DebugPanel() {
-  const debug = useDebugSafe();
   const editor = getEditor();
-  const isOpen = debug?.debugPanelOpen ?? false;
 
   useEffect(() => {
-    if (isOpen) {
-      editor.startFpsMonitor();
-    }
+    editor.startFpsMonitor();
     return () => {
       editor.stopFpsMonitor();
     };
-  }, [isOpen, editor]);
+  }, [editor]);
 
   const toolStateRef = useSignalText(() => {
     const name = editor.getActiveTool();
@@ -38,7 +32,20 @@ export function DebugPanel() {
     const glyph = editor.glyph.value;
     if (!glyph) return "0";
 
-    return `${Glyphs.getAllPoints(glyph).length}`;
+    return `${glyph.allPoints.length}`;
+  });
+
+  const glyphMemoryRef = useSignalText(() => {
+    const glyph = editor.glyph.value;
+    if (!glyph) return "—";
+
+    const snapshot = glyph.toSnapshot();
+    const json = JSON.stringify(snapshot);
+    const bytes = new Blob([json]).size;
+
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   });
 
   const upmRef = useRef<HTMLTableCellElement>(null);
@@ -46,7 +53,6 @@ export function DebugPanel() {
   const worldRef = useRef<HTMLTableCellElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
     const fx = effect(() => {
       const screen = editor.screenMousePosition.value;
       const coords = editor.fromScreen(screen);
@@ -56,11 +62,7 @@ export function DebugPanel() {
         worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
     });
     return () => fx.dispose();
-  }, [isOpen, editor]);
-
-  if (!isOpen) {
-    return null;
-  }
+  }, [editor]);
 
   const cellClass = "px-2 py-1 border border-line-subtle";
 
@@ -88,6 +90,10 @@ export function DebugPanel() {
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Total Points</span>
             <span ref={pointCountRef} className="font-mono tabular-nums" />
+          </div>
+          <div className="flex items-center justify-between gap-4 text-ui text-muted">
+            <span>Snapshot Size</span>
+            <span ref={glyphMemoryRef} className="font-mono tabular-nums" />
           </div>
         </div>
         <Separator className="bg-gray-300" />

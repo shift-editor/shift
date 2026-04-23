@@ -1,8 +1,8 @@
 import type { Point2D, Rect2D } from "@shift/types";
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram, DrawAPI } from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import type { ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
-import { DEFAULT_STYLES } from "@/lib/styles/style";
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 
 export class Shape extends BaseTool<ShapeState> {
   static stateSpec = defineStateDiagram<ShapeState["type"]>({
@@ -40,14 +40,17 @@ export class Shape extends BaseTool<ShapeState> {
     this.state = { type: "idle" };
   }
 
-  override render(draw: DrawAPI): void {
+  override renderOverlay(canvas: Canvas): void {
     if (this.state.type !== "dragging") return;
     const rect = this.getRect(this.state);
     if (Math.abs(rect.width) < 1 || Math.abs(rect.height) < 1) return;
-    draw.rect(
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      { strokeStyle: DEFAULT_STYLES.strokeStyle, strokeWidth: DEFAULT_STYLES.lineWidth },
+    canvas.strokeRect(
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      canvas.theme.glyph.stroke,
+      canvas.theme.glyph.widthPx,
     );
   }
 

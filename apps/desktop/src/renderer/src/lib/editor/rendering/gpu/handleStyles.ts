@@ -1,6 +1,5 @@
 import type { HandleState } from "@/types/graphics";
-import { HANDLE_STYLES } from "@/lib/styles/style";
-import type { BaseHandleStyle } from "@/lib/styles/canvas/handles";
+import { DEFAULT_THEME, type FirstHandleStyle } from "../Theme";
 import { parseCssColor, TRANSPARENT, type GpuColor } from "./color";
 import type { GpuHandleShape } from "./types";
 
@@ -34,7 +33,7 @@ function buildSimpleStyle(
   shape: "corner" | "smooth" | "control",
   state: HandleState,
 ): CachedInstanceStyle {
-  const style = HANDLE_STYLES[shape][state] as BaseHandleStyle;
+  const style = DEFAULT_THEME.handle[shape][state];
   const halfSize = shape === "corner" ? style.size / 2 : style.size;
   const padding = Math.max(style.lineWidth, 2);
 
@@ -42,9 +41,9 @@ function buildSimpleStyle(
     shapeId: SHAPE_IDS[shape],
     size: style.size,
     lineWidth: style.lineWidth,
-    fillColor: parseCssColor(style.fillStyle),
-    strokeColor: parseCssColor(style.strokeStyle),
-    overlayColor: parseCssColor(style.overlayColor),
+    fillColor: parseCssColor(style.fill),
+    strokeColor: parseCssColor(style.stroke),
+    overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
     barSize: 0,
     barStrokeColor: TRANSPARENT,
     extentX: halfSize + padding,
@@ -57,14 +56,14 @@ function buildDirectionalStyle(
   state: HandleState,
 ): CachedInstanceStyle {
   if (shape === "direction") {
-    const style = HANDLE_STYLES.direction[state];
+    const style = DEFAULT_THEME.handle.direction[state];
     return {
       shapeId: SHAPE_IDS[shape],
       size: style.size,
       lineWidth: style.lineWidth,
-      fillColor: parseCssColor(style.fillStyle),
-      strokeColor: parseCssColor(style.strokeStyle),
-      overlayColor: parseCssColor(style.overlayColor),
+      fillColor: parseCssColor(style.fill),
+      strokeColor: parseCssColor(style.stroke),
+      overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
       barSize: 0,
       barStrokeColor: TRANSPARENT,
       extentX: style.size + style.lineWidth + 2,
@@ -73,10 +72,7 @@ function buildDirectionalStyle(
   }
 
   if (shape === "first") {
-    const style = HANDLE_STYLES.first[state] as BaseHandleStyle & {
-      barSize: number;
-      barStrokeStyle: string;
-    };
+    const style = DEFAULT_THEME.handle.first[state] as FirstHandleStyle;
     const halfBar = style.barSize / 2;
     const triangleTip = FIRST_HANDLE_GAP_PX + style.size * 2;
 
@@ -84,26 +80,26 @@ function buildDirectionalStyle(
       shapeId: SHAPE_IDS[shape],
       size: style.size,
       lineWidth: style.lineWidth,
-      fillColor: parseCssColor(style.fillStyle),
-      strokeColor: parseCssColor(style.strokeStyle),
-      overlayColor: parseCssColor(style.overlayColor),
+      fillColor: parseCssColor(style.fill),
+      strokeColor: parseCssColor(style.stroke),
+      overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
       barSize: style.barSize,
-      barStrokeColor: parseCssColor(style.barStrokeStyle),
+      barStrokeColor: parseCssColor(style.barStroke),
       extentX: triangleTip + style.lineWidth + 2,
       extentY: Math.max(halfBar, style.size * 0.866) + style.lineWidth + 2,
     };
   }
 
-  const style = HANDLE_STYLES.last[state];
+  const style = DEFAULT_THEME.handle.last[state];
   return {
     shapeId: SHAPE_IDS[shape],
     size: style.size,
     lineWidth: style.lineWidth,
-    fillColor: parseCssColor(style.fillStyle),
-    strokeColor: parseCssColor(style.strokeStyle),
-    overlayColor: parseCssColor(style.overlayColor),
+    fillColor: parseCssColor(style.fill),
+    strokeColor: parseCssColor(style.stroke),
+    overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
     barSize: style.size,
-    barStrokeColor: parseCssColor(style.strokeStyle),
+    barStrokeColor: parseCssColor(style.stroke),
     extentX: style.size / 2 + style.lineWidth + 2,
     extentY: style.lineWidth + 2,
   };

@@ -1,80 +1,125 @@
 import { createContext, useEffect, useRef } from "react";
 
-import { Canvas2DContext } from "@/lib/graphics/backends/Canvas2DRenderer";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import { getEditor } from "@/store/store";
 import { CanvasRef } from "@/types/graphics";
 
 interface CanvasContext {
   gpuHandlesCanvasRef: CanvasRef;
-  interactiveCanvasRef: CanvasRef;
   overlayCanvasRef: CanvasRef;
-  staticCanvasRef: CanvasRef;
+  sceneCanvasRef: CanvasRef;
+  backgroundCanvasRef: CanvasRef;
 }
 
 export const CanvasContext = createContext<CanvasContext>({
   gpuHandlesCanvasRef: { current: null },
-  interactiveCanvasRef: { current: null },
   overlayCanvasRef: { current: null },
-  staticCanvasRef: { current: null },
+  sceneCanvasRef: { current: null },
+  backgroundCanvasRef: { current: null },
 });
+
+function scaledContext(canvas: HTMLCanvasElement): {
+  ctx: CanvasRenderingContext2D;
+  rect: DOMRect;
+} {
+  const dpr = window.devicePixelRatio;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(rect.height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Failed to get 2D context");
+  ctx.scale(dpr, dpr);
+  return { ctx, rect };
+}
+
+function resize2DCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+  const { ctx, rect } = scaledContext(canvas);
+
+  const editor = getEditor();
+  editor.setViewportRect({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+  });
+
+  return ctx;
+}
 
 export const CanvasContextProvider = ({ children }: { children: React.ReactNode }) => {
   const gpuHandlesCanvasRef = useRef<HTMLCanvasElement>(null);
-  const interactiveCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const staticCanvasRef = useRef<HTMLCanvasElement>(null);
+  const sceneCanvasRef = useRef<HTMLCanvasElement>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const initCanvas = (canvas: HTMLCanvasElement) => {
-      const ctx = new Canvas2DContext();
-      ctx.resizeCanvas(canvas);
-      return ctx;
-    };
-
     const editor = getEditor();
 
     const setUpContexts = ({
       gpuHandlesCanvas,
-      interactiveCanvas,
       overlayCanvas,
-      staticCanvas,
+      sceneCanvas,
+      backgroundCanvas,
     }: {
       gpuHandlesCanvas: HTMLCanvasElement;
-      interactiveCanvas: HTMLCanvasElement;
       overlayCanvas: HTMLCanvasElement;
-      staticCanvas: HTMLCanvasElement;
+      sceneCanvas: HTMLCanvasElement;
+      backgroundCanvas: HTMLCanvasElement;
     }) => {
       const gpuHandleContext = new ReglHandleContext();
-      const interactiveContext = initCanvas(interactiveCanvas);
-      const overlayContext = initCanvas(overlayCanvas);
-      const staticContext = initCanvas(staticCanvas);
+
+      const bgCtx = scaledContext(backgroundCanvas).ctx;
+      const sceneCtx = scaledContext(sceneCanvas).ctx;
+      const overlayCtx = scaledContext(overlayCanvas).ctx;
 
       gpuHandleContext.resizeCanvas(gpuHandlesCanvas);
+
+      editor.setBackgroundContext(bgCtx);
+      editor.setSceneContext(sceneCtx);
+      editor.setOverlayContext(overlayCtx);
       editor.setGpuHandleContext(gpuHandleContext);
-      editor.setInteractiveContext(interactiveContext);
-      editor.setOverlayContext(overlayContext);
-      editor.setStaticContext(staticContext);
+
+      // Set initial viewport rect from the scene canvas
+      const rect = sceneCanvas.getBoundingClientRect();
+      editor.setViewportRect({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+      });
 
       const resizeCanvases = () => {
         gpuHandleContext.resizeCanvas(gpuHandlesCanvas);
-        interactiveContext.resizeCanvas(interactiveCanvas);
-        overlayContext.resizeCanvas(overlayCanvas);
-        staticContext.resizeCanvas(staticCanvas);
+        editor.setBackgroundContext(resize2DCanvas(backgroundCanvas));
+        editor.setSceneContext(resize2DCanvas(sceneCanvas));
+        editor.setOverlayContext(resize2DCanvas(overlayCanvas));
         editor.requestImmediateRedraw();
       };
 
       const resizeCanvasObserver = (entries: ResizeObserverEntry[]) => {
         for (const entry of entries) {
           const canvas = entry.target as HTMLCanvasElement;
-          if (canvas === gpuHandlesCanvas) {
-            gpuHandleContext.resizeCanvas(canvas);
-          } else if (canvas === interactiveCanvas) {
-            interactiveContext.resizeCanvas(canvas);
-          } else if (canvas === overlayCanvas) {
-            overlayContext.resizeCanvas(canvas);
-          } else if (canvas === staticCanvas) {
-            staticContext.resizeCanvas(canvas);
+          switch (canvas) {
+            case gpuHandlesCanvas:
+              gpuHandleContext.resizeCanvas(canvas);
+              break;
+            case backgroundCanvas:
+              editor.setBackgroundContext(resize2DCanvas(canvas));
+              break;
+            case sceneCanvas:
+              editor.setSceneContext(resize2DCanvas(canvas));
+              break;
+            case overlayCanvas:
+              editor.setOverlayContext(resize2DCanvas(canvas));
+              break;
           }
         }
         editor.requestImmediateRedraw();
@@ -83,9 +128,9 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       const observer = new ResizeObserver(resizeCanvasObserver);
 
       observer.observe(gpuHandlesCanvas);
-      observer.observe(interactiveCanvas);
       observer.observe(overlayCanvas);
-      observer.observe(staticCanvas);
+      observer.observe(sceneCanvas);
+      observer.observe(backgroundCanvas);
 
       const unsubscribeZoom = window.electronAPI?.onUiZoomChanged(() => {
         requestAnimationFrame(() => {
@@ -97,26 +142,23 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
         observer.disconnect();
         if (unsubscribeZoom) unsubscribeZoom();
         gpuHandleContext.destroy();
-        interactiveContext.destroy();
-        overlayContext.destroy();
-        staticContext.destroy();
       };
     };
 
     if (
       !gpuHandlesCanvasRef.current ||
-      !interactiveCanvasRef.current ||
       !overlayCanvasRef.current ||
-      !staticCanvasRef.current
+      !sceneCanvasRef.current ||
+      !backgroundCanvasRef.current
     ) {
       return undefined;
     }
 
     const cleanup = setUpContexts({
       gpuHandlesCanvas: gpuHandlesCanvasRef.current,
-      interactiveCanvas: interactiveCanvasRef.current,
       overlayCanvas: overlayCanvasRef.current,
-      staticCanvas: staticCanvasRef.current,
+      sceneCanvas: sceneCanvasRef.current,
+      backgroundCanvas: backgroundCanvasRef.current,
     });
 
     return cleanup;
@@ -126,9 +168,9 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
     <CanvasContext.Provider
       value={{
         gpuHandlesCanvasRef,
-        interactiveCanvasRef,
         overlayCanvasRef,
-        staticCanvasRef,
+        sceneCanvasRef,
+        backgroundCanvasRef,
       }}
     >
       {children}

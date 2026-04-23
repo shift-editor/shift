@@ -1,14 +1,45 @@
 name: Perf
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
+      - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
+      - "apps/desktop/src/renderer/src/lib/editor/hit/**"
+      - "apps/desktop/src/renderer/src/lib/editor/managers/**"
+      - "apps/desktop/src/renderer/src/lib/tools/**"
+      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/bridge/**"
+      - "apps/desktop/src/renderer/src/lib/commands/**"
+      - "apps/desktop/src/renderer/src/perf/**"
+      - "apps/desktop/e2e/**"
+      - ".github/workflows/perf.yml"
   workflow_dispatch:
-  schedule:
-    - cron: "0 7 * * 1"
+  pull_request:
+    paths:
+      - "apps/desktop/src/renderer/src/lib/editor/rendering/**"
+      - "apps/desktop/src/renderer/src/lib/editor/Editor.ts"
+      - "apps/desktop/src/renderer/src/lib/editor/hit/**"
+      - "apps/desktop/src/renderer/src/lib/editor/managers/**"
+      - "apps/desktop/src/renderer/src/lib/tools/**"
+      - "apps/desktop/src/renderer/src/lib/model/Glyph.ts"
+      - "apps/desktop/src/renderer/src/bridge/NativeBridge.ts"
+      - "apps/desktop/src/renderer/src/lib/commands/**"
+      - "apps/desktop/src/renderer/src/perf/**"
+      - "crates/shift-core/src/**"
+      - "crates/shift-node/src/**"
 
 permissions: {}
 
+concurrency:
+  group: perf-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
-  perf:
+  engine-benchmarks:
+    name: Engine Benchmarks
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,7 +57,108 @@ jobs:
       - name: Install toolchain
         run: rustup show
 
-      - run: pnpm install --frozen-lockfile --prefer-offline
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: shift-rust
 
-      - name: Run scheduled perf lane
+      - name: Cache node_modules
+        id: modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache native module binary
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: crates/shift-node/*.node
+          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
+      - name: Build native module
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native
+
+      - name: Run engine benchmarks
         run: pnpm test:perf
+
+  playwright-perf:
+    name: Playwright Perf (GPU)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: shift-rust-macos
+
+      - name: Cache node_modules
+        id: modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v2-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/@playwright/test/package.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @shift/desktop exec playwright install
+
+      - name: Cache native module binary
+        id: native-cache
+        uses: actions/cache@v4
+        with:
+          path: crates/shift-node/*.node
+          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
+      - name: Build native module
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native
+
+      - name: Build E2E app
+        run: pnpm --filter @shift/desktop build:e2e
+
+      - name: Run Playwright perf tests
+        run: pnpm --filter @shift/desktop exec playwright test --project=perf
+
+      - name: Upload perf results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: apps/desktop/e2e/perf-results/
+          retention-days: 90

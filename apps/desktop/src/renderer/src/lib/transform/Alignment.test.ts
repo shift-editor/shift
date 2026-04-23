@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { Alignment } from "./Alignment";
 import { Bounds } from "@shift/geo";
-import type { TransformablePoint } from "./types";
 import type { PointId } from "@shift/types";
 import { expectAt } from "@/testing";
+import type { PointPosition } from "./PointPosition";
 
-function createPoint(id: number, x: number, y: number): TransformablePoint {
+function createPoint(id: number, x: number, y: number): PointPosition {
   return { id: `0:${id}` as PointId, x, y };
 }
 

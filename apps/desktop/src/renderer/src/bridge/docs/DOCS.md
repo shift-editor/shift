@@ -1,226 +1,119 @@
-# Bridge
+# NativeBridge
 
-TypeScript facade wrapping the native Rust NativeBridge with reactive state management.
+Reactive wrapper over the Rust NAPI bindings that owns the `Glyph` lifecycle and provides the sole API boundary between the JS editor and the native font engine.
 
-## Overview
+## Architecture Invariants
 
-The engine layer provides a high-level TypeScript API for font editing, organizing functionality into specialized managers. It wraps the native NAPI bindings with reactive signals for automatic UI updates and centralized error handling.
+- **Architecture Invariant:** All glyph mutations must go through `Glyph.apply` for the JS-side reactive model. Direct signal writes on `Contour` or `Glyph` internals will bypass the path/bounds recomputation pipeline.
+- **Architecture Invariant:** **CRITICAL**: `GlyphDraft.setPositions` must only call `Glyph.apply` -- never `NativeBridge` methods. Crossing the NAPI boundary on every drag frame kills performance. Rust sync happens once on `GlyphDraft.finish`.
+- **Architecture Invariant:** **CRITICAL**: `#syncPositions` passes `null` (not a zero-length `Float64Array`) when a category has no updates. napi-rs panics on zero-length `Float64Array`.
+- **Architecture Invariant:** `$glyph` is an identity signal (`equals: () => false`). It fires on glyph open/close, not on data changes. Render effects must track `Glyph` internal signals (`contours`, `anchors`, `path`) to respond to mutations.
+- **Architecture Invariant:** `Glyph` holds a back-reference to `NativeBridge` so it can delegate structural mutation methods (`addPoint`, `removePoints`, etc.) directly. This keeps callers from needing both a bridge and a glyph reference.
+- **Architecture Invariant:** Snapshot restore validates via `ValidateSnapshot.isGlyphSnapshot` before sending to Rust. Invalid snapshots throw `NativeOperationError` without touching native state.
 
-## Architecture
-
-```
-NativeBridge implements EditingEngineDeps, SessionEngineDeps, InfoEngineDeps, IOEngineDeps
-├── $glyph: Signal<GlyphSnapshot | null>
-├── editing: EditingManager      (point/contour mutations, smart edits)
-├── session: SessionManager      (edit session lifecycle)
-├── info: InfoManager            (font metadata)
-└── io: IOManager                (file operations)
-    ↓
-Per-manager dep interfaces (focused slices of NativeBridge)
-    ↓
-window.shiftFont (Native NAPI via contextBridge)
-```
-
-### Key Design Decisions
-
-1. **Per-Manager Dep Interfaces**: Each manager declares a focused deps interface (`EditingEngineDeps`, `SessionEngineDeps`, etc.) for exactly the methods it uses. `NativeBridge` implements all of them and passes `this` to each manager.
-2. **Centralized Commit**: All native mutations flow through `commit()`, which parses JSON, checks for errors (throws `NativeOperationError` on failure), and updates the glyph signal. Callers never check `result.success`.
-3. **Reactive Signal**: Single `$glyph` signal as source of truth for glyph state.
-4. **Session Validation**: All editing managers validate session before operations.
-5. **Typed Errors**: Custom error hierarchy for precise error handling.
-
-## Key Concepts
-
-### Per-Manager Dep Interfaces
-
-Each manager declares a focused deps interface for exactly the methods it uses:
-
-- `EditingEngineDeps` — raw API, session check, glyph access, snapshot restore, paste
-- `SessionEngineDeps` — session lifecycle, snapshot, glyph emit
-- `InfoEngineDeps` — metadata, metrics, glyph queries
-- `IOEngineDeps` — load/save
-
-### NativeBridge Class
-
-Central orchestrator implementing all dep interfaces:
-
-```typescript
-const engine = new NativeBridge();
-
-// Reactive state - auto-updates UI
-effect(() => {
-  const glyph = engine.$glyph.value;
-  renderGlyph(glyph);
-});
-
-// Manager access
-engine.session.startEditSession({ glyphName: "A", unicode: 65 });
-engine.editing.addPoint({ id: "" as PointId, x: 100, y: 200, pointType: "onCurve", smooth: false });
-```
-
-### commit() — Centralized State Transitions
-
-All native mutations flow through `commit()`:
-
-```typescript
-// Void operations (most editing methods):
-this.#engine.commit(() => this.#engine.native.closeContour());
-
-// Extraction operations (returns a value from the result):
-return this.#engine.commit(
-  () => this.#engine.native.addContour(),
-  (result) => asContourId(result.snapshot?.activeContourId ?? ""),
-);
-```
-
-`commit()` handles:
-
-- Calling the native operation and parsing the JSON result
-- Throwing `NativeOperationError` if `result.success` is false
-- Updating the `$glyph` signal if the result includes a snapshot
-
-### Bridge Types
-
-Native types are imported from the shared bridge:
-
-```typescript
-import type { NativeBridgeAPI } from "@shared/bridge/NativeBridgeAPI";
-```
-
-See [bridge docs](../../../shared/bridge/docs/DOCS.md) for type-safe bridge architecture.
-
-### Segment Parsing
-
-Converts snapshot points to renderable path segments:
-
-```typescript
-const segments = parseSegments(contour.points, contour.closed);
-// Returns: LineSegment | QuadSegment | CubicSegment[]
-```
-
-## API Reference
-
-### NativeBridge
-
-- `$glyph: Signal<GlyphSnapshot | null>` - Reactive glyph state
-- `editing: EditingManager` - Point/contour operations and smart edits
-- `session: SessionManager` - Session lifecycle
-- `info: InfoManager` - Font metadata
-- `io: IOManager` - File I/O
-
-### EditingManager
-
-- `addPoint(edit): PointId`
-- `addContour(): ContourId`
-- `movePoints(ids, delta): PointId[]`
-- `removePoints(ids): void`
-- `toggleSmooth(id): void`
-- `applySmartEdits(selectedPoints, dx, dy): PointId[]` - Constraint-aware edits
-
-### SessionManager
-
-- `startEditSession(glyph): void`
-- `endEditSession(): void`
-- `isActive(): boolean`
-
-### InfoManager
-
-- `getMetadata(): FontMetadata`
-- `getMetrics(): FontMetrics`
-- `getGlyphCount(): number`
-- `getGlyphUnicodes(): number[]`
-- `getGlyphSvgPath(unicode): string | null`
-- `getGlyphAdvance(unicode): number | null`
-- `getGlyphBbox(unicode): [number, number, number, number] | null`
-
-### Errors
-
-- `NativeBridgeError` - Base error class
-- `NoEditSessionError` - Operation requires session
-- `NativeOperationError` - Rust operation failed (thrown by `commit()`)
-
-## Usage Examples
-
-### Basic Workflow
-
-```typescript
-const engine = createNativeBridge();
-
-// Load and start editing
-engine.io.loadFont("/path/to/font.ufo");
-engine.session.startEditSession({ glyphName: "A", unicode: 65 });
-
-// React to changes
-effect(() => {
-  const glyph = engine.$glyph.value;
-  if (glyph) redraw(glyph);
-});
-
-// Add geometry
-const contourId = engine.editing.addContour();
-const pointId = engine.editing.addPoint({
-  id: "" as PointId,
-  x: 100,
-  y: 200,
-  pointType: "onCurve",
-  smooth: false,
-});
-
-// Apply constraint-aware edits (uses Rust rule engine)
-const affected = engine.editing.applySmartEdits(new Set([pointId]), 50, 0);
-```
-
-### Segment Rendering
-
-```typescript
-const glyph = engine.$glyph.value;
-const segmentMap = parseGlyphSegments(glyph.contours);
-
-for (const [contourId, segments] of segmentMap) {
-  for (const segment of segments) {
-    switch (segment.type) {
-      case "line":
-        drawLine(segment.start, segment.end);
-        break;
-      case "quad":
-        drawQuad(segment.start, segment.cp, segment.end);
-        break;
-      case "cubic":
-        drawCubic(segment.start, segment.cp1, segment.cp2, segment.end);
-        break;
-    }
-  }
-}
-```
-
-## Data Flow
+## Codemap
 
 ```
-User Action
-    ↓
-Manager Method (e.g., editing.addPoint())
-    ↓
-Validate Session (#requireSession)
-    ↓
-commit(operation, extract?)
-    ↓
-Call Native (engine.native.addPoint())
-    ↓
-Parse JSON CommandResult
-    ↓
-Check success (throw NativeOperationError on failure)
-    ↓
-Emit Snapshot (engine.$glyph.set())
-    ↓
-Signal Notifies Subscribers
-    ↓
-UI Updates Automatically
+bridge/
+  NativeBridge.ts     — NAPI wrapper, session lifecycle, mutation dispatch
+  native.ts           — cached `window.shiftFont` accessor (FontEngineAPI)
+  errors.ts           — FontEngineError, NoEditSessionError, NativeOperationError
+  index.ts            — re-exports NativeBridge, Glyph, Contour, errors
 ```
 
-## Related Systems
+## Key Types
 
-- [bridge](../../../shared/bridge/docs/DOCS.md) - Type-safe bridge definitions
-- [shift-node](../../../crates/shift-node/docs/DOCS.md) - Native NAPI bindings
-- [preload](../../preload/docs/DOCS.md) - Context bridge exposure
-- [reactive](../lib/reactive/docs/DOCS.md) - Signal system
-- [editor](../lib/editor/docs/DOCS.md) - Canvas rendering
+- `NativeBridge` -- owns `#raw` (FontEngineAPI) and `#$glyph` (WritableSignal). All font queries and mutations live here.
+- `Glyph` -- reactive mirror of a Rust glyph with per-contour signal granularity. Property getters auto-unwrap signals. All mutations enter through `Glyph.apply`.
+- `Contour` -- reactive contour with `#points`, `#closed`, computed `#path` and `#bounds`. Updated via `_update` (snapshot) or `_setPoints` (position patch).
+- `GlyphChange` -- union of `GlyphSnapshot | NodePositionUpdateList`. Snapshot for structural edits; update list for position-only changes.
+- `GlyphDraft` -- interface with `setPositions`, `finish`, `discard`. Created by `Editor.createDraft`, implements immer-style preview/commit separation.
+- `NodePositionUpdateList` -- `readonly NodePositionUpdate[]`, each entry is a `NodeRef` (point, anchor, or guideline) with absolute x/y.
+- `FontEngineAPI` -- derived from the napi-rs generated `FontEngine` class, exposed via `window.shiftFont` through Electron's contextBridge.
+- `NoEditSessionError` / `NativeOperationError` -- thrown when an operation requires a session or the Rust side fails.
+
+## How it works
+
+### Two-tier mutation model
+
+The bridge separates JS-side reactivity from Rust-side persistence. Not every mutation crosses the NAPI boundary immediately.
+
+**Tier 1 -- JS-only (`Glyph.apply`):** Updates reactive signals (`#contours`, `#anchors`). Render effects auto-track these signals and schedule redraws. Rust is untouched. Used by `GlyphDraft.setPositions` during drag (every frame).
+
+**Tier 2 -- Rust sync (`NativeBridge.sync`):** Pushes a `GlyphChange` to Rust without updating the JS model (already correct from Tier 1). Position updates go through `#syncPositions` (flat `Float64Array` arrays); snapshots go through `restoreSnapshot` (JSON). Used by `GlyphDraft.finish` on drag end (once).
+
+**Combined -- JS + Rust:** Methods like `setNodePositions` and `restoreSnapshot` update both sides atomically. Used by commands (`SetNodePositionsCommand`, `SnapshotCommand`) and sidebar edits where the mutation is immediate.
+
+### Dispatch pipeline
+
+`#dispatch` / `#dispatchVoid` are the standard Rust command path for structural mutations (addPoint, removePoints, closeContour, etc.):
+
+1. Call NAPI method, receive JSON string
+2. `#execute` parses JSON, checks `success`, extracts `CommandResponse` (snapshot + affectedPointIds)
+3. `#syncFromResponse` applies the returned snapshot to the reactive `Glyph` via `Glyph.apply`
+
+### NAPI position sync
+
+`#syncPositions` converts `NodePositionUpdateList` into four flat arrays (pointIds, pointCoords, anchorIds, anchorCoords) packed as `Float64Array`, then calls `#raw.setPositions`. Cost is proportional to the number of changed nodes, not the glyph size.
+
+### GlyphDraft lifecycle
+
+Created by `Editor.createDraft`. Captures a base snapshot, then:
+
+- `setPositions(updates)` -- calls `Glyph.apply(updates)` (JS-only, no Rust)
+- `finish(label)` -- calls `NativeBridge.sync(updates)` for Rust sync, then records a `SetNodePositionsCommand` for undo (stores the diff, not two full snapshots)
+- `discard()` -- calls `Glyph.apply(base)` to revert JS state (Rust was never touched)
+
+A `finished` flag prevents double-finish or post-finish mutation.
+
+### Glyph reactive model
+
+`Glyph` wraps each data dimension in its own signal. Computed signals (`#path`, `#bbox`) derive from these automatically. `Glyph.apply` dispatches on change type:
+
+- Snapshot: `#syncFromSnapshot` reconciles contours by ID (reuses existing `Contour` instances, creates new ones as needed), updates all scalar signals inside a `batch`.
+- Position updates: `#patchPositions` maps point/anchor IDs to new coordinates and patches only the affected `Contour` instances.
+
+## Workflow recipes
+
+### Add a new NAPI-backed mutation
+
+1. Add the `#[napi]` method in Rust, rebuild -- it appears on `FontEngineAPI` automatically
+2. Add a public method on `NativeBridge` that calls `#dispatch` or `#dispatchVoid` with the raw result
+3. If callers should access it through `Glyph`, add a delegation method on `Glyph` that calls `this.#bridge.<method>`
+
+### Add a new position-based operation
+
+1. Build a `NodePositionUpdateList` with the target absolute positions
+2. For immediate apply: call `NativeBridge.setNodePositions(updates)`
+3. For draft-based (drag): call `GlyphDraft.setPositions(updates)` per frame, then `GlyphDraft.finish(label)` on end
+
+### Support undo for a structural edit
+
+Wrap the mutation in a `SnapshotCommand` -- capture a before-snapshot, execute the bridge method, the after-snapshot is the current state.
+
+## Gotchas
+
+- `Float64Array` of length 0 panics napi-rs. `#syncPositions` guards this by passing `null` instead.
+- `$glyph` has `equals: () => false`, so every `.set()` fires subscribers even if the instance is the same. This is intentional for session open/close detection, but means you should never use `$glyph` as a change-tracking signal for data.
+- `Glyph.apply` with a snapshot reconciles contours by ID. If a Rust mutation changes contour IDs (e.g., boolean operations), old `Contour` instances are dropped and new ones created. Effects holding stale `Contour` references will read the old signals.
+- `getPath` for the currently-editing glyph returns the reactive `Glyph.path` (computed from JS signals), not a fresh Rust SVG path. This ensures composites render with live edits.
+- `#execute` throws `NativeOperationError` if the Rust response has `success: false` or is missing a snapshot. Callers of `#dispatch` do not need to check for errors -- they propagate as exceptions.
+
+## Verification
+
+```bash
+# Unit tests (draft lifecycle, position sync)
+npx vitest run apps/desktop/src/renderer/src/lib/editor/draft.test.ts
+
+# Type check
+npx tsc --noEmit -p apps/desktop/tsconfig.json
+```
+
+## Related
+
+- `Editor.createDraft` -- constructs `GlyphDraft` instances and records undo via `SetNodePositionsCommand`
+- `SetNodePositionsCommand` / `SnapshotCommand` -- undo/redo primitives that call back into `NativeBridge`
+- `FontEngineAPI` -- the NAPI type surface, derived from `shift-node`
+- `ValidateSnapshot` -- validates `GlyphSnapshot` shape before Rust restore
+- `constrainDrag` -- smart edit rules invoked by `NativeBridge.applySmartEdits`
+- `TestEditor` -- test harness that wraps `NativeBridge` with a mock `FontEngineAPI`

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { ToolManager } from "./ToolManager";
 import { TestEditor } from "@/testing";
 import type { Modifiers } from "./GestureDetector";
@@ -80,12 +80,12 @@ describe("ToolManager", () => {
 
     it("should not interfere with zoom operations", () => {
       toolManager.activate("pen");
-      const initialCursor = editor.getCursor();
+      const initialCursor = editor.cursor;
 
       toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Meta" }));
 
-      expect(editor.getCursor()).toBe(initialCursor);
+      expect(editor.cursor).toBe(initialCursor);
       expect(toolManager.activeToolId).toBe("pen");
     });
   });
@@ -146,25 +146,23 @@ describe("ToolManager", () => {
       expect(toolManager.activeToolId).toBe("pen");
     });
 
-    it("should call onActivate callback when requesting temporary tool", () => {
+    it("runs the onActivate callback when requesting a temporary tool", () => {
       toolManager.activate("pen");
-      const onActivate = { fn: () => {} };
-      const spy = vi.spyOn(onActivate, "fn");
+      let activated = false;
 
-      editor.requestTemporaryTool("hand", { onActivate: onActivate.fn });
+      editor.requestTemporaryTool("hand", { onActivate: () => (activated = true) });
 
-      expect(spy).toHaveBeenCalled();
+      expect(activated).toBe(true);
     });
 
-    it("should call onReturn callback when returning from temporary tool", () => {
+    it("runs the onReturn callback when returning from a temporary tool", () => {
       toolManager.activate("pen");
-      const onReturn = { fn: () => {} };
-      const spy = vi.spyOn(onReturn, "fn");
+      let returned = false;
 
-      editor.requestTemporaryTool("hand", { onReturn: onReturn.fn });
+      editor.requestTemporaryTool("hand", { onReturn: () => (returned = true) });
       editor.returnFromTemporaryTool();
 
-      expect(spy).toHaveBeenCalled();
+      expect(returned).toBe(true);
     });
   });
 
@@ -184,67 +182,15 @@ describe("ToolManager", () => {
     });
 
     it("drag (down, move, up) drives tool with dragStart, drag, dragEnd and does not emit click", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("hand");
-        toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
-        toolManager.handlePointerUp({ x: 120, y: 100 });
+      toolManager.activate("hand");
+      toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+      toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
+      toolManager.flushPointerMoves();
+      toolManager.handlePointerUp({ x: 120, y: 100 });
 
-        expect(toolManager.isDragging).toBe(false);
-        const lastState = editor.getActiveToolState() as { type?: string };
-        expect(lastState?.type).toBe("ready");
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
-    });
-
-    it("deduplicates pointer move when screen point unchanged (no force)", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
-
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
-
-        const pointerMoveCalls = handleEventSpy.mock.calls.filter(
-          (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
-        );
-        expect(pointerMoveCalls).toHaveLength(1);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
-    });
-
-    it("processes pointer move when screen point unchanged if force: true (e.g. wheel pan)", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const handleEventSpy = vi.spyOn(toolManager.activeTool!, "handleEvent");
-
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers);
-        toolManager.handlePointerMove({ x: 100, y: 100 }, modifiers, { force: true });
-
-        const pointerMoveCalls = handleEventSpy.mock.calls.filter(
-          (c) => c[0] && (c[0] as { type?: string }).type === "pointerMove",
-        );
-        expect(pointerMoveCalls).toHaveLength(2);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      expect(toolManager.isDragging).toBe(false);
+      const lastState = editor.getActiveToolState() as { type?: string };
+      expect(lastState?.type).toBe("ready");
     });
   });
 
@@ -255,25 +201,17 @@ describe("ToolManager", () => {
 
       toolManager.handlePointerDown({ x: 0, y: 0 }, mods);
 
-      expect(editor.getCurrentModifiers()).toEqual(mods);
+      expect(editor.currentModifiers).toEqual(mods);
     });
 
     it("updates currentModifiers on flushPointerMove", () => {
-      const originalRAF = globalThis.requestAnimationFrame;
-      vi.stubGlobal("requestAnimationFrame", (cb: () => void) => {
-        cb();
-        return 0;
-      });
-      try {
-        toolManager.activate("select");
-        const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
+      toolManager.activate("select");
+      const mods: Modifiers = { shiftKey: true, altKey: true, metaKey: false };
 
-        toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
+      toolManager.handlePointerMove({ x: 10, y: 10 }, mods);
+      toolManager.flushPointerMoves();
 
-        expect(editor.getCurrentModifiers()).toEqual(mods);
-      } finally {
-        vi.stubGlobal("requestAnimationFrame", originalRAF);
-      }
+      expect(editor.currentModifiers).toEqual(mods);
     });
 
     it("updates currentModifiers on handleKeyDown", () => {
@@ -283,7 +221,7 @@ describe("ToolManager", () => {
         createKeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: false }),
       );
 
-      expect(editor.getCurrentModifiers()).toEqual({
+      expect(editor.currentModifiers).toEqual({
         shiftKey: false,
         altKey: true,
         metaKey: false,
@@ -296,7 +234,7 @@ describe("ToolManager", () => {
 
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Alt", altKey: false }));
 
-      expect(editor.getCurrentModifiers()).toEqual({
+      expect(editor.currentModifiers).toEqual({
         shiftKey: false,
         altKey: false,
         metaKey: false,

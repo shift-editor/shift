@@ -21,7 +21,7 @@ export class Text extends BaseTool<TextState> {
   override activate(): void {
     const ctrl = this.editor.textRunController;
     const hasExistingRun = ctrl.length > 0;
-    const drawOffset = this.editor.getDrawOffset();
+    const drawOffset = this.editor.drawOffset;
     const activeGlyphName = this.editor.getActiveGlyphName();
     const activeUnicode = this.editor.getActiveGlyphUnicode();
     const activeGlyph =

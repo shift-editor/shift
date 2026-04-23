@@ -7,6 +7,10 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/renderer/src/testing/setup.ts"],
+    benchmark: {
+      include: ["src/**/*.bench.ts"],
+      setupFiles: ["src/renderer/src/testing/setup.ts"],
+    },
   },
   resolve: {
     alias: {

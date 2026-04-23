@@ -34,6 +34,9 @@
       }
     ],
     "shift/no-raw-contour-access": "error",
+    "shift/prefer-instance-method-on-glyph": "error",
+    "shift/no-raw-segment-parse": "error",
+    "shift/no-get-signal-value-method": "error",
     "shift/no-unbranded-ids": "error",
     "shift/no-snapshot-in-domain": "error",
     "shift/no-raw-point-type-check": "error",
@@ -41,7 +44,8 @@
     "shift/no-inline-coordinate-math": "off",
     "shift/no-repeated-optional-chain": "warn",
     "shift/no-section-divider-comments": "error",
-    "shift/no-bridge-import": "error"
+    "shift/no-bridge-import": "error",
+    "shift/no-raw-editor-in-tests": "error"
   },
   "overrides": [
     {

@@ -387,16 +387,6 @@ impl FontEngine {
     sorted
   }
 
-  fn editing_layer_for(&self, unicode: u32) -> Option<&GlyphLayer> {
-    if let Some(session) = &self.current_edit_session {
-      if session.unicode() == unicode {
-        return Some(session.layer());
-      }
-    }
-    let glyph = self.font.glyph_by_unicode(unicode)?;
-    self.default_layer_for_glyph(glyph)
-  }
-
   #[napi]
   /// Returns SVG path data for the glyph, including resolved component
   /// contours from composite dependencies.
@@ -439,35 +429,9 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn get_glyph_advance(&self, unicode: u32) -> Option<f64> {
-    let layer = self.editing_layer_for(unicode)?;
-    Some(layer.width())
-  }
-
-  #[napi]
   pub fn get_glyph_advance_by_name(&self, glyph_name: String) -> Option<f64> {
     let (_, layer) = self.editing_target_for_name(&glyph_name)?;
     Some(layer.width())
-  }
-
-  #[napi]
-  /// Returns a tight bounding box `[min_x, min_y, max_x, max_y]` for the glyph,
-  /// including resolved component contours.
-  pub fn get_glyph_bbox(&self, unicode: u32) -> Option<Vec<f64>> {
-    let (glyph_name, layer) = self.editing_target_for_unicode(unicode)?;
-    let component_contours = self.flatten_component_contours_for_layer(layer, glyph_name);
-    let bbox = layer_bbox(layer, &component_contours);
-    if bbox.is_none() {
-      composite_debug!(
-        "get_glyph_bbox U+{:04X} '{}': empty bbox (contours={}, components={}, flattened_contours={})",
-        unicode,
-        glyph_name,
-        layer.contours().len(),
-        layer.components().len(),
-        component_contours.len()
-      );
-    }
-    bbox.map(|(min_x, min_y, max_x, max_y)| vec![min_x, min_y, max_x, max_y])
   }
 
   #[napi]
@@ -1030,6 +994,62 @@ impl FontEngine {
     Ok(session.set_node_positions(&updates))
   }
 
+  /// Bulk position update via Float64Array.
+  /// IDs are PointId/AnchorId u64 values packed as f64.
+  /// Coords are interleaved [x0, y0, x1, y1, ...].
+  /// Bulk position update via zero-copy Float64Array.
+  /// IDs are PointId/AnchorId u64 values packed as f64.
+  /// Coords are interleaved [x0, y0, x1, y1, ...].
+  /// Pass null for empty arrays (napi-rs panics on zero-length Float64Array).
+  #[napi]
+  pub fn set_positions(
+    &mut self,
+    point_ids: Option<Float64Array>,
+    point_coords: Option<Float64Array>,
+    anchor_ids: Option<Float64Array>,
+    anchor_coords: Option<Float64Array>,
+  ) -> Result<bool> {
+    let Some(session) = self.current_edit_session.as_mut() else {
+      return Ok(false);
+    };
+
+    let mut updates = Vec::new();
+
+    if let (Some(pids), Some(pcoords)) = (&point_ids, &point_coords) {
+      let id_slice: &[f64] = pids;
+      let coord_slice: &[f64] = pcoords;
+
+      updates.reserve(id_slice.len());
+      for (i, &id) in id_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Point(PointId::from_raw(id as u64 as u128)),
+          x: coord_slice[i * 2],
+          y: coord_slice[i * 2 + 1],
+        });
+      }
+    }
+
+    if let (Some(aids), Some(acoords)) = (&anchor_ids, &anchor_coords) {
+      let id_slice: &[f64] = aids;
+      let coord_slice: &[f64] = acoords;
+
+      updates.reserve(id_slice.len());
+      for (i, &id) in id_slice.iter().enumerate() {
+        updates.push(NodePositionUpdate {
+          node: NodeRef::Anchor(AnchorId::from_raw(id as u64 as u128)),
+          x: coord_slice[i * 2],
+          y: coord_slice[i * 2 + 1],
+        });
+      }
+    }
+
+    if updates.is_empty() {
+      return Ok(true);
+    }
+
+    Ok(session.set_node_positions(&updates))
+  }
+
   #[napi]
   pub fn restore_snapshot(&mut self, snapshot_json: String) -> Result<bool> {
     let Some(session) = self.current_edit_session.as_mut() else {
@@ -1229,10 +1249,10 @@ mod tests {
     let path_str = ufo_path.to_str().unwrap();
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
-    let bbox = engine.get_glyph_bbox(65);
+    let bbox = engine.get_glyph_bbox_by_name("A".to_string());
     assert!(
       bbox.is_some(),
-      "get_glyph_bbox(65) should return Some for MutatorSans A"
+      "get_glyph_bbox_by_name(A) should return Some for MutatorSans A"
     );
     let b = bbox.unwrap();
     assert_eq!(b.len(), 4);

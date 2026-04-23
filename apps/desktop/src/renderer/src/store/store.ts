@@ -1,5 +1,6 @@
 import { Editor } from "@/lib/editor/Editor";
 import { NativeBridge } from "@/bridge/NativeBridge";
+import { electronSystemClipboard } from "@/lib/clipboard";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { create } from "zustand";
 import type { StoreApi } from "zustand";
@@ -23,7 +24,10 @@ function getFileNameFromPath(path: string | null): string | null {
 }
 
 const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
-  const editor = new Editor({ bridge: new NativeBridge() });
+  const editor = new Editor({
+    bridge: new NativeBridge(),
+    clipboard: electronSystemClipboard,
+  });
   registerBuiltInTools(editor);
 
   // Set select tool as ready on startup
@@ -65,5 +69,11 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
 const AppState = create<AppState>()(createStore);
 
 export const getEditor = () => AppState.getState().editor;
+
+// Expose editor on window for Playwright E2E tests.
+declare const __PLAYWRIGHT__: boolean | undefined;
+if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
+  (window as unknown as Record<string, unknown>).__shift = { getEditor };
+}
 export const setFilePath = (path: string | null) => AppState.getState().setFilePath(path);
 export const clearDirty = () => AppState.getState().clearDirty();

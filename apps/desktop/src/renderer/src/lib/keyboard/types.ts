@@ -19,7 +19,7 @@ export interface KeyboardEditorActions {
     options?: { onActivate?: () => void; onReturn?: () => void },
   ): void;
   returnFromTemporaryTool(): void;
-  isPreviewMode(): boolean;
+  readonly previewMode: boolean;
   setPreviewMode(enabled: boolean): void;
   openGlyphFinder(): void;
 }

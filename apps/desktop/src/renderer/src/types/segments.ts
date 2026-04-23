@@ -51,6 +51,8 @@ export type CubicSegment = {
 };
 
 /**
- * A segment in a contour - either a line or bezier curve.
+ * Raw discriminated data for a segment in a contour — line, quad, or cubic.
+ * The public-facing API is the `Segment` class in `lib/model/Segment.ts`,
+ * which wraps this data and provides id-aware operations.
  */
-export type Segment = LineSegment | QuadSegment | CubicSegment;
+export type SegmentType = LineSegment | QuadSegment | CubicSegment;

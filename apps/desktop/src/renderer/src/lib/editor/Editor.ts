@@ -1,4 +1,3 @@
-import type { IGraphicContext } from "@/types/graphics";
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
@@ -9,14 +8,16 @@ import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
 import { ToolManager } from "../tools/core/ToolManager";
 import { SnapshotCommand } from "../commands/primitives/SnapshotCommand";
-import { Segment, type SegmentHitResult } from "../geo/Segment";
+import { SetNodePositionsCommand } from "../commands/primitives/SetNodePositionsCommand";
+import type { NodePositionUpdateList } from "@/types/positionUpdate";
+import { Segment, type SegmentHitResult } from "@/lib/model/Segment";
 import { Bounds, Vec2 } from "@shift/geo";
-import { Contours, Glyphs } from "@shift/font";
+import { Contours } from "@shift/font";
 import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
 import { ViewportManager } from "./managers";
-import { isLikelyNonSpacingGlyphRef } from "@/lib/utils/unicode";
+import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
 import { NativeBridge } from "@/bridge";
 import {
   CommandHistory,
@@ -36,7 +37,6 @@ import {
   MoveSelectionToCommand,
   AlignPointsCommand,
   DistributePointsCommand,
-  getSegmentAwareBounds,
   type ReflectAxis,
   type AlignmentType,
   type DistributeType,
@@ -50,19 +50,31 @@ import {
   type Signal,
   type WritableSignal,
 } from "../reactive/signal";
-import { Clipboard, resolveClipboardContent } from "../clipboard";
+import { Clipboard, resolveClipboardContent, type SystemClipboard } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { BOUNDING_BOX_HANDLE_STYLES } from "../styles/style";
+import { DEFAULT_THEME } from "./rendering/Theme";
 import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
 import { pointInRect } from "../tools/select/utils";
 import { HoverManager, EdgePanManager } from "./managers";
-import { CanvasCoordinator, ViewportTransform } from "./rendering/CanvasCoordinator";
+import { Viewport, type ViewportTransform } from "./rendering/Viewport";
+import type { Canvas } from "./rendering/Canvas";
+import { Handles } from "./rendering/Handles";
+import {
+  Guides,
+  BoundingBox,
+  ControlLines,
+  Segments,
+  SnapLines,
+  DebugOverlays as DebugOverlaysIndicator,
+  Anchors,
+} from "./rendering/indicators";
+import { SCREEN_HIT_RADIUS } from "./rendering/constants";
+import { getVisibleSceneBounds } from "./rendering/visibleSceneBounds";
 import type { FocusZone } from "@/types/focus";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
 import { Font } from "../model/Font";
-import type { DrawAPI } from "../tools/core/DrawAPI";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import type {
   DragSnapSession,
@@ -92,20 +104,23 @@ const defaultAppSettings: AppSettings = {
 import type { CompositeGlyph } from "@shift/types";
 import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
-import { deriveGlyphSidebearings, roundSidebearing } from "./sidebearings";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
-import type { Segment as GlyphSegment, LineSegment } from "@/types/segments";
+import type { LineSegment } from "@/types/segments";
 import type { GlyphDraft } from "@/types/draft";
+
+interface EditorOptions {
+  bridge: NativeBridge;
+  clipboard: SystemClipboard;
+}
 
 /**
  * Central orchestrator for the glyph editing surface.
  *
  * Editor owns and wires together every subsystem: viewport (UPM/screen
  * transforms), selection, hover, command history, snapping, clipboard,
- * tool management, and rendering (via CanvasCoordinator). It implements
- * `CanvasCoordinatorContext` (the data the renderer reads) and is passed
+ * tool management, and rendering (via Viewport). It is passed
  * directly to tools and behaviors.
  *
  * Subsystems communicate through reactive signals. Effects watch composite
@@ -122,16 +137,25 @@ import type { GlyphDraft } from "@/types/draft";
  * @knipclassignore
  */
 export class Editor {
-  private $previewMode: WritableSignal<boolean>;
-  private $handlesVisible: WritableSignal<boolean>;
-  private $gpuHandlesEnabled: WritableSignal<boolean>;
+  #previewMode: WritableSignal<boolean>;
+  #handlesVisible: WritableSignal<boolean>;
+  #gpuHandlesEnabled: WritableSignal<boolean>;
 
   readonly selection: Selection;
   readonly font: Font;
   #hover: HoverManager;
-  #renderer: CanvasCoordinator;
+  #renderer: Viewport;
   #edgePan: EdgePanManager;
   #snapManager: SnapManager;
+
+  #guides = new Guides();
+  #boundingBox = new BoundingBox();
+  #controlLines = new ControlLines();
+  #segments = new Segments();
+  #snapLines = new SnapLines();
+  #debugOverlaysIndicator = new DebugOverlaysIndicator();
+  #anchors = new Anchors();
+  #handles = new Handles();
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -145,6 +169,7 @@ export class Editor {
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
   #$glyph: ComputedSignal<Glyph | null>;
+  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, Segment>>;
 
   #staticEffect: Effect;
   #overlayEffect: Effect;
@@ -161,7 +186,7 @@ export class Editor {
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
   #drawOffset: WritableSignal<Point2D>;
-  private $cursor: WritableSignal<string>;
+  #cursor: WritableSignal<string>;
   #currentModifiers: WritableSignal<Modifiers>;
   #isHoveringNode: ComputedSignal<boolean>;
   #settings: ShiftState<AppSettings>;
@@ -177,17 +202,30 @@ export class Editor {
    * reactive effects that schedule canvas redraws when state changes.
    *
    */
-  constructor(options: { bridge: NativeBridge }) {
+  constructor(options: EditorOptions) {
     this.#viewport = new ViewportManager();
+
     this.#bridge = options.bridge;
+
     this.font = new Font(this.#bridge);
     this.#$glyph = computed<Glyph | null>(() => this.#bridge.$glyph.value as Glyph | null);
+
+    this.#$segmentIndex = computed(() => {
+      const glyph = this.#$glyph.value;
+      if (!glyph) return new Map();
+      const segmentsById = new Map<SegmentId, Segment>();
+      for (const { segment } of glyph.segments()) {
+        segmentsById.set(segment.id, segment);
+      }
+      return segmentsById;
+    });
+
     this.#commandHistory = new CommandHistory(this.#$glyph);
 
-    this.$previewMode = signal(false);
-    this.$cursor = signal("default");
-    this.$handlesVisible = signal(true);
-    this.$gpuHandlesEnabled = signal(true);
+    this.#previewMode = signal(false);
+    this.#cursor = signal("default");
+    this.#handlesVisible = signal(true);
+    this.#gpuHandlesEnabled = signal(true);
     this.#stateRegistry = new StateRegistry();
     this.#currentModifiers = signal<Modifiers>({
       shiftKey: false,
@@ -246,11 +284,12 @@ export class Editor {
 
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
-    this.#renderer = new CanvasCoordinator(this);
+    this.#renderer = new Viewport(this);
     this.#clipboard = new Clipboard({
       glyph: this.#$glyph,
       selection: this.selection,
       commands: this.#commandHistory,
+      clipboard: options.clipboard,
     });
     this.#textRunController = new TextRunController();
     this.#textRunController.setFont(this.font);
@@ -282,41 +321,51 @@ export class Editor {
 
     this.#staticEffect = effect(() => {
       const glyph = this.#$glyph.value;
-      if (glyph) void glyph.path; // track contour changes via computed path
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
+      this.$activeToolState.value;
       this.selection.pointIds;
       this.selection.anchorIds;
       this.selection.segmentIds;
       this.selection.mode;
-      this.$previewMode.value;
-      this.$handlesVisible.value;
+      this.#previewMode.value;
+      this.#handlesVisible.value;
       this.#hover.hoveredPointId.value;
       this.#hover.hoveredAnchorId.value;
       this.#hover.hoveredSegmentId.value;
       this.#hover.hoveredBoundingBoxHandle.value;
       this.#debugOverlays.value;
-      this.$gpuHandlesEnabled.value;
+      this.#gpuHandlesEnabled.value;
       this.#textRunController.state.value;
-      this.#renderer.requestStaticRedraw();
+      this.#renderer.requestSceneRedraw();
+      this.#renderer.requestBackgroundRedraw();
     });
 
     this.#overlayEffect = effect(() => {
-      this.#$glyph.value;
+      const glyph = this.#$glyph.value;
+      if (glyph) {
+        glyph.contours;
+        glyph.anchors;
+      }
       this.#drawOffset.value;
       this.selection.segmentIds;
       this.#hover.hoveredPointId.value;
       this.#hover.hoveredAnchorId.value;
       this.#hover.hoveredSegmentId.value;
       this.#hover.hoveredBoundingBoxHandle.value;
-      this.$previewMode.value;
-      this.$handlesVisible.value;
+      this.#previewMode.value;
+      this.#handlesVisible.value;
       this.#snapIndicator.value;
+      this.$activeToolState.value;
       this.#renderer.requestOverlayRedraw();
     });
 
     this.#interactiveEffect = effect(() => {
       this.$activeToolState.value;
-      this.#renderer.requestInteractiveRedraw();
+      this.#renderer.requestOverlayRedraw();
     });
 
     this.#cursorEffect = effect(() => {
@@ -369,6 +418,7 @@ export class Editor {
     return this.$activeTool;
   }
 
+  // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
   public getActiveTool(): ToolName {
     return this.$activeTool.value;
   }
@@ -381,12 +431,24 @@ export class Editor {
     return this.$activeToolState;
   }
 
+  // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
   public getActiveToolState(): ActiveToolState {
     return this.$activeToolState.value;
   }
 
   public setActiveToolState(state: ActiveToolState): void {
     this.$activeToolState.set(state);
+  }
+
+  static readonly #DRAG_STATES: ReadonlySet<string> = new Set([
+    "translating",
+    "resizing",
+    "rotating",
+    "bending",
+  ]);
+
+  #isDragging(): boolean {
+    return Editor.#DRAG_STATES.has(this.$activeToolState.peek().type);
   }
 
   public setActiveTool(toolName: ToolName): void {
@@ -401,18 +463,136 @@ export class Editor {
     return this.#toolManager;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolInScene(draw: DrawAPI): void {
-    this.#toolManager.renderInScene(draw);
+  public renderToolBackground(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.previewMode;
+
+    if (glyph && this.shouldRenderGlyph() && !previewMode) {
+      const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
+      const advance = displayAdvance(glyph.xAdvance, glyph.name, unicode);
+      this.#guides.draw(canvas, this.font.getMetrics(), advance);
+    }
+
+    this.#toolManager.renderBackground(canvas);
+
+    if (!previewMode && !this.#isDragging() && this.shouldRenderGlyph()) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) this.#boundingBox.drawRect(canvas, rect);
+    }
   }
 
-  public renderTool(draw: DrawAPI): void {
-    this.#toolManager.render(draw);
+  public renderToolScene(canvas: Canvas): void {
+    const glyph = this.glyph.peek();
+    const previewMode = this.previewMode;
+    const handlesVisible = this.handlesVisible;
+
+    if (glyph && this.shouldRenderGlyph()) {
+      glyph.drawOutline(canvas);
+      if (previewMode) glyph.draw(canvas);
+    }
+
+    if (!previewMode && glyph && this.shouldRenderGlyph()) {
+      const hoveredSegmentId = this.hoveredSegmentId;
+      const hoveredSegment = hoveredSegmentId ? this.getSegmentById(hoveredSegmentId) : null;
+      const selectedSegments: Segment[] = [];
+      for (const segId of this.selection.segmentIds) {
+        const seg = this.getSegmentById(segId);
+        if (seg) selectedSegments.push(seg);
+      }
+      this.#segments.draw(canvas, hoveredSegment ?? null, selectedSegments);
+
+      const debugOverlays = this.debugOverlays;
+      this.#debugOverlaysIndicator.draw(
+        canvas,
+        glyph,
+        debugOverlays,
+        hoveredSegmentId,
+        this.screenToUpmDistance(SCREEN_HIT_RADIUS),
+      );
+    }
+
+    this.#toolManager.renderScene(canvas);
+
+    if (!previewMode && handlesVisible && glyph && this.shouldRenderGlyph()) {
+      const viewport = this.getViewportTransform();
+      const drawOffset = this.drawOffset;
+      const sceneBounds = getVisibleSceneBounds(viewport, 64);
+
+      this.#controlLines.draw(canvas, glyph, (from, to) => {
+        const minX = Math.min(from.x, to.x) + drawOffset.x;
+        const maxX = Math.max(from.x, to.x) + drawOffset.x;
+        const minY = Math.min(from.y, to.y) + drawOffset.y;
+        const maxY = Math.max(from.y, to.y) + drawOffset.y;
+        return !(
+          maxX < sceneBounds.minX ||
+          minX > sceneBounds.maxX ||
+          maxY < sceneBounds.minY ||
+          minY > sceneBounds.maxY
+        );
+      });
+
+      const renderedOnGpu = this.#handles.draw(
+        glyph,
+        { getHandleState: (id) => this.getHandleState(id) },
+        viewport,
+        drawOffset,
+        this.gpuHandlesEnabled,
+      );
+      if (!renderedOnGpu) {
+        this.#handles.drawCpu(canvas, glyph, {
+          getHandleState: (id) => this.getHandleState(id),
+        });
+      }
+
+      this.#anchors.draw(canvas, glyph, (id) => this.getAnchorHandleState(id));
+    } else {
+      this.#handles.clear();
+    }
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public renderToolBelowHandles(draw: DrawAPI): void {
-    this.#toolManager.renderBelowHandles(draw);
+  public renderOverlay(canvas: Canvas): void {
+    // Screen-space pass: bounding box handles (skip during drag — handles aren't interactive)
+    if (
+      !this.previewMode &&
+      !this.#isDragging() &&
+      this.handlesVisible &&
+      this.shouldRenderGlyph()
+    ) {
+      const rect = this.getSelectionBoundingRect();
+      if (rect) {
+        const offset = this.drawOffset;
+        const topLeft = this.projectSceneToScreen({
+          x: rect.x + offset.x,
+          y: rect.y + rect.height + offset.y,
+        });
+        const bottomRight = this.projectSceneToScreen({
+          x: rect.x + rect.width + offset.x,
+          y: rect.y + offset.y,
+        });
+        const screenRect: Rect2D = {
+          x: topLeft.x,
+          y: topLeft.y,
+          width: bottomRight.x - topLeft.x,
+          height: bottomRight.y - topLeft.y,
+          left: topLeft.x,
+          top: topLeft.y,
+          right: bottomRight.x,
+          bottom: bottomRight.y,
+        };
+        canvas.ctx.save();
+        this.#boundingBox.drawHandles(canvas, screenRect);
+        canvas.ctx.restore();
+      }
+    }
+
+    // UPM-space pass: snap lines + tool overlay
+    this.#renderer.beginUpmSpace(canvas);
+    const indicator = this.snapIndicator;
+    if (indicator) {
+      this.#snapLines.draw(canvas, indicator);
+    }
+    this.#toolManager.renderOverlay(canvas);
+    canvas.ctx.restore();
   }
 
   public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
@@ -442,14 +622,14 @@ export class Editor {
   }
 
   public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
-    if (!isBoundingBoxVisibleAtZoom(this.getZoom())) return null;
+    if (!isBoundingBoxVisibleAtZoom(this.zoom)) return null;
 
     const rect = this.getSelectionBoundingRect();
     if (!rect) return null;
 
-    const handleOffset = this.screenToUpmDistance(BOUNDING_BOX_HANDLE_STYLES.handle.offset);
+    const handleOffset = this.screenToUpmDistance(DEFAULT_THEME.boundingBox.handle.offset);
     const rotationZoneOffset = this.screenToUpmDistance(
-      BOUNDING_BOX_HANDLE_STYLES.rotationZoneOffset,
+      DEFAULT_THEME.boundingBox.rotationZoneOffset,
     );
 
     return hitTestBoundingBox(
@@ -461,7 +641,7 @@ export class Editor {
     );
   }
 
-  public getHoveredBoundingBoxHandle(): BoundingBoxHitResult {
+  public get hoveredBoundingBoxHandle(): BoundingBoxHitResult {
     return this.#hover.getHoveredBoundingBoxHandle();
   }
 
@@ -469,12 +649,20 @@ export class Editor {
     this.#hover.clearHover();
   }
 
-  public getIsHoveringNode(): boolean {
+  public get isHoveringNode(): boolean {
     return this.#isHoveringNode.value;
   }
 
-  public getCurrentModifiers(): Modifiers {
+  public get $isHoveringNode(): Signal<boolean> {
+    return this.#isHoveringNode;
+  }
+
+  public get currentModifiers(): Modifiers {
     return this.#currentModifiers.value;
+  }
+
+  public get $currentModifiers(): Signal<Modifiers> {
+    return this.#currentModifiers;
   }
 
   public setCurrentModifiers(modifiers: Modifiers): void {
@@ -504,9 +692,13 @@ export class Editor {
     this.#snapIndicator.set(indicator);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public getSnapIndicator(): SnapIndicator | null {
-    return this.#snapIndicator.peek();
+  public get snapIndicator(): SnapIndicator | null {
+    return this.#snapIndicator.value;
+  }
+
+  /** @knipclassignore */
+  public get $snapIndicator(): Signal<SnapIndicator | null> {
+    return this.#snapIndicator;
   }
 
   public createDraft(): GlyphDraft {
@@ -515,29 +707,31 @@ export class Editor {
       throw new Error("Cannot create draft without an active glyph");
     }
 
-    const baseSnapshot = glyph.toSnapshot();
-    let dirty = false;
+    const base = glyph.toSnapshot();
+    let updates: NodePositionUpdateList = [];
     let finished = false;
 
     return {
-      base: baseSnapshot,
-      setPositions: (updates) => {
+      base,
+      setPositions: (u) => {
         if (finished) return;
-        dirty = true;
-        this.#bridge.setNodePositions(updates);
+        updates = u;
+        glyph.apply(u);
       },
       finish: (label) => {
         if (finished) return;
         finished = true;
+        if (updates.length === 0) return;
 
-        if (dirty) {
-          this.#commandHistory.record(new SnapshotCommand(label, baseSnapshot, glyph.toSnapshot()));
-        }
+        this.#bridge.sync(updates);
+        this.#commandHistory.record(
+          SetNodePositionsCommand.fromBaseGlyphAndUpdates(label, base, updates)!,
+        );
       },
       discard: () => {
         if (finished) return;
         finished = true;
-        this.#bridge.restoreSnapshot(baseSnapshot);
+        if (updates.length > 0) glyph.apply(base);
       },
     };
   }
@@ -550,20 +744,22 @@ export class Editor {
     return this.#toolStateVersion;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public getDebugOverlays(): DebugOverlays {
+  public get debugOverlays(): DebugOverlays {
     return this.#debugOverlays.value;
+  }
+
+  /** @knipclassignore */
+  public get $debugOverlays(): Signal<DebugOverlays> {
+    return this.#debugOverlays;
   }
 
   public setDebugOverlays(overlays: DebugOverlays): void {
     this.#debugOverlays.set(overlays);
   }
 
-  public getHoveredSegmentId(): SegmentId | null {
-    const hoveredSegment = this.#hover.hoveredSegmentId.peek();
-    if (hoveredSegment == null) return null;
-
-    return hoveredSegment.segmentId;
+  public get hoveredSegmentId(): SegmentId | null {
+    const hoveredSegment = this.#hover.hoveredSegmentId.value;
+    return hoveredSegment?.segmentId ?? null;
   }
 
   public isPointInMarqueePreview(pointId: PointId): boolean {
@@ -573,17 +769,16 @@ export class Editor {
     return marqueePreviewPointIds.has(pointId);
   }
 
-  public get previewMode(): Signal<boolean> {
-    return this.$previewMode;
+  public get previewMode(): boolean {
+    return this.#previewMode.value;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public isPreviewMode(): boolean {
-    return this.$previewMode.peek();
+  public get $previewMode(): Signal<boolean> {
+    return this.#previewMode;
   }
 
   public setPreviewMode(enabled: boolean): void {
-    this.$previewMode.set(enabled);
+    this.#previewMode.set(enabled);
   }
 
   public setMarqueePreviewRect(rect: Rect2D | null): void {
@@ -595,49 +790,52 @@ export class Editor {
     const points = this.getAllPoints();
     const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
     this.#marqueePreviewPointIds.set(new Set(ids));
-    this.requestStaticRedraw();
+    this.requestSceneRedraw();
   }
 
-  public get handlesVisible(): Signal<boolean> {
-    return this.$handlesVisible;
+  public get handlesVisible(): boolean {
+    return this.#handlesVisible.value;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public isHandlesVisible(): boolean {
-    return this.$handlesVisible.peek();
+  public get $handlesVisible(): Signal<boolean> {
+    return this.#handlesVisible;
   }
 
   public setHandlesVisible(visible: boolean): void {
-    this.$handlesVisible.set(visible);
+    this.#handlesVisible.set(visible);
   }
 
-  public get gpuHandlesEnabled(): Signal<boolean> {
-    return this.$gpuHandlesEnabled;
+  public get gpuHandlesEnabled(): boolean {
+    return this.#gpuHandlesEnabled.value;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public isGpuHandlesEnabled(): boolean {
-    return this.$gpuHandlesEnabled.peek();
+  public get $gpuHandlesEnabled(): Signal<boolean> {
+    return this.#gpuHandlesEnabled;
   }
 
   public setGpuHandlesEnabled(enabled: boolean): void {
-    this.$gpuHandlesEnabled.set(enabled);
+    this.#gpuHandlesEnabled.set(enabled);
   }
 
-  public setStaticContext(context: IGraphicContext) {
-    this.#renderer.setStaticContext(context);
+  public setBackgroundContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setBackgroundContext(ctx);
   }
 
-  public setOverlayContext(context: IGraphicContext) {
-    this.#renderer.setOverlayContext(context);
+  public setSceneContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setSceneContext(ctx);
   }
 
-  public setInteractiveContext(context: IGraphicContext) {
-    this.#renderer.setInteractiveContext(context);
+  public setOverlayContext(ctx: CanvasRenderingContext2D) {
+    this.#renderer.setOverlayContext(ctx);
   }
 
   public setGpuHandleContext(context: ReglHandleContext) {
     this.#renderer.setGpuHandleContext(context);
+    this.#handles.setGpu(context);
+  }
+
+  public get gpuHandleContext(): ReglHandleContext | null {
+    return this.#renderer.gpuHandleContext;
   }
 
   /** Opens a glyph for editing by name. */
@@ -663,7 +861,7 @@ export class Editor {
     this.#textRunController.insert({ glyphName, unicode: codepoint });
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public shouldRenderGlyph(): boolean {
     const state = this.#textRunController.state.peek();
     return !state || state.editingIndex !== null;
@@ -811,16 +1009,6 @@ export class Editor {
     return this.glyph.value?.xAdvance ?? 0;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public getVisualGlyphAdvance(glyph: Glyph): number {
-    if (glyph.xAdvance > 0) return glyph.xAdvance;
-    const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
-    if (!isLikelyNonSpacingGlyphRef(glyph.name, unicode)) {
-      return glyph.xAdvance;
-    }
-    return 600;
-  }
-
   public setXAdvance(width: number): void {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
@@ -833,19 +1021,18 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const sidebearings = deriveGlyphSidebearings(glyph);
-    if (sidebearings.lsb === null) return;
+    // Command path — use bezier-accurate bbox so the delta reflects the true
+    // current LSB including curve extension, not the cheap point-based
+    // approximation used for sidebar display.
+    const bbox = glyph.bbox;
+    if (!bbox) return;
 
-    const current = roundSidebearing(sidebearings.lsb)!;
-    const target = roundSidebearing(value)!;
-    const delta = target - current;
+    const delta = Math.round(value) - Math.round(bbox.min.x);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
-    const afterXAdvance = beforeXAdvance + delta;
-
     this.#commandHistory.execute(
-      new SetLeftSidebearingCommand(beforeXAdvance, afterXAdvance, delta),
+      new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
     );
   }
 
@@ -853,18 +1040,17 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return;
 
-    const sidebearings = deriveGlyphSidebearings(glyph);
-    if (sidebearings.rsb === null) return;
+    const bbox = glyph.bbox;
+    if (!bbox) return;
 
-    const current = roundSidebearing(sidebearings.rsb)!;
-    const target = roundSidebearing(value)!;
-    const delta = target - current;
+    const currentRsb = glyph.xAdvance - bbox.max.x;
+    const delta = Math.round(value) - Math.round(currentRsb);
     if (delta === 0) return;
 
     const beforeXAdvance = glyph.xAdvance;
-    const afterXAdvance = beforeXAdvance + delta;
-
-    this.#commandHistory.execute(new SetRightSidebearingCommand(beforeXAdvance, afterXAdvance));
+    this.#commandHistory.execute(
+      new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta),
+    );
   }
 
   public updateMetricsFromFont(): void {
@@ -912,12 +1098,12 @@ export class Editor {
     return this.#viewport.hitRadius;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public screenToUpmDistance(pixels: number): number {
     return this.#viewport.screenToUpmDistance(pixels);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getViewportTransform(): ViewportTransform {
     return {
       zoom: this.#viewport.zoomLevel,
@@ -931,7 +1117,7 @@ export class Editor {
     };
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public projectSceneToScreen(scene: Point2D): Point2D {
     return this.#viewport.projectSceneToScreen(scene.x, scene.y);
   }
@@ -974,14 +1160,14 @@ export class Editor {
     this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getHandleState(pointId: PointId): HandleState {
     const isSelected = (id: PointId) =>
       this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
     return this.#hover.getPointVisualState(pointId, isSelected);
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public getAnchorHandleState(anchorId: AnchorId): HandleState {
     if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
       return "selected";
@@ -1016,19 +1202,23 @@ export class Editor {
   }
 
   public setCursor(cursor: CursorType): void {
-    this.$cursor.set(cursorToCSS(cursor));
+    this.#cursor.set(cursorToCSS(cursor));
   }
 
-  public getCursor(): string {
-    return this.$cursor.value;
+  public get cursor(): string {
+    return this.#cursor.value;
   }
 
-  public get zoom(): Signal<number> {
-    return this.#viewport.zoom;
+  public get $cursor(): Signal<string> {
+    return this.#cursor;
   }
 
-  public getZoom(): number {
+  public get zoom(): number {
     return this.#viewport.zoomLevel;
+  }
+
+  public get $zoom(): Signal<number> {
+    return this.#viewport.zoom;
   }
 
   public get fps(): Signal<number> {
@@ -1066,17 +1256,9 @@ export class Editor {
     return this.#clipboard.paste();
   }
 
-  public getSelectionBounds(): Bounds | null {
-    const glyph = this.#$glyph.value;
-    const pointIds = this.selection.$pointIds.peek();
-    if (!glyph || pointIds.size === 0) return null;
-    return getSegmentAwareBounds(glyph, Array.from(pointIds));
-  }
-
-  public getSelectionCenter(): Point2D | null {
-    const bounds = this.getSelectionBounds();
-    if (!bounds) return null;
-    return Bounds.center(bounds);
+  #selectionCenter(): Point2D | null {
+    const bounds = this.selection.bounds;
+    return bounds ? Bounds.center(bounds) : null;
   }
 
   /** @param angle - Rotation in radians. */
@@ -1084,7 +1266,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const center = origin ?? this.getSelectionCenter();
+    const center = origin ?? this.#selectionCenter();
     if (!center) return;
 
     const cmd = new RotatePointsCommand([...pointIds], angle, center);
@@ -1095,7 +1277,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const o = origin ?? this.getSelectionCenter();
+    const o = origin ?? this.#selectionCenter();
     if (!o) return;
 
     const cmd = new ScalePointsCommand([...pointIds], sx, sy, o);
@@ -1106,7 +1288,7 @@ export class Editor {
     const pointIds = [...this.selection.pointIds];
     if (pointIds.length === 0) return;
 
-    const center = origin ?? this.getSelectionCenter();
+    const center = origin ?? this.#selectionCenter();
     if (!center) return;
 
     const cmd = new ReflectPointsCommand([...pointIds], axis, center);
@@ -1170,7 +1352,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
-    return Glyphs.findContour(glyph, activeContourId) ?? null;
+    return glyph.contour(activeContourId) ?? null;
   }
 
   public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
@@ -1183,7 +1365,7 @@ export class Editor {
     });
   }
 
-  public splitSegment(segment: GlyphSegment, t: number): PointId {
+  public splitSegment(segment: Segment, t: number): PointId {
     return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
@@ -1202,8 +1384,8 @@ export class Editor {
     this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
   }
 
-  public upgradeLineToCubic(segment: LineSegment): void {
-    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
+  public upgradeLineToCubic(segment: Segment): void {
+    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment.raw as LineSegment));
   }
 
   public applyBooleanOp(
@@ -1221,7 +1403,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return null;
 
-    return Glyphs.getPointAt(glyph, coords.glyphLocal, this.hitRadius);
+    return glyph.getPointAt(coords.glyphLocal, this.hitRadius);
   }
 
   private getAnchorAt(
@@ -1244,8 +1426,8 @@ export class Editor {
     if (!glyph) return null;
 
     let bestHit: SegmentHitResult | null = null;
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      const hit = Segment.hitTest(segment, coords.glyphLocal, this.hitRadius);
+    for (const { segment } of glyph.segments()) {
+      const hit = segment.hitTest(coords.glyphLocal, this.hitRadius);
       if (hit && (!bestHit || hit.distance < bestHit.distance)) {
         bestHit = hit;
       }
@@ -1353,7 +1535,7 @@ export class Editor {
       return null;
     }
 
-    const points = Glyphs.findPoints(glyph, selectedPointIds);
+    const points = glyph.points([...selectedPointIds]);
     if (points.length <= 1) return null;
 
     const bounds = Bounds.fromPoints(points);
@@ -1402,7 +1584,7 @@ export class Editor {
     const glyph = this.#$glyph.value;
     if (!glyph) return [];
 
-    return Glyphs.getAllPoints(glyph);
+    return glyph.allPoints;
   }
 
   public duplicateSelection(): PointId[] {
@@ -1424,9 +1606,7 @@ export class Editor {
   }
 
   public getSegmentById(segmentId: SegmentId) {
-    const glyph = this.#$glyph.value;
-    if (!glyph) return null;
-    return this.#getSegmentIndex(glyph).get(segmentId) ?? null;
+    return this.#$segmentIndex.value.get(segmentId) ?? null;
   }
 
   /**
@@ -1460,9 +1640,13 @@ export class Editor {
     return null;
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
-  public getDrawOffset(): Point2D {
+  public get drawOffset(): Point2D {
     return this.#drawOffset.value;
+  }
+
+  /** @knipclassignore */
+  public get $drawOffset(): Signal<Point2D> {
+    return this.#drawOffset;
   }
 
   public setDrawOffsetForGlyph(
@@ -1473,7 +1657,7 @@ export class Editor {
     this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyphName, unicode));
   }
 
-  /** @knipclassignore Indirectly consumed through CanvasCoordinatorContext. */
+  /** @knipclassignore Indirectly consumed through Viewport. */
   public setDrawOffset(offset: Point2D): void {
     this.#drawOffset.set(offset);
   }
@@ -1482,8 +1666,12 @@ export class Editor {
     this.#renderer.requestRedraw();
   }
 
-  public requestStaticRedraw() {
-    this.#renderer.requestStaticRedraw();
+  public requestSceneRedraw() {
+    this.#renderer.requestSceneRedraw();
+  }
+
+  public requestOverlayRedraw() {
+    this.#renderer.requestOverlayRedraw();
   }
 
   public requestImmediateRedraw() {
@@ -1508,20 +1696,12 @@ export class Editor {
     return `${toolId}:${key}`;
   }
 
-  #getSegmentIndex(glyph: Glyph): ReadonlyMap<SegmentId, SegmentHitResult["segment"]> {
-    const segmentsById = new Map<SegmentId, SegmentHitResult["segment"]>();
-    for (const { segment } of Segment.iterateGlyph(glyph.contours)) {
-      segmentsById.set(Segment.id(segment), segment);
-    }
-    return segmentsById;
-  }
-
   #resolveEditorPlacementOffset(
     offset: Point2D,
     glyphName: string | null,
     unicode: number | null,
   ): Point2D {
-    if (!glyphName || !isLikelyNonSpacingGlyphRef(glyphName, unicode)) {
+    if (!glyphName || !isNonSpacingGlyph(glyphName, unicode)) {
       return offset;
     }
 

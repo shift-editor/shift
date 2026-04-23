@@ -22,7 +22,6 @@
 
 // Types (re-export from centralized types)
 export type {
-  TransformablePoint,
   ReflectAxis,
   TransformOptions,
   ScaleOptions,
@@ -41,9 +40,6 @@ export { anchorToPoint } from "./anchor";
 
 // Zoom-from-wheel (viewport zoom sensitivity)
 export { zoomMultiplierFromWheel, type ZoomFromWheelOptions } from "./zoomFromWheel";
-
-// Selection bounds utilities
-export { getSegmentAwareBounds } from "./SelectionBounds";
 
 // Commands for undo/redo (re-export from commands/transform)
 export {

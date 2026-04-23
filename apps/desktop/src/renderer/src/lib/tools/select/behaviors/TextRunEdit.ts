@@ -28,7 +28,7 @@ export class TextRunEdit implements SelectHandlerBehavior {
         glyphName: activeName,
         unicode: ctx.editor.getActiveGlyphUnicode(),
       });
-      ctrl.setOriginX(ctx.editor.getDrawOffset().x);
+      ctrl.setOriginX(ctx.editor.drawOffset.x);
       textRunState = ctrl.state.value;
     }
     if (!textRunState) return false;

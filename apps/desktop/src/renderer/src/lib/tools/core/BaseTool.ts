@@ -1,11 +1,10 @@
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
-import type { DrawAPI } from "./DrawAPI";
+import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Behavior, ToolContext } from "./Behavior";
 import { batch, computed, type ComputedSignal } from "../../reactive/signal";
 import type { CursorType } from "@/types/editor";
-import { renderTextRunInScene } from "../text/renderTextRunScene";
 
 export type { ToolName, ToolState };
 
@@ -65,15 +64,14 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   protected preTransition?(state: S, event: ToolEvent): { state: S } | null;
   protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
-  /** Draw in viewport (scene) space, before the editable glyph. Renders text runs by default. */
-  renderInScene(draw: DrawAPI): void {
-    renderTextRunInScene(this.editor, draw);
-  }
+  /** Layer 0 — rarely redraws (viewport/font change only). Text runs, background elements. */
+  renderBackground?(canvas: Canvas): void;
 
-  /** Draw tool-specific overlays above handles (e.g. pen preview segments). */
-  render?(draw: DrawAPI): void;
-  /** Draw tool-specific overlays below handles (e.g. marquee rectangle). */
-  renderBelowHandles?(draw: DrawAPI): void;
+  /** Layer 1 — redraws on edit/selection/hover change. Guides, outline, handles, segments. */
+  renderScene?(canvas: Canvas): void;
+
+  /** Layer 2 — redraws every mouse move. Snap indicators, selection marquee, cursor. */
+  renderOverlay?(canvas: Canvas): void;
 
   activate?(): void;
   deactivate?(): void;

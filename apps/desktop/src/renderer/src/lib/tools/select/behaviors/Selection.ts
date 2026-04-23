@@ -4,7 +4,6 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { SelectHandlerBehavior, SelectState } from "../types";
 import type { PointId, AnchorId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
-import { Segments as SegmentOps } from "@/lib/geo/Segments";
 import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
 
 function nextSelectionStateAfterToggle(
@@ -123,7 +122,7 @@ export class Selection implements SelectHandlerBehavior {
   private selectSegment(editor: Editor, segmentId: SegmentId, additive: boolean): void {
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
-    const pointIds = SegmentOps.getPointIds(segment);
+    const pointIds = segment.pointIds;
 
     if (additive) {
       editor.selection.add({ kind: "segment", id: segmentId });
@@ -145,7 +144,7 @@ export class Selection implements SelectHandlerBehavior {
 
     const segment = editor.getSegmentById(segmentId);
     if (!segment) return;
-    const pointIds = SegmentOps.getPointIds(segment);
+    const pointIds = segment.pointIds;
 
     for (const pointId of pointIds) {
       if (wasSelected) {

@@ -1,317 +1,113 @@
 # Reactive
 
-Fine-grained reactivity system providing automatic dependency tracking and efficient updates.
+Fine-grained reactivity system providing automatic dependency tracking and efficient updates for the Shift editor.
 
-## Overview
+## Architecture Invariants
 
-The reactive library implements a signals-based reactivity system inspired by SolidJS and Preact Signals. It provides automatic dependency tracking during reads, lazy evaluation for computed values, and batched effect execution for performance.
+- **Architecture Invariant:** Signals use `Object.is` equality by default. Mutating an object in place and re-setting the same reference will **not** notify subscribers. Always create a new reference (e.g., `new Set(...)`) to trigger updates.
+- **Architecture Invariant:** `computed` is lazy -- it only recomputes when `.value` is accessed after a dependency change. It never eagerly evaluates. Accessing `.value` inside a `batch` returns the up-to-date derived value immediately.
+- **Architecture Invariant:** `effect` runs its callback immediately on construction (synchronously). It is not deferred to the next microtask.
+- **Architecture Invariant:** During `batch`, only effects are deferred. Computed values remain available with fresh data inside the batch body.
+- **Architecture Invariant: CRITICAL:** The module-level `currentComputation` variable is the sole mechanism for dependency tracking. Any code that saves/restores it incorrectly will silently break the entire reactive graph. `untracked` and the internal `#recompute`/`execute` methods carefully save and restore this variable.
+- **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
+- **Architecture Invariant:** Classes expose `WritableSignal` fields with a `$` prefix (e.g., `$zoom`). Public getters return the read-only `Signal<T>` type. Use `private` (not `#`) for `$`-prefixed fields to avoid `#$` awkwardness.
+- **Architecture Invariant: Convention:** `$foo` public accessors are for **raw state** — writable signals or cheap computeds — safe to subscribe to via `useSignalState`/`useSignalTrigger`. **Derived values** (bounds, paths, sidebearings) are exposed only as plain getters (`.foo`) and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time. Subscribing directly to an expensive ComputedSignal forces it to re-run on every input fire — that's the footgun to avoid.
 
-## Architecture
+## Codemap
 
 ```
-signal<T>()
-    ↓ writes
-#subscribers: Set<Computation>
-    ↓ notifies
-computed<T>() / effect()
-    ↓ reads (auto-tracks)
-signal.value
+reactive/
+  signal.ts          — signal, computed, effect, batch, untracked, isTracking
+  useSignal.ts       — useSignalState, useSignalTrigger (React bridges)
+  index.ts           — public re-exports
+  signal.test.ts     — unit tests (vitest)
 ```
 
-### Key Design Decisions
+Purpose-specific hooks for derived values live under `hooks/`:
 
-1. **Automatic Tracking**: Dependencies captured during computation execution
-2. **Lazy Computed**: Only recomputes when accessed after becoming dirty
-3. **Batched Effects**: Effects queued during batch, executed at batch end
-4. **Cleanup Support**: Effects can return cleanup functions
+- `useSelectionBounds` — current selection bounds, pulled at render time.
+- `useGlyphSidebearings` — current LSB/RSB, pulled at render time.
+- `useGlyphXAdvance` — current xAdvance.
 
-## Signal Naming Convention
+## Key Types
 
-Classes that use signals follow a consistent naming pattern:
+- `Signal<T>` -- read-only reactive value. `.value` tracks dependencies; `.peek()` reads without tracking.
+- `WritableSignal<T>` -- extends `Signal<T>` with `.set()`, `.update()`, and writable `.value`.
+- `ComputedSignal<T>` -- extends `Signal<T>` with `.invalidate()` to force recomputation on next access.
+- `Effect` -- handle returned by `effect()` with a `.dispose()` method.
+- `SignalOptions<T>` -- optional config with `equals` for custom equality (pass `() => false` to always notify).
+- `Computation` -- internal interface for anything that tracks dependencies (`execute()` + `dependencies`).
+- `SignalNode` -- internal interface for anything that can be unsubscribed from (`_unsubscribe()`).
 
-**Internal (private) fields use `$` prefix:**
+## How it works
 
-```typescript
-private readonly $zoom: WritableSignal<number>;
-private readonly $selectedPointIds: WritableSignal<ReadonlySet<PointId>>;
+**Dependency tracking.** A module-level `currentComputation` variable holds the active `Computation` (either a `ComputedImpl` or `EffectImpl`). When a signal's `.value` getter runs, it checks `currentComputation` and, if non-null, adds the computation to its subscriber set and adds itself to the computation's dependency set. This creates a bidirectional link.
+
+**Cleanup on re-run.** Before each re-execution, both `ComputedImpl` and `EffectImpl` unsubscribe from all previous dependencies and clear their dependency set. The new execution then re-tracks only the dependencies actually read, which enables dynamic dependency graphs (e.g., conditional branches that read different signals).
+
+**Notification.** `SignalImpl.set()` checks equality, then calls `_notify()`. During notification, subscriber computations are copied to an array to avoid mutation-during-iteration issues. Each subscriber's `execute()` is called. For `ComputedImpl`, `execute()` just marks it dirty and propagates to its own subscribers (lazy chain). For `EffectImpl`, `execute()` runs the effect body.
+
+**Batching.** `batch()` increments a `batchDepth` counter. While `batchDepth > 0`, effects are added to `pendingEffects` instead of executed. When the outermost batch exits, all pending effects run. Nested batches are supported via depth counting.
+
+**Re-entrant writes.** If a signal is written during `_notify()` (i.e., an effect writes another signal), the `isNotifying` flag causes the write to be queued in `pendingNotifications`. After the current notification pass finishes, queued signals are flushed.
+
+**React bridge.** `useSignalState` uses React's `useSyncExternalStore`. It creates an `effect` that reads `signal.value` (establishing tracking) and calls the store's `callback` on change. The snapshot function uses `.peek()` to avoid double-tracking.
+
+## Workflow recipes
+
+### Add a new reactive property to a manager class
+
+1. Add a `private $fieldName: WritableSignal<T>` field.
+2. Initialize it in the constructor: `this.$fieldName = signal(initialValue)`.
+3. Add a public getter returning `Signal<T>`: `get fieldName(): Signal<T> { return this.$fieldName; }`.
+4. Write mutators that call `this.$fieldName.set(newValue)` or `.update(fn)`.
+
+### Subscribe to a signal in a React component
+
+1. Import `useSignalState` from `@/lib/reactive`.
+2. Call `const value = useSignalState(someSignal)` in the component body.
+3. The component re-renders when the signal changes.
+
+### Run a side effect tied to component lifecycle
+
+1. Import `useSignalEffect` from `@/hooks/useSignalEffect`.
+2. Call `useSignalEffect(() => { someSignal.value; /* side effect */ })` inside the component. The effect auto-disposes on unmount.
+
+### Read a signal imperatively (no tracking)
+
+Use `.peek()` inside mutators or event handlers where you need the current value but do not want to establish a reactive dependency.
+
+### Force-notify even when the reference is the same
+
+Pass `{ equals: () => false }` as the second argument to `signal()`. This is useful for mutable objects where identity does not change but contents do.
+
+## Gotchas
+
+- **Object mutation is invisible.** Mutating properties on a signal's current value does not trigger updates. You must `.set()` a new reference.
+- **Effects run synchronously.** Setting a signal inside an effect body can trigger other effects immediately (unless inside a `batch`). Careless writes inside effects can cause cascading re-executions.
+- **Computed propagates eagerly on dirty, evaluates lazily.** When a computed's dependency changes, it marks itself dirty and immediately notifies its own subscribers (which may be other computeds or effects). But it does not recompute its value until `.value` is accessed.
+- **`peek()` inside a computed breaks reactivity.** If a computed reads a signal via `.peek()`, it will not re-derive when that signal changes. This is intentional but easy to forget.
+- **Circular computed chains.** There is no cycle detection. A computed that reads itself (directly or indirectly) will hit the `#computing` re-entrancy guard and return the stale value.
+- **`useSignalState` must not be called conditionally.** It is a React hook and follows the rules of hooks.
+
+## Verification
+
+```bash
+# Run reactive module tests
+cd apps/desktop && npx vitest run src/renderer/src/lib/reactive/signal.test.ts
+
+# Run full test suite
+cd apps/desktop && npm test
 ```
 
-**Public getters return the Signal (not the value):**
-
-```typescript
-public get zoom(): Signal<number> {
-  return this.$zoom;
-}
-```
-
-**Usage patterns:**
-
-```typescript
-// Reactive - component re-renders on change
-const zoom = useSignalState(editor.zoom);
-
-// Non-reactive - reads without tracking ("unsafe" escape hatch)
-const zoom = editor.zoom.peek();
-```
-
-**Design principle:** The `$` prefix is internal documentation indicating a signal field. Use `private` keyword (not `#`) for signal fields to avoid `#$` awkwardness. Users opt into reactivity with `useSignalState()`, and use `.peek()` for imperative non-reactive reads.
-
-## When to Use Signals
-
-**Use signals for:**
-
-- Continuous state that changes over time (selection, hover, zoom)
-- State accessed by multiple consumers
-- Derived/computed values
-- UI state that triggers redraws
-
-**Use signals + effect() for:**
-
-- Triggering side effects when state changes
-- Auto-subscribing to dependencies
-- Cleanup on state change (return cleanup function)
-
-**Don't use signals for:**
-
-- One-shot operations (use functions)
-- Event payloads with specific data (if you need to know _what_ changed, pass it directly)
-- State that never changes after initialization
-- React component state that doesn't need editor access (use Zustand)
-
-**Signals vs Zustand:**
-
-- **Signals**: Editor internals (canvas, rendering, tools, commands)
-- **Zustand**: React UI state (filename, active tool, panels, preferences)
-
-**Editor Access Pattern:**
-
-The Editor singleton is stored in Zustand but accessed via `getEditor()`:
-
-```typescript
-import { getEditor } from "@/store/store";
-
-// In React components, effects, callbacks, or non-React code
-const editor = getEditor();
-editor.doSomething();
-```
-
-The Editor is a stable singleton that never changes, so `getEditor()` works everywhere without needing a React hook.
-
-**Pattern: Manager + Signals**
-
-```typescript
-class SelectionManager {
-  private $selectedPoints: WritableSignal<ReadonlySet<PointId>>;
-
-  constructor() {
-    this.$selectedPoints = signal<ReadonlySet<PointId>>(new Set());
-  }
-
-  // Public getter returns the Signal for reactive access
-  get selectedPoints(): Signal<ReadonlySet<PointId>> {
-    return this.$selectedPoints;
-  }
-
-  // Mutator uses peek() to read without tracking
-  addToSelection(id: PointId): void {
-    const next = new Set(this.$selectedPoints.peek());
-    next.add(id);
-    this.$selectedPoints.set(next);
-  }
-}
-
-// React component subscribes via useSignalState()
-function MyComponent() {
-  const selectedPoints = useSignalState(manager.selectedPoints);
-  return <div>Selected: {selectedPoints.size}</div>;
-}
-
-// Effect subscribes via .value
-effect(() => {
-  manager.selectedPoints.value; // Tracks dependency
-  redraw();
-});
-```
-
-## Key Concepts
-
-### Signals
-
-Writable reactive values that notify subscribers on change:
-
-```typescript
-const count = signal(0);
-
-// Read (tracks dependency if in reactive context)
-console.log(count.value);
-
-// Write (notifies subscribers)
-count.set(1);
-count.update((n) => n + 1);
-
-// Read without tracking
-count.peek();
-```
-
-### Computed
-
-Derived values that auto-update when dependencies change:
-
-```typescript
-const doubled = computed(() => count.value * 2);
-
-// Lazy - only computes when accessed
-console.log(doubled.value);
-
-// Auto-recomputes when count changes
-count.set(5);
-console.log(doubled.value); // 10
-```
-
-### Effects
-
-Side effects that re-run when dependencies change:
-
-```typescript
-const fx = effect(() => {
-  console.log("Count is:", count.value);
-
-  // Optional cleanup
-  return () => console.log("Cleaning up");
-});
-
-// Stop the effect
-fx.dispose();
-```
-
-### Batching
-
-Defer effect execution for multiple updates:
-
-```typescript
-batch(() => {
-  a.set(1);
-  b.set(2);
-  c.set(3);
-}); // Effects run once, not three times
-```
-
-## API Reference
-
-### signal<T>(initial: T): WritableSignal<T>
-
-- `.value` - Get/set the value (tracks on read)
-- `.set(value)` - Set new value
-- `.update(fn)` - Functional update
-- `.peek()` - Read without tracking
-
-### computed<T>(fn: () => T): ComputedSignal<T>
-
-- `.value` - Get derived value (lazy, cached)
-- `.invalidate()` - Force recomputation on next access
-
-### effect(fn: () => void | (() => void)): Effect
-
-- Returns Effect with `.dispose()` method
-- Function can return cleanup callback
-
-### batch<T>(fn: () => T): T
-
-- Defers effect execution until batch completes
-- Supports nesting
-
-### untracked<T>(fn: () => T): T
-
-- Execute without tracking dependencies
-
-### isTracking(): boolean
-
-- Check if currently in reactive context
-
-## Usage Examples
-
-### Basic Reactivity
-
-```typescript
-const name = signal("Alice");
-const greeting = computed(() => `Hello, ${name.value}!`);
-
-effect(() => {
-  console.log(greeting.value);
-});
-
-name.set("Bob"); // Logs: "Hello, Bob!"
-```
-
-### Dynamic Dependencies
-
-```typescript
-const condition = signal(true);
-const a = signal(1);
-const b = signal(2);
-
-const value = computed(() => (condition.value ? a.value : b.value));
-
-// Initially depends only on `condition` and `a`
-// When condition becomes false, depends on `condition` and `b`
-```
-
-### Cleanup Pattern
-
-```typescript
-effect(() => {
-  const handler = () => console.log(signal.value);
-  window.addEventListener("resize", handler);
-
-  return () => {
-    window.removeEventListener("resize", handler);
-  };
-});
-```
-
-### Batch Updates
-
-```typescript
-const x = signal(0);
-const y = signal(0);
-let renderCount = 0;
-
-effect(() => {
-  renderCount++;
-  render(x.value, y.value);
-});
-
-// Without batch: renderCount = 3
-// With batch: renderCount = 2
-batch(() => {
-  x.set(100);
-  y.set(200);
-});
-```
-
-## Data Flow
-
-```
-Signal Write (set/update)
-    ↓
-Object.is equality check
-    ↓ (if changed)
-_notify() subscribers
-    ↓
-For each subscriber:
-    ├── Computed: mark dirty (lazy)
-    └── Effect: execute (or queue if batching)
-        ↓
-During execution:
-    signal.value reads → auto-subscribe
-        ↓
-Cleanup old dependencies
-Subscribe to new dependencies
-```
-
-## Related Systems
-
-- [engine](../../engine/docs/DOCS.md) - Uses signals for snapshot state
-- [editor](../editor/docs/DOCS.md) - Effects for redraw triggers
-- [commands](../commands/docs/DOCS.md) - Signals for undo/redo state
-- [tools](../tools/docs/DOCS.md) - State machines use signals
+## Related
+
+- `Editor` -- primary consumer; holds `WritableSignal` fields for tool state, cursor, preview mode
+- `ViewportManager` -- uses `$zoom`, `$panX`, `$panY` as `WritableSignal` fields
+- `HoverManager` -- uses `$hoveredPointId`, `$hoveredSegmentId`, etc.
+- `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state
+- `NativeBridge` -- `$glyph` signal with `equals: () => false` for identity changes
+- `ShiftState` -- uses `signal` for application-level reactive state
+- `useSignalState` -- React bridge hook (in this module)
+- `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)
+- `CommandHistory` -- imports from reactive for undo/redo state signals

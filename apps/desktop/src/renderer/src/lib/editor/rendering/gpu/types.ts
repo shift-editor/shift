@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/types";
-import type { ViewportTransform } from "../CanvasCoordinator";
+import type { ViewportTransform } from "../Viewport";
 
 export const GPU_HANDLE_INSTANCE_FLOATS = 25;
 

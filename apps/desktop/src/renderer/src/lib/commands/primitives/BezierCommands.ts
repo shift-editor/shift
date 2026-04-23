@@ -1,9 +1,8 @@
 import type { PointId, ContourId, Point2D } from "@shift/types";
-import { Glyphs } from "@shift/font";
 import { BaseCommand, type CommandContext } from "../core/Command";
-import { Curve, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { Segment, QuadSegment, CubicSegment, LineSegment } from "@/types/segments";
-import { Segments as SegmentOps } from "@/lib/geo/Segments";
+import { type CubicCurve, type QuadraticCurve } from "@shift/geo";
+import type { LineSegment } from "@/types/segments";
+import type { Segment } from "@/lib/model/Segment";
 
 /**
  * Closes the active contour, connecting the last point back to the first.
@@ -24,7 +23,7 @@ export class CloseContourCommand extends BaseCommand<void> {
     this.#contourId = ctx.glyph.activeContourId;
 
     if (this.#contourId) {
-      const contour = Glyphs.findContour(ctx.glyph, this.#contourId);
+      const contour = ctx.glyph.contour(this.#contourId);
       this.#wasClosed = contour?.closed ?? false;
     }
 
@@ -42,7 +41,8 @@ export class CloseContourCommand extends BaseCommand<void> {
 
 /**
  * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
- * Moves points by a fixed delta, intended for keyboard arrow-key nudging.
+ * Uses setNodePositions (Float64Array path) instead of movePoints to avoid
+ * per-struct NAPI marshaling + full snapshot round-trip.
  */
 export class NudgePointsCommand extends BaseCommand<void> {
   readonly name = "Nudge Points";
@@ -59,13 +59,17 @@ export class NudgePointsCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    if (this.#pointIds.length === 0) return;
-    ctx.glyph.movePoints(this.#pointIds, { x: this.#dx, y: this.#dy });
+    this.#apply(ctx, this.#dx, this.#dy);
   }
 
   undo(ctx: CommandContext): void {
+    this.#apply(ctx, -this.#dx, -this.#dy);
+  }
+
+  #apply(ctx: CommandContext, dx: number, dy: number): void {
     if (this.#pointIds.length === 0) return;
-    ctx.glyph.movePoints(this.#pointIds, { x: -this.#dx, y: -this.#dy });
+
+    ctx.glyph.translate(this.#pointIds, { x: dx, y: dy });
   }
 }
 
@@ -156,10 +160,9 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitLine(ctx: CommandContext): PointId {
-    const curve = SegmentOps.toCurve(this.#segment);
-    const splitPoint = Curve.pointAt(curve, this.#t);
+    const splitPoint = this.#segment.pointAt(this.#t);
 
-    const anchor2Id = this.#segment.points.anchor2.id;
+    const anchor2Id = this.#segment.anchor2.id;
 
     this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
       x: splitPoint.x,
@@ -173,20 +176,19 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const segment = this.#segment as QuadSegment;
-    const curve = SegmentOps.toCurve(segment) as QuadraticCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [QuadraticCurve, QuadraticCurve];
+    const data = this.#segment.asQuad()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [QuadraticCurve, QuadraticCurve];
 
     const cA = curveA.c;
     const mid = curveA.p1;
     const cB = curveB.c;
 
-    const controlId = segment.points.control.id;
-    const anchor2Id = segment.points.anchor2.id;
+    const controlId = data.points.control.id;
+    const anchor2Id = data.points.anchor2.id;
 
     this.#originalPositions.set(controlId, {
-      x: segment.points.control.x,
-      y: segment.points.control.y,
+      x: data.points.control.x,
+      y: data.points.control.y,
     });
 
     this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
@@ -205,15 +207,14 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(cBId);
 
-    ctx.glyph.movePointTo(controlId, cA.x, cA.y);
+    ctx.glyph.movePointTo(controlId, cA);
 
     return this.#splitPointId;
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const segment = this.#segment as CubicSegment;
-    const curve = SegmentOps.toCurve(segment) as CubicCurve;
-    const [curveA, curveB] = Curve.splitAt(curve, this.#t) as [CubicCurve, CubicCurve];
+    const data = this.#segment.asCubic()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [CubicCurve, CubicCurve];
 
     const c0A = curveA.c0;
     const c1A = curveA.c1;
@@ -221,16 +222,16 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const c0B = curveB.c0;
     const c1B = curveB.c1;
 
-    const control1Id = segment.points.control1.id;
-    const control2Id = segment.points.control2.id;
+    const control1Id = data.points.control1.id;
+    const control2Id = data.points.control2.id;
 
     this.#originalPositions.set(control1Id, {
-      x: segment.points.control1.x,
-      y: segment.points.control1.y,
+      x: data.points.control1.x,
+      y: data.points.control1.y,
     });
     this.#originalPositions.set(control2Id, {
-      x: segment.points.control2.x,
-      y: segment.points.control2.y,
+      x: data.points.control2.x,
+      y: data.points.control2.y,
     });
 
     const c1AId = ctx.glyph.insertPointBefore(control2Id, {
@@ -257,8 +258,8 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     });
     this.#insertedPointIds.push(c0BId);
 
-    ctx.glyph.movePointTo(control1Id, c0A.x, c0A.y);
-    ctx.glyph.movePointTo(control2Id, c1B.x, c1B.y);
+    ctx.glyph.movePointTo(control1Id, c0A);
+    ctx.glyph.movePointTo(control2Id, c1B);
 
     return this.#splitPointId;
   }
@@ -269,7 +270,7 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(pointId, pos.x, pos.y);
+      ctx.glyph.movePointTo(pointId, pos);
     }
   }
 
