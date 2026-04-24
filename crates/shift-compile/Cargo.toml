@@ -1,0 +1,13 @@
+[package]
+name = "shift-compile"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fea-rs = "0.22.0"
+fontdrasil = "0.4.0"
+write-fonts = "0.44.1"
+
+[dev-dependencies]
+harfrust = "0.6.0"
+read-fonts = "0.39.2"
