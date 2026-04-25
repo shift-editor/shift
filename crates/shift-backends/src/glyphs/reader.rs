@@ -196,7 +196,10 @@ impl FontReader for GlyphsReader {
                     location.set(axis.tag.clone(), value.into_inner());
                 }
             }
-            font.add_source(Source::new(master.name.clone(), location, layer_id));
+            let source_id = font.add_source(Source::new(master.name.clone(), location, layer_id));
+            if master_idx == glyphs_font.default_master_idx {
+                font.set_default_source_id(source_id);
+            }
         }
 
         for glyph in glyphs_font.glyphs.values() {

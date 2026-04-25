@@ -5,7 +5,6 @@ import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
 import { interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/interpolate";
 
-/** Variation axis slider panel — shown when a variable font is loaded. */
 export const VariationPanel = () => {
   const editor = getEditor();
   const font = editor.font;

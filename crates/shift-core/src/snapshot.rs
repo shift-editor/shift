@@ -134,6 +134,26 @@ impl From<&Contour> for RenderContourSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct GlyphGeometry {
+    #[ts(rename = "xAdvance")]
+    pub x_advance: f64,
+    pub contours: Vec<ContourSnapshot>,
+    pub anchors: Vec<AnchorSnapshot>,
+}
+
+impl From<&GlyphSnapshot> for GlyphGeometry {
+    fn from(snap: &GlyphSnapshot) -> Self {
+        Self {
+            x_advance: snap.x_advance,
+            contours: snap.contours.clone(),
+            anchors: snap.anchors.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct GlyphSnapshot {
     pub unicode: u32,
     pub name: String,
@@ -227,8 +247,9 @@ impl CommandResult {
 pub struct MasterSnapshot {
     pub source_id: String,
     pub source_name: String,
+    pub is_default_source: bool,
     pub location: Location,
-    pub snapshot: GlyphSnapshot,
+    pub geometry: GlyphGeometry,
 }
 
 #[cfg(test)]

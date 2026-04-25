@@ -137,6 +137,13 @@ impl Location {
         }
         Location::from_map(normalized)
     }
+
+    pub fn is_default_axis(&self, axes: &[Axis]) -> bool {
+        axes.iter().all(|axis| {
+            let value = self.get(axis.tag()).unwrap_or(axis.default());
+            (value - axis.default()).abs() < f64::EPSILON
+        })
+    }
 }
 
 #[cfg(test)]

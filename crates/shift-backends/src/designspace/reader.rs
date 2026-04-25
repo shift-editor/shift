@@ -68,12 +68,13 @@ impl FontReader for DesignspaceReader {
         let default_layer_id = font.default_layer_id();
         let default_location = location_from_dimensions(&default_ds_source.location, &doc);
         let default_name = source_name(default_ds_source, default_idx);
-        font.add_source(Source::with_filename(
+        let default_source_id = font.add_source(Source::with_filename(
             default_name,
             default_location,
             default_layer_id,
             default_ds_source.filename.clone(),
         ));
+        font.set_default_source_id(default_source_id);
 
         // Cache loaded UFO fonts so we don't re-read the same file for support layers.
         let mut ufo_cache: HashMap<String, Font> = HashMap::new();

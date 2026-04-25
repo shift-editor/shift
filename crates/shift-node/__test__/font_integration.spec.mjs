@@ -23,7 +23,6 @@ function startEditSessionByUnicode(engine, unicode) {
 describe("FontEngine Integration - UFO Loading", () => {
   it("loads MutatorSans UFO successfully", () => {
     if (!existsSync(MUTATORSANS_UFO)) {
-      console.log("Skipping: MutatorSans UFO not found");
       return;
     }
 
@@ -232,7 +231,6 @@ describe("FontEngine Integration - Round Trip", () => {
 describe("FontEngine Integration - TTF Loading", () => {
   it("loads MutatorSans TTF successfully", () => {
     if (!existsSync(MUTATORSANS_TTF)) {
-      console.log("Skipping: MutatorSans TTF not found");
       return;
     }
 
@@ -540,18 +538,21 @@ describe("FontEngine Integration - Variable Font (.glyphs)", () => {
     const masters = JSON.parse(json);
     expect(masters).toHaveLength(2);
 
-    // Each master snapshot has sourceId, sourceName, location, snapshot
+    // Each master snapshot carries source metadata plus interpolation geometry.
     for (const m of masters) {
       expect(m).toHaveProperty("sourceId");
       expect(m).toHaveProperty("sourceName");
       expect(m).toHaveProperty("location");
-      expect(m).toHaveProperty("snapshot");
-      expect(m.snapshot.contours).toHaveLength(2);
+      expect(m).toHaveProperty("isDefaultSource");
+      expect(m).toHaveProperty("geometry");
+      expect(m).not.toHaveProperty("snapshot");
+      expect(m.geometry.contours).toHaveLength(2);
+      expect(m.geometry.xAdvance).toBeGreaterThan(0);
     }
 
     // Both masters should have matching total point counts
-    const lightTotal = masters[0].snapshot.contours.reduce((s, c) => s + c.points.length, 0);
-    const boldTotal = masters[1].snapshot.contours.reduce((s, c) => s + c.points.length, 0);
+    const lightTotal = masters[0].geometry.contours.reduce((s, c) => s + c.points.length, 0);
+    const boldTotal = masters[1].geometry.contours.reduce((s, c) => s + c.points.length, 0);
     expect(lightTotal).toBe(boldTotal);
   });
 
@@ -612,8 +613,12 @@ describe("FontEngine Integration - Designspace", () => {
     expect(json).not.toBeNull();
     const masters = JSON.parse(json);
     expect(masters.length).toBeGreaterThanOrEqual(4);
+    expect(masters.filter((m) => m.isDefaultSource)).toHaveLength(1);
     for (const m of masters) {
-      expect(m.snapshot.contours.length).toBeGreaterThan(0);
+      expect(m).toHaveProperty("geometry");
+      expect(m).not.toHaveProperty("snapshot");
+      expect(m.geometry.contours.length).toBeGreaterThan(0);
+      expect(m.geometry.xAdvance).toBeGreaterThan(0);
     }
   });
 
@@ -623,7 +628,7 @@ describe("FontEngine Integration - Designspace", () => {
     const json = engine.getGlyphMasterSnapshots("A");
     const masters = JSON.parse(json);
     for (const m of masters) {
-      for (const contour of m.snapshot.contours) {
+      for (const contour of m.geometry.contours) {
         expect(contour.points.length).toBeGreaterThan(0);
       }
     }
@@ -636,9 +641,7 @@ describe("FontEngine Integration - Designspace", () => {
     const masters = JSON.parse(json);
 
     // All masters should have the same contour signature (point counts per contour)
-    const sigs = masters.map(m =>
-      m.snapshot.contours.map(c => c.points.length).join(",")
-    );
+    const sigs = masters.map((m) => m.geometry.contours.map((c) => c.points.length).join(","));
     const uniqueSigs = new Set(sigs);
     expect(uniqueSigs.size).toBe(1);
   });

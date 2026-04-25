@@ -10,7 +10,7 @@ use shift_core::{
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
+  snapshot::{CommandResult, GlyphGeometry, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
   AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
   Location, NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
@@ -481,10 +481,6 @@ impl FontEngine {
     }))
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // VARIABLE FONT QUERIES
-  // ═══════════════════════════════════════════════════════════
-
   #[napi]
   pub fn is_variable(&self) -> bool {
     self.font.is_variable()
@@ -541,6 +537,7 @@ impl FontEngine {
 
     let mut masters: Vec<MasterSnapshot> = Vec::new();
 
+    let default_source_id = self.font.default_source_id();
     for source in self.font.sources() {
       let layer_id = source.layer_id();
       let layer = match glyph.layer(layer_id) {
@@ -575,8 +572,9 @@ impl FontEngine {
       masters.push(MasterSnapshot {
         source_id: source.id().raw().to_string(),
         source_name: source.name().to_string(),
+        is_default_source: default_source_id == Some(source.id()),
         location: source.location().clone(),
-        snapshot,
+        geometry: GlyphGeometry::from(&snapshot),
       });
     }
 
