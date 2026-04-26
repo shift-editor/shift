@@ -16,23 +16,7 @@ When completing a feature, check ROADMAP.md and check any box if we have complet
 
 ## Testing
 
-### TestEditor pattern
-
-Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. No mock context builders, no mock renderers. Enforced by oxlint `no-raw-editor-in-tests`.
-
-```typescript
-const editor = new TestEditor();
-editor.startSession();
-editor.selectTool("pen");
-editor.click(100, 200);
-expect(editor.pointCount).toBe(1);
-```
-
-### Keep tests lean
-
-- 5-15 lines per test
-- beforeEach under 5 lines (`new TestEditor()` + `startSession()` + `selectTool()`)
-- No wrapper factories around TestEditor
+Tests use `TestEditor` from `@/testing/TestEditor` (real Editor + real NAPI). Assert on state, not mock calls. See `/writing-tests` skill for canonical rules, templates, banned patterns, and the fake-test checklist — trigger it any time you add, rewrite, or review a `.test.ts` file.
 
 ## Frontend
 

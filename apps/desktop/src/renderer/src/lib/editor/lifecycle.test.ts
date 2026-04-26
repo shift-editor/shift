@@ -1,76 +1,75 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { EventEmitter } from "./lifecycle";
 
 describe("EventEmitter", () => {
-  it("calls handler when event is emitted", () => {
+  it("delivers the emitted payload to a registered handler", () => {
     const lifecycle = new EventEmitter();
-    const handler = vi.fn();
+    const payloads: unknown[] = [];
 
-    lifecycle.on("fontLoaded", handler);
+    lifecycle.on("fontLoaded", (p) => payloads.push(p));
     lifecycle.emit("fontLoaded", { font: {} as never });
 
-    expect(handler).toHaveBeenCalledOnce();
-    expect(handler).toHaveBeenCalledWith({ font: {} });
+    expect(payloads).toEqual([{ font: {} }]);
   });
 
-  it("calls multiple handlers for the same event", () => {
+  it("delivers to every handler registered for the same event", () => {
     const lifecycle = new EventEmitter();
-    const a = vi.fn();
-    const b = vi.fn();
+    const aPayloads: unknown[] = [];
+    const bPayloads: unknown[] = [];
 
-    lifecycle.on("fontLoaded", a);
-    lifecycle.on("fontLoaded", b);
+    lifecycle.on("fontLoaded", (p) => aPayloads.push(p));
+    lifecycle.on("fontLoaded", (p) => bPayloads.push(p));
     lifecycle.emit("fontLoaded", { font: {} as never });
 
-    expect(a).toHaveBeenCalledOnce();
-    expect(b).toHaveBeenCalledOnce();
+    expect(aPayloads).toEqual([{ font: {} }]);
+    expect(bPayloads).toEqual([{ font: {} }]);
   });
 
-  it("does not call handlers for other events", () => {
+  it("routes by event name so unrelated handlers do not fire", () => {
     const lifecycle = new EventEmitter();
-    const handler = vi.fn();
+    const saved: unknown[] = [];
 
-    lifecycle.on("fontSaved", handler);
+    lifecycle.on("fontSaved", (p) => saved.push(p));
     lifecycle.emit("fontLoaded", { font: {} as never });
 
-    expect(handler).not.toHaveBeenCalled();
+    expect(saved).toEqual([]);
   });
 
-  it("unsubscribes via returned disposer", () => {
+  it("unsubscribes via the returned disposer", () => {
     const lifecycle = new EventEmitter();
-    const handler = vi.fn();
+    const payloads: unknown[] = [];
 
-    const off = lifecycle.on("fontLoaded", handler);
+    const off = lifecycle.on("fontLoaded", (p) => payloads.push(p));
     off();
     lifecycle.emit("fontLoaded", { font: {} as never });
 
-    expect(handler).not.toHaveBeenCalled();
+    expect(payloads).toEqual([]);
   });
 
-  it("handles events with no payload", () => {
+  it("delivers no-payload events", () => {
     const lifecycle = new EventEmitter();
-    const handler = vi.fn();
+    let fires = 0;
 
-    lifecycle.on("destroying", handler);
+    lifecycle.on("destroying", () => fires++);
     lifecycle.emit("destroying");
 
-    expect(handler).toHaveBeenCalledOnce();
+    expect(fires).toBe(1);
   });
 
-  it("dispose removes all listeners", () => {
+  it("dispose clears every listener across every event", () => {
     const lifecycle = new EventEmitter();
-    const a = vi.fn();
-    const b = vi.fn();
+    const loaded: unknown[] = [];
+    const destroying: unknown[] = [];
 
-    lifecycle.on("fontLoaded", a);
-    lifecycle.on("destroying", b);
+    lifecycle.on("fontLoaded", (p) => loaded.push(p));
+    lifecycle.on("destroying", () => destroying.push(null));
     lifecycle.dispose();
 
     lifecycle.emit("fontLoaded", { font: {} as never });
     lifecycle.emit("destroying");
 
-    expect(a).not.toHaveBeenCalled();
-    expect(b).not.toHaveBeenCalled();
+    expect(loaded).toEqual([]);
+    expect(destroying).toEqual([]);
   });
 
   it("emitting with no listeners does not throw", () => {

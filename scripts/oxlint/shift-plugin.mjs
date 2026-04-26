@@ -866,5 +866,137 @@ export default {
         };
       },
     },
+
+    /**
+     * Ban vitest mock primitives in test files.
+     *
+     * `vi.fn`, `vi.spyOn`, `toHaveBeenCalled*`, and `.mock.calls` lead to
+     * tests that assert on invocations ("was method X called N times") rather
+     * than observable state ("did the user's glyph change"). The codebase
+     * has deliberately swept this pattern out — see commits 5f2f503,
+     * fa8a829, bd07e9d.
+     *
+     * Exception: when you're testing a primitive whose contract IS the
+     * invocation count (reactive fire counts, pub/sub dispatch), use a
+     * plain closure counter (`let n = 0; ...; n++`) — that pattern is
+     * legitimate and not flagged by this rule.
+     *
+     * See the /writing-tests skill for the full rationale and migration
+     * patterns.
+     */
+    "no-vitest-mock-primitives": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noViFn:
+            "vi.fn() builds a spy whose only use is counting invocations. Capture the observable effect in a closure (payload array, flag, counter) or drive through TestEditor. See /writing-tests skill.",
+          noViSpyOn:
+            "vi.spyOn is for asserting on call counts — the banned pattern. Drive the real code through its user-facing surface and assert on observable state. See /writing-tests skill.",
+          noToHaveBeenCalled:
+            "Asserting on whether a function was called couples the test to implementation. Assert on the observable consequence (state change, return value, emitted payload). See /writing-tests skill.",
+          noMockCalls:
+            "Inspecting .mock.calls is the banned pattern. Assert on the outcome the code produces, not the invocations it made. See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+        if (!filename.includes(".test.")) return {};
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee &&
+              callee.type === "MemberExpression" &&
+              callee.object &&
+              callee.object.type === "Identifier" &&
+              callee.object.name === "vi" &&
+              callee.property &&
+              callee.property.type === "Identifier"
+            ) {
+              if (callee.property.name === "fn") {
+                context.report({ node, messageId: "noViFn" });
+              } else if (callee.property.name === "spyOn") {
+                context.report({ node, messageId: "noViSpyOn" });
+              }
+            }
+
+            if (
+              callee &&
+              callee.type === "MemberExpression" &&
+              callee.property &&
+              callee.property.type === "Identifier" &&
+              typeof callee.property.name === "string" &&
+              callee.property.name.startsWith("toHaveBeenCalled")
+            ) {
+              context.report({ node, messageId: "noToHaveBeenCalled" });
+            }
+          },
+          MemberExpression(node) {
+            if (
+              node.property &&
+              node.property.type === "Identifier" &&
+              node.property.name === "calls" &&
+              node.object &&
+              node.object.type === "MemberExpression" &&
+              node.object.property &&
+              node.object.property.type === "Identifier" &&
+              node.object.property.name === "mock"
+            ) {
+              context.report({ node, messageId: "noMockCalls" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `vi.stubGlobal(...)` in test files.
+     *
+     * Global stubbing (`vi.stubGlobal("window", ...)`, `vi.stubGlobal("requestAnimationFrame", ...)`)
+     * papers over unmanaged global dependencies. Leaks across tests if unstub
+     * is forgotten, order-sensitive, and hides that the production code has
+     * a hard-coded global that should be an injected boundary.
+     *
+     * - For rAF-backed pipelines, use `toolManager.flushPointerMoves()`
+     *   (TestEditor.pointerMove already does this).
+     * - For `window.electronAPI` / IPC, inject an adapter through the
+     *   constructor (see `SystemClipboard` in `lib/clipboard/`).
+     *
+     * See `/writing-tests` skill for the full rationale.
+     */
+    "no-vi-stub-global-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          noStubGlobal:
+            "Do not use vi.stubGlobal in tests. Inject the boundary via a constructor adapter (SystemClipboard pattern) or use the synchronous seam (toolManager.flushPointerMoves). See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+        if (!filename.includes(".test.")) return {};
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee &&
+              callee.type === "MemberExpression" &&
+              callee.object &&
+              callee.object.type === "Identifier" &&
+              callee.object.name === "vi" &&
+              callee.property &&
+              callee.property.type === "Identifier" &&
+              callee.property.name === "stubGlobal"
+            ) {
+              context.report({ node, messageId: "noStubGlobal" });
+            }
+          },
+        };
+      },
+    },
   },
 };

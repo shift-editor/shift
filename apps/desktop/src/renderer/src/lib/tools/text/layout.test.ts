@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { Font } from "@/lib/model/Font";
 import type { Bounds } from "@shift/geo";
 import { computeTextLayout, hitTestTextSlot, hitTestTextCaret, type GlyphRef } from "./layout";
@@ -19,6 +19,11 @@ function createMockFont(
     glyphNameMap[u] = `uni${u.toString(16).toUpperCase()}`;
   }
 
+  // NOTE: this parallel-world Font mock is the exact pattern the
+  // /writing-tests skill bans — tracked for proper rewrite in
+  // projects/shift/text-layout-rethink.md. Kept narrow (only the methods
+  // computeTextLayout + hitTestTextSlot/Caret actually call) until the
+  // layout API is reshaped.
   return {
     getMetrics: () => ({
       unitsPerEm: 1000,
@@ -30,22 +35,6 @@ function createMockFont(
       italicAngle: null,
       underlinePosition: null,
       underlineThickness: null,
-    }),
-    getMetadata: () => ({
-      familyName: "Test",
-      styleName: null,
-      versionMajor: null,
-      versionMinor: null,
-      copyright: null,
-      trademark: null,
-      designer: null,
-      designerUrl: null,
-      manufacturer: null,
-      manufacturerUrl: null,
-      license: null,
-      licenseUrl: null,
-      description: null,
-      note: null,
     }),
     nameForUnicode: (unicode: number) => glyphNameMap[unicode] ?? null,
     getPath: (name: string) => {
@@ -69,7 +58,7 @@ function createMockFont(
       if (!unicode) return null;
       return svgPaths[Number(unicode)] ?? null;
     },
-  };
+  } as unknown as Font;
 }
 
 function toGlyphs(unicodes: number[]): GlyphRef[] {
@@ -183,8 +172,15 @@ describe("hitTestTextSlot", () => {
   });
 
   it("shape hit test should reject points outside glyph bbox before path hit", () => {
+    // Bbox pre-check is an optimization contract: we must not invoke the
+    // expensive path hit tester when the point is clearly outside the glyph
+    // bbox. Count invocations to verify the optimization holds.
+    let hitPathCalls = 0;
     const pathHitTester = {
-      hitPath: vi.fn(() => true),
+      hitPath: () => {
+        hitPathCalls++;
+        return true;
+      },
     };
 
     const font = createMockFont(
@@ -207,7 +203,7 @@ describe("hitTestTextSlot", () => {
     });
 
     expect(result).toBeNull();
-    expect(pathHitTester.hitPath).not.toHaveBeenCalled();
+    expect(hitPathCalls).toBe(0);
   });
 
   it("shape hit test should allow zero-advance combining marks by glyph bounds", () => {
@@ -215,11 +211,12 @@ describe("hitTestTextSlot", () => {
     const letterA = 0x0061;
     const spacingAcute = 0x00b4;
 
+    let hitPathCalls = 0;
     const pathHitTester = {
-      hitPath: vi.fn(
-        (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) =>
-          x >= 40 && x <= 120 && y >= 0 && y <= 100,
-      ),
+      hitPath: (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) => {
+        hitPathCalls++;
+        return x >= 40 && x <= 120 && y >= 0 && y <= 100;
+      },
     };
 
     const font = createMockFont(
@@ -253,7 +250,7 @@ describe("hitTestTextSlot", () => {
       }),
     ).toBe(0);
 
-    expect(pathHitTester.hitPath).toHaveBeenCalled();
+    expect(hitPathCalls).toBeGreaterThan(0);
   });
 
   it("should hit slots on the second line", () => {
@@ -287,12 +284,12 @@ describe("hitTestTextSlot", () => {
   });
 
   it("shape hit test should return slot only when path hit succeeds", () => {
+    let hitPathCalls = 0;
     const pathHitTester = {
-      hitPath: vi.fn(
-        (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) => {
-          return x >= 20 && x <= 80 && y >= 10 && y <= 90;
-        },
-      ),
+      hitPath: (_path: Path2D, x: number, y: number, _strokeWidth: number, _fill: boolean) => {
+        hitPathCalls++;
+        return x >= 20 && x <= 80 && y >= 10 && y <= 90;
+      },
     };
 
     const font = createMockFont(
@@ -325,7 +322,7 @@ describe("hitTestTextSlot", () => {
       }),
     ).toBe(0);
 
-    expect(pathHitTester.hitPath).toHaveBeenCalled();
+    expect(hitPathCalls).toBeGreaterThan(0);
   });
 });
 
