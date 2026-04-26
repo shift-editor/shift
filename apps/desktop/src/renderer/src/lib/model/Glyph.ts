@@ -522,6 +522,62 @@ export class Glyph {
     }
   }
 
+  /**
+   * @knipclassignore — used by VariationPanel for live interpolation
+   *
+   * Apply interpolated values from variation math.
+   *
+   * `values` order MUST match `flatten()` in crates/shift-core/src/interpolation.rs:
+   *   [xAdvance, p0.x, p0.y, p1.x, p1.y, ..., a0.x, a0.y, ...]
+   *
+   * In-place patch — reuses Point/Contour/Anchor identities, fires per-contour
+   * signals via a single batch. No struct allocation tree, no JSON parse, no
+   * NAPI hop on the hot path.
+   *
+   * Length-checked at runtime to catch drift between Rust's flatten() walk and
+   * this one. Round-trip-tested in interpolate.test.ts (parity test ensures
+   * the values themselves are correct).
+   */
+  applyValues(values: Float64Array): void {
+    const contours = this.#contours.peek();
+    const anchors = this.#anchors.peek();
+
+    let expected = 1; // xAdvance
+    for (const c of contours) expected += c.points.length * 2;
+    expected += anchors.length * 2;
+
+    if (values.length !== expected) {
+      throw new Error(
+        `Glyph.applyValues: length mismatch — got ${values.length}, expected ${expected}. ` +
+          `flatten() in shift-core::interpolation may have drifted from this walk.`,
+      );
+    }
+
+    batch(() => {
+      let i = 0;
+      this.#xAdvance.set(values[i++]);
+
+      for (const contour of contours) {
+        contour._setPoints(
+          contour.points.map((pt) => {
+            const x = values[i++];
+            const y = values[i++];
+            return { ...pt, x, y };
+          }),
+        );
+      }
+      this.#contours.set([...contours]);
+
+      this.#anchors.set(
+        anchors.map((a) => {
+          const x = values[i++];
+          const y = values[i++];
+          return { ...a, x, y };
+        }),
+      );
+    });
+  }
+
   /** Extract current reactive state as a plain snapshot (for undo, Rust sync). */
   toSnapshot(): GlyphSnapshot {
     return {

@@ -15,6 +15,7 @@ mod metrics;
 mod point;
 mod segment;
 mod source;
+pub mod variation;
 
 pub use anchor::Anchor;
 pub use axis::{Axis, Location};

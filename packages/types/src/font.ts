@@ -11,11 +11,20 @@ export type {
   RenderPointSnapshot,
   RenderContourSnapshot,
   GlyphSnapshot,
+  GlyphGeometry,
+  MasterSnapshot,
+  InterpolationResult,
+  SourceError,
+  AxisTent,
+  GlyphVariationData,
   CommandResult,
   RuleId,
   MatchedRule,
   FontMetrics,
   FontMetadata,
+  Axis,
+  Location,
+  Source,
 } from "./generated";
 
 // Domain types (for Editor API)

@@ -31,12 +31,21 @@ export type {
   RenderPointSnapshot,
   RenderContourSnapshot,
   GlyphSnapshot,
+  GlyphGeometry,
+  MasterSnapshot,
+  InterpolationResult,
+  SourceError,
+  AxisTent,
+  GlyphVariationData,
   CommandResult,
   RuleId,
   MatchedRule,
   FontMetadata,
   FontMetrics,
   DecomposedTransform,
+  Axis,
+  Location,
+  Source,
 } from "./font";
 
 // Domain types (for Editor API)

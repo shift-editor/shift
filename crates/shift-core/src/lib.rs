@@ -5,13 +5,14 @@ pub mod curve;
 pub mod dependency_graph;
 pub mod edit_session;
 pub mod font_loader;
+pub mod interpolation;
 pub mod snapshot;
 pub mod vec2;
 
 pub use shift_ir::{
-    Anchor, AnchorId, BooleanOp, Contour, ContourId, CurveSegment, CurveSegmentIter, Font,
-    FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, GuidelineId, LayerId, Point, PointId,
-    PointType, Transform,
+    Anchor, AnchorId, Axis, BooleanOp, Contour, ContourId, CurveSegment, CurveSegmentIter, Font,
+    FontMetadata, FontMetrics, Glyph, GlyphLayer, GlyphName, GuidelineId, LayerId, Location, Point,
+    PointId, PointType, Source, SourceId, Transform,
 };
 
 pub use shift_backends::ufo::{UfoReader, UfoWriter};

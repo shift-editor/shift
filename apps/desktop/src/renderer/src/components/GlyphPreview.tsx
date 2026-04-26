@@ -60,6 +60,9 @@ export const GlyphPreview = memo(function GlyphPreview({
     return null;
   }
 
+  // TODO Phase D: wire variation interpolation into glyph grid.
+  // For now grid always shows the default master; the variation slider only
+  // affects the canvas glyph via VariationPanel.
   const svgPath = font.getSvgPath(name);
   const advance = font.getAdvance(name);
   const fontMetrics = font.getMetrics();

@@ -6,6 +6,10 @@ import type {
   ContourId,
   Point2D,
   AnchorId,
+  Axis,
+  Source,
+  GlyphVariationData,
+  MasterSnapshot,
 } from "@shift/types";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
@@ -21,6 +25,11 @@ import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph, type GlyphChange } from "@/lib/model/Glyph";
+
+export interface InterpolationResult {
+  instance: GlyphSnapshot;
+  errors: Array<{ sourceIndex: number; sourceName: string; message: string }>;
+}
 
 /**
  * Owns the raw NAPI bridge and the reactive {@link $glyph} signal.
@@ -133,6 +142,34 @@ export class NativeBridge {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
     return JSON.parse(payload) as CompositeComponentsPayload;
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  isVariable(): boolean {
+    return this.#raw.isVariable();
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getAxes(): Axis[] {
+    return JSON.parse(this.#raw.getAxes()) as Axis[];
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getSources(): Source[] {
+    return JSON.parse(this.#raw.getSources()) as Source[];
+  }
+
+  /** @knipclassignore — used by VariationPanel component */
+  getGlyphMasterSnapshots(glyphName: string): MasterSnapshot[] | null {
+    const json = this.#raw.getGlyphMasterSnapshots(glyphName);
+    if (!json) return null;
+    return JSON.parse(json) as MasterSnapshot[];
+  }
+
+  getGlyphVariationData(glyphName: string): GlyphVariationData | null {
+    const json = this.#raw.getGlyphVariationData(glyphName);
+    if (!json) return null;
+    return JSON.parse(json) as GlyphVariationData;
   }
 
   getSnapshot(): GlyphSnapshot {

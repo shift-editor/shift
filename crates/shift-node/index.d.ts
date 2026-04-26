@@ -19,6 +19,12 @@ export declare class FontEngine {
   getGlyphAdvanceByName(glyphName: string): number | null
   getGlyphBboxByName(glyphName: string): Array<number> | null
   getGlyphCompositeComponents(glyphName: string): string | null
+  isVariable(): boolean
+  getAxes(): string
+  getSources(): string
+  /** Returns a JSON array of master snapshots for a glyph. */
+  getGlyphMasterSnapshots(glyphName: string): string | null
+  getGlyphVariationData(glyphName: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
   endEditSession(): void
   hasEditSession(): boolean

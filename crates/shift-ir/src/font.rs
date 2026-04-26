@@ -1,5 +1,5 @@
 use crate::axis::Axis;
-use crate::entity::LayerId;
+use crate::entity::{LayerId, SourceId};
 use crate::features::FeatureData;
 use crate::glyph::Glyph;
 use crate::guideline::Guideline;
@@ -83,6 +83,8 @@ pub struct Font {
     metrics: FontMetrics,
     axes: Vec<Axis>,
     sources: Vec<Source>,
+    #[serde(default)]
+    default_source_id: Option<SourceId>,
     layers: HashMap<LayerId, Layer>,
     glyphs: HashMap<GlyphName, Glyph>,
     kerning: KerningData,
@@ -103,6 +105,7 @@ impl Default for Font {
             metrics: FontMetrics::default(),
             axes: Vec::new(),
             sources: Vec::new(),
+            default_source_id: None,
             layers,
             glyphs: HashMap::new(),
             kerning: KerningData::new(),
@@ -147,8 +150,28 @@ impl Font {
         &self.sources
     }
 
-    pub fn add_source(&mut self, source: Source) {
+    pub fn add_source(&mut self, source: Source) -> SourceId {
+        let source_id = source.id();
+        if self.default_source_id.is_none() {
+            self.default_source_id = Some(source_id);
+        }
         self.sources.push(source);
+        source_id
+    }
+
+    pub fn default_source_id(&self) -> Option<SourceId> {
+        self.default_source_id
+    }
+
+    pub fn set_default_source_id(&mut self, source_id: SourceId) {
+        self.default_source_id = Some(source_id);
+    }
+
+    pub fn default_source(&self) -> Option<&Source> {
+        let default_source_id = self.default_source_id?;
+        self.sources
+            .iter()
+            .find(|source| source.id() == default_source_id)
     }
 
     pub fn is_variable(&self) -> bool {

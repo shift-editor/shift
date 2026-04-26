@@ -23,7 +23,6 @@ function startEditSessionByUnicode(engine, unicode) {
 describe("FontEngine Integration - UFO Loading", () => {
   it("loads MutatorSans UFO successfully", () => {
     if (!existsSync(MUTATORSANS_UFO)) {
-      console.log("Skipping: MutatorSans UFO not found");
       return;
     }
 
@@ -232,7 +231,6 @@ describe("FontEngine Integration - Round Trip", () => {
 describe("FontEngine Integration - TTF Loading", () => {
   it("loads MutatorSans TTF successfully", () => {
     if (!existsSync(MUTATORSANS_TTF)) {
-      console.log("Skipping: MutatorSans TTF not found");
       return;
     }
 
@@ -497,5 +495,168 @@ describe("FontEngine Integration - Extended Round Trip", () => {
     engine2.endEditSession();
 
     expect(reloadedTypes).toEqual(originalTypes);
+  });
+});
+
+// --- Variable font (.glyphs with multiple masters) tests ---
+
+const MUTATORSANS_VARIABLE = join(FIXTURES_PATH, "fonts/MutatorSansVariable.glyphs");
+
+describe("FontEngine Integration - Variable Font (.glyphs)", () => {
+  it("detects variable font", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    expect(engine.isVariable()).toBe(true);
+  });
+
+  it("returns axes", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const axes = JSON.parse(engine.getAxes());
+    expect(axes).toHaveLength(1);
+    expect(axes[0].tag).toBe("wght");
+    expect(axes[0].name).toBe("Weight");
+    expect(axes[0].minimum).toBe(100);
+    expect(axes[0].maximum).toBe(900);
+    expect(axes[0].default).toBe(100);
+  });
+
+  it("returns sources", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const sources = JSON.parse(engine.getSources());
+    expect(sources).toHaveLength(2);
+    expect(sources[0].location.values.wght).toBe(100);
+    expect(sources[1].location.values.wght).toBe(900);
+  });
+
+  it("returns master snapshots for glyph A", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    expect(json).not.toBeNull();
+    const masters = JSON.parse(json);
+    expect(masters).toHaveLength(2);
+
+    // Each master snapshot carries source metadata plus interpolation geometry.
+    for (const m of masters) {
+      expect(m).toHaveProperty("sourceId");
+      expect(m).toHaveProperty("sourceName");
+      expect(m).toHaveProperty("location");
+      expect(m).toHaveProperty("isDefaultSource");
+      expect(m).toHaveProperty("geometry");
+      expect(m).not.toHaveProperty("snapshot");
+      expect(m.geometry.contours).toHaveLength(2);
+      expect(m.geometry.xAdvance).toBeGreaterThan(0);
+    }
+
+    // Both masters should have matching total point counts
+    const lightTotal = masters[0].geometry.contours.reduce((s, c) => s + c.points.length, 0);
+    const boldTotal = masters[1].geometry.contours.reduce((s, c) => s + c.points.length, 0);
+    expect(lightTotal).toBe(boldTotal);
+  });
+
+  it("non-variable font returns isVariable false", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_UFO);
+    expect(engine.isVariable()).toBe(false);
+  });
+
+  it("returns null for non-existent glyph master snapshots", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_VARIABLE);
+    const json = engine.getGlyphMasterSnapshots("nonexistent");
+    expect(json).toBeNull();
+  });
+});
+
+// --- Designspace (.designspace) tests ---
+
+const MUTATORSANS_DESIGNSPACE = join(
+  FIXTURES_PATH,
+  "fonts/mutatorsans-variable/MutatorSans.designspace",
+);
+
+describe("FontEngine Integration - Designspace", () => {
+  it("loads designspace and detects variable font", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    expect(engine.isVariable()).toBe(true);
+    expect(engine.getGlyphCount()).toBeGreaterThan(10);
+  });
+
+  it("returns axes from designspace", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const axes = JSON.parse(engine.getAxes());
+    expect(axes).toHaveLength(2);
+    expect(axes[0].tag).toBe("wdth");
+    expect(axes[0].minimum).toBe(0);
+    expect(axes[0].maximum).toBe(1000);
+    expect(axes[1].tag).toBe("wght");
+  });
+
+  it("returns sources from designspace", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const sources = JSON.parse(engine.getSources());
+    // 4 main masters + 3 support layers
+    expect(sources).toHaveLength(7);
+    expect(sources[0].location.values.wdth).toBe(0);
+    expect(sources[0].location.values.wght).toBe(0);
+  });
+
+  it("returns master snapshots for glyph A", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    expect(json).not.toBeNull();
+    const masters = JSON.parse(json);
+    expect(masters.length).toBeGreaterThanOrEqual(4);
+    expect(masters.filter((m) => m.isDefaultSource)).toHaveLength(1);
+    for (const m of masters) {
+      expect(m).toHaveProperty("geometry");
+      expect(m).not.toHaveProperty("snapshot");
+      expect(m.geometry.contours.length).toBeGreaterThan(0);
+      expect(m.geometry.xAdvance).toBeGreaterThan(0);
+    }
+  });
+
+  it("excludes empty contours from master snapshots", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    const masters = JSON.parse(json);
+    for (const m of masters) {
+      for (const contour of m.geometry.contours) {
+        expect(contour.points.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("returns consistent contour order across masters", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    const json = engine.getGlyphMasterSnapshots("A");
+    const masters = JSON.parse(json);
+
+    // All masters should have the same contour signature (point counts per contour)
+    const sigs = masters.map((m) => m.geometry.contours.map((c) => c.points.length).join(","));
+    const uniqueSigs = new Set(sigs);
+    expect(uniqueSigs.size).toBe(1);
+  });
+
+  it("returns master snapshots for the currently editing glyph", () => {
+    const engine = new FontEngine();
+    engine.loadFont(MUTATORSANS_DESIGNSPACE);
+    engine.startEditSession({ glyphName: "A", unicode: 65 });
+
+    // Glyph is taken from font during session, but snapshots should still work
+    const json = engine.getGlyphMasterSnapshots("A");
+    expect(json).not.toBeNull();
+    const masters = JSON.parse(json);
+    expect(masters.length).toBeGreaterThanOrEqual(4);
+
+    engine.endEditSession();
   });
 });

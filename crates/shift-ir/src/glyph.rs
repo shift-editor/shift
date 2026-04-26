@@ -5,6 +5,7 @@ use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, LayerId};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::GlyphName;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -21,7 +22,7 @@ pub struct Glyph {
 pub struct GlyphLayer {
     width: f64,
     height: Option<f64>,
-    contours: HashMap<ContourId, Contour>,
+    contours: IndexMap<ContourId, Contour>,
     components: HashMap<ComponentId, Component>,
     anchors: Vec<Anchor>,
     guidelines: Vec<Guideline>,
@@ -56,7 +57,7 @@ impl GlyphLayer {
         self.height = height;
     }
 
-    pub fn contours(&self) -> &HashMap<ContourId, Contour> {
+    pub fn contours(&self) -> &IndexMap<ContourId, Contour> {
         &self.contours
     }
 
@@ -79,7 +80,7 @@ impl GlyphLayer {
     }
 
     pub fn remove_contour(&mut self, id: ContourId) -> Option<Contour> {
-        self.contours.remove(&id)
+        self.contours.shift_remove(&id)
     }
 
     pub fn clear_contours(&mut self) {

@@ -239,8 +239,9 @@ impl FontReader for UfoReader {
         font.metrics_mut().x_height = norad_font.font_info.x_height;
         font.metrics_mut().italic_angle = norad_font.font_info.italic_angle;
 
+        let norad_default_layer_name = norad_font.layers.default_layer().name().clone();
         for layer in norad_font.layers.iter() {
-            let layer_id = if layer.name().as_str() == "public.default" {
+            let layer_id = if layer.name() == &norad_default_layer_name {
                 default_layer_id
             } else {
                 let new_layer = Layer::new(layer.name().to_string());
