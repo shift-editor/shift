@@ -23,8 +23,6 @@ export type {
   FontMetrics,
   FontMetadata,
   Axis,
-  Location,
-  Source,
 } from "./generated";
 
 // Domain types (for Editor API)
@@ -38,4 +36,6 @@ export type {
   DecomposedTransform,
   CompositeComponent,
   CompositeGlyph,
+  AxisLocation,
+  Source,
 } from "./domain";

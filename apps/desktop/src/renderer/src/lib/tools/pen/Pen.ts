@@ -116,6 +116,7 @@ export class Pen extends BaseTool<PenState> {
           canvas.theme.preview.widthPx,
         );
       }
+
       // Draw pen ready circle
       const { fill, stroke, size, widthPx } = canvas.theme.penReady;
       canvas.filledStrokeCircle(this.state.mousePos, size, fill, stroke, widthPx);

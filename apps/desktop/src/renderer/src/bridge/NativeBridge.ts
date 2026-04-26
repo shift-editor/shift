@@ -7,10 +7,13 @@ import type {
   Point2D,
   AnchorId,
   Axis,
+  AxisLocation,
   Source,
   GlyphVariationData,
   MasterSnapshot,
 } from "@shift/types";
+type RawSourceLocation = { values: { [tag in string]?: number } };
+type RawSource = Omit<Source, "location"> & { location: RawSourceLocation };
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { Bounds } from "@shift/geo";
 import { Bounds as BoundsUtil } from "@shift/geo";
@@ -156,7 +159,12 @@ export class NativeBridge {
 
   /** @knipclassignore — used by VariationPanel component */
   getSources(): Source[] {
-    return JSON.parse(this.#raw.getSources()) as Source[];
+    const raw = JSON.parse(this.#raw.getSources()) as RawSource[];
+    const axes = this.getAxes();
+    return raw.map((source) => ({
+      ...source,
+      location: resolveAxisLocation(source.location.values, axes),
+    }));
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -466,4 +474,13 @@ export class NativeBridge {
       anchorCoords.length > 0 ? new Float64Array(anchorCoords) : null,
     );
   }
+}
+
+function resolveAxisLocation(
+  values: RawSourceLocation["values"] | undefined,
+  axes: Axis[],
+): AxisLocation {
+  const out: AxisLocation = {};
+  for (const axis of axes) out[axis.tag] = values?.[axis.tag] ?? axis.default;
+  return out;
 }

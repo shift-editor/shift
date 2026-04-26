@@ -20,6 +20,7 @@ import type {
   RenderPointSnapshot,
   RenderContourSnapshot,
   DecomposedTransform as DecomposedTransformGenerated,
+  Source as SourceGenerated,
 } from "./generated";
 
 /**
@@ -78,4 +79,24 @@ export type CompositeComponent = {
 export type CompositeGlyph = {
   readonly glyphName: string;
   readonly components: readonly CompositeComponent[];
+};
+
+/**
+ * A designspace location keyed by axis tag.
+ *
+ * The generated `Location` type marshals from Rust as `HashMap<String, f64>`,
+ * which gives optional values per key. In the renderer we always populate
+ * every active axis, so the domain shape is a non-optional record.
+ * Conversion happens once, inside `NativeBridge`; everything downstream uses
+ * `AxisLocation`.
+ */
+export type AxisLocation = Record<string, number>;
+
+/**
+ * A source/master with its location resolved against the font's axes.
+ * Wraps the generated `Source` but replaces its `Location` field with
+ * {@link AxisLocation}.
+ */
+export type Source = Readonly<Omit<SourceGenerated, "location">> & {
+  readonly location: AxisLocation;
 };

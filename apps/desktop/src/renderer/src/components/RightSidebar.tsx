@@ -9,13 +9,12 @@ import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
-import { VariationPanel } from "./VariationPanel";
 
-export const GlyphSidebar = () => {
+export const RightSidebar = () => {
   const editor = getEditor();
-  const { familyName } = editor.font.metadata;
   const zoom = useSignalState(editor.$zoom);
   const zoomPercent = Math.round(zoom * 100);
+  const { familyName } = editor.font.metadata;
 
   const [hasPointSelection, setHasPointSelection] = useState(false);
   const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
@@ -41,10 +40,6 @@ export const GlyphSidebar = () => {
       <TransformOriginProvider>
         <div className="px-3 py-3">
           <GlyphSection />
-        </div>
-        <Separator />
-        <div className="px-3 py-3">
-          <VariationPanel />
         </div>
         <Separator />
         {hasPointSelection && (

@@ -3,8 +3,8 @@ import type {
   FontMetadata,
   CompositeGlyph,
   Axis,
+  AxisLocation,
   Source,
-  Location,
   GlyphVariationData,
 } from "@shift/types";
 import type { MasterSnapshot } from "@shift/types";
@@ -24,14 +24,14 @@ export class Font {
   readonly #$loaded: WritableSignal<boolean>;
   readonly #$unicodes: WritableSignal<number[]>;
   readonly #$metrics: WritableSignal<FontMetrics | null>;
-  readonly #$variationLocation: WritableSignal<Location | null>;
+  readonly #$variationLocation: WritableSignal<AxisLocation>;
 
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
     this.#$loaded = signal(false);
     this.#$unicodes = signal<number[]>([]);
     this.#$metrics = signal<FontMetrics | null>(null);
-    this.#$variationLocation = signal<Location | null>(null);
+    this.#$variationLocation = signal<AxisLocation>({});
   }
 
   /** @knipclassignore */
@@ -105,12 +105,12 @@ export class Font {
   }
 
   /** @knipclassignore — used by GlyphPreview for variation interpolation */
-  get $variationLocation(): Signal<Location | null> {
+  get $variationLocation(): Signal<AxisLocation> {
     return this.#$variationLocation;
   }
 
-  /** @knipclassignore — used by VariationPanel */
-  setVariationLocation(location: Location | null): void {
+  /** @knipclassignore — used by useVariationLocation */
+  setVariationLocation(location: AxisLocation): void {
     this.#$variationLocation.set(location);
   }
 
@@ -149,6 +149,7 @@ export class Font {
     const metrics = this.#bridge.getMetrics();
     this.#$unicodes.set(unicodes);
     this.#$metrics.set(metrics);
+    this.#$variationLocation.set(this.#defaultLocation());
     this.#$loaded.set(true);
   }
 
@@ -161,5 +162,13 @@ export class Font {
     this.#$loaded.set(false);
     this.#$unicodes.set([]);
     this.#$metrics.set(null);
+    this.#$variationLocation.set({});
+  }
+
+  #defaultLocation(): AxisLocation {
+    if (!this.isVariable()) return {};
+    const out: AxisLocation = {};
+    for (const axis of this.#bridge.getAxes()) out[axis.tag] = axis.default;
+    return out;
   }
 }

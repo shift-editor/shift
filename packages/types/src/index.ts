@@ -44,8 +44,6 @@ export type {
   FontMetrics,
   DecomposedTransform,
   Axis,
-  Location,
-  Source,
 } from "./font";
 
 // Domain types (for Editor API)
@@ -58,4 +56,6 @@ export type {
   Glyph,
   CompositeComponent,
   CompositeGlyph,
+  AxisLocation,
+  Source,
 } from "./font";

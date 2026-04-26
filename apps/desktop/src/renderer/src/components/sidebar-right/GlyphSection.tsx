@@ -51,7 +51,7 @@ export const GlyphSection = () => {
         <div className="mt-2">
           <EditableSidebarInput
             className="text-center"
-            value={xAdvance}
+            value={Math.round(xAdvance)}
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>

@@ -1,6 +1,7 @@
 export { Button, type ButtonProps } from "./components/button";
 export { Separator, type SeparatorProps } from "./components/separator";
 export { Input, type InputProps } from "./components/input";
+export { Slider, type SliderProps } from "./components/slider";
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./components/tooltip";
 export {
   ToastProvider,
@@ -27,9 +28,11 @@ export {
   Collapsible,
   CollapsibleTrigger,
   CollapsiblePanel,
+  CollapsibleChevron,
   type CollapsibleProps,
   type CollapsibleTriggerProps,
   type CollapsiblePanelProps,
+  type CollapsibleChevronProps,
 } from "./components/collapsible";
 export { cn } from "./lib/utils";
 export { Search } from "lucide-react";

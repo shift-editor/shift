@@ -3,7 +3,7 @@ import { useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Toolbar } from "@/components/Toolbar";
-import { Sidebar } from "@/components/sidebar-right";
+import { LeftSidebar, RightSidebar } from "@/components/sidebar-right";
 import { GlyphFinder } from "@/components/GlyphFinder";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -102,11 +102,14 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
     <div className="flex h-screen w-screen flex-col bg-white">
       <Toolbar />
       <div className="flex flex-1 overflow-hidden">
+        <ZoneContainer zone="sidebar">
+          <LeftSidebar />
+        </ZoneContainer>
         <ZoneContainer zone="canvas" className="flex-1">
           <EditorView glyphId={glyphId ?? ""} />
         </ZoneContainer>
         <ZoneContainer zone="sidebar">
-          <Sidebar />
+          <RightSidebar />
         </ZoneContainer>
       </div>
       <GlyphFinder

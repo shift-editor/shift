@@ -1,6 +1,6 @@
 import { GlyphGrid } from "@/components/GlyphGrid";
-import { GlyphGridSidebar } from "@/components/GlyphGridSidebar";
-import { Sidebar } from "@/components/sidebar-right";
+import { LeftSidebarHome } from "@/components/LeftSidebarHome";
+import { RightSidebar } from "@/components/sidebar-right";
 import { Toolbar } from "@/components/Toolbar";
 import { useGlyphCatalog } from "@/hooks/useGlyphCatalog";
 
@@ -33,11 +33,11 @@ export const Home = () => {
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar />
       <section className="flex min-h-0 overflow-hidden">
-        <GlyphGridSidebar {...sideBarState} />
+        <LeftSidebarHome {...sideBarState} />
         <div className="min-h-0 min-w-0 flex-1">
           <GlyphGrid unicodes={filteredUnicodes} />
         </div>
-        <Sidebar />
+        <RightSidebar />
       </section>
     </main>
   );
