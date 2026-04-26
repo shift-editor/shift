@@ -7,7 +7,7 @@ import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
-import { DebugPanel } from "./debug/DebugPanel";
+import { DebugPanel } from "../debug/DebugPanel";
 import { HiddenTextInput } from "./HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 

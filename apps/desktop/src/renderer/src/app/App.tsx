@@ -5,7 +5,7 @@ import { HashRouter, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
 import { DebugProvider } from "@/context/DebugContext";
-import { ZoomToast } from "@/components/ZoomToast";
+import { ZoomToast } from "@/components/chrome/ZoomToast";
 import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
 import { clearDirty, getEditor, setFilePath } from "@/store/store";

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-import type { AnchorPosition } from "@/components/sidebar-right/TransformGrid";
+import type { AnchorPosition } from "@/components/editor/sidebar-right/TransformGrid";
 
 interface TransformOriginContextValue {
   anchor: AnchorPosition;

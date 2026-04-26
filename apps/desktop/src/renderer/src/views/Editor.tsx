@@ -2,16 +2,17 @@ import { useCallback, useEffect } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import { Toolbar } from "@/components/Toolbar";
-import { LeftSidebar, RightSidebar } from "@/components/sidebar-right";
-import { GlyphFinder } from "@/components/GlyphFinder";
+import { Toolbar } from "@/components/chrome/Toolbar";
+import { LeftSidebar } from "@/components/editor/LeftSidebar";
+import { RightSidebar } from "@/components/editor/RightSidebar";
+import { GlyphFinder } from "@/components/editor/GlyphFinder";
+import { EditorView } from "@/components/editor/EditorView";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { useSignalState } from "@/lib/reactive";
 import { KeyboardRouter } from "@/lib/keyboard";
 
 import { codepointToHex } from "@/lib/utils/unicode";
-import { EditorView } from "../components/EditorView";
 
 interface EditorProps {
   glyphId?: string;

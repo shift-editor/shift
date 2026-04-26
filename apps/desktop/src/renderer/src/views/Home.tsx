@@ -1,44 +1,20 @@
-import { GlyphGrid } from "@/components/GlyphGrid";
-import { LeftSidebarHome } from "@/components/LeftSidebarHome";
-import { RightSidebar } from "@/components/sidebar-right";
-import { Toolbar } from "@/components/Toolbar";
-import { useGlyphCatalog } from "@/hooks/useGlyphCatalog";
+import { GlyphGrid } from "@/components/home/GlyphGrid";
+import { LeftSidebar } from "@/components/home/LeftSidebar";
+import { RightSidebar } from "@/components/editor/RightSidebar";
+import { Toolbar } from "@/components/chrome/Toolbar";
+import { GlyphCatalogProvider } from "@/context/GlyphCatalogContext";
 
-export const Home = () => {
-  const {
-    availableUnicodes,
-    filteredUnicodes,
-    categories,
-    query,
-    selectedCategory,
-    selectedSubCategoryKey,
-    setQuery,
-    selectAll,
-    selectCategory,
-    selectSubCategory,
-  } = useGlyphCatalog();
-
-  const sideBarState = {
-    query: { query, onQueryChange: setQuery },
-    categories: { collection: categories, selectedCategory, selectedSubCategoryKey },
-    counts: { totalCount: availableUnicodes.length, filteredCount: filteredUnicodes.length },
-    select: {
-      onSelectAll: selectAll,
-      onSelectCategory: selectCategory,
-      onSelectSubCategory: selectSubCategory,
-    },
-  };
-
-  return (
+export const Home = () => (
+  <GlyphCatalogProvider>
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar />
       <section className="flex min-h-0 overflow-hidden">
-        <LeftSidebarHome {...sideBarState} />
+        <LeftSidebar />
         <div className="min-h-0 min-w-0 flex-1">
-          <GlyphGrid unicodes={filteredUnicodes} />
+          <GlyphGrid />
         </div>
         <RightSidebar />
       </section>
     </main>
-  );
-};
+  </GlyphCatalogProvider>
+);

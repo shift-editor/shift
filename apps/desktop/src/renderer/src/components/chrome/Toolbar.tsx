@@ -1,6 +1,6 @@
 import { NavigationPane } from "./NavigationPane";
 import { Titlebar } from "./Titlebar";
-import { ToolsPane } from "./ToolsPane";
+import { ToolsPane } from "@/components/editor/ToolsPane";
 
 export const Toolbar = () => {
   return (

@@ -1,4 +1,4 @@
-import { Toolbar } from "@/components/Toolbar";
+import { Toolbar } from "@/components/chrome/Toolbar";
 import { getEditor } from "@/store/store";
 
 export const FontInfo = () => {

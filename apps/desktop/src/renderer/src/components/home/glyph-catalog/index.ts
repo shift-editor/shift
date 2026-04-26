@@ -1,0 +1,1 @@
+export { GlyphCatalog } from "./GlyphCatalog";

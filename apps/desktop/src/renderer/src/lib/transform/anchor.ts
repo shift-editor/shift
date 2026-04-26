@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/types";
 import { Bounds } from "@shift/geo";
-import type { AnchorPosition } from "@/components/sidebar-right/TransformGrid";
+import type { AnchorPosition } from "@/components/editor/sidebar-right/TransformGrid";
 
 export function anchorToPoint(anchor: AnchorPosition, bounds: Bounds): Point2D {
   const center = Bounds.center(bounds);

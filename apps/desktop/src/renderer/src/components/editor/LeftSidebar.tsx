@@ -1,7 +1,7 @@
 import { Separator } from "@shift/ui";
-import { CollapsibleSection } from "./sidebar";
-import { AxesPanel } from "./AxesPanel";
-import { Sources } from "./Sources";
+import { CollapsibleSection } from "@/components/sidebar";
+import { AxesPanel } from "@/components/variation/AxesPanel";
+import { Sources } from "@/components/variation/Sources";
 
 export const LeftSidebar = () => (
   <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">

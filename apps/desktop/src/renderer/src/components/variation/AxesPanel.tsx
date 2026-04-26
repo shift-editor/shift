@@ -1,6 +1,6 @@
 import type { Axis } from "@shift/types";
 import { Slider } from "@shift/ui";
-import { EditableSidebarInput } from "./sidebar-right/EditableSidebarInput";
+import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
 import { useAxes } from "@/hooks/useAxes";
 import { useVariationLocation } from "@/hooks/useVariationLocation";
 import { useApplyVariation } from "@/hooks/useApplyVariation";

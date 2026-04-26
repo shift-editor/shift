@@ -40,15 +40,14 @@
  *   Each virtual row: unicodes.slice(rowIndex * columns, (rowIndex + 1) * columns)
  *   Row DOM: flex gap-2 px-4; each cell width/maxWidth = cellWidth, min-w-0.
  */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { codepointToHex } from "@/lib/utils/unicode";
-import { useSignalState } from "@/lib/reactive";
-import { CELL_HEIGHT, GlyphPreview } from "@/components/GlyphPreview";
+import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
 import { getGlyphInfo } from "@/store/glyphInfo";
 import { getEditor } from "@/store/store";
-import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
+import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button } from "@shift/ui";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
@@ -58,10 +57,6 @@ const SCROLL_PADDING = 4;
 const ROW_PADDING_X = 4;
 const OVERSCAN = 5;
 
-interface GlyphGridProps {
-  unicodes?: number[];
-}
-
 function computeLayout(width: number) {
   const availableWidth = width - SCROLL_PADDING - ROW_PADDING_X;
   const columns = Math.max(1, Math.floor(availableWidth / (NOMINAL_CELL_WIDTH + GAP)));
@@ -69,20 +64,12 @@ function computeLayout(width: number) {
   return { columns, cellWidth };
 }
 
-export const GlyphGrid = memo(function GlyphGrid({ unicodes: unicodesProp }: GlyphGridProps) {
+export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
   const editor = getEditor();
-  const fontLoaded = useSignalState(editor.font.$loaded);
-  const fontUnicodes = useSignalState(editor.font.$unicodes);
+  const { filteredUnicodes: unicodes } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const fallbackUnicodes = useMemo(
-    () =>
-      fontLoaded ? fontUnicodes : Object.values(ADOBE_LATIN_1).map((g) => parseInt(g.unicode, 16)),
-    [fontLoaded, fontUnicodes],
-  );
-  const unicodes = unicodesProp ?? fallbackUnicodes;
 
   // Sizing: useVirtualizer only virtualizes rows (vertical); it does not provide container width.
   // We need container width to compute columns and cell width so rows don't overflow. ResizeObserver
