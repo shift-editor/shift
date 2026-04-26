@@ -51,8 +51,7 @@ impl FontReader for DesignspaceReader {
 
         // Add axes.
         for ds_axis in &doc.axes {
-            let minimum = ds_axis.minimum.unwrap_or(ds_axis.default) as f64;
-            let maximum = ds_axis.maximum.unwrap_or(ds_axis.default) as f64;
+            let (minimum, maximum) = derive_axis_range(ds_axis);
             let mut axis = Axis::new(
                 ds_axis.tag.clone(),
                 ds_axis.name.clone(),
@@ -191,4 +190,132 @@ fn find_layer_by_name(font: &Font, name: &str) -> Option<LayerId> {
         .iter()
         .find(|(_, layer)| layer.name() == name)
         .map(|(&id, _)| id)
+}
+
+/// Derive (minimum, maximum) for an axis from norad's parsed designspace.
+///
+/// Designspace axis edge cases handled:
+/// - **Continuous** (both min/max present): use as-is.
+/// - **Discrete** (`values="0 1"` with no min/max attrs): min/max are the
+///   smallest/largest values in the list. e.g. `ital`, our `SLAB`.
+/// - **One-sided** (only min OR max specified): the missing side falls back
+///   to `default`. Common with slant axes (`min=-15, default=0, max=0`).
+/// - **Degenerate** (no min/max/values): all three collapse to default.
+fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
+    let values_range = || {
+        ds_axis
+            .values
+            .as_ref()
+            .filter(|v| !v.is_empty())
+            .map(|values| {
+                let min = values.iter().cloned().fold(f32::INFINITY, f32::min) as f64;
+                let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max) as f64;
+                (min, max)
+            })
+    };
+
+    match (ds_axis.minimum, ds_axis.maximum) {
+        (Some(min), Some(max)) => (min as f64, max as f64),
+        (None, None) => values_range().unwrap_or((ds_axis.default as f64, ds_axis.default as f64)),
+        (Some(min), None) => (min as f64, ds_axis.default as f64),
+        (None, Some(max)) => (ds_axis.default as f64, max as f64),
+    }
+}
+
+#[cfg(test)]
+mod axis_range_tests {
+    use super::*;
+    use norad::designspace::Axis as DsAxis;
+
+    fn axis(min: Option<f32>, max: Option<f32>, default: f32, values: Option<Vec<f32>>) -> DsAxis {
+        DsAxis {
+            name: "test".into(),
+            tag: "TEST".into(),
+            minimum: min,
+            maximum: max,
+            default,
+            hidden: false,
+            values,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn continuous_uses_explicit_min_max() {
+        let a = axis(Some(100.0), Some(900.0), 400.0, None);
+        assert_eq!(derive_axis_range(&a), (100.0, 900.0));
+    }
+
+    #[test]
+    fn discrete_two_values_derives_range() {
+        // SLAB axis pattern: <axis values="0 1" default="0"/>
+        let a = axis(None, None, 0.0, Some(vec![0.0, 1.0]));
+        assert_eq!(derive_axis_range(&a), (0.0, 1.0));
+    }
+
+    #[test]
+    fn discrete_three_values_derives_range_from_extremes() {
+        let a = axis(None, None, 1.0, Some(vec![0.5, 1.0, 1.5]));
+        assert_eq!(derive_axis_range(&a), (0.5, 1.5));
+    }
+
+    #[test]
+    fn discrete_unsorted_values_still_finds_extremes() {
+        let a = axis(None, None, 1.0, Some(vec![1.5, 0.5, 1.0]));
+        assert_eq!(derive_axis_range(&a), (0.5, 1.5));
+    }
+
+    #[test]
+    fn explicit_min_max_takes_precedence_over_values() {
+        let a = axis(Some(0.0), Some(2.0), 1.0, Some(vec![0.5, 1.5]));
+        assert_eq!(derive_axis_range(&a), (0.0, 2.0));
+    }
+
+    #[test]
+    fn one_sided_min_only_falls_back_to_default_for_max() {
+        // slant-like, half-spec'd: min=-15, default=0, no max attr
+        let a = axis(Some(-15.0), None, 0.0, None);
+        assert_eq!(derive_axis_range(&a), (-15.0, 0.0));
+    }
+
+    #[test]
+    fn one_sided_max_only_falls_back_to_default_for_min() {
+        let a = axis(None, Some(900.0), 400.0, None);
+        assert_eq!(derive_axis_range(&a), (400.0, 900.0));
+    }
+
+    #[test]
+    fn no_min_max_no_values_collapses_to_default() {
+        let a = axis(None, None, 400.0, None);
+        assert_eq!(derive_axis_range(&a), (400.0, 400.0));
+    }
+
+    #[test]
+    fn empty_values_list_collapses_to_default() {
+        let a = axis(None, None, 0.0, Some(vec![]));
+        assert_eq!(derive_axis_range(&a), (0.0, 0.0));
+    }
+
+    #[test]
+    fn asymmetric_default_at_minimum() {
+        // Older fonts where the Light is the default
+        let a = axis(Some(400.0), Some(900.0), 400.0, None);
+        assert_eq!(derive_axis_range(&a), (400.0, 900.0));
+        // The Axis itself should still normalise sensibly:
+        let axis = Axis::new("wght".into(), "Weight".into(), 400.0, 400.0, 900.0);
+        assert_eq!(axis.normalize(400.0), 0.0);
+        assert_eq!(axis.normalize(900.0), 1.0);
+        // Below default: range is zero, must return 0 (no negative ramp).
+        assert_eq!(axis.normalize(100.0), 0.0);
+    }
+
+    #[test]
+    fn asymmetric_one_sided_negative_axis() {
+        // slnt-like: min=-15, default=0, max=0
+        let axis = Axis::new("slnt".into(), "Slant".into(), -15.0, 0.0, 0.0);
+        assert_eq!(axis.normalize(0.0), 0.0);
+        assert_eq!(axis.normalize(-15.0), -1.0);
+        // Above default: range is zero, returns 0 (no positive ramp).
+        assert_eq!(axis.normalize(5.0), 0.0);
+    }
 }

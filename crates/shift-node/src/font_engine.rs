@@ -1,6 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi::{Error, Result, Status};
 use napi_derive::napi;
+use shift_core::interpolation::get_glyph_variation_data;
 use shift_core::{
   composite::{
     flatten_component_contours_for_layer as flatten_component_contours, layer_bbox,
@@ -10,9 +11,9 @@ use shift_core::{
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphGeometry, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
+  snapshot::{CommandResult, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
   AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
-  Location, NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
+  NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
 use std::collections::HashSet;
 
@@ -503,86 +504,38 @@ impl FontEngine {
     Some(to_json(&masters))
   }
 
-  /// Interpolate a glyph at a given designspace location.
   #[napi]
-  pub fn interpolate_glyph(&self, glyph_name: String, location_json: String) -> Option<String> {
+  pub fn get_glyph_variation_data(&self, glyph_name: String) -> Option<String> {
     let masters = self.build_master_snapshots(&glyph_name)?;
-    let target: Location = serde_json::from_str(&location_json).expect("Invalid location JSON");
     let axes = self.font.axes();
-    let result = shift_core::interpolation::interpolate_glyph(&masters, axes, &target)?;
-    Some(to_json(&result))
+    let variation_data = get_glyph_variation_data(&masters, axes)?;
+
+    Some(to_json(&variation_data))
   }
 
   fn build_master_snapshots(&self, glyph_name: &str) -> Option<Vec<MasterSnapshot>> {
-    if !self.font.is_variable() {
-      return None;
-    }
-
-    let mut temp_glyph;
-    let glyph = if let (Some(editing), Some(session), Some(layer_id)) = (
-      &self.editing_glyph,
-      &self.current_edit_session,
-      &self.editing_layer_id,
-    ) {
-      if editing.name() == glyph_name {
-        temp_glyph = editing.clone();
-        temp_glyph.set_layer(*layer_id, session.layer().clone());
-        &temp_glyph
-      } else {
-        self.font.glyph(glyph_name)?
-      }
-    } else {
-      self.font.glyph(glyph_name)?
+    let editing = self.editing_glyph_for(glyph_name);
+    let glyph: &Glyph = match &editing {
+      Some(g) => g,
+      None => self.font.glyph(glyph_name)?,
     };
+    shift_core::interpolation::build_master_snapshots(&self.font, glyph)
+  }
 
-    let mut masters: Vec<MasterSnapshot> = Vec::new();
-
-    let default_source_id = self.font.default_source_id();
-    for source in self.font.sources() {
-      let layer_id = source.layer_id();
-      let layer = match glyph.layer(layer_id) {
-        Some(l) if !l.contours().is_empty() => l,
-        _ => continue,
-      };
-
-      let primary_unicode = glyph.primary_unicode().unwrap_or(0);
-
-      let contours: Vec<_> = layer
-        .contours()
-        .values()
-        .filter(|c| !c.points().is_empty())
-        .map(shift_core::snapshot::ContourSnapshot::from)
-        .collect();
-
-      let anchors = layer
-        .anchors_iter()
-        .map(shift_core::snapshot::AnchorSnapshot::from)
-        .collect();
-
-      let snapshot = GlyphSnapshot {
-        unicode: primary_unicode,
-        name: glyph.name().to_string(),
-        x_advance: layer.width(),
-        contours,
-        anchors,
-        composite_contours: Vec::new(),
-        active_contour_id: None,
-      };
-
-      masters.push(MasterSnapshot {
-        source_id: source.id().raw().to_string(),
-        source_name: source.name().to_string(),
-        is_default_source: default_source_id == Some(source.id()),
-        location: source.location().clone(),
-        geometry: GlyphGeometry::from(&snapshot),
-      });
-    }
-
-    if masters.is_empty() {
+  /// If the glyph currently being edited is `glyph_name`, return a copy with the
+  /// in-progress session layer patched in. Otherwise `None` — caller falls back
+  /// to the disk copy.
+  fn editing_glyph_for(&self, glyph_name: &str) -> Option<Glyph> {
+    let editing = self.editing_glyph.as_ref()?;
+    if editing.name() != glyph_name {
       return None;
     }
+    let session = self.current_edit_session.as_ref()?;
+    let layer_id = *self.editing_layer_id.as_ref()?;
 
-    Some(masters)
+    let mut temp = editing.clone();
+    temp.set_layer(layer_id, session.layer().clone());
+    Some(temp)
   }
 
   // ═══════════════════════════════════════════════════════════

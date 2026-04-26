@@ -24,8 +24,7 @@ export declare class FontEngine {
   getSources(): string
   /** Returns a JSON array of master snapshots for a glyph. */
   getGlyphMasterSnapshots(glyphName: string): string | null
-  /** Interpolate a glyph at a given designspace location. */
-  interpolateGlyph(glyphName: string, locationJson: string): string | null
+  getGlyphVariationData(glyphName: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
   endEditSession(): void
   hasEditSession(): boolean

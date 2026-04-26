@@ -242,8 +242,9 @@ impl CommandResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct MasterSnapshot {
     pub source_id: String,
     pub source_name: String,

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Axis } from "@shift/types";
+import type { Axis, GlyphVariationData, Source } from "@shift/types";
 import { SidebarSection } from "./sidebar-right/SidebarSection";
 import { getEditor } from "@/store/store";
 import { useSignalState } from "@/lib/reactive";
-import { interpolateGlyph, type MasterSnapshot } from "@/lib/interpolation/interpolate";
+import { interpolate, normalize } from "@/lib/interpolation/interpolate";
+import { Input } from "@shift/ui";
 
 export const VariationPanel = () => {
   const editor = getEditor();
@@ -11,19 +12,22 @@ export const VariationPanel = () => {
   const fontLoaded = useSignalState(font.$loaded);
 
   const [axes, setAxes] = useState<Axis[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [location, setLocation] = useState<Record<string, number>>({});
-  const mastersRef = useRef<MasterSnapshot[] | null>(null);
+  const variationDataRef = useRef<GlyphVariationData | null>(null);
   const [isInterpolating, setIsInterpolating] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<string | null>(null);
 
   useEffect(() => {
     if (!fontLoaded || !font.isVariable()) {
       setAxes([]);
+      setSources([]);
       return;
     }
 
     const fontAxes = font.getAxes();
     setAxes(fontAxes);
+    setSources(font.getSources());
 
     const defaults: Record<string, number> = {};
     for (const axis of fontAxes) {
@@ -36,55 +40,53 @@ export const VariationPanel = () => {
     setEditingGlyph(editor.getActiveGlyphName());
   });
 
+  // Fetch variation data ONCE per glyph (cached in ref). Slider scrub reads from
+  // the cache and never goes back to Rust. TODO Phase D: invalidate on glyph
+  // commit (needs a commit-version signal on Glyph).
   useEffect(() => {
     if (axes.length === 0 || !editingGlyph) {
-      mastersRef.current = null;
+      variationDataRef.current = null;
       return;
     }
-
-    mastersRef.current = font.getGlyphMasterSnapshots(editingGlyph);
+    variationDataRef.current = font.getGlyphVariationData(editingGlyph);
     setIsInterpolating(false);
   }, [axes, editingGlyph, font]);
+
+  // Pure JS math, zero NAPI calls.
+  const applyAt = useCallback(
+    (newLocation: Record<string, number>) => {
+      const data = variationDataRef.current;
+      if (!data) return;
+
+      const values = interpolate(data, normalize(newLocation, axes));
+      const glyph = editor.glyph.peek();
+      if (glyph) glyph.applyValues(values);
+      font.setVariationLocation({ values: newLocation });
+    },
+    [axes, editor, font],
+  );
 
   const handleAxisChange = useCallback(
     (tag: string, value: number) => {
       const newLocation = { ...location, [tag]: value };
       setLocation(newLocation);
-
-      const ms = mastersRef.current;
-      if (!ms || ms.length < 2) return;
-
-      const result = interpolateGlyph(ms, axes, newLocation);
-      if (!result) return;
-
       setIsInterpolating(true);
-      const glyph = editor.glyph.peek();
-      if (glyph) glyph.apply(result.instance);
-      font.setVariationLocation({ values: newLocation });
+      applyAt(newLocation);
     },
-    [location, axes, editor, font],
+    [location, applyAt],
   );
 
   const handleMasterClick = useCallback(
-    (sourceName: string) => {
-      const masters = mastersRef.current;
-      if (!masters) return;
-
-      const master = masters.find((m) => m.sourceName === sourceName);
-      if (!master) return;
-
+    (source: Source) => {
       const newLocation: Record<string, number> = {};
       for (const axis of axes) {
-        newLocation[axis.tag] = master.location.values[axis.tag] ?? axis.default;
+        newLocation[axis.tag] = source.location.values[axis.tag] ?? axis.default;
       }
       setLocation(newLocation);
-
       setIsInterpolating(true);
-      const glyph = editor.glyph.peek();
-      if (glyph) glyph.apply(master.snapshot);
-      font.setVariationLocation({ values: newLocation });
+      applyAt(newLocation);
     },
-    [axes, editor, font],
+    [axes, applyAt],
   );
 
   const handleResetToSession = useCallback(() => {
@@ -106,8 +108,6 @@ export const VariationPanel = () => {
 
   if (axes.length === 0) return null;
 
-  const masters = mastersRef.current ?? [];
-
   return (
     <SidebarSection title="Variation">
       <div className="flex flex-col gap-3">
@@ -119,16 +119,16 @@ export const VariationPanel = () => {
             onChange={(value) => handleAxisChange(axis.tag, value)}
           />
         ))}
-        {masters.length > 0 && (
+        {sources.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {masters.map((m) => (
+            {sources.map((s) => (
               <button
-                key={m.sourceId}
+                key={s.id}
                 type="button"
                 className="px-2 py-0.5 text-[11px] rounded bg-[#f0f0f0] hover:bg-[#e0e0e0] text-[#333] transition-colors"
-                onClick={() => handleMasterClick(m.sourceName)}
+                onClick={() => handleMasterClick(s)}
               >
-                {m.sourceName}
+                {s.name}
               </button>
             ))}
           </div>
@@ -162,7 +162,7 @@ const AxisSlider = ({ axis, value, onChange }: AxisSliderProps) => {
         <span className="text-[11px] text-[#666]">{axis.name}</span>
         <span className="text-[11px] font-mono text-[#999]">{displayValue}</span>
       </div>
-      <input
+      <Input
         type="range"
         min={axis.minimum}
         max={axis.maximum}
