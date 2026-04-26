@@ -15,9 +15,7 @@ export const GlyphSection = () => {
   const xAdvance = useGlyphXAdvance();
   const glyphInfo = getGlyphInfo();
 
-  if (!glyph) return null;
-
-  const unicode = formatCodepointAsUPlus(glyph.unicode);
+  const unicode = formatCodepointAsUPlus(glyph?.unicode ?? 0);
   const lsb = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
   const rsb = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEnabled = lsb !== null && rsb !== null;
@@ -55,7 +53,7 @@ export const GlyphSection = () => {
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph.unicode)}</div>
+        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph?.unicode ?? 0)}</div>
       </main>
     </SidebarSection>
   );

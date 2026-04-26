@@ -5,7 +5,6 @@ import {
   CollapsibleTrigger,
   Input,
   Search,
-  Separator,
 } from "@shift/ui";
 import AllIcon from "@/assets/sidebar-left/all.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
@@ -27,21 +26,18 @@ export const GlyphCatalog = () => {
   } = useGlyphCatalog();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-3 py-2">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search glyphs..."
-          className="h-8 text-sm bg-input"
-          icon={<Search className="w-3 h-3 text-muted" />}
-          iconPosition="left"
-        />
-      </div>
-      <Separator />
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+    <div className="flex min-h-0 flex-col gap-2">
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search glyphs..."
+        className="h-8 text-sm bg-input"
+        icon={<Search className="w-3 h-3 text-muted" />}
+        iconPosition="left"
+      />
+      <div className="flex-1 overflow-y-auto">
         <div className="flex items-center justify-between font-sans mb-2">
-          <span className="text-sm">Glyphs</span>
+          <span className="text-ui font-medium text-primary">Glyphs</span>
           <span className="text-xs">{`${filteredUnicodes.length}/${availableUnicodes.length}`}</span>
         </div>
 
