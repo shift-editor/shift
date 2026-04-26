@@ -31,7 +31,7 @@ export interface SegmentIndicator {
  * Drives visual feedback (highlight rings, segment indicators) and determines
  * what a click would target.
  */
-export interface IndicatorState {
+export interface Indicator {
   hoveredPoint: PointId | null;
   hoveredSegment: SegmentIndicator | null;
 }

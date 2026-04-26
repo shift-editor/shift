@@ -13,7 +13,7 @@ export const PersistedTextRunSchema = z.object({
   editingGlyph: GlyphRefSchema.nullable(),
 });
 
-export const TextRunModulePayloadSchema = z.object({
+export const TextRunModuleSchema = z.object({
   runsByGlyph: z.record(z.string(), PersistedTextRunSchema),
 });
 
@@ -42,7 +42,7 @@ export const PersistenceRegistrySchema = z.object({
   lruDocIds: z.array(z.string()),
 });
 
-export const PersistedDocumentStateSchema = z.object({
+export const PersistedDocumentSchema = z.object({
   docId: z.string(),
   updatedAt: z.number().finite(),
   modules: z.record(z.string(), PersistedModuleEnvelopeSchema),
@@ -52,14 +52,14 @@ export const PersistedRootSchema = z.object({
   version: z.number().int().positive(),
   registry: PersistenceRegistrySchema,
   appModules: z.record(z.string(), PersistedModuleEnvelopeSchema),
-  documents: z.record(z.string(), PersistedDocumentStateSchema),
+  documents: z.record(z.string(), PersistedDocumentSchema),
 });
 
 export type PersistedTextRun = z.infer<typeof PersistedTextRunSchema>;
-export type TextRunModulePayload = z.infer<typeof TextRunModulePayloadSchema>;
+export type TextRunModule = z.infer<typeof TextRunModuleSchema>;
 export type SnapPreferencesShape = z.infer<typeof SnapPreferencesSchema>;
 export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
 export type PersistedModuleEnvelope = z.infer<typeof PersistedModuleEnvelopeSchema>;
 export type PersistenceRegistry = z.infer<typeof PersistenceRegistrySchema>;
-export type PersistedDocumentState = z.infer<typeof PersistedDocumentStateSchema>;
+export type PersistedDocument = z.infer<typeof PersistedDocumentSchema>;
 export type PersistedRoot = z.infer<typeof PersistedRootSchema>;

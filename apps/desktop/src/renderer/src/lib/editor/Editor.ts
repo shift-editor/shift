@@ -84,8 +84,8 @@ import type {
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
 import { TextRunController } from "@/lib/tools/text/TextRunController";
-import { SnapPreferencesSchema, TextRunModulePayloadSchema } from "@shift/validation";
-import type { TextRunModulePayload } from "@/persistence/types";
+import { SnapPreferencesSchema, TextRunModuleSchema } from "@shift/validation";
+import type { TextRunModule } from "@/persistence/types";
 
 interface AppSettings {
   snap: SnapPreferences;
@@ -102,7 +102,7 @@ const defaultAppSettings: AppSettings = {
   },
 };
 import type { CompositeGlyph } from "@shift/types";
-import type { ToolDescriptor, ToolShortcutEntry } from "@/types/tools";
+import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
 import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
@@ -294,13 +294,13 @@ export class Editor {
     this.#textRunController = new TextRunController();
     this.#textRunController.setFont(this.font);
 
-    const textRunPersistence = this.registerState<TextRunModulePayload>({
+    const textRunPersistence = this.registerState<TextRunModule>({
       id: "text-run",
       scope: "document",
       initial: () => ({ runsByGlyph: {} }),
       serialize: () => ({ runsByGlyph: this.#textRunController.exportRuns() }),
       deserialize: (json) => {
-        const payload = TextRunModulePayloadSchema.parse(json);
+        const payload = TextRunModuleSchema.parse(json);
         this.#textRunController.hydrateRuns(payload.runsByGlyph);
         return payload;
       },
@@ -386,7 +386,7 @@ export class Editor {
     });
   }
 
-  public registerTool(descriptor: ToolDescriptor): void {
+  public registerTool(descriptor: ToolManifest): void {
     const { id, icon, tooltip, shortcut } = descriptor;
     this.#toolMetadata.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
     this.toolManager.register(descriptor);

@@ -6,7 +6,7 @@ import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState
 import {
   PERSISTENCE_DOCUMENT_LIMIT,
   PERSISTENCE_SCHEMA_VERSION,
-  type PersistedDocumentState,
+  type PersistedDocument,
   type PersistedModuleEnvelope,
   type PersistedRoot,
 } from "./types";
@@ -345,11 +345,11 @@ export class DocumentStatePersistence {
     }, SAVE_DEBOUNCE_MS);
   }
 
-  private ensureDocumentState(docId: string): PersistedDocumentState {
+  private ensureDocumentState(docId: string): PersistedDocument {
     const existing = this.#state.documents[docId];
     if (existing) return existing;
 
-    const next: PersistedDocumentState = {
+    const next: PersistedDocument = {
       docId,
       updatedAt: Date.now(),
       modules: {},

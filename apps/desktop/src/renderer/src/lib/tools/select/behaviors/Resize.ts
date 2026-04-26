@@ -5,12 +5,12 @@ import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { DragTarget } from "../types";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import type { GlyphDraft } from "@/types/draft";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 
-export class Resize implements SelectHandlerBehavior {
+export class Resize implements SelectBehavior {
   #draft: GlyphDraft | null = null;
   #target: DragTarget | null = null;
   #origin: Point2D | null = null;

@@ -41,7 +41,7 @@ const electronAPI: ElectronAPI = {
   setDocumentDirty: invoke("document:setDirty"),
   setDocumentFilePath: invoke("document:setFilePath"),
   saveCompleted: invoke("document:saveCompleted"),
-  getDebugState: invoke("debug:getState"),
+  getDebug: invoke("debug:getState"),
   pathsExist: invoke("fs:pathsExist"),
 
   // Events

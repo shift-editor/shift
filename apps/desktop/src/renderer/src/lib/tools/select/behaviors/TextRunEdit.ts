@@ -1,6 +1,6 @@
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { hitTestTextSlot, type GlyphRef } from "../../text/layout";
 import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
 
@@ -10,7 +10,7 @@ import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
  * Takes priority over the normal double-click-select-contour behavior
  * when a text run is active.
  */
-export class TextRunEdit implements SelectHandlerBehavior {
+export class TextRunEdit implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

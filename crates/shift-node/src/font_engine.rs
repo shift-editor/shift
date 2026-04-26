@@ -450,7 +450,7 @@ impl FontEngine {
 
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
-    struct CompositeComponentPayload {
+    struct CompositeComponent {
       component_glyph_name: String,
       source_unicodes: Vec<u32>,
       contours: Vec<RenderContourSnapshot>,
@@ -458,14 +458,14 @@ impl FontEngine {
 
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
-    struct CompositeComponentsPayload {
+    struct CompositeComponents {
       glyph_name: String,
-      components: Vec<CompositeComponentPayload>,
+      components: Vec<CompositeComponent>,
     }
 
     let components = instances
       .into_iter()
-      .map(|instance| CompositeComponentPayload {
+      .map(|instance| CompositeComponent {
         source_unicodes: self
           .font
           .glyph(&instance.component_glyph_name)
@@ -476,7 +476,7 @@ impl FontEngine {
       })
       .collect();
 
-    Some(to_json(&CompositeComponentsPayload {
+    Some(to_json(&CompositeComponents {
       glyph_name: resolved_name.to_string(),
       components,
     }))

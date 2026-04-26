@@ -1,12 +1,12 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { Editor } from "@/lib/editor/Editor";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import { isSegmentHit } from "@/types/hitResult";
 
-export class ContourDoubleClick implements SelectHandlerBehavior {
+export class ContourDoubleClick implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

@@ -54,7 +54,7 @@ export interface SystemClipboard {
 }
 
 /** Current in-memory clipboard state held by the clipboard service. */
-export interface ClipboardState {
+export interface Clipboard {
   content: ClipboardContent | null;
   bounds: Rect2D | null;
   timestamp: number;

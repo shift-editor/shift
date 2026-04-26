@@ -5,7 +5,7 @@ import { Validate } from "@shift/validation";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { PenState, PenBehavior, AnchorData, HandleData } from "../types";
+import type { PenState, PenBehavior, Anchor, Handles } from "../types";
 import type { DragSnapSession } from "@/lib/editor/snapping/types";
 
 const DRAG_THRESHOLD = 3;
@@ -123,7 +123,7 @@ export class HandleBehavior implements PenBehavior {
     };
   }
 
-  #createHandles(anchor: AnchorData, snappedPos: Point2D, editor: Editor): HandleData {
+  #createHandles(anchor: Anchor, snappedPos: Point2D, editor: Editor): Handles {
     const glyph = editor.glyph.peek();
     if (!glyph) return {};
 
@@ -193,12 +193,7 @@ export class HandleBehavior implements PenBehavior {
     return { cpIn: cpInId };
   }
 
-  #updateHandles(
-    anchor: AnchorData,
-    handles: HandleData,
-    snappedPos: Point2D,
-    editor: Editor,
-  ): void {
+  #updateHandles(anchor: Anchor, handles: Handles, snappedPos: Point2D, editor: Editor): void {
     const glyph = editor.glyph.peek();
     if (!glyph) return;
 
@@ -212,7 +207,7 @@ export class HandleBehavior implements PenBehavior {
     }
   }
 
-  #startSnap(editor: Editor, anchor: AnchorData): void {
+  #startSnap(editor: Editor, anchor: Anchor): void {
     if (!anchor.pointId) return;
 
     this.#clearSnap();

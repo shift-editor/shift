@@ -2,11 +2,11 @@ import { Vec2 } from "@shift/geo";
 import type {
   PointSnapStep,
   PointSnapStepArgs,
-  PointSnapResult,
-  PointStepResult,
+  PointSnap,
+  PointStep,
   RotateSnapStep,
   RotateSnapStepArgs,
-  RotateSnapResult,
+  RotateSnap,
 } from "./types";
 
 /**
@@ -27,8 +27,8 @@ export class SnapPipelineRunner {
    *    to the original point is chosen.
    * 3. **No match** — returns the input point unchanged with `source: null`.
    */
-  runPointPipeline(steps: readonly PointSnapStep[], args: PointSnapStepArgs): PointSnapResult {
-    const candidates: PointStepResult[] = [];
+  runPointPipeline(steps: readonly PointSnapStep[], args: PointSnapStepArgs): PointSnap {
+    const candidates: PointStep[] = [];
 
     for (const step of steps) {
       const result = step.apply(args);
@@ -60,7 +60,7 @@ export class SnapPipelineRunner {
    * Uses **first-match** semantics: the first step that returns a non-null result
    * wins. If no step matches, the raw delta passes through with `source: null`.
    */
-  runRotatePipeline(steps: readonly RotateSnapStep[], args: RotateSnapStepArgs): RotateSnapResult {
+  runRotatePipeline(steps: readonly RotateSnapStep[], args: RotateSnapStepArgs): RotateSnap {
     for (const step of steps) {
       const result = step.apply(args);
       if (result) {

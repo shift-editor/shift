@@ -26,7 +26,7 @@ export interface ElectronAPI {
   setDocumentDirty: CommandInvoker<"document:setDirty">;
   setDocumentFilePath: CommandInvoker<"document:setFilePath">;
   saveCompleted: CommandInvoker<"document:saveCompleted">;
-  getDebugState: CommandInvoker<"debug:getState">;
+  getDebug: CommandInvoker<"debug:getState">;
   pathsExist: CommandInvoker<"fs:pathsExist">;
 
   // Events

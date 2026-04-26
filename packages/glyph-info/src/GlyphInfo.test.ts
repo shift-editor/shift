@@ -13,9 +13,9 @@ afterAll(() => {
   db.close();
 });
 
-describe("getGlyphData", () => {
+describe("getGlyph", () => {
   it("returns full data for dollar sign", () => {
-    const result = db.getGlyphData(0x24);
+    const result = db.getGlyph(0x24);
     expect(result).toEqual({
       codepoint: 0x24,
       name: "dollar",
@@ -28,19 +28,19 @@ describe("getGlyphData", () => {
   });
 
   it("returns data for LATIN CAPITAL LETTER A", () => {
-    const result = db.getGlyphData(0x41);
+    const result = db.getGlyph(0x41);
     expect(result).not.toBeNull();
     expect(result!.name).toBe("A");
     expect(result!.category).toBe("Letter");
     expect(result!.script).toBe("latin");
   });
 
-  it("returns null for codepoint not in GlyphData.xml", () => {
-    expect(db.getGlyphData(0xfffe)).toBeNull();
+  it("returns null for codepoint not in Glyph.xml", () => {
+    expect(db.getGlyph(0xfffe)).toBeNull();
   });
 
   it("returns data for space (U+0020)", () => {
-    const result = db.getGlyphData(0x20);
+    const result = db.getGlyph(0x20);
     expect(result).not.toBeNull();
     expect(result!.name).toBe("space");
     expect(result!.category).toBe("Separator");
@@ -49,7 +49,7 @@ describe("getGlyphData", () => {
 
   it("returns data with altNames field", () => {
     // bar (U+007C) has altNames="verticalbar"
-    const result = db.getGlyphData(0x7c);
+    const result = db.getGlyph(0x7c);
     expect(result).not.toBeNull();
     expect(result!.name).toBe("bar");
     expect(result!.altNames).toBe("verticalbar");
@@ -57,25 +57,25 @@ describe("getGlyphData", () => {
 
   it("returns data with production field", () => {
     // nbspace (U+00A0) has production="uni00A0"
-    const result = db.getGlyphData(0xa0);
+    const result = db.getGlyph(0xa0);
     expect(result).not.toBeNull();
     expect(result!.production).toBe("uni00A0");
   });
 
   it("returns null for negative codepoint", () => {
-    expect(db.getGlyphData(-1)).toBeNull();
+    expect(db.getGlyph(-1)).toBeNull();
   });
 
   it("returns null for codepoint beyond BMP", () => {
-    expect(db.getGlyphData(0x10000)).toBeNull();
+    expect(db.getGlyph(0x10000)).toBeNull();
   });
 
   it("returns null for surrogate codepoint", () => {
-    expect(db.getGlyphData(0xd800)).toBeNull();
+    expect(db.getGlyph(0xd800)).toBeNull();
   });
 
   it("returns data for digit zero", () => {
-    const result = db.getGlyphData(0x30);
+    const result = db.getGlyph(0x30);
     expect(result).not.toBeNull();
     expect(result!.name).toBe("zero");
     expect(result!.category).toBe("Number");
@@ -103,14 +103,14 @@ describe("getGlyphName", () => {
   });
 });
 
-describe("getAllGlyphData", () => {
+describe("getAllGlyph", () => {
   it("returns many entries", () => {
-    const all = db.getAllGlyphData();
+    const all = db.getAllGlyph();
     expect(all.length).toBeGreaterThan(100);
   });
 
   it("every entry has required fields", () => {
-    const all = db.getAllGlyphData();
+    const all = db.getAllGlyph();
     for (const g of all) {
       expect(g.codepoint).toBeTypeOf("number");
       expect(g.name).toBeTypeOf("string");
@@ -121,14 +121,14 @@ describe("getAllGlyphData", () => {
   });
 
   it("contains no duplicate codepoints", () => {
-    const all = db.getAllGlyphData();
+    const all = db.getAllGlyph();
     const codepoints = all.map((g) => g.codepoint);
     const uniqueCodepoints = new Set(codepoints);
     expect(uniqueCodepoints.size).toBe(codepoints.length);
   });
 
   it("codepoints are all non-negative integers", () => {
-    const all = db.getAllGlyphData();
+    const all = db.getAllGlyph();
     for (const g of all) {
       expect(g.codepoint).toBeGreaterThanOrEqual(0);
       expect(Number.isInteger(g.codepoint)).toBe(true);
@@ -177,8 +177,8 @@ describe("getGlyphsByCategory", () => {
     }
   });
 
-  it("category results are consistent with getAllGlyphData", () => {
-    const all = db.getAllGlyphData();
+  it("category results are consistent with getAllGlyph", () => {
+    const all = db.getAllGlyph();
     const categories = db.getGlyphCategories();
     let totalFromCategories = 0;
     for (const cat of categories) {
@@ -569,7 +569,7 @@ describe("cross-domain consistency", () => {
         expect(name.length).toBeGreaterThan(0);
       }
     }
-    // Most Adobe Latin 1 codepoints should be in GlyphData.xml
+    // Most Adobe Latin 1 codepoints should be in Glyph.xml
     expect(matchCount).toBeGreaterThan(200);
   });
 
@@ -596,7 +596,7 @@ describe("cross-domain consistency", () => {
     const dollarResult = searchResults.find((r) => r.codepoint === 0x24);
     expect(dollarResult).toBeDefined();
 
-    const glyphData = db.getGlyphData(0x24);
+    const glyphData = db.getGlyph(0x24);
     expect(glyphData).not.toBeNull();
     expect(dollarResult!.glyphName).toBe(glyphData!.name);
   });

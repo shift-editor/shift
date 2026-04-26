@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateGlyphData } from "./generators/glyphData.js";
+import { generateGlyph } from "./generators/glyphData.js";
 import { generateDecomposition } from "./generators/decomposition.js";
 import { generateCharsets } from "./generators/charsets.js";
 import { generateSearchIndex } from "./generators/search.js";
@@ -32,7 +32,7 @@ function generate() {
   // Step 1: glyph-data.json
   const glyphDataPath = join(RESOURCES_DIR, "glyph-data.json");
   const xmlPath = join(VENDOR_DIR, "GlyphData.xml");
-  const glyphCount = generateGlyphData(xmlPath, glyphDataPath);
+  const glyphCount = generateGlyph(xmlPath, glyphDataPath);
   console.log(`  glyph-data.json: ${glyphCount} entries (${formatSize(glyphDataPath)})`);
 
   // Step 2: decomposition.json

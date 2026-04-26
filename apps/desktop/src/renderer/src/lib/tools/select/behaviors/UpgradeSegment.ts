@@ -1,9 +1,9 @@
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { isSegmentHit } from "@/types/hitResult";
 
-export class UpgradeSegment implements SelectHandlerBehavior {
+export class UpgradeSegment implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
     if ((state.type !== "ready" && state.type !== "selected") || !event.altKey) return false;
 

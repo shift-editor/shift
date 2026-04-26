@@ -19,7 +19,7 @@ const db = new GlyphInfo(resources);
 
 console.log("GlyphInfo REPL — `db` is ready to use");
 console.log("Try: db.getGlyphName(0x24)");
-console.log("     db.getGlyphData(0x41)");
+console.log("     db.getGlyph(0x41)");
 console.log("     db.getDecomposition(0xE9)");
 console.log('     db.search("dollar")');
 console.log("     db.listCharsets()");

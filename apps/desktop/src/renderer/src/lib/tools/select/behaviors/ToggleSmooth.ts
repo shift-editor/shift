@@ -1,10 +1,10 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { getPointIdFromHit } from "@/types/hitResult";
 import { Validate } from "@shift/validation";
 
-export class ToggleSmooth implements SelectHandlerBehavior {
+export class ToggleSmooth implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
     ctx: ToolContext<SelectState>,

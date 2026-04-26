@@ -10,15 +10,15 @@ export type FontEngineAPI = Omit<FontEngine, "constructor">;
 export type NodeRef = JsNodeRef;
 export type NodePositionUpdate = JsNodePositionUpdate;
 
-export interface CompositeComponentPayload {
+export interface CompositeComponent {
   componentGlyphName: string;
   sourceUnicodes: number[];
   contours: RenderContourSnapshot[];
 }
 
-export interface CompositeComponentsPayload {
+export interface CompositeComponents {
   glyphName: string;
-  components: CompositeComponentPayload[];
+  components: CompositeComponent[];
 }
 
 declare global {

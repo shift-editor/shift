@@ -1,6 +1,6 @@
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
-import type { SelectHandlerBehavior, SelectState } from "../types";
+import type { SelectBehavior, SelectState } from "../types";
 import { hitTestTextSlot } from "../../text/layout";
 import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
 
@@ -10,7 +10,7 @@ import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
  * This is a visual-only behavior — it returns false so that
  * subsequent behaviors can also process the pointer move event.
  */
-export class TextRunHover implements SelectHandlerBehavior {
+export class TextRunHover implements SelectBehavior {
   onPointerMove(
     state: SelectState,
     ctx: ToolContext<SelectState>,

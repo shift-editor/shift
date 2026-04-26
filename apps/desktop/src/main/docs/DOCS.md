@@ -29,7 +29,7 @@ src/main/
 ## Key Types
 
 - `ThemeName` -- `"light" | "dark" | "system"`, stored in `MenuManager.currentTheme`
-- `DebugState` -- aggregates `reactScanEnabled`, `debugPanelOpen`, and `DebugOverlays`; only used in dev builds
+- `Debug` -- aggregates `reactScanEnabled`, `debugPanelOpen`, and `DebugOverlays`; only used in dev builds
 - `DebugOverlays` -- per-overlay booleans (`tightBounds`, `hitRadii`, `segmentBounds`, `glyphBbox`)
 - `IpcCommands` -- renderer-to-main request/response channels (invoke/handle)
 - `IpcEvents` -- main-to-renderer broadcast channels (send/on)
@@ -110,5 +110,5 @@ IPC handlers are split across managers. `WindowManager` registers window-control
 
 - `IpcCommands`, `IpcEvents` -- type-safe IPC channel definitions in `shared/ipc/channels.ts`
 - `ipc.send`, `ipc.handle` -- typed wrappers in `shared/ipc/main.ts`
-- `ThemeName`, `DebugState`, `DebugOverlays` -- shared types in `shared/ipc/types.ts`
+- `ThemeName`, `Debug`, `DebugOverlays` -- shared types in `shared/ipc/types.ts`
 - Preload bridge -- exposes IPC to renderer (see preload DOCS.md)

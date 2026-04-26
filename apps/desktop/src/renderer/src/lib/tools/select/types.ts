@@ -10,20 +10,20 @@ export interface DragTarget {
 }
 
 /** Tracks the start and current positions of a marquee drag. */
-export interface SelectionData {
+export interface SelectionDrag {
   startPos: Point2D;
   currentPos: Point2D;
 }
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
-export interface TranslateData {
+export interface TranslateDrag {
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */
-export interface ResizeData {
+export interface ResizeDrag {
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
   lastPos: Point2D;
@@ -33,7 +33,7 @@ export interface ResizeData {
 }
 
 /** Live state of a rotation drag, tracking angles and initial point positions for the transform. */
-export interface RotateData {
+export interface RotateDrag {
   corner: CornerHandle;
   startPos: Point2D;
   lastPos: Point2D;
@@ -43,7 +43,7 @@ export interface RotateData {
   snappedAngle?: number;
 }
 
-export interface BendData {
+export interface BendDrag {
   t: number;
   startPos: Point2D;
   initialControlOne: Point2D;
@@ -65,12 +65,11 @@ export interface BendData {
 export type SelectState =
   | { type: "idle" }
   | { type: "ready" }
-  | { type: "selecting"; selection: SelectionData }
+  | { type: "selecting"; selection: SelectionDrag }
   | { type: "selected" }
-  | { type: "translating"; translate: TranslateData }
-  | { type: "resizing"; resize: ResizeData }
-  | { type: "rotating"; rotate: RotateData }
-  | { type: "bending"; bend: BendData };
+  | { type: "translating"; translate: TranslateDrag }
+  | { type: "resizing"; resize: ResizeDrag }
+  | { type: "rotating"; rotate: RotateDrag }
+  | { type: "bending"; bend: BendDrag };
 
 export type SelectBehavior = Behavior<SelectState>;
-export type SelectHandlerBehavior = SelectBehavior;

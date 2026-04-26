@@ -23,8 +23,8 @@ import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
 import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
-import type { CompositeComponentsPayload } from "@shared/bridge/FontEngineAPI";
-import type { CommandResponse, PasteResult, PointEdit } from "@/types/engine";
+import type { CompositeComponents } from "@shared/bridge/FontEngineAPI";
+import type { CommandResult, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
 import type { NodePositionUpdateList } from "@/types/positionUpdate";
 import { Glyph, type GlyphChange } from "@/lib/model/Glyph";
@@ -141,10 +141,10 @@ export class NativeBridge {
     return svg ? new Path2D(svg) : null;
   }
 
-  getGlyphCompositeComponents(glyphName: string): CompositeComponentsPayload | null {
+  getGlyphCompositeComponents(glyphName: string): CompositeComponents | null {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
-    return JSON.parse(payload) as CompositeComponentsPayload;
+    return JSON.parse(payload) as CompositeComponents;
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -184,7 +184,7 @@ export class NativeBridge {
     return JSON.parse(this.#raw.getSnapshotData()) as GlyphSnapshot;
   }
 
-  #execute(json: string): CommandResponse {
+  #execute(json: string): CommandResult {
     const raw = JSON.parse(json);
     if (!raw.success) {
       throw new NativeOperationError(raw.error ?? "Unknown native error");

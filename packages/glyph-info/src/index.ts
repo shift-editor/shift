@@ -28,7 +28,7 @@ export type {
   /** Lightweight summary returned by `GlyphInfo.listCharsets()`. */
   CharsetSummary,
   /** Bidirectional codepoint decomposition maps. */
-  DecompositionData,
+  Decomposition,
   /** Known Unicode general category for glyph classification. */
   GlyphCategory,
   /** Category fallback and inclusion options for codepoint categorization APIs. */
@@ -44,7 +44,7 @@ export type {
   /** Subcategory summary entry used inside `GlyphCategorySummary`. */
   GlyphSubCategorySummary,
   /** Per-codepoint glyph metadata (name, category, script, etc.). */
-  GlyphData,
+  Glyph,
   /** Bundle of all resources needed to construct a {@link GlyphInfo} instance. */
   GlyphInfoResources,
   /** A single hit from `GlyphInfo.search()`, ranked by relevance. */

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { XMLParser } from "fast-xml-parser";
-import type { GlyphCategory, GlyphData } from "../../src/types.js";
+import type { GlyphCategory, Glyph } from "../../src/types.js";
 
 interface XmlGlyph {
   unicode?: string;
@@ -12,7 +12,7 @@ interface XmlGlyph {
   altNames?: string;
 }
 
-export function generateGlyphData(xmlPath: string, outputPath: string): number {
+export function generateGlyph(xmlPath: string, outputPath: string): number {
   const xml = readFileSync(xmlPath, "utf-8");
 
   const parser = new XMLParser({
@@ -24,7 +24,7 @@ export function generateGlyphData(xmlPath: string, outputPath: string): number {
   const parsed = parser.parse(xml);
   const glyphs: XmlGlyph[] = parsed.glyphData.glyph;
 
-  const results: GlyphData[] = [];
+  const results: Glyph[] = [];
 
   for (const g of glyphs) {
     if (!g.unicode) continue;

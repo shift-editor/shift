@@ -1,11 +1,11 @@
 import type {
-  PersistedDocumentState,
+  PersistedDocument,
   PersistedModuleEnvelope,
   PersistedRoot,
   PersistenceRegistry,
   PersistedTextRun,
   UserPreferences,
-  TextRunModulePayload,
+  TextRunModule,
 } from "@shift/validation";
 
 export const PERSISTENCE_SCHEMA_VERSION = 1;
@@ -14,10 +14,10 @@ export const PERSISTENCE_DOCUMENT_LIMIT = 100;
 export type PersistenceScope = "app" | "document";
 export type {
   PersistedModuleEnvelope,
-  PersistedDocumentState,
+  PersistedDocument,
   PersistenceRegistry,
   PersistedRoot,
   UserPreferences,
-  TextRunModulePayload,
+  TextRunModule,
   PersistedTextRun,
 };

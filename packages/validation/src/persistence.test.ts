@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PersistedRootSchema,
-  TextRunModulePayloadSchema,
-  UserPreferencesSchema,
-} from "./persistence";
+import { PersistedRootSchema, TextRunModuleSchema, UserPreferencesSchema } from "./persistence";
 
 describe("persistence schemas", () => {
   it("accepts a valid persisted root payload", () => {
@@ -62,7 +58,7 @@ describe("persistence schemas", () => {
   });
 
   it("rejects invalid text-run payload", () => {
-    const result = TextRunModulePayloadSchema.safeParse({
+    const result = TextRunModuleSchema.safeParse({
       runsByGlyph: {
         "65": {
           glyphs: [{ glyphName: "A", unicode: 65 }],

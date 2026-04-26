@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { unicodeName } from "unicode-name";
-import type { GlyphData } from "../../src/types.js";
+import type { Glyph } from "../../src/types.js";
 
 export function generateSearchIndex(glyphDataPath: string, outputPath: string): number {
-  const glyphDataRaw: GlyphData[] = JSON.parse(readFileSync(glyphDataPath, "utf-8"));
+  const glyphDataRaw: Glyph[] = JSON.parse(readFileSync(glyphDataPath, "utf-8"));
   const glyphMap = new Map(glyphDataRaw.map((g) => [g.codepoint, g]));
 
   const records: Array<{

@@ -7,7 +7,7 @@ export interface DebugOverlays {
   glyphBbox: boolean;
 }
 
-export interface DebugState {
+export interface Debug {
   reactScanEnabled: boolean;
   debugPanelOpen: boolean;
   overlays: DebugOverlays;
