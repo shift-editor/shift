@@ -262,15 +262,13 @@ export class MenuManager {
                   label: "React Scan",
                   type: "checkbox" as const,
                   checked: this.debugState.reactScanEnabled,
-                  click: () =>
-                    this.setDebug("reactScanEnabled", !this.debugState.reactScanEnabled),
+                  click: () => this.setDebug("reactScanEnabled", !this.debugState.reactScanEnabled),
                 },
                 {
                   label: "Debug Panel",
                   type: "checkbox" as const,
                   checked: this.debugState.debugPanelOpen,
-                  click: () =>
-                    this.setDebug("debugPanelOpen", !this.debugState.debugPanelOpen),
+                  click: () => this.setDebug("debugPanelOpen", !this.debugState.debugPanelOpen),
                 },
                 { type: "separator" as const },
                 {

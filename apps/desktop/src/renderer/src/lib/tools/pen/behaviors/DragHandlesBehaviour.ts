@@ -193,12 +193,7 @@ export class HandleBehavior implements PenBehavior {
     return { cpIn: cpInId };
   }
 
-  #updateHandles(
-    anchor: Anchor,
-    handles: Handles,
-    snappedPos: Point2D,
-    editor: Editor,
-  ): void {
+  #updateHandles(anchor: Anchor, handles: Handles, snappedPos: Point2D, editor: Editor): void {
     const glyph = editor.glyph.peek();
     if (!glyph) return;
 

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PersistedRootSchema,
-  TextRunModuleSchema,
-  UserPreferencesSchema,
-} from "./persistence";
+import { PersistedRootSchema, TextRunModuleSchema, UserPreferencesSchema } from "./persistence";
 
 describe("persistence schemas", () => {
   it("accepts a valid persisted root payload", () => {
