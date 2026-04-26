@@ -31,7 +31,7 @@ function generate() {
 
   // Step 1: glyph-data.json
   const glyphDataPath = join(RESOURCES_DIR, "glyph-data.json");
-  const xmlPath = join(VENDOR_DIR, "Glyph.xml");
+  const xmlPath = join(VENDOR_DIR, "GlyphData.xml");
   const glyphCount = generateGlyph(xmlPath, glyphDataPath);
   console.log(`  glyph-data.json: ${glyphCount} entries (${formatSize(glyphDataPath)})`);
 

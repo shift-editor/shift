@@ -1,4 +1,4 @@
-// TODO: Derive GlyphSubCategory and GlyphScript unions from Glyph.xml during the generate step.
+// TODO: Derive GlyphSubCategory and GlyphScript unions from GlyphData.xml during the generate step.
 
 /** Known Unicode general categories used for glyph classification. */
 export const GLYPH_CATEGORIES = [

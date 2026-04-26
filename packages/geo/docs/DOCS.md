@@ -36,7 +36,7 @@ src/
 - `QuadraticCurve` -- `{ type: "quadratic"; p0; c; p1 }`. One control point.
 - `CubicCurve` -- `{ type: "cubic"; p0; c0; c1; p1 }`. Two control points.
 - `CurveType` -- discriminated union of `LineCurve | QuadraticCurve | CubicCurve`. Switch on `.type`.
-- `ClosestPointResult` -- `{ t, point, distance }`. Returned by `Curve.closestPoint` for hit-testing.
+- `ClosestPoint` -- `{ t, point, distance }`. Returned by `Curve.closestPoint` for hit-testing.
 - `MatModel` -- readonly interface for the six affine matrix coefficients `(a, b, c, d, e, f)`.
 - `Mat` -- mutable class implementing `MatModel`. Maps directly to Canvas2D `transform(a, b, c, d, e, f)`.
 

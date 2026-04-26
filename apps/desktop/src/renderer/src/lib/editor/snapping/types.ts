@@ -72,7 +72,7 @@ export interface PointSnapStepArgs {
 }
 
 /** Output of a single point snap step: the corrected position, which source matched, and optional visual indicator. */
-export interface PointStepResult {
+export interface PointStep {
   snappedPoint: Point2D;
   source: "pointToPoint" | "metrics" | "angle";
   indicator: SnapIndicator | null;
@@ -80,11 +80,11 @@ export interface PointStepResult {
 
 /**
  * A single stage in the point snap pipeline. Each step inspects the input and
- * either returns a {@link PointStepResult} (snap hit) or `null` (no match).
+ * either returns a {@link PointStep} (snap hit) or `null` (no match).
  */
 export interface PointSnapStep {
   id: string;
-  apply(args: PointSnapStepArgs): PointStepResult | null;
+  apply(args: PointSnapStepArgs): PointStep | null;
 }
 
 /** Input bundle passed to each {@link RotateSnapStep}. Contains the raw rotation delta (radians) and modifier state. */
@@ -97,30 +97,30 @@ export interface RotateSnapStepArgs {
 }
 
 /** Output of a single rotate snap step: the quantized delta and its source. */
-export interface RotateStepResult {
+export interface RotateStep {
   snappedDelta: number;
   source: "angle";
   indicator: SnapIndicator | null;
 }
 
 /**
- * A single stage in the rotate snap pipeline. Returns a {@link RotateStepResult}
+ * A single stage in the rotate snap pipeline. Returns a {@link RotateStep}
  * when the rotation delta should be quantized, or `null` to pass through.
  */
 export interface RotateSnapStep {
   id: string;
-  apply(args: RotateSnapStepArgs): RotateStepResult | null;
+  apply(args: RotateSnapStepArgs): RotateStep | null;
 }
 
 /** Final resolved result of a point snap pipeline run. If no step matched, `source` is `null` and `point` is unchanged. */
-export interface PointSnapResult {
+export interface PointSnap {
   point: Point2D;
   indicator: SnapIndicator | null;
   source: "pointToPoint" | "metrics" | "angle" | null;
 }
 
 /** Final resolved result of a rotate snap pipeline run. If no step matched, `source` is `null` and `delta` is unchanged. */
-export interface RotateSnapResult {
+export interface RotateSnap {
   delta: number;
   source: "angle" | null;
 }
@@ -142,7 +142,7 @@ export interface DragSnapSessionConfig {
  */
 export interface DragSnapSession {
   getAnchorPosition(): Point2D;
-  snap(point: Point2D, modifiers: { shiftKey: boolean }): PointSnapResult;
+  snap(point: Point2D, modifiers: { shiftKey: boolean }): PointSnap;
   clear(): void;
 }
 
@@ -151,6 +151,6 @@ export interface DragSnapSession {
  * call `snap()` on each rotation event and `clear()` when rotation ends.
  */
 export interface RotateSnapSession {
-  snap(delta: number, modifiers: { shiftKey: boolean }): RotateSnapResult;
+  snap(delta: number, modifiers: { shiftKey: boolean }): RotateSnap;
   clear(): void;
 }

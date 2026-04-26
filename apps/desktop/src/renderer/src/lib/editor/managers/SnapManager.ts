@@ -8,10 +8,10 @@ import type { SnapPreferences } from "@/types/editor";
 import type {
   DragSnapSession,
   DragSnapSessionConfig,
-  PointSnapResult,
+  PointSnap,
   PointSnapStep,
   RotateSnapSession,
-  RotateSnapResult,
+  RotateSnap,
   RotateSnapStep,
   SnapContext,
   SnappableObject,
@@ -75,7 +75,7 @@ export class SnapManager {
 
     return {
       getAnchorPosition: () => anchorPosition,
-      snap: (cursorPoint, modifiers): PointSnapResult => {
+      snap: (cursorPoint, modifiers): PointSnap => {
         const pointPosition = Vec2.add(anchorPosition, Vec2.sub(cursorPoint, config.dragStart));
         const prefs = this.#getPreferences();
 
@@ -101,7 +101,7 @@ export class SnapManager {
     const steps: RotateSnapStep[] = [createRotateAngleStep()];
 
     return {
-      snap: (delta, modifiers): RotateSnapResult => {
+      snap: (delta, modifiers): RotateSnap => {
         const prefs = this.#getPreferences();
 
         return this.#runner.runRotatePipeline(steps, {

@@ -70,7 +70,7 @@ export type CurveType = LineCurve | QuadraticCurve | CubicCurve;
 /**
  * Result of a closest-point query.
  */
-export interface ClosestPointResult {
+export interface ClosestPoint {
   /** Parameter t where the closest point lies (0 to 1) */
   t: number;
   /** The closest point on the curve */
@@ -159,7 +159,7 @@ export const Curve = {
    * Find closest point on curve to a test point.
    * Uses Newton-Raphson refinement for accuracy.
    */
-  closestPoint(curve: CurveType, point: Point2D): ClosestPointResult {
+  closestPoint(curve: CurveType, point: Point2D): ClosestPoint {
     switch (curve.type) {
       case "line":
         return lineClosestPoint(curve, point);
@@ -279,7 +279,7 @@ function quadraticTangentAt(curve: QuadraticCurve, t: number): Point2D {
   };
 }
 
-function quadraticClosestPoint(curve: QuadraticCurve, point: Point2D): ClosestPointResult {
+function quadraticClosestPoint(curve: QuadraticCurve, point: Point2D): ClosestPoint {
   let bestT = 0;
   let bestDist = Infinity;
 
@@ -402,7 +402,7 @@ function cubicSecondDerivativeAt(curve: CubicCurve, t: number): Point2D {
   };
 }
 
-function cubicClosestPoint(curve: CubicCurve, point: Point2D): ClosestPointResult {
+function cubicClosestPoint(curve: CubicCurve, point: Point2D): ClosestPoint {
   let bestT = 0;
   let bestDist = Infinity;
 
@@ -508,7 +508,7 @@ function cubicSplitAt(curve: CubicCurve, t: number): [CubicCurve, CubicCurve] {
   return [Curve.cubic(curve.p0, p01, p012, p0123), Curve.cubic(p0123, p123, p23, curve.p1)];
 }
 
-function lineClosestPoint(curve: LineCurve, point: Point2D): ClosestPointResult {
+function lineClosestPoint(curve: LineCurve, point: Point2D): ClosestPoint {
   const v = Vec2.sub(curve.p1, curve.p0);
   const w = Vec2.sub(point, curve.p0);
 

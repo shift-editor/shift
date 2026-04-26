@@ -59,7 +59,7 @@ type GlyphCategoryCountBucket = {
   subCategoryCounts: Map<string, { label: string; count: number }>;
 };
 
-type GlyphCategoryCatalogData = {
+type GlyphCategoryCatalogIndex = {
   categories: GlyphCategorySummary[];
   entries: GlyphCategoryEntry[];
 };
@@ -332,7 +332,7 @@ export class GlyphInfo {
   #buildCategoryCatalogData(
     codepoints: number[],
     options: Required<GlyphCategoryOptions>,
-  ): GlyphCategoryCatalogData {
+  ): GlyphCategoryCatalogIndex {
     const categoryCounts = new Map<GlyphCategory, GlyphCategoryCountBucket>();
     const entries: GlyphCategoryEntry[] = [];
 
@@ -353,7 +353,7 @@ export class GlyphInfo {
     };
   }
 
-  #filterCategoryCatalog(data: GlyphCategoryCatalogData, filter: GlyphCodepointFilter): number[] {
+  #filterCategoryCatalog(data: GlyphCategoryCatalogIndex, filter: GlyphCodepointFilter): number[] {
     const selectedCategory = filter.category ?? null;
     const selectedSubCategoryKey = filter.subCategoryKey ?? null;
     const query = filter.query ?? "";
