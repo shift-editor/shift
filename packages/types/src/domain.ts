@@ -65,7 +65,6 @@ export type RenderContour = Readonly<Omit<RenderContourSnapshot, "points">> & {
 export type Glyph = Readonly<Omit<GlyphSnapshot, "contours" | "anchors" | "compositeContours">> & {
   readonly contours: readonly Contour[];
   readonly anchors: readonly Anchor[];
-  readonly compositeContours: readonly RenderContour[];
 };
 
 /** A single component of a composite glyph. */

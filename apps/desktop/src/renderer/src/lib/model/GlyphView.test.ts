@@ -1,17 +1,11 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { effect } from "@/lib/reactive";
 import { Font } from "./Font";
-import { createBridge } from "@/testing/engine";
-
-const FIXTURE = resolve(
-  process.cwd(),
-  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
+import { createBridge, MUTATORSANS_DESIGNSPACE } from "@/testing";
 
 function loadMutatorSans(): Font {
   const font = new Font(createBridge());
-  font.load(FIXTURE);
+  font.load(MUTATORSANS_DESIGNSPACE);
   return font;
 }
 
@@ -65,5 +59,37 @@ describe("GlyphView — variation interpolation", () => {
     expect(lastSvg).not.toBe(atDefault);
 
     sub.dispose();
+  });
+
+  it("componentContours yields interpolated blocks (covers canvas component drawing)", () => {
+    // The canvas's renderToolScene reads view.componentContours() directly
+    // when drawing components of an active composite edit. This ensures the
+    // iterator yields different geometry across variation locations — i.e.
+    // composites in the canvas will redraw on slider scrub.
+    const font = loadMutatorSans();
+    const aacute = font.glyph("Aacute")!;
+
+    const firstX = (): number => {
+      for (const block of aacute.componentContours()) {
+        if (block.segments.length > 0) return block.segments[0].points[0];
+      }
+      return NaN;
+    };
+
+    const xAtDefault = firstX();
+    expect(Number.isFinite(xAtDefault)).toBe(true);
+
+    const axes = font.getAxes();
+    const bold = locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum])));
+    font.setVariationLocation(bold);
+
+    expect(firstX()).not.toBe(xAtDefault);
+  });
+
+  it("rootContours of a pure composite is empty", () => {
+    const font = loadMutatorSans();
+    const aacute = font.glyph("Aacute")!;
+    const blocks = [...aacute.rootContours()];
+    expect(blocks).toEqual([]);
   });
 });

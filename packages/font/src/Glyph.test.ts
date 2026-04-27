@@ -24,7 +24,6 @@ function makeGlyph(contours: Contour[]): Glyph {
     contours,
     activeContourId: null,
     anchors: [],
-    compositeContours: [],
   };
 }
 

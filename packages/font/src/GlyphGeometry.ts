@@ -155,12 +155,6 @@ export function deriveGlyphTightBounds(glyph: Glyph): Bounds | null {
     }
   }
 
-  for (const contour of glyph.compositeContours ?? []) {
-    for (const segment of parseContourSegments(contour)) {
-      bounds.push(Curve.bounds(segmentToCurve(segment)));
-    }
-  }
-
   return Bounds.unionAll(bounds);
 }
 

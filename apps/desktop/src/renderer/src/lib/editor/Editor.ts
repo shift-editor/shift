@@ -3,6 +3,7 @@ import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
 import type { Point2D, Rect2D, PointId, AnchorId, ContourId, Contour, Point } from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
+import { blockToPath2D } from "@/lib/model/GlyphView";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
@@ -325,6 +326,12 @@ export class Editor {
         glyph.contours;
         glyph.anchors;
       }
+      // Slider scrubs need to re-trigger the scene redraw even when the
+      // active glyph is a pure composite (whose own contour signals don't
+      // fire because useApplyVariation short-circuits on null variationData).
+      // The redraw path then walks font.glyph(name).componentContours() to
+      // pick up freshly-interpolated component shapes.
+      this.font.$variationLocation.value;
       this.#drawOffset.value;
       this.$activeToolState.value;
       this.selection.pointIds;
@@ -489,6 +496,20 @@ export class Editor {
     if (glyph && this.shouldRenderGlyph()) {
       glyph.drawOutline(canvas);
       if (previewMode) glyph.draw(canvas);
+
+      // Composite components — drawn from the read-only GlyphView so they
+      // re-interpolate with the slider. Direct $location.value read keeps
+      // this re-render path alive even if a base GlyphView is evicted from
+      // the LRU mid-session (see lib/reactive/docs/DOCS.md).
+      this.font.$variationLocation.value;
+      const view = this.font.glyph(glyph.name);
+      if (view) {
+        for (const block of view.componentContours()) {
+          const path = blockToPath2D(block);
+          canvas.strokePath(path, canvas.theme.glyph.stroke, canvas.theme.glyph.widthPx);
+          if (previewMode) canvas.fillPath(path, canvas.theme.glyph.fill);
+        }
+      }
     }
 
     if (!previewMode && glyph && this.shouldRenderGlyph()) {

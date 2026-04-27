@@ -27,6 +27,38 @@ export type Segment = { kind: "line" | "quad" | "cubic"; points: readonly number
 export type ContourBlock = { closed: boolean; segments: Segment[] };
 
 /**
+ * Build a `Path2D` from one ContourBlock. Used by the canvas drawing layer
+ * when it consumes `componentContours()` directly (composites in editor).
+ */
+export function blockToPath2D(block: ContourBlock): Path2D {
+  const p = new Path2D();
+  if (block.segments.length === 0) return p;
+  p.moveTo(block.segments[0].points[0], block.segments[0].points[1]);
+  for (const seg of block.segments) {
+    switch (seg.kind) {
+      case "line":
+        p.lineTo(seg.points[2], seg.points[3]);
+        break;
+      case "quad":
+        p.quadraticCurveTo(seg.points[2], seg.points[3], seg.points[4], seg.points[5]);
+        break;
+      case "cubic":
+        p.bezierCurveTo(
+          seg.points[2],
+          seg.points[3],
+          seg.points[4],
+          seg.points[5],
+          seg.points[6],
+          seg.points[7],
+        );
+        break;
+    }
+  }
+  if (block.closed) p.closePath();
+  return p;
+}
+
+/**
  * Reactive read-only view of a glyph at the current variation location.
  *
  * Auto-tracking via signals: read `glyph.svgPath` or `glyph.advance` inside a
@@ -86,36 +118,50 @@ export class GlyphView {
   }
 
   /**
-   * Iterate every contour rendered by this glyph at the current location:
-   * own root contours first, then each component's contours with its
-   * transform applied. `visited` is the active recursion stack — a name is
-   * skipped while it is on the stack and removed when the call exits, so
-   * cyclic refs are blocked but multiple references to the same base in a
-   * single tree still render.
+   * Root contours owned directly by this glyph at the current location.
+   * Empty for pure composites.
+   */
+  *rootContours(): Iterable<ContourBlock> {
+    const v = this.#values.value;
+    let cursor = 1;
+    for (const contour of this.#geometry.contours) {
+      const segments = classifySegments(contour.points, contour.closed, v, cursor);
+      cursor += contour.points.length * 2;
+      if (segments.length > 0) yield { closed: contour.closed, segments };
+    }
+  }
+
+  /**
+   * Component contours, recursed through `font.glyph(baseName).contours()`
+   * with the component transform applied. The caller passes a `visited` set
+   * so cycle-guarding works across the whole walk; pass a fresh set when
+   * called from outside `*contours()`.
+   */
+  *componentContours(visited: Set<string> = new Set([this.name])): Iterable<ContourBlock> {
+    for (const comp of this.#components) {
+      const base = this.#font.glyph(comp.baseGlyphName);
+      if (!base) continue;
+      const matrix = decomposedToMatrix(comp.transform);
+      for (const block of base.contours(visited)) {
+        yield {
+          closed: block.closed,
+          segments: block.segments.map((s) => transformSegment(s, matrix)),
+        };
+      }
+    }
+  }
+
+  /**
+   * Root + component contours. Used by grid and text-run consumers; the
+   * canvas combines `editable.path` (mutable root) with `componentContours`
+   * directly so it never goes through this method.
    */
   *contours(visited: Set<string> = new Set()): Iterable<ContourBlock> {
     if (visited.has(this.name)) return;
     visited.add(this.name);
     try {
-      const v = this.#values.value;
-      let cursor = 1;
-      for (const contour of this.#geometry.contours) {
-        const segments = classifySegments(contour.points, contour.closed, v, cursor);
-        cursor += contour.points.length * 2;
-        if (segments.length > 0) yield { closed: contour.closed, segments };
-      }
-
-      for (const comp of this.#components) {
-        const base = this.#font.glyph(comp.baseGlyphName);
-        if (!base) continue;
-        const matrix = decomposedToMatrix(comp.transform);
-        for (const block of base.contours(visited)) {
-          yield {
-            closed: block.closed,
-            segments: block.segments.map((s) => transformSegment(s, matrix)),
-          };
-        }
-      }
+      yield* this.rootContours();
+      yield* this.componentContours(visited);
     } finally {
       visited.delete(this.name);
     }

@@ -20,7 +20,6 @@ import type {
   AnchorId,
   Point,
   Anchor,
-  RenderContour,
   Point2D,
 } from "@shift/types";
 import {
@@ -162,7 +161,6 @@ export class Glyph {
   readonly #contours: WritableSignal<readonly Contour[]>;
   readonly #xAdvance: WritableSignal<number>;
   readonly #anchors: WritableSignal<readonly Anchor[]>;
-  readonly #compositeContours: WritableSignal<readonly RenderContour[]>;
   readonly #activeContourId: WritableSignal<ContourId | null>;
   readonly #path: ComputedSignal<Path2D>;
   readonly #bbox: ComputedSignal<BoundsType | null>;
@@ -176,38 +174,26 @@ export class Glyph {
     this.#contours = signal<readonly Contour[]>(snapshot.contours.map((c) => new Contour(c)));
     this.#xAdvance = signal(snapshot.xAdvance);
     this.#anchors = signal<readonly Anchor[]>(snapshot.anchors);
-    this.#compositeContours = signal<readonly RenderContour[]>(snapshot.compositeContours);
     this.#activeContourId = signal<ContourId | null>(snapshot.activeContourId);
 
+    // Root contours only. Composite components (for canvas display, grid,
+    // text run) come from `font.glyph(name).componentContours()` at the
+    // drawing site — that path stays reactive to $variationLocation, which
+    // this editable model intentionally does not.
     this.#path = computed<Path2D>(() => {
       const p = new Path2D();
       for (const c of this.#contours.value) {
         p.addPath(c.path);
       }
-      for (const c of this.#compositeContours.value) {
-        p.addPath(buildPath2D(c.points, c.closed));
-      }
       return p;
     });
 
     this.#bbox = computed<BoundsType | null>(() => {
-      const contourBounds = this.#contours.value
+      const bounds = this.#contours.value
         .map((c) => c.bounds)
         .filter((b): b is BoundsType => b !== null);
-
-      const compositeBounds = this.#compositeContours.value
-        .map((c) => {
-          if (c.points.length < 2) return null;
-          const segs = parseContourSegments({ points: c.points, closed: c.closed });
-
-          if (segs.length === 0) return null;
-          return Bounds.unionAll(segs.map((s) => Curve.bounds(segmentToCurve(s))));
-        })
-        .filter((b): b is BoundsType => b !== null);
-
-      const all = [...contourBounds, ...compositeBounds];
-      if (all.length === 0) return null;
-      return Bounds.unionAll(all);
+      if (bounds.length === 0) return null;
+      return Bounds.unionAll(bounds);
     });
 
     // Point-based x-range — cheap, matches integer-rounded sidebar display.
@@ -250,11 +236,6 @@ export class Glyph {
 
   get anchors(): readonly Anchor[] {
     return this.#anchors.value;
-  }
-
-  /** @knipclassignore — part of domain Glyph structural contract */
-  get compositeContours(): readonly RenderContour[] {
-    return this.#compositeContours.value;
   }
 
   /** @knipclassignore */
@@ -590,10 +571,7 @@ export class Glyph {
         closed: c.closed,
       })),
       anchors: [...this.#anchors.peek()],
-      compositeContours: this.#compositeContours.peek().map((c) => ({
-        points: [...c.points],
-        closed: c.closed,
-      })),
+      compositeContours: [],
       activeContourId: this.#activeContourId.peek(),
     };
   }
@@ -621,7 +599,7 @@ export class Glyph {
     batch(() => {
       this.#xAdvance.set(snapshot.xAdvance);
       this.#anchors.set(snapshot.anchors);
-      this.#compositeContours.set(snapshot.compositeContours);
+      // snapshot.compositeContours intentionally ignored — see compositeContours getter.
       this.#activeContourId.set(snapshot.activeContourId);
 
       const currentById = new Map<ContourId, Contour>();

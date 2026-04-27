@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asContourId } from "@shift/types";
-import type { Glyph, Point, PointId, RenderContour } from "@shift/types";
+import type { Glyph, Point, PointId } from "@shift/types";
 import {
   deriveGlyphTightBounds,
   deriveGlyphXBounds,
@@ -23,18 +23,13 @@ function makePoint(
   };
 }
 
-function makeGlyph(input: {
-  xAdvance?: number;
-  contours?: Glyph["contours"];
-  compositeContours?: readonly RenderContour[];
-}): Glyph {
+function makeGlyph(input: { xAdvance?: number; contours?: Glyph["contours"] }): Glyph {
   return {
     unicode: 65,
     name: "A",
     xAdvance: input.xAdvance ?? 500,
     contours: input.contours ?? [],
     anchors: [],
-    compositeContours: input.compositeContours ?? [],
     activeContourId: null,
   };
 }
@@ -111,24 +106,6 @@ describe("glyph bounds derivation", () => {
       min: { x: 10, y: 20 },
       max: { x: 40, y: 50 },
     });
-  });
-
-  it("includes composite contour geometry", () => {
-    const glyph = makeGlyph({
-      compositeContours: [
-        {
-          closed: true,
-          points: [
-            { x: 50, y: 0, pointType: "onCurve", smooth: false },
-            { x: 150, y: 0, pointType: "onCurve", smooth: false },
-            { x: 150, y: 100, pointType: "onCurve", smooth: false },
-            { x: 50, y: 100, pointType: "onCurve", smooth: false },
-          ],
-        },
-      ],
-    });
-
-    expect(deriveGlyphXBounds(glyph)).toEqual({ minX: 50, maxX: 150 });
   });
 
   it("uses curve-tight x bounds", () => {
