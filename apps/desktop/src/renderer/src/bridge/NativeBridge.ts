@@ -9,6 +9,7 @@ import type {
   Axis,
   AxisLocation,
   Source,
+  GlyphData,
   GlyphVariationData,
   MasterSnapshot,
 } from "@shift/types";
@@ -145,6 +146,17 @@ export class NativeBridge {
     const payload = this.#raw.getGlyphCompositeComponents(glyphName);
     if (!payload) return null;
     return JSON.parse(payload) as CompositeComponents;
+  }
+
+  /**
+   * Bundled per-glyph fetch for the render-side `GlyphView` model. One FFI
+   * returns geometry, variation deltas, and component refs (names + transforms,
+   * not pre-flattened — the renderer recurses into composites at iteration time).
+   */
+  getGlyphData(name: string): GlyphData | null {
+    const json = this.#raw.getGlyphData(name);
+    if (!json) return null;
+    return JSON.parse(json) as GlyphData;
   }
 
   /** @knipclassignore — used by VariationPanel component */

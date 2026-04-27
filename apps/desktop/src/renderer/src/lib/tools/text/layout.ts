@@ -94,7 +94,8 @@ export function computeTextLayout(glyphs: GlyphRef[], origin: Point2D, font: Fon
       continue;
     }
 
-    const rawAdvance = font.getAdvance(ref.glyphName) ?? 0;
+    const glyph = font.glyph(ref.glyphName);
+    const rawAdvance = glyph?.advance ?? 0;
     const advance = resolveEditorAdvance(ref, rawAdvance);
 
     slots.push({

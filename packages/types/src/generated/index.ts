@@ -21,6 +21,8 @@ export type { MatchedRule } from "./MatchedRule";
 export type { FontMetrics } from "./FontMetrics";
 export type { FontMetadata } from "./FontMetadata";
 export type { DecomposedTransform } from "./DecomposedTransform";
+export type { Component } from "./Component";
+export type { GlyphData } from "./GlyphData";
 export type { Axis } from "./Axis";
 export type { Location } from "./Location";
 export type { Source } from "./Source";

@@ -43,10 +43,12 @@ function createMockFont(
       const svgPath = svgPaths[Number(unicode)] ?? null;
       return svgPath ? new Path2D(svgPath) : null;
     },
-    getAdvance: (name: string) => {
+    glyph: (name: string) => {
       const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];
       if (!unicode) return null;
-      return advances[Number(unicode)] ?? null;
+      const advance = advances[Number(unicode)];
+      if (advance === undefined) return null;
+      return { advance } as unknown as { advance: number };
     },
     getBbox: (name: string) => {
       const unicode = Object.entries(glyphNameMap).find(([, n]) => n === name)?.[0];

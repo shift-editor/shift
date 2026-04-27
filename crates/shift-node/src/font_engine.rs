@@ -11,7 +11,10 @@ use shift_core::{
   dependency_graph::DependencyGraph,
   edit_session::EditSession,
   font_loader::FontLoader,
-  snapshot::{CommandResult, GlyphSnapshot, MasterSnapshot, RenderContourSnapshot},
+  snapshot::{
+    self, AnchorSnapshot, CommandResult, ContourSnapshot, GlyphData, GlyphGeometry, GlyphSnapshot,
+    MasterSnapshot, RenderContourSnapshot,
+  },
   AnchorId, BooleanOp, ContourId, Font, FontWriter, Glyph, GlyphLayer, GuidelineId, LayerId,
   NodePositionUpdate, NodeRef, PasteContour, PointId, PointType, UfoWriter,
 };
@@ -502,6 +505,34 @@ impl FontEngine {
   pub fn get_glyph_master_snapshots(&self, glyph_name: String) -> Option<String> {
     let masters = self.build_master_snapshots(&glyph_name)?;
     Some(to_json(&masters))
+  }
+
+  /// Bundled per-glyph fetch for the render-side `GlyphView` model.
+  ///
+  /// One FFI returns geometry (default master), variation deltas (or `None`
+  /// for non-variable fonts), and component refs (names + transforms — not
+  /// pre-flattened). The renderer constructs a reactive `GlyphView` from
+  /// this and recurses into composites at iteration time.
+  #[napi]
+  pub fn get_glyph_data(&self, glyph_name: String) -> Option<String> {
+    let (resolved_name, layer) = self.editing_target_for_name(&glyph_name)?;
+    let geometry = GlyphGeometry {
+      x_advance: layer.width(),
+      contours: layer.contours_iter().map(ContourSnapshot::from).collect(),
+      anchors: layer.anchors_iter().map(AnchorSnapshot::from).collect(),
+    };
+    let components: Vec<snapshot::Component> = layer
+      .components_iter()
+      .map(snapshot::Component::from)
+      .collect();
+    let variation_data = self
+      .build_master_snapshots(resolved_name)
+      .and_then(|masters| get_glyph_variation_data(&masters, self.font.axes()));
+    Some(to_json(&GlyphData {
+      geometry,
+      variation_data,
+      components,
+    }))
   }
 
   #[napi]

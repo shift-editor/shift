@@ -12,6 +12,7 @@ Fine-grained reactivity system providing automatic dependency tracking and effic
 - **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
 - **Architecture Invariant:** Classes expose `WritableSignal` fields with a `$` prefix (e.g., `$zoom`). Public getters return the read-only `Signal<T>` type. Use `private` (not `#`) for `$`-prefixed fields to avoid `#$` awkwardness.
 - **Architecture Invariant: Convention:** `$foo` public accessors are for **raw state** — writable signals or cheap computeds — safe to subscribe to via `useSignalState`/`useSignalTrigger`. **Derived values** (bounds, paths, sidebearings) are exposed only as plain getters (`.foo`) and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time. Subscribing directly to an expensive ComputedSignal forces it to re-run on every input fire — that's the footgun to avoid.
+- **Architecture Invariant:** `ComputedSignal.dispose()` clears both its `dependencies` and its `#subscribers`. Anything that was reaching the source signal _through_ this computed loses that path. If the consumer needs to keep firing across the lifetime of the source, it must hold a **direct** subscription to the source — not rely on a chain that passes through a disposable intermediate (e.g. an LRU-cached object's computed).
 
 ## Codemap
 
@@ -89,6 +90,7 @@ Pass `{ equals: () => false }` as the second argument to `signal()`. This is use
 - **`peek()` inside a computed breaks reactivity.** If a computed reads a signal via `.peek()`, it will not re-derive when that signal changes. This is intentional but easy to forget.
 - **Circular computed chains.** There is no cycle detection. A computed that reads itself (directly or indirectly) will hit the `#computing` re-entrancy guard and return the stale value.
 - **`useSignalState` must not be called conditionally.** It is a React hook and follows the rules of hooks.
+- **Disposing a computed silently breaks chains that flowed through it.** If `A → B → C` (A is a source signal, B is a computed, C subscribes to B), and B is disposed, A no longer notifies C — but C does not know it has been orphaned. Pattern: when C's lifetime can outlive B's (e.g. B lives in an LRU and may be evicted), give C a direct edge to A in addition to the indirect one. The canonical case is `GlyphView.#svgPath`: it reads `$variationLocation.value` directly so a composite's reactive chain survives eviction of any base glyph it recurses through.
 
 ## Verification
 

@@ -12,6 +12,10 @@ import type { Bounds } from "@shift/geo";
 import { signal, type WritableSignal, type Signal } from "@/lib/reactive/signal";
 import type { NativeBridge } from "@/bridge";
 import { getGlyphInfo } from "@/store/glyphInfo";
+import { LruCache } from "@/lib/utils/LruCache";
+import { GlyphView } from "./GlyphView";
+
+const GLYPH_CACHE_CAPACITY = 256;
 
 /**
  * Reactive font data surface.
@@ -26,12 +30,15 @@ export class Font {
   readonly #$metrics: WritableSignal<FontMetrics | null>;
   readonly #$variationLocation: WritableSignal<AxisLocation>;
 
+  readonly #glyphs: LruCache<string, GlyphView>;
+
   constructor(bridge: NativeBridge) {
     this.#bridge = bridge;
     this.#$loaded = signal(false);
     this.#$unicodes = signal<number[]>([]);
     this.#$metrics = signal<FontMetrics | null>(null);
     this.#$variationLocation = signal<AxisLocation>({});
+    this.#glyphs = new LruCache<string, GlyphView>(GLYPH_CACHE_CAPACITY, (g) => g.dispose());
   }
 
   /** @knipclassignore */
@@ -83,6 +90,27 @@ export class Font {
     return this.#bridge.nameForUnicode(unicode);
   }
 
+  glyph(name: string): GlyphView | null {
+    const cached = this.#glyphs.get(name);
+    if (cached) return cached;
+
+    const data = this.#bridge.getGlyphData(name);
+    if (!data) return null;
+
+    const g = new GlyphView(
+      name,
+      data.geometry,
+      data.variationData,
+      data.components,
+      this.getAxes(),
+      this.#$variationLocation,
+      this,
+    );
+
+    this.#glyphs.set(name, g);
+    return g;
+  }
+
   /** Resolve unicode to glyph name. Checks font first, then glyph-info DB, then fallback. */
   glyphName(unicode: number): string {
     return (
@@ -92,16 +120,8 @@ export class Font {
     );
   }
 
-  getAdvance(name: string): number | null {
-    return this.#bridge.getAdvance(name);
-  }
-
   getBbox(name: string): Bounds | null {
     return this.#bridge.getBbox(name);
-  }
-
-  getSvgPath(name: string): string | null {
-    return this.#bridge.getSvgPath(name);
   }
 
   /** @knipclassignore — used by GlyphPreview for variation interpolation */
@@ -159,6 +179,7 @@ export class Font {
 
   /** @knipclassignore — called when closing a document */
   reset(): void {
+    this.#glyphs.clear();
     this.#$loaded.set(false);
     this.#$unicodes.set([]);
     this.#$metrics.set(null);

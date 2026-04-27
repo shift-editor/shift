@@ -44,6 +44,8 @@ export type {
   FontMetrics,
   DecomposedTransform,
   Axis,
+  Component,
+  GlyphData,
 } from "./font";
 
 // Domain types (for Editor API)

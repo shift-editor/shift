@@ -24,6 +24,15 @@ export declare class FontEngine {
   getSources(): string
   /** Returns a JSON array of master snapshots for a glyph. */
   getGlyphMasterSnapshots(glyphName: string): string | null
+  /**
+   * Bundled per-glyph fetch for the render-side `GlyphView` model.
+   *
+   * One FFI returns geometry (default master), variation deltas (or `None`
+   * for non-variable fonts), and component refs (names + transforms — not
+   * pre-flattened). The renderer constructs a reactive `GlyphView` from
+   * this and recurses into composites at iteration time.
+   */
+  getGlyphData(glyphName: string): string | null
   getGlyphVariationData(glyphName: string): string | null
   startEditSession(glyphRef: JsGlyphRef): void
   endEditSession(): void

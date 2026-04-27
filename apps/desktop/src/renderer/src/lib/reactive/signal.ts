@@ -156,6 +156,12 @@ export function signal<T>(initialValue: T, options?: SignalOptions<T>): Writable
 export interface ComputedSignal<T> extends Signal<T> {
   /** Force recomputation even if dependencies haven't changed. */
   invalidate(): void;
+  /**
+   * Sever dependency edges so this computed and its closure can be GC'd.
+   * After dispose, dependency signals no longer hold the computed in their
+   * subscriber set, and reads return the last cached value without retracking.
+   */
+  dispose(): void;
 }
 
 class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
@@ -163,6 +169,7 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
   #value: T | undefined;
   #dirty = true;
   #computing = false;
+  #disposed = false;
   #subscribers = new Set<Computation>();
   dependencies = new Set<SignalNode>();
 
@@ -171,6 +178,10 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
   }
 
   get value(): T {
+    if (this.#disposed) {
+      return this.#value!;
+    }
+
     // Track this computed as a dependency
     if (currentComputation) {
       this.#subscribers.add(currentComputation);
@@ -237,6 +248,17 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
 
   _unsubscribe(computation: Computation): void {
     this.#subscribers.delete(computation);
+  }
+
+  dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
+
+    for (const dep of this.dependencies) {
+      dep._unsubscribe(this);
+    }
+    this.dependencies.clear();
+    this.#subscribers.clear();
   }
 }
 

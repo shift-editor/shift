@@ -175,6 +175,69 @@ describe("computed", () => {
     const v3 = c.value;
     expect(v3).not.toBe(v1); // Recomputed
   });
+
+  describe("dispose", () => {
+    it("severs dependency edges so source signals stop notifying", () => {
+      const s = signal(1);
+      const c = computed(() => s.value * 2);
+
+      expect(c.value).toBe(2);
+
+      let runs = 0;
+      const e = effect(() => {
+        c.value;
+        runs++;
+      });
+      expect(runs).toBe(1);
+
+      c.dispose();
+
+      s.set(5);
+      // c is disposed; the effect's edge through c was torn down on dispose
+      // so the effect does not re-run, and c.value returns the cached value.
+      expect(c.value).toBe(2);
+      expect(runs).toBe(1);
+
+      e.dispose();
+    });
+
+    it("is idempotent", () => {
+      const s = signal(1);
+      const c = computed(() => s.value);
+      c.dispose();
+      expect(() => c.dispose()).not.toThrow();
+    });
+
+    it("a direct edge keeps a consumer reactive after an intermediate is disposed", () => {
+      // This is the invariant `GlyphView.#svgPath` relies on. A composite's
+      // svgPath subscribes to $variationLocation through a base GlyphView's
+      // #values. If the LRU evicts the base and disposes its computed, the
+      // indirect chain is severed. To survive, the consumer must hold a
+      // direct edge to the source.
+      const source = signal(0);
+      const intermediate = computed(() => source.value * 2);
+
+      let lastSeen = -1;
+      const consumer = effect(() => {
+        lastSeen = source.value; // direct edge — survives intermediate dispose
+        intermediate.value; // indirect edge via the disposable intermediate
+      });
+
+      expect(lastSeen).toBe(0);
+
+      source.set(5);
+      expect(lastSeen).toBe(5);
+
+      intermediate.dispose();
+
+      // Without the direct edge the consumer would freeze here. With it,
+      // the source still reaches the consumer.
+      source.set(10);
+      expect(lastSeen).toBe(10);
+
+      consumer.dispose();
+    });
+  });
 });
 
 describe("effect", () => {

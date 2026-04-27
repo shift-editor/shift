@@ -4,6 +4,33 @@ use ts_rs::TS;
 use crate::{
     edit_session::EditSession, Anchor, Contour, Location, Point, PointId, PointType as IrPointType,
 };
+use shift_ir::component::{Component as IrComponent, DecomposedTransform};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct Component {
+    pub base_glyph_name: String,
+    pub transform: DecomposedTransform,
+}
+
+impl From<&IrComponent> for Component {
+    fn from(component: &IrComponent) -> Self {
+        Self {
+            base_glyph_name: component.base_glyph().clone(),
+            transform: *component.transform(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../packages/types/src/generated/")]
+pub struct GlyphData {
+    pub geometry: GlyphGeometry,
+    pub variation_data: Option<crate::interpolation::GlyphVariationData>,
+    pub components: Vec<Component>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

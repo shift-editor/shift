@@ -23,6 +23,8 @@ export type {
   FontMetrics,
   FontMetadata,
   Axis,
+  Component,
+  GlyphData,
 } from "./generated";
 
 // Domain types (for Editor API)
