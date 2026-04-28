@@ -1,9 +1,20 @@
 import type { HandleState } from "@/types/graphics";
 import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
-import type { Point2D, Rect2D, PointId, AnchorId, ContourId, Contour, Point } from "@shift/types";
+import type {
+  Point2D,
+  Rect2D,
+  PointId,
+  AnchorId,
+  ContourId,
+  Contour,
+  Point,
+  AxisLocation,
+  GlyphVariationData,
+} from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
 import { blockToPath2D } from "@/lib/model/GlyphView";
+import { interpolate, normalize } from "@/lib/interpolation/interpolate";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";
 import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
@@ -170,6 +181,12 @@ export class Editor {
   #commandHistory: CommandHistory;
   #bridge: NativeBridge;
   #$glyph: ComputedSignal<Glyph | null>;
+  // Variation data for the active glyph. Cached on session start so slider
+  // scrubs avoid a per-tick FFI. Was previously held in a useRef inside
+  // useApplyVariation; moved here so the cache lifecycle is tied to the
+  // edit session (not React render timing) and `open()` can apply the
+  // current location synchronously after starting the session.
+  #activeVariationData: GlyphVariationData | null = null;
   #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, Segment>>;
 
   #staticEffect: Effect;
@@ -859,17 +876,56 @@ export class Editor {
     return this.#renderer.gpuHandleContext;
   }
 
-  /** Opens a glyph for editing by name. */
-  public open(glyphName: string): void {
+  /**
+   * Open `glyphName` for editing. Returns the editable Glyph (or `null` if
+   * the session failed to start). After construction the editable Glyph
+   * carries the master's stored coordinates — but the user came from the
+   * grid where they saw the glyph **interpolated** at the current variation
+   * location. We close that gap by applying the current location to the
+   * active glyph immediately, so the canvas matches what the user clicked.
+   * Subsequent slider scrubs go through `applyVariation`.
+   */
+  public open(glyphName: string): Glyph | null {
     const currentGlyphName = this.#bridge.getEditingGlyphName();
-    if (currentGlyphName === glyphName) return;
+    if (currentGlyphName === glyphName) return this.#$glyph.peek();
 
     this.#bridge.startEditSession(glyphName);
+    this.#activeVariationData = this.font.getGlyphVariationData(glyphName);
+    this.#applyCurrentVariationToActive();
+    return this.#$glyph.peek();
   }
 
   /** Ends the current editing session. */
   public close(): void {
     this.#bridge.endEditSession();
+    this.#activeVariationData = null;
+  }
+
+  /**
+   * Slider-scrub entry point. Sets the shared `$variationLocation` (which
+   * the grid and canvas component-drawing both read) and pushes interpolated
+   * values into the active editable Glyph using the variation data cached
+   * on session start — no per-tick FFI.
+   */
+  public applyVariation(location: AxisLocation): void {
+    this.font.setVariationLocation(location);
+    this.#applyCurrentVariationToActive();
+  }
+
+  /**
+   * Push interpolated values at the current `$variationLocation` into the
+   * active editable Glyph. No-op if there's no cached variation data
+   * (composite with no own deltas, non-variable font, or no active glyph)
+   * — the canvas's reactive component-drawing handles those cases.
+   */
+  #applyCurrentVariationToActive(): void {
+    const glyph = this.#$glyph.peek();
+    const data = this.#activeVariationData;
+    if (!glyph || !data) return;
+
+    const axes = this.font.getAxes();
+    const values = interpolate(data, normalize(this.font.$variationLocation.peek(), axes));
+    glyph.applyValues(values);
   }
 
   public get textRunController(): TextRunController {

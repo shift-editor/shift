@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { effect } from "@/lib/reactive";
 import { Font } from "./Font";
-import { createBridge, MUTATORSANS_DESIGNSPACE } from "@/testing";
+import { TestEditor, createBridge, MUTATORSANS_DESIGNSPACE } from "@/testing";
+import type { GlyphView } from "./GlyphView";
 
 function loadMutatorSans(): Font {
   const font = new Font(createBridge());
   font.load(MUTATORSANS_DESIGNSPACE);
   return font;
+}
+
+function flattenComponentCoords(view: GlyphView): number[] {
+  const out: number[] = [];
+  for (const block of view.componentContours()) {
+    for (const seg of block.segments) out.push(...seg.points);
+  }
+  return out;
 }
 
 function locationOverride(font: Font, override: Record<string, number>) {
@@ -69,21 +78,41 @@ describe("GlyphView — variation interpolation", () => {
     const font = loadMutatorSans();
     const aacute = font.glyph("Aacute")!;
 
-    const firstX = (): number => {
-      for (const block of aacute.componentContours()) {
-        if (block.segments.length > 0) return block.segments[0].points[0];
-      }
-      return NaN;
-    };
-
-    const xAtDefault = firstX();
-    expect(Number.isFinite(xAtDefault)).toBe(true);
+    const atDefault = flattenComponentCoords(aacute);
+    expect(atDefault.length).toBeGreaterThan(0);
 
     const axes = font.getAxes();
     const bold = locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum])));
     font.setVariationLocation(bold);
 
-    expect(firstX()).not.toBe(xAtDefault);
+    const atBold = flattenComponentCoords(aacute);
+    expect(atBold).toHaveLength(atDefault.length);
+    expect(atBold).not.toEqual(atDefault);
+  });
+
+  it("editor.applyVariation re-interpolates a pure composite's component blocks", () => {
+    // Regression for the bug fixed in 22aa095 ("canvas interpolates composite
+    // components on slider scrub"). Pure composites have no own variationData
+    // so applyVariation's per-glyph interpolation no-ops — the slider must
+    // still flow through font.$variationLocation so the canvas redraw path
+    // (font.glyph(name).componentContours()) picks up new component geometry.
+    const editor = new TestEditor();
+    editor.font.load(MUTATORSANS_DESIGNSPACE);
+    editor.open("Aacute");
+
+    const view = editor.font.glyph("Aacute")!;
+    const atDefault = flattenComponentCoords(view);
+    expect(atDefault.length).toBeGreaterThan(0);
+
+    const axes = editor.font.getAxes();
+    const bold = locationOverride(
+      editor.font,
+      Object.fromEntries(axes.map((a) => [a.tag, a.maximum])),
+    );
+    editor.applyVariation(bold);
+
+    const atBold = flattenComponentCoords(view);
+    expect(atBold).not.toEqual(atDefault);
   });
 
   it("rootContours of a pure composite is empty", () => {
