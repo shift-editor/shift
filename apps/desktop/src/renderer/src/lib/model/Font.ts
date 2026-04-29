@@ -82,6 +82,7 @@ export class Font {
     return this.#bridge.getMetrics();
   }
 
+  /** @knipclassignore — read by canvas drawers and TextLayout.shapeHitTest */
   getPath(name: string): Path2D | null {
     return this.#bridge.getPath(name);
   }

@@ -1,0 +1,258 @@
+/**
+ * TextLayout — class facade over the segment → position → assemble pipeline.
+ *
+ * Coordinates: y is negative-down from origin; line N baseline is
+ * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
+ */
+import type { Bounds as BoundsType } from "@shift/geo";
+import { Caret } from "./Caret";
+import type {
+  CaretPosition,
+  Cell,
+  FontMetrics,
+  GlyphCell,
+  Hit,
+  Line,
+  ParagraphSlice,
+  Point2D,
+  PositionedRun,
+  SegmentedRun,
+} from "./types";
+import type { Positioner } from "./Positioner";
+import { Font } from "@/lib/model/Font";
+
+export interface TextLayoutParams {
+  cells: readonly Cell[];
+  origin: Point2D;
+  font: Font;
+  positioner: Positioner;
+}
+
+export class TextLayout {
+  readonly metrics: FontMetrics;
+  readonly origin: Point2D;
+  readonly lines: readonly Line[];
+  readonly totalAdvance: number;
+  /** @knipclassignore — bbox union over positioned glyphs; populated when shapeHitTest lands */
+  readonly bounds: BoundsType | null;
+  readonly bufferLength: number;
+
+  constructor(params: TextLayoutParams) {
+    const { cells, origin, font, positioner } = params;
+    this.metrics = font.getMetrics();
+    this.origin = origin;
+    this.bufferLength = cells.length;
+
+    // splitParagraphs → segmentRuns → position → assemble
+    // Outer array = paragraphs (one Line each); inner array = runs in that paragraph.
+    const positionedParagraphs: PositionedRun[][] = splitParagraphs(cells).map((p) =>
+      segmentRuns(p).map((run) => positioner.position(run, font)),
+    );
+
+    const { lines, totalAdvance, bounds } = assembleLayout(
+      positionedParagraphs,
+      origin,
+      this.metrics,
+    );
+    this.lines = lines;
+    this.totalAdvance = totalAdvance;
+    this.bounds = bounds;
+  }
+
+  /**
+   * Hit-test a canvas point against the layout's advance boxes.
+   *
+   *   1. Find the line whose vertical band [y+descent, y+ascent] contains p.y
+   *      (with optional padding for edge tolerance).
+   *   2. Walk that line's runs/glyphs, accumulating x from `origin.x`. Return
+   *      the glyph whose advance box [left, right) contains p.x.
+   *   3. Within the hit glyph, "left" if p.x is in the left half of the
+   *      advance box, "right" otherwise.
+   *
+   * Returns null when no line / no glyph contains the point.
+   */
+  hitTest(p: Point2D, padding: number = 0): Hit | null {
+    for (const [lineIndex, line] of this.lines.entries()) {
+      const top = line.y + line.ascent;
+      const bottom = line.y + line.descent;
+      if (p.y > top + padding || p.y < bottom - padding) continue;
+
+      let cursor = this.origin.x;
+      for (const [runIndex, run] of line.runs.entries()) {
+        for (const g of run.glyphs) {
+          const left = cursor;
+          const right = cursor + g.xAdvance;
+          if (p.x >= left - padding && p.x < right + padding) {
+            const mid = left + g.xAdvance / 2;
+            return {
+              lineIndex,
+              runIndex,
+              cluster: g.cluster,
+              side: p.x < mid ? "left" : "right",
+            };
+          }
+          cursor = right;
+        }
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /** @knipclassignore — precise glyph-shape hit-test, deferred to follow-up */
+  shapeHitTest(_p: Point2D, _font: Font): Hit | null {
+    throw new Error("TextLayout.shapeHitTest not implemented");
+  }
+
+  /**
+   * Inverse of hitTest: leading-edge canvas point of a positioned glyph at
+   * `cluster`. Returns null if the cluster has no positioned glyph (e.g.
+   * cluster falls on a linebreak, or past the buffer end).
+   */
+  pointAt(cluster: number): CaretPosition | null {
+    const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
+    for (const line of this.lines) {
+      let cursor = this.origin.x;
+      for (const run of line.runs) {
+        for (const g of run.glyphs) {
+          if (g.cluster === cluster) {
+            return { x: cursor, y: line.y, lineHeight };
+          }
+          cursor += g.xAdvance;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** @knipclassignore — convenience for caret construction at a cluster */
+  caretAt(cluster: number): Caret {
+    return Caret.atCluster(this, cluster);
+  }
+
+  /** @knipclassignore — convenience for caret construction at a canvas point */
+  caretAtPoint(p: Point2D): Caret {
+    return Caret.atPoint(this, p);
+  }
+
+  measure(): number {
+    return this.totalAdvance;
+  }
+}
+
+/**
+ * Split the flat cell buffer into paragraphs on linebreak cells.
+ *
+ * Linebreaks are *separators*, not glyphs — they're excluded from any
+ * paragraph's `glyphs` array but they consume a cluster index. The next
+ * paragraph's `clusterStart` is `previous.clusterStart + previous.glyphs.length + 1`
+ * (the +1 is the linebreak itself).
+ *
+ *   buffer:  [A, B, \n, C, D]                buffer:  [A, \n, \n, B]
+ *   index:    0  1   2  3  4                 index:    0   1   2  3
+ *
+ *   output:  [{[A,B], cs:0},                 output:  [{[A], cs:0},
+ *             {[C,D], cs:3}]                           {[],  cs:2},
+ *                                                      {[B], cs:3}]
+ *
+ *   buffer:  [\n, A]               buffer:  [A, \n]            buffer:  []
+ *
+ *   output:  [{[],  cs:0},         output:  [{[A], cs:0},      output:  []
+ *             {[A], cs:1}]                   {[],  cs:2}]
+ */
+function splitParagraphs(cells: readonly Cell[]): ParagraphSlice[] {
+  const paragraphs: ParagraphSlice[] = [];
+  let glyphs: GlyphCell[] = [];
+  let clusterStart = 0;
+
+  cells.forEach((cell, index) => {
+    if (cell.kind === "linebreak") {
+      paragraphs.push({ glyphs, clusterStart });
+      glyphs = [];
+      clusterStart = index + 1;
+      return;
+    }
+    glyphs.push(cell);
+  });
+
+  if (glyphs.length > 0 || cells.length > 0) {
+    paragraphs.push({ glyphs, clusterStart });
+  }
+
+  return paragraphs;
+}
+
+/**
+ * Segment a single paragraph into runs by direction / script / language.
+ *
+ * Phase 1: trivial — every paragraph becomes one LTR run, no BiDi or script
+ * detection. Returned as a `SegmentedRun[]` (single-element array) so the
+ * shape stays stable when Phase 3 introduces real BiDi.
+ *
+ *   Phase 1 (today):
+ *     paragraph: { glyphs: [A, B, C], cs: 0 }
+ *     output:    [{ glyphs: [A,B,C], direction: "ltr", clusterStart: 0 }]
+ *
+ *   Phase 3 (future, with BiDi):
+ *     paragraph: { glyphs: ["h","e","l","l","o"," ","ا","ل","ع","ر","ب","ي","ة"], cs: 0 }
+ *     output:    [
+ *                  { glyphs: ["h","e","l","l","o"," "], direction: "ltr", cs: 0 },
+ *                  { glyphs: ["ا","ل","ع","ر","ب","ي","ة"], direction: "rtl", cs: 6 },
+ *                ]
+ *
+ * Per-paragraph signature (not paragraphs[]) so paragraph structure is
+ * preserved through the pipeline — assembleLayout makes one Line per paragraph,
+ * each Line's `runs` field holds however many runs that paragraph produced.
+ */
+function segmentRuns(paragraph: ParagraphSlice): SegmentedRun[] {
+  return [
+    {
+      glyphs: paragraph.glyphs,
+      direction: "ltr",
+      clusterStart: paragraph.clusterStart,
+    },
+  ];
+}
+
+/**
+ * Stack positioned paragraphs into Lines and sum the total advance.
+ *
+ * One Line per paragraph. Line 0's baseline sits at `origin.y`; line N's at
+ * `origin.y - lineHeight * n` (negative-down, matching font convention where
+ * ascender > 0 and descender < 0).
+ *
+ *   origin.y = 0, lineHeight = 1000:
+ *
+ *     line 0  baseline y = 0       ──────────  [A B]
+ *     line 1  baseline y = -1000   ──────────  [C D]
+ *     line 2  baseline y = -2000   ──────────  []        ← empty paragraph still gets a line
+ *
+ * `totalAdvance` is summed from `run.advance` (which Positioner already
+ * computed as the sum of its glyphs' xAdvance).
+ *
+ * `bounds` returns null for now; full bbox union over positioned glyphs is
+ * a follow-up. No current test requires it.
+ */
+function assembleLayout(
+  positionedParagraphs: PositionedRun[][],
+  origin: Point2D,
+  metrics: FontMetrics,
+): { lines: Line[]; totalAdvance: number; bounds: BoundsType | null } {
+  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+
+  const lines: Line[] = positionedParagraphs.map((runs, i) => ({
+    runs,
+    y: origin.y - lineHeight * i,
+    ascent: metrics.ascender,
+    descent: metrics.descender,
+  }));
+
+  let totalAdvance = 0;
+  for (const line of lines) {
+    for (const run of line.runs) {
+      totalAdvance += run.advance;
+    }
+  }
+
+  return { lines, totalAdvance, bounds: null };
+}

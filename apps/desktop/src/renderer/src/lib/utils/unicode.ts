@@ -1,4 +1,4 @@
-import type { GlyphRef } from "@/lib/tools/text/layout";
+import type { GlyphCell } from "@/lib/tools/text/layout";
 
 /**
  * Convert a Unicode codepoint to its hex representation without prefix (e.g. for URLs).
@@ -37,10 +37,11 @@ export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameReso
   return fallbackGlyphNameForUnicode(unicode);
 }
 
-export function glyphRefFromUnicode(unicode: number, deps: GlyphNameResolverDeps): GlyphRef {
+export function cellFromCodepoint(codepoint: number, deps: GlyphNameResolverDeps): GlyphCell {
   return {
-    glyphName: resolveGlyphNameFromUnicode(unicode, deps),
-    unicode,
+    kind: "glyph",
+    glyphName: resolveGlyphNameFromUnicode(codepoint, deps),
+    codepoint,
   };
 }
 

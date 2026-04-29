@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  cellFromCodepoint,
   fallbackGlyphNameForUnicode,
-  glyphRefFromUnicode,
   resolveGlyphNameFromUnicode,
 } from "./unicode";
 
@@ -34,13 +34,13 @@ describe("resolveGlyphNameFromUnicode", () => {
   });
 });
 
-describe("glyphRefFromUnicode", () => {
-  it("returns a full glyph ref", () => {
-    const ref = glyphRefFromUnicode(0x41, {
+describe("cellFromCodepoint", () => {
+  it("returns a glyph cell with the resolved name and codepoint", () => {
+    const cell = cellFromCodepoint(0x41, {
       getExistingGlyphNameForUnicode: () => "A",
       getMappedGlyphName: () => null,
     });
 
-    expect(ref).toEqual({ glyphName: "A", unicode: 0x41 });
+    expect(cell).toEqual({ kind: "glyph", glyphName: "A", codepoint: 0x41 });
   });
 });

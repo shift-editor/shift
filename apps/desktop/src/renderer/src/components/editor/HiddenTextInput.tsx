@@ -3,7 +3,7 @@
  *
  * Handles IME composition, clipboard paste, and special characters natively.
  * The textarea is positioned off-screen but remains focused. Input events
- * feed into the TextRunController; rendering updates reactively.
+ * feed into `editor.textRun`; rendering updates reactively via signals.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
@@ -41,8 +41,6 @@ export function HiddenTextInput() {
 
   if (!isTextTool) return null;
 
-  const ctrl = editor.textRunController;
-
   const handleInput = () => {
     const textarea = ref.current;
     if (!textarea) return;
@@ -62,6 +60,7 @@ export function HiddenTextInput() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const extend = e.shiftKey;
+    const run = editor.textRun;
 
     switch (e.key) {
       case "Escape":
@@ -70,55 +69,55 @@ export function HiddenTextInput() {
         return;
 
       case "Enter":
-        ctrl.insert({ glyphName: ".newline", unicode: 10 });
+        run.insert({ kind: "linebreak" });
         e.preventDefault();
         return;
 
       case "Backspace":
-        ctrl.delete();
+        run.delete();
         e.preventDefault();
         return;
 
       case "Delete":
-        ctrl.deleteForward();
+        run.deleteForward();
         e.preventDefault();
         return;
 
       case "ArrowLeft":
-        if (e.metaKey) {
-          ctrl.moveCursorToLineStart(extend);
-        } else if (e.altKey) {
-          ctrl.moveCursorByWord(-1, extend);
+        if (e.altKey) {
+          run.moveCursorByWord(-1, extend);
+        } else if (e.metaKey) {
+          run.moveCursorToLineStart(extend);
         } else {
-          ctrl.moveCursorLeft(extend);
+          run.moveCursorLeft(extend);
         }
         e.preventDefault();
         return;
 
       case "ArrowRight":
-        if (e.metaKey) {
-          ctrl.moveCursorToLineEnd(extend);
-        } else if (e.altKey) {
-          ctrl.moveCursorByWord(1, extend);
+        if (e.altKey) {
+          run.moveCursorByWord(1, extend);
+        } else if (e.metaKey) {
+          run.moveCursorToLineEnd(extend);
         } else {
-          ctrl.moveCursorRight(extend);
+          run.moveCursorRight(extend);
         }
         e.preventDefault();
         return;
 
       case "ArrowUp":
-        ctrl.moveCursorVertically(-1, extend);
+        run.moveCursorUp(extend);
         e.preventDefault();
         return;
 
       case "ArrowDown":
-        ctrl.moveCursorVertically(1, extend);
+        run.moveCursorDown(extend);
         e.preventDefault();
         return;
 
       case "a":
         if (e.metaKey || e.ctrlKey) {
-          ctrl.selectAll();
+          run.buffer.selectAll();
           e.preventDefault();
           return;
         }
@@ -126,7 +125,9 @@ export function HiddenTextInput() {
 
       case "c":
         if (e.metaKey || e.ctrlKey) {
-          const codepoints = ctrl.getCodepoints();
+          const codepoints = run.buffer.selectedCells
+            .map((cell) => (cell.kind === "glyph" ? cell.codepoint : 10))
+            .filter((cp): cp is number => cp !== null);
           if (codepoints.length > 0) {
             const text = String.fromCodePoint(...codepoints);
             navigator.clipboard?.writeText(text);

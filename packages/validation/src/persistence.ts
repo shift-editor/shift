@@ -1,16 +1,26 @@
 import { z } from "zod";
 
-export const GlyphRefSchema = z.object({
+export const GlyphCellSchema = z.object({
+  kind: z.literal("glyph"),
   glyphName: z.string().min(1),
-  unicode: z.number().int().nonnegative().nullable(),
+  codepoint: z.number().int().nonnegative().nullable(),
+});
+
+export const LineBreakSchema = z.object({
+  kind: z.literal("linebreak"),
+});
+
+export const CellSchema = z.discriminatedUnion("kind", [GlyphCellSchema, LineBreakSchema]);
+
+export const TextBufferSnapshotSchema = z.object({
+  cells: z.array(CellSchema),
+  cursor: z.number().int().nonnegative(),
+  anchor: z.number().int().nonnegative(),
+  originX: z.number().finite(),
 });
 
 export const PersistedTextRunSchema = z.object({
-  glyphs: z.array(GlyphRefSchema),
-  cursorPosition: z.number().int().nonnegative(),
-  originX: z.number().finite(),
-  editingIndex: z.number().int().nonnegative().nullable(),
-  editingGlyph: GlyphRefSchema.nullable(),
+  buffer: TextBufferSnapshotSchema,
 });
 
 export const TextRunModuleSchema = z.object({

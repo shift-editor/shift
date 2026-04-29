@@ -95,7 +95,9 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import { TextRunController } from "@/lib/tools/text/TextRunController";
+import { TextRuns } from "@/lib/tools/text/TextRuns";
+import type { TextRun } from "@/lib/tools/text/TextRun";
+import { Positioner } from "@/lib/tools/text/layout";
 import { SnapPreferencesSchema, TextRunModuleSchema } from "@shift/validation";
 import type { TextRunModule } from "@/persistence/types";
 
@@ -196,7 +198,7 @@ export class Editor {
   #clipboard: Clipboard;
   #events: EventEmitter;
   #stateRegistry: StateRegistry;
-  #textRunController: TextRunController;
+  #textRuns: TextRuns;
   #mainGlyphUnicode: number | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
 
@@ -309,30 +311,33 @@ export class Editor {
       commands: this.#commandHistory,
       clipboard: options.clipboard,
     });
-    this.#textRunController = new TextRunController();
-    this.#textRunController.setFont(this.font);
+    this.#textRuns = new TextRuns(this.font, new Positioner());
 
     const textRunPersistence = this.registerState<TextRunModule>({
       id: "text-run",
       scope: "document",
       initial: () => ({ runsByGlyph: {} }),
-      serialize: () => ({ runsByGlyph: this.#textRunController.exportRuns() }),
+      serialize: () => ({ runsByGlyph: this.#textRuns.serialize() }),
       deserialize: (json) => {
         const payload = TextRunModuleSchema.parse(json);
-        this.#textRunController.hydrateRuns(payload.runsByGlyph);
+        this.#textRuns.deserialize(payload.runsByGlyph);
         return payload;
       },
     });
 
-    // Bridge: when text run controller state changes, notify the persistence field
+    // Bridge: when active run's buffer changes (or active switches), notify persistence.
     effect(() => {
-      this.#textRunController.state.value;
-      textRunPersistence.set({ runsByGlyph: this.#textRunController.exportRuns() });
+      const run = this.#textRuns.$active.value;
+      run.buffer.$cells.value;
+      run.buffer.$cursor.value;
+      run.buffer.$anchor.value;
+      run.buffer.$originX.value;
+      textRunPersistence.set({ runsByGlyph: this.#textRuns.serialize() });
     });
 
     this.#events.on("fontLoaded", () => {
       this.#commandHistory.clear();
-      this.#textRunController.clearAll();
+      this.#textRuns.clearAll();
     });
 
     this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
@@ -363,7 +368,8 @@ export class Editor {
       this.#hover.hoveredBoundingBoxHandle.value;
       this.#debugOverlays.value;
       this.#gpuHandlesEnabled.value;
-      this.#textRunController.state.value;
+      this.#textRuns.$active.value;
+      this.#textRuns.active.buffer.$cells.value;
       this.#renderer.requestSceneRedraw();
       this.#renderer.requestBackgroundRedraw();
     });
@@ -928,20 +934,25 @@ export class Editor {
     glyph.applyValues(values);
   }
 
-  public get textRunController(): TextRunController {
-    return this.#textRunController;
+  public get textRuns(): TextRuns {
+    return this.#textRuns;
   }
 
-  /** Resolve a unicode codepoint to a glyph ref and insert into the text run. */
+  /** The currently-active text run. Convenience for `editor.textRuns.active`. */
+  public get textRun(): TextRun {
+    return this.#textRuns.active;
+  }
+
+  /** Resolve a unicode codepoint to a glyph cell and insert into the active text run. */
   public insertTextCodepoint(codepoint: number): void {
     const glyphName = this.font.glyphName(codepoint);
-    this.#textRunController.insert({ glyphName, unicode: codepoint });
+    this.textRun.insert({ kind: "glyph", glyphName, codepoint });
   }
 
   /** @knipclassignore Indirectly consumed through Viewport. */
   public shouldRenderGlyph(): boolean {
-    const state = this.#textRunController.state.peek();
-    return !state || state.editingIndex !== null;
+    const editing = this.#textRuns.active.interaction.editing;
+    return editing !== null;
   }
 
   public getGlyphCompositeComponents(glyphName: string): CompositeGlyph | null {
@@ -1005,8 +1016,8 @@ export class Editor {
 
   public setMainGlyphUnicode(unicode: number | null): void {
     this.#mainGlyphUnicode = unicode;
-    const ref = unicode === null ? null : { glyphName: this.font.glyphName(unicode), unicode };
-    this.#textRunController.setOwnerGlyph(ref);
+    const glyphName = unicode === null ? null : this.font.glyphName(unicode);
+    this.#textRuns.switchTo(glyphName);
   }
 
   public getMainGlyphUnicode(): number | null {

@@ -10,6 +10,7 @@ import type {
 import { computed, type ComputedSignal, type Signal } from "../reactive";
 import { interpolate, normalize } from "../interpolation/interpolate";
 import type { Font } from "./Font";
+import { Bounds } from "@shift/geo";
 
 /**
  * One curve segment from a glyph's contour at the current variation location.
@@ -115,6 +116,13 @@ export class GlyphView {
 
   get $advance(): Signal<number> {
     return this.#advance;
+  }
+
+  get bounds(): Bounds | undefined {
+    const bounds = this.#font.getBbox(this.name);
+    if (!bounds) return;
+
+    return bounds;
   }
 
   /**
