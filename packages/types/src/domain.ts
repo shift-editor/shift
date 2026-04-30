@@ -34,9 +34,6 @@ export type Point = Readonly<PointSnapshot>;
 /** A named glyph attachment anchor. Immutable view of {@link AnchorSnapshot}. */
 export type Anchor = Readonly<AnchorSnapshot>;
 
-/** A render-only point used in flattened composite contours. */
-export type RenderPoint = Readonly<RenderPointSnapshot>;
-
 /** Decomposed affine transform (translate, rotate, scale, skew). Immutable view. */
 export type DecomposedTransform = Readonly<DecomposedTransformGenerated>;
 
@@ -50,11 +47,6 @@ export type Contour = Readonly<Omit<ContourSnapshot, "points">> & {
   readonly points: readonly Point[];
 };
 
-/** A render-only contour produced by flattening component references. */
-export type RenderContour = Readonly<Omit<RenderContourSnapshot, "points">> & {
-  readonly points: readonly RenderPoint[];
-};
-
 /**
  * A full glyph with all contours and their points frozen.
  * Contours are ordered by creation time (newest last). The order is
@@ -65,6 +57,14 @@ export type RenderContour = Readonly<Omit<RenderContourSnapshot, "points">> & {
 export type Glyph = Readonly<Omit<GlyphSnapshot, "contours" | "anchors" | "compositeContours">> & {
   readonly contours: readonly Contour[];
   readonly anchors: readonly Anchor[];
+};
+
+/** A render-only point used in flattened composite contours. */
+export type RenderPoint = Readonly<RenderPointSnapshot>;
+
+/** A render-only contour produced by flattening component references. */
+export type RenderContour = Readonly<Omit<RenderContourSnapshot, "points">> & {
+  readonly points: readonly RenderPoint[];
 };
 
 /** A single component of a composite glyph. */
