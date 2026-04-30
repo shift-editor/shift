@@ -1,6 +1,22 @@
 import type { FontMetrics, Point2D } from "@shift/types";
 import type { Bounds } from "@shift/geo";
 
+export type TextCellId = string;
+export type TextRunId = string;
+
+export interface GlyphAnchor {
+  runId: TextRunId;
+  cellId: TextCellId;
+}
+
+let nextCellId = 1;
+
+export function createTextCellId(): TextCellId {
+  const id = `cell_${nextCellId}`;
+  nextCellId += 1;
+  return id;
+}
+
 /**
  * A single item in a text buffer. Either a glyph (typed character or picked
  * variant) or a structural line break. Line breaks are NOT glyphs — they
@@ -9,6 +25,7 @@ import type { Bounds } from "@shift/geo";
 export type Cell = GlyphCell | LineBreak;
 
 export interface GlyphCell {
+  id: TextCellId;
   kind: "glyph";
   glyphName: string;
   /** Source codepoint when typed via keyboard; null when picked from a glyph UI. */
@@ -16,19 +33,28 @@ export interface GlyphCell {
 }
 
 export interface LineBreak {
+  id: TextCellId;
   kind: "linebreak";
 }
 
 /** Build a glyph cell. `codepoint` is null when the source isn't a typed character. */
-export function glyphCell(glyphName: string, codepoint: number | null = null): GlyphCell {
-  return { kind: "glyph", glyphName, codepoint };
+export function glyphCell(
+  glyphName: string,
+  codepoint: number | null = null,
+  id: TextCellId = createTextCellId(),
+): GlyphCell {
+  return { id, kind: "glyph", glyphName, codepoint };
 }
 
-/** Singleton linebreak cell — structural paragraph separator. */
-export const linebreak: LineBreak = { kind: "linebreak" };
+/** Build a linebreak cell — structural paragraph separator. */
+export function linebreakCell(id: TextCellId = createTextCellId()): LineBreak {
+  return { id, kind: "linebreak" };
+}
 
 export interface PositionedGlyph {
   glyphName: string;
+  cellIds: readonly TextCellId[];
+  origin: Point2D;
   xAdvance: number;
   yAdvance: number;
   xOffset: number;
@@ -62,6 +88,14 @@ export interface Line {
   y: number;
   ascent: number;
   descent: number;
+  /** First cluster index that belongs to this line (inclusive). */
+  clusterStart: number;
+  /**
+   * One past the last cluster on this line — `clusterStart + glyphs.length + 1`
+   * (the +1 covers either the trailing linebreak's cluster or the after-last
+   * caret position on the final line).
+   */
+  clusterEnd: number;
 }
 
 export interface Hit {

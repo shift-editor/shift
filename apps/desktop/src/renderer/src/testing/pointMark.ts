@@ -109,7 +109,7 @@ export interface PointMarkEditor {
  */
 export function createPointMark(scale: PointScale): PointMarkEditor {
   const editor = new TestEditor();
-  editor.startSession("bench");
+  editor.startSession({ glyphName: "bench" });
 
   const contours = generateContours(scale);
   const result = editor.bridge.pasteContours(contours, 0, 0);

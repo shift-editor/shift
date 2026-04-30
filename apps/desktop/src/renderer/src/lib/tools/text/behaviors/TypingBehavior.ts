@@ -3,11 +3,8 @@ import type { ToolContext } from "../../core/Behavior";
 import type { TextBehavior, TextState } from "../types";
 
 /**
- * Minimal typing behavior. Real keyboard input flows through
- * `HiddenTextInput.tsx` directly to `editor.textRun.{insert,delete,...}`;
- * this behavior exists so the Text tool has a registered behavior slot
- * (state-machine compliance) and can intercept Escape via the tool layer
- * if needed.
+ * Escape via the tool layer (most keys go through `HiddenTextInput` while the
+ * text tool is active).
  */
 export class TypingBehavior implements TextBehavior {
   onKeyDown(state: TextState, ctx: ToolContext<TextState>, event: ToolEventOf<"keyDown">): boolean {

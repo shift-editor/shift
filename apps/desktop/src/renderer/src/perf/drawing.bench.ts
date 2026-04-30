@@ -22,7 +22,7 @@ pm50k.editor.selectTool("select");
 describe("pen tool — rapid point placement", () => {
   bench("place 100 points sequentially", () => {
     const editor = new TestEditor();
-    editor.startSession("pen-bench");
+    editor.startSession({ glyphName: "pen-bench" });
     editor.selectTool("pen");
     for (let i = 0; i < 100; i++) {
       editor.click(i * 10, i * 5);

@@ -33,7 +33,7 @@ crates/shift-node/
 - `SaveFontTask` -- NAPI `Task` impl for async font saving (`save_font_async`)
 - `JsNodeRef` -- tagged union (`kind` + `id` string) representing a point, anchor, or guideline across the NAPI boundary
 - `JsNodePositionUpdate` -- pairs a `JsNodeRef` with `(x, y)` for batch position updates
-- `JsGlyphRef` -- glyph name + optional unicode for session start
+- `GlyphHandle` -- glyph name + optional unicode for session start
 - `CommandResult` (from shift-core) -- uniform JSON result shape returned by all mutations
 - `parse_or_err!` -- macro that parses a string ID into a typed ID or returns a `CommandResult::error`
 
@@ -43,18 +43,18 @@ crates/shift-node/
 
 Four internal helpers centralize the mutation-to-JSON pipeline. Each acquires the `EditSession`, runs a closure, builds a `CommandResult`, enriches it with composite contours, and serializes to JSON:
 
-| Helper              | Closure signature                                     | Use when                                   |
-|---------------------|-------------------------------------------------------|--------------------------------------------|
-| `command`           | `&mut EditSession -> Vec<PointId>`                    | mutation returns affected point IDs        |
-| `command_simple`    | `&mut EditSession -> ()`                              | mutation has no meaningful return           |
-| `command_try`       | `&mut EditSession -> Result<Vec<PointId>, String>`    | mutation can fail with a domain error       |
-| `command_try_simple`| `&mut EditSession -> Result<(), String>`              | fallible mutation, no affected IDs          |
+| Helper               | Closure signature                                  | Use when                              |
+| -------------------- | -------------------------------------------------- | ------------------------------------- |
+| `command`            | `&mut EditSession -> Vec<PointId>`                 | mutation returns affected point IDs   |
+| `command_simple`     | `&mut EditSession -> ()`                           | mutation has no meaningful return     |
+| `command_try`        | `&mut EditSession -> Result<Vec<PointId>, String>` | mutation can fail with a domain error |
+| `command_try_simple` | `&mut EditSession -> Result<(), String>`           | fallible mutation, no affected IDs    |
 
 All four delegate to `with_command_result`, which calls `serialize_enriched_result` to attach resolved composite contours before returning the JSON string.
 
 ### Session lifecycle
 
-1. JS calls `start_edit_session(JsGlyphRef)`.
+1. JS calls `start_edit_session(GlyphHandle)`.
 2. `FontEngine` calls `font.take_glyph()`, removing the glyph from the font store. It picks the most complex layer and creates an `EditSession` over it.
 3. Mutations flow through the command helpers above.
 4. `end_edit_session` moves the edited layer back into the glyph, puts the glyph back into the font, and rebuilds the `DependencyGraph`.

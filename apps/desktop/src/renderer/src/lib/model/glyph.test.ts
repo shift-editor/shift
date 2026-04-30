@@ -10,7 +10,7 @@ let glyph: Glyph;
 
 beforeEach(() => {
   bridge = createBridge();
-  bridge.startEditSession("A", 65);
+  bridge.startEditSession({ glyphName: "A", unicode: 65 });
   glyph = bridge.$glyph.peek()!;
 });
 

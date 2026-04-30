@@ -3,7 +3,7 @@ import type { Glyph } from "@/lib/model/Glyph";
 import type { HandleState } from "@/types/graphics";
 import type { Canvas } from "./Canvas";
 import type { ViewportTransform } from "./Viewport";
-import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
+import { Gpu } from "@/lib/graphics/backends/Gpu";
 import { packHandleInstances } from "./gpu/classifyHandles";
 import { Vec2 } from "@shift/geo";
 import { Validate } from "@shift/validation";
@@ -23,10 +23,10 @@ export interface HandleStates {
  * Falls back to CPU (Canvas 2D) rendering if WebGL is unavailable.
  */
 export class Handles {
-  #gpu: ReglHandleContext | null = null;
+  #gpu: Gpu | null = null;
   #packedInstances: Float32Array | null = null;
 
-  setGpu(gpu: ReglHandleContext | null): void {
+  setGpu(gpu: Gpu | null): void {
     this.#gpu = gpu;
   }
 

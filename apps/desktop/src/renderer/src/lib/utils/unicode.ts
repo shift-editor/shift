@@ -1,4 +1,5 @@
-import type { GlyphCell } from "@/lib/tools/text/layout";
+import type { GlyphCell } from "@/lib/text/layout/types";
+import { glyphCell } from "@/lib/text/layout/types";
 
 /**
  * Convert a Unicode codepoint to its hex representation without prefix (e.g. for URLs).
@@ -38,11 +39,7 @@ export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameReso
 }
 
 export function cellFromCodepoint(codepoint: number, deps: GlyphNameResolverDeps): GlyphCell {
-  return {
-    kind: "glyph",
-    glyphName: resolveGlyphNameFromUnicode(codepoint, deps),
-    codepoint,
-  };
+  return glyphCell(resolveGlyphNameFromUnicode(codepoint, deps), codepoint);
 }
 
 const nonSpacingCache = new Map<number, boolean>();

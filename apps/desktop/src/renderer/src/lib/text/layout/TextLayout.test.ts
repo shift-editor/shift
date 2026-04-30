@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { glyphCell as glyph, linebreak } from "./types";
+import { glyphCell as glyph, linebreakCell } from "./types";
 import { loadTestFont, makeLayout } from "./testUtils";
 import { Font } from "@/lib/model/Font";
 
@@ -34,7 +34,7 @@ describe("TextLayout", () => {
 
   // Linebreak cell splits the buffer into two lines.
   it("splits on linebreak cell into separate lines", () => {
-    const layout = makeLayout([glyph("A", 65), linebreak, glyph("B", 66)], font);
+    const layout = makeLayout([glyph("A", 65), linebreakCell(), glyph("B", 66)], font);
 
     expect(layout.lines).toHaveLength(2);
     expect(layout.lines[1].y).toBeLessThan(layout.lines[0].y);
@@ -42,7 +42,7 @@ describe("TextLayout", () => {
 
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
-    const layout = makeLayout([glyph("A", 65), linebreak, glyph("B", 66)], font);
+    const layout = makeLayout([glyph("A", 65), linebreakCell(), glyph("B", 66)], font);
     const metrics = font.getMetrics();
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
@@ -62,5 +62,33 @@ describe("TextLayout", () => {
 
     expect(hit).toEqual({ lineIndex: 0, runIndex: 0, cluster: 1, side: "left" });
     expect(layout.pointAt(1)?.x).toBe(aAdvance);
+  });
+
+  it("resolves edit origin by cell id on the current line", () => {
+    const a = glyph("A", 65);
+    const b = glyph("B", 66);
+    const layout = makeLayout([a, b], font);
+    const aAdvance = font.glyph("A")?.advance ?? 0;
+
+    expect(layout.editOriginForCell(b.id)).toEqual({ x: aAdvance, y: 0 });
+    expect(layout.primaryGlyphForCell(b.id)?.cellIds).toEqual([b.id]);
+  });
+
+  it("resolves edit origin by cell id after a linebreak", () => {
+    const b = glyph("B", 66);
+    const layout = makeLayout([glyph("A", 65), linebreakCell(), b], font);
+
+    expect(layout.editOriginForCell(b.id)).toEqual({ x: 0, y: layout.lines[1].y });
+  });
+
+  it("returns anchors with cell ids rather than cluster-only hits", () => {
+    const b = glyph("B", 66);
+    const layout = makeLayout([glyph("A", 65), b], font);
+    const aAdvance = font.glyph("A")?.advance ?? 0;
+
+    expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
+      runId: "run-1",
+      cellId: b.id,
+    });
   });
 });

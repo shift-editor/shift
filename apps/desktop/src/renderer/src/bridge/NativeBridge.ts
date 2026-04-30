@@ -23,7 +23,7 @@ import { NoEditSessionError, NativeOperationError } from "./errors";
 import { constrainDrag } from "@shift/rules";
 import { ValidateSnapshot } from "@shift/validation";
 import { Glyphs } from "@shift/font";
-import type { FontEngineAPI } from "@shared/bridge/FontEngineAPI";
+import type { FontEngineAPI, GlyphHandle } from "@shared/bridge/FontEngineAPI";
 import type { CompositeComponents } from "@shared/bridge/FontEngineAPI";
 import type { CommandResult, PasteResult, PointEdit } from "@/types/engine";
 import { ContourContent } from "@/lib/clipboard";
@@ -65,14 +65,13 @@ export class NativeBridge {
     return this.#raw.hasEditSession();
   }
 
-  startEditSession(glyphName: string, unicode?: number): void {
+  startEditSession(handle: GlyphHandle): void {
     if (this.hasSession()) {
       const currentName = this.getEditingGlyphName();
-      if (currentName === glyphName) return;
+      if (currentName === handle.glyphName) return;
       this.endEditSession();
     }
-    const ref = unicode !== undefined ? { glyphName, unicode } : { glyphName };
-    this.#raw.startEditSession(ref);
+    this.#raw.startEditSession(handle);
     this.#$glyph.set(this.hasSession() ? new Glyph(this) : null);
   }
 

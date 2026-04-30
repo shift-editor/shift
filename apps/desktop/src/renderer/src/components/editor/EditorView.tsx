@@ -8,7 +8,7 @@ import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
-import { HiddenTextInput } from "./HiddenTextInput";
+import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 
 interface EditorViewProps {
@@ -35,10 +35,9 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
     const glyphName = editor.font.glyphName(unicode);
 
     const initEditor = () => {
-      editor.setMainGlyphUnicode(unicode);
-      editor.open(glyphName);
-
-      editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
+      const handle = { glyphName, unicode };
+      editor.setGlyphHandle(handle);
+      editor.openGlyph(handle);
 
       // Update viewport with actual font metrics (UPM, descender, guides)
       editor.updateMetricsFromFont();
@@ -107,7 +106,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>
-      <HiddenTextInput />
+      <TextInput />
       {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );

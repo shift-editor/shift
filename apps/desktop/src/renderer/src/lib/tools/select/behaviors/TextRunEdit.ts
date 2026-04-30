@@ -3,18 +3,24 @@ import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
 
 /**
- * Stub: double-click-to-edit-glyph against the new TextRun API. Re-add the
- * real implementation in a follow-up — it needs `layout.shapeHitTest`
- * (currently still a throw stub) and the composite-component drill-through
- * we deferred. Returns false to defer to the regular double-click handler.
+ * Double-click on a text run cell to enter in-place editing for that glyph.
+ *
+ * Resolves the click to a stable text-cell anchor and lets Editor derive the
+ * active glyph placement from the current layout. Linebreak cells are not editable.
  */
 export class TextRunEdit implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
-    _ctx: ToolContext<SelectState>,
-    _event: ToolEventOf<"doubleClick">,
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"doubleClick">,
   ): boolean {
     if (state.type !== "ready" && state.type !== "selected") return false;
-    return false;
+
+    const run = ctx.editor.textRun;
+    const anchor = run.anchorAtPoint(event.point, ctx.editor.hitRadius);
+    if (!anchor) return false;
+    ctx.editor.setGlyphFocus(anchor);
+
+    return true;
   }
 }

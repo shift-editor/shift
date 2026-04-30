@@ -98,7 +98,7 @@ describe("GlyphView — variation interpolation", () => {
     // (font.glyph(name).componentContours()) picks up new component geometry.
     const editor = new TestEditor();
     editor.font.load(MUTATORSANS_DESIGNSPACE);
-    editor.open("Aacute");
+    editor.open({ glyphName: "Aacute", unicode: 0x00c1 });
 
     const view = editor.font.glyph("Aacute")!;
     const atDefault = flattenComponentCoords(view);

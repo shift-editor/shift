@@ -28,7 +28,7 @@ let bridge: NativeBridge;
 
 beforeEach(() => {
   bridge = createBridge();
-  bridge.startEditSession("A");
+  bridge.startEditSession({ glyphName: "A" });
   const glyph = bridge.$glyph.peek()!;
   glyph.addContour();
   glyph.addPointToContour(glyph.activeContourId!, {

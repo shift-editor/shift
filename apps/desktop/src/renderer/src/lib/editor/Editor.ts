@@ -1,5 +1,5 @@
 import type { HandleState } from "@/types/graphics";
-import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
+import { Gpu } from "@/lib/graphics/backends/Gpu";
 import type { CursorType, SnapPreferences, ToolRegistryItem } from "@/types/editor";
 import type {
   Point2D,
@@ -11,6 +11,7 @@ import type {
   Point,
   AxisLocation,
   GlyphVariationData,
+  CompositeGlyph,
 } from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
 import { blockToPath2D } from "@/lib/model/GlyphView";
@@ -29,7 +30,7 @@ import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
 
 import { ViewportManager } from "./managers";
-import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
+import { displayAdvance } from "@/lib/utils/unicode";
 import { NativeBridge } from "@/bridge";
 import {
   CommandHistory,
@@ -54,6 +55,7 @@ import {
   type DistributeType,
 } from "../transform";
 import {
+  batch,
   computed,
   effect,
   signal,
@@ -71,6 +73,7 @@ import { HoverManager, EdgePanManager } from "./managers";
 import { Viewport, type ViewportTransform } from "./rendering/Viewport";
 import type { Canvas } from "./rendering/Canvas";
 import { Handles } from "./rendering/Handles";
+import { Text as TextRunDrawer } from "./rendering/Text";
 import {
   Guides,
   BoundingBox,
@@ -83,6 +86,7 @@ import {
 import { SCREEN_HIT_RADIUS } from "./rendering/constants";
 import { getVisibleSceneBounds } from "./rendering/visibleSceneBounds";
 import type { FocusZone } from "@/types/focus";
+import type { GlyphHandle } from "@shared/bridge/FontEngineAPI";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
 import { Selection } from "@/types/selection";
@@ -95,9 +99,10 @@ import type {
   SnapIndicator,
 } from "./snapping/types";
 import { SnapManager } from "./managers/SnapManager";
-import { TextRuns } from "@/lib/tools/text/TextRuns";
-import type { TextRun } from "@/lib/tools/text/TextRun";
-import { Positioner } from "@/lib/tools/text/layout";
+import { TextRuns } from "@/lib/text/TextRuns";
+import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
+import { glyphCell, Positioner } from "@/lib/text/layout";
+import type { GlyphAnchor } from "@/lib/text/layout";
 import { SnapPreferencesSchema, TextRunModuleSchema } from "@shift/validation";
 import type { TextRunModule } from "@/persistence/types";
 
@@ -115,7 +120,6 @@ const defaultAppSettings: AppSettings = {
     pointRadiusPx: 8,
   },
 };
-import type { CompositeGlyph } from "@shift/types";
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
@@ -127,6 +131,11 @@ import type { GlyphDraft } from "@/types/draft";
 interface EditorOptions {
   bridge: NativeBridge;
   clipboard: SystemClipboard;
+}
+
+interface GlyphPlacement {
+  focused: FocusedGlyph;
+  drawOffset: Point2D;
 }
 
 /**
@@ -170,6 +179,7 @@ export class Editor {
   #debugOverlaysIndicator = new DebugOverlaysIndicator();
   #anchors = new Anchors();
   #handles = new Handles();
+  #textRunRenderer = new TextRunDrawer();
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
@@ -199,13 +209,16 @@ export class Editor {
   #events: EventEmitter;
   #stateRegistry: StateRegistry;
   #textRuns: TextRuns;
-  #mainGlyphUnicode: number | null = null;
+  #mainGlyph: GlyphHandle | null = null;
   #$glyphFinderOpen: WritableSignal<boolean>;
 
   #zone: FocusZone = "canvas";
   #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
-  #drawOffset: WritableSignal<Point2D>;
+  #$glyphAnchor: WritableSignal<GlyphAnchor | null>;
+  #$focusedGlyph: ComputedSignal<FocusedGlyph | null>;
+  #$glyphPlacement: ComputedSignal<GlyphPlacement | null>;
+  #$drawOffset: ComputedSignal<Point2D>;
   #cursor: WritableSignal<string>;
   #currentModifiers: WritableSignal<Modifiers>;
   #isHoveringNode: ComputedSignal<boolean>;
@@ -340,7 +353,20 @@ export class Editor {
       this.#textRuns.clearAll();
     });
 
-    this.#drawOffset = signal<Point2D>({ x: 0, y: 0 });
+    this.#$glyphAnchor = signal<GlyphAnchor | null>(null);
+    this.#$focusedGlyph = computed<FocusedGlyph | null>(() => {
+      const anchor = this.#$glyphAnchor.value;
+      if (!anchor) return null;
+      return this.#textRuns.resolveAnchor(anchor);
+    });
+    this.#$glyphPlacement = computed<GlyphPlacement | null>(() => {
+      const focused = this.#$focusedGlyph.value;
+      if (!focused) return null;
+      return { focused, drawOffset: focused.editOrigin };
+    });
+    this.#$drawOffset = computed<Point2D>(
+      () => this.#$glyphPlacement.value?.drawOffset ?? { x: 0, y: 0 },
+    );
 
     this.#staticEffect = effect(() => {
       const glyph = this.#$glyph.value;
@@ -354,7 +380,8 @@ export class Editor {
       // The redraw path then walks font.glyph(name).componentContours() to
       // pick up freshly-interpolated component shapes.
       this.font.$variationLocation.value;
-      this.#drawOffset.value;
+      this.#$drawOffset.value;
+      this.#$focusedGlyph.value;
       this.$activeToolState.value;
       this.selection.pointIds;
       this.selection.anchorIds;
@@ -368,8 +395,13 @@ export class Editor {
       this.#hover.hoveredBoundingBoxHandle.value;
       this.#debugOverlays.value;
       this.#gpuHandlesEnabled.value;
-      this.#textRuns.$active.value;
-      this.#textRuns.active.buffer.$cells.value;
+      const activeRun = this.#textRuns.$active.value;
+      activeRun.buffer.$cells.value;
+      activeRun.buffer.$cursor.value;
+      activeRun.buffer.$anchor.value;
+      activeRun.buffer.$originX.value;
+      activeRun.interaction.$editing.value;
+      activeRun.interaction.$hoveredIndex.value;
       this.#renderer.requestSceneRedraw();
       this.#renderer.requestBackgroundRedraw();
     });
@@ -380,7 +412,8 @@ export class Editor {
         glyph.contours;
         glyph.anchors;
       }
-      this.#drawOffset.value;
+      this.#$drawOffset.value;
+      this.#$focusedGlyph.value;
       this.selection.segmentIds;
       this.#hover.hoveredPointId.value;
       this.#hover.hoveredAnchorId.value;
@@ -556,6 +589,12 @@ export class Editor {
     }
 
     this.#toolManager.renderScene(canvas);
+
+    // Text run draws regardless of active glyph state — it's the run content
+    // (typed glyphs, selection, caret) the user sees while in the Text tool
+    // or hovering text-run cells from Select. World-space → drawOffset-local
+    // compensation lives inside the renderer.
+    this.#textRunRenderer.draw(canvas, this.textRun, this.font, this.drawOffset, this.focusedGlyph);
 
     if (!previewMode && handlesVisible && glyph && this.shouldRenderGlyph()) {
       const viewport = this.getViewportTransform();
@@ -873,12 +912,12 @@ export class Editor {
     this.#renderer.setOverlayContext(ctx);
   }
 
-  public setGpuHandleContext(context: ReglHandleContext) {
+  public setGpuHandleContext(context: Gpu) {
     this.#renderer.setGpuHandleContext(context);
     this.#handles.setGpu(context);
   }
 
-  public get gpuHandleContext(): ReglHandleContext | null {
+  public get gpuHandleContext(): Gpu | null {
     return this.#renderer.gpuHandleContext;
   }
 
@@ -891,14 +930,57 @@ export class Editor {
    * active glyph immediately, so the canvas matches what the user clicked.
    * Subsequent slider scrubs go through `applyVariation`.
    */
-  public open(glyphName: string): Glyph | null {
+  public open(handle: GlyphHandle): Glyph | null {
     const currentGlyphName = this.#bridge.getEditingGlyphName();
-    if (currentGlyphName === glyphName) return this.#$glyph.peek();
+    if (currentGlyphName === handle.glyphName) return this.#$glyph.peek();
 
-    this.#bridge.startEditSession(glyphName);
-    this.#activeVariationData = this.font.getGlyphVariationData(glyphName);
+    this.#bridge.startEditSession(handle);
+    this.#activeVariationData = this.font.getGlyphVariationData(handle.glyphName);
     this.#applyCurrentVariationToActive();
     return this.#$glyph.peek();
+  }
+
+  public openGlyph(handle: GlyphHandle): Glyph | null {
+    const anchor = this.#textRuns.editorRun().setSingleGlyph(handle);
+    this.setGlyphFocus(anchor);
+    return this.#$glyph.peek();
+  }
+
+  /**
+   * Focus a glyph cell and derive editor placement from current layout.
+   *
+   *   GlyphAnchor { runId, cellId }
+   *      │
+   *      ▼
+   *   TextRuns.resolveAnchor(anchor)
+   *      │
+   *      ▼
+   *   native edit session + drawOffset = focused.editOrigin
+   */
+  public setGlyphFocus(anchor: GlyphAnchor): void {
+    const focused = this.#textRuns.resolveAnchor(anchor);
+    if (!focused) {
+      this.clearGlyphFocus();
+      return;
+    }
+
+    batch(() => {
+      this.#$glyphAnchor.set(anchor);
+      this.open(focused.glyph);
+      this.setPreviewMode(false);
+    });
+  }
+
+  public clearGlyphFocus(): void {
+    this.#$glyphAnchor.set(null);
+  }
+
+  public get focusedGlyph(): FocusedGlyph | null {
+    return this.#$focusedGlyph.value;
+  }
+
+  public get glyphPlacement(): GlyphPlacement | null {
+    return this.#$glyphPlacement.value;
   }
 
   /** Ends the current editing session. */
@@ -946,13 +1028,17 @@ export class Editor {
   /** Resolve a unicode codepoint to a glyph cell and insert into the active text run. */
   public insertTextCodepoint(codepoint: number): void {
     const glyphName = this.font.glyphName(codepoint);
-    this.textRun.insert({ kind: "glyph", glyphName, codepoint });
+    this.textRun.insert(glyphCell(glyphName, codepoint));
   }
 
   /** @knipclassignore Indirectly consumed through Viewport. */
   public shouldRenderGlyph(): boolean {
-    const editing = this.#textRuns.active.interaction.editing;
-    return editing !== null;
+    const run = this.#textRuns.active;
+    // No active text-run activity → render the glyph normally (initial state,
+    // grid → canvas open, etc).
+    if (run.buffer.cells.length === 0 && !run.cursorVisible) return true;
+    // Active run → only render the glyph when focus belongs to a text cell in this run.
+    return this.#$focusedGlyph.value?.anchor.runId === run.id;
   }
 
   public getGlyphCompositeComponents(glyphName: string): CompositeGlyph | null {
@@ -1014,14 +1100,13 @@ export class Editor {
     return this.#bridge.getEditingGlyphName();
   }
 
-  public setMainGlyphUnicode(unicode: number | null): void {
-    this.#mainGlyphUnicode = unicode;
-    const glyphName = unicode === null ? null : this.font.glyphName(unicode);
-    this.#textRuns.switchTo(glyphName);
+  public setGlyphHandle(handle: GlyphHandle | null): void {
+    this.#mainGlyph = handle;
+    this.#textRuns.switchTo(handle?.glyphName ?? null);
   }
 
-  public getMainGlyphUnicode(): number | null {
-    return this.#mainGlyphUnicode;
+  public getGlyphHandle(): GlyphHandle | null {
+    return this.#mainGlyph;
   }
 
   public get commandHistory(): CommandHistory {
@@ -1173,12 +1258,12 @@ export class Editor {
   }
 
   public sceneToGlyphLocal(point: Point2D): Point2D {
-    const offset = this.#drawOffset.value;
+    const offset = this.drawOffset;
     return { x: point.x - offset.x, y: point.y - offset.y };
   }
 
   public glyphLocalToScene(point: Point2D): Point2D {
-    const offset = this.#drawOffset.value;
+    const offset = this.drawOffset;
     return { x: point.x + offset.x, y: point.y + offset.y };
   }
 
@@ -1279,10 +1364,9 @@ export class Editor {
     }
     this.font.load(filePath);
     this.#events.emit("fontLoaded", { font: this.font });
-    this.setMainGlyphUnicode(65);
-    const name = this.font.glyphName(65);
-    this.open(name);
-    this.setDrawOffsetForGlyph({ x: 0, y: 0 }, name, 65);
+    const initial = { glyphName: this.font.glyphName(65), unicode: 65 };
+    this.setGlyphHandle(initial);
+    this.openGlyph(initial);
   }
 
   public async saveFont(filePath: string): Promise<void> {
@@ -1476,7 +1560,7 @@ export class Editor {
     this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment.raw as LineSegment));
   }
 
-  public applyBooleanOp(
+  public boolean(
     contourIdA: ContourId,
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
@@ -1729,25 +1813,12 @@ export class Editor {
   }
 
   public get drawOffset(): Point2D {
-    return this.#drawOffset.value;
+    return this.#$drawOffset.value;
   }
 
   /** @knipclassignore */
   public get $drawOffset(): Signal<Point2D> {
-    return this.#drawOffset;
-  }
-
-  public setDrawOffsetForGlyph(
-    offset: Point2D,
-    glyphName: string | null,
-    unicode: number | null = null,
-  ): void {
-    this.#drawOffset.set(this.#resolveEditorPlacementOffset(offset, glyphName, unicode));
-  }
-
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public setDrawOffset(offset: Point2D): void {
-    this.#drawOffset.set(offset);
+    return this.#$drawOffset;
   }
 
   public requestRedraw() {
@@ -1782,61 +1853,6 @@ export class Editor {
 
   #toolStateKey(toolId: string, key: string): string {
     return `${toolId}:${key}`;
-  }
-
-  #resolveEditorPlacementOffset(
-    offset: Point2D,
-    glyphName: string | null,
-    unicode: number | null,
-  ): Point2D {
-    if (!glyphName || !isNonSpacingGlyph(glyphName, unicode)) {
-      return offset;
-    }
-
-    const current = this.#$glyph.peek();
-    if (!current || current.name !== glyphName) {
-      return offset;
-    }
-
-    const metrics = this.font.getMetrics();
-    const targetX = 300;
-    const targetYForAnchorName = (anchorName: string): number => {
-      switch (anchorName) {
-        case "top":
-          return metrics.capHeight ?? metrics.ascender;
-        case "bottom":
-        case "ogonek":
-          return 0;
-        case "center":
-        default:
-          return (metrics.ascender + metrics.descender) / 2;
-      }
-    };
-
-    const attachingAnchor = current.anchors.find((anchor) => {
-      const name = anchor.name ?? "";
-      return name.startsWith("_") && name.length > 1;
-    });
-
-    if (attachingAnchor) {
-      const targetName = attachingAnchor.name!.slice(1);
-      return {
-        x: offset.x + (targetX - attachingAnchor.x),
-        y: offset.y + (targetYForAnchorName(targetName) - attachingAnchor.y),
-      };
-    }
-
-    const bounds = this.font.getBbox(glyphName);
-    if (!bounds) {
-      return offset;
-    }
-
-    const centerX = (bounds.min.x + bounds.max.x) / 2;
-    const centerY = (bounds.min.y + bounds.max.y) / 2;
-    return {
-      x: offset.x + (targetX - centerX),
-      y: offset.y + ((metrics.ascender + metrics.descender) / 2 - centerY),
-    };
   }
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {

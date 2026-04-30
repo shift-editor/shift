@@ -12,7 +12,7 @@ function ctx(): CommandContext {
 
 beforeEach(() => {
   bridge = createBridge();
-  bridge.startEditSession("A");
+  bridge.startEditSession({ glyphName: "A" });
 });
 
 describe("RotatePointsCommand", () => {

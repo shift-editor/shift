@@ -19,19 +19,19 @@ export const BooleanOps = () => {
         <IconButton
           icon={UnionIcon}
           onClick={() => {
-            editor.applyBooleanOp(contourIdA, contourIdB, "union");
+            editor.boolean(contourIdA, contourIdB, "union");
           }}
         />
         <IconButton
           icon={IntersectIcon}
           onClick={() => {
-            editor.applyBooleanOp(contourIdA, contourIdB, "intersect");
+            editor.boolean(contourIdA, contourIdB, "intersect");
           }}
         />
         <IconButton
           icon={SubtractIcon}
           onClick={() => {
-            editor.applyBooleanOp(contourIdA, contourIdB, "subtract");
+            editor.boolean(contourIdA, contourIdB, "subtract");
           }}
         />
       </div>

@@ -36,11 +36,14 @@ describe("Positioner", () => {
   // Each positioned glyph carries the bounds the font reports.
   it("bounds pass through from font.getBbox", () => {
     const positioner = new Positioner();
-    const run = ltrRun([glyph("A", 65)]);
+    const a = glyph("A", 65);
+    const run = ltrRun([a]);
 
     const positioned = positioner.position(run, font);
 
     expect(positioned.glyphs[0].bounds).toEqual(font.getBbox("A"));
+    expect(positioned.glyphs[0].cellIds).toEqual([a.id]);
+    expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
   });
 
   // Glyph not in the font → zero advance, null bounds, no throw.

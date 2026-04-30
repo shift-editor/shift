@@ -10,13 +10,17 @@ import type {
   CaretPosition,
   Cell,
   FontMetrics,
+  GlyphAnchor,
   GlyphCell,
   Hit,
   Line,
   ParagraphSlice,
   Point2D,
+  PositionedGlyph,
   PositionedRun,
   SegmentedRun,
+  TextCellId,
+  TextRunId,
 } from "./types";
 import type { Positioner } from "./Positioner";
 import { Font } from "@/lib/model/Font";
@@ -28,6 +32,12 @@ export interface TextLayoutParams {
   positioner: Positioner;
 }
 
+interface AssembledLayout {
+  lines: Line[];
+  totalAdvance: number;
+  bounds: BoundsType | null;
+}
+
 export class TextLayout {
   readonly metrics: FontMetrics;
   readonly origin: Point2D;
@@ -36,24 +46,23 @@ export class TextLayout {
   /** @knipclassignore — bbox union over positioned glyphs; populated when shapeHitTest lands */
   readonly bounds: BoundsType | null;
   readonly bufferLength: number;
+  readonly #cells: readonly Cell[];
 
   constructor(params: TextLayoutParams) {
     const { cells, origin, font, positioner } = params;
+    this.#cells = cells;
     this.metrics = font.getMetrics();
     this.origin = origin;
     this.bufferLength = cells.length;
 
     // splitParagraphs → segmentRuns → position → assemble
-    // Outer array = paragraphs (one Line each); inner array = runs in that paragraph.
-    const positionedParagraphs: PositionedRun[][] = splitParagraphs(cells).map((p) =>
-      segmentRuns(p).map((run) => positioner.position(run, font)),
-    );
+    const paragraphs: PositionedParagraph[] = splitParagraphs(cells).map((p) => ({
+      runs: segmentRuns(p).map((run) => positioner.position(run, font)),
+      clusterStart: p.clusterStart,
+      clusterEnd: p.clusterStart + p.glyphs.length + 1,
+    }));
 
-    const { lines, totalAdvance, bounds } = assembleLayout(
-      positionedParagraphs,
-      origin,
-      this.metrics,
-    );
+    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
@@ -77,11 +86,11 @@ export class TextLayout {
       const bottom = line.y + line.descent;
       if (p.y > top + padding || p.y < bottom - padding) continue;
 
-      let cursor = this.origin.x;
+      let runBase = this.origin.x;
       for (const [runIndex, run] of line.runs.entries()) {
         for (const g of run.glyphs) {
-          const left = cursor;
-          const right = cursor + g.xAdvance;
+          const left = runBase + g.origin.x;
+          const right = left + g.xAdvance;
           if (p.x >= left - padding && p.x < right + padding) {
             const mid = left + g.xAdvance / 2;
             return {
@@ -91,8 +100,8 @@ export class TextLayout {
               side: p.x < mid ? "left" : "right",
             };
           }
-          cursor = right;
         }
+        runBase += run.advance;
       }
       return null;
     }
@@ -112,17 +121,71 @@ export class TextLayout {
   pointAt(cluster: number): CaretPosition | null {
     const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
     for (const line of this.lines) {
-      let cursor = this.origin.x;
+      let runBase = this.origin.x;
       for (const run of line.runs) {
         for (const g of run.glyphs) {
           if (g.cluster === cluster) {
-            return { x: cursor, y: line.y, lineHeight };
+            return { x: runBase + g.origin.x, y: line.y + g.origin.y, lineHeight };
           }
-          cursor += g.xAdvance;
         }
+        runBase += run.advance;
       }
     }
     return null;
+  }
+
+  glyphsForCell(cellId: TextCellId): readonly PositionedGlyph[] {
+    const glyphs: PositionedGlyph[] = [];
+    for (const line of this.lines) {
+      for (const run of line.runs) {
+        for (const glyph of run.glyphs) {
+          if (glyph.cellIds.includes(cellId)) glyphs.push(glyph);
+        }
+      }
+    }
+    return glyphs;
+  }
+
+  primaryGlyphForCell(cellId: TextCellId): PositionedGlyph | null {
+    return this.glyphsForCell(cellId)[0] ?? null;
+  }
+
+  /**
+   * Resolve stable text-cell identity to the current scene-space glyph edit
+   * origin.
+   *
+   *   cellId
+   *      │
+   *      ▼
+   *   PositionedGlyph { origin, xOffset/yOffset }
+   *      │
+   *      ▼
+   *   scene edit origin
+   */
+  editOriginForCell(cellId: TextCellId): Point2D | null {
+    for (const line of this.lines) {
+      let runBase = this.origin.x;
+      for (const run of line.runs) {
+        for (const glyph of run.glyphs) {
+          if (glyph.cellIds.includes(cellId)) {
+            return {
+              x: runBase + glyph.origin.x + glyph.xOffset,
+              y: line.y + glyph.origin.y + glyph.yOffset,
+            };
+          }
+        }
+        runBase += run.advance;
+      }
+    }
+    return null;
+  }
+
+  anchorAtPoint(runId: TextRunId, p: Point2D, padding: number = 0): GlyphAnchor | null {
+    const hit = this.hitTest(p, padding);
+    if (!hit) return null;
+    const cell = this.#cells[hit.cluster];
+    if (!cell || cell.kind !== "glyph") return null;
+    return { runId, cellId: cell.id };
   }
 
   /** @knipclassignore — convenience for caret construction at a cluster */
@@ -233,18 +296,26 @@ function segmentRuns(paragraph: ParagraphSlice): SegmentedRun[] {
  * `bounds` returns null for now; full bbox union over positioned glyphs is
  * a follow-up. No current test requires it.
  */
+interface PositionedParagraph {
+  runs: PositionedRun[];
+  clusterStart: number;
+  clusterEnd: number;
+}
+
 function assembleLayout(
-  positionedParagraphs: PositionedRun[][],
+  paragraphs: PositionedParagraph[],
   origin: Point2D,
   metrics: FontMetrics,
-): { lines: Line[]; totalAdvance: number; bounds: BoundsType | null } {
+): AssembledLayout {
   const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
-  const lines: Line[] = positionedParagraphs.map((runs, i) => ({
-    runs,
+  const lines: Line[] = paragraphs.map((p, i) => ({
+    runs: p.runs,
     y: origin.y - lineHeight * i,
     ascent: metrics.ascender,
     descent: metrics.descender,
+    clusterStart: p.clusterStart,
+    clusterEnd: p.clusterEnd,
   }));
 
   let totalAdvance = 0;

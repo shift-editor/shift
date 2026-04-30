@@ -8,6 +8,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Three coordinate spaces flow through every interaction: `screen` (canvas pixels, Y-down), `scene` (UPM with viewport transform applied), and `glyphLocal` (scene minus draw offset). All three are bundled in the `Coordinates` type; build one via `Editor.fromScreen()` / `fromScene()` / `fromGlyphLocal()` -- never compute one space from another manually.
 
+**Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, cellId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForCell()`. Tools must not set text-run edit placement coordinates directly.
+
 **Architecture Invariant: CRITICAL:** `ViewportManager` owns the affine matrices (`$upmToScreenMatrix`, `$screenToUpmMatrix`) as lazily computed signals. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 
 **Architecture Invariant: CRITICAL:** Rendering is driven by four reactive effects (`#staticEffect`, `#overlayEffect`, `#interactiveEffect`, `#cursorEffect`). Each effect reads the specific signals it depends on, then calls the corresponding `Viewport.request*Redraw()`. If you add new editor state that should trigger a redraw, you must read that signal inside the correct effect -- otherwise the canvas will not update.
@@ -89,9 +91,11 @@ editor/
 Screen (canvas pixels, Y-down)
   -> ViewportManager.projectScreenToScene() [affine matrix inverse]
 Scene (UPM space, Y-up, viewport-relative)
-  -> Editor.sceneToGlyphLocal() [subtract drawOffset]
+  -> Editor.sceneToGlyphLocal() [subtract layout-derived drawOffset]
 GlyphLocal (origin at glyph baseline-left)
 ```
+
+For direct glyph opens, `Editor.openGlyph()` creates a one-cell implicit editor run and focuses that cell. For text-run editing, `Editor.setGlyphFocus(anchor)` focuses the clicked cell. Both paths produce `drawOffset` through the same anchor-resolution pipeline.
 
 `ViewportManager` computes the UPM-to-screen matrix as: baseline positioning + Y-flip + scale, composed with pan + zoom. The inverse is lazily computed. Both are `ComputedSignal<Mat>` so any dependent computed/effect auto-invalidates.
 

@@ -1,14 +1,16 @@
 import { BaseTool, type ToolName } from "../core/BaseTool";
+import { TypingBehavior } from "./behaviors/TypingBehavior";
 import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "@/types/editor";
-import { TypingBehavior } from "./behaviors/TypingBehaviour";
+import { glyphCell } from "@/lib/text/layout";
 
-export class Text extends BaseTool<TextState> {
+export class TextTool extends BaseTool<TextState> {
   readonly id: ToolName = "text";
   readonly behaviors: TextBehavior[] = [new TypingBehavior()];
 
-  override getCursor(_state: TextState): CursorType {
-    return { type: "text" };
+  override getCursor(state: TextState): CursorType {
+    if (state.type === "typing") return { type: "text" };
+    return { type: "default" };
   }
 
   initialState(): TextState {
@@ -16,19 +18,22 @@ export class Text extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    const activeName = this.editor.getActiveGlyphName();
-    if (!activeName) {
+    // Run owner = MAIN glyph, not the currently-active editing glyph.
+    // Double-clicking a slot changes the active glyph (so its outline becomes
+    // editable in place) but the run still belongs to whoever owned it —
+    // the main glyph the user opened from the grid. Keying on activeGlyph
+    // here would silently switch to a fresh per-active-glyph run when the
+    // user toggles tools mid-slot-edit, wiping the run they were in.
+    const owner = this.editor.getGlyphHandle();
+    if (!owner) {
       this.state = { type: "typing" };
       this.editor.setPreviewMode(true);
       return;
     }
 
-    const activeUnicode = this.editor.getActiveGlyphUnicode();
-    const run = this.editor.textRuns.switchTo(activeName);
-    run.seed(
-      { kind: "glyph", glyphName: activeName, codepoint: activeUnicode },
-      this.editor.drawOffset.x,
-    );
+    const ownerName = owner.glyphName;
+    const run = this.editor.textRuns.switchTo(ownerName);
+    run.seed(glyphCell(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
     run.interaction.suspend();
     run.setCursorVisible(true);
 
@@ -44,5 +49,3 @@ export class Text extends BaseTool<TextState> {
     this.state = { type: "idle" };
   }
 }
-
-export default Text;

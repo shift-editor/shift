@@ -87,7 +87,7 @@ pub struct SaveFontTask {
 }
 
 #[napi(object)]
-pub struct JsGlyphRef {
+pub struct GlyphHandle {
   #[napi(js_name = "glyphName")]
   pub glyph_name: String,
   pub unicode: Option<u32>,
@@ -619,7 +619,7 @@ impl FontEngine {
   }
 
   #[napi]
-  pub fn start_edit_session(&mut self, glyph_ref: JsGlyphRef) -> Result<()> {
+  pub fn start_edit_session(&mut self, glyph_ref: GlyphHandle) -> Result<()> {
     self.start_edit_session_for_name(&glyph_ref.glyph_name, glyph_ref.unicode)
   }
 
@@ -1091,7 +1091,7 @@ mod tests {
     let mut engine = FontEngine::new();
 
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "A".to_string(),
         unicode: Some(65),
       })
@@ -1110,7 +1110,7 @@ mod tests {
     let mut engine = FontEngine::new();
 
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "A".to_string(),
         unicode: Some(65),
       })
@@ -1127,12 +1127,12 @@ mod tests {
     let mut engine = FontEngine::new();
 
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "A".to_string(),
         unicode: Some(65),
       })
       .unwrap();
-    let result = engine.start_edit_session(JsGlyphRef {
+    let result = engine.start_edit_session(GlyphHandle {
       glyph_name: "B".to_string(),
       unicode: Some(66),
     });
@@ -1144,7 +1144,7 @@ mod tests {
   fn test_add_contour() {
     let mut engine = FontEngine::new();
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "A".to_string(),
         unicode: Some(65),
       })
@@ -1208,7 +1208,7 @@ mod tests {
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "A".to_string(),
         unicode: Some(65),
       })
@@ -1253,7 +1253,7 @@ mod tests {
     let mut engine = FontEngine::new();
     engine.load_font(path_str.to_string()).unwrap();
     engine
-      .start_edit_session(JsGlyphRef {
+      .start_edit_session(GlyphHandle {
         glyph_name: "Aacute".to_string(),
         unicode: Some(0x00C1),
       })

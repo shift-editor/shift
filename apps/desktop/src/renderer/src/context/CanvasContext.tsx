@@ -1,6 +1,6 @@
 import { createContext, useEffect, useRef } from "react";
 
-import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
+import { Gpu } from "@/lib/graphics/backends/Gpu";
 import { getEditor } from "@/store/store";
 import { CanvasRef } from "@/types/graphics";
 
@@ -70,7 +70,7 @@ export const CanvasContextProvider = ({ children }: { children: React.ReactNode 
       sceneCanvas: HTMLCanvasElement;
       backgroundCanvas: HTMLCanvasElement;
     }) => {
-      const gpuHandleContext = new ReglHandleContext();
+      const gpuHandleContext = new Gpu();
 
       const bgCtx = scaledContext(backgroundCanvas).ctx;
       const sceneCtx = scaledContext(sceneCanvas).ctx;

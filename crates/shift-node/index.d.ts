@@ -34,7 +34,7 @@ export declare class FontEngine {
    */
   getGlyphData(glyphName: string): string | null
   getGlyphVariationData(glyphName: string): string | null
-  startEditSession(glyphRef: JsGlyphRef): void
+  startEditSession(glyphRef: GlyphHandle): void
   endEditSession(): void
   hasEditSession(): boolean
   getEditingUnicode(): number | null
@@ -71,7 +71,7 @@ export declare class FontEngine {
   restoreSnapshot(snapshotJson: string): boolean
 }
 
-export interface JsGlyphRef {
+export interface GlyphHandle {
   glyphName: string
   unicode?: number
 }

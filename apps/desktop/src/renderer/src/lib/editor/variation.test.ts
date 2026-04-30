@@ -23,13 +23,13 @@ describe("Editor.open — variation-aware edit sessions", () => {
     const editor = new TestEditor();
     editor.font.load(MUTATORSANS_DESIGNSPACE);
 
-    const atDefault = editor.open("A")!;
+    const atDefault = editor.open({ glyphName: "A", unicode: 65 })!;
     const defaultAdvance = atDefault.xAdvance;
     const defaultPoints = flattenPoints(atDefault);
     editor.close();
 
     editor.font.setVariationLocation(boldLocation(editor));
-    const atBold = editor.open("A")!;
+    const atBold = editor.open({ glyphName: "A", unicode: 65 })!;
 
     expect(atBold.xAdvance).not.toBe(defaultAdvance);
     expect(flattenPoints(atBold)).not.toEqual(defaultPoints);

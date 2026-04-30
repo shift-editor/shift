@@ -4,7 +4,7 @@ import { DEFAULT_THEME } from "./Theme";
 import { Canvas } from "./Canvas";
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
-import { ReglHandleContext } from "@/lib/graphics/backends/ReglHandleContext";
+import { Gpu } from "@/lib/graphics/backends/Gpu";
 import type { Editor } from "../Editor";
 
 /**
@@ -44,7 +44,7 @@ export class Viewport {
     overlay: Canvas | null;
   } = { background: null, scene: null, overlay: null };
 
-  #gpuHandleContext: ReglHandleContext | null = null;
+  #gpuHandleContext: Gpu | null = null;
 
   #backgroundFrame = new FrameHandler();
   #sceneFrame = new FrameHandler();
@@ -77,11 +77,11 @@ export class Viewport {
     this.#canvases.overlay = null;
   }
 
-  setGpuHandleContext(context: ReglHandleContext): void {
+  setGpuHandleContext(context: Gpu): void {
     this.#gpuHandleContext = context;
   }
 
-  get gpuHandleContext(): ReglHandleContext | null {
+  get gpuHandleContext(): Gpu | null {
     return this.#gpuHandleContext;
   }
 

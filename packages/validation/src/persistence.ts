@@ -1,12 +1,14 @@
 import { z } from "zod";
 
 export const GlyphCellSchema = z.object({
+  id: z.string().min(1),
   kind: z.literal("glyph"),
   glyphName: z.string().min(1),
   codepoint: z.number().int().nonnegative().nullable(),
 });
 
 export const LineBreakSchema = z.object({
+  id: z.string().min(1),
   kind: z.literal("linebreak"),
 });
 

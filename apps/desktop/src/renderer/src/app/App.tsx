@@ -60,9 +60,9 @@ export const App = () => {
           const unicode = parseEditorUnicodeFromHash(window.location.hash);
           if (unicode !== null) {
             const glyphName = editor.font.glyphName(unicode);
-            editor.setMainGlyphUnicode(unicode);
-            editor.open(glyphName);
-            editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
+            const handle = { glyphName, unicode };
+            editor.setGlyphHandle(handle);
+            editor.openGlyph(handle);
           }
         } else {
           navigateToHome();

@@ -3,12 +3,13 @@
  *
  * Usage:
  *   const editor = new TestEditor();
- *   editor.startSession("A");
+ *   editor.startSession();
  *   editor.selectTool("pen");
  *   editor.click(100, 200);
  *   expect(editor.pointCount).toBe(1);
  */
 
+import type { GlyphHandle } from "@shared/bridge/FontEngineAPI";
 import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
 import { Glyphs } from "@shift/font";
@@ -49,8 +50,9 @@ export class TestEditor extends Editor {
     return this.#clipboard.buffer;
   }
 
-  startSession(glyphName = "A"): this {
-    this.open(glyphName);
+  startSession(handle: GlyphHandle = { glyphName: "A", unicode: 65 }): this {
+    this.setGlyphHandle(handle);
+    this.openGlyph(handle);
     return this;
   }
 

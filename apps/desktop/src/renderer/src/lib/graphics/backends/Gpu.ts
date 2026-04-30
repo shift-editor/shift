@@ -5,7 +5,7 @@ import frag from "@/lib/editor/rendering/gpu/shaders/handle.frag.glsl";
 
 const UNIT_QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1]);
 
-export class ReglHandleContext {
+export class Gpu {
   #regl: REGL.Regl | null = null;
   #instanceBuffer: REGL.Buffer | null = null;
   #drawCommand: REGL.DrawCommand | null = null;

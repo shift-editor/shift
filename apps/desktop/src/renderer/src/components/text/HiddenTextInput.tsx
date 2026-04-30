@@ -8,8 +8,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
 import { effect } from "@/lib/reactive/signal";
+import { linebreakCell } from "@/lib/text/layout";
 
-export function HiddenTextInput() {
+export function TextInput() {
   const editor = getEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [isTextTool, setIsTextTool] = useState(false);
@@ -23,7 +24,7 @@ export function HiddenTextInput() {
 
   const textareaRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
-      (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+      ref.current = node;
       if (!node) return;
 
       node.focus();
@@ -69,7 +70,7 @@ export function HiddenTextInput() {
         return;
 
       case "Enter":
-        run.insert({ kind: "linebreak" });
+        run.insert(linebreakCell());
         e.preventDefault();
         return;
 

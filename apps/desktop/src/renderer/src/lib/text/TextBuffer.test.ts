@@ -20,9 +20,10 @@ describe("TextBuffer", () => {
 
   // SEED — insert appends and advances cursor + anchor.
   it("insert places cell at cursor and advances both cursor and anchor", () => {
-    buffer.insert(glyph("A"));
+    const a = glyph("A");
+    buffer.insert(a);
 
-    expect(buffer.cells).toEqual([glyph("A")]);
+    expect(buffer.cells).toEqual([a]);
     expect(buffer.cursor).toBe(1);
     expect(buffer.anchor).toBe(1);
     expect(buffer.hasSelection).toBe(false);
@@ -32,23 +33,28 @@ describe("TextBuffer", () => {
   // insert(X)
   // after:   [A, X]       cursor = anchor = 2  (X collapses BC + caret advances)
   it("insert replaces an active selection", () => {
-    buffer.insertMany([glyph("A"), glyph("B"), glyph("C")]);
+    const a = glyph("A");
+    const b = glyph("B");
+    const c = glyph("C");
+    const x = glyph("X");
+    buffer.insertMany([a, b, c]);
     buffer.selectRange(1, 3);
 
-    buffer.insert(glyph("X"));
+    buffer.insert(x);
 
-    expect(buffer.cells).toEqual([glyph("A"), glyph("X")]);
+    expect(buffer.cells).toEqual([a, x]);
     expect(buffer.cursor).toBe(2);
     expect(buffer.anchor).toBe(2);
   });
 
   // SEED — backspace with no selection removes one cell before cursor.
   it("delete removes cell before cursor when there is no selection", () => {
-    buffer.insertMany([glyph("A"), glyph("B")]); // cursor=2
+    const a = glyph("A");
+    buffer.insertMany([a, glyph("B")]); // cursor=2
 
     expect(buffer.delete()).toBe(true);
 
-    expect(buffer.cells).toEqual([glyph("A")]);
+    expect(buffer.cells).toEqual([a]);
     expect(buffer.cursor).toBe(1);
   });
 
@@ -62,12 +68,13 @@ describe("TextBuffer", () => {
   // delete()
   // after:   [A]          cursor = anchor = 1  (selection removed, caret at start)
   it("delete with active selection removes it and collapses to start", () => {
-    buffer.insertMany([glyph("A"), glyph("B"), glyph("C")]);
+    const a = glyph("A");
+    buffer.insertMany([a, glyph("B"), glyph("C")]);
     buffer.selectRange(1, 3);
 
     expect(buffer.delete()).toBe(true);
 
-    expect(buffer.cells).toEqual([glyph("A")]);
+    expect(buffer.cells).toEqual([a]);
     expect(buffer.cursor).toBe(1);
     expect(buffer.anchor).toBe(1);
   });
@@ -98,7 +105,8 @@ describe("TextBuffer", () => {
 
   // SEED — snapshot / restore round-trip.
   it("snapshot then restore reproduces buffer state", () => {
-    buffer.insertMany([glyph("A"), glyph("B"), glyph("C")]);
+    const cells = [glyph("A"), glyph("B"), glyph("C")];
+    buffer.insertMany(cells);
     buffer.selectRange(1, 3);
     buffer.setOriginX(42);
 
@@ -107,9 +115,24 @@ describe("TextBuffer", () => {
     const fresh = new TextBuffer();
     fresh.restore(snap);
 
-    expect(fresh.cells).toEqual([glyph("A"), glyph("B"), glyph("C")]);
+    expect(fresh.cells).toEqual(cells);
     expect(fresh.anchor).toBe(1);
     expect(fresh.cursor).toBe(3);
     expect(fresh.originX).toBe(42);
+  });
+
+  it("cellById follows the same logical cell through insertions and deletion", () => {
+    const b = glyph("B");
+    buffer.insertMany([glyph("A"), b]);
+
+    buffer.placeCaret(0);
+    buffer.insert(glyph("X"));
+
+    expect(buffer.cellById(b.id)).toBe(b);
+
+    buffer.selectRange(2, 3);
+    buffer.delete();
+
+    expect(buffer.cellById(b.id)).toBeNull();
   });
 });

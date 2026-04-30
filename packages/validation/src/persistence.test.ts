@@ -38,8 +38,8 @@ describe("persistence schemas", () => {
                   "65": {
                     buffer: {
                       cells: [
-                        { kind: "glyph", glyphName: "A", codepoint: 65 },
-                        { kind: "glyph", glyphName: "B", codepoint: 66 },
+                        { id: "a1", kind: "glyph", glyphName: "A", codepoint: 65 },
+                        { id: "b1", kind: "glyph", glyphName: "B", codepoint: 66 },
                       ],
                       cursor: 2,
                       anchor: 2,
@@ -63,7 +63,7 @@ describe("persistence schemas", () => {
       runsByGlyph: {
         "65": {
           buffer: {
-            cells: [{ kind: "glyph", glyphName: "A", codepoint: 65 }],
+            cells: [{ id: "a1", kind: "glyph", glyphName: "A", codepoint: 65 }],
             cursor: "1",
             anchor: 0,
             originX: 0,

@@ -41,6 +41,7 @@ describe("cellFromCodepoint", () => {
       getMappedGlyphName: () => null,
     });
 
-    expect(cell).toEqual({ kind: "glyph", glyphName: "A", codepoint: 0x41 });
+    expect(cell).toMatchObject({ kind: "glyph", glyphName: "A", codepoint: 0x41 });
+    expect(cell.id).toEqual(expect.any(String));
   });
 });

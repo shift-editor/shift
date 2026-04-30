@@ -19,7 +19,7 @@
  * `TextRun`.
  */
 import { signal, batch, type WritableSignal, type Signal } from "@/lib/reactive/signal";
-import type { Cell } from "./layout";
+import type { Cell, TextCellId } from "./layout";
 import { clamp } from "@/lib/utils/utils";
 
 export interface SelectionRange {
@@ -105,6 +105,10 @@ export class TextBuffer {
     return this.#$cells.peek().slice(start, end);
   }
 
+  cellById(id: TextCellId): Cell | null {
+    return this.#$cells.value.find((cell) => cell.id === id) ?? null;
+  }
+
   /** Raw signals for React hooks that need `Signal<T>`. */
   get $cells(): Signal<readonly Cell[]> {
     return this.#$cells;
@@ -162,8 +166,14 @@ export class TextBuffer {
    * Existing cursor/anchor shift right by 1 if they sit at or after `index`.
    */
   /** @knipclassignore — used by Select tool's TextRunEdit splice (TODO) */
-  insertAt(_index: number, _cell: Cell): void {
-    throw new Error("TextBuffer.insertAt not implemented");
+  insertAt(index: number, cell: Cell): void {
+    const at = clamp(index, 0, this.length);
+    const next = [...this.cells.slice(0, at), cell, ...this.cells.slice(at)];
+    this.#update({
+      cells: next,
+      cursor: this.cursor >= at ? this.cursor + 1 : this.cursor,
+      anchor: this.anchor >= at ? this.anchor + 1 : this.anchor,
+    });
   }
 
   /**

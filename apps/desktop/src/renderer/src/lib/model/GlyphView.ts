@@ -1,6 +1,7 @@
 import type {
   Axis,
   AxisLocation,
+  Anchor,
   Component,
   DecomposedTransform,
   GlyphGeometry,
@@ -75,7 +76,9 @@ export class GlyphView {
   readonly #font: Font;
   readonly #values: ComputedSignal<Float64Array>;
   readonly #svgPath: ComputedSignal<string>;
+  readonly #path: ComputedSignal<Path2D>;
   readonly #advance: ComputedSignal<number>;
+  readonly #bounds: ComputedSignal<Bounds | null>;
 
   constructor(
     name: string,
@@ -103,7 +106,17 @@ export class GlyphView {
       $location.value;
       return buildSvgPath(this.contours());
     });
+    // Cached Path2D — re-built only when $svgPath fires (variation scrub or
+    // geometry mutation). Constructing a Path2D from an SVG string is the
+    // hot path during text-run draws; this turns per-frame allocation
+    // into a one-time cost per variation tick.
+    this.#path = computed(() => new Path2D(this.#svgPath.value));
     this.#advance = computed(() => this.#values.value[0]);
+    // Cached bbox — `font.getBbox` is a NAPI call into Rust; positioner asks
+    // every layout rebuild, so without this it dominates the variation-scrub
+    // hot path. Wrapped in a computed (with no tracked deps today) so it
+    // upgrades cleanly when variation-aware bounds land.
+    this.#bounds = computed(() => this.#font.getBbox(this.name) ?? null);
   }
 
   get advance(): number {
@@ -114,15 +127,30 @@ export class GlyphView {
     return this.#svgPath;
   }
 
+  get $path(): Signal<Path2D> {
+    return this.#path;
+  }
+
   get $advance(): Signal<number> {
     return this.#advance;
   }
 
-  get bounds(): Bounds | undefined {
-    const bounds = this.#font.getBbox(this.name);
-    if (!bounds) return;
+  get bounds(): Bounds | null {
+    return this.#bounds.value;
+  }
 
-    return bounds;
+  get anchors(): readonly Anchor[] {
+    const v = this.#values.value;
+    let cursor = 1;
+    for (const contour of this.#geometry.contours) {
+      cursor += contour.points.length * 2;
+    }
+
+    return this.#geometry.anchors.map((anchor, index) => ({
+      ...anchor,
+      x: v[cursor + index * 2],
+      y: v[cursor + index * 2 + 1],
+    }));
   }
 
   /**
@@ -180,6 +208,7 @@ export class GlyphView {
     this.#values.dispose();
     this.#svgPath.dispose();
     this.#advance.dispose();
+    this.#bounds.dispose();
   }
 }
 

@@ -15,7 +15,7 @@ describe("NativeBridge session lifecycle", () => {
   });
 
   it("startEditSession opens a session and populates $glyph", () => {
-    bridge.startEditSession("A");
+    bridge.startEditSession({ glyphName: "A" });
 
     expect(bridge.hasSession()).toBe(true);
     expect(bridge.$glyph.peek()).not.toBe(null);
@@ -23,7 +23,7 @@ describe("NativeBridge session lifecycle", () => {
   });
 
   it("endEditSession clears the session and nulls $glyph", () => {
-    bridge.startEditSession("A");
+    bridge.startEditSession({ glyphName: "A" });
     bridge.endEditSession();
 
     expect(bridge.hasSession()).toBe(false);
@@ -31,20 +31,20 @@ describe("NativeBridge session lifecycle", () => {
   });
 
   it("starting the same glyph again is a no-op — $glyph reference is preserved", () => {
-    bridge.startEditSession("A");
+    bridge.startEditSession({ glyphName: "A" });
     const first = bridge.$glyph.peek();
 
-    bridge.startEditSession("A");
+    bridge.startEditSession({ glyphName: "A" });
     const second = bridge.$glyph.peek();
 
     expect(second).toBe(first);
   });
 
   it("switching to a different glyph replaces the Glyph instance", () => {
-    bridge.startEditSession("A");
+    bridge.startEditSession({ glyphName: "A" });
     const first = bridge.$glyph.peek();
 
-    bridge.startEditSession("B");
+    bridge.startEditSession({ glyphName: "B" });
     const second = bridge.$glyph.peek();
 
     expect(bridge.getEditingGlyphName()).toBe("B");

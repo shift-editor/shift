@@ -16,9 +16,10 @@ describe("TextInteraction", () => {
   });
 
   it("setEditing stores the target", () => {
-    ctx.setEditing({ index: 3, cell: glyph("A", 65) });
+    const target = { index: 3, cell: glyph("A", 65) };
+    ctx.setEditing(target);
 
-    expect(ctx.editing).toEqual({ index: 3, cell: glyph("A", 65) });
+    expect(ctx.editing).toEqual(target);
   });
 
   it("suspend moves editing into suspended", () => {
@@ -92,9 +93,11 @@ describe("TextInteraction", () => {
   });
 
   it("snapshot then restore reproduces context state", () => {
-    ctx.setEditing({ index: 4, cell: glyph("A", 65) });
+    const suspended = { index: 4, cell: glyph("A", 65) };
+    const editing = { index: 1, cell: glyph("B", 66) };
+    ctx.setEditing(suspended);
     ctx.suspend();
-    ctx.setEditing({ index: 1, cell: glyph("B", 66) });
+    ctx.setEditing(editing);
     ctx.setHovered(3);
 
     const snap = ctx.snapshot();
@@ -102,8 +105,8 @@ describe("TextInteraction", () => {
     const fresh = new TextInteraction();
     fresh.restore(snap);
 
-    expect(fresh.editing).toEqual({ index: 1, cell: glyph("B", 66) });
-    expect(fresh.suspended).toEqual({ index: 4, cell: glyph("A", 65) });
+    expect(fresh.editing).toEqual(editing);
+    expect(fresh.suspended).toEqual(suspended);
     expect(fresh.hoveredIndex).toBe(3);
   });
 });

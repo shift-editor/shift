@@ -17,9 +17,11 @@
 import { signal, computed, type Signal, type ComputedSignal } from "@/lib/reactive/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
-import { Caret, TextLayout } from "./layout";
-import type { Cell, Positioner } from "./layout";
+import { Caret, glyphCell, TextLayout } from "./layout";
+import type { Cell, GlyphAnchor, GlyphCell, Positioner, TextRunId } from "./layout";
 import type { Font } from "@/lib/model/Font";
+import type { GlyphHandle } from "@shared/bridge/FontEngineAPI";
+import type { Point2D } from "@shift/types";
 
 export interface SelectionRect {
   x: number;
@@ -28,7 +30,15 @@ export interface SelectionRect {
   bottom: number;
 }
 
+export interface FocusedGlyph {
+  anchor: GlyphAnchor;
+  cell: GlyphCell;
+  glyph: GlyphHandle;
+  editOrigin: Point2D;
+}
+
 export class TextRun {
+  readonly id: TextRunId;
   readonly buffer: TextBuffer;
   readonly interaction: TextInteraction;
   readonly #font: Font;
@@ -41,7 +51,8 @@ export class TextRun {
 
   #goalX: number | null = null;
 
-  constructor(font: Font, positioner: Positioner) {
+  constructor(id: TextRunId, font: Font, positioner: Positioner) {
+    this.id = id;
     this.buffer = new TextBuffer();
     this.interaction = new TextInteraction();
     this.#font = font;
@@ -99,9 +110,14 @@ export class TextRun {
   /**
    * Initialize the run with a single seed cell at originX. Combines
    * `buffer.seed` + `buffer.setOriginX` so Text-tool activation is one call.
-   * No-op on the seed if the buffer already has cells; originX is always set.
+   *
+   * No-op when the buffer already has cells. Critically, this means originX
+   * is *not* re-applied on re-activation — without that guard, the run
+   * shifts every time the user toggles between Select and Text after
+   * drawOffset has moved (e.g. via double-clicking a slot to edit it).
    */
   seed(cell: Cell, originX: number): void {
+    if (this.buffer.length > 0) return;
     this.buffer.seed(cell);
     this.buffer.setOriginX(originX);
   }
@@ -168,6 +184,58 @@ export class TextRun {
     this.#resetGoalX();
   }
 
+  anchorAtPoint(p: Point2D, padding = 0): GlyphAnchor | null {
+    const layout = this.#$layout.peek();
+    return layout?.anchorAtPoint(this.id, p, padding) ?? null;
+  }
+
+  /**
+   * Resolve a durable glyph anchor through current buffer and layout state.
+   *
+   *   run = [a(id=a1), a(id=a2), s(id=s1), d(id=d1)]
+   *                              ▲
+   *                              click
+   *      │
+   *      ▼
+   *   GlyphAnchor { runId: run.id, cellId: s1 }
+   *      │
+   *      ▼
+   *   resolveAnchor(anchor)
+   *      │ reads current buffer + current layout
+   *      ▼
+   *   FocusedGlyph { glyph: "s", editOrigin }
+   */
+  resolveAnchor(anchor: GlyphAnchor): FocusedGlyph | null {
+    if (anchor.runId !== this.id) return null;
+    const cell = this.buffer.cellById(anchor.cellId);
+    if (!cell || cell.kind !== "glyph") return null;
+
+    const editOrigin = this.#$layout.peek()?.editOriginForCell(anchor.cellId) ?? null;
+    if (!editOrigin) return null;
+
+    return {
+      anchor,
+      cell,
+      glyph: {
+        glyphName: cell.glyphName,
+        ...(cell.codepoint !== null ? { unicode: cell.codepoint } : {}),
+      },
+      editOrigin,
+    };
+  }
+
+  setSingleGlyph(handle: GlyphHandle): GlyphAnchor {
+    const cell = glyphCell(handle.glyphName, handle.unicode ?? null);
+    this.buffer.restore({
+      cells: [cell],
+      cursor: 1,
+      anchor: 1,
+      originX: 0,
+    });
+    this.interaction.clear();
+    return { runId: this.id, cellId: cell.id };
+  }
+
   /** @knipclassignore — keyboard nav via HiddenTextInput */
   moveCursorLeft(extend = false): void {
     this.#resetGoalX();
@@ -184,36 +252,105 @@ export class TextRun {
     else this.buffer.placeCaret(next);
   }
 
-  // Vertical nav: deferred. No-op for now; lands when Caret.nextLine ships.
   /** @knipclassignore — keyboard nav via HiddenTextInput */
-  moveCursorUp(_extend = false): void {
-    void this.#goalX; // TODO: read as goalX seed for Caret.previousLine
+  moveCursorUp(extend = false): void {
+    const caret = this.#$caret.peek();
+    if (!caret) return;
+    this.#goalX ??= caret.position().x;
+    const next = caret.previousLine(this.#goalX);
+    if (extend) this.buffer.extendSelection(next.cluster);
+    else this.buffer.placeCaret(next.cluster);
   }
 
   /** @knipclassignore — keyboard nav via HiddenTextInput */
-  moveCursorDown(_extend = false): void {
-    /* TODO: Caret.nextLine(this.#goalX ??= caret.position().x) */
-  }
-
-  // Word and line-edge nav: deferred. No-op for now.
-  /** @knipclassignore — keyboard nav via HiddenTextInput */
-  moveCursorByWord(_direction: -1 | 1, _extend = false): void {
-    /* TODO: walk cells looking for word boundaries via codepoint classes */
-  }
-
-  /** @knipclassignore — keyboard nav via HiddenTextInput */
-  moveCursorToLineStart(_extend = false): void {
-    /* TODO: find current line, set cursor to its clusterStart */
+  moveCursorDown(extend = false): void {
+    const caret = this.#$caret.peek();
+    if (!caret) return;
+    this.#goalX ??= caret.position().x;
+    const next = caret.nextLine(this.#goalX);
+    if (extend) this.buffer.extendSelection(next.cluster);
+    else this.buffer.placeCaret(next.cluster);
   }
 
   /** @knipclassignore — keyboard nav via HiddenTextInput */
-  moveCursorToLineEnd(_extend = false): void {
-    /* TODO: find current line, set cursor to its last caret position */
+  moveCursorByWord(direction: -1 | 1, extend = false): void {
+    this.#resetGoalX();
+    const cells = this.buffer.cells;
+    let pos = this.buffer.cursor;
+
+    if (direction === -1) {
+      if (pos <= 0) return;
+      pos--;
+      while (pos > 0 && isWhitespaceCell(cells[pos - 1])) pos--;
+      while (pos > 0 && !isWhitespaceCell(cells[pos - 1]) && !isPunctuationCell(cells[pos - 1])) {
+        pos--;
+      }
+    } else {
+      if (pos >= cells.length) return;
+      while (
+        pos < cells.length &&
+        !isWhitespaceCell(cells[pos]) &&
+        !isPunctuationCell(cells[pos])
+      ) {
+        pos++;
+      }
+      // while (pos < cells.length && isWhitespaceCell(cells[pos])) pos++;
+    }
+
+    if (extend) this.buffer.extendSelection(pos);
+    else this.buffer.placeCaret(pos);
+  }
+
+  /** @knipclassignore — keyboard nav via HiddenTextInput */
+  moveCursorToLineStart(extend = false): void {
+    this.#resetGoalX();
+    const lineIdx = this.#findCurrentLineIndex();
+    if (lineIdx < 0) return;
+    const target = this.#$layout.peek()!.lines[lineIdx].clusterStart;
+    if (extend) this.buffer.extendSelection(target);
+    else this.buffer.placeCaret(target);
+  }
+
+  /** @knipclassignore — keyboard nav via HiddenTextInput */
+  moveCursorToLineEnd(extend = false): void {
+    this.#resetGoalX();
+    const lineIdx = this.#findCurrentLineIndex();
+    if (lineIdx < 0) return;
+    const target = this.#$layout.peek()!.lines[lineIdx].clusterEnd - 1;
+    if (extend) this.buffer.extendSelection(target);
+    else this.buffer.placeCaret(target);
   }
 
   #resetGoalX(): void {
     this.#goalX = null;
   }
+
+  #findCurrentLineIndex(): number {
+    const layout = this.#$layout.peek();
+    if (!layout) return -1;
+    const cursor = this.buffer.cursor;
+    for (const [i, line] of layout.lines.entries()) {
+      if (cursor >= line.clusterStart && cursor < line.clusterEnd) return i;
+    }
+    return -1;
+  }
+}
+
+function isWhitespaceCell(cell: Cell): boolean {
+  if (cell.kind === "linebreak") return true;
+  if (cell.codepoint === null) return false;
+  return cell.codepoint === 0x20 || cell.codepoint === 0x09 || cell.codepoint === 0x0a;
+}
+
+function isPunctuationCell(cell: Cell): boolean {
+  if (cell.kind !== "glyph" || cell.codepoint === null) return false;
+  const cp = cell.codepoint;
+  return (
+    (cp >= 0x21 && cp <= 0x2f) ||
+    (cp >= 0x3a && cp <= 0x40) ||
+    (cp >= 0x5b && cp <= 0x60) ||
+    (cp >= 0x7b && cp <= 0x7e)
+  );
 }
 
 function computeSelectionRects(
@@ -222,19 +359,19 @@ function computeSelectionRects(
 ): SelectionRect[] {
   const rects: SelectionRect[] = [];
   for (const line of layout.lines) {
-    let cursor = layout.origin.x;
+    let runBase = layout.origin.x;
     let rectStart: number | null = null;
-    let rectEnd = cursor;
+    let rectEnd = runBase;
     for (const run of line.runs) {
       for (const g of run.glyphs) {
-        const left = cursor;
-        const right = cursor + g.xAdvance;
+        const left = runBase + g.origin.x;
+        const right = left + g.xAdvance;
         if (g.cluster >= range.start && g.cluster < range.end) {
           if (rectStart === null) rectStart = left;
           rectEnd = right;
         }
-        cursor = right;
       }
+      runBase += run.advance;
     }
     if (rectStart !== null) {
       rects.push({

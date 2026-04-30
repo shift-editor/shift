@@ -165,7 +165,7 @@ describe("State diagram compliance", () => {
     let spec: StateDiagram;
 
     beforeEach(() => {
-      editor.startSession("A", 65);
+      editor.startSession({ glyphName: "A", unicode: 65 });
       pen = new Pen(editor);
       spec = Pen.stateSpec;
     });
