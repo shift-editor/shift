@@ -18,7 +18,7 @@ Format-agnostic intermediate representation for font data, serving as the canoni
 
 **Architecture Invariant:** IR types must remain format-agnostic. No UFO paths, binary table offsets, or format-specific metadata belong here. Format-specific concerns live in `shift-backends`. WHY: the IR is the single source of truth shared by all readers, writers, and the editor core.
 
-**Architecture Invariant:** `FontMetadata`, `FontMetrics`, and `DecomposedTransform` derive `ts_rs::TS` to auto-generate TypeScript types for the frontend. If you add fields to these types, run the TS export to keep types in sync.
+**Architecture Invariant:** `shift-ir` must not know about TypeScript or bridge bindings. Frontend-facing DTOs live in `shift-wire`, and TypeScript bridge declarations are generated from `shift-bridge`. WHY: IR is the Rust domain model, not a cross-language API contract.
 
 ## Codemap
 
@@ -66,17 +66,15 @@ src/
 
 ## How it works
 
-**Ownership hierarchy:** `Font` owns `HashMap<GlyphName, Glyph>`. Each `Glyph` owns `HashMap<LayerId, GlyphLayer>`. Each `GlyphLayer` owns contours (by `ContourId`), components (by `ComponentId`), and anchors (ordered `Vec`). This is a pure value tree with no reference counting or interior mutability.
+**Ownership hierarchy:** `Font` uses copy-on-write storage around its document data and glyph map. Glyphs use copy-on-write layer storage. Each `GlyphLayer` owns contours (by `ContourId`), components (by `ComponentId`), and anchors (ordered `Vec`). This keeps save snapshots cheap while preserving normal value-style mutation APIs.
 
-**Edit pattern:** The upstream `shift-core` crate uses `take_glyph()` / `put_glyph()` to temporarily extract a glyph from the font, mutate it through an `EditSession`, then return it. This avoids borrow conflicts since the font no longer holds the glyph during editing.
+**Edit pattern:** The upstream `shift-edit` crate edits a `GlyphLayer` through `EditSession`. The bridge owns active edit lifecycle and commits the edited layer back to the glyph/font when the session ends.
 
 **Segment iteration:** `Contour::segments()` returns a `CurveSegmentIter` that classifies consecutive points by their on-curve/off-curve pattern: two on-curve points produce a `Line`, on-off-on produces a `Quad`, on-off-off-on produces a `Cubic`. For closed contours, the iterator wraps around from the last point back to the first.
 
 **BezPath interop:** `Contour` converts to/from `kurbo::BezPath` for use with the `linesweeper` boolean operations and kurbo geometry utilities. The `Contours` newtype wraps `Vec<Contour>` and implements `From<&BezPath>` to handle multi-subpath paths.
 
 **Variable fonts:** `Axis` defines a design space dimension. `Source` links a `Location` (axis coordinates) to a `LayerId`. `Axis::normalize()` / `denormalize()` map between user-space and normalized (-1..0..1) coordinates.
-
-**TypeScript bridge:** `FontMetadata`, `FontMetrics`, and `DecomposedTransform` use `ts-rs` to export TypeScript type definitions to `packages/types/src/generated/`.
 
 ## Workflow recipes
 
@@ -85,8 +83,8 @@ src/
 1. Add the field to the struct (e.g., in `glyph.rs`)
 2. Update `Default` impl if applicable
 3. Add getter/setter methods
-4. If the type has `#[ts(export)]`, run `cargo test` to regenerate TS types
-5. Update backend readers/writers in `shift-backends` to handle the new field
+4. Update backend readers/writers in `shift-backends` to handle the new field
+5. If the field crosses the bridge boundary, add or update the DTO in `shift-wire`
 
 ### Add a new entity type
 
@@ -101,7 +99,7 @@ src/
 2. Call `boolean(BooleanOp::Union, &a, &b)` (or other op)
 3. Result is `Contours` (a `Vec<Contour>` wrapper) -- each contour has fresh IDs
 
-### Perform a glyph edit (from shift-core)
+### Perform a glyph edit (from shift-edit)
 
 1. `font.take_glyph("A")` to extract
 2. Mutate the glyph's layer data
@@ -122,17 +120,15 @@ src/
 # Run all shift-ir tests
 cargo test -p shift-ir
 
-# Check TS type generation still works
-cargo test -p shift-ir -- --ignored 2>/dev/null || cargo test -p shift-ir
-
 # Verify downstream crates still compile
-cargo check -p shift-core -p shift-backends
+cargo check -p shift-edit -p shift-backends
 ```
 
 ## Related
 
-- `shift-core` -- editing logic (`EditSession`, constraint enforcement) that operates on IR types
+- `shift-edit` -- editing logic (`EditSession`, constraint enforcement) that operates on IR types
 - `shift-backends` -- format readers/writers (UFO, Glyphs) that produce/consume `Font`
-- `shift-node` -- NAPI bindings exposing IR types to the JavaScript/TypeScript frontend
+- `shift-wire` -- bridge DTOs derived from IR/edit state
+- `shift-bridge` -- NAPI bindings exposing bridge DTOs to JavaScript/TypeScript
 - `kurbo::BezPath` -- external type used for path geometry interop
 - `linesweeper` -- external crate powering `boolean()` operations

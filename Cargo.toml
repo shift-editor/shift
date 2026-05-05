@@ -4,5 +4,8 @@ members = ["crates/*"]
 
 
 [workspace.dependencies]
-shift-core = { path = "crates/shift-core" }
-shift-node = { path = "crates/shift-node" }
+shift-wire = { path = "crates/shift-wire" }
+shift-backends = { path = "crates/shift-backends" }
+shift-bridge = { path = "crates/shift-bridge" }
+shift-edit = { path = "crates/shift-edit" }
+shift-ir = { path = "crates/shift-ir" }

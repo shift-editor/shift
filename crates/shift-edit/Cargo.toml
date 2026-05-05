@@ -1,0 +1,23 @@
+[package]
+edition = "2021"
+name = "shift-edit"
+version = "0.0.0"
+authors = ["Kostya Farber <kostya.farber@gmail.com>"]
+license = "MIT"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+shift-ir = { workspace = true }
+shift-backends = { workspace = true }
+shift-wire = { workspace = true }
+
+bitflags = "2.9.1"
+fontc = "0.2.0"
+fontdrasil = "0.4.0"
+norad = "0.16.0"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0"
+skrifa = "0.32.0"
+thiserror = "2.0.18"

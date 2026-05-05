@@ -7,6 +7,7 @@ mod entity;
 mod features;
 mod font;
 mod glyph;
+mod glyph_name;
 mod guideline;
 mod kerning;
 mod layer;
@@ -28,6 +29,7 @@ pub use entity::{
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};
 pub use glyph::{Glyph, GlyphLayer};
+pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{KerningData, KerningPair, KerningSide};
 pub use layer::Layer;
@@ -36,5 +38,3 @@ pub use metrics::FontMetrics;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
 pub use source::Source;
-
-pub type GlyphName = String;

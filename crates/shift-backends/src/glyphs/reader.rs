@@ -58,7 +58,7 @@ impl GlyphsReader {
                     .get(&group_name)
                     .cloned()
                     .unwrap_or_default();
-                members.push(glyph.name.to_string());
+                members.push(glyph.name.to_string().into());
                 members.sort();
                 members.dedup();
                 kerning.set_group1(group_name, members);
@@ -71,7 +71,7 @@ impl GlyphsReader {
                     .get(&group_name)
                     .cloned()
                     .unwrap_or_default();
-                members.push(glyph.name.to_string());
+                members.push(glyph.name.to_string().into());
                 members.sort();
                 members.dedup();
                 kerning.set_group2(group_name, members);
@@ -94,7 +94,7 @@ impl GlyphsReader {
             {
                 KerningSide::Group(format!("{UFO_SIDE1_PREFIX}{group}"))
             } else {
-                KerningSide::Glyph(first.clone())
+                KerningSide::Glyph(first.clone().into())
             };
 
             let second_side = if let Some(group) = second
@@ -103,7 +103,7 @@ impl GlyphsReader {
             {
                 KerningSide::Group(format!("{UFO_SIDE2_PREFIX}{group}"))
             } else {
-                KerningSide::Glyph(second.clone())
+                KerningSide::Glyph(second.clone().into())
             };
 
             kerning.add_pair(KerningPair::new(

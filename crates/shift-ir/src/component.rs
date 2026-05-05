@@ -1,7 +1,6 @@
 use crate::entity::ComponentId;
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Component {
@@ -30,9 +29,8 @@ pub struct Transform {
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
 /// Composition order: translate to center → rotate → scale → skew → translate back
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct DecomposedTransform {
     pub translate_x: f64,
     pub translate_y: f64,
@@ -202,26 +200,41 @@ impl Transform {
 }
 
 impl Component {
-    pub fn new(base_glyph: GlyphName) -> Self {
+    pub fn new(base_glyph: impl Into<GlyphName>) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph,
+            base_glyph: base_glyph.into(),
             transform: DecomposedTransform::identity(),
         }
     }
 
-    pub fn with_transform(base_glyph: GlyphName, transform: DecomposedTransform) -> Self {
+    pub fn with_transform(
+        base_glyph: impl Into<GlyphName>,
+        transform: DecomposedTransform,
+    ) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph,
+            base_glyph: base_glyph.into(),
             transform,
         }
     }
 
-    pub fn with_matrix(base_glyph: GlyphName, matrix: &Transform) -> Self {
+    pub fn with_id(
+        id: ComponentId,
+        base_glyph: impl Into<GlyphName>,
+        transform: DecomposedTransform,
+    ) -> Self {
+        Self {
+            id,
+            base_glyph: base_glyph.into(),
+            transform,
+        }
+    }
+
+    pub fn with_matrix(base_glyph: impl Into<GlyphName>, matrix: &Transform) -> Self {
         Self {
             id: ComponentId::new(),
-            base_glyph,
+            base_glyph: base_glyph.into(),
             transform: DecomposedTransform::from_matrix(matrix),
         }
     }
@@ -259,7 +272,7 @@ mod tests {
     #[test]
     fn component_creation() {
         let c = Component::new("a".to_string());
-        assert_eq!(c.base_glyph(), "a");
+        assert_eq!(c.base_glyph().as_str(), "a");
         assert!(c.transform().is_identity());
     }
 

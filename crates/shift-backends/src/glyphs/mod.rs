@@ -45,11 +45,7 @@ mod tests {
             .expect("Homenaje should include features");
         assert!(fea.contains("feature frac"));
 
-        assert_eq!(
-            font.kerning()
-                .get_kerning(&"A".to_string(), &"V".to_string()),
-            Some(-55.0)
-        );
+        assert_eq!(font.kerning().get_kerning("A", "V"), Some(-55.0));
 
         let aacute = font.glyph("Aacute").expect("Aacute should exist");
         let layer = aacute

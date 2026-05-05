@@ -11,11 +11,10 @@ use crate::source::Source;
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use ts_rs::TS;
+use std::sync::Arc;
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../packages/types/src/generated/")]
 pub struct FontMetadata {
     pub family_name: Option<String>,
     pub style_name: Option<String>,
@@ -79,6 +78,11 @@ impl FontMetadata {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Font {
+    inner: Arc<FontData>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct FontData {
     metadata: FontMetadata,
     metrics: FontMetrics,
     axes: Vec<Axis>,
@@ -86,7 +90,7 @@ pub struct Font {
     #[serde(default)]
     default_source_id: Option<SourceId>,
     layers: HashMap<LayerId, Layer>,
-    glyphs: HashMap<GlyphName, Glyph>,
+    glyphs: HashMap<GlyphName, Arc<Glyph>>,
     kerning: KerningData,
     features: FeatureData,
     guidelines: Vec<Guideline>,
@@ -101,18 +105,20 @@ impl Default for Font {
         layers.insert(default_layer_id, Layer::default_layer());
 
         Self {
-            metadata: FontMetadata::default(),
-            metrics: FontMetrics::default(),
-            axes: Vec::new(),
-            sources: Vec::new(),
-            default_source_id: None,
-            layers,
-            glyphs: HashMap::new(),
-            kerning: KerningData::new(),
-            features: FeatureData::new(),
-            guidelines: Vec::new(),
-            lib: LibData::new(),
-            default_layer_id,
+            inner: Arc::new(FontData {
+                metadata: FontMetadata::default(),
+                metrics: FontMetrics::default(),
+                axes: Vec::new(),
+                sources: Vec::new(),
+                default_source_id: None,
+                layers,
+                glyphs: HashMap::new(),
+                kerning: KerningData::new(),
+                features: FeatureData::new(),
+                guidelines: Vec::new(),
+                lib: LibData::new(),
+                default_layer_id,
+            }),
         }
     }
 }
@@ -122,169 +128,247 @@ impl Font {
         Self::default()
     }
 
+    fn data(&self) -> &FontData {
+        &self.inner
+    }
+
+    fn data_mut(&mut self) -> &mut FontData {
+        Arc::make_mut(&mut self.inner)
+    }
+
     pub fn metadata(&self) -> &FontMetadata {
-        &self.metadata
+        &self.data().metadata
     }
 
     pub fn metadata_mut(&mut self) -> &mut FontMetadata {
-        &mut self.metadata
+        &mut self.data_mut().metadata
     }
 
     pub fn metrics(&self) -> &FontMetrics {
-        &self.metrics
+        &self.data().metrics
     }
 
     pub fn metrics_mut(&mut self) -> &mut FontMetrics {
-        &mut self.metrics
+        &mut self.data_mut().metrics
     }
 
     pub fn axes(&self) -> &[Axis] {
-        &self.axes
+        &self.data().axes
     }
 
     pub fn add_axis(&mut self, axis: Axis) {
-        self.axes.push(axis);
+        self.data_mut().axes.push(axis);
     }
 
     pub fn sources(&self) -> &[Source] {
-        &self.sources
+        &self.data().sources
     }
 
     pub fn add_source(&mut self, source: Source) -> SourceId {
         let source_id = source.id();
-        if self.default_source_id.is_none() {
-            self.default_source_id = Some(source_id);
+        let data = self.data_mut();
+        if data.default_source_id.is_none() {
+            data.default_source_id = Some(source_id);
         }
-        self.sources.push(source);
+        data.sources.push(source);
         source_id
     }
 
     pub fn default_source_id(&self) -> Option<SourceId> {
-        self.default_source_id
+        self.data().default_source_id
     }
 
     pub fn set_default_source_id(&mut self, source_id: SourceId) {
-        self.default_source_id = Some(source_id);
+        self.data_mut().default_source_id = Some(source_id);
     }
 
     pub fn default_source(&self) -> Option<&Source> {
-        let default_source_id = self.default_source_id?;
-        self.sources
+        let default_source_id = self.data().default_source_id?;
+        self.data()
+            .sources
             .iter()
             .find(|source| source.id() == default_source_id)
     }
 
     pub fn is_variable(&self) -> bool {
-        !self.axes.is_empty()
+        !self.data().axes.is_empty()
     }
 
     pub fn layers(&self) -> &HashMap<LayerId, Layer> {
-        &self.layers
+        &self.data().layers
     }
 
     pub fn layer(&self, id: LayerId) -> Option<&Layer> {
-        self.layers.get(&id)
+        self.data().layers.get(&id)
     }
 
     pub fn layer_mut(&mut self, id: LayerId) -> Option<&mut Layer> {
-        self.layers.get_mut(&id)
+        self.data_mut().layers.get_mut(&id)
     }
 
     pub fn default_layer_id(&self) -> LayerId {
-        self.default_layer_id
+        self.data().default_layer_id
     }
 
     pub fn default_layer(&self) -> Option<&Layer> {
-        self.layers.get(&self.default_layer_id)
+        self.data().layers.get(&self.data().default_layer_id)
     }
 
     pub fn add_layer(&mut self, layer: Layer) -> LayerId {
         let id = layer.id();
-        self.layers.insert(id, layer);
+        self.data_mut().layers.insert(id, layer);
         id
     }
 
-    pub fn glyphs(&self) -> &HashMap<GlyphName, Glyph> {
-        &self.glyphs
+    pub fn glyphs(&self) -> &HashMap<GlyphName, Arc<Glyph>> {
+        &self.data().glyphs
     }
 
     pub fn glyph(&self, name: &str) -> Option<&Glyph> {
-        self.glyphs.get(name)
+        self.data().glyphs.get(name).map(Arc::as_ref)
     }
 
     pub fn glyph_mut(&mut self, name: &str) -> Option<&mut Glyph> {
-        self.glyphs.get_mut(name)
+        self.data_mut().glyphs.get_mut(name).map(Arc::make_mut)
     }
 
     pub fn glyph_by_unicode(&self, unicode: u32) -> Option<&Glyph> {
-        self.glyphs
+        self.data()
+            .glyphs
             .values()
             .find(|g| g.unicodes().contains(&unicode))
+            .map(Arc::as_ref)
     }
 
     pub fn glyph_by_unicode_mut(&mut self, unicode: u32) -> Option<&mut Glyph> {
-        self.glyphs
+        self.data_mut()
+            .glyphs
             .values_mut()
             .find(|g| g.unicodes().contains(&unicode))
+            .map(Arc::make_mut)
     }
 
     pub fn insert_glyph(&mut self, glyph: Glyph) {
-        self.glyphs.insert(glyph.name().to_string(), glyph);
+        self.data_mut()
+            .glyphs
+            .insert(glyph.glyph_name().clone(), Arc::new(glyph));
     }
 
     pub fn remove_glyph(&mut self, name: &str) -> Option<Glyph> {
-        self.glyphs.remove(name)
+        self.data_mut()
+            .glyphs
+            .remove(name)
+            .map(Arc::unwrap_or_clone)
     }
 
     pub fn glyph_count(&self) -> usize {
-        self.glyphs.len()
+        self.data().glyphs.len()
     }
 
     pub fn take_glyph(&mut self, name: &str) -> Option<Glyph> {
-        self.glyphs.remove(name)
+        self.data_mut()
+            .glyphs
+            .remove(name)
+            .map(Arc::unwrap_or_clone)
     }
 
     pub fn put_glyph(&mut self, glyph: Glyph) {
-        self.glyphs.insert(glyph.name().to_string(), glyph);
+        self.data_mut()
+            .glyphs
+            .insert(glyph.glyph_name().clone(), Arc::new(glyph));
     }
 
     pub fn kerning(&self) -> &KerningData {
-        &self.kerning
+        &self.data().kerning
     }
 
     pub fn kerning_mut(&mut self) -> &mut KerningData {
-        &mut self.kerning
+        &mut self.data_mut().kerning
     }
 
     pub fn features(&self) -> &FeatureData {
-        &self.features
+        &self.data().features
     }
 
     pub fn features_mut(&mut self) -> &mut FeatureData {
-        &mut self.features
+        &mut self.data_mut().features
     }
 
     pub fn guidelines(&self) -> &[Guideline] {
-        &self.guidelines
+        &self.data().guidelines
     }
 
     pub fn add_guideline(&mut self, guideline: Guideline) {
-        self.guidelines.push(guideline);
+        self.data_mut().guidelines.push(guideline);
     }
 
     pub fn lib(&self) -> &LibData {
-        &self.lib
+        &self.data().lib
     }
 
     pub fn lib_mut(&mut self) -> &mut LibData {
-        &mut self.lib
+        &mut self.data_mut().lib
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph::GlyphLayer;
+    use crate::{Contour, GlyphLayer, PointType};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    #[derive(Clone, Copy)]
+    struct PerfFontMark {
+        label: &'static str,
+        glyphs: usize,
+        contours_per_glyph: usize,
+        points_per_contour: usize,
+    }
+
+    impl PerfFontMark {
+        fn total_points(self) -> usize {
+            self.glyphs * self.contours_per_glyph * self.points_per_contour
+        }
+    }
+
+    fn synthetic_point_heavy_font(mark: PerfFontMark) -> Font {
+        let mut font = Font::new();
+        let default_layer_id = font.default_layer_id();
+
+        for glyph_index in 0..mark.glyphs {
+            let mut glyph = Glyph::with_unicode(format!("g{glyph_index:05}"), glyph_index as u32);
+            let mut layer = GlyphLayer::with_width(500.0 + glyph_index as f64);
+
+            for contour_index in 0..mark.contours_per_glyph {
+                let mut contour = Contour::new();
+                for point_index in 0..mark.points_per_contour {
+                    contour.add_point(
+                        point_index as f64,
+                        (glyph_index + contour_index + point_index) as f64,
+                        PointType::OnCurve,
+                        false,
+                    );
+                }
+                layer.add_contour(contour);
+            }
+
+            glyph.set_layer(default_layer_id, layer);
+            font.insert_glyph(glyph);
+        }
+
+        font
+    }
+
+    fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
+        eprintln!(
+            "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
+            mark.label,
+            mark.glyphs,
+            mark.total_points(),
+            elapsed
+        );
+    }
 
     #[test]
     fn font_creation() {
@@ -318,5 +402,143 @@ mod tests {
 
         font.put_glyph(taken.unwrap());
         assert_eq!(font.glyph_count(), 1);
+    }
+
+    #[test]
+    fn cloned_font_shares_storage_until_mutated() {
+        let mut font = Font::new();
+        let snapshot = font.clone();
+
+        assert!(Arc::ptr_eq(&font.inner, &snapshot.inner));
+
+        font.metadata_mut().family_name = Some("Edited".to_string());
+
+        assert!(!Arc::ptr_eq(&font.inner, &snapshot.inner));
+        assert_eq!(font.metadata().family_name.as_deref(), Some("Edited"));
+        assert_eq!(
+            snapshot.metadata().family_name.as_deref(),
+            Some("Untitled Font")
+        );
+    }
+
+    #[test]
+    fn mutating_one_glyph_after_snapshot_keeps_other_glyphs_shared() {
+        let mut font = Font::new();
+        font.insert_glyph(Glyph::with_unicode("A".to_string(), 65));
+        font.insert_glyph(Glyph::with_unicode("B".to_string(), 66));
+        let snapshot = font.clone();
+
+        font.glyph_mut("A")
+            .unwrap()
+            .set_unicodes(vec![0x41, 0x00C1]);
+
+        assert_eq!(font.glyph("A").unwrap().unicodes(), &[0x41, 0x00C1]);
+        assert_eq!(snapshot.glyph("A").unwrap().unicodes(), &[0x41]);
+        assert!(!Arc::ptr_eq(
+            font.inner.glyphs.get("A").unwrap(),
+            snapshot.inner.glyphs.get("A").unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            font.inner.glyphs.get("B").unwrap(),
+            snapshot.inner.glyphs.get("B").unwrap()
+        ));
+    }
+
+    #[test]
+    fn perf_mark_large_font_clone_is_cow_snapshot() {
+        let marks = [
+            PerfFontMark {
+                label: "small-latin",
+                glyphs: 250,
+                contours_per_glyph: 2,
+                points_per_contour: 12,
+            },
+            PerfFontMark {
+                label: "large-latin",
+                glyphs: 2_000,
+                contours_per_glyph: 4,
+                points_per_contour: 16,
+            },
+            PerfFontMark {
+                label: "cjk-scale",
+                glyphs: 10_000,
+                contours_per_glyph: 2,
+                points_per_contour: 8,
+            },
+        ];
+
+        for mark in marks {
+            let font = synthetic_point_heavy_font(mark);
+            let start = Instant::now();
+            let snapshots: Vec<_> = (0..128).map(|_| font.clone()).collect();
+            let elapsed = start.elapsed();
+
+            assert_eq!(font.glyph_count(), mark.glyphs);
+            for snapshot in &snapshots {
+                assert!(Arc::ptr_eq(&font.inner, &snapshot.inner));
+                assert_eq!(snapshot.glyph_count(), font.glyph_count());
+            }
+
+            print_perf_mark("font.clone snapshots x128", mark, elapsed);
+            assert!(
+                elapsed < Duration::from_secs(1),
+                "COW snapshot creation should stay comfortably sub-second for {}; got {elapsed:?}",
+                mark.label
+            );
+        }
+    }
+
+    #[test]
+    fn perf_mark_large_font_mutating_one_glyph_preserves_unedited_glyph_sharing() {
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let snapshot = font.clone();
+        let default_layer_id = font.default_layer_id();
+        let start = Instant::now();
+
+        font.glyph_mut("g00000")
+            .expect("target glyph should exist")
+            .layer_mut(default_layer_id)
+            .expect("target layer should exist")
+            .set_width(777.0);
+
+        let elapsed = start.elapsed();
+
+        assert_eq!(
+            font.glyph("g00000")
+                .unwrap()
+                .layer(default_layer_id)
+                .unwrap()
+                .width(),
+            777.0
+        );
+        assert_ne!(
+            snapshot
+                .glyph("g00000")
+                .unwrap()
+                .layer(snapshot.default_layer_id())
+                .unwrap()
+                .width(),
+            777.0
+        );
+        assert!(!Arc::ptr_eq(
+            font.inner.glyphs.get("g00000").unwrap(),
+            snapshot.inner.glyphs.get("g00000").unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            font.inner.glyphs.get("g00001").unwrap(),
+            snapshot.inner.glyphs.get("g00001").unwrap()
+        ));
+
+        print_perf_mark("single glyph mutation after snapshot", mark, elapsed);
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "single-glyph COW mutation should stay comfortably sub-second; got {elapsed:?}"
+        );
     }
 }

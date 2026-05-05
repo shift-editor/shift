@@ -1,0 +1,22 @@
+[package]
+edition = "2021"
+name = "shift-wire"
+version = "0.0.0"
+authors = ["Kostya Farber <kostya.farber@gmail.com>"]
+license = "MIT"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+napi = ["dep:napi", "dep:napi-derive"]
+
+[dependencies]
+shift-ir = { workspace = true }
+
+napi = { version = "=3.8.6", optional = true, default-features = false, features = [
+    "napi6",
+] }
+napi-derive = { version = "=3.5.5", optional = true }
+serde = { version = "1.0.219", features = ["derive"] }

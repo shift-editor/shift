@@ -1,15 +1,15 @@
 repos:
   # Standard file hygiene
-  # Generated files (ts-rs output, NAPI .d.ts, parity fixtures) are excluded
+  # Generated files (bridge DTO typegen, NAPI .d.ts, parity fixtures) are excluded
   # because their format is owned by the generator. Re-formatting them here
-  # creates a loop with the cargo-test hook that regenerates them.
+  # creates churn with the hooks that regenerate them.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: '^(packages/types/src/generated/|packages/types/__fixtures__/|crates/shift-node/index\.(d\.ts|js))'
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
       - id: end-of-file-fixer
-        exclude: '^(packages/types/src/generated/|packages/types/__fixtures__/|crates/shift-node/index\.(d\.ts|js))'
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
@@ -41,7 +41,7 @@ repos:
 
       - id: cargo-check-tests
         name: cargo check (including tests)
-        entry: bash -c 'cargo check --package shift-node --tests'
+        entry: cargo check --workspace --tests --exclude shift-bridge
         language: system
         types: [rust]
         pass_filenames: false
@@ -62,7 +62,7 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        entry: bash -c 'cargo test --workspace --exclude shift-node && npx tsx scripts/patch-generated-types.ts && git add packages/types/src/generated/*.ts'
+        entry: cargo test --workspace --exclude shift-bridge
         language: system
         types: [rust]
         pass_filenames: false
