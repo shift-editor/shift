@@ -2,29 +2,29 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 const { contextBridge, ipcRenderer, clipboard } = require("electron");
-const { FontEngine } = require("shift-node");
 const os = require("os");
-import type { FontEngineAPI } from "../shared/bridge/FontEngineAPI";
+import { createBridge, type BridgeApi } from "@shift/bridge";
 import type { IpcEvents, IpcCommands } from "../shared/ipc/channels";
 import type { ElectronAPI } from "../shared/ipc/electronAPI";
 import { listener, command } from "../shared/ipc/preload";
 
-const fontEngineInstance = new FontEngine();
+const bridge = createBridge();
 
-function buildBridgeAPI<T>(instance: Record<string, unknown>): T {
+function buildContextBridgeApi<T extends object>(instance: T): T {
   const api: Record<string, unknown> = {};
+  const target = instance as Record<string, unknown>;
   const proto = Object.getPrototypeOf(instance);
   for (const name of Object.getOwnPropertyNames(proto)) {
-    if (name === "constructor" || typeof instance[name] !== "function") continue;
-    api[name] = (...args: unknown[]) => (instance[name] as Function)(...args);
+    if (name === "constructor" || typeof target[name] !== "function") continue;
+    api[name] = (...args: unknown[]) => (target[name] as Function)(...args);
   }
-  return api as unknown as T;
+  return api as T;
 }
 
-const fontEngineAPI = buildBridgeAPI<FontEngineAPI>(fontEngineInstance);
+const bridgeApi = buildContextBridgeApi<BridgeApi>(bridge);
 
 // Expose to renderer via contextBridge
-contextBridge.exposeInMainWorld("shiftFont", fontEngineAPI);
+contextBridge.exposeInMainWorld("shiftBridge", bridgeApi);
 
 const on = <K extends keyof IpcEvents>(ch: K) => listener(ipcRenderer, ch);
 const invoke = <K extends keyof IpcCommands>(ch: K) => command(ipcRenderer, ch);

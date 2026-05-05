@@ -9,6 +9,10 @@
 declare const PointIdBrand: unique symbol;
 declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
+declare const ComponentIdBrand: unique symbol;
+declare const GuidelineIdBrand: unique symbol;
+declare const LayerIdBrand: unique symbol;
+declare const SourceIdBrand: unique symbol;
 
 /**
  * A point identifier from Rust.
@@ -29,6 +33,30 @@ export type ContourId = string & {
  * Branded string type - can't be confused with PointId/ContourId or plain strings.
  */
 export type AnchorId = string & { readonly [AnchorIdBrand]: typeof AnchorIdBrand };
+
+/**
+ * A component identifier from Rust.
+ * Branded string type - can't be confused with other IDs or plain strings.
+ */
+export type ComponentId = string & { readonly [ComponentIdBrand]: typeof ComponentIdBrand };
+
+/**
+ * A guideline identifier from Rust.
+ * Branded string type - can't be confused with other IDs or plain strings.
+ */
+export type GuidelineId = string & { readonly [GuidelineIdBrand]: typeof GuidelineIdBrand };
+
+/**
+ * A layer identifier from Rust.
+ * Branded string type - can't be confused with other IDs or plain strings.
+ */
+export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/**
+ * A source identifier from Rust.
+ * Branded string type - can't be confused with other IDs or plain strings.
+ */
+export type SourceId = string & { readonly [SourceIdBrand]: typeof SourceIdBrand };
 
 /**
  * Convert a string ID from Rust to a typed PointId.
@@ -55,6 +83,38 @@ export function asAnchorId(id: string): AnchorId {
 }
 
 /**
+ * Convert a string ID from Rust to a typed ComponentId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asComponentId(id: string): ComponentId {
+  return id as ComponentId;
+}
+
+/**
+ * Convert a string ID from Rust to a typed GuidelineId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asGuidelineId(id: string): GuidelineId {
+  return id as GuidelineId;
+}
+
+/**
+ * Convert a string ID from Rust to a typed LayerId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asLayerId(id: string): LayerId {
+  return id as LayerId;
+}
+
+/**
+ * Convert a string ID from Rust to a typed SourceId.
+ * Use this when receiving IDs from Rust snapshots.
+ */
+export function asSourceId(id: string): SourceId {
+  return id as SourceId;
+}
+
+/**
  * Type guard to check if a value is a valid PointId.
  * Useful for runtime validation in debug builds.
  */
@@ -75,5 +135,37 @@ export function isValidContourId(id: unknown): id is ContourId {
  * Useful for runtime validation in debug builds.
  */
 export function isValidAnchorId(id: unknown): id is AnchorId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid ComponentId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidComponentId(id: unknown): id is ComponentId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid GuidelineId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidGuidelineId(id: unknown): id is GuidelineId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid LayerId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidLayerId(id: unknown): id is LayerId {
+  return typeof id === "string" && id.length > 0;
+}
+
+/**
+ * Type guard to check if a value is a valid SourceId.
+ * Useful for runtime validation in debug builds.
+ */
+export function isValidSourceId(id: unknown): id is SourceId {
   return typeof id === "string" && id.length > 0;
 }

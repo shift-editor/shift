@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@shift/bridge": "workspace:*",
     "@shift/font": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/glyph-info": "workspace:*",
@@ -70,7 +71,7 @@
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.12.0",
     "regl": "^2.1.1",
-    "shift-node": "workspace:*",
+    "shift-bridge": "workspace:*",
     "tailwind-merge": "^3.3.1",
     "throttle-debounce": "^5.0.2",
     "zustand": "^5.0.6"

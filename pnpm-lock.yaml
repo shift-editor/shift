@@ -45,6 +45,9 @@ importers:
       '@base-ui-components/react':
         specifier: 1.0.0-rc.0
         version: 1.0.0-rc.0(@types/react@19.1.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@shift/bridge':
+        specifier: workspace:*
+        version: link:../../packages/bridge
       '@shift/font':
         specifier: workspace:*
         version: link:../../packages/font
@@ -99,9 +102,9 @@ importers:
       regl:
         specifier: ^2.1.1
         version: 2.1.1
-      shift-node:
+      shift-bridge:
         specifier: workspace:*
-        version: link:../../crates/shift-node
+        version: link:../../crates/shift-bridge
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.3.1
@@ -188,14 +191,34 @@ importers:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@25.3.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  crates/shift-node:
+  crates/shift-bridge:
+    dependencies:
+      '@shift/types':
+        specifier: workspace:^
+        version: link:../../packages/types
     devDependencies:
       '@napi-rs/cli':
-        specifier: ^3.6.0
-        version: 3.6.0(@emnapi/runtime@1.8.1)(@types/node@25.3.0)
+        specifier: 3.6.2
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.3.0)
       vitest:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@25.3.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/bridge:
+    dependencies:
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+      shift-bridge:
+        specifier: workspace:*
+        version: link:../../crates/shift-bridge
+    devDependencies:
+      '@shift/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
 
   packages/font:
     dependencies:
@@ -982,8 +1005,8 @@ packages:
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
     engines: {node: '>= 12.13.0'}
 
-  '@napi-rs/cli@3.6.0':
-    resolution: {integrity: sha512-aA8m4+9XxnK1+0sr4GplZP0Ze90gkzO8sMKaplOK0zXbLnzsLl6O2BQQt6rTCcTRzIN24wrrByakr/imM+CxhA==}
+  '@napi-rs/cli@3.6.2':
+    resolution: {integrity: sha512-jy5rABUh9tbE/vPRzw9kGzGuqZiVslyDQUV8LkvjzqVX/oJMN7g0U1uhtr9L3W1H+iRM/urXHXUf+CE4n8FvLA==}
     engines: {node: '>= 16'}
     hasBin: true
     peerDependencies:
@@ -5295,7 +5318,7 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
 
-  '@napi-rs/cli@3.6.0(@emnapi/runtime@1.8.1)(@types/node@25.3.0)':
+  '@napi-rs/cli@3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.3.0)':
     dependencies:
       '@inquirer/prompts': 8.3.2(@types/node@25.3.0)
       '@napi-rs/cross-toolchain': 1.0.3
@@ -7500,11 +7523,11 @@ snapshots:
 
   node-abi@3.75.0:
     dependencies:
-      semver: 7.7.2
+      semver: 7.7.4
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.2
+      semver: 7.7.4
 
   node-fetch@2.7.0(encoding@0.1.13):
     dependencies:
