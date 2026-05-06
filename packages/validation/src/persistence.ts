@@ -29,19 +29,6 @@ export const TextRunModuleSchema = z.object({
   runsByGlyph: z.record(z.string(), PersistedTextRunSchema),
 });
 
-export const SnapPreferencesSchema = z.object({
-  enabled: z.boolean(),
-  angle: z.boolean(),
-  metrics: z.boolean(),
-  pointToPoint: z.boolean(),
-  angleIncrementDeg: z.number().finite(),
-  pointRadiusPx: z.number().finite(),
-});
-
-export const UserPreferencesSchema = z.object({
-  snap: SnapPreferencesSchema,
-});
-
 export const PersistedModuleEnvelopeSchema = z.object({
   moduleVersion: z.number().int().nonnegative(),
   payload: z.unknown(),
@@ -69,8 +56,6 @@ export const PersistedRootSchema = z.object({
 
 export type PersistedTextRun = z.infer<typeof PersistedTextRunSchema>;
 export type TextRunModule = z.infer<typeof TextRunModuleSchema>;
-export type SnapPreferencesShape = z.infer<typeof SnapPreferencesSchema>;
-export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
 export type PersistedModuleEnvelope = z.infer<typeof PersistedModuleEnvelopeSchema>;
 export type PersistenceRegistry = z.infer<typeof PersistenceRegistrySchema>;
 export type PersistedDocument = z.infer<typeof PersistedDocumentSchema>;

@@ -1,4 +1,4 @@
-import { signal, type WritableSignal, type Signal } from "../../reactive/signal";
+import { signal, type WritableSignal, type Signal } from "../../signals/signal";
 import type { PointId, AnchorId } from "@shift/types";
 import { asPointId } from "@shift/types";
 import type { SegmentId, SegmentIndicator } from "@/types/indicator";

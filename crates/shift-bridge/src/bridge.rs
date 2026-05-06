@@ -1,4 +1,4 @@
-use crate::errors::{self, to_napi_error, BridgeError, BridgeResult};
+use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::parse;
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use shift_backends::{font_loader::FontLoader, ufo::UfoWriter, FontView};
 use shift_edit::{
   edit_session::{BulkNodePositionUpdates, EditSession},
-  interpolation::{build_masters, get_glyph_variation_data},
-  BooleanOp, ContourId, Font, Glyph, GlyphLayer, LayerId, PointId,
+  interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
+  BooleanOp, ContourId, Font, Glyph, GlyphLayer, LayerId, PointId, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
@@ -16,8 +16,9 @@ use shift_wire::{
     NapiGlyphStructure, NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
   },
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
-  GlyphStructureChange, GlyphValueChange, Source,
+  GlyphStructureChange, GlyphValueChange, Location, Source,
 };
+use std::collections::HashMap;
 use std::sync::{
   atomic::{AtomicU64, Ordering},
   Arc,
@@ -32,8 +33,40 @@ pub struct GlyphHandle {
   pub unicode: Option<u32>,
 }
 
+#[napi(object)]
+pub struct NapiGlyphVariationDiagnosticSource {
+  #[napi(ts_type = "SourceId")]
+  pub id: String,
+  pub index: u32,
+  pub name: String,
+}
+
+#[napi(object)]
+pub struct NapiGlyphVariationDiagnostic {
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  pub code: String,
+  pub severity: String,
+  pub source: Option<NapiGlyphVariationDiagnosticSource>,
+  pub message: String,
+}
+
+#[napi(object)]
+pub struct NapiGlyphVariationReport {
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  pub status: String,
+  pub variation_data_available: bool,
+  pub master_count: u32,
+  pub compatible_master_count: u32,
+  pub skipped_master_count: u32,
+  pub diagnostics: Vec<NapiGlyphVariationDiagnostic>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DocumentVersion(u64);
+
+const STATIC_DEFAULT_SOURCE_ID: u128 = 0;
 
 impl DocumentVersion {
   fn next(self) -> Self {
@@ -190,21 +223,28 @@ impl Task for SaveFontTask {
 pub struct ActiveEdit {
   session: EditSession,
   glyph: Glyph,
+  source_id: SourceId,
   layer_id: LayerId,
   dirty: bool,
 }
 
 impl ActiveEdit {
-  fn new(session: EditSession, glyph: Glyph, layer_id: LayerId) -> Self {
+  fn new(session: EditSession, glyph: Glyph, source_id: SourceId, layer_id: LayerId) -> Self {
     Self {
       session,
       glyph,
+      source_id,
       layer_id,
       dirty: false,
     }
   }
 
-  fn from_glyph(glyph: Glyph, layer_id: LayerId, unicode_hint: Option<u32>) -> Self {
+  fn from_glyph(
+    glyph: Glyph,
+    source_id: SourceId,
+    layer_id: LayerId,
+    unicode_hint: Option<u32>,
+  ) -> Self {
     let unicode = glyph.primary_unicode().or(unicode_hint).unwrap_or(0);
     let layer = glyph
       .layer(layer_id)
@@ -212,7 +252,7 @@ impl ActiveEdit {
       .unwrap_or_else(|| GlyphLayer::with_width(500.0));
     let session = EditSession::new(glyph.name().to_string(), unicode, layer);
 
-    Self::new(session, glyph, layer_id)
+    Self::new(session, glyph, source_id, layer_id)
   }
 
   fn session(&self) -> &EditSession {
@@ -229,6 +269,10 @@ impl ActiveEdit {
 
   fn is_dirty(&self) -> bool {
     self.dirty
+  }
+
+  fn source_id(&self) -> SourceId {
+    self.source_id
   }
 
   fn glyph_with_session_layer(&self) -> Glyph {
@@ -329,13 +373,57 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_glyph_state(&self, glyph_ref: GlyphHandle) -> Option<NapiGlyphState> {
-    let glyph = self.glyph_for_read(&glyph_ref.name)?;
-    let layer = glyph.layer(self.font.default_layer_id())?;
-    let variation_data = build_masters(&self.font, &glyph)
-      .and_then(|masters| get_glyph_variation_data(&masters, self.font.axes()));
+  pub fn get_glyph_state(
+    &self,
+    glyph_handle: GlyphHandle,
+    #[napi(ts_arg_type = "SourceId")] source_id: String,
+  ) -> errors::Result<Option<NapiGlyphState>> {
+    let source_id = parse::<SourceId>(&source_id)?;
+    let layer_id = self.source_layer_id(source_id)?;
 
-    Some(GlyphState::from_layer(layer, variation_data).into())
+    let glyph = match self.glyph_for_read(&glyph_handle.name) {
+      Some(glyph) => glyph,
+      None => return Ok(None),
+    };
+    let layer = match glyph.layer(layer_id) {
+      Some(layer) => layer,
+      None => return Ok(None),
+    };
+
+    let variation_data = self
+      .variation_build_for_glyph(&glyph)
+      .and_then(|(_, build)| build.variation_data);
+
+    Ok(Some(GlyphState::from_layer(layer, variation_data).into()))
+  }
+
+  #[napi]
+  pub fn get_glyph_variation_report(
+    &self,
+    glyph_ref: GlyphHandle,
+  ) -> Option<NapiGlyphVariationReport> {
+    let glyph = self.glyph_for_read(&glyph_ref.name)?;
+    Some(self.variation_report_for_glyph(&glyph_ref.name, &glyph))
+  }
+
+  #[napi]
+  pub fn get_variation_reports(&self) -> Vec<NapiGlyphVariationReport> {
+    let mut glyph_names: Vec<String> = self
+      .font
+      .glyphs()
+      .keys()
+      .map(|glyph_name| glyph_name.to_string())
+      .collect();
+    glyph_names.sort();
+
+    glyph_names
+      .into_iter()
+      .filter_map(|glyph_name| {
+        self
+          .glyph_for_read(&glyph_name)
+          .map(|glyph| self.variation_report_for_glyph(&glyph_name, &glyph))
+      })
+      .collect()
   }
 
   #[napi]
@@ -356,6 +444,10 @@ impl Bridge {
 
   #[napi]
   pub fn get_sources(&self) -> Vec<NapiSource> {
+    if self.font.sources().is_empty() {
+      return vec![self.static_default_source().into()];
+    }
+
     self
       .font
       .sources()
@@ -365,16 +457,53 @@ impl Bridge {
       .collect()
   }
 
+  fn static_default_source_id(&self) -> SourceId {
+    SourceId::from_raw(STATIC_DEFAULT_SOURCE_ID)
+  }
+
+  fn static_default_source(&self) -> Source {
+    Source {
+      id: self.static_default_source_id(),
+      name: "Default".to_string(),
+      location: Location {
+        values: HashMap::new(),
+      },
+      layer_id: self.font.default_layer_id(),
+      filename: None,
+    }
+  }
+
+  fn source_layer_id(&self, source_id: SourceId) -> BridgeResult<LayerId> {
+    if let Some(source) = self
+      .font
+      .sources()
+      .iter()
+      .find(|source| source.id() == source_id)
+    {
+      return Ok(source.layer_id());
+    }
+
+    if self.font.sources().is_empty() && source_id == self.static_default_source_id() {
+      return Ok(self.font.default_layer_id());
+    }
+
+    Err(BridgeError::InvalidInput {
+      kind: "source ID",
+      value: source_id.to_string(),
+    })
+  }
+
   fn start_edit_session_for_name(
     &mut self,
     glyph_name: &str,
+    source_id: SourceId,
     unicode_hint: Option<u32>,
-  ) -> Result<()> {
+  ) -> errors::Result<()> {
     if self.active_edit.is_some() {
-      return Err(to_napi_error(BridgeError::ActiveEditAlreadyExists));
+      return Err(BridgeError::ActiveEditAlreadyExists);
     }
 
-    let default_layer_id = self.font.default_layer_id();
+    let layer_id = self.source_layer_id(source_id)?;
     let glyph = self
       .font
       .glyph(glyph_name)
@@ -383,7 +512,8 @@ impl Bridge {
 
     self.active_edit = Some(ActiveEdit::from_glyph(
       glyph,
-      default_layer_id,
+      source_id,
+      layer_id,
       unicode_hint,
     ));
 
@@ -391,8 +521,13 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn start_edit_session(&mut self, glyph_ref: GlyphHandle) -> Result<()> {
-    self.start_edit_session_for_name(&glyph_ref.name, glyph_ref.unicode)
+  pub fn start_edit_session(
+    &mut self,
+    glyph_handle: GlyphHandle,
+    #[napi(ts_arg_type = "SourceId")] source_id: String,
+  ) -> errors::Result<()> {
+    let source_id = parse::<SourceId>(&source_id)?;
+    self.start_edit_session_for_name(&glyph_handle.name, source_id, glyph_handle.unicode)
   }
 
   fn active_edit(&self) -> BridgeResult<&ActiveEdit> {
@@ -435,6 +570,105 @@ impl Bridge {
       .or_else(|| self.font.glyph(glyph_name).cloned())
   }
 
+  fn variation_build_for_glyph(&self, glyph: &Glyph) -> Option<(usize, GlyphVariationBuild)> {
+    build_masters(&self.font, glyph).map(|masters| {
+      let master_count = masters.len();
+      let build = build_glyph_variation_data(&masters, self.font.axes());
+      (master_count, build)
+    })
+  }
+
+  fn variation_diagnostics_for_build(
+    glyph_name: &str,
+    build: &GlyphVariationBuild,
+  ) -> Vec<NapiGlyphVariationDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    if build.missing_default_source {
+      diagnostics.push(NapiGlyphVariationDiagnostic {
+        glyph_name: glyph_name.to_string(),
+        code: "missing-default-source".to_string(),
+        severity: "error".to_string(),
+        source: None,
+        message: "glyph has variation masters, but none belongs to the default source".to_string(),
+      });
+    }
+
+    diagnostics.extend(
+      build
+        .source_errors
+        .iter()
+        .map(|error| NapiGlyphVariationDiagnostic {
+          glyph_name: glyph_name.to_string(),
+          code: "incompatible-source".to_string(),
+          severity: "warning".to_string(),
+          source: Some(NapiGlyphVariationDiagnosticSource {
+            id: error.source_id.clone(),
+            index: error.source_index.min(u32::MAX as usize) as u32,
+            name: error.source_name.clone(),
+          }),
+          message: error.message.clone(),
+        }),
+    );
+
+    if let Some(message) = &build.model_error {
+      diagnostics.push(NapiGlyphVariationDiagnostic {
+        glyph_name: glyph_name.to_string(),
+        code: "variation-model-failed".to_string(),
+        severity: "error".to_string(),
+        source: None,
+        message: message.clone(),
+      });
+    }
+
+    diagnostics
+  }
+
+  fn variation_report_for_glyph(
+    &self,
+    glyph_name: &str,
+    glyph: &Glyph,
+  ) -> NapiGlyphVariationReport {
+    let Some((master_count, build)) = self.variation_build_for_glyph(glyph) else {
+      return NapiGlyphVariationReport {
+        glyph_name: glyph_name.to_string(),
+        status: "static".to_string(),
+        variation_data_available: false,
+        master_count: 0,
+        compatible_master_count: 0,
+        skipped_master_count: 0,
+        diagnostics: Vec::new(),
+      };
+    };
+
+    let diagnostics = Self::variation_diagnostics_for_build(glyph_name, &build);
+    let skipped_master_count = build.source_errors.len();
+    let compatible_master_count = if build.missing_default_source {
+      0
+    } else {
+      master_count.saturating_sub(skipped_master_count)
+    };
+    let variation_data_available = build.variation_data.is_some();
+    let status = match (
+      variation_data_available,
+      skipped_master_count > 0 || !diagnostics.is_empty(),
+    ) {
+      (true, false) => "variable",
+      (true, true) => "partial",
+      (false, _) => "unavailable",
+    };
+
+    NapiGlyphVariationReport {
+      glyph_name: glyph_name.to_string(),
+      status: status.to_string(),
+      variation_data_available,
+      master_count: master_count.min(u32::MAX as usize) as u32,
+      compatible_master_count: compatible_master_count.min(u32::MAX as usize) as u32,
+      skipped_master_count: skipped_master_count.min(u32::MAX as usize) as u32,
+      diagnostics,
+    }
+  }
+
   fn mark_active_edit_changed(&mut self) {
     self.bump_live_version();
     if let Some(active_edit) = self.active_edit.as_mut() {
@@ -456,11 +690,6 @@ impl Bridge {
 
   fn persisted_version(&self) -> DocumentVersion {
     DocumentVersion(self.persisted_version.load(Ordering::Acquire))
-  }
-
-  #[napi]
-  pub fn get_live_version(&self) -> u32 {
-    self.live_version().as_u32()
   }
 
   #[napi]
@@ -502,6 +731,14 @@ impl Bridge {
       .active_session()
       .ok()
       .map(|session| session.glyph_name().to_string())
+  }
+
+  #[napi(ts_return_type = "SourceId | null")]
+  pub fn get_editing_source_id(&self) -> Option<String> {
+    self
+      .active_edit()
+      .ok()
+      .map(|edit| edit.source_id().to_string())
   }
 
   #[napi]
@@ -851,6 +1088,10 @@ mod tests {
     font
   }
 
+  fn default_source_id(bridge: &Bridge) -> String {
+    bridge.get_sources()[0].id.clone()
+  }
+
   fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
     eprintln!(
       "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
@@ -883,11 +1124,15 @@ mod tests {
     let mut bridge = Bridge::new();
 
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
 
     assert!(bridge.has_edit_session());
     assert_eq!(bridge.get_editing_glyph_name().as_deref(), Some("A"));
+    assert_eq!(
+      bridge.get_editing_source_id().as_deref(),
+      Some(default_source_id(&bridge).as_str())
+    );
     assert_eq!(bridge.get_editing_unicode(), Some(65));
   }
 
@@ -896,7 +1141,7 @@ mod tests {
     let mut bridge = Bridge::new();
 
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     bridge.end_edit_session().unwrap();
 
@@ -912,11 +1157,14 @@ mod tests {
     let mut bridge = Bridge::new();
 
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
-    let result = bridge.start_edit_session(glyph_handle("B", Some(66)));
+    let result = bridge.start_edit_session(glyph_handle("B", Some(66)), default_source_id(&bridge));
 
-    assert_eq!(result.unwrap_err().reason, "edit session already active");
+    assert_eq!(
+      result.unwrap_err().to_string(),
+      "edit session already active"
+    );
     assert_eq!(bridge.get_editing_glyph_name().as_deref(), Some("A"));
   }
 
@@ -924,7 +1172,7 @@ mod tests {
   fn add_contour_returns_structure_change() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
 
     let change = bridge.add_contour().unwrap();
@@ -942,7 +1190,7 @@ mod tests {
   fn save_snapshot_includes_active_edit_without_committing_session() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     let contour_id = bridge.add_contour().unwrap().changed.contour_ids[0].clone();
     let point_id = bridge
@@ -976,7 +1224,7 @@ mod tests {
   fn persisted_older_snapshot_keeps_document_dirty_after_new_edit() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     let contour_id = bridge.add_contour().unwrap().changed.contour_ids[0].clone();
     let snapshot = bridge.save_snapshot();
@@ -987,7 +1235,7 @@ mod tests {
     record_persisted_version(&bridge.persisted_version, snapshot.version());
 
     assert_eq!(snapshot.version().as_u32(), 1);
-    assert_eq!(bridge.get_live_version(), 2);
+    assert_eq!(bridge.live_version().as_u32(), 2);
     assert_eq!(bridge.get_persisted_version(), 1);
     assert!(bridge.is_dirty());
   }
@@ -996,7 +1244,7 @@ mod tests {
   fn load_resets_persisted_version_handle_for_old_async_saves() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     bridge.add_contour().unwrap();
     let old_persisted_version = bridge.persisted_version.clone();
@@ -1015,13 +1263,13 @@ mod tests {
   fn ending_dirty_edit_session_does_not_increment_version_again() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     bridge.add_contour().unwrap();
 
     bridge.end_edit_session().unwrap();
 
-    assert_eq!(bridge.get_live_version(), 1);
+    assert_eq!(bridge.live_version().as_u32(), 1);
     assert!(bridge.is_dirty());
     assert_eq!(bridge.get_glyphs()[0].name, "A");
   }
@@ -1030,7 +1278,7 @@ mod tests {
   fn add_point_returns_structure_and_changed_point() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     let contour_id = bridge.add_contour().unwrap().changed.contour_ids[0].clone();
 
@@ -1050,7 +1298,7 @@ mod tests {
   fn get_glyph_state_reads_active_edit_overlay() {
     let mut bridge = Bridge::new();
     bridge
-      .start_edit_session(glyph_handle("A", Some(65)))
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
       .unwrap();
     let contour_id = bridge.add_contour().unwrap().changed.contour_ids[0].clone();
     bridge
@@ -1058,7 +1306,8 @@ mod tests {
       .unwrap();
 
     let state = bridge
-      .get_glyph_state(glyph_handle("A", Some(65)))
+      .get_glyph_state(glyph_handle("A", Some(65)), default_source_id(&bridge))
+      .unwrap()
       .expect("active edit glyph should be readable");
 
     assert!(bridge.get_glyphs().is_empty());
@@ -1072,7 +1321,8 @@ mod tests {
     let bridge = Bridge::new();
 
     assert!(bridge
-      .get_glyph_state(glyph_handle("missing", None))
+      .get_glyph_state(glyph_handle("missing", None), default_source_id(&bridge))
+      .unwrap()
       .is_none());
   }
 
@@ -1105,6 +1355,7 @@ mod tests {
     let active_glyph = point_heavy_glyph("active", 0xE000, default_layer_id, active_mark);
     bridge.active_edit = Some(ActiveEdit::from_glyph(
       active_glyph,
+      bridge.static_default_source_id(),
       default_layer_id,
       Some(0xE000),
     ));
@@ -1122,7 +1373,7 @@ mod tests {
         .layer(snapshot.default_layer_id())
         .expect("active overlay should include the default layer");
 
-      assert_eq!(snapshot.version().as_u32(), bridge.get_live_version());
+      assert_eq!(snapshot.version().as_u32(), bridge.live_version().as_u32());
       assert_eq!(snapshot.glyphs().len(), committed_mark.glyphs + 1);
       assert_eq!(active_glyph.unicodes(), &[0xE000]);
       assert_eq!(

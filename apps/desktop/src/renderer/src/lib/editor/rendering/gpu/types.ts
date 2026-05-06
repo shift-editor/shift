@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { ViewportTransform } from "../Viewport";
 
 export const GPU_HANDLE_INSTANCE_FLOATS = 25;

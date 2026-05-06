@@ -1,714 +1,618 @@
-/**
- * Reactive glyph model.
- *
- * {@link Glyph} and {@link Contour} are reactive mirrors of Rust glyph data
- * with per-contour signal granularity. Property getters auto-unwrap signals,
- * so consumers read `glyph.contours`, `glyph.xAdvance`, `contour.points`
- * as plain values. Inside a reactive context (computed/effect) the read
- * auto-tracks the signal.
- *
- * All mutations go through {@link Glyph.apply}, which accepts either a full
- * {@link GlyphSnapshot} (structural edits, undo/redo) or a
- * {@link NodePositionUpdateList} (drag hot path).
- */
-
 import type {
-  GlyphSnapshot,
-  ContourSnapshot,
-  ContourId,
-  PointId,
   AnchorId,
-  Point,
-  Anchor,
-  Point2D,
+  ContourId,
+  GlyphName,
+  GlyphState,
+  GlyphStructure,
+  GlyphStructureChange,
+  GlyphValueChange,
+  GlyphVariationData,
+  PointId,
+  PointType,
+  Source,
+  Unicode,
 } from "@shift/types";
+import type { GlyphHandle } from "@shift/bridge";
 import {
-  signal,
-  computed,
   batch,
-  type WritableSignal,
+  computed,
+  signal,
   type ComputedSignal,
   type Signal,
-} from "@/lib/reactive/signal";
-import {
-  Contours,
-  Glyphs,
-  parseContourSegments,
-  segmentToCurve,
-  type SegmentContourLike,
-  type PointWithNeighbors,
-} from "@shift/font";
-import { Bounds, Curve, Vec2, type Bounds as BoundsType } from "@shift/geo";
-import type { NodePositionUpdate, NodePositionUpdateList } from "@/types/positionUpdate";
-import { Segment } from "@/lib/model/Segment";
-
-export interface GlyphSidebearings {
-  readonly lsb: number | null;
-  readonly rsb: number | null;
-}
-
-export type GlyphChange = GlyphSnapshot | NodePositionUpdateList;
-
-import type { Canvas } from "@/lib/editor/rendering/Canvas";
-import type { NativeBridge } from "@/bridge";
-import type { PointEdit, PasteResult } from "@/types/engine";
-import type { ContourContent } from "@/lib/clipboard";
+  type WritableSignal,
+} from "@/lib/signals/signal";
+import { interpolate, normalize } from "@/lib/interpolation/interpolate";
+import { axisLocationFromLocation, axisLocationsEqual } from "@/lib/variation/location";
+import type { AxisLocation } from "@/types/variation";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
 import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
-import type { PointPosition } from "@/lib/transform/PointPosition";
+import { Bounds, Vec2, type Bounds as BoundsType, type Point2D } from "@shift/geo";
+import {
+  Anchor,
+  Component,
+  Contour,
+  GlyphStateGeometry as GlyphGeometry,
+  Segment,
+  type GlyphPosition as SourcePosition,
+  type GlyphPositions as SourcePositions,
+  type GlyphPositionTarget as SourcePositionTarget,
+  type GlyphSidebearings,
+  type Point,
+} from "@shift/glyph-state";
+import { GlyphOutline } from "./GlyphOutline";
+import { SourcePositionList } from "./SourcePositionList";
+import type { Font } from "./Font";
 
-export class Contour {
-  readonly id: ContourId;
-  readonly #closed: WritableSignal<boolean>;
-  readonly #points: WritableSignal<readonly Point[]>;
-  readonly #path: ComputedSignal<Path2D>;
-  readonly #bounds: ComputedSignal<BoundsType | null>;
+export interface PointEdit {
+  readonly x: number;
+  readonly y: number;
+  readonly pointType: PointType;
+  readonly smooth: boolean;
+}
 
-  constructor(snapshot: ContourSnapshot) {
-    this.id = snapshot.id;
-    this.#closed = signal(snapshot.closed);
-    this.#points = signal<readonly Point[]>(snapshot.points);
-    this.#path = computed<Path2D>(() => buildPath2D(this.#points.value, this.#closed.value));
-    this.#bounds = computed<BoundsType | null>(() => {
-      const pts = this.#points.value;
-      const isClosed = this.#closed.value;
-      if (pts.length < 2) return null;
-      const segments = parseContourSegments({ points: pts, closed: isClosed });
-      if (segments.length === 0) return null;
-      return Bounds.unionAll(segments.map((s) => Curve.bounds(segmentToCurve(s))));
+export {
+  GlyphGeometry,
+  type GlyphSidebearings,
+  type SourcePosition,
+  type SourcePositions,
+  type SourcePositionTarget,
+};
+
+interface GlyphEditState {
+  readonly structure: WritableSignal<GlyphStructure>;
+  readonly values: WritableSignal<Float64Array>;
+  readonly geometry: Signal<GlyphGeometry>;
+}
+
+class GlyphEditSession {
+  readonly #font: Font;
+  readonly #handle: GlyphHandle;
+  readonly #source: Source;
+  readonly #state: GlyphEditState;
+
+  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphEditState) {
+    this.#font = font;
+    this.#handle = handle;
+    this.#source = source;
+    this.#state = state;
+  }
+
+  get geometry(): GlyphGeometry {
+    return this.#state.geometry.value;
+  }
+
+  setXAdvance(width: number): void {
+    this.#ensureActiveSession();
+    this.#applyValueChange(this.#font.bridge.setXAdvance(width));
+  }
+
+  setPositions(updates: SourcePositions): void {
+    if (updates.length === 0) return;
+    this.#ensureActiveSession();
+    this.#applyValueChange(
+      this.#font.bridge.setPositions(...GlyphGeometry.packPositionUpdates(updates)),
+    );
+  }
+
+  translateLayer(dx: number, dy: number): void {
+    this.#ensureActiveSession();
+    this.#applyValueChange(this.#font.bridge.translateLayer(dx, dy));
+  }
+
+  previewPositions(updates: SourcePositions): void {
+    if (updates.length === 0) return;
+    const nextGeometry = this.#state.geometry.peek().withPositionUpdates(updates);
+    this.#state.values.set(nextGeometry.values);
+  }
+
+  addContour(): ContourId {
+    this.#ensureActiveSession();
+    const change = this.#font.bridge.addContour();
+    this.#applyStructureChange(change);
+    const contourId = change.changed.contourIds[0];
+    if (!contourId) throw new Error("Bridge did not return a created contour ID");
+    return contourId;
+  }
+
+  addPoint(contourId: ContourId, edit: PointEdit): PointId {
+    this.#ensureActiveSession();
+    const change = this.#font.bridge.addPoint(
+      contourId,
+      edit.x,
+      edit.y,
+      edit.pointType,
+      edit.smooth,
+    );
+    this.#applyStructureChange(change);
+    const pointId = change.changed.pointIds[0];
+    if (!pointId) throw new Error("Bridge did not return a created point ID");
+    return pointId;
+  }
+
+  insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
+    this.#ensureActiveSession();
+    const change = this.#font.bridge.insertPointBefore(
+      beforePointId,
+      edit.x,
+      edit.y,
+      edit.pointType,
+      edit.smooth,
+    );
+    this.#applyStructureChange(change);
+    const pointId = change.changed.pointIds[0];
+    if (!pointId) throw new Error("Bridge did not return a created point ID");
+    return pointId;
+  }
+
+  openContour(contourId: ContourId): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.openContour(contourId));
+  }
+
+  closeContour(contourId: ContourId): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.closeContour(contourId));
+  }
+
+  reverseContour(contourId: ContourId): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.reverseContour(contourId));
+  }
+
+  applyBooleanOp(
+    contourIdA: ContourId,
+    contourIdB: ContourId,
+    operation: "union" | "subtract" | "intersect" | "difference",
+  ): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.applyBooleanOp(contourIdA, contourIdB, operation));
+  }
+
+  removePoints(pointIds: readonly PointId[]): void {
+    if (pointIds.length === 0) return;
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.removePoints([...pointIds]));
+  }
+
+  toggleSmooth(pointId: PointId): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.toggleSmooth(pointId));
+  }
+
+  restore(state: GlyphState): void {
+    this.#ensureActiveSession();
+    this.#applyStructureChange(this.#font.bridge.restoreState(state.structure, state.values));
+  }
+
+  #ensureActiveSession(): void {
+    const bridge = this.#font.bridge;
+    if (
+      bridge.getEditingGlyphName() === this.#handle.name &&
+      bridge.getEditingSourceId() === this.#source.id
+    ) {
+      return;
+    }
+
+    if (bridge.hasEditSession()) {
+      bridge.endEditSession();
+    }
+
+    bridge.startEditSession(this.#handle, this.#source.id);
+  }
+
+  #applyStructureChange(change: GlyphStructureChange): void {
+    batch(() => {
+      this.#state.structure.set(change.structure);
+      this.#state.values.set(change.values);
     });
   }
 
-  get closed(): boolean {
-    return this.#closed.value;
+  #applyValueChange(change: GlyphValueChange): void {
+    this.#state.values.set(change.values);
+  }
+}
+
+export class GlyphSource {
+  readonly source: Source;
+  readonly #edit: GlyphEditSession;
+
+  constructor(source: Source, edit: GlyphEditSession) {
+    this.source = source;
+    this.#edit = edit;
   }
 
-  get points(): readonly Point[] {
-    return this.#points.value;
+  /** @knipclassignore — convenience alias for source identity. */
+  get id() {
+    return this.source.id;
   }
 
-  get path(): Path2D {
-    return this.#path.value;
+  /** @knipclassignore — convenience alias for source identity. */
+  get sourceId() {
+    return this.source.id;
+  }
+
+  get geometry(): GlyphGeometry {
+    return this.#edit.geometry;
+  }
+
+  get state(): GlyphState {
+    return {
+      structure: this.geometry.structure,
+      values: new Float64Array(this.geometry.values),
+    };
+  }
+
+  get xAdvance(): number {
+    return this.geometry.xAdvance;
+  }
+
+  get contours(): readonly Contour[] {
+    return this.geometry.contours;
+  }
+
+  get anchors(): readonly Anchor[] {
+    return this.geometry.anchors;
+  }
+
+  /** @knipclassignore — public authored-source geometry API. */
+  get components(): readonly Component[] {
+    return this.geometry.components;
   }
 
   get bounds(): BoundsType | null {
-    return this.#bounds.value;
+    return this.geometry.bounds;
   }
 
-  get firstPoint(): Point | null {
-    return this.#points.value[0] ?? null;
+  /** @knipclassignore — public authored-source metrics API. */
+  get sidebearings(): GlyphSidebearings {
+    return this.geometry.sidebearings;
   }
 
-  get lastPoint(): Point | null {
-    const pts = this.#points.value;
-    return pts[pts.length - 1] ?? null;
+  get allPoints(): Point[] {
+    return this.geometry.allPoints;
   }
 
-  get isEmpty(): boolean {
-    return this.#points.value.length === 0;
+  point(pointId: PointId): Point | null {
+    return this.geometry.point(pointId);
   }
 
-  /** @knipclassignore */
-  *withNeighbors(): Generator<PointWithNeighbors> {
-    yield* Contours.withNeighbors(this);
+  points(pointIds: readonly PointId[]): Point[] {
+    return this.geometry.points(pointIds);
   }
 
-  *segments(): Generator<Segment> {
-    yield* Segment.parse(this.#points.value, this.#closed.value);
+  /** @knipclassignore — public authored-source lookup API. */
+  anchor(anchorId: AnchorId): Anchor | null {
+    return this.geometry.anchor(anchorId);
   }
 
-  /**
-   * Tight bounds for the subset of this contour's points in `ids`.
-   * Fully-selected segments contribute their bezier envelope; partially-selected
-   * segments contribute the raw points of their selected endpoints.
-   */
-  selectionBounds(ids: ReadonlySet<PointId>): BoundsType | null {
-    const parts: (BoundsType | null)[] = [];
-
-    for (const segment of this.segments()) {
-      if (segment.pointIds.every((id) => ids.has(id))) {
-        parts.push(segment.bounds);
-      }
-    }
-
-    parts.push(Bounds.fromPoints(this.#points.value.filter((p) => ids.has(p.id))));
-
-    return Bounds.unionAll(parts);
+  contour(contourId: ContourId): Contour | null {
+    return this.geometry.contour(contourId);
   }
 
-  canClose(position: Point2D, hitRadius: number): boolean {
-    return Contours.canClose(this, position, hitRadius);
+  positionsFor(targets: readonly SourcePositionTarget[]): SourcePosition[] {
+    return [...SourcePositionList.fromTargets(this.geometry, targets).positions];
   }
 
-  /** @internal Called by Glyph.apply for structural updates. */
-  _update(snapshot: ContourSnapshot): void {
-    this.#closed.set(snapshot.closed);
-    this.#points.set(snapshot.points);
+  setXAdvance(width: number): void {
+    this.#edit.setXAdvance(width);
   }
 
-  /** @internal Called by Glyph.apply for position patching. */
-  _setPoints(points: readonly Point[]): void {
-    this.#points.set(points);
+  setPositions(updates: SourcePositions): void {
+    this.#edit.setPositions(updates);
+  }
+
+  translateLayer(dx: number, dy: number): void {
+    this.#edit.translateLayer(dx, dy);
+  }
+
+  previewPositions(updates: SourcePositions): void {
+    this.#edit.previewPositions(updates);
+  }
+
+  addContour(): ContourId {
+    return this.#edit.addContour();
+  }
+
+  addPoint(contourId: ContourId, edit: PointEdit): PointId {
+    return this.#edit.addPoint(contourId, edit);
+  }
+
+  insertPointBefore(pointId: PointId, edit: PointEdit): PointId {
+    return this.#edit.insertPointBefore(pointId, edit);
+  }
+
+  openContour(contourId: ContourId): void {
+    this.#edit.openContour(contourId);
+  }
+
+  closeContour(contourId: ContourId): void {
+    this.#edit.closeContour(contourId);
+  }
+
+  reverseContour(contourId: ContourId): void {
+    this.#edit.reverseContour(contourId);
+  }
+
+  applyBooleanOp(
+    contourIdA: ContourId,
+    contourIdB: ContourId,
+    operation: "union" | "subtract" | "intersect" | "difference",
+  ): void {
+    this.#edit.applyBooleanOp(contourIdA, contourIdB, operation);
+  }
+
+  removePoints(pointIds: readonly PointId[]): void {
+    this.#edit.removePoints(pointIds);
+  }
+
+  toggleSmooth(pointId: PointId): void {
+    this.#edit.toggleSmooth(pointId);
+  }
+
+  movePointTo(pointId: PointId, position: Point2D): void {
+    this.setPositions([{ kind: "point", id: pointId, x: position.x, y: position.y }]);
+  }
+
+  movePoints(pointIds: readonly PointId[], delta: Point2D): void {
+    const positions = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
+    const nextPositions = positions.map((position) => {
+      const next = Vec2.add(position, delta);
+      return { ...position, x: next.x, y: next.y };
+    });
+
+    this.setPositions(nextPositions);
+  }
+
+  translate(pointIds: readonly PointId[], delta: Point2D): void {
+    this.movePoints(pointIds, delta);
+  }
+
+  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
+    this.movePoints(pointIds, Vec2.sub(target, anchor));
+  }
+
+  rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
+    this.setPositions(
+      Transform.rotatePoints(
+        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
+        angle,
+        origin,
+      ),
+    );
+  }
+
+  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
+    this.setPositions(
+      Transform.scalePoints(
+        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
+        sx,
+        sy,
+        origin,
+      ),
+    );
+  }
+
+  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
+    this.setPositions(
+      Transform.reflectPoints(
+        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
+        axis,
+        origin,
+      ),
+    );
+  }
+
+  align(pointIds: readonly PointId[], alignment: AlignmentType): void {
+    const points = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
+    const bounds = Bounds.fromPoints(points);
+    if (!bounds) return;
+
+    this.setPositions(Alignment.alignPoints(points, alignment, bounds));
+  }
+
+  distribute(pointIds: readonly PointId[], type: DistributeType): void {
+    this.setPositions(
+      Alignment.distributePoints(
+        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
+        type,
+      ),
+    );
+  }
+
+  restore(state: GlyphState): void {
+    this.#edit.restore(state);
+  }
+}
+
+export class GlyphInstance {
+  readonly location: AxisLocation;
+
+  readonly #glyph: Glyph;
+
+  constructor(glyph: Glyph, location: AxisLocation) {
+    this.#glyph = glyph;
+    this.location = location;
+  }
+
+  get geometry(): GlyphGeometry {
+    return this.#glyph.geometryAt(this.location);
+  }
+
+  get outline(): GlyphOutline {
+    return this.#glyph.outlineAt(this.location);
   }
 }
 
 export class Glyph {
-  readonly name: string;
-  readonly unicode: number;
-  readonly #bridge: NativeBridge;
+  readonly handle: GlyphHandle;
 
-  readonly #contours: WritableSignal<readonly Contour[]>;
-  readonly #xAdvance: WritableSignal<number>;
-  readonly #anchors: WritableSignal<readonly Anchor[]>;
-  readonly #activeContourId: WritableSignal<ContourId | null>;
-  readonly #path: ComputedSignal<Path2D>;
-  readonly #bbox: ComputedSignal<BoundsType | null>;
-  readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
+  readonly #font: Font;
+  readonly #source: Source;
 
-  constructor(bridge: NativeBridge) {
-    this.#bridge = bridge;
-    const snapshot = bridge.getSnapshot();
-    this.name = snapshot.name;
-    this.unicode = snapshot.unicode;
-    this.#contours = signal<readonly Contour[]>(snapshot.contours.map((c) => new Contour(c)));
-    this.#xAdvance = signal(snapshot.xAdvance);
-    this.#anchors = signal<readonly Anchor[]>(snapshot.anchors);
-    this.#activeContourId = signal<ContourId | null>(snapshot.activeContourId);
+  readonly #structure: WritableSignal<GlyphStructure>;
+  readonly #values: WritableSignal<Float64Array>;
+  readonly #variationData: GlyphVariationData | null;
 
-    // Root contours only. Composite components (for canvas display, grid,
-    // text run) come from `font.glyph(name).componentContours()` at the
-    // drawing site — that path stays reactive to $variationLocation, which
-    // this editable model intentionally does not.
-    this.#path = computed<Path2D>(() => {
-      const p = new Path2D();
-      for (const c of this.#contours.value) {
-        p.addPath(c.path);
-      }
-      return p;
-    });
+  readonly #geometry: ComputedSignal<GlyphGeometry>;
 
-    this.#bbox = computed<BoundsType | null>(() => {
-      const bounds = this.#contours.value
-        .map((c) => c.bounds)
-        .filter((b): b is BoundsType => b !== null);
-      if (bounds.length === 0) return null;
-      return Bounds.unionAll(bounds);
-    });
+  readonly #xAdvance: ComputedSignal<number>;
+  readonly #edit: GlyphEditSession;
 
-    // Point-based x-range — cheap, matches integer-rounded sidebar display.
-    // Avoids warming the bezier #bbox chain which transitively computes
-    // every contour's bezier bounds. Consumers use `useGlyphSidebearings`
-    // React hook to subscribe; not exposed as a `$sidebearings` signal to
-    // prevent accidental subscription-driven recomputation.
-    this.#sidebearings = computed<GlyphSidebearings>(() => {
-      let minX = Infinity;
-      let maxX = -Infinity;
-      for (const contour of this.#contours.value) {
-        for (const p of contour.points) {
-          if (p.x < minX) minX = p.x;
-          if (p.x > maxX) maxX = p.x;
-        }
-      }
-      if (minX === Infinity) return { lsb: null, rsb: null };
-      return { lsb: minX, rsb: this.#xAdvance.value - maxX };
+  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphState) {
+    this.handle = handle;
+    this.#font = font;
+    this.#source = source;
+
+    this.#structure = signal(state.structure);
+    this.#values = signal(state.values);
+    this.#variationData = state.variationData ?? null;
+
+    this.#geometry = computed(() => new GlyphGeometry(this.#structure.value, this.#values.value));
+
+    this.#xAdvance = computed(() => this.#geometry.value.xAdvance);
+    this.#edit = new GlyphEditSession(font, handle, source, {
+      structure: this.#structure,
+      values: this.#values,
+      geometry: this.#geometry,
     });
   }
 
-  get contours(): readonly Contour[] {
-    return this.#contours.value;
+  get name(): GlyphName {
+    return this.handle.name;
   }
 
-  /**
-   * @knipclassignore — used by purpose-specific React hooks in `@/hooks/`
-   * Signal that fires once per structural/position change — use this to
-   * subscribe to "something about the glyph changed" without forcing the
-   * bounds / path / bbox computeds to eagerly recompute. Consumers pull
-   * derived values on demand after the signal fires.
-   */
-  get $contours(): Signal<readonly Contour[]> {
-    return this.#contours;
+  get unicode(): Unicode | null {
+    return this.handle.unicode ?? null;
   }
 
   get xAdvance(): number {
     return this.#xAdvance.value;
   }
 
+  get contours(): readonly Contour[] {
+    return this.#geometry.value.contours;
+  }
+
   get anchors(): readonly Anchor[] {
-    return this.#anchors.value;
+    return this.#geometry.value.anchors;
   }
 
-  /** @knipclassignore */
-  get activeContourId(): ContourId | null {
-    return this.#activeContourId.value;
+  /** @knipclassignore — public visible-geometry API. */
+  get components(): readonly Component[] {
+    return this.#geometry.value.components;
   }
 
-  get path(): Path2D {
-    return this.#path.value;
+  get bounds(): BoundsType | null {
+    return this.#geometry.value.bounds;
   }
 
-  /** @knipclassignore */
-  get bbox(): BoundsType | null {
-    return this.#bbox.value;
-  }
-
-  /**
-   * @knipclassignore — used by Editor command path and `useGlyphSidebearings`
-   * Sidebearings (point-based x-range) — pull at read time; for React live
-   * display use `useGlyphSidebearings()`.
-   */
+  /** @knipclassignore — public metrics API. */
   get sidebearings(): GlyphSidebearings {
-    return this.#sidebearings.value;
+    return this.#geometry.value.sidebearings;
   }
 
-  /** @knipclassignore — subscribed by `useGlyphXAdvance` hook */
+  get allPoints(): Point[] {
+    return this.#geometry.value.allPoints;
+  }
+
+  /** @knipclassignore — reactive contour API for UI consumers. */
+  get $contours(): Signal<readonly Contour[]> {
+    return computed(() => this.contours);
+  }
+
   get $xAdvance(): Signal<number> {
     return this.#xAdvance;
   }
 
-  /** @knipclassignore Fill the glyph's complete path using the theme's glyph fill color. */
-  draw(canvas: Canvas): void {
-    canvas.fillPath(this.path, canvas.theme.glyph.fill);
+  instanceAt(location: AxisLocation): GlyphInstance {
+    return new GlyphInstance(this, location);
   }
 
-  /** @knipclassignore Stroke the glyph's complete path using the theme's glyph stroke style. */
-  drawOutline(canvas: Canvas): void {
-    canvas.strokePath(this.path, canvas.theme.glyph.stroke, canvas.theme.glyph.widthPx);
+  geometryAt(location: AxisLocation): GlyphGeometry {
+    const sourceLocation = axisLocationFromLocation(this.#source.location);
+    if (axisLocationsEqual(location, sourceLocation, [...this.#font.getAxes()])) {
+      return this.#geometry.value;
+    }
+
+    const exactSource = this.#font.sourceAt(location);
+    if (exactSource) {
+      return this.#font.glyphSource(this.handle, exactSource)?.geometry ?? this.#geometry.value;
+    }
+
+    if (!this.#variationData) {
+      return this.#geometry.value;
+    }
+
+    const values = interpolate(this.#variationData, normalize(location, [...this.#font.getAxes()]));
+
+    if (values.length === 0) {
+      return this.#geometry.value;
+    }
+
+    return new GlyphGeometry(this.#structure.value, values);
   }
 
-  /** @knipclassignore */
-  point(pointId: PointId) {
-    return Glyphs.findPoint(this, pointId);
+  outline(location: Signal<AxisLocation>): GlyphOutline {
+    return new GlyphOutline(this, {
+      variationLocation: location,
+      glyph: (handle) => this.#font.glyph(handle),
+    });
   }
 
-  /** @knipclassignore */
+  outlineAt(location: AxisLocation): GlyphOutline {
+    return this.outline(signal(location));
+  }
+
+  isPrimarySource(source: Source): boolean {
+    return source.id === this.#source.id;
+  }
+
+  /** @internal GlyphSource caching is owned by Font.glyphSource(). */
+  createGlyphSource(source: Source, state?: GlyphState | null): GlyphSource | null {
+    if (!this.#font.source(source.id)) return null;
+    if (this.isPrimarySource(source)) return new GlyphSource(source, this.#edit);
+    if (!state) return null;
+
+    const structure = signal(state.structure);
+    const values = signal(state.values);
+    const geometry = computed(() => new GlyphGeometry(structure.value, values.value));
+    const edit = new GlyphEditSession(this.#font, this.handle, source, {
+      structure,
+      values,
+      geometry,
+    });
+    return new GlyphSource(source, edit);
+  }
+
+  point(pointId: PointId): Point | null {
+    return this.#geometry.value.point(pointId);
+  }
+
   points(pointIds: readonly PointId[]): Point[] {
-    return Glyphs.findPoints(this, [...pointIds]);
+    return this.#geometry.value.points(pointIds);
   }
 
-  /** @knipclassignore */
-  contour(contourId: ContourId) {
-    return Glyphs.findContour(this, contourId);
+  contour(contourId: ContourId): Contour | null {
+    return this.#geometry.value.contour(contourId);
   }
 
-  /** @knipclassignore */
-  get allPoints(): Point[] {
-    return Glyphs.getAllPoints(this);
-  }
-
-  /** @knipclassignore */
   *segments(): Generator<{ segment: Segment; contourId: ContourId }> {
-    for (const contour of this.#contours.value) {
+    for (const contour of this.contours) {
       for (const segment of contour.segments()) {
         yield { segment, contourId: contour.id };
       }
     }
   }
 
-  /** @knipclassignore */
-  getPointAt(pos: Point2D, radius: number): Point | null {
-    return Glyphs.getPointAt(this, pos, radius);
-  }
+  toState(): GlyphState {
+    const variationData = this.#variationData;
+    if (!variationData) return { structure: this.#structure.value, values: this.#values.value };
 
-  /** @knipclassignore — callers migrating from bridge → glyph */
-  addPoint(edit: PointEdit): PointId {
-    return this.#bridge.addPoint(edit);
-  }
-
-  /** @knipclassignore */
-  addPointToContour(contourId: ContourId, edit: PointEdit): PointId {
-    return this.#bridge.addPointToContour(contourId, edit);
-  }
-
-  /** @knipclassignore */
-  insertPointBefore(beforePointId: PointId, edit: PointEdit): PointId {
-    return this.#bridge.insertPointBefore(beforePointId, edit);
-  }
-
-  /** @knipclassignore */
-  movePoints(pointIds: PointId[], delta: Point2D): PointId[] {
-    return this.#bridge.movePoints(pointIds, delta);
-  }
-
-  /** @knipclassignore */
-  movePointTo(pointId: PointId, position: Point2D): void {
-    this.#bridge.movePointTo(pointId, position.x, position.y);
-  }
-
-  /** @knipclassignore */
-  moveAnchors(anchorIds: AnchorId[], delta: Point2D): void {
-    this.#bridge.moveAnchors(anchorIds, delta);
-  }
-
-  /** @knipclassignore */
-  removePoints(pointIds: PointId[]): void {
-    this.#bridge.removePoints(pointIds);
-  }
-
-  /** @knipclassignore */
-  toggleSmooth(pointId: PointId): void {
-    this.#bridge.toggleSmooth(pointId);
-  }
-
-  /** @knipclassignore */
-  addContour(): ContourId {
-    return this.#bridge.addContour();
-  }
-
-  /** @knipclassignore */
-  closeContour(): void {
-    this.#bridge.closeContour();
-  }
-
-  /** @knipclassignore */
-  openContour(contourId: ContourId): void {
-    this.#bridge.openContour(contourId);
-  }
-
-  /** @knipclassignore */
-  reverseContour(contourId: ContourId): void {
-    this.#bridge.reverseContour(contourId);
-  }
-
-  /** @knipclassignore */
-  setXAdvance(width: number): void {
-    this.#bridge.setXAdvance(width);
-  }
-
-  /** @internal High-throughput position write primitive used by domain verbs. */
-  setNodePositions(updates: NodePositionUpdateList): void {
-    this.#bridge.setNodePositions(updates);
-  }
-
-  /** @knipclassignore */
-  translate(pointIds: readonly PointId[], delta: Point2D): void {
-    if (pointIds.length === 0 || (delta.x === 0 && delta.y === 0)) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    this.#applyPointUpdates(
-      points.map((point) => {
-        const next = Vec2.add(point, delta);
-        return { node: { kind: "point", id: point.id }, x: next.x, y: next.y };
-      }),
-    );
-  }
-
-  /** @knipclassignore */
-  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
-    if (pointIds.length === 0) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    const delta = Vec2.sub(target, anchor);
-
-    this.#applyPointUpdates(
-      points.map((point) => {
-        const next = Vec2.add(point, delta);
-        return { node: { kind: "point", id: point.id }, x: next.x, y: next.y };
-      }),
-    );
-  }
-
-  /** @knipclassignore */
-  rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
-    if (pointIds.length === 0 || angle === 0) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    this.#applyPointPositions(Transform.rotatePoints(points, angle, origin));
-  }
-
-  /** @knipclassignore */
-  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
-    if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    this.#applyPointPositions(Transform.scalePoints(points, sx, sy, origin));
-  }
-
-  /** @knipclassignore */
-  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
-    if (pointIds.length === 0) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    this.#applyPointPositions(Transform.reflectPoints(points, axis, origin));
-  }
-
-  /** @knipclassignore */
-  align(pointIds: readonly PointId[], alignment: AlignmentType): void {
-    if (pointIds.length === 0) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length === 0) return;
-
-    const bounds = Bounds.fromPoints(points);
-    if (!bounds) return;
-
-    this.#applyPointPositions(Alignment.alignPoints(points, alignment, bounds));
-  }
-
-  /** @knipclassignore */
-  distribute(pointIds: readonly PointId[], type: DistributeType): void {
-    if (pointIds.length < 3) return;
-
-    const points = this.#resolvePointPositions(pointIds);
-    if (points.length < 3) return;
-
-    this.#applyPointPositions(Alignment.distributePoints(points, type));
-  }
-
-  /** @knipclassignore */
-  setActiveContour(contourId: ContourId): void {
-    this.#bridge.setActiveContour(contourId);
-  }
-
-  /** @knipclassignore */
-  clearActiveContour(): void {
-    this.#bridge.clearActiveContour();
-  }
-
-  /** @knipclassignore */
-  restoreSnapshot(snapshot: GlyphSnapshot): void {
-    this.#bridge.restoreSnapshot(snapshot);
-  }
-
-  /** @knipclassignore */
-  translateLayer(dx: number, dy: number): void {
-    this.#bridge.translateLayer(dx, dy);
-  }
-
-  /** @knipclassignore */
-  pasteContours(contours: ContourContent[], offsetX: number, offsetY: number): PasteResult {
-    return this.#bridge.pasteContours(contours, offsetX, offsetY);
-  }
-
-  /**
-   * Apply a change to the glyph. Accepts either a full snapshot (structural
-   * edits, undo/redo) or position updates (drag hot path). The glyph picks
-   * the efficient internal path automatically.
-   */
-  apply(change: GlyphChange): void {
-    if (isSnapshot(change)) {
-      this.#syncFromSnapshot(change);
-    } else {
-      this.#patchPositions(change);
-    }
-  }
-
-  /**
-   * @knipclassignore — used by VariationPanel for live interpolation
-   *
-   * Apply interpolated values from variation math.
-   *
-   * `values` order MUST match `flatten()` in crates/shift-core/src/interpolation.rs:
-   *   [xAdvance, p0.x, p0.y, p1.x, p1.y, ..., a0.x, a0.y, ...]
-   *
-   * In-place patch — reuses Point/Contour/Anchor identities, fires per-contour
-   * signals via a single batch. No struct allocation tree, no JSON parse, no
-   * NAPI hop on the hot path.
-   *
-   * Length-checked at runtime to catch drift between Rust's flatten() walk and
-   * this one. Round-trip-tested in interpolate.test.ts (parity test ensures
-   * the values themselves are correct).
-   */
-  applyValues(values: Float64Array): void {
-    const contours = this.#contours.peek();
-    const anchors = this.#anchors.peek();
-
-    let expected = 1; // xAdvance
-    for (const c of contours) expected += c.points.length * 2;
-    expected += anchors.length * 2;
-
-    if (values.length !== expected) {
-      throw new Error(
-        `Glyph.applyValues: length mismatch — got ${values.length}, expected ${expected}. ` +
-          `flatten() in shift-core::interpolation may have drifted from this walk.`,
-      );
-    }
-
-    batch(() => {
-      let i = 0;
-      this.#xAdvance.set(values[i++]);
-
-      for (const contour of contours) {
-        contour._setPoints(
-          contour.points.map((pt) => {
-            const x = values[i++];
-            const y = values[i++];
-            return { ...pt, x, y };
-          }),
-        );
-      }
-      this.#contours.set([...contours]);
-
-      this.#anchors.set(
-        anchors.map((a) => {
-          const x = values[i++];
-          const y = values[i++];
-          return { ...a, x, y };
-        }),
-      );
-    });
-  }
-
-  /** Extract current reactive state as a plain snapshot (for undo, Rust sync). */
-  toSnapshot(): GlyphSnapshot {
     return {
-      name: this.name,
-      unicode: this.unicode,
-      xAdvance: this.#xAdvance.peek(),
-      contours: this.#contours.peek().map((c) => ({
-        id: c.id,
-        points: [...c.points],
-        closed: c.closed,
-      })),
-      anchors: [...this.#anchors.peek()],
-      compositeContours: [],
-      activeContourId: this.#activeContourId.peek(),
+      structure: this.#structure.value,
+      values: this.#values.value,
+      variationData,
     };
   }
-
-  #resolvePointPositions(pointIds: readonly PointId[]): PointPosition[] {
-    return this.points(pointIds).map((point) => ({
-      id: point.id,
-      x: point.x,
-      y: point.y,
-    }));
-  }
-
-  #applyPointPositions(points: readonly PointPosition[]): void {
-    this.#applyPointUpdates(
-      points.map((point) => ({ node: { kind: "point", id: point.id }, x: point.x, y: point.y })),
-    );
-  }
-
-  #applyPointUpdates(updates: readonly NodePositionUpdate[]): void {
-    if (updates.length === 0) return;
-    this.setNodePositions(updates);
-  }
-
-  #syncFromSnapshot(snapshot: GlyphSnapshot): void {
-    batch(() => {
-      this.#xAdvance.set(snapshot.xAdvance);
-      this.#anchors.set(snapshot.anchors);
-      // snapshot.compositeContours intentionally ignored — see compositeContours getter.
-      this.#activeContourId.set(snapshot.activeContourId);
-
-      const currentById = new Map<ContourId, Contour>();
-      for (const c of this.#contours.peek()) {
-        currentById.set(c.id, c);
-      }
-
-      const updated: Contour[] = snapshot.contours.map((cs) => {
-        const existing = currentById.get(cs.id);
-        if (existing) {
-          existing._update(cs);
-          return existing;
-        }
-        return new Contour(cs);
-      });
-
-      this.#contours.set(updated);
-    });
-  }
-
-  #patchPositions(updates: NodePositionUpdateList): void {
-    if (updates.length === 0) return;
-
-    const pointMoves = new Map<PointId, Point2D>();
-    const anchorMoves = new Map<AnchorId, Point2D>();
-
-    for (const u of updates) {
-      switch (u.node.kind) {
-        case "point":
-          pointMoves.set(u.node.id, u);
-          break;
-        case "anchor":
-          anchorMoves.set(u.node.id, u);
-          break;
-      }
-    }
-
-    batch(() => {
-      if (pointMoves.size > 0) {
-        const contours = this.#contours.peek();
-        for (const contour of contours) {
-          const pts = contour.points;
-          if (!pts.some((p) => pointMoves.has(p.id))) continue;
-
-          contour._setPoints(
-            pts.map((pt) => {
-              const move = pointMoves.get(pt.id);
-              return move ? { ...pt, x: move.x, y: move.y } : pt;
-            }),
-          );
-        }
-        this.#contours.set([...contours]);
-      }
-
-      if (anchorMoves.size > 0) {
-        const current = this.#anchors.peek();
-        if (current.some((a) => anchorMoves.has(a.id))) {
-          this.#anchors.set(
-            current.map((anchor) => {
-              const move = anchorMoves.get(anchor.id);
-              return move ? { ...anchor, x: move.x, y: move.y } : anchor;
-            }),
-          );
-        }
-      }
-    });
-  }
-}
-
-function isSnapshot(change: GlyphChange): change is GlyphSnapshot {
-  return !Array.isArray(change);
-}
-
-function buildPath2D(points: SegmentContourLike["points"], closed: boolean): Path2D {
-  const path = new Path2D();
-  if (points.length < 2) return path;
-
-  const segments = parseContourSegments({ points, closed });
-  const first = segments[0];
-  if (!first) return path;
-
-  path.moveTo(first.points.anchor1.x, first.points.anchor1.y);
-
-  for (const segment of segments) {
-    switch (segment.type) {
-      case "line":
-        path.lineTo(segment.points.anchor2.x, segment.points.anchor2.y);
-        break;
-      case "quad":
-        path.quadraticCurveTo(
-          segment.points.control.x,
-          segment.points.control.y,
-          segment.points.anchor2.x,
-          segment.points.anchor2.y,
-        );
-        break;
-      case "cubic":
-        path.bezierCurveTo(
-          segment.points.control1.x,
-          segment.points.control1.y,
-          segment.points.control2.x,
-          segment.points.control2.y,
-          segment.points.anchor2.x,
-          segment.points.anchor2.y,
-        );
-        break;
-    }
-  }
-
-  if (closed) path.closePath();
-  return path;
 }

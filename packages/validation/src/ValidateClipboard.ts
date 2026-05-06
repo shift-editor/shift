@@ -1,4 +1,6 @@
-import { ValidateSnapshot } from "./ValidateSnapshot";
+import type { PointType } from "@shift/types";
+
+const VALID_POINT_TYPES: ReadonlySet<string> = new Set<PointType>(["onCurve", "offCurve"]);
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -8,7 +10,7 @@ function isValidPoint(v: unknown): boolean {
   if (!isRecord(v)) return false;
   if (typeof v.x !== "number" || !Number.isFinite(v.x)) return false;
   if (typeof v.y !== "number" || !Number.isFinite(v.y)) return false;
-  if (!ValidateSnapshot.isValidPointType(v.pointType)) return false;
+  if (typeof v.pointType !== "string" || !VALID_POINT_TYPES.has(v.pointType)) return false;
   if (typeof v.smooth !== "boolean") return false;
   return true;
 }

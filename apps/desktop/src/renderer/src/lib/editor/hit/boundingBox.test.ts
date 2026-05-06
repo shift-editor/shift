@@ -5,7 +5,7 @@ import {
   isBoundingBoxVisibleAtZoom,
   BOUNDING_BOX_MIN_VISIBLE_ZOOM,
 } from "./boundingBox";
-import type { Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
 
 const createRect = (x: number, y: number, width: number, height: number): Rect2D => ({
   x,

@@ -17,18 +17,20 @@ export declare class Bridge {
   getMetrics(): NapiFontMetrics
   getGlyphCount(): number
   getGlyphs(): Array<NapiGlyphRecord>
-  getGlyphState(glyphRef: GlyphHandle): NapiGlyphState | null
+  getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
+  getGlyphVariationReport(glyphRef: GlyphHandle): NapiGlyphVariationReport | null
+  getVariationReports(): Array<NapiGlyphVariationReport>
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
-  startEditSession(glyphRef: GlyphHandle): void
-  getLiveVersion(): number
+  startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
   getPersistedVersion(): number
   isDirty(): boolean
   endEditSession(): void
   hasEditSession(): boolean
   getEditingUnicode(): Unicode | null
   getEditingGlyphName(): GlyphName | null
+  getEditingSourceId(): SourceId | null
   setXAdvance(width: number): NapiGlyphValueChange
   translateLayer(dx: number, dy: number): NapiGlyphValueChange
   addPoint(contourId: ContourId, x: number, y: number, pointType: NapiPointType, smooth: boolean): NapiGlyphStructureChange
@@ -51,6 +53,30 @@ export declare class Bridge {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface NapiGlyphVariationDiagnostic {
+  glyphName: GlyphName
+  code: string
+  severity: string
+  source?: NapiGlyphVariationDiagnosticSource
+  message: string
+}
+
+export interface NapiGlyphVariationDiagnosticSource {
+  id: SourceId
+  index: number
+  name: string
+}
+
+export interface NapiGlyphVariationReport {
+  glyphName: GlyphName
+  status: string
+  variationDataAvailable: boolean
+  masterCount: number
+  compatibleMasterCount: number
+  skippedMasterCount: number
+  diagnostics: Array<NapiGlyphVariationDiagnostic>
 }
 export interface NapiAnchorData {
   id: AnchorId

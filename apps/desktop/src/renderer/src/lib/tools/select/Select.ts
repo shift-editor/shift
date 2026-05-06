@@ -23,6 +23,7 @@ import type { Canvas } from "@/lib/editor/rendering/Canvas";
 export type { BoundingRectEdge, SelectState };
 
 export class Select extends BaseTool<SelectState> {
+  /** @knipclassignore — declarative state spec for tool docs/debugging. */
   static stateSpec = defineStateDiagram<SelectState["type"]>({
     states: [
       "idle",

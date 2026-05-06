@@ -1,24 +1,24 @@
-import type { Point2D, PointId, PointType } from "@shift/types";
-import type { Glyph } from "@/lib/model/Glyph";
+import type { PointId, PointType } from "@shift/types";
 import type { HandleState } from "@/types/graphics";
-import { Vec2 } from "@shift/geo";
+import { Point2D, Vec2 } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import { STYLES, type CachedInstanceStyle } from "./handleStyles";
 import { GPU_HANDLE_INSTANCE_FLOATS } from "./types";
 import { getVisibleSceneBounds } from "../visibleSceneBounds";
 import type { ViewportTransform } from "../Viewport";
+import { Contour } from "@shift/glyph-state";
 
 const HANDLE_CULL_MARGIN_PX = 64;
 
 export function packHandleInstances(
-  glyph: Glyph,
+  contours: readonly Contour[],
   getHandleState: (pointId: PointId) => HandleState,
   viewport: ViewportTransform,
   drawOffset: Point2D,
   reusable: Float32Array | null,
 ): { packedInstances: Float32Array; instanceCount: number } {
   let totalPoints = 0;
-  for (const contour of glyph.contours) {
+  for (const contour of contours) {
     totalPoints += contour.points.length;
   }
 
@@ -29,7 +29,7 @@ export function packHandleInstances(
 
   let index = 0;
 
-  for (const contour of glyph.contours) {
+  for (const contour of contours) {
     const points = contour.points;
     const numPoints = points.length;
     if (numPoints === 0) continue;

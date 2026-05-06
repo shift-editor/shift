@@ -36,7 +36,6 @@ export interface Theme {
     first: HandleStateStyles<FirstHandleStyle>;
     last: HandleStateStyles;
   };
-  snap: { color: string; widthPx: number; crossSizePx: number };
   segment: {
     hoverColor: string;
     selectedColor: string;
@@ -172,7 +171,6 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#ffffff", stroke: "#0C92F4", size: 14, lineWidth: 2 },
     },
   },
-  snap: { color: "#ff3b30", widthPx: 1, crossSizePx: 2 },
   segment: {
     hoverColor: "#1886D7",
     selectedColor: "#1886D7",

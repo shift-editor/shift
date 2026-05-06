@@ -1,13 +1,12 @@
 import { clamp } from "@/lib/utils/utils";
-import type { Point2D, Rect2D } from "@shift/types";
-import { Mat } from "@shift/geo";
+import { Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
   signal,
   computed,
   type WritableSignal,
   type Signal,
   type ComputedSignal,
-} from "@/lib/reactive/signal";
+} from "@/lib/signals/signal";
 import { SCREEN_HIT_RADIUS } from "../rendering/constants";
 
 /** Lower bound for zoom level. Prevents the glyph from becoming invisible. */

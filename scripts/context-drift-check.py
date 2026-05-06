@@ -29,10 +29,10 @@ MD_PARSER = MarkdownIt("commonmark")
 
 # All known DOCS.md locations (must match routing index)
 EXPECTED_DOCS = [
-    "crates/shift-core/docs/DOCS.md",
+    "crates/shift-edit/docs/DOCS.md",
     "crates/shift-backends/docs/DOCS.md",
     "crates/shift-ir/docs/DOCS.md",
-    "crates/shift-node/docs/DOCS.md",
+    "crates/shift-bridge/docs/DOCS.md",
     "apps/desktop/src/main/docs/DOCS.md",
     "apps/desktop/src/preload/docs/DOCS.md",
     "apps/desktop/src/shared/bridge/docs/DOCS.md",
@@ -45,7 +45,7 @@ EXPECTED_DOCS = [
     "apps/desktop/src/renderer/src/lib/reactive/docs/DOCS.md",
     "packages/types/docs/DOCS.md",
     "packages/geo/docs/DOCS.md",
-    "packages/font/docs/DOCS.md",
+    "packages/glyph-state/docs/DOCS.md",
     "packages/ui/docs/DOCS.md",
     "packages/validation/docs/DOCS.md",
     "packages/rules/docs/DOCS.md",
@@ -432,7 +432,7 @@ def _load_valid_commands() -> dict:
             pnpm[name] = set(data.get("scripts", {}).keys())
 
     # Also index the napi crate by its npm name
-    node_pkg = REPO_ROOT / "crates" / "shift-node" / "package.json"
+    node_pkg = REPO_ROOT / "crates" / "shift-bridge" / "package.json"
     if node_pkg.exists():
         data = json_mod.loads(node_pkg.read_text())
         name = data.get("name", "")

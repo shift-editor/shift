@@ -1,4 +1,4 @@
-import type { Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
 import type { Canvas } from "../Canvas";
 import { getHandlePositions } from "@/lib/editor/hit/boundingBox";
 

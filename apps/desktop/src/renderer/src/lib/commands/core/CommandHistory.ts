@@ -17,10 +17,10 @@ import {
   type WritableSignal,
   type ComputedSignal,
   type Signal,
-} from "@/lib/reactive/signal";
+} from "@/lib/signals/signal";
 import type { Command, CommandContext } from "./Command";
 import { CompositeCommand } from "./Command";
-import type { Glyph } from "@/lib/model/Glyph";
+import type { GlyphSource } from "@/lib/model/Glyph";
 
 export interface CommandHistoryOptions {
   /** Maximum number of commands to keep in history */
@@ -38,7 +38,7 @@ export class CommandHistory {
   #undoStack: Command<unknown>[] = [];
   #redoStack: Command<unknown>[] = [];
   #maxHistory: number;
-  #$glyph: Signal<Glyph | null>;
+  #$source: Signal<GlyphSource | null>;
   #batch: BatchState | null = null;
   #onDirty: (() => void) | undefined;
 
@@ -47,8 +47,8 @@ export class CommandHistory {
   readonly canUndo: ComputedSignal<boolean>;
   readonly canRedo: ComputedSignal<boolean>;
 
-  constructor($glyph: Signal<Glyph | null>, options: CommandHistoryOptions = {}) {
-    this.#$glyph = $glyph;
+  constructor($source: Signal<GlyphSource | null>, options: CommandHistoryOptions = {}) {
+    this.#$source = $source;
     this.#maxHistory = options.maxHistory ?? 100;
     this.#onDirty = options.onDirty;
 
@@ -67,7 +67,10 @@ export class CommandHistory {
   }
 
   #createContext(): CommandContext {
-    return { glyph: this.#$glyph.peek()! };
+    const source = this.#$source.peek();
+    if (!source) throw new Error("Cannot execute command without an active glyph source");
+
+    return { source };
   }
 
   #updateCounts(): void {

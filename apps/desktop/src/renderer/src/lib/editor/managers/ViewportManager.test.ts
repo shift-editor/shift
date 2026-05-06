@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ViewportManager } from "./ViewportManager";
-import type { Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
 
 describe("ViewportManager", () => {
   let viewport: ViewportManager;

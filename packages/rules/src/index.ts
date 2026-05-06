@@ -21,6 +21,7 @@
 // Types
 export type {
   AffectedPointRole,
+  ConstrainDragGlyph,
   RuleId,
   RuleAffectedRole,
   RuleAffectedRolesById,
@@ -38,5 +39,5 @@ export type {
 export { pickRule, diagnoseSelectionPatterns } from "./matcher";
 
 // Rule application
-export { constrainDrag, constrainPreparedDrag, prepareConstrainDrag } from "./actions";
+export { constrainDrag, constrainPreparedDrag, prepareConstrainedDrag } from "./actions";
 export type { PreparedConstrainDrag } from "./actions";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PersistedRootSchema, TextRunModuleSchema, UserPreferencesSchema } from "./persistence";
+import { PersistedRootSchema, TextRunModuleSchema } from "./persistence";
 
 describe("persistence schemas", () => {
   it("accepts a valid persisted root payload", () => {
@@ -12,19 +12,7 @@ describe("persistence schemas", () => {
         lruDocIds: ["doc-1"],
       },
       appModules: {
-        "user-preferences": {
-          moduleVersion: 1,
-          payload: {
-            snap: {
-              enabled: true,
-              angle: true,
-              metrics: true,
-              pointToPoint: true,
-              angleIncrementDeg: 45,
-              pointRadiusPx: 8,
-            },
-          },
-        },
+        "user-preferences": { moduleVersion: 1, payload: {} },
       },
       documents: {
         "doc-1": {
@@ -69,21 +57,6 @@ describe("persistence schemas", () => {
             originX: 0,
           },
         },
-      },
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects invalid user preferences payload", () => {
-    const result = UserPreferencesSchema.safeParse({
-      snap: {
-        enabled: true,
-        angle: true,
-        metrics: true,
-        pointToPoint: true,
-        angleIncrementDeg: "45",
-        pointRadiusPx: 8,
       },
     });
 

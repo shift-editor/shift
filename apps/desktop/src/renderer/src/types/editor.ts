@@ -39,15 +39,6 @@ export interface TemporaryToolOptions {
   onReturn?: () => void;
 }
 
-export interface SnapPreferences {
-  enabled: boolean;
-  angle: boolean;
-  metrics: boolean;
-  pointToPoint: boolean;
-  angleIncrementDeg: number;
-  pointRadiusPx: number;
-}
-
 export interface ToolSwitchHandler {
   requestTemporary: (toolId: ToolName, options?: TemporaryToolOptions) => void;
   returnFromTemporary: () => void;

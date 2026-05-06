@@ -4,7 +4,7 @@ import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";

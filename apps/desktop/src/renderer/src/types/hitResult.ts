@@ -13,8 +13,10 @@
  *
  * @module
  */
-import type { Point2D, PointId, ContourId, Point, Contour, AnchorId } from "@shift/types";
-import type { Segment } from "@/lib/model/Segment";
+import type { Point2D } from "@shift/geo";
+import type { AnchorId, ContourId, PointId } from "@shift/types";
+import type { Contour, Point } from "@shift/glyph-state";
+import type { Segment } from "@shift/glyph-state";
 import type { SegmentId } from "./indicator";
 import type { BoundingBoxHitResult } from "./boundingBox";
 

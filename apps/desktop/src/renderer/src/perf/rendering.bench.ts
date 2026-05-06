@@ -8,7 +8,7 @@
  * Key scenarios:
  * - renderToolScene — glyph outline + handles + control lines
  * - renderToolBackground — guides + bounding box
- * - renderOverlay — bounding box handles + snap lines
+ * - renderOverlay — bounding box handles
  */
 
 import { bench, describe } from "vitest";

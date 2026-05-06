@@ -43,7 +43,7 @@ describe("TextLayout", () => {
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
     const layout = makeLayout([glyph("A", 65), linebreakCell(), glyph("B", 66)], font);
-    const metrics = font.getMetrics();
+    const metrics = font.metrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
     expect(layout.lines[0].y).toBe(0);
@@ -54,8 +54,10 @@ describe("TextLayout", () => {
   // left half of B's advance box hits cluster=1, side="left".
   it("pointAt after hitTest recovers cluster's leading edge", () => {
     const layout = makeLayout([glyph("A", 65), glyph("B", 66)], font);
-    const aAdvance = font.glyph("A")?.advance ?? 0;
-    const bAdvance = font.glyph("B")?.advance ?? 0;
+    const source = font.defaultSource();
+    if (!source) throw new Error("Expected source");
+    const aAdvance = font.glyphSource({ name: "A" }, source)?.xAdvance ?? 0;
+    const bAdvance = font.glyphSource({ name: "B" }, source)?.xAdvance ?? 0;
     const bLeftHalfX = aAdvance + bAdvance / 4;
 
     const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
@@ -68,7 +70,9 @@ describe("TextLayout", () => {
     const a = glyph("A", 65);
     const b = glyph("B", 66);
     const layout = makeLayout([a, b], font);
-    const aAdvance = font.glyph("A")?.advance ?? 0;
+    const source = font.defaultSource();
+    if (!source) throw new Error("Expected source");
+    const aAdvance = font.glyphSource({ name: "A" }, source)?.xAdvance ?? 0;
 
     expect(layout.editOriginForCell(b.id)).toEqual({ x: aAdvance, y: 0 });
     expect(layout.primaryGlyphForCell(b.id)?.cellIds).toEqual([b.id]);
@@ -84,7 +88,9 @@ describe("TextLayout", () => {
   it("returns anchors with cell ids rather than cluster-only hits", () => {
     const b = glyph("B", 66);
     const layout = makeLayout([glyph("A", 65), b], font);
-    const aAdvance = font.glyph("A")?.advance ?? 0;
+    const source = font.defaultSource();
+    if (!source) throw new Error("Expected source");
+    const aAdvance = font.glyphSource({ name: "A" }, source)?.xAdvance ?? 0;
 
     expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
       runId: "run-1",

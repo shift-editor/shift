@@ -1,11 +1,11 @@
-import type { Point2D, PointId } from "@shift/types";
+import type { PointId } from "@shift/types";
 import type { Glyph } from "@/lib/model/Glyph";
 import type { HandleState } from "@/types/graphics";
 import type { Canvas } from "./Canvas";
 import type { ViewportTransform } from "./Viewport";
 import { Gpu } from "@/lib/graphics/backends/Gpu";
 import { packHandleInstances } from "./gpu/classifyHandles";
-import { Vec2 } from "@shift/geo";
+import { Point2D, Vec2 } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import {
   drawHandle,
@@ -13,6 +13,7 @@ import {
   drawHandleDirection,
   drawHandleLast,
 } from "./indicators/handleDrawing";
+import { Contour } from "@shift/glyph-state";
 
 export interface HandleStates {
   getHandleState: (pointId: PointId) => HandleState;
@@ -31,14 +32,14 @@ export class Handles {
   }
 
   draw(
-    glyph: Glyph,
+    contours: readonly Contour[],
     states: HandleStates,
     viewport: ViewportTransform,
     drawOffset: Point2D,
     gpuEnabled: boolean,
   ): boolean {
     if (gpuEnabled && this.#gpu?.isAvailable()) {
-      return this.#drawGpu(glyph, states, viewport, drawOffset);
+      return this.#drawGpu(contours, states, viewport, drawOffset);
     }
     return false;
   }
@@ -91,7 +92,7 @@ export class Handles {
   }
 
   #drawGpu(
-    glyph: Glyph,
+    contours: readonly Contour[],
     states: HandleStates,
     viewport: ViewportTransform,
     drawOffset: Point2D,
@@ -99,7 +100,7 @@ export class Handles {
     if (!this.#gpu?.isAvailable()) return false;
 
     const { packedInstances, instanceCount } = packHandleInstances(
-      glyph,
+      contours,
       (id) => states.getHandleState(id),
       viewport,
       drawOffset,

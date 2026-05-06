@@ -9,9 +9,9 @@ import {
   Separator,
 } from "@shift/ui";
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
-import { getGlyphInfo } from "@/store/glyphInfo";
 import type { SearchResult } from "@shift/glyph-info";
 import { useFocusZone } from "@/context/FocusZoneContext";
+import { getGlyphInfo } from "@/store/store";
 
 interface GlyphFinderProps {
   open: boolean;

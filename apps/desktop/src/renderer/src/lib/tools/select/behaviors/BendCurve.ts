@@ -2,10 +2,10 @@ import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { GlyphDraft } from "@/types/draft";
+import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
 
 export class BendCurve implements SelectBehavior {
-  #draft: GlyphDraft | null = null;
+  #draft: SourceEditDraft | null = null;
   #hasChanges = false;
 
   onDragStart(
@@ -23,7 +23,7 @@ export class BendCurve implements SelectBehavior {
     if (!cubic) return true;
     const { control1, control2 } = cubic.points;
 
-    this.#draft = ctx.editor.createDraft();
+    this.#draft = ctx.editor.beginSourceEditDraft({ points: [control1.id, control2.id] });
     this.#hasChanges = false;
 
     ctx.setState({
@@ -64,10 +64,10 @@ export class BendCurve implements SelectBehavior {
     const { control1, control2 } = cubic.points;
 
     const updates = [
-      { node: { kind: "point" as const, id: control1.id }, x: newCp1.x, y: newCp1.y },
-      { node: { kind: "point" as const, id: control2.id }, x: newCp2.x, y: newCp2.y },
+      { kind: "point" as const, id: control1.id, x: newCp1.x, y: newCp1.y },
+      { kind: "point" as const, id: control2.id, x: newCp2.x, y: newCp2.y },
     ];
-    this.#draft.setPositions(updates);
+    this.#draft.previewPositions(updates);
     this.#hasChanges = true;
     return true;
   }
@@ -76,7 +76,7 @@ export class BendCurve implements SelectBehavior {
     if (state.type !== "bending") return false;
 
     if (this.#hasChanges) {
-      this.#draft?.finish("Bend curve");
+      this.#draft?.commit("Bend curve");
     } else {
       this.#draft?.discard();
     }

@@ -2,10 +2,7 @@
  * NAPI boundary benchmarks — measure the cost of crossing JS/Rust.
  *
  * Key scenarios:
- * - bridge.sync(positionUpdates) — Float64Array fast path for position-only updates
- * - bridge.sync(snapshot) — full JSON round-trip for structural changes
- * - bridge.setNodePositions — individual struct marshaling
- * - bridge.getSnapshot — reading full glyph state back from Rust
+ * - layer.setPositions — JS patch + native position sync
  */
 
 import { bench, describe } from "vitest";
@@ -23,33 +20,14 @@ const marks = [
 
 for (const { label, pm } of marks) {
   describe(`NAPI boundary — ${label} points`, () => {
-    bench("bridge.sync — position updates (all points)", () => {
+    bench("layer.setPositions — all points", () => {
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      pm.editor.bridge.sync(updates);
+      pm.editor.activeGlyphSource!.setPositions(updates);
     });
 
-    bench("bridge.sync — position updates (single point)", () => {
+    bench("layer.setPositions — single point", () => {
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      pm.editor.bridge.sync(updates);
-    });
-
-    bench("bridge.sync — full snapshot round-trip", () => {
-      const snapshot = pm.editor.bridge.getEditingSnapshot()!;
-      pm.editor.bridge.sync(snapshot);
-    });
-
-    bench("bridge.getSnapshot", () => {
-      pm.editor.bridge.getEditingSnapshot();
-    });
-
-    bench("bridge.setNodePositions — all points", () => {
-      const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      pm.editor.bridge.setNodePositions(updates);
-    });
-
-    bench("bridge.setNodePositions — single point", () => {
-      const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      pm.editor.bridge.setNodePositions(updates);
+      pm.editor.activeGlyphSource!.setPositions(updates);
     });
   });
 }

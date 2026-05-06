@@ -1,5 +1,5 @@
-import type { FontMetrics, Point2D } from "@shift/types";
-import type { Bounds } from "@shift/geo";
+import type { Bounds, Point2D } from "@shift/geo";
+import type { FontMetrics } from "@shift/types";
 
 export type TextCellId = string;
 export type TextRunId = string;

@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import { expandPattern } from "./parser";
 import { buildRuleTable, buildRuleTableFromSpecs } from "./rules";
 import { diagnoseSelectionPatterns, pickRule } from "./matcher";
-import { constrainDrag, prepareConstrainDrag } from "./actions";
-import type { ContourSnapshot, GlyphSnapshot, PointSnapshot } from "@shift/types";
+import { constrainDrag, prepareConstrainedDrag } from "./actions";
 import type { PointId, ContourId } from "@shift/types";
-import type { PointMove } from "./types";
+import type { ConstrainDragGlyph, PointMove } from "./types";
+
+type ConstrainDragContour = ConstrainDragGlyph["contours"][number];
+type ConstrainDragPoint = ConstrainDragContour["points"][number];
 
 // Helper to create test points
 function createPoint(
@@ -14,7 +16,7 @@ function createPoint(
   y: number,
   type: "onCurve" | "offCurve",
   smooth: boolean = false,
-): PointSnapshot {
+): ConstrainDragPoint {
   return {
     id: id as PointId,
     x,
@@ -27,9 +29,9 @@ function createPoint(
 // Helper to create test contour
 function createContour(
   id: string,
-  points: PointSnapshot[],
+  points: ConstrainDragPoint[],
   closed: boolean = false,
-): ContourSnapshot {
+): ConstrainDragContour {
   return {
     id: id as ContourId,
     points,
@@ -38,19 +40,13 @@ function createContour(
 }
 
 // Helper to create test glyph
-function createGlyph(contours: ContourSnapshot[]): GlyphSnapshot {
+function createGlyph(contours: ConstrainDragContour[]): ConstrainDragGlyph {
   return {
-    unicode: 65, // 'A'
-    name: "test",
-    xAdvance: 500,
     contours,
-    anchors: [],
-    compositeContours: [],
-    activeContourId: null,
   };
 }
 
-function applyPointMovesToGlyph(glyph: GlyphSnapshot, moves: PointMove[]): GlyphSnapshot {
+function applyPointMovesToGlyph(glyph: ConstrainDragGlyph, moves: PointMove[]): ConstrainDragGlyph {
   const moveMap = new Map<PointId, PointMove>();
   for (const move of moves) {
     moveMap.set(move.id, move);
@@ -70,7 +66,7 @@ function applyPointMovesToGlyph(glyph: GlyphSnapshot, moves: PointMove[]): Glyph
 }
 
 function runConstrainDrag(
-  glyph: GlyphSnapshot,
+  glyph: ConstrainDragGlyph,
   selectedIds: ReadonlySet<PointId>,
   dx: number,
   dy: number,
@@ -588,7 +584,7 @@ describe("Rule Application", () => {
     ]);
     const selected = new Set(["corner1" as PointId, "corner2" as PointId]);
 
-    const prepared = prepareConstrainDrag(glyph, selected);
+    const prepared = prepareConstrainedDrag(glyph, selected);
 
     expect(prepared.allowsUniformTranslationCommit).toBe(true);
   });
@@ -621,7 +617,7 @@ describe("Rule Application", () => {
     const glyph = createTestGlyph();
     const selected = new Set(["smooth" as PointId]);
 
-    const prepared = prepareConstrainDrag(glyph, selected);
+    const prepared = prepareConstrainedDrag(glyph, selected);
 
     expect(prepared.allowsUniformTranslationCommit).toBe(false);
   });

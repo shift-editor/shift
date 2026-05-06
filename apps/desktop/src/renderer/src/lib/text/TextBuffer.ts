@@ -18,7 +18,7 @@
  * cursorVisible (transient UI state). Those live in `TextInteraction` /
  * `TextRun`.
  */
-import { signal, batch, type WritableSignal, type Signal } from "@/lib/reactive/signal";
+import { signal, batch, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import type { Cell, TextCellId } from "./layout";
 import { clamp } from "@/lib/utils/utils";
 

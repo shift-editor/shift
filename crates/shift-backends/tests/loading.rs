@@ -103,16 +103,8 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     assert!(layer_names.contains(&"public.default"));
     assert!(font.layers().len() >= 2);
 
-    assert_eq!(
-        font.kerning()
-            .get_kerning("T", "A"),
-        Some(-75.0)
-    );
-    assert_eq!(
-        font.kerning()
-            .get_kerning("V", "A"),
-        Some(-100.0)
-    );
+    assert_eq!(font.kerning().get_kerning("T", "A"), Some(-75.0));
+    assert_eq!(font.kerning().get_kerning("V", "A"), Some(-100.0));
 }
 
 #[test]
@@ -146,16 +138,8 @@ fn loads_glyphs_file_features_kerning_components_and_anchors() {
     assert!(fea.contains("feature frac"));
     assert!(fea.contains("feature ordn"));
 
-    assert_eq!(
-        font.kerning()
-            .get_kerning("A", "V"),
-        Some(-55.0)
-    );
-    assert_eq!(
-        font.kerning()
-            .get_kerning("V", "a"),
-        Some(-65.0)
-    );
+    assert_eq!(font.kerning().get_kerning("A", "V"), Some(-55.0));
+    assert_eq!(font.kerning().get_kerning("V", "a"), Some(-65.0));
 
     let aacute = font.glyph("Aacute").expect("Aacute glyph should exist");
     let component_bases: Vec<_> = main_layer(aacute)

@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
-import { effect } from "@/lib/reactive";
+import { effect } from "@/lib/signals";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
@@ -39,7 +39,7 @@ export function DebugPanel() {
     const glyph = editor.glyph.value;
     if (!glyph) return "—";
 
-    const snapshot = glyph.toSnapshot();
+    const snapshot = glyph.toState();
     const json = JSON.stringify(snapshot);
     const bytes = new Blob([json]).size;
 
@@ -96,6 +96,7 @@ export function DebugPanel() {
             <span ref={glyphMemoryRef} className="font-mono tabular-nums" />
           </div>
         </div>
+        <Separator className="bg-gray-300" />
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">
           <h2 className="text-sm font-medium">Coordinates</h2>

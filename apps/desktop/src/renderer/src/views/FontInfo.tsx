@@ -3,7 +3,9 @@ import { getEditor } from "@/store/store";
 
 export const FontInfo = () => {
   const editor = getEditor();
-  const metrics = editor.font.getMetrics();
+  if (!editor.font.loaded) return null;
+
+  const metrics = editor.font.metrics;
   const metadata = editor.font.metadata;
 
   return (

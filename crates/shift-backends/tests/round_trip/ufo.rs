@@ -188,16 +188,6 @@ fn preserves_components_anchors_layers_and_kerning() {
         assert!(reloaded_layer_names.contains(&name));
     }
 
-    assert_eq!(
-        reloaded
-            .kerning()
-            .get_kerning("T", "A"),
-        Some(-75.0)
-    );
-    assert_eq!(
-        reloaded
-            .kerning()
-            .get_kerning("V", "A"),
-        Some(-100.0)
-    );
+    assert_eq!(reloaded.kerning().get_kerning("T", "A"), Some(-75.0));
+    assert_eq!(reloaded.kerning().get_kerning("V", "A"), Some(-100.0));
 }

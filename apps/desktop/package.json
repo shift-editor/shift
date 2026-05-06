@@ -53,7 +53,7 @@
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
     "@shift/bridge": "workspace:*",
-    "@shift/font": "workspace:*",
+    "@shift/glyph-state": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/glyph-info": "workspace:*",
     "@shift/rules": "workspace:*",

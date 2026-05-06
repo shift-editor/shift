@@ -14,8 +14,46 @@ use crate::{Font, Glyph};
 #[derive(Debug, Clone)]
 pub struct SourceError {
     pub source_index: usize,
+    pub source_id: String,
     pub source_name: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlyphVariationBuild {
+    pub variation_data: Option<GlyphVariationData>,
+    pub source_errors: Vec<SourceError>,
+    pub missing_default_source: bool,
+    pub model_error: Option<String>,
+}
+
+impl GlyphVariationBuild {
+    fn data(variation_data: GlyphVariationData, source_errors: Vec<SourceError>) -> Self {
+        Self {
+            variation_data: Some(variation_data),
+            source_errors,
+            missing_default_source: false,
+            model_error: None,
+        }
+    }
+
+    fn missing_default() -> Self {
+        Self {
+            variation_data: None,
+            source_errors: Vec::new(),
+            missing_default_source: true,
+            model_error: None,
+        }
+    }
+
+    fn model_failed(source_errors: Vec<SourceError>, message: String) -> Self {
+        Self {
+            variation_data: None,
+            source_errors,
+            missing_default_source: false,
+            model_error: Some(message),
+        }
+    }
 }
 
 fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), String> {
@@ -48,12 +86,6 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
         for (j, (pa, pb)) in ca.points.iter().zip(cb.points.iter()).enumerate() {
             if pa.point_type != pb.point_type {
                 return Err(format!("contour {i} point {j} type mismatch"));
-            }
-            if pa.smooth != pb.smooth {
-                return Err(format!(
-                    "contour {i} point {j} smooth mismatch: {} vs {}",
-                    pa.smooth, pb.smooth
-                ));
             }
         }
     }
@@ -162,16 +194,15 @@ pub fn build_masters(font: &Font, glyph: &Glyph) -> Option<Vec<GlyphMaster>> {
     }
 }
 
-pub fn get_glyph_variation_data(
-    masters: &[GlyphMaster],
-    axes: &[Axis],
-) -> Option<GlyphVariationData> {
+pub fn build_glyph_variation_data(masters: &[GlyphMaster], axes: &[Axis]) -> GlyphVariationBuild {
     let ordered_axes: Vec<Tag> = axes
         .iter()
         .filter_map(|a| Tag::from_str(a.tag()).ok())
         .collect();
 
-    let default_master = masters.iter().find(|master| master.is_default_source)?;
+    let Some(default_master) = masters.iter().find(|master| master.is_default_source) else {
+        return GlyphVariationBuild::missing_default();
+    };
 
     let mut errors = Vec::new();
     let mut points: HashMap<NormalizedLocation, Vec<f64>> = HashMap::new();
@@ -184,6 +215,7 @@ pub fn get_glyph_variation_data(
             Err(message) => {
                 errors.push(SourceError {
                     source_index,
+                    source_id: master.source_id.clone(),
                     source_name: master.source_name.clone(),
                     message,
                 });
@@ -193,7 +225,10 @@ pub fn get_glyph_variation_data(
 
     let locations_set: HashSet<NormalizedLocation> = points.keys().cloned().collect();
     let model = VariationModel::new(locations_set, ordered_axes);
-    let model_deltas = model.deltas::<f64, f64>(&points).ok()?;
+    let model_deltas = match model.deltas::<f64, f64>(&points) {
+        Ok(model_deltas) => model_deltas,
+        Err(err) => return GlyphVariationBuild::model_failed(errors, err.to_string()),
+    };
 
     let regions: Vec<Vec<AxisTent>> = model_deltas
         .iter()
@@ -212,5 +247,88 @@ pub fn get_glyph_variation_data(
 
     let deltas: Vec<Vec<f64>> = model_deltas.into_iter().map(|(_, d)| d).collect();
 
-    Some(GlyphVariationData { regions, deltas })
+    GlyphVariationBuild::data(GlyphVariationData { regions, deltas }, errors)
+}
+
+pub fn get_glyph_variation_data(
+    masters: &[GlyphMaster],
+    axes: &[Axis],
+) -> Option<GlyphVariationData> {
+    build_glyph_variation_data(masters, axes).variation_data
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use shift_wire::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
+
+    use super::build_glyph_variation_data;
+    use shift_ir::Axis;
+
+    fn structure_with_smooth(smooth: bool) -> GlyphStructure {
+        GlyphStructure {
+            contours: vec![ContourData {
+                id: "contour-1".to_string(),
+                closed: false,
+                points: vec![
+                    PointData {
+                        id: "point-1".to_string(),
+                        point_type: PointType::OnCurve,
+                        smooth,
+                    },
+                    PointData {
+                        id: "point-2".to_string(),
+                        point_type: PointType::OnCurve,
+                        smooth: false,
+                    },
+                ],
+            }],
+            anchors: Vec::new(),
+            components: Vec::new(),
+        }
+    }
+
+    fn master(
+        source_name: &str,
+        is_default_source: bool,
+        location_value: f64,
+        smooth: bool,
+        x_offset: f64,
+    ) -> GlyphMaster {
+        GlyphMaster {
+            source_id: source_name.to_string(),
+            source_name: source_name.to_string(),
+            is_default_source,
+            location: Location {
+                values: HashMap::from([("wght".to_string(), location_value)]),
+            },
+            structure: structure_with_smooth(smooth),
+            values: vec![500.0, x_offset, 0.0, 100.0 + x_offset, 0.0],
+        }
+    }
+
+    #[test]
+    fn smooth_point_mismatch_does_not_make_masters_incompatible() {
+        let axes = vec![Axis::new(
+            "wght".to_string(),
+            "Weight".to_string(),
+            0.0,
+            0.0,
+            100.0,
+        )];
+        let masters = vec![
+            master("Regular", true, 0.0, false, 0.0),
+            master("Bold", false, 100.0, true, 20.0),
+        ];
+
+        let build = build_glyph_variation_data(&masters, &axes);
+
+        assert!(
+            build.source_errors.is_empty(),
+            "smooth-only mismatch should not skip sources: {:?}",
+            build.source_errors
+        );
+        assert!(build.variation_data.is_some());
+    }
 }

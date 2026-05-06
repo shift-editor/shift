@@ -1,4 +1,5 @@
-import type { Point2D, PointId } from "@shift/types";
+import type { PointId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { AlignmentType, DistributeType } from "@/types/transform";
 
@@ -24,7 +25,7 @@ export class AlignPointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length === 0) return;
 
-    const points = ctx.glyph.points(this.#pointIds);
+    const points = ctx.source.points(this.#pointIds);
     if (points.length === 0) return;
 
     if (this.#originalPositions.size === 0) {
@@ -33,17 +34,17 @@ export class AlignPointsCommand extends BaseCommand<void> {
       }
     }
 
-    ctx.glyph.align(this.#pointIds, this.#alignment);
+    ctx.source.align(this.#pointIds, this.#alignment);
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(id, pos);
+      ctx.source.movePointTo(id, pos);
     }
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.align(this.#pointIds, this.#alignment);
+    ctx.source.align(this.#pointIds, this.#alignment);
   }
 }
 
@@ -69,7 +70,7 @@ export class DistributePointsCommand extends BaseCommand<void> {
   execute(ctx: CommandContext): void {
     if (this.#pointIds.length < 3) return;
 
-    const points = ctx.glyph.points(this.#pointIds);
+    const points = ctx.source.points(this.#pointIds);
     if (points.length < 3) return;
 
     if (this.#originalPositions.size === 0) {
@@ -78,16 +79,16 @@ export class DistributePointsCommand extends BaseCommand<void> {
       }
     }
 
-    ctx.glyph.distribute(this.#pointIds, this.#type);
+    ctx.source.distribute(this.#pointIds, this.#type);
   }
 
   undo(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(id, pos);
+      ctx.source.movePointTo(id, pos);
     }
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.distribute(this.#pointIds, this.#type);
+    ctx.source.distribute(this.#pointIds, this.#type);
   }
 }

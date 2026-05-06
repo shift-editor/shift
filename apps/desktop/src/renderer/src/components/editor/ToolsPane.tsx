@@ -1,7 +1,7 @@
 import { FC } from "react";
 
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { getEditor } from "@/store/store";
 import { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";

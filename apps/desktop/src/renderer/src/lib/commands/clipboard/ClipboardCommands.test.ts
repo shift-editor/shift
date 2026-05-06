@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CommandHistory } from "../core/CommandHistory";
 import { CutCommand, PasteCommand } from "./ClipboardCommands";
-import { createBridge, expectAt, getAllPoints, getPointCount } from "@/testing";
 import type { ClipboardContent } from "../../clipboard/types";
-import type { PointId } from "@shift/types";
+import type { ContourId } from "@shift/types";
+import type { GlyphSource } from "@/lib/model/Glyph";
+import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
 
 function createTestContent(points: Array<{ x: number; y: number }>): ClipboardContent {
   return {
@@ -21,188 +22,131 @@ function createTestContent(points: Array<{ x: number; y: number }>): ClipboardCo
   };
 }
 
-function addPointToActiveContour(
-  bridge: ReturnType<typeof createBridge>,
-  edit: {
-    id?: PointId;
-    x: number;
-    y: number;
-    pointType: "onCurve" | "offCurve";
-    smooth: boolean;
-  },
-): PointId {
-  const contourId = bridge.getActiveContourId();
-  if (!contourId) throw new Error("No active contour");
-  return bridge.addPointToContour(contourId, edit);
-}
-
 describe("CutCommand", () => {
-  let bridge: ReturnType<typeof createBridge>;
+  let source: GlyphSource;
+  let contourId: ContourId;
   let history: CommandHistory;
 
   beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
+    const fixture = commandSourceFixture();
+    source = fixture.source;
+    contourId = addContour(source);
+    history = new CommandHistory(fixture.$source);
   });
 
-  it("should remove points on execute", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 200,
-      y: 200,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(2);
+  it("removes points on execute", () => {
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
+    const p2 = addPoint(source, contourId, { x: 200, y: 200 });
+    expect(contourPoints(source, contourId).length).toBe(2);
 
     history.execute(new CutCommand([p1]));
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
-    const remaining = getAllPoints(bridge.getEditingSnapshot());
-    expect(expectAt(remaining, 0).x).toBe(200);
+    expect(contourPoints(source, contourId).length).toBe(1);
+    expect(point(source, p2).x).toBe(200);
   });
 
-  it("should restore points on undo", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
+  it("restores points on undo", () => {
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
+
     history.execute(new CutCommand([p1]));
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+    expect(contourPoints(source, contourId).length).toBe(0);
 
     history.undo();
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
-    const restored = getAllPoints(bridge.getEditingSnapshot());
-    expect(expectAt(restored, 0).x).toBe(100);
-    expect(expectAt(restored, 0).y).toBe(100);
+    expect(contourPoints(source, contourId).length).toBe(1);
+    expect(point(source, p1)).toMatchObject({ x: 100, y: 100 });
   });
 
-  it("should remove same points on redo", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
+  it("removes same points on redo", () => {
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
+
     history.execute(new CutCommand([p1]));
     history.undo();
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    expect(contourPoints(source, contourId).length).toBe(1);
 
     history.redo();
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+    expect(contourPoints(source, contourId).length).toBe(0);
   });
 
-  it("should handle multiple points", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    const p2 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 200,
-      y: 200,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 300,
-      y: 300,
-      pointType: "onCurve",
-      smooth: false,
-    });
+  it("handles multiple points", () => {
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
+    const p2 = addPoint(source, contourId, { x: 200, y: 200 });
+    const p3 = addPoint(source, contourId, { x: 300, y: 300 });
 
     history.execute(new CutCommand([p1, p2]));
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
-    const remaining = getAllPoints(bridge.getEditingSnapshot());
-    expect(expectAt(remaining, 0).x).toBe(300);
+    expect(contourPoints(source, contourId).length).toBe(1);
+    expect(point(source, p3).x).toBe(300);
   });
 
-  it("should have the correct name", () => {
-    const cmd = new CutCommand([]);
-    expect(cmd.name).toBe("Cut");
+  it("has the correct name", () => {
+    expect(new CutCommand([]).name).toBe("Cut");
   });
 });
 
 describe("PasteCommand", () => {
-  let bridge: ReturnType<typeof createBridge>;
+  let source: GlyphSource;
   let history: CommandHistory;
 
   beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
+    const fixture = commandSourceFixture();
+    source = fixture.source;
+    addContour(source);
+    history = new CommandHistory(fixture.$source);
   });
 
-  it("should create points on execute", () => {
+  it("creates points on execute", () => {
+    const start = source.allPoints.length;
     const content = createTestContent([
       { x: 100, y: 100 },
       { x: 200, y: 200 },
     ]);
+    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
 
-    const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    history.execute(cmd);
+    history.execute(command);
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(2);
-    expect(cmd.createdPointIds.length).toBe(2);
+    expect(source.allPoints.length).toBe(start + 2);
+    expect(command.createdPointIds.length).toBe(2);
   });
 
-  it("should apply offset to pasted points", () => {
+  it("applies offset to pasted points", () => {
     const content = createTestContent([{ x: 100, y: 100 }]);
+    const command = new PasteCommand(content, { offset: { x: 20, y: -20 } });
 
-    const cmd = new PasteCommand(content, { offset: { x: 20, y: -20 } });
-    history.execute(cmd);
+    history.execute(command);
 
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(expectAt(points, 0).x).toBe(120);
-    expect(expectAt(points, 0).y).toBe(80);
+    expect(point(source, command.createdPointIds[0]!)).toMatchObject({ x: 120, y: 80 });
   });
 
-  it("should remove points on undo", () => {
+  it("removes points on undo", () => {
+    const start = source.allPoints.length;
     const content = createTestContent([{ x: 100, y: 100 }]);
-    const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    history.execute(cmd);
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
+
+    history.execute(command);
+    expect(source.allPoints.length).toBe(start + 1);
 
     history.undo();
 
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+    expect(source.allPoints.length).toBe(start);
   });
 
-  it("should restore same state on redo (snapshot-based)", () => {
+  it("restores same state on redo", () => {
+    const start = source.allPoints.length;
     const content = createTestContent([{ x: 100, y: 100 }]);
-    const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    history.execute(cmd);
-    const originalIds = [...cmd.createdPointIds];
+    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
 
+    history.execute(command);
+    const originalIds = [...command.createdPointIds];
     history.undo();
     history.redo();
 
-    expect(cmd.createdPointIds).toEqual(originalIds);
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    expect(command.createdPointIds).toEqual(originalIds);
+    expect(source.allPoints.length).toBe(start + 1);
   });
 
-  it("should handle multiple contours", () => {
+  it("handles multiple contours", () => {
     const content: ClipboardContent = {
       contours: [
         {
@@ -215,74 +159,61 @@ describe("PasteCommand", () => {
         },
       ],
     };
+    const command = new PasteCommand(content, { offset: { x: 0, y: 0 } });
 
-    const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    history.execute(cmd);
+    history.execute(command);
 
-    expect(cmd.createdContourIds.length).toBe(2);
+    expect(command.createdContourIds.length).toBe(2);
   });
 
-  it("should have the correct name", () => {
+  it("has the correct name", () => {
     const content = createTestContent([]);
-    const cmd = new PasteCommand(content, { offset: { x: 0, y: 0 } });
-    expect(cmd.name).toBe("Paste");
+    expect(new PasteCommand(content, { offset: { x: 0, y: 0 } }).name).toBe("Paste");
   });
 });
 
 describe("Cut + Paste integration", () => {
-  let bridge: ReturnType<typeof createBridge>;
+  let source: GlyphSource;
+  let contourId: ContourId;
   let history: CommandHistory;
 
   beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
+    const fixture = commandSourceFixture();
+    source = fixture.source;
+    contourId = addContour(source);
+    history = new CommandHistory(fixture.$source);
   });
 
-  it("should support cut then paste workflow", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+  it("supports cut then paste workflow", () => {
+    const start = source.allPoints.length;
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
 
     history.execute(new CutCommand([p1]));
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+    expect(source.allPoints.length).toBe(start);
 
     const content = createTestContent([{ x: 100, y: 100 }]);
-    const pasteCmd = new PasteCommand(content, { offset: { x: 20, y: 20 } });
-    history.execute(pasteCmd);
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    const pasteCommand = new PasteCommand(content, { offset: { x: 20, y: 20 } });
+    history.execute(pasteCommand);
 
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(expectAt(points, 0).x).toBe(120);
-    expect(expectAt(points, 0).y).toBe(120);
+    expect(source.allPoints.length).toBe(start + 1);
+    expect(point(source, pasteCommand.createdPointIds[0]!)).toMatchObject({ x: 120, y: 120 });
   });
 
-  it("should undo cut and paste separately", () => {
-    const p1 = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
+  it("undoes cut and paste separately", () => {
+    const start = source.allPoints.length;
+    const p1 = addPoint(source, contourId, { x: 100, y: 100 });
 
     history.execute(new CutCommand([p1]));
-
-    const content = createTestContent([{ x: 100, y: 100 }]);
-    history.execute(new PasteCommand(content, { offset: { x: 0, y: 0 } }));
+    history.execute(
+      new PasteCommand(createTestContent([{ x: 100, y: 100 }]), { offset: { x: 0, y: 0 } }),
+    );
 
     expect(history.undoCount.value).toBe(2);
+    history.undo();
+    expect(source.allPoints.length).toBe(start);
 
     history.undo();
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
-
-    history.undo();
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    expect(source.allPoints.length).toBe(start + 1);
+    expect(point(source, p1)).toMatchObject({ x: 100, y: 100 });
   });
 });

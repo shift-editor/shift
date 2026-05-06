@@ -51,18 +51,20 @@ export const App = () => {
 
       try {
         editor.loadFont(filePath);
-        editor.updateMetricsFromFont();
+
         setFilePath(filePath);
         clearDirty();
+
         documentPersistence.openDocument(filePath);
         didOpenFont = true;
+
         if (source === "restore") {
           const unicode = parseEditorUnicodeFromHash(window.location.hash);
           if (unicode !== null) {
-            const glyphName = editor.font.glyphName(unicode);
-            const handle = { glyphName, unicode };
-            editor.setGlyphHandle(handle);
-            editor.openGlyph(handle);
+            const handle = editor.font.glyphHandleForUnicode(unicode);
+            if (handle) {
+              editor.getGlyph(handle);
+            }
           }
         } else {
           navigateToHome();

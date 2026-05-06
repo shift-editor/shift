@@ -16,199 +16,204 @@ export type GlyphName = string;
 export type Unicode = number;
 
 export interface BridgeApi {
-  loadFont(path: string): void;
-  saveFont(path: string): Promise<number>;
-  getMetadata(): FontMetadata;
-  getMetrics(): FontMetrics;
-  getGlyphCount(): number;
-  getGlyphs(): Array<GlyphRecord>;
-  getGlyphState(glyphRef: GlyphHandle): GlyphState | null;
-  isVariable(): boolean;
-  getAxes(): Array<Axis>;
-  getSources(): Array<Source>;
-  startEditSession(glyphRef: GlyphHandle): void;
-  getLiveVersion(): number;
-  getPersistedVersion(): number;
-  isDirty(): boolean;
-  endEditSession(): void;
-  hasEditSession(): boolean;
-  getEditingUnicode(): Unicode | null;
-  getEditingGlyphName(): GlyphName | null;
-  setXAdvance(width: number): GlyphValueChange;
-  translateLayer(dx: number, dy: number): GlyphValueChange;
-  addPoint(
-    contourId: ContourId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean,
-  ): GlyphStructureChange;
-  insertPointBefore(
-    beforePointId: PointId,
-    x: number,
-    y: number,
-    pointType: PointType,
-    smooth: boolean,
-  ): GlyphStructureChange;
-  addContour(): GlyphStructureChange;
-  openContour(contourId: ContourId): GlyphStructureChange;
-  closeContour(contourId: ContourId): GlyphStructureChange;
-  reverseContour(contourId: ContourId): GlyphStructureChange;
-  applyBooleanOp(
-    contourIdA: ContourId,
-    contourIdB: ContourId,
-    operation: string,
-  ): GlyphStructureChange;
-  removePoints(pointIds: Array<PointId>): GlyphStructureChange;
-  toggleSmooth(pointId: PointId): GlyphStructureChange;
+  loadFont(path: string): void
+  saveFont(path: string): Promise<number>
+  getMetadata(): FontMetadata
+  getMetrics(): FontMetrics
+  getGlyphCount(): number
+  getGlyphs(): Array<GlyphRecord>
+  getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
+  getGlyphVariationReport(glyphRef: GlyphHandle): GlyphVariationReport | null
+  getVariationReports(): Array<GlyphVariationReport>
+  isVariable(): boolean
+  getAxes(): Array<Axis>
+  getSources(): Array<Source>
+  startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
+  getPersistedVersion(): number
+  isDirty(): boolean
+  endEditSession(): void
+  hasEditSession(): boolean
+  getEditingUnicode(): Unicode | null
+  getEditingGlyphName(): GlyphName | null
+  getEditingSourceId(): SourceId | null
+  setXAdvance(width: number): GlyphValueChange
+  translateLayer(dx: number, dy: number): GlyphValueChange
+  addPoint(contourId: ContourId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
+  insertPointBefore(beforePointId: PointId, x: number, y: number, pointType: PointType, smooth: boolean): GlyphStructureChange
+  addContour(): GlyphStructureChange
+  openContour(contourId: ContourId): GlyphStructureChange
+  closeContour(contourId: ContourId): GlyphStructureChange
+  reverseContour(contourId: ContourId): GlyphStructureChange
+  applyBooleanOp(contourIdA: ContourId, contourIdB: ContourId, operation: string): GlyphStructureChange
+  removePoints(pointIds: Array<PointId>): GlyphStructureChange
+  toggleSmooth(pointId: PointId): GlyphStructureChange
   /**
    * Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  setPositions(
-    pointIds?: BigUint64Array | undefined | null,
-    pointCoords?: Float64Array | undefined | null,
-    anchorIds?: BigUint64Array | undefined | null,
-    anchorCoords?: Float64Array | undefined | null,
-  ): GlyphValueChange;
-  restoreState(structure: GlyphStructure, values: Float64Array): GlyphStructureChange;
+  setPositions(pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): GlyphValueChange
+  restoreState(structure: GlyphStructure, values: Float64Array): GlyphStructureChange
 }
 
 export interface GlyphHandle {
-  name: GlyphName;
-  unicode?: Unicode;
+  name: GlyphName
+  unicode?: Unicode
+}
+
+export interface GlyphVariationDiagnostic {
+  glyphName: GlyphName
+  code: string
+  severity: string
+  source?: GlyphVariationDiagnosticSource
+  message: string
+}
+
+export interface GlyphVariationDiagnosticSource {
+  id: SourceId
+  index: number
+  name: string
+}
+
+export interface GlyphVariationReport {
+  glyphName: GlyphName
+  status: string
+  variationDataAvailable: boolean
+  masterCount: number
+  compatibleMasterCount: number
+  skippedMasterCount: number
+  diagnostics: Array<GlyphVariationDiagnostic>
 }
 export interface AnchorData {
-  id: AnchorId;
-  name?: string;
+  id: AnchorId
+  name?: string
 }
 
 export interface Axis {
-  tag: string;
-  name: string;
-  minimum: number;
-  default: number;
-  maximum: number;
-  hidden: boolean;
+  tag: string
+  name: string
+  minimum: number
+  default: number
+  maximum: number
+  hidden: boolean
 }
 
 export interface AxisTent {
-  axisTag: string;
-  lower: number;
-  peak: number;
-  upper: number;
+  axisTag: string
+  lower: number
+  peak: number
+  upper: number
 }
 
 export interface ComponentData {
-  id: ComponentId;
-  baseGlyphName: GlyphName;
+  id: ComponentId
+  baseGlyphName: GlyphName
 }
 
 export interface ContourData {
-  id: ContourId;
-  points: Array<PointData>;
-  closed: boolean;
+  id: ContourId
+  points: Array<PointData>
+  closed: boolean
 }
 
 export interface FontMetadata {
-  familyName?: string;
-  styleName?: string;
-  versionMajor?: number;
-  versionMinor?: number;
-  copyright?: string;
-  trademark?: string;
-  designer?: string;
-  designerUrl?: string;
-  manufacturer?: string;
-  manufacturerUrl?: string;
-  license?: string;
-  licenseUrl?: string;
-  description?: string;
-  note?: string;
+  familyName?: string
+  styleName?: string
+  versionMajor?: number
+  versionMinor?: number
+  copyright?: string
+  trademark?: string
+  designer?: string
+  designerUrl?: string
+  manufacturer?: string
+  manufacturerUrl?: string
+  license?: string
+  licenseUrl?: string
+  description?: string
+  note?: string
 }
 
 export interface FontMetrics {
-  unitsPerEm: number;
-  ascender: number;
-  descender: number;
-  capHeight?: number;
-  xHeight?: number;
-  lineGap?: number;
-  italicAngle?: number;
-  underlinePosition?: number;
-  underlineThickness?: number;
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  capHeight?: number
+  xHeight?: number
+  lineGap?: number
+  italicAngle?: number
+  underlinePosition?: number
+  underlineThickness?: number
 }
 
 export interface GlyphChangedEntities {
-  pointIds: Array<PointId>;
-  contourIds: Array<ContourId>;
-  anchorIds: Array<AnchorId>;
-  guidelineIds: Array<GuidelineId>;
-  componentIds: Array<ComponentId>;
+  pointIds: Array<PointId>
+  contourIds: Array<ContourId>
+  anchorIds: Array<AnchorId>
+  guidelineIds: Array<GuidelineId>
+  componentIds: Array<ComponentId>
 }
 
 export interface GlyphMaster {
-  sourceId: SourceId;
-  sourceName: string;
-  isDefaultSource: boolean;
-  location: Location;
-  structure: GlyphStructure;
-  values: Float64Array;
+  sourceId: SourceId
+  sourceName: string
+  isDefaultSource: boolean
+  location: Location
+  structure: GlyphStructure
+  values: Float64Array
 }
 
 export interface GlyphRecord {
-  name: GlyphName;
-  unicodes: Array<Unicode>;
-  componentBaseGlyphNames: Array<GlyphName>;
+  name: GlyphName
+  unicodes: Array<Unicode>
+  componentBaseGlyphNames: Array<GlyphName>
 }
 
 export interface GlyphState {
-  structure: GlyphStructure;
+  structure: GlyphStructure
   /** Numeric glyph state ordered to match `GlyphStructure`. */
-  values: Float64Array;
-  variationData?: GlyphVariationData;
+  values: Float64Array
+  variationData?: GlyphVariationData
 }
 
 export interface GlyphStructure {
-  contours: Array<ContourData>;
-  anchors: Array<AnchorData>;
-  components: Array<ComponentData>;
+  contours: Array<ContourData>
+  anchors: Array<AnchorData>
+  components: Array<ComponentData>
 }
 
 export interface GlyphStructureChange {
-  structure: GlyphStructure;
-  values: Float64Array;
-  changed: GlyphChangedEntities;
+  structure: GlyphStructure
+  values: Float64Array
+  changed: GlyphChangedEntities
 }
 
 export interface GlyphValueChange {
-  values: Float64Array;
-  changed: GlyphChangedEntities;
+  values: Float64Array
+  changed: GlyphChangedEntities
 }
 
 export interface GlyphVariationData {
   /** One entry per region. Inner = tents on the axes the region depends on. */
-  regions: Array<Array<AxisTent>>;
+  regions: Array<Array<AxisTent>>
   /** Deltas are flattened in `GlyphState::values` order. */
-  deltas: Array<Float64Array>;
+  deltas: Array<Float64Array>
 }
 
 export interface Location {
-  values: Record<string, number>;
+  values: Record<string, number>
 }
 
 export interface PointData {
-  id: PointId;
-  pointType: PointType;
-  smooth: boolean;
+  id: PointId
+  pointType: PointType
+  smooth: boolean
 }
 
 export type PointType = "onCurve" | "offCurve";
 
 export interface Source {
-  id: SourceId;
-  name: string;
-  location: Location;
-  layerId: LayerId;
-  filename?: string;
+  id: SourceId
+  name: string
+  location: Location
+  layerId: LayerId
+  filename?: string
 }

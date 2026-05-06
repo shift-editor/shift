@@ -4,6 +4,7 @@ import type { HandState } from "./types";
 import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
 
 export class Hand extends BaseTool<HandState> {
+  /** @knipclassignore — declarative state spec for tool docs/debugging. */
   static stateSpec = defineStateDiagram<HandState["type"]>({
     states: ["idle", "ready", "dragging"],
     initial: "idle",

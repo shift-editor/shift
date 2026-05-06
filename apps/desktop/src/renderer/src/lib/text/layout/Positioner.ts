@@ -1,7 +1,10 @@
 import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
 import type { GlyphCell, PositionedRun, SegmentedRun } from "./types";
 import { Font } from "@/lib/model/Font";
-import type { Point2D } from "@shift/types";
+import type { Signal } from "@/lib/signals/signal";
+import type { AxisLocation } from "@/types/variation";
+import type { Bounds, Point2D } from "@shift/geo";
+import type { Source } from "@shift/types";
 
 /**
  * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
@@ -12,18 +15,29 @@ import type { Point2D } from "@shift/types";
  *
  */
 export class Positioner {
-  position(run: SegmentedRun, font: Font): PositionedRun {
+  position(run: SegmentedRun, font: Font, designLocation: Signal<AxisLocation>): PositionedRun {
     let totalAdvance = 0;
+    const glyphs: PositionedRun["glyphs"] = [];
+    const source = font.sourceAtOrDefault(designLocation.value);
 
-    const glyphs = run.glyphs.map((g, idx) => {
-      const glyph = font.glyph(g.glyphName);
-      const xAdvance = resolveAdvance(g, font);
+    for (const [idx, g] of run.glyphs.entries()) {
+      const handle = { name: g.glyphName };
+      const glyph = font.glyph(handle);
+      let glyphName = g.glyphName;
+      let bounds: Bounds | null = null;
+
+      if (glyph) {
+        glyphName = glyph.name;
+        bounds = glyph.outline(designLocation).bounds;
+      }
+
+      const xAdvance = resolveAdvance(g, font, source);
       const origin = { x: totalAdvance, y: 0 };
-      const offset = resolveGlyphOffset(g, font);
+      const offset = resolveGlyphOffset(g, font, source);
       totalAdvance += xAdvance;
 
-      return {
-        glyphName: glyph?.name ?? g.glyphName,
+      glyphs.push({
+        glyphName,
         cellIds: [g.id],
         origin,
         xAdvance,
@@ -31,27 +45,28 @@ export class Positioner {
         xOffset: offset.x,
         yOffset: offset.y,
         cluster: run.clusterStart + idx,
-        bounds: glyph?.bounds ?? null,
-      };
-    });
+        bounds,
+      });
+    }
 
     return { ...run, glyphs, advance: totalAdvance };
   }
 }
 
 /** Resolve a glyph cell to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(cell: GlyphCell, font: Font): number {
-  const raw = font.glyph(cell.glyphName)?.advance ?? 0;
+export function resolveAdvance(cell: GlyphCell, font: Font, source: Source | null): number {
+  const raw = source ? (font.glyphSource({ name: cell.glyphName }, source)?.xAdvance ?? 0) : 0;
   return displayAdvance(raw, cell.glyphName, cell.codepoint);
 }
 
-export function resolveGlyphOffset(cell: GlyphCell, font: Font): Point2D {
+export function resolveGlyphOffset(cell: GlyphCell, font: Font, source: Source | null): Point2D {
   if (!isNonSpacingGlyph(cell.glyphName, cell.codepoint)) return { x: 0, y: 0 };
+  if (!source) return { x: 0, y: 0 };
 
-  const glyph = font.glyph(cell.glyphName);
+  const glyph = font.glyphSource({ name: cell.glyphName }, source);
   if (!glyph) return { x: 0, y: 0 };
 
-  const metrics = font.getMetrics();
+  const metrics = font.metrics;
   const targetX = 300;
   const targetYForAnchorName = (anchorName: string): number => {
     switch (anchorName) {

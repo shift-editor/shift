@@ -4,7 +4,6 @@ import type {
   PersistedRoot,
   PersistenceRegistry,
   PersistedTextRun,
-  UserPreferences,
   TextRunModule,
 } from "@shift/validation";
 
@@ -17,7 +16,6 @@ export type {
   PersistedDocument,
   PersistenceRegistry,
   PersistedRoot,
-  UserPreferences,
   TextRunModule,
   PersistedTextRun,
 };

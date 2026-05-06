@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { Behavior } from "../core/Behavior";
 
 export type ShapeState =

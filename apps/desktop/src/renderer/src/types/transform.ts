@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 
 /**
  * Axis or arbitrary angle for reflection transforms.

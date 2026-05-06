@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use shift_ir::{AnchorId, ComponentId, ContourId, GuidelineId, LayerId, PointId};
+use shift_ir::{AnchorId, ComponentId, ContourId, GuidelineId, LayerId, PointId, SourceId};
 
 use crate::errors::{BridgeError, BridgeResult};
 
@@ -41,4 +41,8 @@ impl BridgeParse for GuidelineId {
 
 impl BridgeParse for LayerId {
   const KIND: &'static str = "layer ID";
+}
+
+impl BridgeParse for SourceId {
+  const KIND: &'static str = "source ID";
 }

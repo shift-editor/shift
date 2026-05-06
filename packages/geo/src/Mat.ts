@@ -1,5 +1,16 @@
-import type { DecomposedTransform } from "@shift/types";
 import type { Point2D } from "./types";
+
+export interface DecomposedTransform {
+  readonly translateX: number;
+  readonly translateY: number;
+  readonly rotation: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly skewX: number;
+  readonly skewY: number;
+  readonly tCenterX: number;
+  readonly tCenterY: number;
+}
 
 /**
  * 2D Affine Transformation Matrix (3x2 representation)

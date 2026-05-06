@@ -1,5 +1,5 @@
 import type { Canvas } from "../Canvas";
-import type { Segment } from "@/lib/model/Segment";
+import type { Segment } from "@shift/glyph-state";
 
 export class Segments {
   draw(canvas: Canvas, hovered: Segment | null, selected: readonly Segment[]): void {

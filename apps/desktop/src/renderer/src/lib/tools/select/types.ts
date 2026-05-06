@@ -1,4 +1,5 @@
-import type { AnchorId, Point2D, PointId, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/geo";
+import type { AnchorId, PointId } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "@/types/boundingBox";
 import type { Behavior } from "../core/Behavior";
@@ -40,7 +41,6 @@ export interface RotateDrag {
   center: Point2D;
   startAngle: number;
   currentAngle: number;
-  snappedAngle?: number;
 }
 
 export interface BendDrag {

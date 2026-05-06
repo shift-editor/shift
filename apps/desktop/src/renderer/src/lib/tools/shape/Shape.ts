@@ -1,10 +1,12 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/geo";
 import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import type { ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
+import { DrawRectangleCommand } from "@/lib/commands/primitives";
 
 export class Shape extends BaseTool<ShapeState> {
+  /** @knipclassignore — declarative state spec for tool docs/debugging. */
   static stateSpec = defineStateDiagram<ShapeState["type"]>({
     states: ["idle", "ready", "dragging"],
     initial: "idle",
@@ -74,24 +76,6 @@ export class Shape extends BaseTool<ShapeState> {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 
-    const glyph = this.editor.glyph.peek();
-    if (!glyph) return;
-
-    this.batch("Draw Rectangle", () => {
-      const contourId = glyph.addContour();
-
-      const edit = (x: number, y: number) => ({
-        x,
-        y,
-        pointType: "onCurve" as const,
-        smooth: false,
-      });
-
-      glyph.addPointToContour(contourId, edit(rect.x, rect.y));
-      glyph.addPointToContour(contourId, edit(rect.x + rect.width, rect.y));
-      glyph.addPointToContour(contourId, edit(rect.x + rect.width, rect.y + rect.height));
-      glyph.addPointToContour(contourId, edit(rect.x, rect.y + rect.height));
-      glyph.closeContour();
-    });
+    this.editor.commandHistory.execute(new DrawRectangleCommand(rect));
   }
 }

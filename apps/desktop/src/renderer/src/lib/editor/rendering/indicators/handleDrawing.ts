@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { Canvas } from "../Canvas";
 import type { HandleState, HandleType } from "@/types/graphics";
 import type { HandleStyle } from "../Theme";

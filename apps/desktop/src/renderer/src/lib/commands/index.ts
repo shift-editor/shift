@@ -11,13 +11,16 @@ export {
 // Primitive commands (point, bezier operations)
 export {
   AddPointCommand,
+  DrawRectangleCommand,
+  ToggleSmoothCommand,
   CloseContourCommand,
-  SetActiveContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
-  SetNodePositionsCommand,
+  BooleanOperationCommand,
+  type BooleanOperation,
+  SetSourcePositionsCommand,
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,

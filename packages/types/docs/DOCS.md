@@ -1,6 +1,6 @@
 # @shift/types
 
-Shared DTO and primitive TypeScript types for Shift. This package owns branded IDs, math primitives, and bridge DTOs generated from `shift-bridge`.
+Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
 ## Architecture Invariants
 
@@ -14,8 +14,7 @@ Shared DTO and primitive TypeScript types for Shift. This package owns branded I
 
 ```
 packages/types/src/
-  index.ts               -- root barrel: IDs, math, bridge DTOs
-  math.ts                -- Point2D, Rect2D, TransformMatrix
+  index.ts               -- root barrel: IDs and bridge DTOs
   ids.ts                 -- branded IDs + cast helpers
   bridge/
     index.ts             -- stable bridge DTO barrel

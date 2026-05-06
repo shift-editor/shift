@@ -61,7 +61,7 @@ export class DebugOverlays {
   }
 
   #drawGlyphBbox(canvas: Canvas, glyph: Glyph, color: string): void {
-    const b = glyph.bbox;
+    const b = glyph.bounds;
     if (!b) return;
     canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
   }

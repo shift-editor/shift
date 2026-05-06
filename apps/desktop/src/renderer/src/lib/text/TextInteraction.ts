@@ -18,7 +18,7 @@
  * will live in its own `CompositeInspection` class when that feature is
  * rebuilt — intentionally not folded in here.
  */
-import { signal, batch, type WritableSignal, type Signal } from "@/lib/reactive/signal";
+import { signal, batch, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import type { Cell } from "./layout";
 
 export interface EditingTarget {

@@ -10,11 +10,14 @@ export const Landing = () => {
 
   const openFont = (filePath: string) => {
     const editor = getEditor();
+
     editor.loadFont(filePath);
-    editor.updateMetricsFromFont();
+
     setFilePath(filePath);
     clearDirty();
+
     documentPersistence.openDocument(filePath);
+
     navigate("/home");
   };
 
@@ -27,14 +30,13 @@ export const Landing = () => {
 
   const handleNewFont = () => {
     const editor = getEditor();
-    const name = editor.font.glyphName(65);
-    const handle = { glyphName: name, unicode: 65 };
-    editor.setGlyphHandle(handle);
-    editor.openGlyph(handle);
-    editor.font.reset();
+    editor.resetFont();
+
     setFilePath(null);
     clearDirty();
+
     documentPersistence.closeDocument();
+
     navigate("/home");
   };
 

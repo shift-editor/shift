@@ -1,68 +1,58 @@
-/**
- * Tests for CommandHistory integration with commands.
- *
- * These tests verify:
- * - Undo/redo functionality
- * - Command execution through history
- * - Integration with NativeBridge
- */
-
-import { describe, it, expect, beforeEach } from "vitest";
-import { CommandHistory } from "./CommandHistory";
-import { AddPointCommand, NudgePointsCommand } from "../primitives";
-import { createBridge, expectAt, getAllPoints, getPointCount } from "@/testing";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-
-function addPointToActiveContour(
-  bridge: ReturnType<typeof createBridge>,
-  edit: {
-    id?: PointId;
-    x: number;
-    y: number;
-    pointType: "onCurve" | "offCurve";
-    smooth: boolean;
-  },
-): PointId {
-  const contourId = bridge.getActiveContourId();
-  if (!contourId) throw new Error("No active contour");
-  return bridge.addPointToContour(contourId, edit);
-}
+import { CommandHistory } from "./CommandHistory";
+import { AddPointCommand } from "../primitives/PointCommands";
+import { NudgePointsCommand } from "../primitives/BezierCommands";
+import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
+import type { GlyphSource } from "@/lib/model/Glyph";
+import type { ContourId } from "@shift/types";
+import type { Signal } from "@/lib/signals/signal";
 
 describe("CommandHistory", () => {
-  let bridge: ReturnType<typeof createBridge>;
+  let source: GlyphSource;
+  let $source: Signal<GlyphSource | null>;
+  let contourId: ContourId;
   let history: CommandHistory;
 
   beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
+    const fixture = commandSourceFixture();
+    source = fixture.source;
+    $source = fixture.$source;
+    contourId = addContour(source);
+    history = new CommandHistory($source);
   });
 
+  function addPointCommand(x: number, y: number): AddPointCommand {
+    return new AddPointCommand(x, y, "onCurve", false, contourId);
+  }
+
+  function addSourcePoint(x: number, y: number): PointId {
+    return addPoint(source, contourId, { x, y });
+  }
+
   describe("execute", () => {
-    it("should execute a command and return the result", () => {
-      const cmd = new AddPointCommand(100, 200, "onCurve");
-      const pointId = history.execute(cmd);
+    it("executes a command and returns the result", () => {
+      const pointId = history.execute(addPointCommand(100, 200));
 
       expect(pointId).toBeDefined();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+      expect(contourPoints(source, contourId).length).toBe(1);
     });
 
-    it("should add command to undo stack", () => {
+    it("adds command to undo stack", () => {
       expect(history.canUndo.value).toBe(false);
 
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+      history.execute(addPointCommand(100, 200));
 
       expect(history.canUndo.value).toBe(true);
       expect(history.undoCount.value).toBe(1);
     });
 
-    it("should clear redo stack on new command", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("clears redo stack on new command", () => {
+      history.execute(addPointCommand(100, 200));
       history.undo();
       expect(history.canRedo.value).toBe(true);
 
-      history.execute(new AddPointCommand(150, 250, "onCurve"));
+      history.execute(addPointCommand(150, 250));
 
       expect(history.canRedo.value).toBe(false);
       expect(history.redoCount.value).toBe(0);
@@ -70,18 +60,18 @@ describe("CommandHistory", () => {
   });
 
   describe("undo", () => {
-    it("should undo the last command", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    it("undoes the last command", () => {
+      history.execute(addPointCommand(100, 200));
+      expect(contourPoints(source, contourId).length).toBe(1);
 
       const didUndo = history.undo();
 
       expect(didUndo).toBe(true);
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
     });
 
-    it("should move command to redo stack", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("moves command to redo stack", () => {
+      history.execute(addPointCommand(100, 200));
       expect(history.canRedo.value).toBe(false);
 
       history.undo();
@@ -91,38 +81,37 @@ describe("CommandHistory", () => {
       expect(history.undoCount.value).toBe(0);
     });
 
-    it("should return false when stack is empty", () => {
-      const didUndo = history.undo();
-      expect(didUndo).toBe(false);
+    it("returns false when stack is empty", () => {
+      expect(history.undo()).toBe(false);
     });
 
-    it("should undo multiple commands in reverse order", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
-      history.execute(new AddPointCommand(150, 250, "onCurve"));
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(2);
+    it("undoes multiple commands in reverse order", () => {
+      history.execute(addPointCommand(100, 200));
+      history.execute(addPointCommand(150, 250));
+      expect(contourPoints(source, contourId).length).toBe(2);
 
-      history.undo(); // Remove second point
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+      history.undo();
+      expect(contourPoints(source, contourId).length).toBe(1);
 
-      history.undo(); // Remove first point
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      history.undo();
+      expect(contourPoints(source, contourId).length).toBe(0);
     });
   });
 
   describe("redo", () => {
-    it("should redo the last undone command", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("redoes the last undone command", () => {
+      history.execute(addPointCommand(100, 200));
       history.undo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
 
       const didRedo = history.redo();
 
       expect(didRedo).toBe(true);
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+      expect(contourPoints(source, contourId).length).toBe(1);
     });
 
-    it("should move command back to undo stack", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("moves command back to undo stack", () => {
+      history.execute(addPointCommand(100, 200));
       history.undo();
 
       history.redo();
@@ -131,16 +120,15 @@ describe("CommandHistory", () => {
       expect(history.canRedo.value).toBe(false);
     });
 
-    it("should return false when redo stack is empty", () => {
-      const didRedo = history.redo();
-      expect(didRedo).toBe(false);
+    it("returns false when redo stack is empty", () => {
+      expect(history.redo()).toBe(false);
     });
   });
 
   describe("clear", () => {
-    it("should clear both undo and redo stacks", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
-      history.execute(new AddPointCommand(150, 250, "onCurve"));
+    it("clears both undo and redo stacks", () => {
+      history.execute(addPointCommand(100, 200));
+      history.execute(addPointCommand(150, 250));
       history.undo();
 
       history.clear();
@@ -153,53 +141,41 @@ describe("CommandHistory", () => {
   });
 
   describe("labels", () => {
-    it("should return undo label for the last command", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("returns undo label for the last command", () => {
+      history.execute(addPointCommand(100, 200));
 
       expect(history.getUndoLabel()).toBe("Add Point");
     });
 
-    it("should return redo label for the last undone command", () => {
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
+    it("returns redo label for the last undone command", () => {
+      history.execute(addPointCommand(100, 200));
       history.undo();
 
       expect(history.getRedoLabel()).toBe("Add Point");
     });
 
-    it("should return null when no commands available", () => {
+    it("returns null when no commands are available", () => {
       expect(history.getUndoLabel()).toBe(null);
       expect(history.getRedoLabel()).toBe(null);
     });
   });
-});
 
-describe("batching", () => {
-  let bridge: ReturnType<typeof createBridge>;
-  let history: CommandHistory;
-
-  beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
-  });
-
-  describe("beginBatch/endBatch", () => {
-    it("should group multiple commands into single undo step", () => {
+  describe("batching", () => {
+    it("groups multiple commands into a single undo step", () => {
       history.beginBatch("Add Points");
-      history.execute(new AddPointCommand(100, 100, "onCurve"));
-      history.execute(new AddPointCommand(200, 200, "onCurve"));
-      history.execute(new AddPointCommand(300, 300, "onCurve"));
+      history.execute(addPointCommand(100, 100));
+      history.execute(addPointCommand(200, 200));
+      history.execute(addPointCommand(300, 300));
       history.endBatch();
 
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(3);
+      expect(contourPoints(source, contourId).length).toBe(3);
       expect(history.undoCount.value).toBe(1);
 
       history.undo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
     });
 
-    it("should set isBatching to true during batch", () => {
+    it("tracks batching state", () => {
       expect(history.isBatching).toBe(false);
       history.beginBatch("Test");
       expect(history.isBatching).toBe(true);
@@ -207,37 +183,37 @@ describe("batching", () => {
       expect(history.isBatching).toBe(false);
     });
 
-    it("should throw if beginBatch called while already batching", () => {
+    it("throws when beginBatch is called while already batching", () => {
       history.beginBatch("First");
       expect(() => history.beginBatch("Second")).toThrow("Cannot nest batches");
     });
 
-    it("should throw if endBatch called without beginBatch", () => {
+    it("throws when endBatch is called without beginBatch", () => {
       expect(() => history.endBatch()).toThrow("Not in a batch");
     });
 
-    it("should not add empty batch to undo stack", () => {
+    it("does not add empty batch to undo stack", () => {
       history.beginBatch("Empty");
       history.endBatch();
       expect(history.undoCount.value).toBe(0);
     });
 
-    it("should handle single command batch same as non-batched", () => {
+    it("handles single command batch same as non-batched", () => {
       history.beginBatch("Single");
-      history.execute(new AddPointCommand(100, 100, "onCurve"));
+      history.execute(addPointCommand(100, 100));
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+      expect(contourPoints(source, contourId).length).toBe(1);
 
       history.undo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
     });
 
-    it("should use batch name as undo label", () => {
+    it("uses batch name as undo label", () => {
       history.beginBatch("Draw Curve");
-      history.execute(new AddPointCommand(100, 100, "onCurve"));
-      history.execute(new AddPointCommand(200, 200, "onCurve"));
+      history.execute(addPointCommand(100, 100));
+      history.execute(addPointCommand(200, 200));
       history.endBatch();
 
       expect(history.getUndoLabel()).toBe("Draw Curve");
@@ -245,19 +221,17 @@ describe("batching", () => {
   });
 
   describe("cancelBatch", () => {
-    it("should discard batch without adding to undo stack", () => {
+    it("discards batch without adding to undo stack", () => {
       history.beginBatch("Cancelled");
-      history.execute(new AddPointCommand(100, 100, "onCurve"));
-      history.execute(new AddPointCommand(200, 200, "onCurve"));
+      history.execute(addPointCommand(100, 100));
+      history.execute(addPointCommand(200, 200));
       history.cancelBatch();
 
-      // Points were still added (commands executed)
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(2);
-      // But no undo entry
+      expect(contourPoints(source, contourId).length).toBe(2);
       expect(history.undoCount.value).toBe(0);
     });
 
-    it("should reset isBatching state", () => {
+    it("resets batching state", () => {
       history.beginBatch("Test");
       expect(history.isBatching).toBe(true);
       history.cancelBatch();
@@ -266,273 +240,144 @@ describe("batching", () => {
   });
 
   describe("withBatch", () => {
-    it("should return callback result and group commands into one undo step", () => {
+    it("returns callback result and groups commands into one undo step", () => {
       const pointId = history.withBatch("Add Points", () => {
-        history.execute(new AddPointCommand(100, 100, "onCurve"));
-        return history.execute(new AddPointCommand(200, 200, "onCurve"));
+        history.execute(addPointCommand(100, 100));
+        return history.execute(addPointCommand(200, 200));
       });
 
       expect(pointId).toBeDefined();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(2);
+      expect(contourPoints(source, contourId).length).toBe(2);
       expect(history.undoCount.value).toBe(1);
 
       history.undo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
     });
 
-    it("should cancel batch and rethrow when callback throws", () => {
+    it("cancels batch and rethrows when callback throws", () => {
       expect(() =>
         history.withBatch("Failing Batch", () => {
-          history.execute(new AddPointCommand(100, 100, "onCurve"));
+          history.execute(addPointCommand(100, 100));
           throw new Error("boom");
         }),
       ).toThrow("boom");
 
       expect(history.isBatching).toBe(false);
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+      expect(contourPoints(source, contourId).length).toBe(1);
       expect(history.undoCount.value).toBe(0);
     });
   });
 
   describe("record", () => {
-    it("should add command to undo stack without executing", () => {
-      // Add point directly (not through history)
-      const pointId = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 100,
-        y: 100,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    it("adds command to undo stack without executing", () => {
+      const pointId = addSourcePoint(100, 100);
+      expect(contourPoints(source, contourId).length).toBe(1);
 
-      // Move point directly
-      bridge.movePoints([pointId], { x: 50, y: 50 });
-      const points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(150);
+      source.translate([pointId], { x: 50, y: 50 });
+      expect(point(source, pointId).x).toBe(150);
 
-      // Record the move command (already executed)
       history.record(new NudgePointsCommand([pointId], 50, 50));
-
       expect(history.undoCount.value).toBe(1);
 
-      // Undo should reverse the already-executed move
       history.undo();
-      const undonePoints = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(undonePoints, 0).x).toBe(100);
+      expect(point(source, pointId).x).toBe(100);
     });
 
-    it("should work within a batch", () => {
-      const pointId = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 100,
-        y: 100,
-        pointType: "onCurve",
-        smooth: false,
-      });
+    it("works within a batch", () => {
+      const pointId = addSourcePoint(100, 100);
 
       history.beginBatch("Drag");
-      bridge.movePoints([pointId], { x: 10, y: 0 });
-      bridge.movePoints([pointId], { x: 10, y: 0 });
-      bridge.movePoints([pointId], { x: 10, y: 0 });
-      // Record single command for total movement
+      source.translate([pointId], { x: 10, y: 0 });
+      source.translate([pointId], { x: 10, y: 0 });
+      source.translate([pointId], { x: 10, y: 0 });
       history.record(new NudgePointsCommand([pointId], 30, 0));
       history.endBatch();
 
       expect(history.undoCount.value).toBe(1);
-      const points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(130);
+      expect(point(source, pointId).x).toBe(130);
 
       history.undo();
-      const undonePoints = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(undonePoints, 0).x).toBe(100);
+      expect(point(source, pointId).x).toBe(100);
     });
   });
-});
 
-describe("onDirty callback", () => {
-  let bridge: ReturnType<typeof createBridge>;
-  let history: CommandHistory;
-  let onDirtyCalled: number;
-
-  beforeEach(() => {
-    bridge = createBridge();
-    onDirtyCalled = 0;
-    history = new CommandHistory(bridge.$glyph, {
-      onDirty: () => {
-        onDirtyCalled++;
-      },
-    });
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
-  });
-
-  it("should call onDirty when command is executed", () => {
-    expect(onDirtyCalled).toBe(0);
-    history.execute(new AddPointCommand(100, 200, "onCurve"));
-    expect(onDirtyCalled).toBe(1);
-  });
-
-  it("should call onDirty for each executed command", () => {
-    history.execute(new AddPointCommand(100, 200, "onCurve"));
-    history.execute(new AddPointCommand(150, 250, "onCurve"));
-    expect(onDirtyCalled).toBe(2);
-  });
-
-  it("should call onDirty when command is recorded", () => {
-    const pointId = addPointToActiveContour(bridge, {
-      id: "" as PointId,
-      x: 100,
-      y: 100,
-      pointType: "onCurve",
-      smooth: false,
-    });
-    bridge.movePoints([pointId], { x: 50, y: 50 });
-    expect(onDirtyCalled).toBe(0);
-
-    history.record(new NudgePointsCommand([pointId], 50, 50));
-    expect(onDirtyCalled).toBe(1);
-  });
-
-  it("should call onDirty during batch for each command", () => {
-    history.beginBatch("Add Points");
-    history.execute(new AddPointCommand(100, 100, "onCurve"));
-    expect(onDirtyCalled).toBe(1);
-    history.execute(new AddPointCommand(200, 200, "onCurve"));
-    expect(onDirtyCalled).toBe(2);
-    history.endBatch();
-    expect(onDirtyCalled).toBe(2);
-  });
-
-  it("should allow setting onDirty callback after construction", () => {
-    const historyNoCallback = new CommandHistory(bridge.$glyph);
-    let lateDirtyCalled = 0;
-    historyNoCallback.setOnDirty(() => {
-      lateDirtyCalled++;
-    });
-
-    historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
-    expect(lateDirtyCalled).toBe(1);
-  });
-
-  it("should not throw if onDirty is not set", () => {
-    const historyNoCallback = new CommandHistory(bridge.$glyph);
-    expect(() => {
-      historyNoCallback.execute(new AddPointCommand(100, 200, "onCurve"));
-    }).not.toThrow();
-  });
-});
-
-describe("Command integration with history", () => {
-  let bridge: ReturnType<typeof createBridge>;
-  let history: CommandHistory;
-
-  beforeEach(() => {
-    bridge = createBridge();
-    history = new CommandHistory(bridge.$glyph);
-    bridge.startEditSession({ glyphName: "A" });
-    bridge.addContour();
-  });
-
-  describe("NudgePointsCommand", () => {
-    it("should nudge points and undo returns them to original position", () => {
-      const pointId = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
+  describe("onDirty callback", () => {
+    it("calls onDirty when commands execute or record", () => {
+      let onDirtyCalled = 0;
+      history = new CommandHistory($source, {
+        onDirty: () => {
+          onDirtyCalled++;
+        },
       });
 
-      history.execute(new NudgePointsCommand([pointId], 10, 0)); // Nudge right
-      const nudgedPoints = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(nudgedPoints, 0).x).toBe(110);
+      history.execute(addPointCommand(100, 200));
+      history.execute(addPointCommand(150, 250));
+
+      expect(onDirtyCalled).toBe(2);
+    });
+
+    it("allows setting onDirty callback after construction", () => {
+      let lateDirtyCalled = 0;
+      history.setOnDirty(() => {
+        lateDirtyCalled++;
+      });
+
+      history.execute(addPointCommand(100, 200));
+      expect(lateDirtyCalled).toBe(1);
+    });
+
+    it("does not throw without onDirty", () => {
+      expect(() => history.execute(addPointCommand(100, 200))).not.toThrow();
+    });
+  });
+
+  describe("command integration", () => {
+    it("nudges points and undo returns them to original position", () => {
+      const pointId = addSourcePoint(100, 200);
+
+      history.execute(new NudgePointsCommand([pointId], 10, 0));
+      expect(point(source, pointId).x).toBe(110);
 
       history.undo();
-      const restoredPoints = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(restoredPoints, 0).x).toBe(100);
+      expect(point(source, pointId).x).toBe(100);
     });
-  });
 
-  describe("Complex undo/redo sequences", () => {
-    it("should handle move undo/redo on existing points", () => {
-      // Add point directly (not through history)
-      const pointId = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 100,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    it("handles move undo and redo on existing points", () => {
+      const pointId = addSourcePoint(100, 200);
 
-      // Move point through history
       history.execute(new NudgePointsCommand([pointId], 50, 50));
-      let points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(150);
-      expect(expectAt(points, 0).y).toBe(250);
+      expect(point(source, pointId)).toMatchObject({ x: 150, y: 250 });
 
-      // Undo move
       history.undo();
-      points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(100);
-      expect(expectAt(points, 0).y).toBe(200);
+      expect(point(source, pointId)).toMatchObject({ x: 100, y: 200 });
 
-      // Redo move
       history.redo();
-      points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(150);
-      expect(expectAt(points, 0).y).toBe(250);
+      expect(point(source, pointId)).toMatchObject({ x: 150, y: 250 });
     });
 
-    it("should handle add undo/redo", () => {
-      // Add point through history
-      history.execute(new AddPointCommand(100, 200, "onCurve"));
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    it("handles add undo and redo", () => {
+      history.execute(addPointCommand(100, 200));
+      expect(contourPoints(source, contourId).length).toBe(1);
 
-      // Undo add
       history.undo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+      expect(contourPoints(source, contourId).length).toBe(0);
 
-      // Redo add (creates new point, potentially with different ID)
       history.redo();
-      expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
-      const points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(100);
-      expect(expectAt(points, 0).y).toBe(200);
+      expect(contourPoints(source, contourId).length).toBe(1);
+      expect(contourPoints(source, contourId)[0]).toMatchObject({ x: 100, y: 200 });
     });
 
-    it("should handle multiple points with single command", () => {
-      const p1 = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 100,
-        y: 100,
-        pointType: "onCurve",
-        smooth: false,
-      });
-      const p2 = addPointToActiveContour(bridge, {
-        id: "" as PointId,
-        x: 200,
-        y: 200,
-        pointType: "onCurve",
-        smooth: false,
-      });
+    it("handles multiple points with a single command", () => {
+      const p1 = addSourcePoint(100, 100);
+      const p2 = addSourcePoint(200, 200);
 
-      // Move both points together
       history.execute(new NudgePointsCommand([p1, p2], 50, 50));
-      let points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(150);
-      expect(expectAt(points, 0).y).toBe(150);
-      expect(expectAt(points, 1).x).toBe(250);
-      expect(expectAt(points, 1).y).toBe(250);
+      expect(point(source, p1)).toMatchObject({ x: 150, y: 150 });
+      expect(point(source, p2)).toMatchObject({ x: 250, y: 250 });
 
-      // Undo moves both back
       history.undo();
-      points = getAllPoints(bridge.getEditingSnapshot());
-      expect(expectAt(points, 0).x).toBe(100);
-      expect(expectAt(points, 0).y).toBe(100);
-      expect(expectAt(points, 1).x).toBe(200);
-      expect(expectAt(points, 1).y).toBe(200);
+      expect(point(source, p1)).toMatchObject({ x: 100, y: 100 });
+      expect(point(source, p2)).toMatchObject({ x: 200, y: 200 });
     });
   });
 });

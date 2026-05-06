@@ -19,10 +19,10 @@
  * ```
  */
 
-import { Mat, type MatModel } from "@shift/geo";
-import type { Point2D } from "@shift/types";
+import { Mat, type MatModel, type Point2D } from "@shift/geo";
 import type { ReflectAxis } from "./types";
-import type { PointPosition } from "./PointPosition";
+
+type Coordinate = { readonly x: number; readonly y: number };
 
 /**
  * Pure transformation functions for geometry manipulation.
@@ -36,7 +36,7 @@ export const Transform = {
    * @param origin - Center of rotation
    * @returns New array of transformed points (original unchanged)
    */
-  rotatePoints(points: readonly PointPosition[], angle: number, origin: Point2D): PointPosition[] {
+  rotatePoints<T extends Coordinate>(points: readonly T[], angle: number, origin: Point2D): T[] {
     return Transform.applyMatrix(points, Mat.Rotate(angle), origin);
   },
 
@@ -49,12 +49,12 @@ export const Transform = {
    * @param origin - Center of scaling
    * @returns New array of transformed points (original unchanged)
    */
-  scalePoints(
-    points: readonly PointPosition[],
+  scalePoints<T extends Coordinate>(
+    points: readonly T[],
     sx: number,
     sy: number,
     origin: Point2D,
-  ): PointPosition[] {
+  ): T[] {
     return Transform.applyMatrix(points, Mat.Scale(sx, sy), origin);
   },
 
@@ -66,11 +66,11 @@ export const Transform = {
    * @param origin - Point the axis passes through
    * @returns New array of transformed points (original unchanged)
    */
-  reflectPoints(
-    points: readonly PointPosition[],
+  reflectPoints<T extends Coordinate>(
+    points: readonly T[],
     axis: ReflectAxis,
     origin: Point2D,
-  ): PointPosition[] {
+  ): T[] {
     const matrix =
       axis === "horizontal"
         ? Mat.ReflectHorizontal()
@@ -89,11 +89,11 @@ export const Transform = {
    * @param origin - Center of transformation (default: {0, 0})
    * @returns New array of transformed points (original unchanged)
    */
-  applyMatrix(
-    points: readonly PointPosition[],
+  applyMatrix<T extends Coordinate>(
+    points: readonly T[],
     matrix: MatModel,
     origin: Point2D = { x: 0, y: 0 },
-  ): PointPosition[] {
+  ): T[] {
     // Build composite: Translate(-origin) → Matrix → Translate(origin)
     // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
     const toOrigin = Mat.Translate(-origin.x, -origin.y);
@@ -102,7 +102,7 @@ export const Transform = {
 
     return points.map((p) => {
       const transformed = Mat.applyToPoint(composite, p);
-      return { id: p.id, x: transformed.x, y: transformed.y };
+      return { ...p, x: transformed.x, y: transformed.y };
     });
   },
 
@@ -120,42 +120,42 @@ export const Transform = {
   /**
    * Rotate points by 90 degrees counter-clockwise.
    */
-  rotate90CCW(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
+  rotate90CCW<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
     return Transform.rotatePoints(points, Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 90 degrees clockwise.
    */
-  rotate90CW(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
+  rotate90CW<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
     return Transform.rotatePoints(points, -Math.PI / 2, origin);
   },
 
   /**
    * Rotate points by 180 degrees.
    */
-  rotate180(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
+  rotate180<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
     return Transform.rotatePoints(points, Math.PI, origin);
   },
 
   /**
    * Scale uniformly (same factor for X and Y).
    */
-  scaleUniform(points: readonly PointPosition[], factor: number, origin: Point2D): PointPosition[] {
+  scaleUniform<T extends Coordinate>(points: readonly T[], factor: number, origin: Point2D): T[] {
     return Transform.scalePoints(points, factor, factor, origin);
   },
 
   /**
    * Flip horizontally (mirror across horizontal axis through origin).
    */
-  flipHorizontal(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
+  flipHorizontal<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
     return Transform.reflectPoints(points, "horizontal", origin);
   },
 
   /**
    * Flip vertically (mirror across vertical axis through origin).
    */
-  flipVertical(points: readonly PointPosition[], origin: Point2D): PointPosition[] {
+  flipVertical<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
     return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;

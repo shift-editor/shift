@@ -2,17 +2,19 @@ import type { Axis } from "@shift/types";
 import { Slider } from "@shift/ui";
 import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
 import { useAxes } from "@/hooks/useAxes";
-import { useVariationLocation } from "@/hooks/useVariationLocation";
-import { useApplyVariation } from "@/hooks/useApplyVariation";
+import { useDesignLocation } from "@/hooks/useDesignLocation";
+import { axisValue, withAxisValue } from "@/lib/variation/location";
 
 export const AxesPanel = () => {
   const axes = useAxes();
-  const [location] = useVariationLocation();
-  const apply = useApplyVariation();
+  const [location, setDesignLocation] = useDesignLocation();
 
   if (axes.length === 0) return null;
 
-  const onAxisChange = (tag: string, value: number) => apply({ ...location, [tag]: value });
+  const onAxisChange = (axis: Axis, value: number) => {
+    const nextLocation = withAxisValue(location, axis, value);
+    setDesignLocation(nextLocation);
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -24,14 +26,14 @@ export const AxesPanel = () => {
 
           <div className="flex items-center gap-4">
             <EditableSidebarInput
-              value={location[axis.tag] ?? axis.default}
+              value={axisValue(location, axis)}
               className="w-14"
-              onValueChange={(value) => onAxisChange(axis.tag, value)}
+              onValueChange={(value) => onAxisChange(axis, value)}
             />
             <AxisSlider
               axis={axis}
-              value={location[axis.tag] ?? axis.default}
-              onChange={(value) => onAxisChange(axis.tag, value)}
+              value={axisValue(location, axis)}
+              onChange={(value) => onAxisChange(axis, value)}
             />
           </div>
         </div>

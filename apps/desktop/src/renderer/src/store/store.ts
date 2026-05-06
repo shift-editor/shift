@@ -1,9 +1,10 @@
 import { Editor } from "@/lib/editor/Editor";
-import { NativeBridge } from "@/bridge/NativeBridge";
 import { electronSystemClipboard } from "@/lib/clipboard";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { create } from "zustand";
 import type { StoreApi } from "zustand";
+import type { ShiftBridge } from "@shift/bridge";
+import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 
 interface AppState {
   editor: Editor;
@@ -23,9 +24,23 @@ function getFileNameFromPath(path: string | null): string | null {
   return parts[parts.length - 1] || null;
 }
 
+function createShiftBridge(): ShiftBridge {
+  if (!window.shiftBridge) {
+    throw Error("native bridge has not been exposed by preload");
+  }
+
+  return window.shiftBridge;
+}
+
+let instance: GlyphInfo | null = null;
+export function getGlyphInfo(): GlyphInfo {
+  if (!instance) instance = new GlyphInfo(defaultResources);
+  return instance;
+}
+
 const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
   const editor = new Editor({
-    bridge: new NativeBridge(),
+    bridge: createShiftBridge(),
     clipboard: electronSystemClipboard,
   });
   registerBuiltInTools(editor);

@@ -11,27 +11,27 @@ describe("SvgImporter", () => {
     }
     return value;
   };
-  const requireImport = (input: string) => requireValue(importer.import(input));
+  const requireImport = (input: string) => requireValue(importer.importText(input));
 
-  describe("canImport", () => {
+  describe("canImportText", () => {
     it("recognizes SVG elements", () => {
-      expect(importer.canImport('<svg width="100" height="100"></svg>')).toBe(true);
+      expect(importer.canImportText('<svg width="100" height="100"></svg>')).toBe(true);
     });
 
     it("recognizes path elements", () => {
-      expect(importer.canImport('<path d="M0,0 L100,100"/>')).toBe(true);
+      expect(importer.canImportText('<path d="M0,0 L100,100"/>')).toBe(true);
     });
 
     it("recognizes raw path data", () => {
-      expect(importer.canImport("M0,0 L100,100 Z")).toBe(true);
+      expect(importer.canImportText("M0,0 L100,100 Z")).toBe(true);
     });
 
     it("rejects plain text", () => {
-      expect(importer.canImport("hello world")).toBe(false);
+      expect(importer.canImportText("hello world")).toBe(false);
     });
 
     it("rejects JSON", () => {
-      expect(importer.canImport('{"format": "shift/glyph-data"}')).toBe(false);
+      expect(importer.canImportText('{"format": "shift/glyph-data"}')).toBe(false);
     });
   });
 
@@ -117,7 +117,7 @@ describe("SvgImporter", () => {
     });
 
     it("returns null for invalid input", () => {
-      const result = importer.import("");
+      const result = importer.importText("");
       expect(result).toBeNull();
     });
 

@@ -29,7 +29,7 @@ export interface ToolContext<S> {
  * state `S` and the {@link Editor}. Implement `canHandle` as a fast guard
  * (typically a state-type + event-type check) and `transition` as the pure
  * state computation. Use `onTransition` for post-transition side effects
- * that need both the previous and next states (e.g. starting a snap session).
+ * that need both the previous and next states.
  */
 export interface Behavior<S> {
   // New explicit event handlers

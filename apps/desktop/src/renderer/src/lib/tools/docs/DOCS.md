@@ -8,7 +8,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** Behaviors are tried in **array order**; first handler that returns `true` wins. Reordering the `behaviors` array changes tool semantics. **CRITICAL**: placing a broad handler (e.g. `Selection`) before a narrow one (e.g. `ToggleSmooth`) will shadow the narrow handler.
 
-- **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. Behaviors must not hold state that survives across events (private fields for long-lived resources like `GlyphDraft` or `DragSnapSession` are the exception, cleaned up in `onStateEnter`/`onStateExit`).
+- **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. Behaviors must not hold state that survives across events unless that resource is cleaned up in `onStateEnter`/`onStateExit`.
 
 - **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `renderOverlay` / `renderScene` / `renderBackground` methods.
 
@@ -30,7 +30,7 @@ tools/
     GestureDetector.ts   — pointer+timing -> ToolEvent (click, drag, doubleClick, ...)
     ToolManager.ts       — tool orchestration, rAF coalescing, temporary tool override
     ToolManifest.ts      — ToolManifest registration descriptor
-    StateDiagram.ts      — defineStateDiagram, transitionInDiagram for compliance tests
+    StateDiagram.ts      — defineStateDiagram for declarative tool state specs
     ToolStateMap.ts      — union map of all built-in tool states
     createContext.ts     — ToolName, ToolState, BUILT_IN_TOOL_IDS
   hand/                  — canvas panning (createBehavior style)
@@ -101,12 +101,12 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 ### Draft pattern for drag mutations
 
-Behaviors that move geometry (Translate, Resize, Rotate, BendCurve) use `GlyphDraft`:
+Behaviors that move source geometry use `SourceEditDraft`:
 
-1. `editor.createDraft()` on drag start -- snapshots the glyph.
-2. `draft.setPositions(updates)` on each drag event -- applies deltas to the snapshot.
-3. `draft.finish(label)` on drag end -- commits as an undoable command.
-4. `draft.discard()` on drag cancel -- restores the original snapshot.
+1. `editor.beginSourceEditDraft(subject)` on drag start -- captures source positions for selected points/anchors.
+2. `draft.preview(...)` on each drag event -- applies preview positions to the reactive source.
+3. `draft.commit(label)` on drag end -- commits the final positions as an undoable command.
+4. `draft.discard()` on drag cancel -- restores the captured source positions.
 
 ### Rendering layers
 
@@ -230,10 +230,9 @@ onDragCancel(state, ctx) {
 
 ## Related
 
-- `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph, snapping).
+- `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
 - `Canvas` — rendering target passed to `renderOverlay` / `renderScene` / `renderBackground`.
 - `GlyphDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
-- `DragSnapSession` — snapping during point drags; created via `editor.createDragSnapSession`.
 - `Coordinates` — `{ screen, scene, glyphLocal }` coordinate bundle on pointer events.
 - `TextRunController` — text input controller used by Text tool.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

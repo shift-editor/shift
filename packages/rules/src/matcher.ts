@@ -2,9 +2,9 @@
  * Pattern Matcher - Matches point patterns against rules
  */
 
-import { Contours, Glyphs } from "@shift/font";
-import type { PointId, Point, Contour, Glyph } from "@shift/types";
+import type { PointId } from "@shift/types";
 import type {
+  ConstrainDragGlyph,
   MatchedRule,
   MatchedRuleAffected,
   MatchedRuleById,
@@ -19,11 +19,14 @@ import type { AffectedPointSpec, RuleMatch } from "./rules";
 
 const WINDOW_SIZES = [5, 3] as const;
 
+type ConstrainDragContour = ConstrainDragGlyph["contours"][number];
+type ConstrainDragPoint = ConstrainDragContour["points"][number];
+
 /**
  * Get point token for pattern matching
  */
 function getPointToken(
-  point: Point | undefined,
+  point: ConstrainDragPoint | undefined,
   selectedIds: ReadonlySet<PointId>,
   isCentral: boolean,
 ): string {
@@ -45,14 +48,19 @@ function getPointToken(
   return point.smooth ? TOKEN_SMOOTH : TOKEN_CORNER;
 }
 
-type ContourMatchInput = Contour;
+type ContourMatchInput = ConstrainDragContour;
 
 function getPointAtOffset(
   contour: ContourMatchInput,
   centerIndex: number,
   offset: number,
-): Point | undefined {
-  return Contours.at(contour, centerIndex + offset, contour.closed) ?? undefined;
+): ConstrainDragPoint | undefined {
+  const index = centerIndex + offset;
+  if (index >= 0 && index < contour.points.length) return contour.points[index];
+  if (!contour.closed || contour.points.length === 0) return undefined;
+
+  const wrapped = ((index % contour.points.length) + contour.points.length) % contour.points.length;
+  return contour.points[wrapped];
 }
 
 /**
@@ -218,7 +226,7 @@ export function pickRule(
   pointId: PointId,
   selectedIds: ReadonlySet<PointId>,
 ): MatchedRule | null {
-  const pointIndex = Contours.findPointIndex(contour, pointId);
+  const pointIndex = contour.points.findIndex((point) => point.id === pointId);
   if (pointIndex === -1) {
     return null;
   }
@@ -239,13 +247,13 @@ export function pickRuleAtIndex(
  * Build per-point rule diagnostics for the current selection.
  */
 export function diagnoseSelectionPatterns(
-  glyph: Glyph,
+  glyph: ConstrainDragGlyph,
   selectedIds: ReadonlySet<PointId>,
 ): SelectionRuleDiagnostics {
   const diagnostics: PointRuleDiagnostics[] = [];
 
   for (const pointId of selectedIds) {
-    const found = Glyphs.findPoint(glyph, pointId);
+    const found = findPoint(glyph, pointId);
     if (!found) {
       diagnostics.push({
         pointId,
@@ -273,4 +281,16 @@ export function diagnoseSelectionPatterns(
     selectedPointIds: [...selectedIds],
     points: diagnostics,
   };
+}
+
+function findPoint(
+  glyph: ConstrainDragGlyph,
+  pointId: PointId,
+): { contour: ConstrainDragContour; index: number } | null {
+  for (const contour of glyph.contours) {
+    const index = contour.points.findIndex((point) => point.id === pointId);
+    if (index !== -1) return { contour, index };
+  }
+
+  return null;
 }

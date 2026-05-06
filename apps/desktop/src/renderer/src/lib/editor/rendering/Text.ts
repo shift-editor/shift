@@ -7,8 +7,8 @@
  * and re-draws when they change.
  *
  * Coordinate space note: the canvas inside `renderToolScene` has been
- * translated by `editor.drawOffset` (Viewport.ts:174) so that `glyph.draw`
- * for the active glyph lands at world `drawOffset`. The TextLayout, by
+ * translated by `editor.drawOffset` (Viewport.ts:174) so the active glyph
+ * outline lands at world `drawOffset`. The TextLayout, by
  * contrast, holds glyph positions in *world* (scene) UPM space — same space
  * that `event.point` arrives in via `coords.scene`.
  *
@@ -25,13 +25,16 @@
 import type { Canvas } from "./Canvas";
 import type { Font } from "@/lib/model/Font";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { Signal } from "@/lib/signals/signal";
+import type { AxisLocation } from "@/types/variation";
 
 export class Text {
   draw(
     canvas: Canvas,
     run: TextRun,
     font: Font,
+    designLocation: Signal<AxisLocation>,
     drawOffset: Point2D,
     focusedGlyph: FocusedGlyph | null,
   ): void {
@@ -39,6 +42,7 @@ export class Text {
     if (!layout) return;
 
     const theme = canvas.theme.textRun;
+    const source = font.sourceAtOrDefault(designLocation.value);
 
     canvas.save();
     // Reverse the drawOffset translate so we draw in world UPM space.
@@ -63,21 +67,20 @@ export class Text {
             continue;
           }
 
-          // GlyphView.$path is a cached Path2D — only re-built when the
-          // variation location moves (or the glyph's geometry changes).
-          // The Editor's staticEffect already tracks $variationLocation
-          // and requests a scene redraw, so peek() is correct here.
-          const view = font.glyph(g.glyphName);
-          if (view) {
-            const path = view.$path.peek();
-            canvas.save();
-            canvas.translate(runBase + g.origin.x + g.xOffset, line.y + g.origin.y + g.yOffset);
-            canvas.fillPath(path, canvas.theme.glyph.fill);
-            if (g.cluster === hoveredCluster) {
-              canvas.strokePath(path, theme.hoverOutline, theme.hoverOutlineWidthPx);
-            }
-            canvas.restore();
+          if (!source) continue;
+          const glyph = font.glyph({ name: g.glyphName });
+          if (!glyph) continue;
+
+          const path = glyph.outline(designLocation).path;
+
+          canvas.save();
+          canvas.translate(runBase + g.origin.x + g.xOffset, line.y + g.origin.y + g.yOffset);
+          canvas.fillPath(path, canvas.theme.glyph.fill);
+
+          if (g.cluster === hoveredCluster) {
+            canvas.strokePath(path, theme.hoverOutline, theme.hoverOutlineWidthPx);
           }
+          canvas.restore();
         }
         runBase += r.advance;
       }

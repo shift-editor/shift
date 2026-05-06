@@ -1,4 +1,3 @@
-import { Contours } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -20,6 +19,6 @@ export class EscapeBehavior implements PenBehavior {
   private hasActiveDrawingContour(editor: Editor): boolean {
     const contour = editor.getActiveContour();
     if (!contour) return false;
-    return Contours.isOpen(contour) && !Contours.isEmpty(contour);
+    return !contour.closed && !contour.isEmpty;
   }
 }

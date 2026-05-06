@@ -2,7 +2,7 @@ import { FC, useEffect, useRef, useState } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
-import { effect } from "@/lib/reactive/signal";
+import { effect } from "@/lib/signals/signal";
 import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
@@ -32,17 +32,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   useEffect(() => {
     const parsed = Number.parseInt(glyphId, 16);
     const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
-    const glyphName = editor.font.glyphName(unicode);
+    const handle = editor.font.glyphHandleForUnicode(unicode);
+    if (!handle) return undefined;
 
     const initEditor = () => {
-      const handle = { glyphName, unicode };
-      editor.setGlyphHandle(handle);
-      editor.openGlyph(handle);
-
-      // Update viewport with actual font metrics (UPM, descender, guides)
-      editor.updateMetricsFromFont();
-
-      editor.requestRedraw();
+      editor.getGlyph(handle);
     };
 
     initEditor();

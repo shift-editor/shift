@@ -24,12 +24,15 @@ import type {
 } from "./types";
 import type { Positioner } from "./Positioner";
 import { Font } from "@/lib/model/Font";
+import type { Signal } from "@/lib/signals/signal";
+import type { AxisLocation } from "@/types/variation";
 
 export interface TextLayoutParams {
   cells: readonly Cell[];
   origin: Point2D;
   font: Font;
   positioner: Positioner;
+  designLocation: Signal<AxisLocation>;
 }
 
 interface AssembledLayout {
@@ -49,15 +52,15 @@ export class TextLayout {
   readonly #cells: readonly Cell[];
 
   constructor(params: TextLayoutParams) {
-    const { cells, origin, font, positioner } = params;
+    const { cells, origin, font, positioner, designLocation } = params;
     this.#cells = cells;
-    this.metrics = font.getMetrics();
+    this.metrics = font.metrics;
     this.origin = origin;
     this.bufferLength = cells.length;
 
     // splitParagraphs → segmentRuns → position → assemble
     const paragraphs: PositionedParagraph[] = splitParagraphs(cells).map((p) => ({
-      runs: segmentRuns(p).map((run) => positioner.position(run, font)),
+      runs: segmentRuns(p).map((run) => positioner.position(run, font, designLocation)),
       clusterStart: p.clusterStart,
       clusterEnd: p.clusterStart + p.glyphs.length + 1,
     }));

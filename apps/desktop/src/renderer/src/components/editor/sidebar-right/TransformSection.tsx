@@ -5,7 +5,7 @@ import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";

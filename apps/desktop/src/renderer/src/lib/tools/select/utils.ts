@@ -1,4 +1,4 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/geo";
 import { Vec2 } from "@shift/geo";
 
 export function normalizeRect(start: Point2D, current: Point2D): Rect2D {

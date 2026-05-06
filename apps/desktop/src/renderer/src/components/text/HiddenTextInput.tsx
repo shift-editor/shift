@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
-import { effect } from "@/lib/reactive/signal";
+import { effect } from "@/lib/signals/signal";
 import { linebreakCell } from "@/lib/text/layout";
 
 export function TextInput() {

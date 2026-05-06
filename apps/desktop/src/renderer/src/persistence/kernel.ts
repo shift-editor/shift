@@ -1,5 +1,5 @@
 import type { Editor } from "@/lib/editor/Editor";
-import { effect, type Effect } from "@/lib/reactive/signal";
+import { effect, type Effect } from "@/lib/signals/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
 import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";

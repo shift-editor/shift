@@ -24,14 +24,14 @@ export class TextTool extends BaseTool<TextState> {
     // the main glyph the user opened from the grid. Keying on activeGlyph
     // here would silently switch to a fresh per-active-glyph run when the
     // user toggles tools mid-slot-edit, wiping the run they were in.
-    const owner = this.editor.getGlyphHandle();
+    const owner = this.editor.rootGlyphHandle;
     if (!owner) {
       this.state = { type: "typing" };
       this.editor.setPreviewMode(true);
       return;
     }
 
-    const ownerName = owner.glyphName;
+    const ownerName = owner.name;
     const run = this.editor.textRuns.switchTo(ownerName);
     run.seed(glyphCell(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
     run.interaction.suspend();

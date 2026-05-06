@@ -8,10 +8,14 @@ import type { AnchorId } from "@shift/types";
 
 export const AnchorSection = () => {
   const editor = getEditor();
+
   const [singleAnchorId, setSingleAnchorId] = useState<AnchorId | null>(null);
+
   const [anchorName, setAnchorName] = useState<string | null>(null);
+
   const [anchorX, setAnchorX] = useState(0);
   const [anchorY, setAnchorY] = useState(0);
+
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
@@ -46,12 +50,12 @@ export const AnchorSection = () => {
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {
     if (!singleAnchorId) return;
-    const glyph = editor.glyph.peek();
-    if (!glyph) return;
+    const layer = editor.activeGlyphSource;
+    if (!layer) return;
 
     const nextX = axis === "x" ? value : anchorX;
     const nextY = axis === "y" ? value : anchorY;
-    glyph.setNodePositions([{ node: { kind: "anchor", id: singleAnchorId }, x: nextX, y: nextY }]);
+    layer.setPositions([{ kind: "anchor", id: singleAnchorId, x: nextX, y: nextY }]);
     editor.requestRedraw();
   };
 

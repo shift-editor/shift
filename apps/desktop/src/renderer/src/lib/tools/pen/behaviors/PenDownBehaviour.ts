@@ -1,37 +1,31 @@
-import { Contours } from "@shift/font";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { PenState, PenBehavior } from "../types";
+import { PenStroke } from "./PenStroke";
 
 export class PenDownBehaviour implements PenBehavior {
   onClick(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"click">): boolean {
     if (state.type !== "ready") return false;
 
     const editor = ctx.editor;
-    const glyph = editor.glyph.peek();
-    if (!glyph) return false;
+    const stroke = PenStroke.active(editor);
+    if (!stroke) return false;
 
     const localPoint = event.coords.glyphLocal;
-    const activeContour = editor.getActiveContour();
+    const activeContour = stroke.activeContour;
 
     editor.selection.clear();
 
     const hit = editor.hitTest(event.coords);
 
     if (!activeContour && !hit) {
-      const contourId = glyph.addContour();
-      glyph.addPointToContour(contourId, {
-        x: localPoint.x,
-        y: localPoint.y,
-        pointType: "onCurve",
-        smooth: false,
-      });
+      stroke.startContour(localPoint);
       ctx.setState({ type: "ready", mousePos: localPoint });
       return true;
     }
 
-    if (activeContour && Contours.canClose(activeContour, localPoint, editor.hitRadius)) {
-      glyph.closeContour();
+    if (activeContour && stroke.canClose(localPoint, editor.hitRadius)) {
+      stroke.closeActiveContour();
       ctx.setState({ type: "ready", mousePos: localPoint });
       return true;
     }
@@ -52,12 +46,7 @@ export class PenDownBehaviour implements PenBehavior {
 
     if (!activeContour) return false;
 
-    glyph.addPointToContour(activeContour.id, {
-      x: localPoint.x,
-      y: localPoint.y,
-      pointType: "onCurve",
-      smooth: false,
-    });
+    stroke.appendOnCurve(localPoint);
     ctx.setState({ type: "ready", mousePos: localPoint });
     return true;
   }

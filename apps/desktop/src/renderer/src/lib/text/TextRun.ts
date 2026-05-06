@@ -14,14 +14,15 @@
  * previousLine so vertical motion preserves horizontal position across short
  * lines. goalX resets on horizontal nav, click, and edits.
  */
-import { signal, computed, type Signal, type ComputedSignal } from "@/lib/reactive/signal";
+import { signal, computed, type Signal, type ComputedSignal } from "@/lib/signals/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphCell, TextLayout } from "./layout";
 import type { Cell, GlyphAnchor, GlyphCell, Positioner, TextRunId } from "./layout";
 import type { Font } from "@/lib/model/Font";
-import type { GlyphHandle } from "@shared/bridge/FontEngineAPI";
-import type { Point2D } from "@shift/types";
+import type { GlyphHandle } from "@shared/bridge/BridgeApi";
+import type { Point2D } from "@shift/geo";
+import type { AxisLocation } from "@/types/variation";
 
 export interface SelectionRect {
   x: number;
@@ -43,6 +44,7 @@ export class TextRun {
   readonly interaction: TextInteraction;
   readonly #font: Font;
   readonly #positioner: Positioner;
+  readonly #designLocation: Signal<AxisLocation>;
 
   readonly #$cursorVisible: Signal<boolean>;
   readonly #$layout: ComputedSignal<TextLayout | null>;
@@ -51,12 +53,18 @@ export class TextRun {
 
   #goalX: number | null = null;
 
-  constructor(id: TextRunId, font: Font, positioner: Positioner) {
+  constructor(
+    id: TextRunId,
+    font: Font,
+    positioner: Positioner,
+    designLocation: Signal<AxisLocation>,
+  ) {
     this.id = id;
     this.buffer = new TextBuffer();
     this.interaction = new TextInteraction();
     this.#font = font;
     this.#positioner = positioner;
+    this.#designLocation = designLocation;
     this.#$cursorVisible = signal(false);
 
     this.#$layout = computed(() => {
@@ -67,6 +75,7 @@ export class TextRun {
         origin: { x: this.buffer.originX, y: 0 },
         font: this.#font,
         positioner: this.#positioner,
+        designLocation: this.#designLocation,
       });
     });
 
@@ -217,7 +226,7 @@ export class TextRun {
       anchor,
       cell,
       glyph: {
-        glyphName: cell.glyphName,
+        name: cell.glyphName,
         ...(cell.codepoint !== null ? { unicode: cell.codepoint } : {}),
       },
       editOrigin,
@@ -225,7 +234,7 @@ export class TextRun {
   }
 
   setSingleGlyph(handle: GlyphHandle): GlyphAnchor {
-    const cell = glyphCell(handle.glyphName, handle.unicode ?? null);
+    const cell = glyphCell(handle.name, handle.unicode ?? null);
     this.buffer.restore({
       cells: [cell],
       cursor: 1,

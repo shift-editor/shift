@@ -1,6 +1,5 @@
 export { Guides } from "./Guides";
 export { BoundingBox } from "./BoundingBox";
-export { SnapLines } from "./SnapLines";
 export { Segments } from "./Segments";
 export { DebugOverlays } from "./DebugOverlays";
 export { ControlLines } from "./ControlLines";

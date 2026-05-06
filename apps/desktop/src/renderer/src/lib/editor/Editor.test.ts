@@ -23,13 +23,14 @@ describe("Editor", () => {
     });
 
     it("does not render the glyph once the run has cells and no slot edit", () => {
-      editor.textRun.buffer.insert(glyphCell("B", 66));
+      editor.selectTool("text");
       expect(editor.shouldRenderGlyph()).toBe(false);
     });
 
     it("renders the glyph again when in-place editing a slot", () => {
-      const cell = glyphCell("B", 66);
-      editor.textRun.buffer.insert(cell);
+      editor.selectTool("text");
+      const cell = glyphCell("S", 83);
+      editor.textRun.insert(cell);
       editor.setGlyphFocus({ runId: editor.textRun.id, cellId: cell.id });
       expect(editor.shouldRenderGlyph()).toBe(true);
     });
@@ -48,24 +49,25 @@ describe("Editor", () => {
   describe("text-run owner = main glyph (not active editing glyph)", () => {
     it("keeps the run's cells when switching back to Text after a slot drill-in", () => {
       // A is the main glyph (the one the user "opened from the grid").
-      const ownerKey = editor.font.glyphName(65);
-      editor.setGlyphHandle({ glyphName: ownerKey, unicode: 65 });
+      const owner = editor.font.glyphHandleForUnicode(65)!;
+      const ownerKey = owner.name;
+      editor.setRootGlyphHandle(owner);
 
       editor.selectTool("text");
-      editor.textRun.insert(glyphCell("B", 66));
+      editor.textRun.insert(glyphCell("S", 83));
       expect(editor.textRun.buffer.cells).toHaveLength(2);
 
-      // Drill into slot 1 (the B): mirrors what TextRunEdit does on dblclick.
+      // Drill into slot 1 (the S): mirrors what TextRunEdit does on dblclick.
       editor.selectTool("select");
-      const bCell = editor.textRun.buffer.cells[1];
-      expect(bCell.kind).toBe("glyph");
-      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: bCell.id });
-      expect(editor.getActiveGlyphName()).toBe("B");
+      const sCell = editor.textRun.buffer.cells[1];
+      expect(sCell.kind).toBe("glyph");
+      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: sCell.id });
+      expect(editor.getActiveGlyphName()).toBe("S");
       // Main glyph (run owner) hasn't moved.
-      expect(editor.getGlyphHandle()!.glyphName).toBe(ownerKey);
+      expect(editor.rootGlyphHandle!.name).toBe(ownerKey);
 
       // Toggle back to Text. The run should still be the A-keyed run, with
-      // its cells preserved — not a fresh B-keyed run.
+      // its cells preserved — not a fresh S-keyed run.
       editor.selectTool("text");
 
       expect(editor.textRun.buffer.cells).toHaveLength(2);
@@ -74,27 +76,27 @@ describe("Editor", () => {
         glyphName: ownerKey,
         codepoint: 65,
       });
-      expect(editor.textRun.buffer.cells[1]).toBe(bCell);
+      expect(editor.textRun.buffer.cells[1]).toBe(sCell);
     });
   });
 
   describe("glyph focus placement", () => {
     it("recomputes drawOffset from the focused cell after inserting a linebreak before it", () => {
-      const ownerKey = editor.font.glyphName(65);
-      editor.setGlyphHandle({ glyphName: ownerKey, unicode: 65 });
+      const owner = editor.font.glyphHandleForUnicode(65)!;
+      editor.setRootGlyphHandle(owner);
       editor.selectTool("text");
-      const b = glyphCell("B", 66);
-      editor.textRun.insert(b);
-      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: b.id });
+      const s = glyphCell("S", 83);
+      editor.textRun.insert(s);
+      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: s.id });
       const firstLineOrigin = editor.glyphPlacement?.focused.editOrigin;
 
       editor.textRun.buffer.placeCaret(1);
       editor.textRun.insert(linebreakCell());
       editor.selectTool("select");
 
-      const secondLineOrigin = editor.textRun.$layout.peek()?.editOriginForCell(b.id);
-      expect(editor.focusedGlyph?.anchor.cellId).toBe(b.id);
-      expect(editor.focusedGlyph?.glyph.glyphName).toBe("B");
+      const secondLineOrigin = editor.textRun.$layout.peek()?.editOriginForCell(s.id);
+      expect(editor.focusedGlyph?.anchor.cellId).toBe(s.id);
+      expect(editor.focusedGlyph?.glyph.name).toBe("S");
       expect(secondLineOrigin?.y).toBe(editor.textRun.$layout.peek()?.lines[1].y);
       expect(editor.glyphPlacement?.focused.editOrigin).toEqual(secondLineOrigin);
       expect(editor.drawOffset).toEqual(secondLineOrigin);
@@ -103,9 +105,9 @@ describe("Editor", () => {
 
     it("clears derived placement when the focused cell is deleted", () => {
       editor.selectTool("text");
-      const b = glyphCell("B", 66);
-      editor.textRun.insert(b);
-      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: b.id });
+      const s = glyphCell("S", 83);
+      editor.textRun.insert(s);
+      editor.setGlyphFocus({ runId: editor.textRun.id, cellId: s.id });
 
       editor.textRun.buffer.placeCaret(2);
       editor.textRun.delete();
@@ -116,9 +118,9 @@ describe("Editor", () => {
     });
 
     it("opens direct glyphs through the implicit editor run", () => {
-      editor.openGlyph({ glyphName: "S", unicode: 83 });
+      editor.openGlyph({ name: "S", unicode: 83 });
 
-      expect(editor.focusedGlyph?.glyph.glyphName).toBe("S");
+      expect(editor.focusedGlyph?.glyph.name).toBe("S");
       expect(editor.textRuns.resolveAnchor(editor.focusedGlyph!.anchor)).toEqual(
         editor.focusedGlyph,
       );

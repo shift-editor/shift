@@ -3,7 +3,7 @@ import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Behavior, ToolContext } from "./Behavior";
-import { batch, computed, type ComputedSignal } from "../../reactive/signal";
+import { batch, computed, type ComputedSignal } from "../../signals/signal";
 import type { CursorType } from "@/types/editor";
 
 export type { ToolName, ToolState };
@@ -70,12 +70,13 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   /** Layer 1 — redraws on edit/selection/hover change. Guides, outline, handles, segments. */
   renderScene?(canvas: Canvas): void;
 
-  /** Layer 2 — redraws every mouse move. Snap indicators, selection marquee, cursor. */
+  /** Layer 2 — redraws every mouse move. Selection marquee, cursor. */
   renderOverlay?(canvas: Canvas): void;
 
   activate?(): void;
   deactivate?(): void;
 
+  /** @knipclassignore — pure transition API used by tool tests/debugging. */
   transition(state: S, event: ToolEvent): S {
     return this.#runBehaviors(state, event).state;
   }
@@ -120,6 +121,7 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   }
 
   /** Execute `fn` inside a named command batch. Automatically rolls back on exception. */
+  /** @knipclassignore — command batching helper for tool subclasses. */
   protected batch<T>(name: string, fn: () => T): T {
     return this.editor.commands.withBatch(name, fn);
   }

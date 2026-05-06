@@ -1,13 +1,13 @@
 /**
  * Full-pipeline interaction benchmarks — simulate real drag operations
- * through the tool system (hit test -> state machine -> snap -> draft).
+ * through the tool system (hit test -> state machine -> draft).
  *
  * These measure what actually happens during a user drag:
- * - pointerDown: hit-test + selection + draft creation + snap session
- * - pointerMove (per frame): snap resolution + build updates + draft.setPositions
- * - pointerUp: draft.finish + undo recording
+ * - pointerDown: hit-test + selection + draft creation
+ * - pointerMove (per frame): draft.preview*
+ * - pointerUp: draft.commit + undo recording
  *
- * Contrast with pointManipulation.bench.ts which calls createDraft/setPositions
+ * Contrast with pointManipulation.bench.ts which calls beginSourceEditDraft/previewPositions
  * directly and skips the tool overhead.
  */
 

@@ -9,7 +9,7 @@
  * App-scoped states persist across documents (settings, preferences).
  * Document-scoped states persist per font file (text runs, viewport).
  */
-import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 
 export type StateScope = "app" | "document";
 

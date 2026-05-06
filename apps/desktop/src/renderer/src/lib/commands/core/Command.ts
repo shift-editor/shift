@@ -1,18 +1,17 @@
 /**
  * Command Pattern Infrastructure
  *
- * Commands encapsulate glyph mutations as undoable actions.
- * Each command receives a Glyph and calls its mutation methods.
+ * Commands encapsulate source mutations as undoable actions.
  */
 
-import type { Glyph } from "@/lib/model/Glyph";
+import type { GlyphSource } from "@/lib/model/Glyph";
 
 /**
  * Context available to commands during execution.
- * Commands receive the reactive Glyph directly — it has all mutation methods.
+ * Commands receive the active authored source directly.
  */
 export interface CommandContext {
-  readonly glyph: Glyph;
+  readonly source: GlyphSource;
 }
 
 export interface Command<TResult = void> {

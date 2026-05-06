@@ -1,6 +1,6 @@
 import type { Bounds } from "@shift/geo";
 import { getEditor } from "@/store/store";
-import { useSignalState, useSignalTrigger } from "@/lib/reactive";
+import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 /**
  * Current selection bounds (axis-aligned, point-based), live-updating.

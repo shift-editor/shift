@@ -1,6 +1,4 @@
-import { Vec2 } from "@shift/geo";
-import { Contours } from "@shift/font";
-import type { Point2D } from "@shift/types";
+import { Vec2, type Point2D } from "@shift/geo";
 import { BaseTool, type ToolName, defineStateDiagram, type ToolEvent } from "../core";
 import type { PenState } from "./types";
 import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
@@ -11,6 +9,7 @@ import type { Canvas } from "@/lib/editor/rendering/Canvas";
 export type { PenState };
 
 export class Pen extends BaseTool<PenState> {
+  /** @knipclassignore — declarative state spec for tool docs/debugging. */
   static stateSpec = defineStateDiagram<PenState["type"]>({
     states: ["idle", "ready", "anchored", "dragging"],
     initial: "idle",
@@ -55,8 +54,7 @@ export class Pen extends BaseTool<PenState> {
   override activate(): void {
     const pos = this.editor.sceneToGlyphLocal(this.editor.getMousePosition());
     this.state = { type: "ready", mousePos: pos };
-    const glyph = this.editor.glyph.peek();
-    if (glyph) glyph.clearActiveContour();
+    this.editor.clearActiveContour();
   }
 
   override deactivate(): void {
@@ -78,7 +76,7 @@ export class Pen extends BaseTool<PenState> {
       return false;
     }
 
-    const firstPoint = Contours.firstPoint(contour);
+    const firstPoint = contour.firstPoint;
     if (!firstPoint) return false;
 
     return Vec2.isWithin({ x, y }, firstPoint, this.editor.hitRadius);
@@ -87,16 +85,16 @@ export class Pen extends BaseTool<PenState> {
   private hasActiveDrawingContour(): boolean {
     const contour = this.editor.getActiveContour();
     if (!contour) return false;
-    return Contours.isOpen(contour) && !Contours.isEmpty(contour);
+    return !contour.closed && !contour.isEmpty;
   }
 
   private getLastOnCurvePoint(): Point2D | null {
     const contour = this.editor.getActiveContour();
-    if (!contour || Contours.isEmpty(contour) || contour.closed) {
+    if (!contour || contour.isEmpty || contour.closed) {
       return null;
     }
 
-    const lastOnCurve = Contours.lastOnCurvePoint(contour);
+    const lastOnCurve = contour.lastOnCurvePoint;
     if (!lastOnCurve) return null;
 
     return { x: lastOnCurve.x, y: lastOnCurve.y };
@@ -124,8 +122,8 @@ export class Pen extends BaseTool<PenState> {
 
     // Control handle preview during drag
     if (this.state.type === "dragging") {
-      const { anchor, mousePos, snappedPos } = this.state;
-      const effectivePos = snappedPos ?? mousePos;
+      const { anchor, mousePos } = this.state;
+      const effectivePos = mousePos;
       const mirrorPos = Vec2.mirror(effectivePos, anchor.position);
 
       const { stroke, widthPx } = canvas.theme.glyph;

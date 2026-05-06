@@ -1,4 +1,5 @@
-import type { PointId, Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
+import type { PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";

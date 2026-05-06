@@ -1,7 +1,8 @@
 import type { FontMetrics } from "@shift/types";
 import type { Font } from "@/lib/model/Font";
-import type { GlyphView } from "@/lib/model/GlyphView";
-import { useSignalState } from "@/lib/reactive";
+import type { Glyph } from "@/lib/model/Glyph";
+import { useSignalState } from "@/lib/signals";
+import { getEditor } from "@/store/store";
 
 export const CELL_HEIGHT = 75;
 
@@ -9,11 +10,7 @@ export const MARGIN_TOP_RATIO = 0.2;
 export const MARGIN_BOTTOM_RATIO = 0.05;
 export const MARGIN_SIDE_RATIO = 0;
 
-export function glyphPreviewViewBox(metrics: FontMetrics | null, advance: number | null): string {
-  if (!metrics) {
-    return "0 -800 1000 1000";
-  }
-
+export function glyphPreviewViewBox(metrics: FontMetrics, advance: number | null): string {
   const upm = metrics.unitsPerEm;
   const marginTop = upm * MARGIN_TOP_RATIO;
   const marginBottom = upm * MARGIN_BOTTOM_RATIO;
@@ -33,11 +30,11 @@ export function computeViewBoxHeight(metrics: FontMetrics): number {
 }
 
 export function computeCellWidth(
-  metrics: FontMetrics | null,
+  metrics: FontMetrics,
   advance: number | null,
   cellHeight: number,
 ): number {
-  if (!metrics || advance === null) {
+  if (advance === null) {
     return cellHeight;
   }
 
@@ -53,9 +50,13 @@ interface GlyphPreviewProps {
 }
 
 export function GlyphPreview({ unicode, font, height = CELL_HEIGHT }: GlyphPreviewProps) {
-  const name = font.nameForUnicode(unicode);
-  const glyph = name ? font.glyph(name) : null;
+  const editor = getEditor();
 
+  const handle = font.glyphHandleForUnicode(unicode);
+  const source = font.sourceAtOrDefault(editor.designLocation);
+  if (!source || !handle) return null;
+
+  const glyph = font.glyph(handle);
   if (!glyph) {
     return <FallbackCell unicode={unicode} font={font} height={height} advance={null} />;
   }
@@ -72,11 +73,16 @@ function GlyphCell({
   unicode: number;
   font: Font;
   height: number;
-  glyph: GlyphView;
+  glyph: Glyph;
 }) {
-  const svgPath = useSignalState(glyph.$svgPath);
-  const advance = useSignalState(glyph.$advance);
-  const fontMetrics = font.getMetrics();
+  const editor = getEditor();
+  const outline = glyph.outline(editor.$designLocation);
+
+  const svgPath = useSignalState(outline.$svgPath);
+  const advance = useSignalState(glyph.$xAdvance);
+
+  const fontMetrics = font.metrics;
+
   const cellWidth = computeCellWidth(fontMetrics, advance, height);
   const containerStyle = { width: cellWidth, height };
 
@@ -114,7 +120,7 @@ function FallbackCell({
   height: number;
   advance: number | null;
 }) {
-  const cellWidth = computeCellWidth(font.getMetrics(), advance, height);
+  const cellWidth = computeCellWidth(font.metrics, advance, height);
   return (
     <div
       style={{ width: cellWidth, height }}

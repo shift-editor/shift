@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Selection } from "@/types/selection";
-import { signal } from "@/lib/reactive/signal";
+import { signal } from "@/lib/signals/signal";
 import type { PointId } from "@shift/types";
 import type { SegmentId } from "@/types/indicator";
 import type { Glyph } from "@/lib/model/Glyph";

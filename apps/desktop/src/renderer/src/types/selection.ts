@@ -1,4 +1,5 @@
-import type { PointId, ContourId, AnchorId, Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { PointId, ContourId, AnchorId } from "@shift/types";
 import type { SegmentId } from "./indicator";
 import type { Glyph } from "@/lib/model/Glyph";
 import type { SelectionMode } from "./editor";
@@ -8,7 +9,7 @@ import {
   type WritableSignal,
   type Signal,
   type ComputedSignal,
-} from "@/lib/reactive/signal";
+} from "@/lib/signals/signal";
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 
 /** Discriminated reference to any selectable entity. */

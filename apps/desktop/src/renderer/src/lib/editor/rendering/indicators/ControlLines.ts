@@ -1,5 +1,5 @@
 import type { Canvas } from "../Canvas";
-import type { Glyph } from "@/lib/model/Glyph";
+import { Contour } from "@shift/glyph-state";
 import { Validate } from "@shift/validation";
 
 /**
@@ -9,7 +9,7 @@ import { Validate } from "@shift/validation";
 export class ControlLines {
   draw(
     canvas: Canvas,
-    glyph: Glyph,
+    contours: readonly Contour[],
     isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
   ): void {
     const { stroke, widthPx } = canvas.theme.glyph;
@@ -22,7 +22,7 @@ export class ControlLines {
     canvas.ctx.beginPath();
     let hasLines = false;
 
-    for (const contour of glyph.contours) {
+    for (const contour of contours) {
       const points = contour.points;
       const len = points.length;
       if (len === 0) continue;

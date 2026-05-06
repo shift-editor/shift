@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { effect } from "@/lib/reactive";
+import { effect } from "@/lib/signals";
 
 export function useSignalEffect(fn: () => void) {
   useEffect(() => {

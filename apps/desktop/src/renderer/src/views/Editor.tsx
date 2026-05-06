@@ -9,7 +9,7 @@ import { GlyphFinder } from "@/components/editor/GlyphFinder";
 import { EditorView } from "@/components/editor/EditorView";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
 import { codepointToHex } from "@/lib/utils/unicode";

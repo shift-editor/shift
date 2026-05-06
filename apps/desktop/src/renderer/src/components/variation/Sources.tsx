@@ -1,12 +1,12 @@
 import { Button } from "@shift/ui";
 import { useSources } from "@/hooks/useSources";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
-import { useApplyVariation } from "@/hooks/useApplyVariation";
+import { getEditor } from "@/store/store";
 
 export const Sources = () => {
   const sources = useSources();
   const activeSourceId = useActiveSourceId();
-  const apply = useApplyVariation();
+  const editor = getEditor();
 
   if (sources.length === 0) return null;
 
@@ -19,7 +19,7 @@ export const Sources = () => {
           key={s.id}
           type="button"
           isActive={s.id === activeSourceId}
-          onClick={() => apply({ ...s.location })}
+          onClick={() => editor.selectSource(s.id)}
         >
           {s.name}
         </Button>

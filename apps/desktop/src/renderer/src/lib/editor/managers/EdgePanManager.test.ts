@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import type { Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
 
 const canvasBounds: Rect2D = {
   x: 0,

@@ -8,7 +8,7 @@
  */
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/font/", "packages/rules/"];
+const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
 
 /** Files where direct .contours access is expected (structural traversal). */
 const CONTOURS_ALLOWED = [
@@ -16,7 +16,7 @@ const CONTOURS_ALLOWED = [
   "bridge/NativeBridge.ts",
   "bridge/glyph.ts",
   "lib/model/",
-  "packages/font/",
+  "packages/glyph-state/",
   "rendering/", // render passes iterate contours to draw them
   "types/selection.ts", // selection-bounds computed unions per-contour bounds
   "hit/composite.ts", // component contour bounds check
@@ -196,7 +196,7 @@ export default {
 
     /**
      * Prefer instance methods on the Glyph / Contour domain classes over the
-     * static namespaces from @shift/font when the receiver is a class instance.
+     * static namespaces from @shift/glyph-state when the receiver is a class instance.
      *
      * Swaps:
      *   Glyphs.findPoint(glyph, id)     → glyph.point(id)
@@ -225,7 +225,7 @@ export default {
 
         const PREFER_INSTANCE_ALLOWED = [
           "lib/model/", // domain classes delegate to these internally
-          "packages/font/", // implementation
+          "packages/glyph-state/", // implementation
           "bridge/", // operates on GlyphSnapshot, not class instances
           "commands/", // undo/redo snapshots
           "behaviors/", // drag handlers read base snapshots
@@ -302,7 +302,7 @@ export default {
 
         const SEGMENT_PARSE_ALLOWED = [
           "lib/model/", // Segment.parse + Contour.segments wrap parseContourSegments here
-          "packages/font/", // parseContourSegments lives here
+          "packages/glyph-state/", // parseContourSegments lives here
           "testing/",
         ];
 

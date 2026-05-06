@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
