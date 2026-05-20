@@ -15,7 +15,7 @@ export type ButtonProps = BaseButtonProps & {
 const variantStyles = {
   primary: "bg-accent text-white hover:bg-accent/90 rounded-md",
   default: "bg-surface border border-line-subtle hover:bg-surface-hover",
-  ghost: "hover:bg-hover",
+  ghost: "hover:bg-hover/40 data-[active]:bg-hover/50",
 };
 
 const sizeStyles = {
@@ -27,7 +27,18 @@ const sizeStyles = {
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "md", isActive, icon, children, ...props }, ref) => {
+  (
+    {
+      className,
+      variant = "default",
+      size = "md",
+      isActive,
+      icon,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
     return (
       <BaseButton
         ref={ref}

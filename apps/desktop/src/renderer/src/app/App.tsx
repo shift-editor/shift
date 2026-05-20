@@ -8,7 +8,7 @@ import { DebugProvider } from "@/context/DebugContext";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
-import { clearDirty, getEditor, setFilePath } from "@/store/store";
+import { getDocument } from "@/store/store";
 import { documentPersistence } from "@/persistence";
 
 import { RouteDispatcher } from "./RouteDispatcher";
@@ -26,6 +26,10 @@ function isLandingHash(hash: string): boolean {
   return hash === "" || hash === "#" || hash === "#/";
 }
 
+function needsLoadedDocument(hash: string): boolean {
+  return !isLandingHash(hash);
+}
+
 function parseEditorUnicodeFromHash(hash: string): number | null {
   const match = hash.match(EDITOR_HASH_RE);
   if (!match) return null;
@@ -35,7 +39,8 @@ function parseEditorUnicodeFromHash(hash: string): number | null {
 
 export const App = () => {
   useEffect(() => {
-    const editor = getEditor();
+    const fontDocument = getDocument();
+    const editor = fontDocument.editor;
     documentPersistence.init(editor);
     let didOpenFont = false;
 
@@ -44,27 +49,23 @@ export const App = () => {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    const handleOpenFont = (filePath: string, source: "event" | "restore" = "event") => {
+    const handleOpenFont = (
+      filePath: string,
+      source: "event" | "restore" = "event",
+    ) => {
       if (source === "restore" && didOpenFont) {
         return;
       }
 
       try {
-        editor.loadFont(filePath);
-
-        setFilePath(filePath);
-        clearDirty();
-
-        documentPersistence.openDocument(filePath);
+        fontDocument.openFont(filePath);
         didOpenFont = true;
 
         if (source === "restore") {
           const unicode = parseEditorUnicodeFromHash(window.location.hash);
           if (unicode !== null) {
             const handle = editor.font.glyphHandleForUnicode(unicode);
-            if (handle) {
-              editor.getGlyph(handle);
-            }
+            editor.getGlyph(handle);
           }
         } else {
           navigateToHome();
@@ -83,39 +84,47 @@ export const App = () => {
 
         const state = documentPersistence.getState();
         const mostRecentDocId = state.registry.lruDocIds[0];
-        const mostRecentPath = mostRecentDocId ? state.registry.docIdToPath[mostRecentDocId] : null;
+        const mostRecentPath = mostRecentDocId
+          ? state.registry.docIdToPath[mostRecentDocId]
+          : null;
         if (!mostRecentPath) {
+          fontDocument.createFont();
           return;
         }
 
         const exists = await window.electronAPI?.pathsExist([mostRecentPath]);
         if (!exists?.[0]) {
+          fontDocument.createFont();
           return;
         }
 
         handleOpenFont(mostRecentPath, "restore");
       })();
+    } else if (
+      needsLoadedDocument(window.location.hash) &&
+      !fontDocument.loaded
+    ) {
+      fontDocument.createFont();
     }
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
-    const unsubscribeExternalOpen = window.electronAPI?.onExternalOpenFont(handleOpenFont);
+    const unsubscribeExternalOpen =
+      window.electronAPI?.onExternalOpenFont(handleOpenFont);
 
-    const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
-      try {
-        await editor.saveFont(savePath);
-        setFilePath(savePath);
-        clearDirty();
-        documentPersistence.onDocumentPathChanged(savePath);
-        documentPersistence.flushNow();
-        await window.electronAPI?.saveCompleted(savePath);
-      } catch (error) {
-        console.error("Failed to save font:", error);
-      }
-    });
+    const unsubscribeSave = window.electronAPI?.onMenuSaveFont(
+      async (savePath) => {
+        try {
+          await fontDocument.saveFont(savePath);
+        } catch (error) {
+          console.error("Failed to save font:", error);
+        }
+      },
+    );
 
-    const unsubscribePatternDump = window.electronAPI?.onDebugDumpSelectionPatterns(() => {
-      dumpSelectionPatternsToConsole();
-    });
+    const unsubscribePatternDump =
+      window.electronAPI?.onDebugDumpSelectionPatterns(() => {
+        dumpSelectionPatternsToConsole();
+      });
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);

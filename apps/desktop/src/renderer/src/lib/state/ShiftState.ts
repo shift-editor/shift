@@ -57,6 +57,7 @@ export class ShiftStateImpl<T> implements ShiftState<T> {
   }
 
   get value(): T {
+    // oxlint-disable-next-line shift/no-reactive-value-outside-boundary -- ShiftState.value is the public reactive read for this state primitive.
     return this.#signal.value;
   }
 

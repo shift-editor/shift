@@ -13,19 +13,15 @@ export interface FirstHandleStyle extends HandleStyle {
   barStroke: string;
 }
 
-export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<HandleState, T>;
+export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<
+  HandleState,
+  T
+>;
 
 export interface Theme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
-  boundingBox: {
-    stroke: string;
-    widthPx: number;
-    dash: number[];
-    handle: { radius: number; offset: number; stroke: string; widthPx: number };
-    rotationZoneOffset: number;
-  };
   glyph: { fill: string; stroke: string; widthPx: number };
   handle: {
     corner: HandleStateStyles;
@@ -67,26 +63,23 @@ const hover = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 export const DEFAULT_THEME: Theme = {
   cursor: { color: "#0C92F4", widthPx: 1.25 },
   guides: { color: "#6366f1", widthPx: 0.5 },
-  selection: { fill: "rgba(59, 130, 246, 0.04)", stroke: "#3b82f6", widthPx: 1 },
-  boundingBox: {
-    stroke: "#000000",
-    widthPx: 1,
-    dash: [12, 8],
-    handle: { radius: 4, offset: 15, stroke: "#000000", widthPx: 1 },
-    rotationZoneOffset: 20,
+  selection: {
+    fill: "rgba(59, 130, 246, 0.1)",
+    stroke: "rgba(59, 130, 246, 0.5)",
+    widthPx: 0.5,
   },
   glyph: { fill: "#000000", stroke: "#000000", widthPx: 0.75 },
   handle: {
     corner: {
-      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
+      idle: { fill: "#ffffff", stroke: "#d203c4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
-        stroke: "#0C92F4",
+        stroke: "#d203c4",
         size: 6,
         lineWidth: 1,
-        overlayColor: hover(0.75),
+        overlayColor: hover(0.5),
       },
-      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 8, lineWidth: 2 },
+      selected: { fill: "#d203c4", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     smooth: {
       idle: { fill: "#ffffff", stroke: "#03D211", size: 2.5, lineWidth: 3 },
@@ -95,7 +88,7 @@ export const DEFAULT_THEME: Theme = {
         stroke: "#03D211",
         size: 3,
         lineWidth: 3,
-        overlayColor: hover(0.5),
+        overlayColor: hover(0.1),
       },
       selected: { fill: "#03D211", stroke: "#ffffff", size: 4, lineWidth: 4 },
     },
@@ -106,7 +99,7 @@ export const DEFAULT_THEME: Theme = {
         stroke: "#B0B0B0",
         size: 3,
         lineWidth: 3,
-        overlayColor: hover(0.5),
+        overlayColor: hover(0.1),
       },
       selected: { fill: "#B0B0B0", stroke: "#ffffff", size: 4, lineWidth: 4 },
     },
@@ -122,15 +115,15 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#6B15EC", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     direction: {
-      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 1 },
+      idle: { fill: "#ffffff", stroke: "#d203c4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
-        stroke: "#0C92F4",
+        stroke: "#d203c4",
         size: 6,
         lineWidth: 1,
-        overlayColor: hover(0.5),
+        overlayColor: hover(0.1),
       },
-      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 8, lineWidth: 2 },
+      selected: { fill: "#d203c4", stroke: "#ffffff", size: 8, lineWidth: 2 },
     },
     first: {
       idle: {
@@ -148,7 +141,7 @@ export const DEFAULT_THEME: Theme = {
         lineWidth: 1,
         barSize: 18,
         barStroke: "#0C92F4",
-        overlayColor: hover(0.75),
+        overlayColor: hover(0.3),
       },
       selected: {
         fill: "#0C92F4",
@@ -174,11 +167,11 @@ export const DEFAULT_THEME: Theme = {
   segment: {
     hoverColor: "#1886D7",
     selectedColor: "#1886D7",
-    hoverWidthPx: 1,
-    selectedWidthPx: 1.5,
+    hoverWidthPx: 1.5,
+    selectedWidthPx: 1.75,
   },
   preview: { color: "#1886D7", widthPx: 1 },
-  penReady: { fill: "#ffffff", stroke: "#3b82f6", size: 3, widthPx: 1 },
+  penReady: { fill: "#ffffff", stroke: "#3b82f6", size: 3, widthPx: 2 },
   debug: {
     tightBounds: "red",
     hitRadii: "#2196F3",
@@ -192,7 +185,13 @@ export const DEFAULT_THEME: Theme = {
     hoverOutline: "#0C92F4",
     hoverOutlineWidthPx: 3,
     compositeArmFill: "rgba(128, 128, 128, 0.22)",
-    componentOverlay: ["rgba(169, 236, 183, 0.26)", "rgba(255, 182, 207, 0.26)"],
-    componentOverlayHover: ["rgba(124, 220, 150, 0.4)", "rgba(255, 151, 186, 0.4)"],
+    componentOverlay: [
+      "rgba(169, 236, 183, 0.26)",
+      "rgba(255, 182, 207, 0.26)",
+    ],
+    componentOverlayHover: [
+      "rgba(124, 220, 150, 0.4)",
+      "rgba(255, 151, 186, 0.4)",
+    ],
   },
 };

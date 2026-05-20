@@ -3,28 +3,32 @@ import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { CornerHandle } from "@/types/boundingBox";
 import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { Select } from "../Select";
 
 export class Rotate implements SelectBehavior {
   #draft: SourceEditDraft | null = null;
   #origin: Point2D | null = null;
 
   onDragStart(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
+    _state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
     event: ToolEventOf<"dragStart">,
   ): boolean {
-    if (state.type !== "selected") return false;
+    if (!ctx.editor.selection.hasSelection()) return false;
 
-    const next = this.tryStartRotate(event, ctx.editor);
+    const next = this.tryStartRotate(event, ctx.editor, ctx.tool);
     if (!next) return false;
 
     ctx.setState(next);
     return true;
   }
 
-  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+    event: ToolEventOf<"drag">,
+  ): boolean {
     if (state.type !== "rotating") return false;
     if (!this.#draft || !this.#origin) return false;
 
@@ -34,38 +38,52 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+  onDragEnd(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): boolean {
     if (state.type !== "rotating") return false;
+
     this.#draft?.commit("Rotate Points");
-    this.#cleanup(ctx.editor);
-    ctx.setState({ type: "selected" });
+    this.#cleanup();
+
+    ctx.setState({ type: "ready" });
     return true;
   }
 
-  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+  onDragCancel(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): boolean {
     if (state.type !== "rotating") return false;
+
     this.#draft?.discard();
-    this.#cleanup(ctx.editor);
-    ctx.setState({ type: "selected" });
+    this.#cleanup();
+
+    ctx.setState({ type: "ready" });
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): void {
     const editor = ctx.editor;
     if (prev.type !== "rotating" && next.type === "rotating") {
-      editor.setHandlesVisible(false);
-      editor.clearHover();
+      // editor.setHandlesVisible(false);
+      editor.hover.clear();
     }
+
     if (prev.type === "rotating" && next.type !== "rotating") {
-      this.#cleanup(editor);
-      editor.setHandlesVisible(true);
+      this.#cleanup();
+      // editor.setHandlesVisible(true);
     }
   }
 
-  #cleanup(editor: Editor): void {
+  #cleanup(): void {
     this.#draft = null;
     this.#origin = null;
-    editor.requestRedraw();
   }
 
   private nextRotatingState(
@@ -90,22 +108,24 @@ export class Rotate implements SelectBehavior {
     };
   }
 
-  private tryStartRotate(event: ToolEventOf<"dragStart">, editor: Editor): SelectState | null {
-    const hit = editor.hitTest(event.coords);
-    if (hit?.type === "point") return null;
+  private tryStartRotate(
+    event: ToolEventOf<"dragStart">,
+    editor: Editor,
+    tool: Select,
+  ): SelectState | null {
+    const source = editor.editGlyphSource;
+    if (!source) return null;
 
-    const bbHit = editor.hitTestBoundingBoxAt(event.coords);
-    const corner: CornerHandle | null = bbHit?.type === "rotate" ? bbHit.corner : null;
-    const bounds = editor.getSelectionBoundingRect();
+    const bbHit = tool.boundingBox.hit(event.coords);
+    if (!bbHit) return null;
 
-    if (!corner || !bounds) return null;
+    if (bbHit.type !== "rotate") return null;
+
+    const corner = bbHit.corner;
 
     const localPoint = event.coords.glyphLocal;
 
-    const center = Vec2.midpoint(
-      Vec2.fromArray([bounds.left, bounds.top]),
-      Vec2.fromArray([bounds.right, bounds.bottom]),
-    );
+    const center = bbHit.center;
 
     const startAngle = Vec2.angleTo(center, localPoint);
 
@@ -113,6 +133,7 @@ export class Rotate implements SelectBehavior {
       points: [...editor.selection.pointIds],
       anchors: [...editor.selection.anchorIds],
     });
+
     this.#origin = center;
 
     return {

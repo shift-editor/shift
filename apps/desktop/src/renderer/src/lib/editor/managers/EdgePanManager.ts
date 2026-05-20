@@ -22,7 +22,6 @@ type EdgePanEditor = {
   };
   pan: Point2D;
   setPan(pan: Point2D): void;
-  requestRedraw(): void;
 };
 
 export class EdgePanManager {
@@ -74,8 +73,6 @@ export class EdgePanManager {
       { shiftKey: false, altKey: false },
       { force: true },
     );
-
-    this.editor.requestRedraw();
     requestAnimationFrame(() => this.tick());
   }
 

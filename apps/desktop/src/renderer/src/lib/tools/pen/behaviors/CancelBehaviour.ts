@@ -4,12 +4,16 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { PenState, PenBehavior } from "../types";
 
 export class EscapeBehavior implements PenBehavior {
-  onKeyDown(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"keyDown">): boolean {
+  onKeyDown(
+    state: PenState,
+    ctx: ToolContext<PenState>,
+    event: ToolEventOf<"keyDown">,
+  ): boolean {
     if (state.type !== "ready") return false;
     if (event.key !== "Escape") return false;
 
     if (this.hasActiveDrawingContour(ctx.editor)) {
-      // abandonPenContour(ctx.editor);
+      ctx.editor.clearActiveContour();
       return true;
     }
 

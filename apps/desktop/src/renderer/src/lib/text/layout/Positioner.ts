@@ -1,5 +1,5 @@
 import { displayAdvance, isNonSpacingGlyph } from "@/lib/utils/unicode";
-import type { GlyphCell, PositionedRun, SegmentedRun } from "./types";
+import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
 import { Font } from "@/lib/model/Font";
 import type { Signal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
@@ -15,10 +15,14 @@ import type { Source } from "@shift/types";
  *
  */
 export class Positioner {
-  position(run: SegmentedRun, font: Font, designLocation: Signal<AxisLocation>): PositionedRun {
+  position(
+    run: SegmentedRun,
+    font: Font,
+    designLocation: Signal<AxisLocation>,
+  ): PositionedRun {
     let totalAdvance = 0;
     const glyphs: PositionedRun["glyphs"] = [];
-    const source = font.sourceAtOrDefault(designLocation.value);
+    const source = font.sourceAtOrDefault(designLocation.peek());
 
     for (const [idx, g] of run.glyphs.entries()) {
       const handle = { name: g.glyphName };
@@ -28,7 +32,7 @@ export class Positioner {
 
       if (glyph) {
         glyphName = glyph.name;
-        bounds = glyph.outline(designLocation).bounds;
+        bounds = glyph.instance(designLocation).render.outline.bounds;
       }
 
       const xAdvance = resolveAdvance(g, font, source);
@@ -38,7 +42,7 @@ export class Positioner {
 
       glyphs.push({
         glyphName,
-        cellIds: [g.id],
+        sourceItemIds: [g.id],
         origin,
         xAdvance,
         yAdvance: 0,
@@ -53,17 +57,27 @@ export class Positioner {
   }
 }
 
-/** Resolve a glyph cell to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(cell: GlyphCell, font: Font, source: Source | null): number {
-  const raw = source ? (font.glyphSource({ name: cell.glyphName }, source)?.xAdvance ?? 0) : 0;
-  return displayAdvance(raw, cell.glyphName, cell.codepoint);
+/** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
+export function resolveAdvance(
+  item: GlyphTextItem,
+  font: Font,
+  source: Source | null,
+): number {
+  const raw = source
+    ? (font.glyphSource({ name: item.glyphName }, source)?.xAdvance ?? 0)
+    : 0;
+  return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 
-export function resolveGlyphOffset(cell: GlyphCell, font: Font, source: Source | null): Point2D {
-  if (!isNonSpacingGlyph(cell.glyphName, cell.codepoint)) return { x: 0, y: 0 };
+export function resolveGlyphOffset(
+  item: GlyphTextItem,
+  font: Font,
+  source: Source | null,
+): Point2D {
+  if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
   if (!source) return { x: 0, y: 0 };
 
-  const glyph = font.glyphSource({ name: cell.glyphName }, source);
+  const glyph = font.glyphSource({ name: item.glyphName }, source);
   if (!glyph) return { x: 0, y: 0 };
 
   const metrics = font.metrics;

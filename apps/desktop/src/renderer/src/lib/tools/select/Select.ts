@@ -1,5 +1,5 @@
-import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
-import { edgeToCursor, boundingBoxHitResultToCursor, type BoundingRectEdge } from "./cursor";
+import { BaseTool, type ToolName } from "../core";
+import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import {
   Selection,
@@ -12,47 +12,28 @@ import {
   ToggleSmooth,
   UpgradeSegment,
   BendCurve,
-  ContourDoubleClick,
+  SelectHover,
+  SegmentDoubleClick,
 } from "./behaviors";
 import { TextRunHover } from "./behaviors/TextRunHover";
-import { normalizeRect } from "./utils";
 import type { CursorType } from "@/types/editor";
 import { TextRunEdit } from "./behaviors/TextRunEdit";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
+import { SelectBoundingBox } from "./BoundingBox";
+import { SelectMarquee } from "./Marquee";
+import { SelectSegments } from "./Segments";
 
 export type { BoundingRectEdge, SelectState };
 
-export class Select extends BaseTool<SelectState> {
-  /** @knipclassignore — declarative state spec for tool docs/debugging. */
-  static stateSpec = defineStateDiagram<SelectState["type"]>({
-    states: [
-      "idle",
-      "ready",
-      "selecting",
-      "selected",
-      "translating",
-      "resizing",
-      "rotating",
-      "bending",
-    ],
-    initial: "idle",
-    transitions: [
-      { from: "idle", to: "ready", event: "activate" },
-      { from: "ready", to: "selecting", event: "marquee" },
-      { from: "ready", to: "selected", event: "click" },
-      { from: "selecting", to: "selected", event: "release" },
-      { from: "selected", to: "translating", event: "drag" },
-      { from: "translating", to: "selected", event: "release" },
-      { from: "selected", to: "ready", event: "escape" },
-      { from: "ready", to: "idle", event: "deactivate" },
-    ],
-  });
-
+export class Select extends BaseTool<SelectState, Select> {
   readonly id: ToolName = "select";
+  readonly boundingBox = new SelectBoundingBox(this);
+  readonly marquee = new SelectMarquee(this);
+  readonly #segments = new SelectSegments();
 
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
-    new ContourDoubleClick(),
+    new SegmentDoubleClick(),
     new TextRunHover(),
     new TextRunEdit(),
     new UpgradeSegment(),
@@ -64,22 +45,25 @@ export class Select extends BaseTool<SelectState> {
     new BendCurve(),
     new Translate(),
     new Marquee(),
+    new SelectHover(),
   ];
 
   override getCursor(state: SelectState): CursorType {
     if (state.type === "translating") return { type: "move" };
     if (state.type === "resizing") return edgeToCursor(state.resize.edge);
     if (state.type === "rotating") {
-      return boundingBoxHitResultToCursor({
-        type: "rotate",
-        corner: state.rotate.corner,
-      });
+      return this.boundingBox.cursorForRotationCorner(state.rotate.corner);
     }
 
-    const bbHandle = this.editor.hoveredBoundingBoxHandle;
-    if (bbHandle) return boundingBoxHitResultToCursor(bbHandle);
+    const coords = this.editor.input.pointerCell.value;
+    if (coords) {
+      const cursor = this.boundingBox.cursor(coords);
+      if (cursor) return cursor;
+    }
 
-    if (this.editor.currentModifiers.altKey && this.editor.isHoveringNode) {
+    const modifiers = this.editor.input.modifiersCell.value;
+    const hover = this.editor.hover.targetCell.value;
+    if (modifiers.altKey && hover) {
       return { type: "copy" };
     }
 
@@ -91,38 +75,38 @@ export class Select extends BaseTool<SelectState> {
   }
 
   override activate(): void {
-    this.state = { type: "ready" };
+    this.setState({ type: "ready" });
   }
 
   override deactivate(): void {
-    this.state = { type: "idle" };
+    this.setState({ type: "idle" });
   }
 
-  protected override preTransition(state: SelectState, event: ToolEvent) {
-    if (event.type === "selectionChanged") {
-      const hasSelection = this.editor.selection.hasSelection();
-      if (hasSelection && state.type === "ready") {
-        return { state: { type: "selected" as const } };
-      }
-      if (!hasSelection && state.type === "selected") {
-        return { state: { type: "ready" as const } };
-      }
-      return { state };
-    }
-    return null;
-  }
+  override drawScene(canvas: Canvas): void {
+    const display = this.editor.glyphDisplay;
+    if (display.proofMode || !display.editableGlyphVisible) return;
 
-  override renderOverlay(canvas: Canvas): void {
-    if (this.state.type !== "selecting") return;
-    const rect = normalizeRect(this.state.selection.startPos, this.state.selection.currentPos);
-    canvas.fillRect(rect.x, rect.y, rect.width, rect.height, canvas.theme.selection.fill);
-    canvas.strokeRect(
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      canvas.theme.selection.stroke,
-      canvas.theme.selection.widthPx,
+    const instance = this.editor.previewInstance;
+    if (!instance) return;
+
+    this.#segments.draw(
+      canvas,
+      instance.geometry,
+      this.editor.selection,
+      this.editor.hover,
     );
+  }
+
+  override drawOverlay(canvas: Canvas): void {
+    const isMutatingState =
+      this.state.type === "translating" ||
+      this.state.type === "resizing" ||
+      this.state.type === "rotating";
+
+    if (!isMutatingState) {
+      this.boundingBox.draw(canvas);
+    }
+
+    this.marquee.draw(canvas);
   }
 }

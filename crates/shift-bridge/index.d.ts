@@ -11,6 +11,7 @@ import type {
 } from "@shift/types";
 export declare class Bridge {
   constructor()
+  createFont(): void
   loadFont(path: string): void
   saveFont(path: string): Promise<number>
   getMetadata(): NapiFontMetadata
@@ -46,7 +47,7 @@ export declare class Bridge {
    * Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
    * Coords are interleaved [x0, y0, x1, y1, ...].
    */
-  setPositions(pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): NapiGlyphValueChange
+  applyPositionPatch(pointIds?: BigUint64Array | undefined | null, pointCoords?: Float64Array | undefined | null, anchorIds?: BigUint64Array | undefined | null, anchorCoords?: Float64Array | undefined | null): void
   restoreState(structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
 }
 

@@ -1,5 +1,5 @@
-import type { GlyphCell } from "@/lib/text/layout/types";
-import { glyphCell } from "@/lib/text/layout/types";
+import type { GlyphTextItem } from "@/lib/text/layout/types";
+import { glyphTextItem } from "@/lib/text/layout/types";
 
 /**
  * Convert a Unicode codepoint to its hex representation without prefix (e.g. for URLs).
@@ -24,7 +24,10 @@ export interface GlyphNameResolverDeps {
   getMappedGlyphName(unicode: number): string | null;
 }
 
-export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameResolverDeps): string {
+export function resolveGlyphNameFromUnicode(
+  unicode: number,
+  deps: GlyphNameResolverDeps,
+): string {
   const existingName = deps.getExistingGlyphNameForUnicode(unicode);
   if (existingName) {
     return existingName;
@@ -38,8 +41,11 @@ export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameReso
   return fallbackGlyphNameForUnicode(unicode);
 }
 
-export function cellFromCodepoint(codepoint: number, deps: GlyphNameResolverDeps): GlyphCell {
-  return glyphCell(resolveGlyphNameFromUnicode(codepoint, deps), codepoint);
+export function textItemFromCodepoint(
+  codepoint: number,
+  deps: GlyphNameResolverDeps,
+): GlyphTextItem {
+  return glyphTextItem(resolveGlyphNameFromUnicode(codepoint, deps), codepoint);
 }
 
 const nonSpacingCache = new Map<number, boolean>();
@@ -74,7 +80,10 @@ export function isNonSpacingMarkCodepoint(codepoint: number | null): boolean {
  * Unicode Mn/Me categories with a glyph-name token match (`comb` / `mark`).
  * Used in editor-only visual layout to give combining glyphs a visible advance.
  */
-export function isNonSpacingGlyph(glyphName: string, unicode: number | null): boolean {
+export function isNonSpacingGlyph(
+  glyphName: string,
+  unicode: number | null,
+): boolean {
   if (isNonSpacingMarkCodepoint(unicode)) return true;
   return /(?:^|[._-])(comb|mark)(?:$|[._-])/i.test(glyphName);
 }
@@ -89,7 +98,11 @@ export const NON_SPACING_EDITOR_ADVANCE = 600;
  * Advance used for on-canvas layout (guides, text runs). Matches the glyph's
  * xAdvance except for non-spacing glyphs at zero, which get a visible fallback.
  */
-export function displayAdvance(advance: number, glyphName: string, unicode: number | null): number {
+export function displayAdvance(
+  advance: number,
+  glyphName: string,
+  unicode: number | null,
+): number {
   if (advance > 0) return advance;
   if (!isNonSpacingGlyph(glyphName, unicode)) return advance;
   return NON_SPACING_EDITOR_ADVANCE;

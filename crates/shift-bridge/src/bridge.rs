@@ -16,9 +16,8 @@ use shift_wire::{
     NapiGlyphStructure, NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
   },
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
-  GlyphStructureChange, GlyphValueChange, Location, Source,
+  GlyphStructureChange, GlyphValueChange, Source,
 };
-use std::collections::HashMap;
 use std::sync::{
   atomic::{AtomicU64, Ordering},
   Arc,
@@ -65,8 +64,6 @@ pub struct NapiGlyphVariationReport {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DocumentVersion(u64);
-
-const STATIC_DEFAULT_SOURCE_ID: u128 = 0;
 
 impl DocumentVersion {
   fn next(self) -> Self {
@@ -326,6 +323,14 @@ impl Bridge {
   }
 
   #[napi]
+  pub fn create_font(&mut self) {
+    self.font = Font::new();
+    self.active_edit = None;
+    self.live_version = DocumentVersion::default();
+    self.persisted_version = Arc::new(AtomicU64::new(0));
+  }
+
+  #[napi]
   pub fn load_font(&mut self, path: String) -> errors::Result<()> {
     self.font = self.font_loader.read_font(&path)?;
     self.active_edit = None;
@@ -444,10 +449,6 @@ impl Bridge {
 
   #[napi]
   pub fn get_sources(&self) -> Vec<NapiSource> {
-    if self.font.sources().is_empty() {
-      return vec![self.static_default_source().into()];
-    }
-
     self
       .font
       .sources()
@@ -455,22 +456,6 @@ impl Bridge {
       .map(Source::from)
       .map(Into::into)
       .collect()
-  }
-
-  fn static_default_source_id(&self) -> SourceId {
-    SourceId::from_raw(STATIC_DEFAULT_SOURCE_ID)
-  }
-
-  fn static_default_source(&self) -> Source {
-    Source {
-      id: self.static_default_source_id(),
-      name: "Default".to_string(),
-      location: Location {
-        values: HashMap::new(),
-      },
-      layer_id: self.font.default_layer_id(),
-      filename: None,
-    }
   }
 
   fn source_layer_id(&self, source_id: SourceId) -> BridgeResult<LayerId> {
@@ -481,10 +466,6 @@ impl Bridge {
       .find(|source| source.id() == source_id)
     {
       return Ok(source.layer_id());
-    }
-
-    if self.font.sources().is_empty() && source_id == self.static_default_source_id() {
-      return Ok(self.font.default_layer_id());
     }
 
     Err(BridgeError::InvalidInput {
@@ -965,15 +946,15 @@ impl Bridge {
   /// Bulk position sync. IDs use BigUint64Array to avoid lossy float packing.
   /// Coords are interleaved [x0, y0, x1, y1, ...].
   #[napi]
-  pub fn set_positions(
+  pub fn apply_position_patch(
     &mut self,
     point_ids: Option<BigUint64Array>,
     point_coords: Option<Float64Array>,
     anchor_ids: Option<BigUint64Array>,
     anchor_coords: Option<Float64Array>,
-  ) -> errors::Result<NapiGlyphValueChange> {
+  ) -> errors::Result<()> {
     let session = self.active_session_mut()?;
-    let changed = session.set_bulk_node_positions(BulkNodePositionUpdates {
+    session.apply_bulk_node_positions(BulkNodePositionUpdates {
       point_ids: point_ids.as_ref().map(|ids| {
         let ids: &[u64] = ids;
         ids
@@ -992,9 +973,8 @@ impl Bridge {
       }),
     })?;
 
-    let change = GlyphValueChange::from_layer(session.layer(), changed);
     self.mark_active_edit_changed();
-    Ok(change.into())
+    Ok(())
   }
 
   #[napi]
@@ -1112,11 +1092,28 @@ mod tests {
     assert!(!bridge.has_edit_session());
     assert_eq!(bridge.get_glyph_count(), 0);
     assert!(bridge.get_glyphs().is_empty());
+    assert_eq!(bridge.get_sources().len(), 1);
+    assert_eq!(bridge.get_sources()[0].name, "Regular");
     assert_eq!(metadata.family_name.as_deref(), Some("Untitled Font"));
     assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
     assert_eq!(metrics.units_per_em, 1000.0);
     assert_eq!(metrics.ascender, 800.0);
     assert_eq!(metrics.descender, -200.0);
+  }
+
+  #[test]
+  fn create_font_resets_to_fresh_font_state() {
+    let mut bridge = Bridge::new();
+    bridge
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
+      .unwrap();
+
+    bridge.create_font();
+
+    assert!(!bridge.has_edit_session());
+    assert_eq!(bridge.get_glyph_count(), 0);
+    assert_eq!(bridge.get_sources().len(), 1);
+    assert_eq!(bridge.get_sources()[0].name, "Regular");
   }
 
   #[test]
@@ -1355,7 +1352,10 @@ mod tests {
     let active_glyph = point_heavy_glyph("active", 0xE000, default_layer_id, active_mark);
     bridge.active_edit = Some(ActiveEdit::from_glyph(
       active_glyph,
-      bridge.static_default_source_id(),
+      bridge
+        .font
+        .default_source_id()
+        .expect("test font should have a default source"),
       default_layer_id,
       Some(0xE000),
     ));

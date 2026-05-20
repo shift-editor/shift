@@ -323,9 +323,10 @@ impl EditSession {
         }
     }
 
-    fn set_point_positions(&mut self, updates: &HashMap<PointId, NodePosition>) -> CoreResult<()> {
-        self.point_positions_exist_or_err(updates)?;
-
+    fn set_point_positions_validated(
+        &mut self,
+        updates: &HashMap<PointId, NodePosition>,
+    ) -> CoreResult<()> {
         let mut remaining: HashSet<PointId> = updates.keys().copied().collect();
         if remaining.is_empty() {
             return Ok(());
@@ -337,6 +338,9 @@ impl EditSession {
                 if let Some(position) = updates.get(&point_id) {
                     point.set_position(position.x, position.y);
                     remaining.remove(&point_id);
+                    if remaining.is_empty() {
+                        return Ok(());
+                    }
                 }
             }
         }
@@ -348,12 +352,10 @@ impl EditSession {
         }
     }
 
-    fn set_anchor_positions(
+    fn set_anchor_positions_validated(
         &mut self,
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
-        self.anchor_positions_exist_or_err(updates)?;
-
         for (anchor_id, position) in updates {
             self.anchor_mut_or_err(*anchor_id)?
                 .set_position(position.x, position.y);
@@ -381,6 +383,14 @@ impl EditSession {
         reader.read_points(updates.point_ids, updates.point_coords)?;
         reader.read_anchors(updates.anchor_ids, updates.anchor_coords)?;
         Ok(reader.finish())
+    }
+
+    fn apply_node_position_groups(&mut self, groups: &NodePositionGroups) -> CoreResult<()> {
+        self.point_positions_exist_or_err(&groups.points)?;
+        self.anchor_positions_exist_or_err(&groups.anchors)?;
+
+        self.set_point_positions_validated(&groups.points)?;
+        self.set_anchor_positions_validated(&groups.anchors)
     }
 }
 
@@ -661,12 +671,16 @@ impl EditSession {
             ..Default::default()
         };
 
-        self.point_positions_exist_or_err(&groups.points)?;
-        self.anchor_positions_exist_or_err(&groups.anchors)?;
-
-        self.set_point_positions(&groups.points)?;
-        self.set_anchor_positions(&groups.anchors)?;
+        self.apply_node_position_groups(&groups)?;
         Ok(changed)
+    }
+
+    pub fn apply_bulk_node_positions(
+        &mut self,
+        updates: BulkNodePositionUpdates<'_>,
+    ) -> CoreResult<()> {
+        let groups = Self::bulk_node_position_updates(updates)?;
+        self.apply_node_position_groups(&groups)
     }
 }
 

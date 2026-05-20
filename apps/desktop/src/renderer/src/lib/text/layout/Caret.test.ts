@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Font } from "@/lib/model/Font";
 import { Caret } from "./Caret";
-import { glyphCell as glyph, linebreakCell } from "./types";
+import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
 import { loadTestFont, makeLayout } from "./testUtils";
 
 describe("Caret", () => {
@@ -40,9 +40,13 @@ describe("Caret", () => {
   // Caret 0 (before A) → 1 (end of line 1, before linebreak)
   //                    → 2 (start of line 2, before B)
   it("next steps through paragraph boundary", () => {
-    const layout = makeLayout([glyph("A", 65), linebreakCell(), glyph("B", 66)], font);
+    const layout = makeLayout(
+      [glyph("A", 65), lineBreakTextItem(), glyph("B", 66)],
+      font,
+    );
     const metrics = font.metrics;
-    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const lineHeight =
+      metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     let c = Caret.atCluster(layout, 0);
 
     c = c.next();
@@ -70,9 +74,10 @@ describe("Caret", () => {
   //   line 0  A  ⏎    ←  cluster 0 = before A; cluster 1 = end of line 0
   //   line 1                  cluster 2 = empty line 1 (caret sits at originX)
   it("position on empty trailing line lands at that line's baseline", () => {
-    const layout = makeLayout([glyph("A", 65), linebreakCell()], font);
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem()], font);
     const metrics = font.metrics;
-    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const lineHeight =
+      metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     const caret = Caret.atCluster(layout, 2);
 
     const pos = caret.position();
@@ -87,9 +92,10 @@ describe("Caret", () => {
   //   line 1  ⏎              cluster 1  ← we want this
   //   line 2                  cluster 2
   it("position on empty line between two linebreaks lands on the middle line", () => {
-    const layout = makeLayout([linebreakCell(), linebreakCell()], font);
+    const layout = makeLayout([lineBreakTextItem(), lineBreakTextItem()], font);
     const metrics = font.metrics;
-    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const lineHeight =
+      metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     const caret = Caret.atCluster(layout, 1);
 
     const pos = caret.position();

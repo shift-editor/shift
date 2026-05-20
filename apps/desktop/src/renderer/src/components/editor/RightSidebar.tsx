@@ -12,7 +12,7 @@ import { BooleanOps } from "./BooleanOps";
 
 export const RightSidebar = () => {
   const editor = getEditor();
-  const zoom = useSignalState(editor.$zoom);
+  const zoom = useSignalState(editor.zoomCell);
   const zoomPercent = Math.round(zoom * 100);
   const { familyName } = editor.font.metadata;
 
@@ -20,16 +20,17 @@ export const RightSidebar = () => {
   const [hasAnchorSelection, setHasAnchorSelection] = useState(false);
 
   useSignalEffect(() => {
-    const pointIds = editor.selection.$pointIds.value;
-    const anchorIds = editor.selection.$anchorIds.value;
+    const { pointIds, anchorIds } = editor.selection.stateCell.value;
     const nextPoints = pointIds.size > 0;
     const nextAnchors = anchorIds.size > 0;
     setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
-    setHasAnchorSelection((prev) => (prev === nextAnchors ? prev : nextAnchors));
+    setHasAnchorSelection((prev) =>
+      prev === nextAnchors ? prev : nextAnchors,
+    );
   });
 
   return (
-    <aside className="w-[250px] h-full bg-panel border-l border-line-subtle flex flex-col">
+    <aside className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden">
       <div className="px-3 py-2 flex items-center justify-between">
         <span className="text-ui font-medium text-primary truncate">
           {familyName ?? "Untitled"}

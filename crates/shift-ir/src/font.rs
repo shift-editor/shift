@@ -1,4 +1,4 @@
-use crate::axis::Axis;
+use crate::axis::{Axis, Location};
 use crate::entity::{LayerId, SourceId};
 use crate::features::FeatureData;
 use crate::glyph::Glyph;
@@ -103,6 +103,37 @@ impl Default for Font {
         let default_layer_id = LayerId::new();
         let mut layers = HashMap::new();
         layers.insert(default_layer_id, Layer::default_layer());
+        let default_source = Source::new("Regular".to_string(), Location::new(), default_layer_id);
+        let default_source_id = default_source.id();
+
+        Self {
+            inner: Arc::new(FontData {
+                metadata: FontMetadata::default(),
+                metrics: FontMetrics::default(),
+                axes: Vec::new(),
+                sources: vec![default_source],
+                default_source_id: Some(default_source_id),
+                layers,
+                glyphs: HashMap::new(),
+                kerning: KerningData::new(),
+                features: FeatureData::new(),
+                guidelines: Vec::new(),
+                lib: LibData::new(),
+                default_layer_id,
+            }),
+        }
+    }
+}
+
+impl Font {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn empty() -> Self {
+        let default_layer_id = LayerId::new();
+        let mut layers = HashMap::new();
+        layers.insert(default_layer_id, Layer::default_layer());
 
         Self {
             inner: Arc::new(FontData {
@@ -120,12 +151,6 @@ impl Default for Font {
                 default_layer_id,
             }),
         }
-    }
-}
-
-impl Font {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     fn data(&self) -> &FontData {
@@ -172,6 +197,12 @@ impl Font {
         }
         data.sources.push(source);
         source_id
+    }
+
+    pub fn clear_sources(&mut self) {
+        let data = self.data_mut();
+        data.sources.clear();
+        data.default_source_id = None;
     }
 
     pub fn default_source_id(&self) -> Option<SourceId> {
@@ -375,6 +406,8 @@ mod tests {
         let font = Font::new();
         assert_eq!(font.glyph_count(), 0);
         assert!(font.default_layer().is_some());
+        assert_eq!(font.sources().len(), 1);
+        assert_eq!(font.default_source().map(Source::name), Some("Regular"));
     }
 
     #[test]

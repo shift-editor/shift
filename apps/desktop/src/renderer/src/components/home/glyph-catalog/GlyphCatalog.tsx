@@ -1,5 +1,6 @@
 import {
   Button,
+  cn,
   Collapsible,
   CollapsiblePanel,
   CollapsibleTrigger,
@@ -25,6 +26,9 @@ export const GlyphCatalog = () => {
     selectSubCategory,
   } = useGlyphCatalog();
 
+  const isTopLevelCategorySelected =
+    selectedCategory !== null && selectedSubCategoryKey === null;
+
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <Input
@@ -35,7 +39,7 @@ export const GlyphCatalog = () => {
         icon={<Search className="w-3 h-3 text-muted" />}
         iconPosition="left"
       />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-hidden">
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
           <span className="text-xs">{`${filteredUnicodes.length}/${availableUnicodes.length}`}</span>
@@ -47,7 +51,9 @@ export const GlyphCatalog = () => {
             variant="ghost"
             size="sm"
             onClick={selectAll}
-            data-active={selectedCategory === null && selectedSubCategoryKey === null}
+            isActive={
+              selectedCategory === null && selectedSubCategoryKey === null
+            }
           >
             <AllIcon className="w-4 h-4" />
             <span className="text-sm">All</span>
@@ -55,9 +61,18 @@ export const GlyphCatalog = () => {
         </div>
 
         {categories.map((categoryNode) => (
-          <div key={categoryNode.category} className="mt-1">
+          <div
+            key={categoryNode.category}
+            className={cn(
+              "mt-1",
+              isTopLevelCategorySelected &&
+                selectedCategory === categoryNode.category
+                ? "bg-hover/50 rounded-sm"
+                : null,
+            )}
+          >
             <Collapsible>
-              <CollapsibleTrigger className="w-full">
+              <CollapsibleTrigger render={<div className="w-full" />}>
                 <Category
                   category={categoryNode.category}
                   selectedCategory={selectedCategory}
@@ -65,7 +80,7 @@ export const GlyphCatalog = () => {
                 />
               </CollapsibleTrigger>
               <CollapsiblePanel>
-                <div className="ml-3">
+                <div>
                   {categoryNode.subCategories.map((subCategory) => (
                     <SubCategory
                       key={subCategory.key}

@@ -6,17 +6,18 @@
  */
 
 import { Canvas } from "@/lib/editor/rendering/Canvas";
-import type { ViewportTransform } from "@/lib/editor/rendering/Viewport";
+import type { CameraTransform } from "@/lib/editor/managers/Camera";
 
 const noop = () => {};
 
-const DEFAULT_VIEWPORT: ViewportTransform = {
+const DEFAULT_CAMERA: CameraTransform = {
   zoom: 1,
   panX: 0,
   panY: 0,
   centre: { x: 500, y: 400 },
   upmScale: 0.8,
   logicalHeight: 800,
+  layoutHeight: 800,
   padding: 40,
   descender: -200,
 };
@@ -48,7 +49,11 @@ function createStubContext(): CanvasRenderingContext2D {
     strokeText: noop,
     createLinearGradient: () => ({ addColorStop: noop }),
     drawImage: noop,
-    getImageData: () => ({ data: new Uint8ClampedArray(0), width: 0, height: 0 }),
+    getImageData: () => ({
+      data: new Uint8ClampedArray(0),
+      width: 0,
+      height: 0,
+    }),
     putImageData: noop,
     strokeStyle: "",
     fillStyle: "",
@@ -62,6 +67,8 @@ function createStubContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
-export function createStubCanvas(viewport: ViewportTransform = DEFAULT_VIEWPORT): Canvas {
-  return new Canvas(createStubContext(), viewport);
+export function createStubCanvas(
+  camera: CameraTransform = DEFAULT_CAMERA,
+): Canvas {
+  return new Canvas(createStubContext(), camera);
 }

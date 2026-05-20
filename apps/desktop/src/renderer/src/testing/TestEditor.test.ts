@@ -10,16 +10,17 @@ describe("TestEditor", () => {
   });
 
   describe("pointerMove", () => {
-    it("drives the tool pipeline synchronously via the flush seam", () => {
+    it("flushes pointer input synchronously", () => {
       editor.selectTool("pen");
 
-      // Two distinct moves must both register synchronously — a single-flush
-      // rAF implementation would coalesce them and only the latest would land.
+      // Two distinct moves must both register synchronously. Without the
+      // explicit flush seam, these would be coalesced behind rAF and tests
+      // would observe stale pointer input.
       editor.pointerMove(100, 100);
-      const first = editor.getActiveToolState().mousePos;
+      const first = editor.input.pointer;
 
       editor.pointerMove(200, 200);
-      const second = editor.getActiveToolState().mousePos;
+      const second = editor.input.pointer;
 
       expect(first).toBeDefined();
       expect(second).toBeDefined();

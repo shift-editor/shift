@@ -1,6 +1,6 @@
-import type { Rect2D } from "@shift/geo";
+import { Vec2, type Rect2D } from "@shift/geo";
 import type { ContourId, PointId } from "@shift/types";
-import type { PointEdit } from "@/lib/model/Glyph";
+import { Point } from "@shift/glyph-state";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
 export class DrawRectangleCommand extends BaseCommand<ContourId> {
@@ -19,27 +19,25 @@ export class DrawRectangleCommand extends BaseCommand<ContourId> {
     this.#pointIds = [];
     this.#contourId = ctx.source.addContour();
 
-    this.#pointIds.push(
-      ctx.source.addPoint(this.#contourId, pointEdit(this.#rect.x, this.#rect.y)),
+    const origin = Vec2.create(this.#rect.x, this.#rect.y);
+    const topLeft = origin;
+    const topRight = Vec2.add(origin, Vec2.create(this.#rect.width, 0));
+    const bottomRight = Vec2.add(
+      origin,
+      Vec2.create(this.#rect.width, this.#rect.height),
     );
-    this.#pointIds.push(
-      ctx.source.addPoint(
-        this.#contourId,
-        pointEdit(this.#rect.x + this.#rect.width, this.#rect.y),
-      ),
-    );
-    this.#pointIds.push(
-      ctx.source.addPoint(
-        this.#contourId,
-        pointEdit(this.#rect.x + this.#rect.width, this.#rect.y + this.#rect.height),
-      ),
-    );
-    this.#pointIds.push(
-      ctx.source.addPoint(
-        this.#contourId,
-        pointEdit(this.#rect.x, this.#rect.y + this.#rect.height),
-      ),
-    );
+    const bottomLeft = Vec2.add(origin, Vec2.create(0, this.#rect.height));
+
+    const topLeftPoint = Point.onCurve(topLeft);
+    const topRightPoint = Point.onCurve(topRight);
+    const bottomRightPoint = Point.onCurve(bottomRight);
+    const bottomLeftPoint = Point.onCurve(bottomLeft);
+
+    this.#pointIds.push(ctx.source.addPoint(this.#contourId, topLeftPoint));
+    this.#pointIds.push(ctx.source.addPoint(this.#contourId, topRightPoint));
+    this.#pointIds.push(ctx.source.addPoint(this.#contourId, bottomRightPoint));
+    this.#pointIds.push(ctx.source.addPoint(this.#contourId, bottomLeftPoint));
+
     ctx.source.closeContour(this.#contourId);
 
     return this.#contourId;
@@ -50,13 +48,4 @@ export class DrawRectangleCommand extends BaseCommand<ContourId> {
       ctx.source.removePoints(this.#pointIds);
     }
   }
-}
-
-function pointEdit(x: number, y: number): PointEdit {
-  return {
-    x,
-    y,
-    pointType: "onCurve",
-    smooth: false,
-  };
 }

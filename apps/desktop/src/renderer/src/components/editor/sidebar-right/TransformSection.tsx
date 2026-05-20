@@ -1,6 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { SidebarSection } from "./SidebarSection";
-import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
+import {
+  EditableSidebarInput,
+  type EditableSidebarInputHandle,
+} from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
@@ -50,7 +59,11 @@ const AlignButtonsRow = React.memo(function AlignButtonsRow({
         />
       </div>
       <div className="flex gap-1">
-        <IconButton icon={AlignTopIcon} onClick={() => onAlign("top")} disabled={!canDistribute} />
+        <IconButton
+          icon={AlignTopIcon}
+          onClick={() => onAlign("top")}
+          disabled={!canDistribute}
+        />
         <IconButton
           icon={AlignCenterVIcon}
           onClick={() => onAlign("center-v")}
@@ -92,7 +105,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
-  const selectedPointIds = useSignalState(editor.selection.$pointIds);
+  const selectedPointIds = useSignalState(editor.selection.stateCell).pointIds;
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
@@ -117,7 +130,6 @@ export const TransformSection = () => {
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
       editor.alignSelection(alignment);
-      editor.requestRedraw();
     },
     [editor],
   );
@@ -125,13 +137,13 @@ export const TransformSection = () => {
   const handleDistribute = useCallback(
     (type: DistributeType) => {
       editor.distributeSelection(type);
-      editor.requestRedraw();
     },
     [editor],
   );
 
   const origin = useMemo(
-    () => (selectionBounds ? anchorToPoint(anchor, selectionBounds) : undefined),
+    () =>
+      selectionBounds ? anchorToPoint(anchor, selectionBounds) : undefined,
     [anchor, selectionBounds],
   );
 
@@ -158,9 +170,11 @@ export const TransformSection = () => {
     (axis: "x" | "y", value: number) => {
       if (!selectionBounds) return;
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
-      const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
+      const target =
+        axis === "x"
+          ? { x: value, y: anchorPoint.y }
+          : { x: anchorPoint.x, y: value };
       editor.moveSelectionTo(target, anchorPoint);
-      editor.requestRedraw();
     },
     [anchor, editor, selectionBounds],
   );
@@ -174,7 +188,10 @@ export const TransformSection = () => {
 
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Distribute</div>
-        <DistributeButtonsRow onDistribute={handleDistribute} canDistribute={canDistribute} />
+        <DistributeButtonsRow
+          onDistribute={handleDistribute}
+          canDistribute={canDistribute}
+        />
       </div>
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Position</div>

@@ -3,7 +3,7 @@ import type { ContourId, PointId, PointType } from "@shift/types";
 import { signal, type Signal } from "@/lib/signals/signal";
 import { Font } from "@/lib/model/Font";
 import type { GlyphSource } from "@/lib/model/Glyph";
-import type { Point } from "@shift/glyph-state";
+import { Point } from "@shift/glyph-state";
 import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
 import type { CommandContext } from "./core";
 
@@ -19,8 +19,7 @@ export function commandSourceFixture(): CommandSourceFixture {
   font.load(MUTATORSANS_DESIGNSPACE);
 
   const handle = { name: "A", unicode: 65 };
-  const source = font.sourceAt(font.defaultLocation());
-  if (!source) throw new Error("Expected editable source");
+  const source = font.defaultSource;
   bridge.startEditSession(handle, source.id);
 
   const glyphSource = font.glyphSource(handle, source);
@@ -46,12 +45,14 @@ export function addPoint(
     readonly smooth?: boolean;
   },
 ): PointId {
-  return source.addPoint(contourId, {
-    x: edit.x,
-    y: edit.y,
-    pointType: edit.pointType ?? "onCurve",
-    smooth: edit.smooth ?? false,
-  });
+  return source.addPoint(
+    contourId,
+    Point.create(
+      { x: edit.x, y: edit.y },
+      edit.pointType ?? "onCurve",
+      edit.smooth ?? false,
+    ),
+  );
 }
 
 export function point(source: GlyphSource, pointId: PointId): Point {
@@ -60,7 +61,10 @@ export function point(source: GlyphSource, pointId: PointId): Point {
   return result;
 }
 
-export function contourPoints(source: GlyphSource, contourId: ContourId): readonly Point[] {
+export function contourPoints(
+  source: GlyphSource,
+  contourId: ContourId,
+): readonly Point[] {
   const contour = source.contour(contourId);
   if (!contour) throw new Error("Expected contour");
   return contour.points;

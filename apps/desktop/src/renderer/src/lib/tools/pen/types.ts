@@ -14,7 +14,7 @@ export interface Handles {
 
 export type PenState =
   | { type: "idle" }
-  | { type: "ready"; mousePos: Point2D }
+  | { type: "ready" }
   | { type: "anchored"; anchor: Anchor }
   | {
       type: "dragging";

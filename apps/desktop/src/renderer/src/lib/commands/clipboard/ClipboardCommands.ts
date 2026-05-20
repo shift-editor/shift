@@ -1,7 +1,9 @@
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { PointId, ContourId, GlyphState } from "@shift/types";
+import { Point } from "@shift/glyph-state";
 import type { GlyphSource } from "@/lib/model/Glyph";
 import type { ClipboardContent, PasteOptions } from "../../clipboard/types";
+import { Vec2 } from "@shift/geo";
 
 /**
  * Removes the specified points from the glyph as part of a cut operation.
@@ -102,12 +104,11 @@ function pasteContours(
     createdContourIds.push(contourId);
 
     for (const point of contour.points) {
-      const pointId = source.addPoint(contourId, {
-        x: point.x + options.offset.x,
-        y: point.y + options.offset.y,
-        pointType: point.pointType,
-        smooth: point.smooth,
-      });
+      const newPos = Vec2.add(point, options.offset);
+      const pointId = source.addPoint(
+        contourId,
+        Point.create(newPos, point.pointType, point.smooth),
+      );
       createdPointIds.push(pointId);
     }
 

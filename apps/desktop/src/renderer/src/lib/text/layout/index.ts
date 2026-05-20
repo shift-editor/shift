@@ -2,19 +2,19 @@ export { TextLayout } from "./TextLayout";
 export type { TextLayoutParams } from "./TextLayout";
 export { Caret } from "./Caret";
 export { Positioner } from "./Positioner";
-export { createTextCellId, glyphCell, linebreakCell } from "./types";
+export { createTextItemId, glyphTextItem, lineBreakTextItem } from "./types";
 export type {
   CaretPosition,
-  Cell,
+  TextItem,
   Direction,
   GlyphAnchor,
-  GlyphCell,
+  GlyphTextItem,
   Hit,
   Line,
-  LineBreak,
+  LineBreakTextItem,
   PositionedGlyph,
   PositionedRun,
   SegmentedRun,
-  TextCellId,
+  TextItemId,
   TextRunId,
 } from "./types";

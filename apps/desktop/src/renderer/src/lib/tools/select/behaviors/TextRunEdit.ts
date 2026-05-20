@@ -3,10 +3,10 @@ import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
 
 /**
- * Double-click on a text run cell to enter in-place editing for that glyph.
+ * Double-click on a text run item to enter in-place editing for that glyph.
  *
- * Resolves the click to a stable text-cell anchor and lets Editor derive the
- * active glyph placement from the current layout. Linebreak cells are not editable.
+ * Resolves the click to a stable text-item anchor and lets Editor derive the
+ * active glyph placement from the current layout. Linebreak items are not editable.
  */
 export class TextRunEdit implements SelectBehavior {
   onDoubleClick(
@@ -14,7 +14,7 @@ export class TextRunEdit implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"doubleClick">,
   ): boolean {
-    if (state.type !== "ready" && state.type !== "selected") return false;
+    if (state.type !== "ready") return false;
 
     const run = ctx.editor.textRun;
     const anchor = run.anchorAtPoint(event.point, ctx.editor.hitRadius);

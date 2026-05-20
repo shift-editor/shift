@@ -100,9 +100,9 @@ describe("Bridge", () => {
   it("rejects starting a second active edit session", () => {
     bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
 
-    expect(() => bridge.startEditSession({ name: "B", unicode: 66 }, defaultSourceId())).toThrow(
-      /edit session already active/i,
-    );
+    expect(() =>
+      bridge.startEditSession({ name: "B", unicode: 66 }, defaultSourceId()),
+    ).toThrow(/edit session already active/i);
     expect(bridge.getEditingGlyphName()).toBe("A");
   });
 
@@ -129,20 +129,24 @@ describe("Bridge", () => {
     expect(Array.from(change.values)).toEqual([500, 10, 20]);
   });
 
-  it("sets point positions through the bulk typed-array hot path", () => {
+  it("applies point positions through the sparse typed-array hot path", () => {
     bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
     const contourId = bridge.addContour().changed.contourIds[0];
-    const pointId = bridge.addPoint(contourId, 10, 20, "onCurve", false).changed.pointIds[0];
+    const pointId = bridge.addPoint(contourId, 10, 20, "onCurve", false).changed
+      .pointIds[0];
 
-    const change = bridge.setPositions(
+    bridge.applyPositionPatch(
       new BigUint64Array([BigInt(pointId)]),
       new Float64Array([30, 40]),
       null,
       null,
     );
 
-    expect(change.changed.pointIds).toEqual([pointId]);
-    expect(Array.from(change.values)).toEqual([500, 30, 40]);
+    const state = bridge.getGlyphState(
+      { name: "A", unicode: 65 },
+      defaultSourceId(),
+    );
+    expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
 
   it("restores structure and values into the active session", () => {
@@ -151,7 +155,10 @@ describe("Bridge", () => {
     const before = bridge.addPoint(contourId, 10, 20, "onCurve", false);
     const pointId = before.changed.pointIds[0];
 
-    const change = bridge.restoreState(before.structure, new Float64Array([700, 90, 120]));
+    const change = bridge.restoreState(
+      before.structure,
+      new Float64Array([700, 90, 120]),
+    );
 
     expect(change.structure.contours[0].points[0].id).toBe(pointId);
     expect(Array.from(change.values)).toEqual([700, 90, 120]);
@@ -161,9 +168,16 @@ describe("Bridge", () => {
     expect(() => bridge.addContour()).toThrow(/active edit/i);
 
     bridge.startEditSession({ name: "A", unicode: 65 }, defaultSourceId());
-    expect(() => bridge.addPoint("not-a-contour", 10, 20, "onCurve", false)).toThrow(/contour ID/i);
     expect(() =>
-      bridge.setPositions(new BigUint64Array([1n]), new Float64Array([10]), null, null),
+      bridge.addPoint("not-a-contour", 10, 20, "onCurve", false),
+    ).toThrow(/contour ID/i);
+    expect(() =>
+      bridge.applyPositionPatch(
+        new BigUint64Array([1n]),
+        new Float64Array([10]),
+        null,
+        null,
+      ),
     ).toThrow(/point positions/i);
   });
 });

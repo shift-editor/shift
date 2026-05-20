@@ -1,35 +1,35 @@
-export { Anchor } from "./Anchor";
+export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentTransform, type Matrix } from "./Component";
-export { Contour, type Point, type PointWithNeighbors } from "./Contour";
+export { Contour } from "./Contour";
+export { IdIndex } from "./IdIndex";
 export {
-  GlyphStateGeometry,
+  Point,
+  type NewPoint,
+  type PointHit,
+  type PointWithNeighbors,
+} from "./Point";
+export {
+  GlyphGeometry as GlyphStateGeometry,
+  type GeometryAnchorHit,
+  type GeometryHit,
+  type GeometryPointHit,
+  type GeometrySegmentHit,
   type GlyphPosition,
   type GlyphPositions,
   type GlyphPositionTarget,
   type GlyphSidebearings,
-  type PackedPositionUpdates,
-} from "./GlyphStateGeometry";
+} from "./GlyphGeometry";
 export {
   Segment,
   asSegmentId,
-  type SegmentHitResult,
   type SegmentId,
-  type SegmentPoint,
+  type SegmentHit,
   type SegmentType,
+  type SegmentPoints,
+  type LineSegmentPoints,
+  type QuadSegmentPoints,
+  type CubicSegmentPoints,
   type LineSegment,
   type QuadSegment,
   type CubicSegment,
 } from "./Segment";
-export {
-  deriveGlyphTightBounds,
-  deriveGlyphXBounds,
-  parseContourSegments,
-  segmentToCurve,
-  type SegmentPointGeometry,
-  type SegmentContourLike,
-  type SegmentGeometry,
-  type LineSegmentGeometry,
-  type QuadSegmentGeometry,
-  type CubicSegmentGeometry,
-  type SegmentGlyphLike,
-} from "./GlyphGeometry";

@@ -1,5 +1,4 @@
 import type { CursorType } from "@/types/editor";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
 
 export type BoundingRectEdge =
   | "left"
@@ -29,25 +28,4 @@ export function edgeToCursor(edge: BoundingRectEdge): CursorType {
     default:
       return { type: "default" };
   }
-}
-
-export function boundingBoxHitResultToCursor(result: BoundingBoxHitResult): CursorType {
-  if (!result) {
-    return { type: "default" };
-  }
-
-  if (result.type === "rotate") {
-    switch (result.corner) {
-      case "top-left":
-        return { type: "rotate-tl" };
-      case "top-right":
-        return { type: "rotate-tr" };
-      case "bottom-left":
-        return { type: "rotate-bl" };
-      case "bottom-right":
-        return { type: "rotate-br" };
-    }
-  }
-
-  return edgeToCursor(result.edge);
 }

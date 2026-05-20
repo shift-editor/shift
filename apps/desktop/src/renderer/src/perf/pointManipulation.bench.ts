@@ -23,38 +23,42 @@ const marks = [
 
 for (const { label, pm } of marks) {
   describe(`point manipulation — ${label} points`, () => {
-    bench("draft.previewPositions — single point", () => {
-      const draft = pm.editor.beginSourceEditDraft({ points: [pm.pointIds[0]] });
+    bench("draft.previewPositionPatch — single point", () => {
+      const draft = pm.editor.beginSourceEditDraft({
+        points: [pm.pointIds[0]],
+      });
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      draft.previewPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 
-    bench("draft.previewPositions — all points", () => {
+    bench("draft.previewPositionPatch — all points", () => {
       const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      draft.previewPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 
     bench("draft.commit — single point", () => {
-      const draft = pm.editor.beginSourceEditDraft({ points: [pm.pointIds[0]] });
+      const draft = pm.editor.beginSourceEditDraft({
+        points: [pm.pointIds[0]],
+      });
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      draft.previewPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.commit("bench move");
     });
 
     bench("draft.commit — all points", () => {
       const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      draft.previewPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.commit("bench move");
     });
 
     bench("draft.discard — after all-points update", () => {
       const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 5, 5);
-      draft.previewPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 

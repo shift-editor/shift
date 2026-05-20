@@ -1,6 +1,19 @@
 import { useSyncExternalStore } from "react";
 import { effect, type Signal } from "./signal";
 
+interface UseSignalOptions {
+  readonly schedule?: "frame";
+}
+
+function scheduleFrame(execute: () => void): void {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(execute);
+    return;
+  }
+
+  setTimeout(execute, 0);
+}
+
 /**
  * React hook to subscribe to a signal's value.
  *
@@ -11,13 +24,19 @@ import { effect, type Signal } from "./signal";
  * const editor = getEditor();
  * const activeTool = useSignalState(editor.activeTool);
  */
-export function useSignalState<T>(signal: Signal<T>): T {
+export function useSignalState<T>(
+  signal: Signal<T>,
+  options?: UseSignalOptions,
+): T {
   return useSyncExternalStore(
     (callback) => {
-      const fx = effect(() => {
-        signal.value; // Track dependency
-        callback();
-      });
+      const fx = effect(
+        () => {
+          signal.value; // Track dependency
+          callback();
+        },
+        options?.schedule === "frame" ? { schedule: scheduleFrame } : undefined,
+      );
       return () => fx.dispose();
     },
     () => signal.peek(),
@@ -32,14 +51,20 @@ export function useSignalState<T>(signal: Signal<T>): T {
  *
  * Pass `null` to opt out of subscription — safe to call conditionally.
  */
-export function useSignalTrigger(signal: Signal<unknown> | null | undefined): void {
+export function useSignalTrigger(
+  signal: Signal<unknown> | null | undefined,
+  options?: UseSignalOptions,
+): void {
   useSyncExternalStore(
     (callback) => {
       if (!signal) return () => {};
-      const fx = effect(() => {
-        signal.value;
-        callback();
-      });
+      const fx = effect(
+        () => {
+          signal.value;
+          callback();
+        },
+        options?.schedule === "frame" ? { schedule: scheduleFrame } : undefined,
+      );
       return () => fx.dispose();
     },
     () => (signal ? signal.peek() : null),

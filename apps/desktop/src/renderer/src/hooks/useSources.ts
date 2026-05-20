@@ -11,5 +11,6 @@ import { useSignalState } from "@/lib/signals";
 export const useSources = (): Source[] => {
   const font = getEditor().font;
   const fontLoaded = useSignalState(font.$loaded);
-  return useMemo(() => (fontLoaded && font.isVariable() ? font.sources : []), [fontLoaded, font]);
+
+  return useMemo(() => (fontLoaded ? font.sources : []), [fontLoaded, font]);
 };

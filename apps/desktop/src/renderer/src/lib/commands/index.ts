@@ -20,7 +20,7 @@ export {
   UpgradeLineToCubicCommand,
   BooleanOperationCommand,
   type BooleanOperation,
-  SetSourcePositionsCommand,
+  ApplyPositionPatchCommand,
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
@@ -30,4 +30,8 @@ export {
 export { CutCommand, PasteCommand } from "./clipboard";
 
 // Transform commands
-export { RotatePointsCommand, ScalePointsCommand, ReflectPointsCommand } from "./transform";
+export {
+  RotatePointsCommand,
+  ScalePointsCommand,
+  ReflectPointsCommand,
+} from "./transform";

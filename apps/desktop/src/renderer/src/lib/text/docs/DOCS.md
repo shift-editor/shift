@@ -4,20 +4,20 @@ Text editing is split into stable editor identity and derived layout geometry.
 
 ## Architecture Invariants
 
-**Architecture Invariant:** `TextCellId` is the durable identity for editable text cells. Buffer indices and layout clusters may move after insert/delete operations; focus must remain attached to `cell.id`.
+**Architecture Invariant:** `TextItemId` is the durable identity for editable text items. Buffer indices and layout clusters may move after insert/delete operations; focus must remain attached to `item.id`.
 
-**Architecture Invariant:** HarfBuzz clusters are layout metadata, not editor identity. Shaped layout must map output glyphs back to `TextCellId[]`.
+**Architecture Invariant:** HarfBuzz clusters are layout metadata, not editor identity. Shaped layout must map output glyphs back to `TextItemId[]`.
 
-**Architecture Invariant:** `TextLayout` owns identity-to-geometry resolution. Call `editOriginForCell(cellId)` to get the current scene-space edit origin; do not cache text-run placement coordinates in tools.
+**Architecture Invariant:** `TextLayout` owns identity-to-geometry resolution. Call `editOriginForItem(itemId)` to get the current scene-space edit origin; do not cache text-run placement coordinates in tools.
 
 **Architecture Invariant:** Direct glyph editing uses the implicit editor run (`TextRuns.editorRun()`). Real text runs and the implicit editor run share anchor/focus/placement machinery, but only real text runs are persisted as user text content.
 
 ## Core Flow
 
 ```
-TextBuffer cells
-  -> TextLayout positioned glyphs { cellIds, origin, xOffset/yOffset }
-  -> GlyphAnchor { runId, cellId }
+TextBuffer items
+  -> TextLayout positioned glyphs { sourceItemIds, origin, xOffset/yOffset }
+  -> GlyphAnchor { runId, itemId }
   -> TextRuns.resolveAnchor()
   -> FocusedGlyph.editOrigin
   -> Editor.drawOffset
@@ -25,10 +25,10 @@ TextBuffer cells
 
 ## Key Types
 
-- **`TextCellId`** -- stable identity for a glyph or linebreak cell.
-- **`GlyphAnchor`** -- `{ runId, cellId }`; the durable bridge from editor focus to current layout.
-- **`FocusedGlyph`** -- resolved anchor with the current cell, glyph handle, and edit origin.
-- **`PositionedGlyph.cellIds`** -- source cell identities covered by a positioned glyph. Simple layout is one-to-one; shaped layout may be many-to-one or one-to-many.
+- **`TextItemId`** -- stable identity for a glyph or linebreak item.
+- **`GlyphAnchor`** -- `{ runId, itemId }`; the durable bridge from editor focus to current layout.
+- **`FocusedGlyph`** -- resolved anchor with the current item, glyph handle, and edit origin.
+- **`PositionedGlyph.sourceItemIds`** -- source item identities covered by a positioned glyph. Simple layout is one-to-one; shaped layout may be many-to-one or one-to-many.
 - **`Positioner`** -- current simple source-order layout implementation. It owns display advance and mark offset logic so editor placement is layout-derived.
 
 ## Direct Glyph Open
@@ -40,10 +40,10 @@ openGlyph(S)
 editorRun = [S(id=s1)]
    |
    v
-GlyphAnchor { runId: "__editor__", cellId: s1 }
+GlyphAnchor { runId: "__editor__", itemId: s1 }
    |
    v
-TextLayout.editOriginForCell(s1)
+TextLayout.editOriginForItem(s1)
    |
    v
 drawOffset
@@ -57,7 +57,7 @@ run = [a(id=a1), a(id=a2), s(id=s1), d(id=d1)]
                            click
    |
    v
-GlyphAnchor { runId: run.id, cellId: s1 }
+GlyphAnchor { runId: run.id, itemId: s1 }
    |
    v
 resolveAnchor(anchor)
@@ -71,4 +71,4 @@ drawOffset = editOrigin
 
 ## Persistence
 
-Persisted text cells must include IDs. There is no legacy repair path in the renderer: missing IDs are invalid persisted data.
+Persisted text items must include IDs. There is no legacy repair path in the renderer: missing IDs are invalid persisted data.

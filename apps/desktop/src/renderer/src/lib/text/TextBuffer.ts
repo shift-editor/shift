@@ -1,7 +1,7 @@
 /**
  * TextBuffer — pure logical state of an editable text run.
  *
- * Owns: cell buffer + cursor + anchor + originX.
+ * Owns: item buffer + cursor + anchor + originX.
  *
  * Selection model: DOM-style (anchor / focus).
  *   - anchor: where the selection started (stays during shift+arrow)
@@ -9,8 +9,8 @@
  *   - anchor === cursor → no selection, just a caret
  *   - anchor !== cursor → selection from min(...) to max(...)
  *
- * Per-field signals so consumers subscribe only to what they need —
- * a cursor move does not refire `$cells` subscribers. Multi-field
+ * Per-field signals so consumers subscribe only to what they need:
+ * a cursor move does not refire `itemsCell` subscribers. Multi-field
  * mutations go through `#update(patch)` which batches all signal sets,
  * keeping the `batch(() => ...)` boilerplate out of every method.
  *
@@ -18,8 +18,13 @@
  * cursorVisible (transient UI state). Those live in `TextInteraction` /
  * `TextRun`.
  */
-import { signal, batch, type WritableSignal, type Signal } from "@/lib/signals/signal";
-import type { Cell, TextCellId } from "./layout";
+import {
+  signal,
+  batch,
+  type WritableSignal,
+  type Signal,
+} from "@/lib/signals/signal";
+import type { TextItem, TextItemId } from "./layout";
 import { clamp } from "@/lib/utils/utils";
 
 export interface SelectionRange {
@@ -29,7 +34,7 @@ export interface SelectionRange {
 
 /** All-fields-required snapshot of a TextBuffer; safe to round-trip through persistence. */
 export interface TextBufferSnapshot {
-  cells: Cell[];
+  items: TextItem[];
   cursor: number;
   anchor: number;
   originX: number;
@@ -37,47 +42,47 @@ export interface TextBufferSnapshot {
 
 /** Patch shape for `#update`. Any field omitted is left alone. */
 interface TextBufferPatch {
-  cells?: readonly Cell[];
+  items?: readonly TextItem[];
   cursor?: number;
   anchor?: number;
   originX?: number;
 }
 
 export class TextBuffer {
-  readonly #$cells: WritableSignal<readonly Cell[]>;
-  readonly #$cursor: WritableSignal<number>;
-  readonly #$anchor: WritableSignal<number>;
-  readonly #$originX: WritableSignal<number>;
+  readonly #items: WritableSignal<readonly TextItem[]>;
+  readonly #cursor: WritableSignal<number>;
+  readonly #anchor: WritableSignal<number>;
+  readonly #originX: WritableSignal<number>;
 
   constructor() {
-    this.#$cells = signal<readonly Cell[]>([]);
-    this.#$cursor = signal(0);
-    this.#$anchor = signal(0);
-    this.#$originX = signal(0);
+    this.#items = signal<readonly TextItem[]>([]);
+    this.#cursor = signal(0);
+    this.#anchor = signal(0);
+    this.#originX = signal(0);
   }
 
-  get cells(): readonly Cell[] {
-    return this.#$cells.value;
+  get items(): readonly TextItem[] {
+    return this.#items.peek();
   }
 
   get cursor(): number {
-    return this.#$cursor.value;
+    return this.#cursor.peek();
   }
 
   get anchor(): number {
-    return this.#$anchor.value;
+    return this.#anchor.peek();
   }
 
   get originX(): number {
-    return this.#$originX.value;
+    return this.#originX.peek();
   }
 
   get length(): number {
-    return this.#$cells.value.length;
+    return this.#items.peek().length;
   }
 
   get hasSelection(): boolean {
-    return this.#$anchor.value !== this.#$cursor.value;
+    return this.#anchor.peek() !== this.#cursor.peek();
   }
 
   /**
@@ -93,43 +98,42 @@ export class TextBuffer {
    *     [A, B, C, D]                  range = { start: 2, end: 2 }   → empty
    */
   get range(): SelectionRange {
-    const a = this.#$anchor.value;
-    const c = this.#$cursor.value;
+    const a = this.#anchor.peek();
+    const c = this.#cursor.peek();
     return { start: Math.min(a, c), end: Math.max(a, c) };
   }
 
   /** @knipclassignore — read by HiddenTextInput's copy handler */
-  get selectedCells(): Cell[] {
+  get selectedItems(): TextItem[] {
     if (!this.hasSelection) return [];
     const { start, end } = this.range;
-    return this.#$cells.peek().slice(start, end);
+    return this.#items.peek().slice(start, end);
   }
 
-  cellById(id: TextCellId): Cell | null {
-    return this.#$cells.value.find((cell) => cell.id === id) ?? null;
+  itemById(id: TextItemId): TextItem | null {
+    return this.#items.peek().find((item) => item.id === id) ?? null;
   }
 
-  /** Raw signals for React hooks that need `Signal<T>`. */
-  get $cells(): Signal<readonly Cell[]> {
-    return this.#$cells;
+  get itemsCell(): Signal<readonly TextItem[]> {
+    return this.#items;
   }
 
-  get $cursor(): Signal<number> {
-    return this.#$cursor;
+  get cursorCell(): Signal<number> {
+    return this.#cursor;
   }
 
-  get $anchor(): Signal<number> {
-    return this.#$anchor;
+  get anchorCell(): Signal<number> {
+    return this.#anchor;
   }
 
-  get $originX(): Signal<number> {
-    return this.#$originX;
+  get originXCell(): Signal<number> {
+    return this.#originX;
   }
 
   /**
-   * Insert one cell at the cursor. Replaces the current selection
+   * Insert one item at the cursor. Replaces the current selection
    * (if any) before inserting. Cursor and anchor advance to the
-   * position immediately after the inserted cell.
+   * position immediately after the inserted item.
    *
    *   no selection (cursor=2):
    *     before:  [A, B, C]            cursor = anchor = 2
@@ -141,24 +145,32 @@ export class TextBuffer {
    *     insert(X)
    *     after:   [A, X, D]            cursor = anchor = 2
    */
-  insert(cell: Cell): void {
+  insert(item: TextItem): void {
     const { start, end } = this.range;
-    const next = [...this.cells.slice(0, start), cell, ...this.cells.slice(end)];
+    const next = [
+      ...this.items.slice(0, start),
+      item,
+      ...this.items.slice(end),
+    ];
     const pos = start + 1;
 
-    this.#update({ cells: next, cursor: pos, anchor: pos });
+    this.#update({ items: next, cursor: pos, anchor: pos });
   }
 
   /**
-   * Insert many cells at the cursor. Replaces the current selection.
-   * Cursor and anchor land at `start + cells.length`.
+   * Insert many items at the cursor. Replaces the current selection.
+   * Cursor and anchor land at `start + items.length`.
    */
-  insertMany(cells: readonly Cell[]): void {
+  insertMany(items: readonly TextItem[]): void {
     const { start, end } = this.range;
-    const next = [...this.cells.slice(0, start), ...cells, ...this.cells.slice(end)];
-    const pos = start + cells.length;
+    const next = [
+      ...this.items.slice(0, start),
+      ...items,
+      ...this.items.slice(end),
+    ];
+    const pos = start + items.length;
 
-    this.#update({ cells: next, cursor: pos, anchor: pos });
+    this.#update({ items: next, cursor: pos, anchor: pos });
   }
 
   /**
@@ -166,11 +178,11 @@ export class TextBuffer {
    * Existing cursor/anchor shift right by 1 if they sit at or after `index`.
    */
   /** @knipclassignore — used by Select tool's TextRunEdit splice (TODO) */
-  insertAt(index: number, cell: Cell): void {
+  insertAt(index: number, item: TextItem): void {
     const at = clamp(index, 0, this.length);
-    const next = [...this.cells.slice(0, at), cell, ...this.cells.slice(at)];
+    const next = [...this.items.slice(0, at), item, ...this.items.slice(at)];
     this.#update({
-      cells: next,
+      items: next,
       cursor: this.cursor >= at ? this.cursor + 1 : this.cursor,
       anchor: this.anchor >= at ? this.anchor + 1 : this.anchor,
     });
@@ -178,7 +190,7 @@ export class TextBuffer {
 
   /**
    * Backspace. If a selection is active, deletes the selection;
-   * cursor lands at selection start. Otherwise deletes one cell
+   * cursor lands at selection start. Otherwise deletes one item
    * before the cursor.
    *
    * Returns true when something was deleted, false when there's
@@ -187,35 +199,38 @@ export class TextBuffer {
   delete(): boolean {
     if (this.hasSelection) {
       const { start, end } = this.range;
-      const next = [...this.cells.slice(0, start), ...this.cells.slice(end)];
-      this.#update({ cells: next, cursor: start, anchor: start });
+      const next = [...this.items.slice(0, start), ...this.items.slice(end)];
+      this.#update({ items: next, cursor: start, anchor: start });
       return true;
     }
 
     if (this.cursor === 0) return false;
 
     const pos = this.cursor - 1;
-    const next = [...this.cells.slice(0, pos), ...this.cells.slice(pos + 1)];
-    this.#update({ cells: next, cursor: pos, anchor: pos });
+    const next = [...this.items.slice(0, pos), ...this.items.slice(pos + 1)];
+    this.#update({ items: next, cursor: pos, anchor: pos });
     return true;
   }
 
   /**
    * Forward delete. If a selection is active, deletes it; cursor
-   * lands at selection start. Otherwise deletes the cell at cursor.
+   * lands at selection start. Otherwise deletes the item at cursor.
    */
   deleteForward(): boolean {
     if (this.hasSelection) {
       const { start, end } = this.range;
-      const next = [...this.cells.slice(0, start), ...this.cells.slice(end)];
-      this.#update({ cells: next, cursor: start, anchor: start });
+      const next = [...this.items.slice(0, start), ...this.items.slice(end)];
+      this.#update({ items: next, cursor: start, anchor: start });
       return true;
     }
 
     if (this.cursor >= this.length) return false;
 
-    const next = [...this.cells.slice(0, this.cursor), ...this.cells.slice(this.cursor + 1)];
-    this.#update({ cells: next });
+    const next = [
+      ...this.items.slice(0, this.cursor),
+      ...this.items.slice(this.cursor + 1),
+    ];
+    this.#update({ items: next });
     return true;
   }
 
@@ -233,7 +248,7 @@ export class TextBuffer {
    * shift+arrow / shift+click to extend the selection.
    */
   extendSelection(index: number): void {
-    this.#$cursor.set(clamp(index, 0, this.length));
+    this.#cursor.set(clamp(index, 0, this.length));
   }
 
   /**
@@ -265,27 +280,27 @@ export class TextBuffer {
   }
 
   setOriginX(x: number): void {
-    this.#$originX.set(x);
+    this.#originX.set(x);
   }
 
   /**
-   * Initialize with a single cell if and only if the buffer is empty.
+   * Initialize with a single item if and only if the buffer is empty.
    * Cursor + anchor land at index 1. Used by Text tool activation to
    * plant the active glyph.
    */
-  seed(cell: Cell): void {
+  seed(item: TextItem): void {
     if (this.length > 0) return;
-    this.#update({ cells: [cell], cursor: 1, anchor: 1 });
+    this.#update({ items: [item], cursor: 1, anchor: 1 });
   }
 
   /** Empty the buffer; cursor/anchor/originX reset to 0. */
   clear(): void {
-    this.#update({ cells: [], cursor: 0, anchor: 0, originX: 0 });
+    this.#update({ items: [], cursor: 0, anchor: 0, originX: 0 });
   }
 
   snapshot(): TextBufferSnapshot {
     return {
-      cells: [...this.cells],
+      items: [...this.items],
       cursor: this.cursor,
       anchor: this.anchor,
       originX: this.originX,
@@ -303,10 +318,10 @@ export class TextBuffer {
    */
   #update(patch: TextBufferPatch): void {
     batch(() => {
-      if (patch.cells !== undefined) this.#$cells.set(patch.cells);
-      if (patch.cursor !== undefined) this.#$cursor.set(patch.cursor);
-      if (patch.anchor !== undefined) this.#$anchor.set(patch.anchor);
-      if (patch.originX !== undefined) this.#$originX.set(patch.originX);
+      if (patch.items !== undefined) this.#items.set(patch.items);
+      if (patch.cursor !== undefined) this.#cursor.set(patch.cursor);
+      if (patch.anchor !== undefined) this.#anchor.set(patch.anchor);
+      if (patch.originX !== undefined) this.#originX.set(patch.originX);
     });
   }
 }

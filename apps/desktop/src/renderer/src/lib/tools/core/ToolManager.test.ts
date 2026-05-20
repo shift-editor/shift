@@ -4,10 +4,16 @@ import { TestEditor } from "@/testing";
 import type { Modifiers } from "./GestureDetector";
 
 type KeyboardEventOptions = Partial<
-  Pick<KeyboardEvent, "code" | "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">
+  Pick<
+    KeyboardEvent,
+    "code" | "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey"
+  >
 >;
 
-function createKeyboardEvent(type: string, options: KeyboardEventOptions = {}): KeyboardEvent {
+function createKeyboardEvent(
+  type: string,
+  options: KeyboardEventOptions = {},
+): KeyboardEvent {
   const event: Pick<
     KeyboardEvent,
     | "type"
@@ -47,14 +53,18 @@ describe("ToolManager", () => {
     it("does not switch tools on space keydown by itself", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { code: "Space" }));
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { code: "Space" }),
+      );
 
       expect(toolManager.activeToolId).toBe("pen");
     });
 
     it("returns true when active tool handles keydown", () => {
       toolManager.activate("text");
-      const handled = toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Escape" }));
+      const handled = toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Escape" }),
+      );
 
       expect(handled).toBe(true);
     });
@@ -64,7 +74,9 @@ describe("ToolManager", () => {
     it("should NOT switch to select tool when meta key is pressed", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Meta", metaKey: true }),
+      );
 
       expect(toolManager.activeToolId).toBe("pen");
     });
@@ -72,7 +84,9 @@ describe("ToolManager", () => {
     it("should keep current tool while holding meta for zoom", () => {
       toolManager.activate("pen");
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Meta", metaKey: true }),
+      );
 
       expect(toolManager.activeToolId).toBe("pen");
       expect(toolManager.primaryToolId).toBe("pen");
@@ -82,7 +96,9 @@ describe("ToolManager", () => {
       toolManager.activate("pen");
       const initialCursor = editor.cursor;
 
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Meta", metaKey: true }));
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Meta", metaKey: true }),
+      );
       toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Meta" }));
 
       expect(editor.cursor).toBe(initialCursor);
@@ -94,7 +110,7 @@ describe("ToolManager", () => {
     it("should provide cursor signal when activating tool normally", () => {
       toolManager.activate("pen");
 
-      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "pen" });
+      expect(toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen" });
     });
 
     it("should provide cursor signal when activating temporary hand tool", () => {
@@ -102,7 +118,9 @@ describe("ToolManager", () => {
 
       editor.requestTemporaryTool("hand");
 
-      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "grab" });
+      expect(toolManager.activeTool?.cursorCell.value).toEqual({
+        type: "grab",
+      });
     });
   });
 
@@ -150,7 +168,9 @@ describe("ToolManager", () => {
       toolManager.activate("pen");
       let activated = false;
 
-      editor.requestTemporaryTool("hand", { onActivate: () => (activated = true) });
+      editor.requestTemporaryTool("hand", {
+        onActivate: () => (activated = true),
+      });
 
       expect(activated).toBe(true);
     });
@@ -159,7 +179,9 @@ describe("ToolManager", () => {
       toolManager.activate("pen");
       let returned = false;
 
-      editor.requestTemporaryTool("hand", { onReturn: () => (returned = true) });
+      editor.requestTemporaryTool("hand", {
+        onReturn: () => (returned = true),
+      });
       editor.returnFromTemporaryTool();
 
       expect(returned).toBe(true);
@@ -218,7 +240,11 @@ describe("ToolManager", () => {
       toolManager.activate("select");
 
       toolManager.handleKeyDown(
-        createKeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: false }),
+        createKeyboardEvent("keydown", {
+          key: "Alt",
+          altKey: true,
+          shiftKey: false,
+        }),
       );
 
       expect(editor.currentModifiers).toEqual({
@@ -230,9 +256,13 @@ describe("ToolManager", () => {
 
     it("updates currentModifiers on handleKeyUp", () => {
       toolManager.activate("select");
-      toolManager.handleKeyDown(createKeyboardEvent("keydown", { key: "Alt", altKey: true }));
+      toolManager.handleKeyDown(
+        createKeyboardEvent("keydown", { key: "Alt", altKey: true }),
+      );
 
-      toolManager.handleKeyUp(createKeyboardEvent("keyup", { key: "Alt", altKey: false }));
+      toolManager.handleKeyUp(
+        createKeyboardEvent("keyup", { key: "Alt", altKey: false }),
+      );
 
       expect(editor.currentModifiers).toEqual({
         shiftKey: false,

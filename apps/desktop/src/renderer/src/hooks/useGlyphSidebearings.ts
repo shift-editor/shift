@@ -15,8 +15,7 @@ const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
  */
 export function useGlyphSidebearings(): GlyphSidebearings {
   const editor = getEditor();
-  const glyph = useSignalState(editor.glyph);
-  useSignalTrigger(glyph?.$contours);
-  useSignalTrigger(glyph?.$xAdvance);
-  return glyph?.sidebearings ?? EMPTY_SIDEBEARINGS;
+  const glyphSource = useSignalState(editor.$editGlyphSource);
+  useSignalTrigger(glyphSource?.$sidebearings, { schedule: "frame" });
+  return glyphSource?.sidebearings ?? EMPTY_SIDEBEARINGS;
 }

@@ -1,21 +1,18 @@
-import type { HandleState } from "@/types/graphics";
-import { Gpu } from "@/lib/graphics/backends/Gpu";
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, AnchorId, ContourId, Source, SourceId } from "@shift/types";
+import type { PointId, ContourId, Source, SourceId } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
-import type { Glyph, GlyphSource } from "@/lib/model/Glyph";
-import { axisLocationFromLocation, emptyAxisLocation } from "@/lib/variation/location";
-import type { ToolName, ActiveToolState } from "../tools/core";
-import type { SegmentId, SegmentIndicator } from "@/types/indicator";
-import type { HitResult, MiddlePointHit, ContourEndpointHit, HoverResult } from "@/types/hitResult";
-import { ToolManager } from "../tools/core/ToolManager";
-import { Segment, type SegmentHitResult } from "@shift/glyph-state";
-import { Bounds, Point2D, Rect2D, Vec2 } from "@shift/geo";
-import type { BoundingBoxHitResult } from "@/types/boundingBox";
 import type { Coordinates } from "@/types/coordinates";
+import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
+import {
+  axisLocationFromLocation,
+  emptyAxisLocation,
+} from "@/lib/variation/location";
+import type { ToolName, ActiveToolState } from "../tools/core";
+import { ToolManager } from "../tools/core/ToolManager";
+import { Segment } from "@shift/glyph-state";
+import { Bounds, Point2D, Rect2D } from "@shift/geo";
 
-import { ViewportManager } from "./managers";
-import { displayAdvance } from "@/lib/utils/unicode";
+import { Camera } from "./managers";
 import {
   CommandHistory,
   SetLeftSidebearingCommand,
@@ -42,10 +39,8 @@ import {
 } from "../transform";
 import {
   batch,
-  computed,
   effect,
   signal,
-  type ComputedSignal,
   type Effect,
   type Signal,
   type WritableSignal,
@@ -57,34 +52,24 @@ import {
   type SystemClipboard,
 } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
-import { DEFAULT_THEME } from "./rendering/Theme";
-import { hitTestBoundingBox, isBoundingBoxVisibleAtZoom } from "./hit/boundingBox";
-import { pointInRect } from "../tools/select/utils";
-import { HoverManager, EdgePanManager } from "./managers";
-import { Viewport, type ViewportTransform } from "./rendering/Viewport";
-import type { Canvas } from "./rendering/Canvas";
-import { Handles } from "./rendering/Handles";
-import { Text as TextRunDrawer } from "./rendering/Text";
-import {
-  Guides,
-  BoundingBox,
-  ControlLines,
-  Segments,
-  DebugOverlays as DebugOverlaysIndicator,
-  Anchors,
-} from "./rendering/indicators";
-import { SCREEN_HIT_RADIUS } from "./rendering/constants";
-import { getVisibleSceneBounds } from "./rendering/visibleSceneBounds";
+import { EdgePanManager } from "./managers";
+import { Hover } from "./Hover";
+import { Renderer } from "./rendering/Renderer";
+import type {
+  Canvas2DSurface,
+  MarkerCanvasSurface,
+} from "./rendering/CanvasSurface";
+import type { CameraTransform } from "./managers";
 import type { FocusZone } from "@/types/focus";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { DebugOverlays } from "@shared/ipc/types";
 import type { TemporaryToolOptions } from "@/types/editor";
-import { Selection } from "@/types/selection";
+import { Selection } from "./Selection";
 import { Font } from "../model/Font";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { TextRuns } from "@/lib/text/TextRuns";
 import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
-import { glyphCell, Positioner } from "@/lib/text/layout";
+import { glyphTextItem, Positioner } from "@/lib/text/layout";
 import type { GlyphAnchor } from "@/lib/text/layout";
 import { TextRunModuleSchema } from "@shift/validation";
 import type { TextRunModule } from "@/persistence/types";
@@ -92,29 +77,37 @@ import type { TextRunModule } from "@/persistence/types";
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
-import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
+import {
+  StateRegistry,
+  type ShiftState,
+  type ShiftStateOptions,
+} from "@/lib/state/ShiftState";
 
-import type { LineSegment } from "@shift/glyph-state";
+import type { LineSegmentPoints } from "@shift/glyph-state";
 import type { ShiftBridge } from "@shift/bridge";
-import { Contour, type Point } from "@shift/glyph-state";
+import { Contour } from "@shift/glyph-state";
 import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
+import {
+  EditorGlyphState,
+  GlyphDisplay,
+  EditorInput,
+  EditorViewState,
+  TextEditingState,
+  type GlyphDisplayState,
+  type GlyphPlacement,
+} from "./EditorState";
 
 interface EditorOptions {
   bridge: ShiftBridge;
   clipboard: SystemClipboard;
 }
 
-interface GlyphPlacement {
-  focused: FocusedGlyph;
-  drawOffset: Point2D;
-}
-
 /**
  * Central orchestrator for the glyph editing surface.
  *
- * Editor owns and wires together every subsystem: viewport (UPM/screen
+ * Editor owns and wires together every subsystem: camera (UPM/screen
  * transforms), selection, hover, command history, clipboard,
- * tool management, and rendering (via Viewport). It is passed
+ * tool management, and rendering (via Renderer). It is passed
  * directly to tools and behaviors.
  *
  * Subsystems communicate through reactive signals. Effects watch composite
@@ -131,67 +124,93 @@ interface GlyphPlacement {
  * @knipclassignore
  */
 export class Editor {
-  #previewMode: WritableSignal<boolean>;
-  #handlesVisible: WritableSignal<boolean>;
-  #gpuHandlesEnabled: WritableSignal<boolean>;
+  /**
+   * User-facing editor display toggles.
+   *
+   * These are session preferences for how the active glyph is presented. They
+   * are not glyph data and should eventually live behind an `EditorViewState`
+   * object so rendering code can consume them as one named concept.
+   */
+  #view: EditorViewState;
 
+  /**
+   * Long-lived editor model objects.
+   *
+   * `Selection` and `Hover` are mutable runtime state. `Font` owns document
+   * glyph/source models. Geometry remains immutable and is read through the
+   * explicit surfaces below.
+   */
   readonly selection: Selection;
+  readonly hover: Hover;
   readonly font: Font;
-  #hover: HoverManager;
-  #renderer: Viewport;
-  #edgePan: EdgePanManager;
 
-  #guides = new Guides();
-  #boundingBox = new BoundingBox();
-  #controlLines = new ControlLines();
-  #segments = new Segments();
-  #debugOverlaysIndicator = new DebugOverlaysIndicator();
-  #anchors = new Anchors();
-  #handles = new Handles();
-  #textRunRenderer = new TextRunDrawer();
+  /**
+   * Rendering and camera infrastructure.
+   *
+   * The drawer instances are stateless-ish rendering helpers. They currently
+   * live directly on `Editor`, but the render passes below would be easier to
+   * reason about if these moved behind a small `EditorRenderer` facade.
+   */
+  #renderer: Renderer;
+  #edgePan: EdgePanManager;
 
   #toolManager: ToolManager;
   #toolMetadata: Map<
     ToolName,
-    { icon: React.FC<React.SVGProps<SVGSVGElement>>; tooltip: string; shortcut?: string }
+    {
+      icon: React.FC<React.SVGProps<SVGSVGElement>>;
+      tooltip: string;
+      shortcut?: string;
+    }
   >;
-  private $activeTool: WritableSignal<ToolName>;
-  private $activeToolState: WritableSignal<ActiveToolState>;
+  #activeTool: WritableSignal<ToolName>;
+  #activeToolState: WritableSignal<ActiveToolState>;
 
-  #viewport: ViewportManager;
+  /**
+   * Runtime services with lifecycle or side effects.
+   *
+   * These mutate process/editor state: camera, command history, bridge IO,
+   * event dispatch, and registered tool state. They should stay separate from
+   * immutable glyph geometry and from render-only state.
+   */
+  #camera: Camera;
   #commandHistory: CommandHistory;
   #bridge: ShiftBridge;
 
-  #$editingGlyph: WritableSignal<Glyph | null>;
-  #$rootGlyphHandle: WritableSignal<GlyphHandle | null>;
-  #$activeContour: WritableSignal<ContourId | null>;
-  #$designLocation: WritableSignal<AxisLocation>;
-  #$activeSourceId: WritableSignal<SourceId | null>;
-  #$activeSource: ComputedSignal<Source | null>;
-  #$activeGlyphSource: ComputedSignal<GlyphSource | null>;
-  #$segmentIndex: ComputedSignal<ReadonlyMap<SegmentId, Segment>>;
+  /**
+   * Active glyph/source context.
+   *
+   * `edit` is the authored source backing commands and mutation.
+   * `preview` is the displayed/interpolated glyph used by rendering and hit
+   * queries.
+   */
+  #glyph: EditorGlyphState;
 
-  #staticEffect: Effect;
-  #overlayEffect: Effect;
-  #interactiveEffect: Effect;
   #cursorEffect: Effect;
+  #cameraMetricsEffect: Effect;
+
   #clipboard: Clipboard;
+
   #events: EventEmitter;
+
   #stateRegistry: StateRegistry;
+
   #textRuns: TextRuns;
-  #$glyphFinderOpen: WritableSignal<boolean>;
+
+  #glyphFinderOpen: WritableSignal<boolean>;
 
   #zone: FocusZone = "canvas";
-  #marqueePreviewPointIds: WritableSignal<Set<PointId> | null>;
 
-  #$glyphAnchor: WritableSignal<GlyphAnchor | null>;
-  #$focusedGlyph: ComputedSignal<FocusedGlyph | null>;
-  #$glyphPlacement: ComputedSignal<GlyphPlacement | null>;
-  #$drawOffset: ComputedSignal<Point2D>;
-  #cursor: WritableSignal<string>;
-  #currentModifiers: WritableSignal<Modifiers>;
-  #isHoveringNode: ComputedSignal<boolean>;
-  #debugOverlays: WritableSignal<DebugOverlays>;
+  /**
+   * Text-run focus and placement.
+   *
+   * Text editing uses the same camera and glyph rendering surface, but this
+   * state is conceptually its own subsystem. It is a good candidate for a
+   * `TextEditingSession` or `TextRunController` grouping.
+   */
+  #text: TextEditingState;
+  #glyphDisplay: GlyphDisplay;
+  readonly input: EditorInput;
   #toolState: {
     app: Map<string, unknown>;
     document: Map<string, unknown>;
@@ -203,91 +222,57 @@ export class Editor {
    *
    */
   constructor(options: EditorOptions) {
-    this.#viewport = new ViewportManager();
+    this.#camera = new Camera();
 
     this.#bridge = options.bridge;
 
     this.font = new Font(this.#bridge);
+    this.#glyph = new EditorGlyphState(this.font);
 
-    this.#$activeContour = signal<ContourId | null>(null);
-    this.#$editingGlyph = signal<Glyph | null>(null);
-    this.#$rootGlyphHandle = signal<GlyphHandle | null>(null);
-    this.#$designLocation = signal<AxisLocation>(emptyAxisLocation());
-    this.#$activeSourceId = signal<SourceId | null>(null);
+    this.#view = new EditorViewState();
+    this.input = new EditorInput();
 
-    this.#$activeSource = computed(() => {
-      const sourceId = this.#$activeSourceId.value;
-      if (sourceId) return this.font.source(sourceId);
+    this.#commandHistory = new CommandHistory(this.#glyph.edit.glyphSource);
 
-      return this.font.sourceAt(this.#$designLocation.value);
-    });
-
-    this.#$activeGlyphSource = computed(() => {
-      const glyph = this.#$editingGlyph.value;
-      if (!glyph) return null;
-      const source = this.#$activeSource.value;
-      if (!source) return null;
-
-      return this.font.glyphSource(glyph.handle, source);
-    });
-
-    this.#$segmentIndex = computed(() => {
-      const glyph = this.#$editingGlyph.value;
-      if (!glyph) return new Map();
-      const segmentsById = new Map<SegmentId, Segment>();
-      for (const { segment } of glyph.segments()) {
-        segmentsById.set(segment.id, segment);
-      }
-      return segmentsById;
-    });
-
-    this.#commandHistory = new CommandHistory(this.#$activeGlyphSource);
-
-    this.#previewMode = signal(false);
-    this.#cursor = signal("default");
-    this.#handlesVisible = signal(true);
-    this.#gpuHandlesEnabled = signal(true);
     this.#stateRegistry = new StateRegistry();
-    this.#currentModifiers = signal<Modifiers>({
-      shiftKey: false,
-      altKey: false,
-      metaKey: false,
-    });
-
-    this.#debugOverlays = signal<DebugOverlays>({
-      tightBounds: false,
-      hitRadii: false,
-      segmentBounds: false,
-      glyphBbox: false,
-    });
     this.#toolState = {
       app: new Map<string, unknown>(),
       document: new Map<string, unknown>(),
     };
-    this.#toolStateVersion = signal(0);
+    this.#toolStateVersion = signal(0, { name: "editor.toolState.version" });
 
-    this.#$glyphFinderOpen = signal(false);
+    this.#glyphFinderOpen = signal(false, { name: "editor.glyphFinder.open" });
 
-    this.selection = new Selection(this.#$editingGlyph);
-    this.#hover = new HoverManager();
+    this.selection = new Selection(this.#glyph.edit.glyphSource);
+    this.hover = new Hover();
+
     this.#edgePan = new EdgePanManager(this);
-    this.#isHoveringNode = computed(
-      () =>
-        this.#hover.hoveredPointId.value !== null ||
-        this.#hover.hoveredAnchorId.value !== null ||
-        this.#hover.hoveredSegmentId.value !== null,
-    );
 
     this.#toolMetadata = new Map();
-    this.$activeTool = signal<ToolName>("select");
-    this.$activeToolState = signal<ActiveToolState>({ type: "idle" });
-    this.#marqueePreviewPointIds = signal<Set<PointId> | null>(null);
+    this.#activeTool = signal<ToolName>("select", {
+      name: "editor.tool.active",
+    });
+    this.#activeToolState = signal<ActiveToolState>(
+      { type: "idle" },
+      {
+        name: "editor.tool.state",
+      },
+    );
 
     this.#events = new EventEmitter();
     this.#toolManager = new ToolManager(this);
-    this.#renderer = new Viewport(this);
+
     this.#clipboard = new Clipboard(options.clipboard);
-    this.#textRuns = new TextRuns(this.font, new Positioner(), this.#$designLocation);
+
+    this.#textRuns = new TextRuns(
+      this.font,
+      new Positioner(),
+      this.#glyph.design.location,
+    );
+    this.#text = new TextEditingState(this.#textRuns);
+    this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
+
+    this.#renderer = new Renderer(this);
 
     const textRunPersistence = this.registerState<TextRunModule>({
       id: "text-run",
@@ -302,113 +287,51 @@ export class Editor {
     });
 
     // Bridge: when active run's buffer changes (or active switches), notify persistence.
-    effect(() => {
-      const run = this.#textRuns.$active.value;
-      run.buffer.$cells.value;
-      run.buffer.$cursor.value;
-      run.buffer.$anchor.value;
-      run.buffer.$originX.value;
-      textRunPersistence.set({ runsByGlyph: this.#textRuns.serialize() });
-    });
+    effect(
+      () => {
+        const run = this.#textRuns.activeCell.value;
+        run.buffer.itemsCell.value;
+        run.buffer.cursorCell.value;
+        run.buffer.anchorCell.value;
+        run.buffer.originXCell.value;
+        textRunPersistence.set({ runsByGlyph: this.#textRuns.serialize() });
+      },
+      { name: "editor.textRun.persistence" },
+    );
 
     this.#events.on("fontLoaded", () => {
       this.#commandHistory.clear();
       this.#textRuns.clearAll();
     });
 
-    this.#$glyphAnchor = signal<GlyphAnchor | null>(null);
-    this.#$focusedGlyph = computed<FocusedGlyph | null>(() => {
-      const anchor = this.#$glyphAnchor.value;
-      if (!anchor) return null;
-      return this.#textRuns.resolveAnchor(anchor);
-    });
-    this.#$glyphPlacement = computed<GlyphPlacement | null>(() => {
-      const focused = this.#$focusedGlyph.value;
-      if (!focused) return null;
-      return { focused, drawOffset: focused.editOrigin };
-    });
-    this.#$drawOffset = computed<Point2D>(
-      () => this.#$glyphPlacement.value?.drawOffset ?? { x: 0, y: 0 },
+    this.#cameraMetricsEffect = effect(
+      () => {
+        this.font.$loaded.value;
+        this.updateMetricsFromFont();
+      },
+      { name: "editor.cameraMetrics" },
     );
 
-    this.#staticEffect = effect(() => {
-      const glyph = this.#$editingGlyph.value;
-      if (glyph) {
-        glyph.contours;
-        glyph.anchors;
-      }
-      this.#$designLocation.value;
-      this.#$drawOffset.value;
-      this.#$focusedGlyph.value;
-      this.$activeToolState.value;
-      this.selection.pointIds;
-      this.selection.anchorIds;
-      this.selection.segmentIds;
-      this.selection.mode;
-      this.#previewMode.value;
-      this.#handlesVisible.value;
-      this.#hover.hoveredPointId.value;
-      this.#hover.hoveredAnchorId.value;
-      this.#hover.hoveredSegmentId.value;
-      this.#hover.hoveredBoundingBoxHandle.value;
-      this.#debugOverlays.value;
-      this.#gpuHandlesEnabled.value;
-      const activeRun = this.#textRuns.$active.value;
-      activeRun.buffer.$cells.value;
-      activeRun.buffer.$cursor.value;
-      activeRun.buffer.$anchor.value;
-      activeRun.buffer.$originX.value;
-      activeRun.interaction.$editing.value;
-      activeRun.interaction.$hoveredIndex.value;
-      this.#renderer.requestSceneRedraw();
-      this.#renderer.requestBackgroundRedraw();
-    });
+    this.#cursorEffect = effect(
+      () => {
+        const activeTool = this.#toolManager.activeToolCell.value;
+        if (activeTool) {
+          this.setCursor(activeTool.cursorCell.value);
+          return;
+        }
 
-    this.#overlayEffect = effect(() => {
-      const glyph = this.#$editingGlyph.value;
-      if (glyph) {
-        glyph.contours;
-        glyph.anchors;
-      }
-      this.#$drawOffset.value;
-      this.#$focusedGlyph.value;
-      this.selection.segmentIds;
-      this.#hover.hoveredPointId.value;
-      this.#hover.hoveredAnchorId.value;
-      this.#hover.hoveredSegmentId.value;
-      this.#hover.hoveredBoundingBoxHandle.value;
-      this.#previewMode.value;
-      this.#handlesVisible.value;
-      this.$activeToolState.value;
-      this.#renderer.requestOverlayRedraw();
-    });
-
-    this.#interactiveEffect = effect(() => {
-      this.$activeToolState.value;
-      this.#renderer.requestOverlayRedraw();
-    });
-
-    this.#cursorEffect = effect(() => {
-      // Depend on active tool signals to re-run when tool changes
-      this.$activeTool.value;
-      this.$activeToolState.value;
-      this.#hover.hoveredBoundingBoxHandle.value;
-      this.#hover.hoveredPointId.value;
-      this.#hover.hoveredAnchorId.value;
-      const activeTool = this.#toolManager.activeTool;
-      if (activeTool) {
-        const cursor = activeTool.getCursor(activeTool.state);
-        this.setCursor(cursor);
-        return;
-      }
-
-      this.setCursor({ type: "default" });
-    });
+        this.setCursor({ type: "default" });
+      },
+      { name: "editor.cursor" },
+    );
   }
 
   public registerTool(descriptor: ToolManifest): void {
     const { id, icon, tooltip, shortcut } = descriptor;
-    this.#toolMetadata.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
+    this.#toolMetadata.set(
+      id,
+      shortcut ? { icon, tooltip, shortcut } : { icon, tooltip },
+    );
     this.toolManager.register(descriptor);
   }
 
@@ -434,196 +357,56 @@ export class Editor {
     return out;
   }
 
-  public get activeTool(): Signal<ToolName> {
-    return this.$activeTool;
+  public get activeTool(): ToolName {
+    return this.#activeTool.peek();
+  }
+
+  public get activeToolCell(): Signal<ToolName> {
+    return this.#activeTool;
   }
 
   // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
   public getActiveTool(): ToolName {
-    return this.$activeTool.value;
+    return this.#activeTool.peek();
   }
 
   /**
    * Typed as `ActiveToolState` (which is `any`) because each tool defines its
    * own state shape. Consumers should narrow the type based on `activeTool`.
    */
-  public get activeToolState(): Signal<ActiveToolState> {
-    return this.$activeToolState;
+  public get activeToolState(): ActiveToolState {
+    return this.#activeToolState.peek();
+  }
+
+  public get activeToolStateCell(): Signal<ActiveToolState> {
+    return this.#activeToolState;
   }
 
   // oxlint-disable-next-line shift/no-get-signal-value-method -- retained for upcoming tool refactor
   public getActiveToolState(): ActiveToolState {
-    return this.$activeToolState.value;
+    return this.#activeToolState.peek();
   }
 
   public setActiveToolState(state: ActiveToolState): void {
-    this.$activeToolState.set(state);
-  }
-
-  static readonly #DRAG_STATES: ReadonlySet<string> = new Set([
-    "translating",
-    "resizing",
-    "rotating",
-    "bending",
-  ]);
-
-  #isDragging(): boolean {
-    return Editor.#DRAG_STATES.has(this.$activeToolState.peek().type);
+    this.#activeToolState.set(state);
   }
 
   public setActiveTool(toolName: ToolName): void {
-    const currentToolName = this.$activeTool.value;
+    const currentToolName = this.#activeTool.peek();
     if (currentToolName === toolName) return;
 
     this.toolManager.activate(toolName);
-    this.$activeTool.set(toolName);
+    this.#activeTool.set(toolName);
   }
 
   public get toolManager(): ToolManager {
     return this.#toolManager;
   }
 
-  public renderToolBackground(canvas: Canvas): void {
-    const glyph = this.glyph.peek();
-    const previewMode = this.previewMode;
-
-    if (glyph && this.shouldRenderGlyph() && !previewMode) {
-      const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
-      const advance = displayAdvance(glyph.xAdvance, glyph.name, unicode);
-      this.#guides.draw(canvas, this.font.metrics, advance);
-    }
-
-    this.#toolManager.renderBackground(canvas);
-
-    if (!previewMode && !this.#isDragging() && this.shouldRenderGlyph()) {
-      const rect = this.getSelectionBoundingRect();
-      if (rect) this.#boundingBox.drawRect(canvas, rect);
-    }
-  }
-
-  public renderToolScene(canvas: Canvas): void {
-    const glyph = this.glyph.peek();
-    const previewMode = this.previewMode;
-    const handlesVisible = this.handlesVisible;
-
-    if (glyph && this.shouldRenderGlyph()) {
-      const path = glyph.outline(this.#$designLocation).path;
-      canvas.strokePath(path, canvas.theme.glyph.stroke, canvas.theme.glyph.widthPx);
-      if (previewMode) canvas.fillPath(path, canvas.theme.glyph.fill);
-    }
-
-    if (!previewMode && glyph && this.shouldRenderGlyph()) {
-      const hoveredSegmentId = this.hoveredSegmentId;
-      const hoveredSegment = hoveredSegmentId ? this.getSegmentById(hoveredSegmentId) : null;
-      const selectedSegments: Segment[] = [];
-      for (const segId of this.selection.segmentIds) {
-        const seg = this.getSegmentById(segId);
-        if (seg) selectedSegments.push(seg);
-      }
-      this.#segments.draw(canvas, hoveredSegment ?? null, selectedSegments);
-
-      const debugOverlays = this.debugOverlays;
-      this.#debugOverlaysIndicator.draw(
-        canvas,
-        glyph,
-        debugOverlays,
-        hoveredSegmentId,
-        this.screenToUpmDistance(SCREEN_HIT_RADIUS),
-      );
-    }
-
-    this.#toolManager.renderScene(canvas);
-
-    this.#textRunRenderer.draw(
-      canvas,
-      this.textRun,
-      this.font,
-      this.#$designLocation,
-      this.drawOffset,
-      this.focusedGlyph,
-    );
-
-    if (!previewMode && handlesVisible && glyph && this.shouldRenderGlyph()) {
-      const geometry = glyph.geometryAt(this.#$designLocation.peek());
-      const viewport = this.getViewportTransform();
-      const drawOffset = this.drawOffset;
-      const sceneBounds = getVisibleSceneBounds(viewport, 64);
-
-      this.#controlLines.draw(canvas, geometry.contours, (from, to) => {
-        const minX = Math.min(from.x, to.x) + drawOffset.x;
-        const maxX = Math.max(from.x, to.x) + drawOffset.x;
-        const minY = Math.min(from.y, to.y) + drawOffset.y;
-        const maxY = Math.max(from.y, to.y) + drawOffset.y;
-        return !(
-          maxX < sceneBounds.minX ||
-          minX > sceneBounds.maxX ||
-          maxY < sceneBounds.minY ||
-          minY > sceneBounds.maxY
-        );
-      });
-
-      const renderedOnGpu = this.#handles.draw(
-        geometry.contours,
-        { getHandleState: (id) => this.getHandleState(id) },
-        viewport,
-        drawOffset,
-        this.gpuHandlesEnabled,
-      );
-      if (!renderedOnGpu) {
-        this.#handles.drawCpu(canvas, glyph, {
-          getHandleState: (id) => this.getHandleState(id),
-        });
-      }
-
-      const anchors = geometry.anchors;
-      this.#anchors.draw(canvas, anchors, (id) => this.getAnchorHandleState(id));
-    } else {
-      this.#handles.clear();
-    }
-  }
-
-  public renderOverlay(canvas: Canvas): void {
-    // Screen-space pass: bounding box handles (skip during drag — handles aren't interactive)
-    if (
-      !this.previewMode &&
-      !this.#isDragging() &&
-      this.handlesVisible &&
-      this.shouldRenderGlyph()
-    ) {
-      const rect = this.getSelectionBoundingRect();
-      if (rect) {
-        const offset = this.drawOffset;
-        const topLeft = this.projectSceneToScreen({
-          x: rect.x + offset.x,
-          y: rect.y + rect.height + offset.y,
-        });
-        const bottomRight = this.projectSceneToScreen({
-          x: rect.x + rect.width + offset.x,
-          y: rect.y + offset.y,
-        });
-        const screenRect: Rect2D = {
-          x: topLeft.x,
-          y: topLeft.y,
-          width: bottomRight.x - topLeft.x,
-          height: bottomRight.y - topLeft.y,
-          left: topLeft.x,
-          top: topLeft.y,
-          right: bottomRight.x,
-          bottom: bottomRight.y,
-        };
-        canvas.ctx.save();
-        this.#boundingBox.drawHandles(canvas, screenRect);
-        canvas.ctx.restore();
-      }
-    }
-
-    // UPM-space pass: tool overlay
-    this.#renderer.beginUpmSpace(canvas);
-    this.#toolManager.renderOverlay(canvas);
-    canvas.ctx.restore();
-  }
-
-  public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
+  public requestTemporaryTool(
+    toolId: ToolName,
+    options?: TemporaryToolOptions,
+  ): void {
     this.toolManager.requestTemporary(toolId, options);
   }
 
@@ -631,76 +414,24 @@ export class Editor {
     this.toolManager.returnFromTemporary();
   }
 
-  public selectAll(): void {
-    const points = this.getAllPoints();
-    this.selection.select(points.map((p) => ({ kind: "point" as const, id: p.id })));
-    this.toolManager.notifySelectionChanged();
-  }
-
-  public setHoveredPoint(pointId: PointId | null): void {
-    this.#hover.setHoveredPoint(pointId);
-  }
-
-  public setHoveredAnchor(anchorId: AnchorId | null): void {
-    this.#hover.setHoveredAnchor(anchorId);
-  }
-
-  public setHoveredSegment(indicator: SegmentIndicator | null): void {
-    this.#hover.setHoveredSegment(indicator);
-  }
-
-  public hitTestBoundingBoxAt(coords: Coordinates): BoundingBoxHitResult {
-    if (!isBoundingBoxVisibleAtZoom(this.zoom)) return null;
-
-    const rect = this.getSelectionBoundingRect();
-    if (!rect) return null;
-
-    const handleOffset = this.screenToUpmDistance(DEFAULT_THEME.boundingBox.handle.offset);
-    const rotationZoneOffset = this.screenToUpmDistance(
-      DEFAULT_THEME.boundingBox.rotationZoneOffset,
-    );
-
-    return hitTestBoundingBox(
-      coords.glyphLocal,
-      rect,
-      this.hitRadius,
-      handleOffset,
-      rotationZoneOffset,
-    );
-  }
-
-  public get hoveredBoundingBoxHandle(): BoundingBoxHitResult {
-    return this.#hover.getHoveredBoundingBoxHandle();
-  }
-
-  public clearHover(): void {
-    this.#hover.clearHover();
-  }
-
-  public get isHoveringNode(): boolean {
-    return this.#isHoveringNode.value;
-  }
-
-  public get $isHoveringNode(): Signal<boolean> {
-    return this.#isHoveringNode;
-  }
-
   public get currentModifiers(): Modifiers {
-    return this.#currentModifiers.value;
+    return this.input.modifiers;
   }
 
-  public get $currentModifiers(): Signal<Modifiers> {
-    return this.#currentModifiers;
+  public get currentModifiersCell(): Signal<Modifiers> {
+    return this.input.modifiersCell;
   }
 
   public setCurrentModifiers(modifiers: Modifiers): void {
-    this.#currentModifiers.set(modifiers);
+    this.input.setModifiers(modifiers);
   }
 
   public beginSourceEditDraft(subject: SourceEditSubject): SourceEditDraft {
-    const glyphSource = this.#$activeGlyphSource.peek();
+    const glyphSource = this.#glyph.edit.glyphSource.peek();
     if (!glyphSource) {
-      throw new Error("Cannot begin a source edit draft without an active glyph source");
+      throw new Error(
+        "Cannot begin a source edit draft without an active glyph source",
+      );
     }
 
     return new SourceEditDraft(glyphSource, this.#commandHistory, subject);
@@ -710,157 +441,183 @@ export class Editor {
     return this.#commandHistory.withBatch(label, fn);
   }
 
-  public get toolStateVersion(): Signal<number> {
+  public get toolStateVersionCell(): Signal<number> {
     return this.#toolStateVersion;
   }
 
   public get debugOverlays(): DebugOverlays {
-    return this.#debugOverlays.value;
+    return this.#view.debugOverlaysCell.peek();
   }
 
-  /** @knipclassignore */
-  public get $debugOverlays(): Signal<DebugOverlays> {
-    return this.#debugOverlays;
+  public get debugOverlaysCell(): Signal<DebugOverlays> {
+    return this.#view.debugOverlaysCell;
   }
 
   public setDebugOverlays(overlays: DebugOverlays): void {
-    this.#debugOverlays.set(overlays);
+    this.#view.debugOverlaysCell.set(overlays);
   }
 
-  public get hoveredSegmentId(): SegmentId | null {
-    const hoveredSegment = this.#hover.hoveredSegmentId.value;
-    return hoveredSegment?.segmentId ?? null;
+  public get proofMode(): boolean {
+    return this.#glyphDisplay.proofMode;
   }
 
-  public isPointInMarqueePreview(pointId: PointId): boolean {
-    const marqueePreviewPointIds = this.#marqueePreviewPointIds.peek();
-    if (marqueePreviewPointIds == null) return false;
-
-    return marqueePreviewPointIds.has(pointId);
+  public get proofModeCell(): Signal<boolean> {
+    return this.#glyphDisplay.proofModeCell;
   }
 
-  public get previewMode(): boolean {
-    return this.#previewMode.value;
+  public setProofMode(enabled: boolean): void {
+    this.#glyphDisplay.setProofMode(enabled);
   }
 
-  public get $previewMode(): Signal<boolean> {
-    return this.#previewMode;
+  public enableProofMode(): void {
+    this.setProofMode(true);
   }
 
-  public setPreviewMode(enabled: boolean): void {
-    this.#previewMode.set(enabled);
-  }
-
-  public setMarqueePreviewRect(rect: Rect2D | null): void {
-    if (rect === null) {
-      this.#marqueePreviewPointIds.set(null);
-      return;
-    }
-
-    const points = this.getAllPoints();
-    const ids = points.filter((p) => pointInRect(p, rect)).map((p) => p.id);
-    this.#marqueePreviewPointIds.set(new Set(ids));
-    this.requestSceneRedraw();
+  public disableProofMode(): void {
+    this.setProofMode(false);
   }
 
   public get handlesVisible(): boolean {
-    return this.#handlesVisible.value;
+    return this.#glyphDisplay.handlesVisible;
   }
 
-  public get $handlesVisible(): Signal<boolean> {
-    return this.#handlesVisible;
+  public get handlesVisibleCell(): Signal<boolean> {
+    return this.#glyphDisplay.handlesVisibleCell;
   }
 
   public setHandlesVisible(visible: boolean): void {
-    this.#handlesVisible.set(visible);
+    this.#glyphDisplay.setHandlesVisible(visible);
   }
 
-  public get gpuHandlesEnabled(): boolean {
-    return this.#gpuHandlesEnabled.value;
+  public showHandles(): void {
+    this.setHandlesVisible(true);
   }
 
-  public get $gpuHandlesEnabled(): Signal<boolean> {
-    return this.#gpuHandlesEnabled;
+  public hideHandles(): void {
+    this.setHandlesVisible(false);
   }
 
-  public setGpuHandlesEnabled(enabled: boolean): void {
-    this.#gpuHandlesEnabled.set(enabled);
+  /**
+   * Display state for the active glyph in the editor canvas.
+   *
+   * @returns A snapshot combining glyph display toggles and text-focus visibility.
+   */
+  public get glyphDisplay(): GlyphDisplayState {
+    return this.#glyphDisplay.cell.peek();
   }
 
-  public setBackgroundContext(ctx: CanvasRenderingContext2D) {
-    this.#renderer.setBackgroundContext(ctx);
+  /** Reactive display state for render layers and canvas items. */
+  public get glyphDisplayCell(): Signal<GlyphDisplayState> {
+    return this.#glyphDisplay.cell;
   }
 
-  public setSceneContext(ctx: CanvasRenderingContext2D) {
-    this.#renderer.setSceneContext(ctx);
+  public setBackgroundSurface(surface: Canvas2DSurface): void {
+    this.#renderer.setBackgroundSurface(surface);
   }
 
-  public setOverlayContext(ctx: CanvasRenderingContext2D) {
-    this.#renderer.setOverlayContext(ctx);
+  public setSceneSurface(surface: Canvas2DSurface): void {
+    this.#renderer.setSceneSurface(surface);
   }
 
-  public setGpuHandleContext(context: Gpu) {
-    this.#renderer.setGpuHandleContext(context);
-    this.#handles.setGpu(context);
+  public setOverlaySurface(surface: Canvas2DSurface): void {
+    this.#renderer.setOverlaySurface(surface);
   }
 
-  public get gpuHandleContext(): Gpu | null {
-    return this.#renderer.gpuHandleContext;
+  public setMarkerSurface(surface: MarkerCanvasSurface): void {
+    this.#renderer.setMarkerSurface(surface);
   }
 
+  public clearMarkerCanvas(): void {
+    this.#renderer.clearMarkerCanvas();
+  }
+
+  /**
+   * Focus an existing glyph model in the editor.
+   *
+   * This is a read/focus API. It chooses the current active source context for
+   * camera metrics, asks `Font` for existing glyph state, and updates
+   * `editingGlyph` when the glyph can be loaded. It does not create missing
+   * glyph data and does not start an edit session.
+   *
+   * @returns The focused glyph model, or `null` when the glyph has no readable state.
+   */
   public getGlyph(handle: GlyphHandle): Glyph | null {
-    const source =
-      this.#$activeSource.peek() ?? this.font.sourceAtOrDefault(this.#$designLocation.peek());
-    if (!source) return null;
-
     const glyph = this.font.glyph(handle);
     if (!glyph) return null;
 
-    this.#$editingGlyph.set(glyph);
-    this.#updateViewportMetrics();
+    this.#glyph.open.glyph.set(glyph);
 
     return glyph;
   }
 
   public setRootGlyphHandle(handle: GlyphHandle | null): void {
-    this.#$rootGlyphHandle.set(handle);
+    this.#glyph.open.rootHandle.set(handle);
   }
 
   public get rootGlyphHandle(): GlyphHandle | null {
-    return this.#$rootGlyphHandle.value;
+    return this.#glyph.open.rootHandle.peek();
   }
 
   public getActiveGlyphName(): string | null {
-    return this.#$editingGlyph.value?.name ?? null;
+    return this.#glyph.open.glyph.peek()?.name ?? null;
   }
 
-  public editGlyphSource(handle: GlyphHandle, sourceId: SourceId): GlyphSource | null {
+  /**
+   * Start editing a glyph at an explicit source.
+   *
+   * This is the source-aware edit entry point. The `sourceId` must be explicit
+   * so callers do not accidentally edit whatever source happens to be active in
+   * the UI.
+   *
+   * @example
+   * ```ts
+   * const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation())
+   * editor.openGlyphSource(handle, source.id)
+   * ```
+   *
+   * @returns The editable glyph source, or `null` when the source/glyph cannot be opened.
+   */
+  public openGlyphSource(
+    handle: GlyphHandle,
+    sourceId: SourceId,
+  ): GlyphSource | null {
     this.setRootGlyphHandle(handle);
-    const glyph = this.getGlyph(handle);
     const source = this.font.source(sourceId);
-    if (!glyph || !source) return null;
+    if (!source) return null;
 
     if (this.#bridge.hasEditSession()) {
       this.#bridge.endEditSession();
     }
     this.#bridge.startEditSession(handle, source.id);
+    this.#glyph.edit.selectSource(source.id);
 
-    this.#$activeSourceId.set(source.id);
+    const glyph = this.getGlyph(handle);
+    if (!glyph) return null;
+
     return this.font.glyphSource(handle, source);
   }
 
+  /**
+   * Open a glyph as the editor's root text run glyph.
+   *
+   * This updates text-run focus and returns the glyph model selected by the
+   * resulting focus change. It is not the source-editing entry point; use
+   * {@link openGlyphSource} when the caller wants editable source data.
+   *
+   * @returns The focused glyph model, or `null` when the glyph cannot be read.
+   */
   public openGlyph(handle: GlyphHandle): Glyph | null {
     this.setRootGlyphHandle(handle);
     const runs = this.#textRuns.editorRun();
     const anchor = runs.setSingleGlyph(handle);
     this.setGlyphFocus(anchor);
-    return this.#$editingGlyph.peek();
+    return this.#glyph.open.glyph.peek();
   }
 
   /**
-   * Focus a glyph cell and derive editor placement from current layout.
+   * Focus a glyph item and derive editor placement from current layout.
    *
-   *   GlyphAnchor { runId, cellId }
+   *   GlyphAnchor { runId, itemId }
    *      │
    *      ▼
    *   TextRuns.resolveAnchor(anchor)
@@ -876,22 +633,26 @@ export class Editor {
     }
 
     batch(() => {
-      this.#$glyphAnchor.set(anchor);
+      this.#text.glyphAnchor.set(anchor);
       this.getGlyph(focused.glyph);
-      this.setPreviewMode(false);
+      this.disableProofMode();
     });
   }
 
   public clearGlyphFocus(): void {
-    this.#$glyphAnchor.set(null);
+    this.#text.glyphAnchor.set(null);
   }
 
   public get focusedGlyph(): FocusedGlyph | null {
-    return this.#$focusedGlyph.value;
+    return this.#text.focusedGlyph.peek();
+  }
+
+  public get focusedGlyphCell(): Signal<FocusedGlyph | null> {
+    return this.#text.focusedGlyph;
   }
 
   public get glyphPlacement(): GlyphPlacement | null {
-    return this.#$glyphPlacement.value;
+    return this.#text.glyphPlacement.peek();
   }
 
   /** Ends the current editing session. */
@@ -899,55 +660,124 @@ export class Editor {
     if (this.#bridge.hasEditSession()) {
       this.#bridge.endEditSession();
     }
-    this.#$editingGlyph.set(null);
-    this.#$activeContour.set(null);
+    this.#glyph.open.glyph.set(null);
+    this.#glyph.open.activeContourId.set(null);
   }
 
   public get $designLocation(): Signal<AxisLocation> {
-    return this.#$designLocation;
+    return this.#glyph.design.location;
   }
 
+  /** Current designspace coordinate used for displayed glyph data. */
   public get designLocation(): AxisLocation {
-    return this.#$designLocation.value;
+    return this.#glyph.design.location.peek();
   }
 
-  public get $activeSourceId(): Signal<SourceId | null> {
-    return this.#$activeSourceId;
+  /**
+   * Reactive ID of the authored source selected for editing.
+   *
+   * `null` means the edit target follows the exact source at
+   * `designLocation`, if one exists.
+   */
+  public get $editSourceId(): Signal<SourceId | null> {
+    return this.#glyph.edit.sourceId;
   }
 
-  public get activeSourceId(): SourceId | null {
-    return this.#$activeSourceId.value;
+  /** ID of the authored source selected for editing, or `null` for location fallback. */
+  public get editSourceId(): SourceId | null {
+    return this.#glyph.edit.sourceId.peek();
   }
 
-  public get activeSource(): Source | null {
-    return this.#$activeSource.value;
+  /** Authored font source currently selected for editing, or `null` when unavailable. */
+  public get editSource(): Source | null {
+    return this.#glyph.edit.source.peek();
   }
 
-  public get activeGlyphSource(): GlyphSource | null {
-    return this.#$activeGlyphSource.value;
+  /**
+   * Editable glyph source for the current edit target.
+   *
+   * This is the domain object commands and tools mutate. `null` means there is
+   * no open glyph, no resolved edit source, or no glyph data for that source.
+   */
+  public get editGlyphSource(): GlyphSource | null {
+    return this.#glyph.edit.glyphSource.peek();
   }
 
+  /** Reactive editable glyph source for UI consumers that need source changes. */
+  public get $editGlyphSource(): Signal<GlyphSource | null> {
+    return this.#glyph.edit.glyphSource;
+  }
+
+  /** Glyph resolved at the current design location. */
+  public get previewInstance(): GlyphInstance | null {
+    return this.#glyph.preview.instance.peek();
+  }
+
+  public get previewInstanceCell(): Signal<GlyphInstance | null> {
+    return this.#glyph.preview.instance;
+  }
+
+  /**
+   * Set the displayed designspace coordinate and synchronize edit-source focus.
+   *
+   * If the location exactly matches an authored source, that source becomes the
+   * explicit edit target. Otherwise the edit target falls back to location
+   * resolution and may be `null`.
+   */
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
-      this.#$designLocation.set(location);
+      this.#glyph.design.set(location);
       const source = this.font.sourceAt(location);
-      this.#$activeSourceId.set(source?.id ?? null);
+      if (source) {
+        this.#glyph.edit.selectSource(source.id);
+      } else {
+        this.#glyph.edit.selectDefaultSource();
+      }
     });
   }
 
+  /**
+   * Select every point in the active editable source.
+   *
+   * This intentionally uses the editable source rather than interpolated
+   * design-location geometry: selection is an edit target, so it must refer to
+   * authored source point IDs that commands can mutate.
+   */
+  public selectAll(): void {
+    const source = this.editGlyphSource;
+    if (!source) return;
+
+    this.selection.select(
+      source.allPoints.map((point) => ({ kind: "point", id: point.id })),
+    );
+    return;
+  }
+
+  /**
+   * Select an authored source for editing and move the display location to it.
+   *
+   * Missing source IDs are ignored. This does not open a glyph; it retargets
+   * the current open glyph's edit source when one is available.
+   */
   public selectSource(sourceId: SourceId): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
     batch(() => {
       const location = axisLocationFromLocation(source.location);
-      this.#$designLocation.set(location);
-      this.#$activeSourceId.set(source.id);
+      this.#glyph.design.set(location);
+      this.#glyph.edit.selectSource(source.id);
     });
   }
 
+  /**
+   * Clear explicit edit-source selection.
+   *
+   * The editor will resolve the edit source from the current design location
+   * until another source is selected.
+   */
   public clearActiveSource(): void {
-    this.#$activeSourceId.set(null);
+    this.#glyph.edit.selectDefaultSource();
   }
 
   public get textRuns(): TextRuns {
@@ -959,28 +789,32 @@ export class Editor {
     return this.#textRuns.active;
   }
 
-  /** Resolve a unicode codepoint to a glyph cell and insert into the active text run. */
+  /** Resolve a unicode codepoint to a glyph item and insert into the active text run. */
   public insertTextCodepoint(codepoint: number): void {
     const handle = this.font.glyphHandleForUnicode(codepoint);
     if (!handle) return;
-    this.textRun.insert(glyphCell(handle.name, codepoint));
+    this.textRun.insert(glyphTextItem(handle.name, codepoint));
   }
 
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public shouldRenderGlyph(): boolean {
-    const run = this.#textRuns.active;
-    // No active text-run activity → render the glyph normally (initial state,
-    // grid → canvas open, etc).
-    if (run.buffer.cells.length === 0 && !run.cursorVisible) return true;
-    // Active run → only render the glyph when focus belongs to a text cell in this run.
-    return this.#$focusedGlyph.value?.anchor.runId === run.id;
+  /** @knipclassignore Indirectly consumed through Renderer. */
+  public editableGlyphVisible(): boolean {
+    return this.#glyphDisplay.cell.peek().editableGlyphVisible;
   }
 
-  public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
+  public getToolState(
+    scope: ToolStateScope,
+    toolId: string,
+    key: string,
+  ): unknown {
     return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
   }
 
-  public setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void {
+  public setToolState(
+    scope: ToolStateScope,
+    toolId: string,
+    key: string,
+    value: unknown,
+  ): void {
     const scopedState = this.#getToolScopeMap(scope);
     const stateKey = this.#toolStateKey(toolId, key);
     if (scopedState.get(stateKey) === value) return;
@@ -988,7 +822,11 @@ export class Editor {
     this.#bumpToolStateVersion();
   }
 
-  public deleteToolState(scope: ToolStateScope, toolId: string, key: string): void {
+  public deleteToolState(
+    scope: ToolStateScope,
+    toolId: string,
+    key: string,
+  ): void {
     const scopedState = this.#getToolScopeMap(scope);
     const stateKey = this.#toolStateKey(toolId, key);
     if (!scopedState.delete(stateKey)) return;
@@ -1003,7 +841,10 @@ export class Editor {
     return out;
   }
 
-  public hydrateToolState(scope: ToolStateScope, state: Record<string, unknown>): void {
+  public hydrateToolState(
+    scope: ToolStateScope,
+    state: Record<string, unknown>,
+  ): void {
     const scopedState = this.#getToolScopeMap(scope);
     scopedState.clear();
     for (const [key, value] of Object.entries(state)) {
@@ -1020,7 +861,7 @@ export class Editor {
   }
 
   public get glyph(): Signal<Glyph | null> {
-    return this.#$editingGlyph;
+    return this.#glyph.open.glyph;
   }
 
   public get commandHistory(): CommandHistory {
@@ -1060,20 +901,28 @@ export class Editor {
     return this.#zone;
   }
 
+  public get camera(): Camera {
+    return this.#camera;
+  }
+
   public setZone(zone: FocusZone): void {
     this.#zone = zone;
   }
 
-  public get glyphFinderOpen(): Signal<boolean> {
-    return this.#$glyphFinderOpen;
+  public get glyphFinderOpen(): boolean {
+    return this.#glyphFinderOpen.peek();
+  }
+
+  public get glyphFinderOpenCell(): Signal<boolean> {
+    return this.#glyphFinderOpen;
   }
 
   public openGlyphFinder(): void {
-    this.#$glyphFinderOpen.set(true);
+    this.#glyphFinderOpen.set(true);
   }
 
   public closeGlyphFinder(): void {
-    this.#$glyphFinderOpen.set(false);
+    this.#glyphFinderOpen.set(false);
   }
 
   public undo() {
@@ -1084,20 +933,20 @@ export class Editor {
     this.#commandHistory.redo();
   }
 
-  public setViewportRect(rect: Rect2D) {
-    this.#viewport.setRect(rect);
+  public setCameraRect(rect: Rect2D) {
+    this.#camera.setRect(rect);
   }
 
-  public setViewportUpm(upm: number) {
-    this.#viewport.upm = upm;
+  public setCameraUpm(upm: number) {
+    this.#camera.upm = upm;
   }
 
   public get xAdvance(): number {
-    return this.glyph.value?.xAdvance ?? 0;
+    return this.glyph.peek()?.xAdvance ?? 0;
   }
 
   public setXAdvance(width: number): void {
-    const glyph = this.#$editingGlyph.value;
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return;
     if (glyph.xAdvance === width) return;
 
@@ -1105,11 +954,10 @@ export class Editor {
   }
 
   public setLeftSidebearing(value: number): void {
-    const glyph = this.#$editingGlyph.value;
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return;
 
-    const outline = glyph.outline(this.#$designLocation);
-    const bbox = outline.bounds;
+    const bbox = this.previewInstance?.render.outline.bounds;
     if (!bbox) return;
 
     const delta = Math.round(value) - Math.round(bbox.min.x);
@@ -1117,15 +965,19 @@ export class Editor {
 
     const beforeXAdvance = glyph.xAdvance;
     this.#commandHistory.execute(
-      new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
+      new SetLeftSidebearingCommand(
+        beforeXAdvance,
+        beforeXAdvance + delta,
+        delta,
+      ),
     );
   }
 
   public setRightSidebearing(value: number): void {
-    const glyph = this.#$editingGlyph.value;
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return;
 
-    const bbox = glyph.outline(this.#$designLocation).bounds;
+    const bbox = this.previewInstance?.render.outline.bounds;
     if (!bbox) return;
 
     const currentRsb = glyph.xAdvance - bbox.max.x;
@@ -1138,34 +990,38 @@ export class Editor {
     );
   }
 
-  #updateViewportMetrics(): void {
+  public updateMetricsFromFont(): void {
     const metrics = this.font.metrics;
-    this.#viewport.upm = metrics.unitsPerEm;
-    this.#viewport.descender = metrics.descender;
+    this.#camera.upm = metrics.unitsPerEm;
+    this.#camera.descender = metrics.descender;
   }
 
-  public get screenMousePosition(): Signal<Point2D> {
-    return this.#viewport.screenMousePosition;
+  public get screenMousePositionCell(): Signal<Point2D> {
+    return this.#camera.screenMousePositionCell;
   }
 
   public getMousePosition(): Point2D {
-    return this.#viewport.mousePosition;
+    return this.#camera.mousePosition;
   }
 
   public getScreenMousePosition(): Point2D {
-    return this.#viewport.screenMousePosition.peek();
+    return this.#camera.screenMousePosition;
   }
 
   public updateMousePosition(clientX: number, clientY: number): void {
-    this.#viewport.updateMousePosition(clientX, clientY);
+    this.#camera.updateMousePosition(clientX, clientY);
   }
 
   public flushMousePosition(): void {
-    this.#viewport.flushMousePosition();
+    this.#camera.flushMousePosition();
+  }
+
+  public get pointerCoords(): Signal<Coordinates | null> {
+    return this.input.pointerCell;
   }
 
   public projectScreenToScene(screen: Point2D): Point2D {
-    return this.#viewport.projectScreenToScene(screen.x, screen.y);
+    return this.#camera.projectScreenToScene(screen.x, screen.y);
   }
 
   public sceneToGlyphLocal(point: Point2D): Point2D {
@@ -1179,31 +1035,32 @@ export class Editor {
   }
 
   public get hitRadius(): number {
-    return this.#viewport.hitRadius;
+    return this.#camera.hitRadius;
   }
 
-  /** @knipclassignore Indirectly consumed through Viewport. */
+  /** @knipclassignore Indirectly consumed through Renderer. */
   public screenToUpmDistance(pixels: number): number {
-    return this.#viewport.screenToUpmDistance(pixels);
+    return this.#camera.screenToUpmDistance(pixels);
   }
 
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public getViewportTransform(): ViewportTransform {
+  /** @knipclassignore Indirectly consumed through Renderer. */
+  public getCameraTransform(): CameraTransform {
     return {
-      zoom: this.#viewport.zoomLevel,
-      panX: this.#viewport.panX,
-      panY: this.#viewport.panY,
-      centre: this.#viewport.centre,
-      upmScale: this.#viewport.upmScale,
-      logicalHeight: this.#viewport.logicalHeight,
-      padding: this.#viewport.padding,
-      descender: this.#viewport.descender,
+      zoom: this.#camera.zoomLevel,
+      panX: this.#camera.panX,
+      panY: this.#camera.panY,
+      centre: this.#camera.centre,
+      upmScale: this.#camera.upmScale,
+      logicalHeight: this.#camera.logicalHeight,
+      layoutHeight: this.#camera.layoutHeight,
+      padding: this.#camera.padding,
+      descender: this.#camera.descender,
     };
   }
 
-  /** @knipclassignore Indirectly consumed through Viewport. */
+  /** @knipclassignore Indirectly consumed through Renderer. */
   public projectSceneToScreen(scene: Point2D): Point2D {
-    return this.#viewport.projectSceneToScreen(scene.x, scene.y);
+    return this.#camera.projectSceneToScreen(scene.x, scene.y);
   }
 
   public fromScreen(screen: Point2D): Coordinates {
@@ -1225,49 +1082,46 @@ export class Editor {
   }
 
   public get pan(): Point2D {
-    return this.#viewport.pan;
+    return this.#camera.pan;
   }
 
   public setPan(pan: Point2D): void {
-    this.#viewport.setPan(pan.x, pan.y);
+    this.#camera.setPan(pan.x, pan.y);
   }
 
   public zoomIn(): void {
-    this.#viewport.zoomIn();
+    this.#camera.zoomIn();
   }
 
   public zoomOut(): void {
-    this.#viewport.zoomOut();
+    this.#camera.zoomOut();
   }
 
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
-    this.#viewport.zoomToPoint(screenX, screenY, zoomDelta);
-  }
-
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public getHandleState(pointId: PointId): HandleState {
-    const isSelected = (id: PointId) =>
-      this.selection.isSelected({ kind: "point", id }) || this.isPointInMarqueePreview(id);
-    return this.#hover.getPointVisualState(pointId, isSelected);
-  }
-
-  /** @knipclassignore Indirectly consumed through Viewport. */
-  public getAnchorHandleState(anchorId: AnchorId): HandleState {
-    if (this.selection.isSelected({ kind: "anchor", id: anchorId })) {
-      return "selected";
-    }
-    if (this.#hover.hoveredAnchorId.value === anchorId) {
-      return "hovered";
-    }
-    return "idle";
+  public zoomToPoint(
+    screenX: number,
+    screenY: number,
+    zoomDelta: number,
+  ): void {
+    this.#camera.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
   /**
-   * Loads a font from disk, populates the glyph data store, clears command
-   * history, and opens an edit session on Unicode 65 ('A').
-   *
-   * Ends any active session first. After loading, the viewport UPM and
-   * descender are NOT updated here -- call `updateMetricsFromFont()` to sync.
+   * Creates a new loaded font document and resets editor placement to its
+   * default design location.
+   */
+  public createFont(): void {
+    if (this.#bridge.hasEditSession()) {
+      this.close();
+    }
+
+    this.font.create();
+    this.setDesignLocation(this.font.defaultLocation());
+    this.#events.emit("fontLoaded", { font: this.font });
+  }
+
+  /**
+   * Loads a font from disk and resets editor placement to its default design
+   * location.
    */
   public loadFont(filePath: string): void {
     if (this.#bridge.hasEditSession()) {
@@ -1279,12 +1133,12 @@ export class Editor {
     this.#events.emit("fontLoaded", { font: this.font });
   }
 
-  public resetFont(): void {
+  public closeFont(): void {
     if (this.#bridge.hasEditSession()) {
       this.close();
     }
 
-    this.font.reset();
+    this.font.close();
     this.setDesignLocation(emptyAxisLocation());
   }
 
@@ -1293,23 +1147,23 @@ export class Editor {
   }
 
   public setCursor(cursor: CursorType): void {
-    this.#cursor.set(cursorToCSS(cursor));
+    this.#view.cursorCell.set(cursorToCSS(cursor));
   }
 
   public get cursor(): string {
-    return this.#cursor.value;
+    return this.#view.cursorCell.peek();
   }
 
-  public get $cursor(): Signal<string> {
-    return this.#cursor;
+  public get cursorCell(): Signal<string> {
+    return this.#view.cursorCell;
   }
 
   public get zoom(): number {
-    return this.#viewport.zoomLevel;
+    return this.#camera.zoomLevel;
   }
 
-  public get $zoom(): Signal<number> {
-    return this.#viewport.zoom;
+  public get zoomCell(): Signal<number> {
+    return this.#camera.zoomCell;
   }
 
   public get fps(): Signal<number> {
@@ -1325,7 +1179,7 @@ export class Editor {
   }
 
   public deleteSelectedPoints(): void {
-    const glyphSource = this.#$activeGlyphSource.value;
+    const glyphSource = this.editGlyphSource;
     if (!glyphSource) return;
 
     const selectedIds = [...this.selection.pointIds];
@@ -1339,7 +1193,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#$editingGlyph.peek();
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return false;
 
     return this.#clipboard.write(content, { sourceGlyph: glyph.name });
@@ -1349,7 +1203,7 @@ export class Editor {
     const content = this.#selectedClipboardContent();
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#$editingGlyph.peek();
+    const glyph = this.#glyph.open.glyph.peek();
     if (!glyph) return false;
 
     const written = await this.#clipboard.write(content, {
@@ -1369,11 +1223,15 @@ export class Editor {
     if (result.kind !== "glyph" || result.content.contours.length === 0) return;
 
     this.selection.clear();
-    const command = new PasteCommand(result.content, { offset: this.#clipboard.nextPasteOffset() });
+    const command = new PasteCommand(result.content, {
+      offset: this.#clipboard.nextPasteOffset(),
+    });
     this.#commandHistory.execute(command);
 
     if (command.createdPointIds.length > 0) {
-      this.selection.select(command.createdPointIds.map((id) => ({ kind: "point", id })));
+      this.selection.select(
+        command.createdPointIds.map((id) => ({ kind: "point", id })),
+      );
     }
   }
 
@@ -1383,7 +1241,7 @@ export class Editor {
   }
 
   #selectedClipboardContent(): ClipboardContent | null {
-    const source = this.#$activeGlyphSource.peek();
+    const source = this.#glyph.edit.glyphSource.peek();
     if (!source) return null;
 
     const selection = ClipboardSelection.fromSelection(this.selection);
@@ -1477,30 +1335,41 @@ export class Editor {
     this.#commandHistory.execute(cmd);
   }
 
+  public get activeContourIdCell(): Signal<ContourId | null> {
+    return this.#glyph.open.activeContourId;
+  }
+
   public getActiveContourId(): ContourId | null {
-    return this.#$activeContour.value ?? null;
+    const id = this.#glyph.open.activeContourId.peek();
+    if (!id) return null;
+
+    return id;
   }
 
   public setActiveContour(contourId: ContourId | null): void {
-    this.#$activeContour.set(contourId);
+    this.#glyph.open.activeContourId.set(contourId);
   }
 
   public clearActiveContour(): void {
-    this.#$activeContour.set(null);
+    this.#glyph.open.activeContourId.set(null);
   }
 
   public getActiveContour(): Contour | null {
     const activeContourId = this.getActiveContourId();
     if (!activeContourId) return null;
 
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return null;
+    const source = this.editGlyphSource;
+    if (!source) return null;
 
-    return glyph.contour(activeContourId) ?? null;
+    return source.contour(activeContourId) ?? null;
   }
 
-  public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
-    this.#$activeContour.set(contourId);
+  public continueContour(
+    contourId: ContourId,
+    fromStart: boolean,
+    pointId: PointId,
+  ): void {
+    this.#glyph.open.activeContourId.set(contourId);
     if (fromStart) {
       this.#commandHistory.execute(new ReverseContourCommand(contourId));
     }
@@ -1511,23 +1380,40 @@ export class Editor {
     return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
-  public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
+  public scalePoints(
+    pointIds: readonly PointId[],
+    sx: number,
+    sy: number,
+    anchor: Point2D,
+  ): void {
     if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
-    this.#commandHistory.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
+    this.#commandHistory.execute(
+      new ScalePointsCommand([...pointIds], sx, sy, anchor),
+    );
   }
 
-  public rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void {
+  public rotatePoints(
+    pointIds: readonly PointId[],
+    angle: number,
+    center: Point2D,
+  ): void {
     if (pointIds.length === 0 || angle === 0) return;
-    this.#commandHistory.execute(new RotatePointsCommand([...pointIds], angle, center));
+    this.#commandHistory.execute(
+      new RotatePointsCommand([...pointIds], angle, center),
+    );
   }
 
-  public nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void {
+  public nudgePoints(
+    pointIds: readonly PointId[],
+    dx: number,
+    dy: number,
+  ): void {
     if (pointIds.length === 0 || (dx === 0 && dy === 0)) return;
     this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
   }
 
-  public upgradeLineToCubic(segment: Segment): void {
-    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment.raw as LineSegment));
+  public upgradeLineToCubic(segment: LineSegmentPoints): void {
+    this.#commandHistory.execute(new UpgradeLineToCubicCommand(segment));
   }
 
   public boolean(
@@ -1535,198 +1421,9 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#commandHistory.execute(new BooleanOperationCommand(contourIdA, contourIdB, operation));
-  }
-
-  private getPointAt(coords: Coordinates): Point | null {
-    const glyphSource = this.#$activeGlyphSource.value;
-    if (!glyphSource) return null;
-
-    return (
-      glyphSource.allPoints.find((point) => Vec2.dist(point, coords.glyphLocal) < this.hitRadius) ??
-      null
+    this.#commandHistory.execute(
+      new BooleanOperationCommand(contourIdA, contourIdB, operation),
     );
-  }
-
-  private getAnchorAt(
-    coords: Coordinates,
-  ): { id: AnchorId; name: string | null; x: number; y: number } | null {
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return null;
-
-    for (const anchor of glyph.anchors) {
-      if (Vec2.dist(anchor, coords.glyphLocal) < this.hitRadius) {
-        return { id: anchor.id, name: anchor.name ?? null, x: anchor.x, y: anchor.y };
-      }
-    }
-
-    return null;
-  }
-
-  private getSegmentAt(coords: Coordinates): SegmentHitResult | null {
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return null;
-
-    let bestHit: SegmentHitResult | null = null;
-    for (const { segment } of glyph.segments()) {
-      const hit = segment.hitTest(coords.glyphLocal, this.hitRadius);
-      if (hit && (!bestHit || hit.distance < bestHit.distance)) {
-        bestHit = hit;
-      }
-    }
-    return bestHit;
-  }
-
-  /**
-   * Performs a prioritized hit-test at a position (given as Coordinates).
-   *
-   * Priority order: contour endpoint > middle point > anchor > any point > segment.
-   * Returns `null` if nothing is within `hitRadius`.
-   */
-  public hitTest(coords: Coordinates): HitResult {
-    const endpoint = this.getContourEndpointAt(coords);
-
-    if (endpoint) {
-      const { contourId, pointId, position, contour } = endpoint;
-
-      return {
-        type: "contourEndpoint",
-        contourId,
-        pointId,
-        position,
-        contour,
-      };
-    }
-
-    const middle = this.getMiddlePointAt(coords);
-    if (middle) return middle;
-
-    const anchor = this.getAnchorAt(coords);
-    if (anchor) {
-      return { type: "anchor", anchorId: anchor.id };
-    }
-
-    const point = this.getPointAt(coords);
-    if (point) {
-      return { type: "point", point, pointId: point.id };
-    }
-
-    const segmentHit = this.getSegmentAt(coords);
-    if (segmentHit) {
-      return {
-        type: "segment",
-        segment: segmentHit.segment,
-        segmentId: segmentHit.segmentId,
-        t: segmentHit.t,
-        closestPoint: segmentHit.point,
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Hit-tests for the start or end point of an open contour.
-   * Used by the pen tool to detect when the user clicks an endpoint to close
-   * or extend a contour.
-   */
-  private getContourEndpointAt(coords: Coordinates): ContourEndpointHit | null {
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return null;
-
-    for (const contour of glyph.contours) {
-      if (contour.closed || contour.points.length === 0) continue;
-
-      const firstPoint = contour.points[0];
-      const lastPoint = contour.points[contour.points.length - 1];
-
-      if (Vec2.dist(firstPoint, coords.glyphLocal) < this.hitRadius) {
-        return {
-          type: "contourEndpoint",
-          contourId: contour.id,
-          pointId: firstPoint.id,
-          position: "start",
-          contour,
-        };
-      }
-
-      if (Vec2.dist(lastPoint, coords.glyphLocal) < this.hitRadius) {
-        return {
-          type: "contourEndpoint",
-          contourId: contour.id,
-          pointId: lastPoint.id,
-          position: "end",
-          contour,
-        };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Returns the axis-aligned bounding rect of the current committed selection
-   * in UPM space, or `null` if fewer than two points are selected or the
-   * selection is still in preview mode.
-   */
-  public getSelectionBoundingRect(): Rect2D | null {
-    const glyph = this.#$editingGlyph.value;
-    const selectedPointIds = this.selection.$pointIds.peek();
-    const selectionMode = this.selection.$mode.peek();
-
-    if (!glyph || selectionMode !== "committed" || selectedPointIds.size <= 1) {
-      return null;
-    }
-
-    const points = glyph.points([...selectedPointIds]);
-    if (points.length <= 1) return null;
-
-    const bounds = Bounds.fromPoints(points);
-    if (!bounds) return null;
-
-    return Bounds.toRect(bounds);
-  }
-
-  /**
-   * Runs the full hover resolution pipeline at a position (given as Coordinates)
-   * and applies the result to the hover manager. Checks bounding box handles
-   * first (when multi-selected), then points, then segments.
-   */
-  public updateHover(coords: Coordinates): void {
-    this.#hover.applyHoverResult(this.resolveHover(coords));
-  }
-
-  private resolveHover(coords: Coordinates): HoverResult {
-    if (this.selection.$pointIds.peek().size > 1) {
-      const bbHit = this.hitTestBoundingBoxAt(coords);
-      if (bbHit) return { type: "boundingBox", handle: bbHit };
-    }
-
-    const hit = this.hitTest(coords);
-    if (!hit) return { type: "none" };
-
-    switch (hit.type) {
-      case "point":
-        return { type: "point", pointId: hit.pointId };
-      case "contourEndpoint":
-      case "middlePoint":
-        return { type: "point", pointId: hit.pointId };
-      case "anchor":
-        return { type: "anchor", anchorId: hit.anchorId };
-      case "segment":
-        return {
-          type: "segment",
-          segmentId: hit.segmentId,
-          closestPoint: hit.closestPoint,
-          t: hit.t,
-        };
-    }
-  }
-
-  public getAllPoints(): Point[] {
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return [];
-
-    return glyph.allPoints;
   }
 
   public duplicateSelection(): PointId[] {
@@ -1738,76 +1435,19 @@ export class Editor {
     return command.createdPointIds;
   }
 
-  public getSegmentById(segmentId: SegmentId) {
-    return this.#$segmentIndex.value.get(segmentId) ?? null;
-  }
-
-  /**
-   * Hit-tests for an interior point of an open contour (not first or last).
-   * Skips the active contour and closed contours. Used by the pen tool to
-   * detect mid-contour clicks for splitting or joining.
-   */
-  private getMiddlePointAt(coords: Coordinates): MiddlePointHit | null {
-    const glyph = this.#$editingGlyph.value;
-    if (!glyph) return null;
-
-    const activeContourId = this.getActiveContourId();
-    const hitRadius = this.hitRadius;
-
-    for (const contour of glyph.contours) {
-      if (contour.id === activeContourId || contour.closed) continue;
-      if (!contour.hasInteriorPoints) continue;
-
-      for (let i = 1; i < contour.points.length - 1; i++) {
-        const point = contour.points[i];
-        if (Vec2.dist(coords.glyphLocal, point) < hitRadius) {
-          return {
-            type: "middlePoint",
-            contourId: contour.id,
-            pointId: point.id,
-            pointIndex: i,
-          };
-        }
-      }
-    }
-    return null;
-  }
-
   public get drawOffset(): Point2D {
-    return this.#$drawOffset.value;
+    return this.#text.drawOffset.peek();
   }
 
   /** @knipclassignore */
   public get $drawOffset(): Signal<Point2D> {
-    return this.#$drawOffset;
-  }
-
-  public requestRedraw() {
-    this.#renderer.requestRedraw();
-  }
-
-  public requestSceneRedraw() {
-    this.#renderer.requestSceneRedraw();
-  }
-
-  public requestOverlayRedraw() {
-    this.#renderer.requestOverlayRedraw();
-  }
-
-  public requestImmediateRedraw() {
-    this.#renderer.requestImmediateRedraw();
-  }
-
-  public cancelRedraw() {
-    this.#renderer.cancelRedraw();
+    return this.#text.drawOffset;
   }
 
   public destroy() {
     this.#events.emit("destroying");
-    this.#staticEffect.dispose();
-    this.#overlayEffect.dispose();
-    this.#interactiveEffect.dispose();
     this.#cursorEffect.dispose();
+    this.#cameraMetricsEffect.dispose();
     this.#renderer.destroy();
     this.#events.dispose();
   }

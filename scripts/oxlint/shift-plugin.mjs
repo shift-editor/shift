@@ -8,22 +8,10 @@
  */
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
-
-/** Files where direct .contours access is expected (structural traversal). */
-const CONTOURS_ALLOWED = [
-  "bridge/draft.ts",
-  "bridge/NativeBridge.ts",
-  "bridge/glyph.ts",
-  "lib/model/",
+const POINT_TYPE_ALLOWED = [
+  "packages/validation/",
   "packages/glyph-state/",
-  "rendering/", // render passes iterate contours to draw them
-  "types/selection.ts", // selection-bounds computed unions per-contour bounds
-  "hit/composite.ts", // component contour bounds check
-  "Editor.ts", // coordinator-level structural traversal
-  "clipboard/", // ClipboardContent is not a Glyph, different type
-  "ContourDoubleClick.ts", // finds contour by segment match
-  "interpolation/", // interpolation produces snapshots from raw contour data
+  "packages/rules/",
 ];
 
 function checkParam(context, node) {
@@ -70,47 +58,136 @@ function isAllowedFile(filename, allowList) {
   return allowList.some((pattern) => normalized.includes(pattern));
 }
 
+const REACTIVE_VALUE_ALLOWED = ["lib/signals/"];
+
+const REACTIVE_BOUNDARY_CALLEES = new Set([
+  "computed",
+  "effect",
+  "useSignalEffect",
+  "useSignalState",
+  "useSignalText",
+]);
+
+function methodName(node) {
+  if (!node?.key) return null;
+  if (node.key.type === "Identifier") return node.key.name;
+  if (node.key.type === "PrivateIdentifier") return node.key.name;
+  return null;
+}
+
+function classExtendsCanvasItem(node) {
+  if (!node) return false;
+
+  const superclass = node.superClass;
+  if (!superclass) return false;
+  if (superclass.type === "Identifier") return superclass.name === "CanvasItem";
+  if (
+    superclass.type === "MemberExpression" &&
+    superclass.property?.type === "Identifier"
+  ) {
+    return superclass.property.name === "CanvasItem";
+  }
+  return false;
+}
+
+function containingMethod(node) {
+  let current = node.parent;
+
+  while (current) {
+    if (current.type === "MethodDefinition") return current;
+    current = current.parent;
+  }
+
+  return null;
+}
+
+function methodOwnerClass(method) {
+  const body = method?.parent;
+  if (body?.type !== "ClassBody") return null;
+  return body.parent ?? null;
+}
+
+function calleeName(callee) {
+  if (!callee) return null;
+  if (callee.type === "Identifier") return callee.name;
+  if (
+    callee.type === "MemberExpression" &&
+    callee.property?.type === "Identifier"
+  ) {
+    return callee.property.name;
+  }
+  return null;
+}
+
+function isInsideReactiveBoundary(node) {
+  let current = node.parent;
+
+  while (current) {
+    if (
+      current.type === "CallExpression" &&
+      REACTIVE_BOUNDARY_CALLEES.has(calleeName(current.callee))
+    ) {
+      return true;
+    }
+
+    if (current.type === "MethodDefinition") {
+      const name = methodName(current);
+      if (name === "props" && classExtendsCanvasItem(methodOwnerClass(current)))
+        return true;
+      if (name === "dependencies" || name?.endsWith("Dependencies"))
+        return true;
+      if (name === "getCursor") return true;
+      if (name === "trackViewportTransform") return true;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
+
+function isCanvasItemPropsCellValueRead(node) {
+  const method = containingMethod(node);
+  if (!method || methodName(method) !== "draw") return false;
+  if (!classExtendsCanvasItem(methodOwnerClass(method))) return false;
+
+  const object = node.object;
+  if (object?.type !== "MemberExpression") return false;
+  if (
+    object.property?.type !== "Identifier" ||
+    object.property.name !== "propsCell"
+  )
+    return false;
+  return object.object?.type === "ThisExpression";
+}
+
+function isDomValueRead(node) {
+  const object = node.object;
+
+  if (!object) return false;
+  if (object.type === "Identifier" && object.name === "textarea") return true;
+  if (object.type !== "MemberExpression") return false;
+  if (object.property?.type !== "Identifier") return false;
+  return (
+    object.property.name === "target" ||
+    object.property.name === "currentTarget"
+  );
+}
+
+function isIteratorValueRead(node) {
+  const object = node.object;
+
+  if (object?.type !== "CallExpression") return false;
+  const callee = object.callee;
+  if (callee?.type !== "MemberExpression") return false;
+  return (
+    callee.property?.type === "Identifier" && callee.property.name === "next"
+  );
+}
+
 export default {
   meta: { name: "shift" },
   rules: {
-    /**
-     * Ban direct .contours iteration in app code.
-     *
-     * Use instance methods on the Glyph / Contour domain classes:
-     *   - glyph.allPoints / glyph.point(id) / glyph.points(ids)
-     *   - glyph.segments() / contour.segments()
-     *   - glyph.contour(id)
-     * Raw `glyph.contours.map(...)` / `for (const c of glyph.contours)` usually
-     * hides a reduction that belongs on the class.
-     */
-    "no-raw-contour-access": {
-      meta: {
-        type: "suggestion",
-        messages: {
-          noRawContours:
-            "Do not iterate .contours directly. Use glyph.allPoints / glyph.point(id) / glyph.segments() / contour.segments() on the domain classes.",
-        },
-        schema: [],
-      },
-      create(context) {
-        const filename = context.getFilename();
-
-        if (isAllowedFile(filename, CONTOURS_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
-
-        return {
-          // Catch: for (const x of y.contours)
-          'ForOfStatement > MemberExpression[property.name="contours"]'(node) {
-            context.report({ node, messageId: "noRawContours" });
-          },
-          // Catch: y.contours.map / .filter / .find / .flatMap / .some / .every / .reduce / .forEach
-          'CallExpression > MemberExpression > MemberExpression[property.name="contours"]'(node) {
-            context.report({ node, messageId: "noRawContours" });
-          },
-        };
-      },
-    },
-
     /**
      * Ban `getFoo()` / `isFoo()` methods that just return `this.#signal.value`
      * (or `.peek()`). Use a value getter + optional `$foo` signal getter
@@ -141,7 +218,8 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         function suggestedName(methodName) {
           if (/^get[A-Z]/.test(methodName)) {
@@ -166,7 +244,8 @@ export default {
           const ret = stmt.argument;
           if (ret.type !== "MemberExpression") return false;
           if (!ret.property || ret.property.type !== "Identifier") return false;
-          if (ret.property.name !== "value" && ret.property.name !== "peek") return false;
+          if (ret.property.name !== "value" && ret.property.name !== "peek")
+            return false;
           // Return object must itself be a MemberExpression (this.#foo or this.$foo)
           return ret.object && ret.object.type === "MemberExpression";
         }
@@ -189,6 +268,44 @@ export default {
               messageId: "useGetter",
               data: { name, suggested: suggestedName(name) },
             });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban reactive `.value` reads outside explicit reactive boundaries.
+     *
+     * `.value` both reads and subscribes. Outside `computed`, `effect`, or a
+     * React signal hook this creates hidden dependencies that make rendering
+     * hard to reason about. Use `.peek()` for a snapshot read at imperative
+     * boundaries, or move the read into a named dependency builder.
+     */
+    "no-reactive-value-outside-boundary": {
+      meta: {
+        type: "problem",
+        messages: {
+          useSnapshotRead:
+            "Do not read reactive `.value` outside computed/effect/signal hooks. Use `.peek()` for a snapshot read or move this into an explicit dependency boundary.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (isAllowedFile(filename, REACTIVE_VALUE_ALLOWED)) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
+        if (filename.includes("/docs/")) return {};
+
+        return {
+          'MemberExpression[property.name="value"]'(node) {
+            if (isDomValueRead(node)) return;
+            if (isIteratorValueRead(node)) return;
+            if (isCanvasItemPropsCellValueRead(node)) return;
+            if (isInsideReactiveBoundary(node)) return;
+
+            context.report({ node, messageId: "useSnapshotRead" });
           },
         };
       },
@@ -331,7 +448,10 @@ export default {
             }
 
             // parseContourSegments(...)
-            if (callee.type === "Identifier" && callee.name === "parseContourSegments") {
+            if (
+              callee.type === "Identifier" &&
+              callee.name === "parseContourSegments"
+            ) {
               context.report({
                 node: callee,
                 messageId: "useGenerator",
@@ -361,7 +481,8 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         return {
           /**
@@ -410,7 +531,8 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, SNAPSHOT_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         return {
           /**
@@ -444,7 +566,8 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         return {
           /**
@@ -472,9 +595,13 @@ export default {
 
             // The other side must be a string literal ("onCurve" / "offCurve")
             const other = hasPropLeft ? right : left;
-            if (other.type !== "Literal" || typeof other.value !== "string") return;
+            if (other.type !== "Literal" || typeof other.value !== "string")
+              return;
 
-            context.report({ node: hasPropLeft ? left : right, messageId: "useValidate" });
+            context.report({
+              node: hasPropLeft ? left : right,
+              messageId: "useValidate",
+            });
           },
         };
       },
@@ -497,13 +624,15 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         /** Find the first returned ObjectExpression in a block body. */
         function findReturnedObject(block) {
           for (const stmt of block.body) {
             if (stmt.type === "ReturnStatement" && stmt.argument) {
-              if (stmt.argument.type === "ObjectExpression") return stmt.argument;
+              if (stmt.argument.type === "ObjectExpression")
+                return stmt.argument;
               // Parenthesized: return ({ ... })
               if (
                 stmt.argument.type === "SequenceExpression" &&
@@ -524,7 +653,10 @@ export default {
           while (current && depth < 8) {
             if (current.type === "ConditionalExpression") return true;
             // Stop at statement boundaries — the ternary must be in the same expression
-            if (current.type.endsWith("Statement") || current.type.endsWith("Declaration")) {
+            if (
+              current.type.endsWith("Statement") ||
+              current.type.endsWith("Declaration")
+            ) {
               return false;
             }
             current = current.parent;
@@ -572,7 +704,9 @@ export default {
             if (!expr || expr.type !== "ObjectExpression") return;
 
             // Must have a spread element (structural clone pattern)
-            const hasSpread = expr.properties.some((p) => p.type === "SpreadElement");
+            const hasSpread = expr.properties.some(
+              (p) => p.type === "SpreadElement",
+            );
             if (!hasSpread) return;
 
             // Must have a property whose value contains a .map() call
@@ -629,7 +763,8 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         return {
           /**
@@ -657,7 +792,11 @@ export default {
             const yVal = yProp.value;
 
             // Both must be binary expressions (arithmetic on coordinates)
-            if (xVal.type !== "BinaryExpression" || yVal.type !== "BinaryExpression") return;
+            if (
+              xVal.type !== "BinaryExpression" ||
+              yVal.type !== "BinaryExpression"
+            )
+              return;
 
             // Both must involve member access (a.x, b.x, etc.)
             const hasMemberX =
@@ -671,7 +810,11 @@ export default {
 
             // Only flag +, -, * (not / or %)
             const mathOps = ["+", "-", "*"];
-            if (!mathOps.includes(xVal.operator) || !mathOps.includes(yVal.operator)) return;
+            if (
+              !mathOps.includes(xVal.operator) ||
+              !mathOps.includes(yVal.operator)
+            )
+              return;
 
             context.report({ node, messageId: "useVec2" });
           },
@@ -701,7 +844,8 @@ export default {
         const filename = context.getFilename();
 
         if (!filename.endsWith(".tsx")) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         const THRESHOLD = 3;
 
@@ -713,7 +857,10 @@ export default {
 
           function walk(n) {
             if (!n || typeof n !== "object") return;
-            if (n.type === "ChainExpression" && n.expression?.type === "MemberExpression") {
+            if (
+              n.type === "ChainExpression" &&
+              n.expression?.type === "MemberExpression"
+            ) {
               const obj = n.expression.object;
               if (obj?.type === "Identifier") {
                 counts.set(obj.name, (counts.get(obj.name) || 0) + 1);
@@ -770,20 +917,26 @@ export default {
       create(context) {
         const filename = context.getFilename();
 
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        if (filename.includes(".test.") || filename.includes("testing/"))
+          return {};
 
         const sourceCode = context.getSourceCode();
         if (!sourceCode) return {};
 
         return {
           Program() {
-            const comments = sourceCode.getAllComments ? sourceCode.getAllComments() : [];
+            const comments = sourceCode.getAllComments
+              ? sourceCode.getAllComments()
+              : [];
             for (const comment of comments) {
               if (comment.type !== "Line") continue;
               const text = comment.value.trim();
               // Match patterns like: ── Section ──, === Section ===, --- Section ---
               if (/^[─═\-=~]{2,}/.test(text) || /[─═\-=~]{2,}$/.test(text)) {
-                context.report({ node: comment, messageId: "noSectionDivider" });
+                context.report({
+                  node: comment,
+                  messageId: "noSectionDivider",
+                });
               }
             }
           },
@@ -816,7 +969,11 @@ export default {
 
         return {
           NewExpression(node) {
-            if (node.callee && node.callee.type === "Identifier" && node.callee.name === "Editor") {
+            if (
+              node.callee &&
+              node.callee.type === "Identifier" &&
+              node.callee.name === "Editor"
+            ) {
               context.report({ node, messageId: "useTestEditor" });
             }
           },

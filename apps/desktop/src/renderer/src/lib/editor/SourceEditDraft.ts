@@ -1,17 +1,27 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphGeometry, GlyphSource, SourcePositions } from "@/lib/model/Glyph";
-import { SourcePositionList, type SourcePositionSubject } from "@/lib/model/SourcePositionList";
-import { SetSourcePositionsCommand } from "@/lib/commands/primitives/SetSourcePositionsCommand";
+import type { GlyphSource, SourcePositions } from "@/lib/model/Glyph";
+import {
+  SourcePositionList,
+  type SourcePositionSubject,
+} from "@/lib/model/SourcePositionList";
+import { ApplyPositionPatchCommand } from "@/lib/commands/primitives/ApplyPositionPatchCommand";
 import type { CommandHistory } from "@/lib/commands/core/CommandHistory";
 
 export type SourceEditSubject = SourcePositionSubject;
 
+/**
+ * Preview-backed source position edit.
+ *
+ * During interaction, position patches are applied to the local reactive source
+ * only. Commit writes the final sparse patch to Rust and records an undoable
+ * command without round-tripping the full glyph values buffer.
+ */
 export class SourceEditDraft {
   readonly glyphSource: GlyphSource;
   readonly subject: SourceEditSubject;
-  readonly baseGeometry: GlyphGeometry;
 
   readonly #commandHistory: CommandHistory;
+
   #base: SourcePositionList;
   #preview: SourcePositionList | null = null;
   #closed = false;
@@ -22,7 +32,6 @@ export class SourceEditDraft {
     subject: SourceEditSubject,
   ) {
     this.glyphSource = glyphSource;
-    this.baseGeometry = glyphSource.geometry;
 
     this.subject = {
       points: subject.points ? [...subject.points] : [],
@@ -30,19 +39,19 @@ export class SourceEditDraft {
     };
 
     this.#commandHistory = commandHistory;
-    this.#base = SourcePositionList.fromSubject(this.baseGeometry, this.subject);
+    this.#base = SourcePositionList.fromSubject(glyphSource, this.subject);
   }
 
   get basePositions(): SourcePositions {
     return this.#base.positions;
   }
 
-  previewPositions(positions: SourcePositions): void {
+  previewPositionPatch(positions: SourcePositions): void {
     if (this.#closed) return;
 
-    this.#base = this.#base.includeFromGeometry(this.baseGeometry, positions);
+    this.#base = this.#base.includeFrom(this.glyphSource, positions);
     this.#preview = SourcePositionList.fromPositions(positions);
-    this.glyphSource.previewPositions(this.#preview.positions);
+    this.glyphSource.previewPositionPatch(this.#preview.positions);
   }
 
   previewTranslate(delta: Point2D): void {
@@ -58,7 +67,7 @@ export class SourceEditDraft {
   }
 
   preview(positions: SourcePositionList): void {
-    this.previewPositions(positions.positions);
+    this.previewPositionPatch(positions.positions);
   }
 
   commit(label: string): void {
@@ -67,9 +76,13 @@ export class SourceEditDraft {
 
     if (!this.#preview || this.#preview.positions.length === 0) return;
 
-    this.glyphSource.setPositions(this.#preview.positions);
+    this.glyphSource.commitPositionPatch(this.#preview.positions);
     this.#commandHistory.record(
-      new SetSourcePositionsCommand(label, this.#base.positions, this.#preview.positions),
+      new ApplyPositionPatchCommand(
+        label,
+        this.#base.positions,
+        this.#preview.positions,
+      ),
     );
   }
 
@@ -78,7 +91,7 @@ export class SourceEditDraft {
     this.#closed = true;
 
     if (this.#base.positions.length > 0) {
-      this.glyphSource.previewPositions(this.#base.positions);
+      this.glyphSource.previewPositionPatch(this.#base.positions);
     }
   }
 }

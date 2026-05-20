@@ -8,15 +8,20 @@ export interface CategoryProps {
   selectedCategory: GlyphCategory | null;
   onSelectCategory: (category: GlyphCategory) => void;
 }
-export const Category = ({ category, selectedCategory, onSelectCategory }: CategoryProps) => {
+export const Category = ({
+  category,
+  selectedCategory,
+  onSelectCategory,
+}: CategoryProps) => {
   const isActive = selectedCategory === category;
+
   return (
     <Button
       className="w-full justify-between"
       variant="ghost"
       size="sm"
       onClick={() => onSelectCategory(category)}
-      data-active={isActive}
+      isActive={isActive}
     >
       <div className="flex items-center gap-0.5">
         <ChevronRightIcon

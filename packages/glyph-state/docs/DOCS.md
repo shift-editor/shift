@@ -29,7 +29,7 @@ packages/glyph-state/src/
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hitTest`.
-- **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used for source edit previews and `setPositions` packing.
+- **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used for source edit previews and sparse position patch packing.
 
 ## How It Fits
 

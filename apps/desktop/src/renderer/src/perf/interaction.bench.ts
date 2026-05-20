@@ -7,7 +7,7 @@
  * - pointerMove (per frame): draft.preview*
  * - pointerUp: draft.commit + undo recording
  *
- * Contrast with pointManipulation.bench.ts which calls beginSourceEditDraft/previewPositions
+ * Contrast with pointManipulation.bench.ts which calls beginSourceEditDraft/previewPositionPatch
  * directly and skips the tool overhead.
  */
 

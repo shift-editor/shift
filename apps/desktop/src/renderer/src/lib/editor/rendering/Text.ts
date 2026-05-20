@@ -3,14 +3,13 @@
  *
  * Same shape as the indicator drawing classes (Anchors, BoundingBox, etc.):
  * no fields, methods take `(canvas, ...)`. The frame loop subscribes to the
- * relevant signals (textRun.$layout / $caret / $selectionRects / interaction)
+ * relevant signals (textRun.layoutCell / caretCell / selectionRectsCell / interaction)
  * and re-draws when they change.
  *
- * Coordinate space note: the canvas inside `renderToolScene` has been
- * translated by `editor.drawOffset` (Viewport.ts:174) so the active glyph
- * outline lands at world `drawOffset`. The TextLayout, by
- * contrast, holds glyph positions in *world* (scene) UPM space — same space
- * that `event.point` arrives in via `coords.scene`.
+ * Coordinate space note: scene layers draw in glyph-local UPM space after
+ * `Canvas.withGlyphSpace()` applies the current `editor.drawOffset`. The
+ * TextLayout, by contrast, holds glyph positions in world/scene UPM space —
+ * same space that `event.point` arrives in via `coords.scene`.
  *
  * The renderer reverses the drawOffset translate once at the top, then
  * draws everything using world coords directly — same coords the layout
@@ -18,7 +17,7 @@
  *
  * Draw order:
  *   1. selection rects (under glyphs)
- *   2. glyphs (fill + optional hover outline; the cell being edited as a
+ *   2. glyphs (fill + optional hover outline; the item being edited as a
  *      glyph is skipped — the editor draws that one separately at drawOffset)
  *   3. caret (over glyphs)
  */
@@ -28,8 +27,11 @@ import { TextRun, type FocusedGlyph } from "@/lib/text/TextRun";
 import type { Point2D } from "@shift/geo";
 import type { Signal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
+import { OutlineRenderer } from "./Outline";
 
 export class Text {
+  readonly #outlineRenderer = new OutlineRenderer();
+
   draw(
     canvas: Canvas,
     run: TextRun,
@@ -38,47 +40,62 @@ export class Text {
     drawOffset: Point2D,
     focusedGlyph: FocusedGlyph | null,
   ): void {
-    const layout = run.$layout.peek();
+    const layout = run.layoutCell.peek();
     if (!layout) return;
 
     const theme = canvas.theme.textRun;
-    const source = font.sourceAtOrDefault(designLocation.value);
 
     canvas.save();
     // Reverse the drawOffset translate so we draw in world UPM space.
     canvas.translate(-drawOffset.x, -drawOffset.y);
 
     // Selection rects (under glyphs)
-    for (const rect of run.$selectionRects.peek()) {
-      canvas.fillRect(rect.x, rect.bottom, rect.width, rect.top - rect.bottom, theme.selectionFill);
+    for (const rect of run.selectionRectsCell.peek()) {
+      canvas.fillRect(
+        rect.x,
+        rect.bottom,
+        rect.width,
+        rect.top - rect.bottom,
+        theme.selectionFill,
+      );
     }
 
     // Glyphs
-    const focusedCellId = focusedGlyph?.anchor.runId === run.id ? focusedGlyph.anchor.cellId : null;
+    const focusedItemId =
+      focusedGlyph?.anchor.runId === run.id ? focusedGlyph.anchor.itemId : null;
     const hoveredCluster = run.interaction.hoveredIndex;
 
     for (const line of layout.lines) {
       let runBase = layout.origin.x;
       for (const r of line.runs) {
         for (const g of r.glyphs) {
-          // Skip the cell being edited as a glyph — the editor draws that one
+          // Skip the item being edited as a glyph — the editor draws that one
           // at its drawOffset via the standard glyph render path.
-          if (focusedCellId && g.cellIds.includes(focusedCellId)) {
+          if (focusedItemId && g.sourceItemIds.includes(focusedItemId)) {
             continue;
           }
 
-          if (!source) continue;
           const glyph = font.glyph({ name: g.glyphName });
           if (!glyph) continue;
 
-          const path = glyph.outline(designLocation).path;
+          const outline = glyph.instance(designLocation).render.outline;
 
           canvas.save();
-          canvas.translate(runBase + g.origin.x + g.xOffset, line.y + g.origin.y + g.yOffset);
-          canvas.fillPath(path, canvas.theme.glyph.fill);
+          canvas.translate(
+            runBase + g.origin.x + g.xOffset,
+            line.y + g.origin.y + g.yOffset,
+          );
+          this.#outlineRenderer.draw(canvas, outline, {
+            fill: canvas.theme.glyph.fill,
+          });
 
           if (g.cluster === hoveredCluster) {
-            canvas.strokePath(path, theme.hoverOutline, theme.hoverOutlineWidthPx);
+            this.#outlineRenderer.draw(canvas, outline, {
+              stroke: {
+                color: theme.hoverOutline,
+                widthPx: theme.hoverOutlineWidthPx,
+              },
+            });
           }
           canvas.restore();
         }
@@ -88,7 +105,7 @@ export class Text {
 
     // Caret (over glyphs)
     if (run.cursorVisible) {
-      const caret = run.$caret.peek();
+      const caret = run.caretCell.peek();
       if (caret) {
         const pos = caret.position();
         const top = pos.y + layout.metrics.ascender;

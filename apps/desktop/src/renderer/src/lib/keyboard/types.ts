@@ -4,7 +4,6 @@ import type { ToolShortcutEntry } from "@/types/tools";
 export interface KeyboardEditorActions {
   zoomIn(): void;
   zoomOut(): void;
-  requestRedraw(): void;
   copy(): void;
   cut(): void;
   paste(): void;
@@ -19,8 +18,8 @@ export interface KeyboardEditorActions {
     options?: { onActivate?: () => void; onReturn?: () => void },
   ): void;
   returnFromTemporaryTool(): void;
-  readonly previewMode: boolean;
-  setPreviewMode(enabled: boolean): void;
+  readonly proofMode: boolean;
+  setProofMode(enabled: boolean): void;
   openGlyphFinder(): void;
 }
 

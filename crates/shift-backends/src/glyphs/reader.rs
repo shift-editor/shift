@@ -128,7 +128,7 @@ impl FontReader for GlyphsReader {
         let glyphs_font =
             GlyphsFont::load(Path::new(path)).map_err(|e| format!("Failed to load glyphs: {e}"))?;
 
-        let mut font = Font::new();
+        let mut font = Font::empty();
         let default_layer_id = font.default_layer_id();
 
         // Metadata and metrics from default master.

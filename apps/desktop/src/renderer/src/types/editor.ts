@@ -1,7 +1,5 @@
 import type { ToolName } from "@/lib/tools/core";
 
-export type SelectionMode = "preview" | "committed";
-
 export type ToolStateScope = "app" | "document";
 
 export type CursorType =

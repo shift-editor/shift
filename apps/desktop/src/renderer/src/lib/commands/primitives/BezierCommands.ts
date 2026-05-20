@@ -1,7 +1,11 @@
 import type { PointId, ContourId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import { Point2D, type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { LineSegment, Segment } from "@shift/glyph-state";
+import {
+  Point,
+  type LineSegmentPoints,
+  type Segment,
+} from "@shift/glyph-state";
 
 /**
  * Closes the active contour, connecting the last point back to the first.
@@ -132,49 +136,43 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   #splitLine(ctx: CommandContext): PointId {
     const splitPoint = this.#segment.pointAt(this.#t);
 
-    const anchor2Id = this.#segment.anchor2.id;
+    const anchor2Id = this.#segment.endId;
 
-    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, {
-      x: splitPoint.x,
-      y: splitPoint.y,
-      pointType: "onCurve",
-      smooth: false,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(
+      anchor2Id,
+      Point.onCurve(splitPoint),
+    );
     this.#insertedPointIds.push(this.#splitPointId);
 
     return this.#splitPointId;
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const data = this.#segment.asQuad()!;
-    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [QuadraticCurve, QuadraticCurve];
+    const points = this.#segment.asQuad()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [
+      QuadraticCurve,
+      QuadraticCurve,
+    ];
 
     const cA = curveA.c;
     const mid = curveA.p1;
     const cB = curveB.c;
 
-    const controlId = data.points.control.id;
-    const anchor2Id = data.points.anchor2.id;
+    const controlId = points.control.id;
+    const anchor2Id = points.end.id;
 
     this.#originalPositions.set(controlId, {
-      x: data.points.control.x,
-      y: data.points.control.y,
+      x: points.control.x,
+      y: points.control.y,
     });
 
-    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, {
-      x: mid.x,
-      y: mid.y,
-      pointType: "onCurve",
-      smooth: true,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(
+      anchor2Id,
+      Point.smooth(mid),
+    );
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.source.insertPointBefore(anchor2Id, {
-      x: cB.x,
-      y: cB.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const cBId = ctx.source.insertPointBefore(anchor2Id, Point.offCurve(cB));
     this.#insertedPointIds.push(cBId);
 
     ctx.source.movePointTo(controlId, cA);
@@ -183,8 +181,11 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const data = this.#segment.asCubic()!;
-    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [CubicCurve, CubicCurve];
+    const points = this.#segment.asCubic()!;
+    const [curveA, curveB] = this.#segment.splitAt(this.#t) as [
+      CubicCurve,
+      CubicCurve,
+    ];
 
     const c0A = curveA.c0;
     const c1A = curveA.c1;
@@ -192,40 +193,28 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const c0B = curveB.c0;
     const c1B = curveB.c1;
 
-    const control1Id = data.points.control1.id;
-    const control2Id = data.points.control2.id;
+    const control1Id = points.controlStart.id;
+    const control2Id = points.controlEnd.id;
 
     this.#originalPositions.set(control1Id, {
-      x: data.points.control1.x,
-      y: data.points.control1.y,
+      x: points.controlStart.x,
+      y: points.controlStart.y,
     });
     this.#originalPositions.set(control2Id, {
-      x: data.points.control2.x,
-      y: data.points.control2.y,
+      x: points.controlEnd.x,
+      y: points.controlEnd.y,
     });
 
-    const c1AId = ctx.source.insertPointBefore(control2Id, {
-      x: c1A.x,
-      y: c1A.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const c1AId = ctx.source.insertPointBefore(control2Id, Point.offCurve(c1A));
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.source.insertPointBefore(control2Id, {
-      x: mid.x,
-      y: mid.y,
-      pointType: "onCurve",
-      smooth: true,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(
+      control2Id,
+      Point.smooth(mid),
+    );
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.source.insertPointBefore(control2Id, {
-      x: c0B.x,
-      y: c0B.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const c0BId = ctx.source.insertPointBefore(control2Id, Point.offCurve(c0B));
     this.#insertedPointIds.push(c0BId);
 
     ctx.source.movePointTo(control1Id, c0A);
@@ -272,10 +261,10 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   #control1Id: PointId | null = null;
   #control2Id: PointId | null = null;
 
-  constructor(segment: LineSegment) {
+  constructor(segment: LineSegmentPoints) {
     super();
-    const p1 = segment.points.anchor1;
-    const p2 = segment.points.anchor2;
+    const p1 = segment.start;
+    const p2 = segment.end;
     this.#anchor2Id = p2.id;
 
     this.#control1Pos = {
@@ -289,22 +278,20 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.source.insertPointBefore(this.#anchor2Id, {
-      x: this.#control2Pos.x,
-      y: this.#control2Pos.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
-    this.#control1Id = ctx.source.insertPointBefore(this.#control2Id, {
-      x: this.#control1Pos.x,
-      y: this.#control1Pos.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    this.#control2Id = ctx.source.insertPointBefore(
+      this.#anchor2Id,
+      Point.offCurve(this.#control2Pos),
+    );
+    this.#control1Id = ctx.source.insertPointBefore(
+      this.#control2Id,
+      Point.offCurve(this.#control1Pos),
+    );
   }
 
   undo(ctx: CommandContext): void {
-    const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
+    const toRemove = [this.#control1Id, this.#control2Id].filter(
+      Boolean,
+    ) as PointId[];
     if (toRemove.length > 0) {
       ctx.source.removePoints(toRemove);
     }

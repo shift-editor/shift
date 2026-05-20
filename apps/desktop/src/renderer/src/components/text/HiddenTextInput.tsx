@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getEditor } from "@/store/store";
 import { effect } from "@/lib/signals/signal";
-import { linebreakCell } from "@/lib/text/layout";
+import { lineBreakTextItem } from "@/lib/text/layout";
 
 export function TextInput() {
   const editor = getEditor();
@@ -17,7 +17,7 @@ export function TextInput() {
 
   useEffect(() => {
     const fx = effect(() => {
-      setIsTextTool(editor.getActiveTool() === "text");
+      setIsTextTool(editor.activeToolCell.value === "text");
     });
     return () => fx.dispose();
   }, [editor]);
@@ -70,7 +70,7 @@ export function TextInput() {
         return;
 
       case "Enter":
-        run.insert(linebreakCell());
+        run.insert(lineBreakTextItem());
         e.preventDefault();
         return;
 
@@ -126,8 +126,8 @@ export function TextInput() {
 
       case "c":
         if (e.metaKey || e.ctrlKey) {
-          const codepoints = run.buffer.selectedCells
-            .map((cell) => (cell.kind === "glyph" ? cell.codepoint : 10))
+          const codepoints = run.buffer.selectedItems
+            .map((item) => (item.kind === "glyph" ? item.codepoint : 10))
             .filter((cp): cp is number => cp !== null);
           if (codepoints.length > 0) {
             const text = String.fromCodePoint(...codepoints);

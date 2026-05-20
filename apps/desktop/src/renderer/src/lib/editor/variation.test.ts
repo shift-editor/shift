@@ -52,7 +52,9 @@ describe("Editor.open — variation-aware edit sessions", () => {
     const movedX = point.x + 250;
 
     const draft = editor.beginSourceEditDraft({ points: [point.id] });
-    draft.previewPositions([{ kind: "point", id: point.id, x: movedX, y: point.y }]);
+    draft.previewPositionPatch([
+      { kind: "point", id: point.id, x: movedX, y: point.y },
+    ]);
     draft.commit("Move");
 
     editor.close();
@@ -75,16 +77,17 @@ describe("Editor.open — variation-aware edit sessions", () => {
     const movedX = point.x + 250;
 
     const draft = editor.beginSourceEditDraft({ points: [point.id] });
-    draft.previewPositions([{ kind: "point", id: point.id, x: movedX, y: point.y }]);
+    draft.previewPositionPatch([
+      { kind: "point", id: point.id, x: movedX, y: point.y },
+    ]);
     draft.commit("Move");
 
     editor.close();
 
     // Same Glyph instance the grid would read — registry single-source-of-truth.
-    const source = editor.font.defaultSource();
-    if (!source) throw new Error("Expected source");
-
     const fromRegistry = editor.font.glyph({ name: "A" })!;
-    expect(fromRegistry.outline(editor.$designLocation).svgPath).toContain(String(movedX));
+    expect(fromRegistry.outline(editor.$designLocation).svgPath).toContain(
+      String(movedX),
+    );
   });
 });

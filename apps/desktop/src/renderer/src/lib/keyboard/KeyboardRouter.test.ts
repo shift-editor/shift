@@ -3,10 +3,15 @@ import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
 
 type KeyboardEventOptions = Partial<
-  Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
+  Pick<
+    KeyboardEvent,
+    "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target"
+  >
 >;
 
-function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent {
+function createKeyboardEvent(
+  options: KeyboardEventOptions = {},
+): KeyboardEvent {
   const event: Pick<
     KeyboardEvent,
     | "key"
@@ -79,7 +84,12 @@ describe("KeyboardRouter", () => {
     it("does not intercept shift+equal (leaves it for native UI zoom)", () => {
       canvasActive = false;
       const zoomBefore = editor.zoom;
-      const e = createKeyboardEvent({ key: "+", code: "Equal", metaKey: true, shiftKey: true });
+      const e = createKeyboardEvent({
+        key: "+",
+        code: "Equal",
+        metaKey: true,
+        shiftKey: true,
+      });
 
       const handled = router.handleKeyDown(e);
 
@@ -90,7 +100,12 @@ describe("KeyboardRouter", () => {
     it("does not intercept shift+minus (leaves it for native UI zoom)", () => {
       canvasActive = false;
       const zoomBefore = editor.zoom;
-      const e = createKeyboardEvent({ key: "_", code: "Minus", ctrlKey: true, shiftKey: true });
+      const e = createKeyboardEvent({
+        key: "_",
+        code: "Minus",
+        ctrlKey: true,
+        shiftKey: true,
+      });
 
       const handled = router.handleKeyDown(e);
 
@@ -190,11 +205,11 @@ describe("KeyboardRouter", () => {
       // reflects the override while primaryToolId stays on the base tool.
       expect(editor.toolManager.activeToolId).toBe("hand");
       expect(editor.toolManager.primaryToolId).toBe("select");
-      expect(editor.previewMode).toBe(true);
+      expect(editor.proofMode).toBe(true);
 
       router.handleKeyUp(up);
       expect(editor.toolManager.activeToolId).toBe("select");
-      expect(editor.previewMode).toBe(false);
+      expect(editor.proofMode).toBe(false);
     });
 
     it("does not activate the hand tool on space while the text tool is active", () => {

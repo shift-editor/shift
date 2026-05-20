@@ -17,7 +17,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (element.isContentEditable === true) return true;
   const tag = (element.tagName ?? "").toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return !!element.closest?.('[contenteditable="true"], input, textarea, select');
+  return !!element.closest?.(
+    '[contenteditable="true"], input, textarea, select',
+  );
 }
 
 export class KeyboardRouter {
@@ -26,13 +28,15 @@ export class KeyboardRouter {
   #textKeyDown: KeyBinding[];
   #canvasKeyDown: KeyBinding[];
   #globalKeyUp: KeyBinding[];
-  #spacePreviewBeforeTemporary: boolean | null = null;
+  #spaceProofModeBeforeTemporary: boolean | null = null;
 
   constructor(getContext: () => KeyContext) {
     this.#getContext = getContext;
     const handlers = {
-      activateTemporaryHand: (ctx: KeyContext) => this.#activateTemporaryHand(ctx),
-      releaseTemporaryHand: (ctx: KeyContext) => this.#releaseTemporaryHand(ctx),
+      activateTemporaryHand: (ctx: KeyContext) =>
+        this.#activateTemporaryHand(ctx),
+      releaseTemporaryHand: (ctx: KeyContext) =>
+        this.#releaseTemporaryHand(ctx),
     };
     this.#globalKeyDown = createGlobalKeyDownBindings();
     this.#textKeyDown = createTextKeyDownBindings();
@@ -84,7 +88,11 @@ export class KeyboardRouter {
     return ctx.toolManager.handleKeyUp(e);
   }
 
-  #runBindings(bindings: readonly KeyBinding[], ctx: KeyContext, e: KeyboardEvent): boolean {
+  #runBindings(
+    bindings: readonly KeyBinding[],
+    ctx: KeyContext,
+    e: KeyboardEvent,
+  ): boolean {
     const event = normalizeKeyboardEvent(e);
 
     for (const binding of bindings) {
@@ -103,32 +111,32 @@ export class KeyboardRouter {
   }
 
   #activateTemporaryHand(ctx: KeyContext): boolean {
-    if (this.#spacePreviewBeforeTemporary !== null) {
+    if (this.#spaceProofModeBeforeTemporary !== null) {
       return true;
     }
 
-    const wasPreview = ctx.editor.previewMode;
-    this.#spacePreviewBeforeTemporary = wasPreview;
+    const wasProofMode = ctx.editor.proofMode;
+    this.#spaceProofModeBeforeTemporary = wasProofMode;
     ctx.editor.requestTemporaryTool("hand", {
       onActivate: () => {
-        ctx.editor.setPreviewMode(true);
+        ctx.editor.setProofMode(true);
       },
       onReturn: () => {
-        const restore = this.#spacePreviewBeforeTemporary ?? wasPreview;
-        ctx.editor.setPreviewMode(restore);
-        this.#spacePreviewBeforeTemporary = null;
+        const restore = this.#spaceProofModeBeforeTemporary ?? wasProofMode;
+        ctx.editor.setProofMode(restore);
+        this.#spaceProofModeBeforeTemporary = null;
       },
     });
     return true;
   }
 
   #releaseTemporaryHand(ctx: KeyContext): boolean {
-    if (this.#spacePreviewBeforeTemporary === null) {
+    if (this.#spaceProofModeBeforeTemporary === null) {
       return false;
     }
 
     ctx.editor.returnFromTemporaryTool();
-    this.#spacePreviewBeforeTemporary = null;
+    this.#spaceProofModeBeforeTemporary = null;
     return true;
   }
 }

@@ -3,7 +3,8 @@
 
 @font-face {
   font-family: "Host Grotesk";
-  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf") format("truetype");
+  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
+    format("truetype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -59,6 +60,15 @@
   --text-sm: 0.75rem /* 12px */;
   --text-ui: 0.6875rem /* 11px */;
   --text-xs: 0.625rem /* 10px */;
+}
+
+/* Hide scrollbar while preserving scroll behavior */
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Custom titlebar styles */

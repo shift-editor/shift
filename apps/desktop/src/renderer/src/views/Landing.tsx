@@ -1,23 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { clearDirty, getEditor, setFilePath } from "@/store/store";
-import { documentPersistence } from "@/persistence";
+import { getDocument } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 
 export const Landing = () => {
   const navigate = useNavigate();
+  const fontDocument = getDocument();
 
   const openFont = (filePath: string) => {
-    const editor = getEditor();
-
-    editor.loadFont(filePath);
-
-    setFilePath(filePath);
-    clearDirty();
-
-    documentPersistence.openDocument(filePath);
-
+    fontDocument.openFont(filePath);
     navigate("/home");
   };
 
@@ -29,14 +21,7 @@ export const Landing = () => {
   };
 
   const handleNewFont = () => {
-    const editor = getEditor();
-    editor.resetFont();
-
-    setFilePath(null);
-    clearDirty();
-
-    documentPersistence.closeDocument();
-
+    fontDocument.createFont();
     navigate("/home");
   };
 

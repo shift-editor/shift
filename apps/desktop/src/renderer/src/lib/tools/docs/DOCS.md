@@ -10,13 +10,13 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. Behaviors must not hold state that survives across events unless that resource is cleaned up in `onStateEnter`/`onStateExit`.
 
-- **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `renderOverlay` / `renderScene` / `renderBackground` methods.
+- **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `drawOverlay` / `drawScene` / `drawBackground` methods.
 
 - **Architecture Invariant:** `ToolManager` coalesces pointer-move events via `requestAnimationFrame`. The synchronous pointer handler only stores input; projection, hit-test, and tool dispatch run in the rAF callback. **CRITICAL**: reading layout-dependent state synchronously in the pointer handler will see stale data.
 
 - **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
 
-- **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the draft pattern: `editor.createDraft()` on drag start, `draft.setPositions()` on each drag event, `draft.finish(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `finish` or `discard` leaks the draft and leaves the glyph in preview state.
+- **Architecture Invariant:** For drag operations that mutate the glyph (translate, resize, rotate, bend), use the source edit draft pattern: `editor.beginSourceEditDraft(subject)` on drag start, `draft.previewPositionPatch()` or another `draft.preview*()` method on each drag event, `draft.commit(label)` on drag end, `draft.discard()` on cancel. **CRITICAL**: forgetting `commit` or `discard` leaks the draft and leaves the glyph in preview state.
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`, `glyphLocal`). Use `event.coords` for hit-testing and layout; `event.point` is an alias for `coords.scene`. **CRITICAL**: using raw `event.point` when glyph-local coordinates are needed (e.g. pen cursor position) produces wrong results when draw offset is non-zero.
 
@@ -43,7 +43,7 @@ tools/
 
 ## Key Types
 
-- `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `renderOverlay`, `renderScene`, `renderBackground`.
+- `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`.
 - `Behavior<S>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
 - `ToolContext<S>` — `{ editor, getState, setState }`. Passed to behaviors during the event loop and lifecycle hooks.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
@@ -69,8 +69,8 @@ User pointer/key
   -> BaseTool.handleEvent(event)
   -> #runBehaviors (behavior loop)
   -> state commit + lifecycle hooks
-  -> editor.requestRedraw / requestOverlayRedraw
-  -> tool.renderOverlay / renderScene / renderBackground
+  -> renderer dependency effects observe changed state
+  -> tool.drawOverlay / drawScene / drawBackground
 ```
 
 ### Behavior loop (`#runBehaviors`)
@@ -112,15 +112,15 @@ Behaviors that move source geometry use `SourceEditDraft`:
 
 Tools can implement up to three rendering hooks, each tied to a different redraw frequency:
 
-- `renderBackground(canvas)` — layer 0, redraws on viewport/font change (e.g. text runs).
-- `renderScene(canvas)` — layer 1, redraws on edit/selection/hover change (e.g. guides, handles).
-- `renderOverlay(canvas)` — layer 2, redraws every mouse move (e.g. selection marquee, pen preview).
+- `drawBackground(canvas)` — layer 0, redraws on viewport/font change (e.g. text runs).
+- `drawScene(canvas)` — layer 1, redraws on edit/selection/hover change (e.g. guides, handles).
+- `drawOverlay(canvas)` — layer 2, redraws every mouse move (e.g. selection marquee, pen preview).
 
 All three receive a `Canvas` instance.
 
 ### Cursor
 
-`BaseTool.$cursor` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors. Inside `getCursor`, reading `editor.getHoveredBoundingBoxHandle()`, `editor.getCurrentModifiers()`, or `editor.getIsHoveringNode()` makes the cursor reactive to hover and modifier changes.
+`BaseTool.cursorCell` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors. Inside `getCursor`, reading `editor.getHoveredBoundingBoxHandle()`, `editor.getCurrentModifiers()`, or `editor.getIsHoveringNode()` makes the cursor reactive to hover and modifier changes.
 
 ## Workflow recipes
 
@@ -155,7 +155,11 @@ For complex tools (Select, Pen) where behaviors need private helper methods or h
 
 ```typescript
 export class MyBehavior implements Behavior<MyState> {
-  onDragStart(state: MyState, ctx: ToolContext<MyState>, event: ToolEventOf<"dragStart">): boolean {
+  onDragStart(
+    state: MyState,
+    ctx: ToolContext<MyState>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean {
     if (state.type !== "ready") return false;
     ctx.setState({ type: "dragging", startPos: event.point });
     return true;
@@ -179,21 +183,21 @@ export class MyBehavior implements Behavior<MyState> {
 ```typescript
 onDragStart(state, ctx, event) {
   if (state.type !== "selected") return false;
-  this.#draft = ctx.editor.createDraft();
+  this.#draft = ctx.editor.beginSourceEditDraft({ points: [...ctx.editor.selection.pointIds] });
   ctx.setState({ type: "translating", startPos: event.point, totalDelta: { x: 0, y: 0 } });
   return true;
 }
 
 onDrag(state, ctx, event) {
   if (state.type !== "translating") return false;
-  this.#draft!.setPositions(buildUpdates(this.#draft!.base, event.delta));
+  this.#draft!.previewPositionPatch(buildUpdates(this.#draft!.basePositions, event.delta));
   ctx.setState({ ...state, totalDelta: event.delta });
   return true;
 }
 
 onDragEnd(state, ctx) {
   if (state.type !== "translating") return false;
-  this.#draft!.finish("Move Points");
+  this.#draft!.commit("Move Points");
   this.#draft = null;
   ctx.setState({ type: "selected" });
   return true;
@@ -231,8 +235,8 @@ onDragCancel(state, ctx) {
 ## Related
 
 - `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
-- `Canvas` — rendering target passed to `renderOverlay` / `renderScene` / `renderBackground`.
-- `GlyphDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
+- `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
+- `SourceEditDraft` — preview-and-commit pattern for drag mutations (translate, resize, rotate, bend).
 - `Coordinates` — `{ screen, scene, glyphLocal }` coordinate bundle on pointer events.
 - `TextRunController` — text input controller used by Text tool.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

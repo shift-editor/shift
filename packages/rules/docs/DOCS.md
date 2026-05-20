@@ -98,7 +98,7 @@ cd packages/rules && npx tsc --noEmit
 ## Related
 
 - `NativeBridge.applySmartEdits` -- primary consumer; calls `constrainDrag` during drag operations
-- `GlyphDraft` -- draft lifecycle that feeds `DragPatch.pointUpdates` into `Glyph.apply`
+- `SourceEditDraft` -- draft lifecycle that feeds drag patches into local preview and sparse commit paths
 - `dumpSelectionPatternsToConsole` -- dev-tool that calls `diagnoseSelectionPatterns` for debugging
 - `Contours.at` -- wrapping point accessor used by the matcher for closed/open contour handling
 - `Glyphs.findPoint` -- locates a point's contour and index, used by `diagnoseSelectionPatterns`

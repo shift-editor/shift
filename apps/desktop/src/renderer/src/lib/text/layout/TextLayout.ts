@@ -8,10 +8,10 @@ import type { Bounds as BoundsType } from "@shift/geo";
 import { Caret } from "./Caret";
 import type {
   CaretPosition,
-  Cell,
+  TextItem,
   FontMetrics,
   GlyphAnchor,
-  GlyphCell,
+  GlyphTextItem,
   Hit,
   Line,
   ParagraphSlice,
@@ -19,7 +19,7 @@ import type {
   PositionedGlyph,
   PositionedRun,
   SegmentedRun,
-  TextCellId,
+  TextItemId,
   TextRunId,
 } from "./types";
 import type { Positioner } from "./Positioner";
@@ -28,7 +28,7 @@ import type { Signal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 
 export interface TextLayoutParams {
-  cells: readonly Cell[];
+  items: readonly TextItem[];
   origin: Point2D;
   font: Font;
   positioner: Positioner;
@@ -49,23 +49,31 @@ export class TextLayout {
   /** @knipclassignore — bbox union over positioned glyphs; populated when shapeHitTest lands */
   readonly bounds: BoundsType | null;
   readonly bufferLength: number;
-  readonly #cells: readonly Cell[];
+  readonly #items: readonly TextItem[];
 
   constructor(params: TextLayoutParams) {
-    const { cells, origin, font, positioner, designLocation } = params;
-    this.#cells = cells;
+    const { items, origin, font, positioner, designLocation } = params;
+    this.#items = items;
     this.metrics = font.metrics;
     this.origin = origin;
-    this.bufferLength = cells.length;
+    this.bufferLength = items.length;
 
     // splitParagraphs → segmentRuns → position → assemble
-    const paragraphs: PositionedParagraph[] = splitParagraphs(cells).map((p) => ({
-      runs: segmentRuns(p).map((run) => positioner.position(run, font, designLocation)),
-      clusterStart: p.clusterStart,
-      clusterEnd: p.clusterStart + p.glyphs.length + 1,
-    }));
+    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map(
+      (p) => ({
+        runs: segmentRuns(p).map((run) =>
+          positioner.position(run, font, designLocation),
+        ),
+        clusterStart: p.clusterStart,
+        clusterEnd: p.clusterStart + p.glyphs.length + 1,
+      }),
+    );
 
-    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
+    const { lines, totalAdvance, bounds } = assembleLayout(
+      paragraphs,
+      origin,
+      this.metrics,
+    );
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
@@ -122,13 +130,20 @@ export class TextLayout {
    * cluster falls on a linebreak, or past the buffer end).
    */
   pointAt(cluster: number): CaretPosition | null {
-    const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
+    const lineHeight =
+      this.metrics.ascender -
+      this.metrics.descender +
+      (this.metrics.lineGap ?? 0);
     for (const line of this.lines) {
       let runBase = this.origin.x;
       for (const run of line.runs) {
         for (const g of run.glyphs) {
           if (g.cluster === cluster) {
-            return { x: runBase + g.origin.x, y: line.y + g.origin.y, lineHeight };
+            return {
+              x: runBase + g.origin.x,
+              y: line.y + g.origin.y,
+              lineHeight,
+            };
           }
         }
         runBase += run.advance;
@@ -137,27 +152,27 @@ export class TextLayout {
     return null;
   }
 
-  glyphsForCell(cellId: TextCellId): readonly PositionedGlyph[] {
+  glyphsForItem(itemId: TextItemId): readonly PositionedGlyph[] {
     const glyphs: PositionedGlyph[] = [];
     for (const line of this.lines) {
       for (const run of line.runs) {
         for (const glyph of run.glyphs) {
-          if (glyph.cellIds.includes(cellId)) glyphs.push(glyph);
+          if (glyph.sourceItemIds.includes(itemId)) glyphs.push(glyph);
         }
       }
     }
     return glyphs;
   }
 
-  primaryGlyphForCell(cellId: TextCellId): PositionedGlyph | null {
-    return this.glyphsForCell(cellId)[0] ?? null;
+  primaryGlyphForItem(itemId: TextItemId): PositionedGlyph | null {
+    return this.glyphsForItem(itemId)[0] ?? null;
   }
 
   /**
-   * Resolve stable text-cell identity to the current scene-space glyph edit
+   * Resolve stable text-item identity to the current scene-space glyph edit
    * origin.
    *
-   *   cellId
+   *   itemId
    *      │
    *      ▼
    *   PositionedGlyph { origin, xOffset/yOffset }
@@ -165,12 +180,12 @@ export class TextLayout {
    *      ▼
    *   scene edit origin
    */
-  editOriginForCell(cellId: TextCellId): Point2D | null {
+  editOriginForItem(itemId: TextItemId): Point2D | null {
     for (const line of this.lines) {
       let runBase = this.origin.x;
       for (const run of line.runs) {
         for (const glyph of run.glyphs) {
-          if (glyph.cellIds.includes(cellId)) {
+          if (glyph.sourceItemIds.includes(itemId)) {
             return {
               x: runBase + glyph.origin.x + glyph.xOffset,
               y: line.y + glyph.origin.y + glyph.yOffset,
@@ -183,12 +198,16 @@ export class TextLayout {
     return null;
   }
 
-  anchorAtPoint(runId: TextRunId, p: Point2D, padding: number = 0): GlyphAnchor | null {
+  anchorAtPoint(
+    runId: TextRunId,
+    p: Point2D,
+    padding: number = 0,
+  ): GlyphAnchor | null {
     const hit = this.hitTest(p, padding);
     if (!hit) return null;
-    const cell = this.#cells[hit.cluster];
-    if (!cell || cell.kind !== "glyph") return null;
-    return { runId, cellId: cell.id };
+    const item = this.#items[hit.cluster];
+    if (!item || item.kind !== "glyph") return null;
+    return { runId, itemId: item.id };
   }
 
   /** @knipclassignore — convenience for caret construction at a cluster */
@@ -207,7 +226,7 @@ export class TextLayout {
 }
 
 /**
- * Split the flat cell buffer into paragraphs on linebreak cells.
+ * Split the flat item buffer into paragraphs on linebreak items.
  *
  * Linebreaks are *separators*, not glyphs — they're excluded from any
  * paragraph's `glyphs` array but they consume a cluster index. The next
@@ -226,22 +245,22 @@ export class TextLayout {
  *   output:  [{[],  cs:0},         output:  [{[A], cs:0},      output:  []
  *             {[A], cs:1}]                   {[],  cs:2}]
  */
-function splitParagraphs(cells: readonly Cell[]): ParagraphSlice[] {
+function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
   const paragraphs: ParagraphSlice[] = [];
-  let glyphs: GlyphCell[] = [];
+  let glyphs: GlyphTextItem[] = [];
   let clusterStart = 0;
 
-  cells.forEach((cell, index) => {
-    if (cell.kind === "linebreak") {
+  items.forEach((item, index) => {
+    if (item.kind === "linebreak") {
       paragraphs.push({ glyphs, clusterStart });
       glyphs = [];
       clusterStart = index + 1;
       return;
     }
-    glyphs.push(cell);
+    glyphs.push(item);
   });
 
-  if (glyphs.length > 0 || cells.length > 0) {
+  if (glyphs.length > 0 || items.length > 0) {
     paragraphs.push({ glyphs, clusterStart });
   }
 
@@ -310,7 +329,8 @@ function assembleLayout(
   origin: Point2D,
   metrics: FontMetrics,
 ): AssembledLayout {
-  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const lineHeight =
+    metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,

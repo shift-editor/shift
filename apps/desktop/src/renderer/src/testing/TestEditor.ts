@@ -56,28 +56,42 @@ export class TestEditor extends Editor {
       this.loadFont(MUTATORSANS_DESIGNSPACE);
     }
 
-    const source = this.font.defaultSource();
-    if (!source) throw new Error("TestEditor needs a loaded font source");
-    const glyphSource = this.editGlyphSource(handle, source.id);
+    const source = this.font.defaultSource;
+    const glyphSource = this.openGlyphSource(handle, source.id);
     if (glyphSource) {
       glyphSource.removePoints(glyphSource.allPoints.map((point) => point.id));
     }
     return this;
   }
 
-  click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+  click(
+    x: number,
+    y: number,
+    options?: Partial<typeof DEFAULT_MODIFIERS>,
+  ): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
     this.toolManager.handlePointerDown({ x, y }, mods);
     this.toolManager.handlePointerUp({ x, y });
     return this;
   }
 
-  pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerDown({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
+  pointerDown(
+    x: number,
+    y: number,
+    options?: Partial<typeof DEFAULT_MODIFIERS>,
+  ): this {
+    this.toolManager.handlePointerDown(
+      { x, y },
+      { ...DEFAULT_MODIFIERS, ...options },
+    );
     return this;
   }
 
-  pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+  pointerMove(
+    x: number,
+    y: number,
+    options?: Partial<typeof DEFAULT_MODIFIERS>,
+  ): this {
     this.toolManager.handlePointerMove(
       { x, y },
       { ...DEFAULT_MODIFIERS, ...options },
@@ -120,7 +134,7 @@ export class TestEditor extends Editor {
   }
 
   get currentGlyphSource(): GlyphSource | null {
-    return this.activeGlyphSource;
+    return this.editGlyphSource;
   }
 
   get pointCount(): number {

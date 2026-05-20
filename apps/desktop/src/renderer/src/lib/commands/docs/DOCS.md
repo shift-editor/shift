@@ -22,7 +22,7 @@ commands/
     PointCommands.ts     # AddPointCommand
     BezierCommands.ts    # CloseContourCommand, NudgePointsCommand, ReverseContourCommand,
                          #   SplitSegmentCommand, UpgradeLineToCubicCommand
-    SetSourcePositionsCommand.ts # Efficient bulk position updates (before/after lists)
+    ApplyPositionPatchCommand.ts # Efficient sparse position patch replay (before/after lists)
     SidebearingCommands.ts  # SetXAdvanceCommand, SetLeftSidebearingCommand, SetRightSidebearingCommand
   transform/
     TransformCommands.ts    # RotatePointsCommand, ScalePointsCommand, ReflectPointsCommand, MoveSelectionToCommand
@@ -39,7 +39,7 @@ commands/
 - **`CompositeCommand`** -- Groups multiple commands into one undo step. Executes children in order, undoes in reverse.
 - **`CommandHistory`** -- Manages undo/redo stacks. Exposes `execute`, `record`, `undo`, `redo`, `clear`, batching (`beginBatch`/`endBatch`/`withBatch`), and reactive signals (`canUndo`, `canRedo`).
 - **`CommandHistoryOptions`** -- `{ maxHistory?: number; onDirty?: () => void }`. `maxHistory` defaults to 100.
-- **`SetSourcePositionsCommand`** -- Stores before/after `SourcePositions`. Efficient path for point/anchor position-only operations.
+- **`ApplyPositionPatchCommand`** -- Stores before/after `SourcePositions`. Efficient path for point/anchor position-only operations.
 - **`BaseTransformCommand`** -- Abstract template in `TransformCommands.ts`. Captures original positions on first execute; subclasses implement `transformPoints`. Used by `RotatePointsCommand`, `ScalePointsCommand`, `ReflectPointsCommand`, `MoveSelectionToCommand`.
 
 ## How it works
@@ -51,7 +51,7 @@ commands/
 ### execute vs record
 
 - **`execute(cmd)`** -- Calls `cmd.execute(ctx)`, then pushes to undo stack. Use for discrete one-shot operations (add point, nudge, transform).
-- **`record(cmd)`** -- Pushes to undo stack without calling execute. Use when mutations have already been applied incrementally (e.g. dragging points). `SourceEditDraft.commit()` applies the final source positions, then records a `SetSourcePositionsCommand`.
+- **`record(cmd)`** -- Pushes to undo stack without calling execute. Use when mutations have already been applied incrementally (e.g. dragging points). `SourceEditDraft.commit()` commits the final sparse patch to Rust, then records an `ApplyPositionPatchCommand`.
 
 ### Batching
 
@@ -65,7 +65,7 @@ Commands use one of three strategies depending on cost:
 2. **Position-capture** -- Store original positions, restore on undo. Used by `BaseTransformCommand` subclasses, `AlignPointsCommand`, `DistributePointsCommand`, `SplitSegmentCommand`.
 3. **Source-state-based** -- Store full `GlyphState` before/after. Used by `CutCommand` and `PasteCommand` for topology changes (adding/removing contours).
 
-`SetSourcePositionsCommand` is a hybrid: it stores before/after position lists (cheaper than full snapshots) and replays them on undo/redo.
+`ApplyPositionPatchCommand` stores before/after position lists (cheaper than full snapshots) and replays them on undo/redo.
 
 ### Reactive UI
 
@@ -116,6 +116,6 @@ npx vitest run --project renderer src/lib/editor/
 - `GlyphSource` -- Active editable glyph source; commands mutate through `ctx.source`
 - `Editor` -- Orchestrates command execution; owns the `CommandHistory` instance
 - `Signal`, `ComputedSignal` -- Reactive primitives powering `canUndo`/`canRedo`
-- `SourcePositions` -- Typed point/anchor position lists used by `SetSourcePositionsCommand`
+- `SourcePositions` -- Typed point/anchor position lists used by `ApplyPositionPatchCommand`
 - `Transform` -- Pure math functions for rotate/scale/reflect, consumed by transform commands
 - `Alignment` -- Pure math for align/distribute, consumed by `AlignPointsCommand`/`DistributePointsCommand`

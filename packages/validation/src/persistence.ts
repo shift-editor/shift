@@ -1,21 +1,24 @@
 import { z } from "zod";
 
-export const GlyphCellSchema = z.object({
+export const GlyphTextItemSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("glyph"),
   glyphName: z.string().min(1),
   codepoint: z.number().int().nonnegative().nullable(),
 });
 
-export const LineBreakSchema = z.object({
+export const LineBreakTextItemSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("linebreak"),
 });
 
-export const CellSchema = z.discriminatedUnion("kind", [GlyphCellSchema, LineBreakSchema]);
+export const TextItemSchema = z.discriminatedUnion("kind", [
+  GlyphTextItemSchema,
+  LineBreakTextItemSchema,
+]);
 
 export const TextBufferSnapshotSchema = z.object({
-  cells: z.array(CellSchema),
+  items: z.array(TextItemSchema),
   cursor: z.number().int().nonnegative(),
   anchor: z.number().int().nonnegative(),
   originX: z.number().finite(),
@@ -56,7 +59,9 @@ export const PersistedRootSchema = z.object({
 
 export type PersistedTextRun = z.infer<typeof PersistedTextRunSchema>;
 export type TextRunModule = z.infer<typeof TextRunModuleSchema>;
-export type PersistedModuleEnvelope = z.infer<typeof PersistedModuleEnvelopeSchema>;
+export type PersistedModuleEnvelope = z.infer<
+  typeof PersistedModuleEnvelopeSchema
+>;
 export type PersistenceRegistry = z.infer<typeof PersistenceRegistrySchema>;
 export type PersistedDocument = z.infer<typeof PersistedDocumentSchema>;
 export type PersistedRoot = z.infer<typeof PersistedRootSchema>;

@@ -27,11 +27,18 @@ function glyphChar(codepoint: number): string {
   }
 }
 
-export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) {
+export function GlyphFinder({
+  open,
+  onOpenChange,
+  onSelect,
+}: GlyphFinderProps) {
   const { lockToZone, unlock } = useFocusZone();
+
   const [query, setQuery] = useState("");
+
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -114,7 +121,9 @@ export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) 
   };
 
   const selectedColour = (index: number) =>
-    index === selectedIndex ? "bg-accent/10 text-accent" : "text-primary hover:bg-muted/10";
+    index === selectedIndex
+      ? "bg-accent/10 text-accent"
+      : "text-primary hover:bg-muted/10";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal>
@@ -125,7 +134,11 @@ export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) 
           finalFocus={false}
           className="max-w-[300px] shadow-sm bg-panel"
         >
-          <div className="px-1 py-1.5" onKeyDown={handleKeyDown} onKeyUp={stopPropagation}>
+          <div
+            className="px-1 py-1.5"
+            onKeyDown={handleKeyDown}
+            onKeyUp={stopPropagation}
+          >
             <Input
               ref={inputRef}
               value={query}
@@ -141,7 +154,7 @@ export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) 
                 <div
                   ref={listRef}
                   role="listbox"
-                  className="mt-2 max-h-80 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="mt-2 max-h-80 overflow-y-auto scrollbar-hidden"
                 >
                   {results.map((result, index) => (
                     <div

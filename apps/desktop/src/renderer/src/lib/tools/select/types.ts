@@ -1,8 +1,9 @@
 import type { Point2D, Rect2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
-import type { CornerHandle } from "@/types/boundingBox";
+import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
+import type { Select } from "./Select";
 import type { SegmentId } from "@/types/indicator";
 
 export interface DragTarget {
@@ -11,7 +12,7 @@ export interface DragTarget {
 }
 
 /** Tracks the start and current positions of a marquee drag. */
-export interface SelectionDrag {
+export interface BrushingDrag {
   startPos: Point2D;
   currentPos: Point2D;
 }
@@ -46,6 +47,8 @@ export interface RotateDrag {
 export interface BendDrag {
   t: number;
   startPos: Point2D;
+  controlOneId: PointId;
+  controlTwoId: PointId;
   initialControlOne: Point2D;
   initialControlTwo: Point2D;
   segmentId: SegmentId;
@@ -57,7 +60,6 @@ export interface BendDrag {
  * - `idle` -- no glyph loaded or tool not active.
  * - `ready` -- listening for clicks or drags.
  * - `selecting` -- marquee rectangle being drawn.
- * - `selected` -- one or more points are selected; bounding box visible.
  * - `translating` -- dragging selected points.
  * - `resizing` -- dragging a bounding-box edge handle.
  * - `rotating` -- dragging a bounding-box corner to rotate.
@@ -65,11 +67,10 @@ export interface BendDrag {
 export type SelectState =
   | { type: "idle" }
   | { type: "ready" }
-  | { type: "selecting"; selection: SelectionDrag }
-  | { type: "selected" }
+  | { type: "brushing"; selection: BrushingDrag }
   | { type: "translating"; translate: TranslateDrag }
   | { type: "resizing"; resize: ResizeDrag }
   | { type: "rotating"; rotate: RotateDrag }
   | { type: "bending"; bend: BendDrag };
 
-export type SelectBehavior = Behavior<SelectState>;
+export type SelectBehavior<TTool = Select> = Behavior<SelectState, TTool>;

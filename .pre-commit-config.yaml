@@ -75,6 +75,7 @@ repos:
         entry: pnpm prettier --write --ignore-unknown
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json, markdown]
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
 
       - id: oxlint
         name: oxlint

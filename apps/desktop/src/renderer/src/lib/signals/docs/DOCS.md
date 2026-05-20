@@ -105,7 +105,7 @@ cd apps/desktop && npm test
 ## Related
 
 - `Editor` -- primary consumer; holds `WritableSignal` fields for tool state, cursor, preview mode
-- `ViewportManager` -- uses `$zoom`, `$panX`, `$panY` as `WritableSignal` fields
+- `Camera` -- uses `$zoom`, `$panX`, `$panY` as `WritableSignal` fields
 - `HoverManager` -- uses `$hoveredPointId`, `$hoveredSegmentId`, etc.
 - `Selection` -- uses `WritableSignal` fields for selected point/anchor/segment state
 - `NativeBridge` -- `$glyph` signal with `equals: () => false` for identity changes

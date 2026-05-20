@@ -1,4 +1,5 @@
 import type { ContourId, PointType, PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
 /**
@@ -33,12 +34,10 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    this.#resultId = ctx.source.addPoint(this.#contourId, {
-      x: this.#x,
-      y: this.#y,
-      pointType: this.#pointType,
-      smooth: this.#smooth,
-    });
+    this.#resultId = ctx.source.addPoint(
+      this.#contourId,
+      Point.create({ x: this.#x, y: this.#y }, this.#pointType, this.#smooth),
+    );
     return this.#resultId;
   }
 

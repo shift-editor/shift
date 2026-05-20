@@ -1,7 +1,13 @@
-import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
+import {
+  Curve,
+  Vec2,
+  type Bounds,
+  type CurveType,
+  type Point2D,
+} from "@shift/geo";
 import type { PointId } from "@shift/types";
-import { parseContourSegments, segmentToCurve } from "./GlyphGeometry";
-import type { Point } from "./Contour";
+import { Point } from "./Point";
+import { Contour } from "./Contour";
 
 declare const SegmentIdBrand: unique symbol;
 
@@ -13,49 +19,65 @@ export function asSegmentId(id: string): SegmentId {
   return id as SegmentId;
 }
 
-export interface SegmentPoint {
-  id: PointId;
-  x: number;
-  y: number;
-  pointType: "onCurve" | "offCurve";
-  smooth: boolean;
-}
-
 export type LineSegment = {
   type: "line";
   points: {
-    anchor1: SegmentPoint;
-    anchor2: SegmentPoint;
+    anchor1: Point;
+    anchor2: Point;
   };
 };
 
 export type QuadSegment = {
   type: "quad";
   points: {
-    anchor1: SegmentPoint;
-    control: SegmentPoint;
-    anchor2: SegmentPoint;
+    anchor1: Point;
+    control: Point;
+    anchor2: Point;
   };
 };
 
 export type CubicSegment = {
   type: "cubic";
   points: {
-    anchor1: SegmentPoint;
-    control1: SegmentPoint;
-    control2: SegmentPoint;
-    anchor2: SegmentPoint;
+    anchor1: Point;
+    control1: Point;
+    control2: Point;
+    anchor2: Point;
   };
 };
 
 export type SegmentType = LineSegment | QuadSegment | CubicSegment;
 
-export interface SegmentHitResult {
-  segment: Segment;
-  segmentId: SegmentId;
-  t: number;
-  point: Point2D;
-  distance: number;
+export type LineSegmentPoints = {
+  readonly type: "line";
+  readonly start: Point;
+  readonly end: Point;
+};
+
+export type QuadSegmentPoints = {
+  readonly type: "quad";
+  readonly start: Point;
+  readonly control: Point;
+  readonly end: Point;
+};
+
+export type CubicSegmentPoints = {
+  readonly type: "cubic";
+  readonly start: Point;
+  readonly controlStart: Point;
+  readonly controlEnd: Point;
+  readonly end: Point;
+};
+
+export type SegmentPoints =
+  | LineSegmentPoints
+  | QuadSegmentPoints
+  | CubicSegmentPoints;
+
+export interface SegmentHit {
+  readonly t: number;
+  readonly closestPoint: Point2D;
+  readonly distance: number;
 }
 
 /**
@@ -66,87 +88,259 @@ export interface SegmentHitResult {
  * as instance methods.
  */
 export class Segment {
-  readonly #data: SegmentType;
+  #structure: SegmentType;
+  #id: SegmentId | null = null;
+  #pointIds: readonly PointId[] | null = null;
+  #points: SegmentPoints | null = null;
+  #flatPoints: readonly Point[] | null = null;
+  #curve: CurveType | null = null;
+  #bounds: Bounds | null = null;
+  #length: number | null = null;
 
   constructor(data: SegmentType) {
-    this.#data = data;
+    this.#structure = data;
   }
 
   /** Parse a contour's points into segment instances. */
-  static parse(points: readonly Point[], closed: boolean): Segment[] {
-    return parseContourSegments({ points, closed }).map((geom) => new Segment(geom as SegmentType));
-  }
-
-  /** Find the closest-hit segment in a collection. */
-  static hitTestMultiple(
-    segments: readonly Segment[],
-    pos: Point2D,
-    radius: number,
-  ): SegmentHitResult | null {
-    let best: SegmentHitResult | null = null;
-
-    for (const segment of segments) {
-      const hit = segment.hitTest(pos, radius);
-      if (hit && (best === null || hit.distance < best.distance)) {
-        best = hit;
-      }
+  static parse(contour: Contour): Segment[] {
+    const { points, closed } = contour;
+    if (points.length < 2) {
+      return [];
     }
 
-    return best;
+    const segments: Segment[] = [];
+    let index = 0;
+
+    const getPoint = (i: number): Point | null => {
+      if (i < points.length) {
+        return points[i];
+      }
+      if (closed) {
+        return points[i - points.length];
+      }
+
+      return null;
+    };
+
+    const limit = closed ? points.length : points.length - 1;
+
+    while (index < limit) {
+      const p1 = getPoint(index);
+      const p2 = getPoint(index + 1);
+
+      if (!p1 || !p2) {
+        break;
+      }
+
+      if (Point.isOnCurve(p1) && Point.isOnCurve(p2)) {
+        segments.push(
+          new Segment({
+            type: "line",
+            points: { anchor1: p1, anchor2: p2 },
+          }),
+        );
+        index += 1;
+        continue;
+      }
+
+      if (Point.isOnCurve(p1) && Point.isOffCurve(p2)) {
+        const p3 = getPoint(index + 2);
+
+        if (!p3) {
+          break;
+        }
+
+        if (Point.isOnCurve(p3)) {
+          segments.push(
+            new Segment({
+              type: "quad",
+              points: { anchor1: p1, control: p2, anchor2: p3 },
+            }),
+          );
+          index += 2;
+          continue;
+        }
+
+        if (Point.isOffCurve(p3)) {
+          const p4 = getPoint(index + 3);
+          if (!p4) {
+            break;
+          }
+
+          segments.push(
+            new Segment({
+              type: "cubic",
+              points: { anchor1: p1, control1: p2, control2: p3, anchor2: p4 },
+            }),
+          );
+          index += 3;
+          continue;
+        }
+      }
+
+      index += 1;
+    }
+
+    return segments;
   }
 
   get type(): SegmentType["type"] {
-    return this.#data.type;
+    return this.#structure.type;
   }
 
-  get anchor1(): SegmentPoint {
-    return this.#data.points.anchor1;
-  }
-
-  get anchor2(): SegmentPoint {
-    return this.#data.points.anchor2;
+  get structure(): SegmentType {
+    return this.#structure;
   }
 
   get id(): SegmentId {
-    return asSegmentId(`${this.#data.points.anchor1.id}:${this.#data.points.anchor2.id}`);
+    if (this.#id === null) {
+      const id = asSegmentId(`${this.startId}:${this.endId}`);
+      this.#id = id;
+    }
+    return this.#id;
   }
 
-  get pointIds(): PointId[] {
-    switch (this.#data.type) {
-      case "line":
-        return [this.#data.points.anchor1.id, this.#data.points.anchor2.id];
-      case "quad":
-        return [
-          this.#data.points.anchor1.id,
-          this.#data.points.control.id,
-          this.#data.points.anchor2.id,
-        ];
-      case "cubic":
-        return [
-          this.#data.points.anchor1.id,
-          this.#data.points.control1.id,
-          this.#data.points.control2.id,
-          this.#data.points.anchor2.id,
-        ];
+  get pointIds(): readonly PointId[] {
+    if (this.#pointIds === null) {
+      const points = this.points;
+      switch (points.type) {
+        case "line":
+          this.#pointIds = [points.start.id, points.end.id];
+          break;
+        case "quad":
+          this.#pointIds = [points.start.id, points.control.id, points.end.id];
+          break;
+        case "cubic":
+          this.#pointIds = [
+            points.start.id,
+            points.controlStart.id,
+            points.controlEnd.id,
+            points.end.id,
+          ];
+          break;
+      }
     }
+    return this.#pointIds;
+  }
+
+  get points(): SegmentPoints {
+    if (this.#points === null) {
+      switch (this.#structure.type) {
+        case "line":
+          this.#points = {
+            type: "line",
+            start: this.#structure.points.anchor1,
+            end: this.#structure.points.anchor2,
+          };
+          break;
+        case "quad":
+          this.#points = {
+            type: "quad",
+            start: this.#structure.points.anchor1,
+            control: this.#structure.points.control,
+            end: this.#structure.points.anchor2,
+          };
+          break;
+        case "cubic":
+          this.#points = {
+            type: "cubic",
+            start: this.#structure.points.anchor1,
+            controlStart: this.#structure.points.control1,
+            controlEnd: this.#structure.points.control2,
+            end: this.#structure.points.anchor2,
+          };
+          break;
+      }
+    }
+    return this.#points;
+  }
+
+  get start(): Point {
+    return this.points.start;
+  }
+
+  get end(): Point {
+    return this.points.end;
+  }
+
+  get startId(): PointId {
+    return this.start.id;
+  }
+
+  get endId(): PointId {
+    return this.end.id;
+  }
+
+  get flatPoints(): readonly Point[] {
+    if (this.#flatPoints === null) {
+      const points = this.points;
+      switch (points.type) {
+        case "line":
+          this.#flatPoints = [points.start, points.end];
+          break;
+        case "quad":
+          this.#flatPoints = [points.start, points.control, points.end];
+          break;
+        case "cubic":
+          this.#flatPoints = [
+            points.start,
+            points.controlStart,
+            points.controlEnd,
+            points.end,
+          ];
+          break;
+      }
+    }
+    return this.#flatPoints;
   }
 
   get bounds(): Bounds {
-    return Curve.bounds(this.toCurve());
+    if (this.#bounds === null) {
+      this.#bounds = Curve.bounds(this.toCurve());
+    }
+
+    return this.#bounds;
   }
 
   /** @knipclassignore */
   get length(): number {
-    return Curve.length(this.toCurve());
+    if (this.#length === null) {
+      this.#length = Curve.length(this.toCurve());
+    }
+    return this.#length;
   }
 
   /** @internal Raw discriminated data for rendering / clipboard interop. */
   get raw(): SegmentType {
-    return this.#data;
+    return this.#structure;
   }
 
   toCurve(): CurveType {
-    return segmentToCurve(this.#data);
+    if (this.#curve === null) {
+      const points = this.points;
+      switch (points.type) {
+        case "line":
+          this.#curve = Curve.line(points.start, points.end);
+          break;
+        case "quad":
+          this.#curve = Curve.quadratic(
+            points.start,
+            points.control,
+            points.end,
+          );
+          break;
+        case "cubic":
+          this.#curve = Curve.cubic(
+            points.start,
+            points.controlStart,
+            points.controlEnd,
+            points.end,
+          );
+          break;
+      }
+    }
+
+    return this.#curve;
   }
 
   /** @knipclassignore */
@@ -169,41 +363,40 @@ export class Segment {
     return Curve.sample(this.toCurve(), count);
   }
 
-  /** @knipclassignore Narrow to a line segment, or null if this isn't one. */
-  asLine(): LineSegment | null {
-    return this.#data.type === "line" ? this.#data : null;
-  }
+  hit(pos: Point2D, radius: number): SegmentHit | null {
+    const radiusVector = { x: radius, y: radius };
+    const min = Vec2.sub(this.bounds.min, radiusVector);
+    const max = Vec2.add(this.bounds.max, radiusVector);
 
-  /** Narrow to a quad segment, or null if this isn't one. */
-  asQuad(): QuadSegment | null {
-    return this.#data.type === "quad" ? this.#data : null;
-  }
-
-  /** Narrow to a cubic segment, or null if this isn't one. */
-  asCubic(): CubicSegment | null {
-    return this.#data.type === "cubic" ? this.#data : null;
-  }
-
-  hitTest(pos: Point2D, radius: number): SegmentHitResult | null {
-    const b = this.bounds;
-    const r = { x: radius, y: radius };
-    const lo = Vec2.sub(b.min, r);
-    const hi = Vec2.add(b.max, r);
-
-    if (pos.x < lo.x || pos.x > hi.x || pos.y < lo.y || pos.y > hi.y) return null;
-
-    const closest = Curve.closestPoint(this.toCurve(), pos);
-
-    if (closest.distance < radius) {
-      return {
-        segment: this,
-        segmentId: this.id,
-        t: closest.t,
-        point: closest.point,
-        distance: closest.distance,
-      };
+    if (pos.x < min.x || pos.x > max.x || pos.y < min.y || pos.y > max.y) {
+      return null;
     }
 
-    return null;
+    const closest = this.closestPoint(pos);
+    if (closest.distance > radius) return null;
+
+    return {
+      t: closest.t,
+      closestPoint: closest.point,
+      distance: closest.distance,
+    };
+  }
+
+  /** @knipclassignore Narrow to line points, or null if this isn't a line. */
+  asLine(): LineSegmentPoints | null {
+    const points = this.points;
+    return points.type === "line" ? points : null;
+  }
+
+  /** Narrow to quad points, or null if this isn't a quad. */
+  asQuad(): QuadSegmentPoints | null {
+    const points = this.points;
+    return points.type === "quad" ? points : null;
+  }
+
+  /** Narrow to cubic points, or null if this isn't a cubic. */
+  asCubic(): CubicSegmentPoints | null {
+    const points = this.points;
+    return points.type === "cubic" ? points : null;
   }
 }

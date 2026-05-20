@@ -137,7 +137,10 @@ test.describe("Performance — 50K points", () => {
     const base = baseline[stats.label];
     // For near-zero baselines (sub-millisecond ops), allow up to 1ms absolute
     // jitter instead of a percentage — 0.00ms → 0.10ms isn't a real regression.
-    const allowed = Math.max(base.p95 * (1 + REGRESSION_TOLERANCE), base.p95 + 1);
+    const allowed = Math.max(
+      base.p95 * (1 + REGRESSION_TOLERANCE),
+      base.p95 + 1,
+    );
 
     expect(
       stats.p95,
@@ -150,16 +153,17 @@ test.describe("Performance — 50K points", () => {
 
     const pointCount = await page.evaluate((data) => {
       const shift = (window as any).__shift;
-      if (!shift) throw new Error("__shift not exposed — was the app built with __PLAYWRIGHT__?");
+      if (!shift)
+        throw new Error(
+          "__shift not exposed — was the app built with __PLAYWRIGHT__?",
+        );
 
       const editor = shift.getEditor();
       const result = editor.bridge.pasteContours(data, 0, 0);
 
       if (!result.success) throw new Error("pasteContours failed");
 
-      return editor.bridge
-        .getEditingSnapshot()
-        ?.contours.reduce((sum: number, c: any) => sum + c.points.length, 0);
+      return editor.editGlyphSource?.allPoints.length ?? 0;
     }, contours);
 
     expect(pointCount).toBeGreaterThanOrEqual(TARGET_POINTS);
@@ -174,25 +178,29 @@ test.describe("Performance — 50K points", () => {
         const editor = (window as any).__shift.getEditor();
         editor.bridge.pasteContours(contours, 0, 0);
 
-        const snapshot = editor.bridge.getEditingSnapshot();
-        const pointIds = snapshot.contours[0].points.slice(0, 5).map((p: any) => p.id);
-        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
+        const pointIds = editor.editGlyphSource.allPoints
+          .slice(0, 5)
+          .map((p: any) => p.id);
+        editor.selection.select(
+          pointIds.map((id: string) => ({ kind: "point", id })),
+        );
 
-        const draft = editor.createDraft();
+        const draft = editor.beginSourceEditDraft({ points: pointIds });
         const times: number[] = [];
 
         for (let i = 0; i < frames; i++) {
           const start = performance.now();
           const updates = pointIds.map((id: string, idx: number) => ({
-            node: { kind: "point" as const, id },
+            kind: "point" as const,
+            id,
             x: 100 + i + idx,
             y: 200 + i + idx,
           }));
-          draft.setPositions(updates);
+          draft.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.finish("translate-few");
+        draft.commit("translate-few");
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -211,26 +219,28 @@ test.describe("Performance — 50K points", () => {
         const editor = (window as any).__shift.getEditor();
         editor.bridge.pasteContours(contours, 0, 0);
 
-        const snapshot = editor.bridge.getEditingSnapshot();
-        const allPoints = snapshot.contours.flatMap((c: any) => c.points);
+        const allPoints = editor.editGlyphSource.allPoints;
         const pointIds = allPoints.slice(0, 1000).map((p: any) => p.id);
-        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
+        editor.selection.select(
+          pointIds.map((id: string) => ({ kind: "point", id })),
+        );
 
-        const draft = editor.createDraft();
+        const draft = editor.beginSourceEditDraft({ points: pointIds });
         const times: number[] = [];
 
         for (let i = 0; i < frames; i++) {
           const start = performance.now();
           const updates = pointIds.map((id: string, idx: number) => ({
-            node: { kind: "point" as const, id },
+            kind: "point" as const,
+            id,
             x: idx + i,
             y: idx + i,
           }));
-          draft.setPositions(updates);
+          draft.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.finish("translate-many");
+        draft.commit("translate-many");
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -251,25 +261,25 @@ test.describe("Performance — 50K points", () => {
 
         editor.selectAll();
 
-        const snapshot = editor.bridge.getEditingSnapshot();
-        const allPoints = snapshot.contours.flatMap((c: any) => c.points);
+        const allPoints = editor.editGlyphSource.allPoints;
         const pointIds = allPoints.map((p: any) => p.id);
 
-        const draft = editor.createDraft();
+        const draft = editor.beginSourceEditDraft({ points: pointIds });
         const times: number[] = [];
 
         for (let i = 0; i < frames; i++) {
           const start = performance.now();
           const updates = pointIds.map((id: string, idx: number) => ({
-            node: { kind: "point" as const, id },
+            kind: "point" as const,
+            id,
             x: idx + i,
             y: idx + i,
           }));
-          draft.setPositions(updates);
+          draft.previewPositionPatch(updates);
           times.push(performance.now() - start);
         }
 
-        draft.finish("translate-all");
+        draft.commit("translate-all");
         return times;
       },
       { contours, frames: DRAG_FRAMES },
@@ -289,8 +299,7 @@ test.describe("Performance — 50K points", () => {
         editor.bridge.pasteContours(contours, 0, 0);
         editor.selectAll();
 
-        const snapshot = editor.bridge.getEditingSnapshot();
-        const allPoints = snapshot.contours.flatMap((c: any) => c.points);
+        const allPoints = editor.editGlyphSource.allPoints;
         const pointIds = allPoints.map((p: any) => p.id);
 
         const times: number[] = [];
@@ -320,18 +329,18 @@ test.describe("Performance — 50K points", () => {
         editor.bridge.pasteContours(contours, 0, 0);
         editor.selectAll();
 
-        const snapshot = editor.bridge.getEditingSnapshot();
-        const allPoints = snapshot.contours.flatMap((c: any) => c.points);
+        const allPoints = editor.editGlyphSource.allPoints;
         const pointIds = allPoints.map((p: any) => p.id);
 
-        const draft = editor.createDraft();
+        const draft = editor.beginSourceEditDraft({ points: pointIds });
         const updates = pointIds.map((id: string, idx: number) => ({
-          node: { kind: "point" as const, id },
+          kind: "point" as const,
+          id,
           x: idx + 10,
           y: idx + 10,
         }));
-        draft.setPositions(updates);
-        draft.finish("pre-undo-translate");
+        draft.previewPositionPatch(updates);
+        draft.commit("pre-undo-translate");
 
         const undoTimes: number[] = [];
         const redoTimes: number[] = [];
@@ -358,7 +367,9 @@ test.describe("Performance — 50K points", () => {
     assertPerf(redoStats);
   });
 
-  test("pen tool — rapid point placement on complex glyph", async ({ page }) => {
+  test("pen tool — rapid point placement on complex glyph", async ({
+    page,
+  }) => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(

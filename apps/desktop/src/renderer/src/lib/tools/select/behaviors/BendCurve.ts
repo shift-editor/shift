@@ -13,17 +13,30 @@ export class BendCurve implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"dragStart">,
   ): boolean {
-    if ((state.type !== "ready" && state.type !== "selected") || !event.metaKey) return false;
+    if (state.type !== "ready" || !event.metaKey) return false;
 
-    const hit = ctx.editor.hitTest(event.coords);
-    if (!hit || hit.type !== "segment" || hit.segment.type !== "cubic") return false;
+    const source = ctx.editor.editGlyphSource;
+    if (!source) return false;
 
-    const { t, closestPoint, segmentId, segment } = hit;
+    const geometry = source.geometry;
+    const hit = geometry.hitSegment(
+      event.coords.glyphLocal,
+      ctx.editor.hitRadius,
+    );
+    if (!hit) return false;
+
+    const { t, closestPoint, segmentId } = hit;
+    const segment = geometry.segment(segmentId);
+    if (!segment) return false;
+
     const cubic = segment.asCubic();
-    if (!cubic) return true;
-    const { control1, control2 } = cubic.points;
+    if (!cubic) return false;
 
-    this.#draft = ctx.editor.beginSourceEditDraft({ points: [control1.id, control2.id] });
+    const { controlStart, controlEnd } = cubic;
+
+    this.#draft = ctx.editor.beginSourceEditDraft({
+      points: [controlStart.id, controlEnd.id],
+    });
     this.#hasChanges = false;
 
     ctx.setState({
@@ -32,14 +45,20 @@ export class BendCurve implements SelectBehavior {
         t,
         startPos: closestPoint,
         segmentId,
-        initialControlOne: control1,
-        initialControlTwo: control2,
+        controlOneId: controlStart.id,
+        controlTwoId: controlEnd.id,
+        initialControlOne: controlStart,
+        initialControlTwo: controlEnd,
       },
     });
     return true;
   }
 
-  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(
+    state: SelectState,
+    _ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"drag">,
+  ): boolean {
     if (state.type !== "bending") return false;
     if (!this.#draft) return false;
 
@@ -51,23 +70,27 @@ export class BendCurve implements SelectBehavior {
     const denom = w1 * w1 + w2 * w2;
     if (Math.abs(denom) < 1e-12) return true;
 
-    const segment = ctx.editor.getSegmentById(state.bend.segmentId);
-    if (!segment || segment.type !== "cubic") return true;
-
     const delta1 = Vec2.scale(delta, w1 / denom);
     const delta2 = Vec2.scale(delta, w2 / denom);
     const { initialControlOne, initialControlTwo } = state.bend;
     const newCp1 = Vec2.add(initialControlOne, delta1);
     const newCp2 = Vec2.add(initialControlTwo, delta2);
-    const cubic = segment.asCubic();
-    if (!cubic) return true;
-    const { control1, control2 } = cubic.points;
 
     const updates = [
-      { kind: "point" as const, id: control1.id, x: newCp1.x, y: newCp1.y },
-      { kind: "point" as const, id: control2.id, x: newCp2.x, y: newCp2.y },
+      {
+        kind: "point" as const,
+        id: state.bend.controlOneId,
+        x: newCp1.x,
+        y: newCp1.y,
+      },
+      {
+        kind: "point" as const,
+        id: state.bend.controlTwoId,
+        x: newCp2.x,
+        y: newCp2.y,
+      },
     ];
-    this.#draft.previewPositions(updates);
+    this.#draft.previewPositionPatch(updates);
     this.#hasChanges = true;
     return true;
   }
@@ -83,7 +106,7 @@ export class BendCurve implements SelectBehavior {
     this.#draft = null;
     this.#hasChanges = false;
 
-    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState({ type: "ready" });
     return true;
   }
 
@@ -92,7 +115,7 @@ export class BendCurve implements SelectBehavior {
     this.#draft?.discard();
     this.#draft = null;
     this.#hasChanges = false;
-    ctx.setState(ctx.editor.selection.hasSelection() ? { type: "selected" } : { type: "ready" });
+    ctx.setState({ type: "ready" });
     return true;
   }
 }

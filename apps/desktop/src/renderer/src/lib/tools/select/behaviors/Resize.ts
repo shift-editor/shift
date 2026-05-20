@@ -1,30 +1,61 @@
 import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
-import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { BoundingRectEdge } from "../cursor";
 import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
+import type { Select } from "../Select";
 
 export class Resize implements SelectBehavior {
   #draft: SourceEditDraft | null = null;
   #origin: Point2D | null = null;
 
   onDragStart(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
+    _state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
     event: ToolEventOf<"dragStart">,
   ): boolean {
-    if (state.type !== "selected") return false;
+    if (!ctx.editor.selection.hasSelection()) return false;
 
-    const next = this.tryStartResize(event, ctx.editor);
-    if (!next) return false;
+    const editor = ctx.editor;
+    if (!editor.editGlyphSource) return false;
 
-    ctx.setState(next);
+    const bbHit = ctx.tool.boundingBox.hit(event.coords);
+    if (!bbHit) return false;
+
+    if (bbHit.type !== "resize") return false;
+    const bounds = bbHit.rect;
+
+    const edge = bbHit.edge;
+    const localPoint = event.coords.glyphLocal;
+    const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
+
+    this.#draft = editor.beginSourceEditDraft({
+      points: [...editor.selection.pointIds],
+      anchors: [...editor.selection.anchorIds],
+    });
+    this.#origin = anchorPoint;
+
+    ctx.setState({
+      type: "resizing",
+      resize: {
+        edge,
+        startPos: localPoint,
+        lastPos: localPoint,
+        initialBounds: bounds,
+        anchorPoint,
+        uniformScale: false,
+      },
+    });
+
     return true;
   }
 
-  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+    event: ToolEventOf<"drag">,
+  ): boolean {
     if (state.type !== "resizing") return false;
     if (!this.#draft || !this.#origin) return false;
 
@@ -33,26 +64,40 @@ export class Resize implements SelectBehavior {
     return true;
   }
 
-  onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+  onDragEnd(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): boolean {
     if (state.type !== "resizing") return false;
+
     this.#draft?.commit("Scale Points");
     this.#cleanup();
-    ctx.setState({ type: "selected" });
+
+    ctx.setState({ type: "ready" });
     return true;
   }
 
-  onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
+  onDragCancel(
+    state: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): boolean {
     if (state.type !== "resizing") return false;
+
     this.#draft?.discard();
     this.#cleanup();
-    ctx.setState({ type: "selected" });
+
+    ctx.setState({ type: "ready" });
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+  ): void {
     const editor = ctx.editor;
     if (prev.type !== "resizing" && next.type === "resizing") {
-      editor.clearHover();
+      editor.hover.clear();
     }
   }
 
@@ -61,7 +106,10 @@ export class Resize implements SelectBehavior {
     this.#origin = null;
   }
 
-  private nextResizingState(state: SelectState, event: ToolEventOf<"drag">): SelectState {
+  private nextResizingState(
+    state: SelectState,
+    event: ToolEventOf<"drag">,
+  ): SelectState {
     if (state.type !== "resizing") return state;
 
     const uniformScale = event.shiftKey;
@@ -86,42 +134,14 @@ export class Resize implements SelectBehavior {
     };
   }
 
-  private tryStartResize(event: ToolEventOf<"dragStart">, editor: Editor): SelectState | null {
-    const hit = editor.hitTest(event.coords);
-    if (hit?.type === "point") return null;
-
-    const bbHit = editor.hitTestBoundingBoxAt(event.coords);
-    if (!bbHit) return null;
-
-    const edge: BoundingRectEdge = bbHit.type === "resize" ? bbHit.edge : null;
-    const bounds = editor.getSelectionBoundingRect();
-
-    if (!edge || !bounds) return null;
-
-    const localPoint = event.coords.glyphLocal;
-    const anchorPoint = this.getAnchorPointForEdge(edge, bounds);
-
-    this.#draft = editor.beginSourceEditDraft({
-      points: [...editor.selection.pointIds],
-      anchors: [...editor.selection.anchorIds],
-    });
-    this.#origin = anchorPoint;
-
-    return {
-      type: "resizing",
-      resize: {
-        edge,
-        startPos: localPoint,
-        lastPos: localPoint,
-        initialBounds: bounds,
-        anchorPoint,
-        uniformScale: false,
-      },
-    };
-  }
-
-  private getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
-    const center = Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
+  private getAnchorPointForEdge(
+    edge: Exclude<BoundingRectEdge, null>,
+    rect: Rect2D,
+  ): Point2D {
+    const center = Vec2.midpoint(
+      { x: rect.left, y: rect.top },
+      { x: rect.right, y: rect.bottom },
+    );
 
     switch (edge) {
       case "top-left":
@@ -185,7 +205,11 @@ export class Resize implements SelectBehavior {
 
     if (edge === "left" || edge === "top-left" || edge === "bottom-left") {
       flipX = currentPos.x > anchorPoint.x;
-    } else if (edge === "right" || edge === "top-right" || edge === "bottom-right") {
+    } else if (
+      edge === "right" ||
+      edge === "top-right" ||
+      edge === "bottom-right"
+    ) {
       flipX = currentPos.x < anchorPoint.x;
     }
 

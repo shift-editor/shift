@@ -1,169 +1,435 @@
-import { Bounds, Curve, type CurveType } from "@shift/geo";
-import type { PointData } from "@shift/types";
+import {
+  Bounds,
+  type Bounds as BoundsType,
+  Vec2,
+  type Point2D,
+} from "@shift/geo";
+import type {
+  AnchorId,
+  ComponentId,
+  ContourId,
+  GlyphState,
+  GlyphStructure,
+  PointId,
+} from "@shift/types";
+import { Anchor } from "./Anchor";
+import type { AnchorHit } from "./Anchor";
+import { Component } from "./Component";
+import { Contour } from "./Contour";
+import { IdIndex } from "./IdIndex";
+import { Segment, type SegmentId } from "./Segment";
+import type { SegmentHit } from "./Segment";
+import { Point } from "./Point";
+import type { PointHit } from "./Point";
 
-export interface SegmentPointGeometry {
-  readonly x: number;
-  readonly y: number;
-  readonly pointType: PointData["pointType"];
-  readonly smooth: boolean;
-  readonly id?: PointData["id"];
+export interface GlyphSidebearings {
+  readonly lsb: number | null;
+  readonly rsb: number | null;
 }
 
-export interface SegmentContourLike {
-  readonly points: readonly SegmentPointGeometry[];
-  readonly closed: boolean;
+export type GlyphPositionTarget =
+  | { readonly kind: "point"; readonly id: PointId }
+  | { readonly kind: "anchor"; readonly id: AnchorId };
+
+export type GlyphPosition =
+  | {
+      readonly kind: "point";
+      readonly id: PointId;
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly kind: "anchor";
+      readonly id: AnchorId;
+      readonly x: number;
+      readonly y: number;
+    };
+
+export type GlyphPositions = readonly GlyphPosition[];
+
+export interface GeometryPointHit extends PointHit {
+  readonly type: "point";
+  readonly pointId: PointId;
 }
 
-export type LineSegmentGeometry = {
-  readonly type: "line";
-  readonly points: {
-    readonly anchor1: SegmentPointGeometry;
-    readonly anchor2: SegmentPointGeometry;
-  };
-};
-
-export type QuadSegmentGeometry = {
-  readonly type: "quad";
-  readonly points: {
-    readonly anchor1: SegmentPointGeometry;
-    readonly control: SegmentPointGeometry;
-    readonly anchor2: SegmentPointGeometry;
-  };
-};
-
-export type CubicSegmentGeometry = {
-  readonly type: "cubic";
-  readonly points: {
-    readonly anchor1: SegmentPointGeometry;
-    readonly control1: SegmentPointGeometry;
-    readonly control2: SegmentPointGeometry;
-    readonly anchor2: SegmentPointGeometry;
-  };
-};
-
-export type SegmentGeometry = LineSegmentGeometry | QuadSegmentGeometry | CubicSegmentGeometry;
-
-function isOnCurve(point: SegmentPointGeometry): boolean {
-  return point.pointType === "onCurve";
+export interface GeometryAnchorHit extends AnchorHit {
+  readonly type: "anchor";
+  readonly anchorId: AnchorId;
 }
 
-function isOffCurve(point: SegmentPointGeometry): boolean {
-  return point.pointType === "offCurve";
+export interface GeometrySegmentHit extends SegmentHit {
+  readonly type: "segment";
+  readonly segmentId: SegmentId;
 }
 
-export function parseContourSegments(contour: SegmentContourLike): SegmentGeometry[] {
-  const { points, closed } = contour;
-  if (points.length < 2) {
-    return [];
+export type GeometryHit =
+  | GeometryPointHit
+  | GeometryAnchorHit
+  | GeometrySegmentHit;
+
+/**
+ * Immutable geometry view over a glyph structure and value buffer.
+ *
+ * `GlyphStateGeometry` is the pure data shape used by rendering, hit testing,
+ * transforms, clipboard, and edit previews. It does not talk to the bridge and
+ * does not mutate its input values. Methods that apply changes return a new
+ * geometry object or packed data for another layer to commit.
+ */
+export class GlyphGeometry {
+  readonly structure: GlyphStructure;
+  readonly values: Float64Array;
+
+  readonly #cache: GeometryCache;
+
+  constructor(structure: GlyphStructure, values: Float64Array) {
+    this.structure = structure;
+    this.values = values;
+    this.#cache = new GeometryCache(structure, values);
   }
 
-  const segments: SegmentGeometry[] = [];
-  let index = 0;
+  static fromState(state: GlyphState): GlyphGeometry {
+    return new GlyphGeometry(state.structure, state.values);
+  }
 
-  const getPoint = (i: number): SegmentPointGeometry | undefined => {
-    if (i < points.length) {
-      return points[i];
+  get xAdvance(): number {
+    return this.values[0] ?? 0;
+  }
+
+  get contours(): readonly Contour[] {
+    return this.#cache.contours;
+  }
+
+  get segments(): readonly Segment[] {
+    return this.#cache.segments;
+  }
+
+  get anchors(): readonly Anchor[] {
+    return this.#cache.anchors;
+  }
+
+  get components(): readonly Component[] {
+    return this.#cache.components;
+  }
+
+  get allPoints(): Point[] {
+    return [...this.#cache.points];
+  }
+
+  get bounds(): BoundsType | null {
+    return this.#cache.bounds;
+  }
+
+  get sidebearings(): GlyphSidebearings {
+    return this.#cache.sidebearings;
+  }
+
+  point(pointId: PointId): Point | null {
+    return this.#cache.point(pointId);
+  }
+
+  points(pointIds: readonly PointId[]): Point[] {
+    const points: Point[] = [];
+    for (const pointId of pointIds) {
+      const point = this.point(pointId);
+      if (point) points.push(point);
     }
-    if (closed) {
-      return points[i - points.length];
-    }
-    return undefined;
-  };
+    return points;
+  }
 
-  const limit = closed ? points.length : points.length - 1;
+  contour(contourId: ContourId): Contour | null {
+    return this.#cache.contour(contourId);
+  }
 
-  while (index < limit) {
-    const p1 = getPoint(index);
-    const p2 = getPoint(index + 1);
+  contourIdOfPoint(pointId: PointId): ContourId | null {
+    return this.#cache.contourIdOfPoint(pointId);
+  }
 
-    if (!p1 || !p2) {
-      break;
-    }
+  segment(segmentId: SegmentId): Segment | null {
+    return this.#cache.segment(segmentId);
+  }
 
-    if (isOnCurve(p1) && isOnCurve(p2)) {
-      segments.push({
-        type: "line",
-        points: { anchor1: p1, anchor2: p2 },
-      });
-      index += 1;
-      continue;
-    }
+  anchor(anchorId: AnchorId): Anchor | null {
+    return this.#cache.anchor(anchorId);
+  }
 
-    if (isOnCurve(p1) && isOffCurve(p2)) {
-      const p3 = getPoint(index + 2);
+  component(componentId: ComponentId): Component | null {
+    return this.#cache.component(componentId);
+  }
 
-      if (!p3) {
-        break;
+  hitPoint(pos: Point2D, radius: number): GeometryPointHit | null {
+    let best: GeometryPointHit | null = null;
+
+    for (const point of this.#cache.points) {
+      const hit = Point.hit(point, pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) {
+        best = {
+          type: "point",
+          pointId: point.id,
+          distance: hit.distance,
+        };
       }
+    }
 
-      if (isOnCurve(p3)) {
-        segments.push({
-          type: "quad",
-          points: { anchor1: p1, control: p2, anchor2: p3 },
-        });
-        index += 2;
-        continue;
+    return best;
+  }
+
+  hitAnchor(pos: Point2D, radius: number): GeometryAnchorHit | null {
+    let best: GeometryAnchorHit | null = null;
+
+    for (const anchor of this.#cache.anchors) {
+      const hit = anchor.hit(pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) {
+        best = {
+          type: "anchor",
+          anchorId: anchor.id,
+          distance: hit.distance,
+        };
       }
+    }
 
-      if (isOffCurve(p3)) {
-        const p4 = getPoint(index + 3);
-        if (!p4) {
+    return best;
+  }
+
+  hitSegment(pos: Point2D, radius: number): GeometrySegmentHit | null {
+    let best: GeometrySegmentHit | null = null;
+
+    for (const segment of this.#cache.segments) {
+      const hit = segment.hit(pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) {
+        best = {
+          type: "segment",
+          segmentId: segment.id,
+          t: hit.t,
+          closestPoint: hit.closestPoint,
+          distance: hit.distance,
+        };
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Read current positions for point and anchor targets.
+   *
+   * Missing targets are skipped. This is the pure geometry equivalent of the
+   * editable source API and is useful for transforms that should not know where
+   * the geometry came from.
+   */
+  positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
+    const positions: GlyphPosition[] = [];
+
+    for (const target of targets) {
+      switch (target.kind) {
+        case "point": {
+          const point = this.point(target.id);
+          if (point)
+            positions.push({
+              kind: "point",
+              id: point.id,
+              x: point.x,
+              y: point.y,
+            });
           break;
         }
-
-        segments.push({
-          type: "cubic",
-          points: { anchor1: p1, control1: p2, control2: p3, anchor2: p4 },
-        });
-        index += 3;
-        continue;
+        case "anchor": {
+          const anchor = this.anchor(target.id);
+          if (anchor)
+            positions.push({
+              kind: "anchor",
+              id: anchor.id,
+              x: anchor.x,
+              y: anchor.y,
+            });
+          break;
+        }
       }
     }
 
-    index += 1;
+    return positions;
   }
 
-  return segments;
-}
+  /**
+   * Return a new geometry object with point/anchor positions applied.
+   *
+   * The structure is reused and the value buffer is copied before changes are
+   * written. Use this for previews and tests; committing to Rust happens at the
+   * editor/model layer.
+   */
+  withPositionUpdates(updates: GlyphPositions): GlyphGeometry {
+    if (updates.length === 0) return this;
 
-export function segmentToCurve(segment: SegmentGeometry): CurveType {
-  switch (segment.type) {
-    case "line":
-      return Curve.line(segment.points.anchor1, segment.points.anchor2);
-    case "quad":
-      return Curve.quadratic(
-        segment.points.anchor1,
-        segment.points.control,
-        segment.points.anchor2,
-      );
-    case "cubic":
-      return Curve.cubic(
-        segment.points.anchor1,
-        segment.points.control1,
-        segment.points.control2,
-        segment.points.anchor2,
-      );
-  }
-}
+    const values = new Float64Array(this.values);
+    const pointOffsets = Contour.pointValueOffsets(this.structure);
+    const anchorOffsets = Anchor.valueOffsets(this.structure);
 
-export interface SegmentGlyphLike {
-  readonly contours: readonly SegmentContourLike[];
-}
-
-export function deriveGlyphTightBounds(glyph: SegmentGlyphLike): Bounds | null {
-  const bounds: Bounds[] = [];
-
-  for (const contour of glyph.contours ?? []) {
-    for (const segment of parseContourSegments(contour)) {
-      bounds.push(Curve.bounds(segmentToCurve(segment)));
+    for (const update of updates) {
+      switch (update.kind) {
+        case "point": {
+          const offset = pointOffsets.get(update.id);
+          if (offset === undefined) break;
+          values[offset] = update.x;
+          values[offset + 1] = update.y;
+          break;
+        }
+        case "anchor": {
+          const offset = anchorOffsets.get(update.id);
+          if (offset === undefined) break;
+          values[offset] = update.x;
+          values[offset + 1] = update.y;
+          break;
+        }
+      }
     }
+
+    return new GlyphGeometry(this.structure, values);
   }
 
-  return Bounds.unionAll(bounds);
+  /**
+   * Move position records without needing access to the original geometry.
+   *
+   * This keeps transform code working with `GlyphPosition` records rather than
+   * points, anchors, or source-specific models.
+   */
+  movePositions(positions: GlyphPositions, delta: Point2D): GlyphPosition[] {
+    return positions.map((position) => {
+      const next = Vec2.add(position, delta);
+      return { ...position, x: next.x, y: next.y };
+    });
+  }
 }
 
-export function deriveGlyphXBounds(glyph: SegmentGlyphLike): { minX: number; maxX: number } | null {
-  const bounds = deriveGlyphTightBounds(glyph);
-  if (!bounds) return null;
-  return { minX: bounds.min.x, maxX: bounds.max.x };
+class GeometryCache {
+  readonly #points: IdIndex<PointId, Point>;
+  readonly #contours: IdIndex<ContourId, Contour>;
+  readonly #segments: IdIndex<SegmentId, Segment>;
+  readonly #anchors: IdIndex<AnchorId, Anchor>;
+  readonly #components: IdIndex<ComponentId, Component>;
+
+  readonly #xAdvance: number;
+
+  #contourIdByPointId: ReadonlyMap<PointId, ContourId> | null = null;
+  #bounds: BoundsType | null | undefined;
+  #sidebearings: GlyphSidebearings | null = null;
+
+  constructor(structure: GlyphStructure, values: Float64Array) {
+    this.#xAdvance = values[0] ?? 0;
+
+    let contours: readonly Contour[] | null = null;
+    this.#contours = new IdIndex(
+      () => (contours ??= Contour.fromStructure(structure, values)),
+      (contour) => contour.id,
+    );
+
+    let points: readonly Point[] | null = null;
+    this.#points = new IdIndex(
+      () =>
+        (points ??= this.contours.flatMap((contour) => [...contour.points])),
+      (point) => point.id,
+    );
+
+    let segments: readonly Segment[] | null = null;
+    this.#segments = new IdIndex(
+      () =>
+        (segments ??= this.contours.flatMap((contour) => contour.segments())),
+      (segment) => segment.id,
+    );
+
+    let anchors: readonly Anchor[] | null = null;
+    this.#anchors = new IdIndex(
+      () => (anchors ??= Anchor.fromStructure(structure, values)),
+      (anchor) => anchor.id,
+    );
+
+    let components: readonly Component[] | null = null;
+    this.#components = new IdIndex(
+      () => (components ??= Component.fromStructure(structure, values)),
+      (component) => component.id,
+    );
+  }
+
+  get points(): readonly Point[] {
+    return this.#points.all;
+  }
+
+  point(id: PointId): Point | null {
+    return this.#points.get(id);
+  }
+
+  contourIdOfPoint(id: PointId): ContourId | null {
+    return this.contourIdByPointId.get(id) ?? null;
+  }
+
+  get contourIdByPointId(): ReadonlyMap<PointId, ContourId> {
+    if (this.#contourIdByPointId === null) {
+      const contourIds = new Map<PointId, ContourId>();
+
+      for (const contour of this.contours) {
+        contour.points.forEach((point) => {
+          contourIds.set(point.id, contour.id);
+        });
+      }
+
+      this.#contourIdByPointId = contourIds;
+    }
+
+    return this.#contourIdByPointId;
+  }
+
+  get contours(): readonly Contour[] {
+    return this.#contours.all;
+  }
+
+  contour(id: ContourId): Contour | null {
+    return this.#contours.get(id);
+  }
+
+  get segments(): readonly Segment[] {
+    return this.#segments.all;
+  }
+
+  segment(id: SegmentId): Segment | null {
+    return this.#segments.get(id);
+  }
+
+  get anchors(): readonly Anchor[] {
+    return this.#anchors.all;
+  }
+
+  anchor(id: AnchorId): Anchor | null {
+    return this.#anchors.get(id);
+  }
+
+  get components(): readonly Component[] {
+    return this.#components.all;
+  }
+
+  component(id: ComponentId): Component | null {
+    return this.#components.get(id);
+  }
+
+  get bounds(): BoundsType | null {
+    if (this.#bounds === undefined) {
+      this.#bounds = Bounds.unionAll(
+        this.contours.map((contour) => contour.bounds),
+      );
+    }
+
+    return this.#bounds;
+  }
+
+  get sidebearings(): GlyphSidebearings {
+    if (this.#sidebearings === null) {
+      const bounds = Bounds.fromPoints(this.points);
+      if (bounds === null) return { lsb: null, rsb: null };
+
+      this.#sidebearings = {
+        lsb: bounds.min.x,
+        rsb: this.#xAdvance - bounds.max.x,
+      };
+      return this.#sidebearings;
+    }
+
+    return this.#sidebearings;
+  }
 }

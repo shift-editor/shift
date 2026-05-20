@@ -1,19 +1,19 @@
 import type { Bounds, Point2D } from "@shift/geo";
 import type { FontMetrics } from "@shift/types";
 
-export type TextCellId = string;
+export type TextItemId = string;
 export type TextRunId = string;
 
 export interface GlyphAnchor {
   runId: TextRunId;
-  cellId: TextCellId;
+  itemId: TextItemId;
 }
 
-let nextCellId = 1;
+let nextItemId = 1;
 
-export function createTextCellId(): TextCellId {
-  const id = `cell_${nextCellId}`;
-  nextCellId += 1;
+export function createTextItemId(): TextItemId {
+  const id = `item_${nextItemId}`;
+  nextItemId += 1;
   return id;
 }
 
@@ -22,38 +22,40 @@ export function createTextCellId(): TextCellId {
  * variant) or a structural line break. Line breaks are NOT glyphs — they
  * never get positioned; the layout splits on them into paragraphs.
  */
-export type Cell = GlyphCell | LineBreak;
+export type TextItem = GlyphTextItem | LineBreakTextItem;
 
-export interface GlyphCell {
-  id: TextCellId;
+export interface GlyphTextItem {
+  id: TextItemId;
   kind: "glyph";
   glyphName: string;
   /** Source codepoint when typed via keyboard; null when picked from a glyph UI. */
   codepoint: number | null;
 }
 
-export interface LineBreak {
-  id: TextCellId;
+export interface LineBreakTextItem {
+  id: TextItemId;
   kind: "linebreak";
 }
 
-/** Build a glyph cell. `codepoint` is null when the source isn't a typed character. */
-export function glyphCell(
+/** Build a glyph text item. `codepoint` is null when the source isn't a typed character. */
+export function glyphTextItem(
   glyphName: string,
   codepoint: number | null = null,
-  id: TextCellId = createTextCellId(),
-): GlyphCell {
+  id: TextItemId = createTextItemId(),
+): GlyphTextItem {
   return { id, kind: "glyph", glyphName, codepoint };
 }
 
-/** Build a linebreak cell — structural paragraph separator. */
-export function linebreakCell(id: TextCellId = createTextCellId()): LineBreak {
+/** Build a line break text item — structural paragraph separator. */
+export function lineBreakTextItem(
+  id: TextItemId = createTextItemId(),
+): LineBreakTextItem {
   return { id, kind: "linebreak" };
 }
 
 export interface PositionedGlyph {
   glyphName: string;
-  cellIds: readonly TextCellId[];
+  sourceItemIds: readonly TextItemId[];
   origin: Point2D;
   xAdvance: number;
   yAdvance: number;
@@ -66,7 +68,7 @@ export interface PositionedGlyph {
 export type Direction = "ltr" | "rtl";
 
 export interface SegmentedRun {
-  glyphs: readonly GlyphCell[];
+  glyphs: readonly GlyphTextItem[];
   direction: Direction;
   script?: string;
   language?: string;
@@ -112,7 +114,7 @@ export interface CaretPosition {
 }
 
 export interface ParagraphSlice {
-  glyphs: readonly GlyphCell[];
+  glyphs: readonly GlyphTextItem[];
   clusterStart: number;
 }
 

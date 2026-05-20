@@ -2,7 +2,10 @@ import type { Editor } from "@/lib/editor/Editor";
 import { effect, type Effect } from "@/lib/signals/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
-import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";
+import {
+  toolStateAppModule,
+  toolStateDocumentModule,
+} from "./modules/toolState";
 import {
   PERSISTENCE_DOCUMENT_LIMIT,
   PERSISTENCE_SCHEMA_VERSION,
@@ -31,7 +34,8 @@ function createEmptyState(): PersistedRoot {
 function normalizeState(raw: unknown): PersistedRoot {
   const parsed = PersistedRootSchema.safeParse(raw);
   if (!parsed.success) return createEmptyState();
-  if (parsed.data.version !== PERSISTENCE_SCHEMA_VERSION) return createEmptyState();
+  if (parsed.data.version !== PERSISTENCE_SCHEMA_VERSION)
+    return createEmptyState();
   return parsed.data as PersistedRoot;
 }
 
@@ -68,7 +72,8 @@ export class DocumentStatePersistence {
   }
 
   registerModule(module: PersistenceModule): void {
-    const target = module.scope === "app" ? this.#appModules : this.#documentModules;
+    const target =
+      module.scope === "app" ? this.#appModules : this.#documentModules;
     if (target.has(module.id)) {
       throw new Error(`Persistence module "${module.id}" already registered`);
     }
@@ -87,6 +92,18 @@ export class DocumentStatePersistence {
     const docId = this.resolveDocId(normalizedPath);
     this.#currentDocId = docId;
     this.#currentPath = normalizedPath;
+    this.touchLru(docId);
+
+    this.hydrateDocumentModules(docId);
+    this.scheduleSave();
+  }
+
+  openUntitledDocument(docId: string): void {
+    if (!this.#editor) return;
+    this.flushNow();
+
+    this.#currentDocId = docId;
+    this.#currentPath = null;
     this.touchLru(docId);
 
     this.hydrateDocumentModules(docId);
@@ -141,7 +158,9 @@ export class DocumentStatePersistence {
     for (const p of paths) {
       const docId = state.registry.pathToDocId[p];
       if (!docId) continue;
-      state.registry.lruDocIds = state.registry.lruDocIds.filter((id) => id !== docId);
+      state.registry.lruDocIds = state.registry.lruDocIds.filter(
+        (id) => id !== docId,
+      );
       delete state.registry.docIdToPath[docId];
       delete state.documents[docId];
       delete state.registry.pathToDocId[p];
@@ -153,7 +172,10 @@ export class DocumentStatePersistence {
     const state = this.getState();
 
     const paths = new Set(
-      state.registry.lruDocIds.slice(0, 10).map((docId) => state.registry.docIdToPath[docId]),
+      state.registry.lruDocIds
+        .slice(0, 10)
+        .map((docId) => state.registry.docIdToPath[docId])
+        .filter((path): path is string => Boolean(path)),
     );
 
     if (paths.size === 0) return [];
@@ -201,7 +223,7 @@ export class DocumentStatePersistence {
 
     this.#effects.push(
       effect(() => {
-        editor.toolStateVersion.value;
+        editor.toolStateVersionCell.value;
         this.scheduleSave();
       }),
     );
@@ -262,7 +284,10 @@ export class DocumentStatePersistence {
     }
   }
 
-  private hydrateModule(module: PersistenceModule, envelope?: PersistedModuleEnvelope): void {
+  private hydrateModule(
+    module: PersistenceModule,
+    envelope?: PersistedModuleEnvelope,
+  ): void {
     if (!this.#editor) return;
     if (!envelope) {
       if (module.clear) module.clear({ editor: this.#editor });
@@ -391,7 +416,9 @@ export class DocumentStatePersistence {
       delete this.#state.documents[removedDocId];
       delete this.#state.registry.docIdToPath[removedDocId];
 
-      for (const [path, docId] of Object.entries(this.#state.registry.pathToDocId)) {
+      for (const [path, docId] of Object.entries(
+        this.#state.registry.pathToDocId,
+      )) {
         if (docId === removedDocId) {
           delete this.#state.registry.pathToDocId[path];
         }

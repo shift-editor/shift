@@ -1,4 +1,6 @@
 import { Editor } from "@/lib/editor/Editor";
+import { Document } from "@/app/Document";
+import { documentPersistence } from "@/persistence";
 import { electronSystemClipboard } from "@/lib/clipboard";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { create } from "zustand";
@@ -7,6 +9,7 @@ import type { ShiftBridge } from "@shift/bridge";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 
 interface AppState {
+  document: Document;
   editor: Editor;
   fileName: string | null;
   filePath: string | null;
@@ -55,7 +58,28 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
 
   editor.commandHistory.setOnDirty(markDirty);
 
+  const setFilePath = (filePath: string | null) => {
+    set({
+      filePath,
+      fileName: getFileNameFromPath(filePath),
+    });
+    window.electronAPI?.setDocumentFilePath(filePath);
+  };
+
+  const clearDirty = () => {
+    set({ isDirty: false });
+    window.electronAPI?.setDocumentDirty(false);
+  };
+
+  const document = new Document(editor, {
+    persistence: documentPersistence,
+    setFilePath,
+    clearDirty,
+    notifySaveCompleted: (path) => window.electronAPI?.saveCompleted(path),
+  });
+
   return {
+    document,
     editor,
     fileName: null,
     filePath: null,
@@ -63,26 +87,18 @@ const createStore = (set: StoreApi<AppState>["setState"]): AppState => {
     setFileName: (fileName: string) => {
       set({ fileName });
     },
-    setFilePath: (filePath: string | null) => {
-      set({
-        filePath,
-        fileName: getFileNameFromPath(filePath),
-      });
-      window.electronAPI?.setDocumentFilePath(filePath);
-    },
+    setFilePath,
     setDirty: (dirty: boolean) => {
       set({ isDirty: dirty });
     },
     markDirty,
-    clearDirty: () => {
-      set({ isDirty: false });
-      window.electronAPI?.setDocumentDirty(false);
-    },
+    clearDirty,
   };
 };
 
 const AppState = create<AppState>()(createStore);
 
+export const getDocument = () => AppState.getState().document;
 export const getEditor = () => AppState.getState().editor;
 
 // Expose editor on window for Playwright E2E tests.
@@ -90,5 +106,3 @@ declare const __PLAYWRIGHT__: boolean | undefined;
 if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
   (window as unknown as Record<string, unknown>).__shift = { getEditor };
 }
-export const setFilePath = (path: string | null) => AppState.getState().setFilePath(path);
-export const clearDirty = () => AppState.getState().clearDirty();

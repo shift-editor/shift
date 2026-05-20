@@ -32,16 +32,20 @@ export interface PersistedTextRun {
 
 export class TextRuns {
   readonly #runs: Map<string, TextRun>;
-  readonly #$activeKey: WritableSignal<string>;
-  readonly #$active: ComputedSignal<TextRun>;
+  readonly #activeKey: WritableSignal<string>;
+  readonly #active: ComputedSignal<TextRun>;
   readonly #font: Font;
   readonly #positioner: Positioner;
   readonly #designLocation: Signal<AxisLocation>;
   readonly #editorRun: TextRun;
 
-  constructor(font: Font, positioner: Positioner, designLocation: Signal<AxisLocation>) {
+  constructor(
+    font: Font,
+    positioner: Positioner,
+    designLocation: Signal<AxisLocation>,
+  ) {
     this.#runs = new Map();
-    this.#$activeKey = signal(DEFAULT_RUN_KEY);
+    this.#activeKey = signal(DEFAULT_RUN_KEY);
     this.#font = font;
     this.#positioner = positioner;
     this.#designLocation = designLocation;
@@ -51,17 +55,17 @@ export class TextRuns {
       this.#positioner,
       this.#designLocation,
     );
-    this.#$active = computed(() => this.#getOrCreate(this.#$activeKey.value));
+    this.#active = computed(() => this.#getOrCreate(this.#activeKey.value));
   }
 
   /** The currently-active run. Lazily creates one for the active key if needed. */
   get active(): TextRun {
-    return this.#$active.value;
+    return this.#active.peek();
   }
 
   /** Reactive view of the active run — fires on `switchTo`. */
-  get $active(): Signal<TextRun> {
-    return this.#$active;
+  get activeCell(): Signal<TextRun> {
+    return this.#active;
   }
 
   /**
@@ -73,10 +77,10 @@ export class TextRuns {
    *   editorRun = [S(id=s1)]
    *      │
    *      ▼
-   *   GlyphAnchor { runId: "__editor__", cellId: s1 }
+   *   GlyphAnchor { runId: "__editor__", itemId: s1 }
    *      │
    *      ▼
-   *   TextLayout.editOriginForCell(s1)
+   *   TextLayout.editOriginForItem(s1)
    *      │
    *      ▼
    *   drawOffset
@@ -91,7 +95,7 @@ export class TextRuns {
    */
   switchTo(glyphName: string | null): TextRun {
     const key = glyphName ?? DEFAULT_RUN_KEY;
-    this.#$activeKey.set(key);
+    this.#activeKey.set(key);
     return this.active;
   }
 
@@ -115,7 +119,11 @@ export class TextRuns {
   }
 
   resolveAnchor(anchor: GlyphAnchor): FocusedGlyph | null {
-    return this.get(anchor.runId)?.resolveAnchor(anchor) ?? null;
+    const run = this.get(anchor.runId);
+    if (!run) return null;
+    // oxlint-disable-next-line shift/no-reactive-value-outside-boundary -- Anchor resolution is used by TextEditingState.focusedGlyph to track layout-driven edit origins.
+    run.layoutCell.value;
+    return run.resolveAnchor(anchor);
   }
 
   serialize(): Record<string, PersistedTextRun> {
@@ -123,7 +131,7 @@ export class TextRuns {
     for (const [key, run] of this.#runs) {
       if (key === DEFAULT_RUN_KEY) continue;
       const buffer = run.buffer.snapshot();
-      if (buffer.cells && buffer.cells.length > 0) {
+      if (buffer.items && buffer.items.length > 0) {
         out[key] = { buffer };
       }
     }
@@ -133,22 +141,27 @@ export class TextRuns {
   deserialize(persisted: Record<string, PersistedTextRun>): void {
     this.#runs.clear();
     for (const [key, entry] of Object.entries(persisted)) {
-      const run = new TextRun(key, this.#font, this.#positioner, this.#designLocation);
+      const run = new TextRun(
+        key,
+        this.#font,
+        this.#positioner,
+        this.#designLocation,
+      );
       run.buffer.restore(entry.buffer);
       this.#runs.set(key, run);
     }
 
-    // Force `$active` to re-resolve from the now-populated Map. Without this,
-    // any consumer that already read `$active.value` before deserialize ran
+    // Force `activeCell` to re-resolve from the now-populated Map. Without this,
+    // any consumer that already read `activeCell.value` before deserialize ran
     // (e.g., the Editor's auto-save effect during construction) holds a
     // stale reference to a pre-load empty TextRun — and any subsequent fire
     // of the effect serializes that empty state back over the loaded data.
-    // The Map itself isn't a signal, so we toggle `$activeKey` through a
+    // The Map itself isn't a signal, so we toggle `activeKey` through a
     // sentinel to bypass the computed's equality skip.
-    const key = this.#$activeKey.peek();
+    const key = this.#activeKey.peek();
     const targetKey = this.#runs.has(key) ? key : DEFAULT_RUN_KEY;
-    this.#$activeKey.set("__force_recompute__");
-    this.#$activeKey.set(targetKey);
+    this.#activeKey.set("__force_recompute__");
+    this.#activeKey.set(targetKey);
   }
 
   #getOrCreate(key: string): TextRun {

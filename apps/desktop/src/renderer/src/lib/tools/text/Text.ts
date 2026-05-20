@@ -2,7 +2,7 @@ import { BaseTool, type ToolName } from "../core/BaseTool";
 import { TypingBehavior } from "./behaviors/TypingBehavior";
 import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "@/types/editor";
-import { glyphCell } from "@/lib/text/layout";
+import { glyphTextItem } from "@/lib/text/layout";
 
 export class TextTool extends BaseTool<TextState> {
   readonly id: ToolName = "text";
@@ -27,25 +27,29 @@ export class TextTool extends BaseTool<TextState> {
     const owner = this.editor.rootGlyphHandle;
     if (!owner) {
       this.state = { type: "typing" };
-      this.editor.setPreviewMode(true);
+      this.editor.glyphDisplay;
       return;
     }
 
     const ownerName = owner.name;
     const run = this.editor.textRuns.switchTo(ownerName);
-    run.seed(glyphCell(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
+    run.seed(
+      glyphTextItem(ownerName, owner.unicode ?? null),
+      this.editor.drawOffset.x,
+    );
     run.interaction.suspend();
     run.setCursorVisible(true);
 
     this.state = { type: "typing" };
-    this.editor.setPreviewMode(true);
+    this.editor.enableProofMode();
   }
 
   override deactivate(): void {
     const run = this.editor.textRun;
     run.setCursorVisible(false);
     run.interaction.resume();
-    this.editor.setPreviewMode(false);
+
+    this.editor.disableProofMode();
     this.state = { type: "idle" };
   }
 }

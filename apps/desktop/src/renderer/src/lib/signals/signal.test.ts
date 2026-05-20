@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { signal, computed, effect, batch, untracked, isTracking } from "./signal";
+import {
+  signal,
+  computed,
+  effect,
+  batch,
+  untracked,
+  isTracking,
+  signalDebug,
+  traceReactiveRun,
+} from "./signal";
 
 describe("signal", () => {
   it("should store and return a value", () => {
@@ -509,6 +518,211 @@ describe("isTracking", () => {
       });
     });
     expect(wasTracking).toBe(false);
+  });
+});
+
+describe("signal debug", () => {
+  it("names signals, computeds, and effects in dependency snapshots", () => {
+    const source = signal(1, { name: "source" });
+    const doubled = computed(() => source.value * 2, { name: "doubled" });
+    const fx = effect(
+      () => {
+        doubled.value;
+      },
+      { name: "draw" },
+    );
+
+    expect(source.name).toBe("source");
+    expect(doubled.name).toBe("doubled");
+    expect(fx.name).toBe("draw");
+
+    expect(source.debug().subscribers).toEqual(["computed(doubled)"]);
+    expect(doubled.debug().dependencies).toEqual(["signal(source)"]);
+    expect(doubled.debug().subscribers).toEqual(["effect(draw)"]);
+    expect(fx.debug().dependencies).toEqual(["computed(doubled)"]);
+
+    fx.dispose();
+  });
+
+  it("dumps a readable dependency graph from a root node", () => {
+    const source = signal(1, { name: "source" });
+    const doubled = computed(() => source.value * 2, { name: "doubled" });
+    const fx = effect(
+      () => {
+        doubled.value;
+      },
+      { name: "draw" },
+    );
+
+    const graph = signalDebug.dump(fx, { direction: "dependencies", depth: 3 });
+
+    expect(graph).toContain("effect(draw)");
+    expect(graph).toContain("computed(doubled)");
+    expect(graph).toContain("signal(source)");
+
+    fx.dispose();
+  });
+
+  it("traces changed reactive ancestors for the current computation", () => {
+    const messages: string[] = [];
+    const source = signal(1, { name: "source" });
+    const doubled = computed(() => source.value * 2, { name: "doubled" });
+    const fx = effect(
+      () => {
+        traceReactiveRun({ report: (message) => messages.push(message) });
+        doubled.value;
+      },
+      { name: "draw" },
+    );
+
+    messages.length = 0;
+    source.set(2);
+
+    const output = messages.join("\n");
+    expect(output).toContain("effect(draw) is running because:");
+    expect(output).toContain("computed(doubled) changed");
+    expect(output).toContain("signal(source) changed");
+
+    fx.dispose();
+  });
+});
+
+describe("scheduled effects", () => {
+  function runNext(queue: (() => void)[]): void {
+    const next = queue.shift();
+    if (next) next();
+  }
+
+  it("should schedule initial execution without running immediately", () => {
+    const queued: (() => void)[] = [];
+    let fires = 0;
+
+    effect(
+      () => {
+        fires++;
+      },
+      {
+        schedule: (execute) => queued.push(execute),
+      },
+    );
+
+    expect(fires).toBe(0);
+    expect(queued).toHaveLength(1);
+
+    runNext(queued);
+    expect(fires).toBe(1);
+  });
+
+  it("should coalesce multiple dependency changes into one scheduled execution", () => {
+    const queued: (() => void)[] = [];
+    const s = signal(0);
+    let fires = 0;
+
+    effect(
+      () => {
+        s.value;
+        fires++;
+      },
+      {
+        schedule: (execute) => queued.push(execute),
+      },
+    );
+
+    runNext(queued);
+    expect(fires).toBe(1);
+
+    s.value = 1;
+    s.value = 2;
+    s.value = 3;
+
+    expect(fires).toBe(1);
+    expect(queued).toHaveLength(1);
+
+    runNext(queued);
+    expect(fires).toBe(2);
+  });
+
+  it("should recapture dependencies after scheduled execution", () => {
+    const queued: (() => void)[] = [];
+    const useA = signal(true);
+    const a = signal(0);
+    const b = signal(0);
+    const seen: number[] = [];
+
+    effect(
+      () => {
+        seen.push(useA.value ? a.value : b.value);
+      },
+      {
+        schedule: (execute) => queued.push(execute),
+      },
+    );
+
+    runNext(queued);
+    expect(seen).toEqual([0]);
+
+    useA.value = false;
+    runNext(queued);
+    expect(seen).toEqual([0, 0]);
+
+    a.value = 1;
+    expect(queued).toHaveLength(0);
+
+    b.value = 2;
+    expect(queued).toHaveLength(1);
+    runNext(queued);
+    expect(seen).toEqual([0, 0, 2]);
+  });
+
+  it("should cancel a pending scheduled execution without disposing dependencies", () => {
+    const queued: (() => void)[] = [];
+    const s = signal(0);
+    let fires = 0;
+
+    const fx = effect(
+      () => {
+        s.value;
+        fires++;
+      },
+      {
+        schedule: (execute) => queued.push(execute),
+      },
+    );
+
+    fx.cancel();
+    runNext(queued);
+    expect(fires).toBe(0);
+
+    fx.execute();
+    runNext(queued);
+    expect(fires).toBe(1);
+
+    s.value = 1;
+    fx.cancel();
+    runNext(queued);
+    expect(fires).toBe(1);
+
+    s.value = 2;
+    runNext(queued);
+    expect(fires).toBe(2);
+  });
+
+  it("should ignore pending scheduled execution after dispose", () => {
+    const queued: (() => void)[] = [];
+    let fires = 0;
+
+    const fx = effect(
+      () => {
+        fires++;
+      },
+      {
+        schedule: (execute) => queued.push(execute),
+      },
+    );
+
+    fx.dispose();
+    runNext(queued);
+    expect(fires).toBe(0);
   });
 });
 

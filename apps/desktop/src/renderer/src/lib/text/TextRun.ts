@@ -4,21 +4,32 @@
  * goal-x persistence).
  *
  * Reactive boundaries:
- *   - $layout: computed from buffer.cells + buffer.originX + font (rebuilt
+ *   - layoutCell: computed from buffer.items + buffer.originX + font (rebuilt
  *     when any of those change). Cursor/anchor changes do NOT recompute.
- *   - $caret: computed from $layout + buffer.cursor. Rebuilt on cursor move
+ *   - caretCell: computed from layoutCell + buffer.cursor. Rebuilt on cursor move
  *     OR layout rebuild.
- *   - $selectionRects: computed from $layout + buffer.range + hasSelection.
+ *   - selectionRectsCell: computed from layoutCell + buffer.range + hasSelection.
  *
  * Cursor math lives on Caret. TextRun threads goalX through Caret.nextLine /
  * previousLine so vertical motion preserves horizontal position across short
  * lines. goalX resets on horizontal nav, click, and edits.
  */
-import { signal, computed, type Signal, type ComputedSignal } from "@/lib/signals/signal";
+import {
+  signal,
+  computed,
+  type Signal,
+  type ComputedSignal,
+} from "@/lib/signals/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
-import { Caret, glyphCell, TextLayout } from "./layout";
-import type { Cell, GlyphAnchor, GlyphCell, Positioner, TextRunId } from "./layout";
+import { Caret, glyphTextItem, TextLayout } from "./layout";
+import type {
+  TextItem,
+  GlyphAnchor,
+  GlyphTextItem,
+  Positioner,
+  TextRunId,
+} from "./layout";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { Point2D } from "@shift/geo";
@@ -33,7 +44,7 @@ export interface SelectionRect {
 
 export interface FocusedGlyph {
   anchor: GlyphAnchor;
-  cell: GlyphCell;
+  item: GlyphTextItem;
   glyph: GlyphHandle;
   editOrigin: Point2D;
 }
@@ -46,10 +57,10 @@ export class TextRun {
   readonly #positioner: Positioner;
   readonly #designLocation: Signal<AxisLocation>;
 
-  readonly #$cursorVisible: Signal<boolean>;
-  readonly #$layout: ComputedSignal<TextLayout | null>;
-  readonly #$caret: ComputedSignal<Caret | null>;
-  readonly #$selectionRects: ComputedSignal<readonly SelectionRect[]>;
+  readonly #cursorVisible: ReturnType<typeof signal<boolean>>;
+  readonly #layout: ComputedSignal<TextLayout | null>;
+  readonly #caret: ComputedSignal<Caret | null>;
+  readonly #selectionRects: ComputedSignal<readonly SelectionRect[]>;
 
   #goalX: number | null = null;
 
@@ -65,28 +76,30 @@ export class TextRun {
     this.#font = font;
     this.#positioner = positioner;
     this.#designLocation = designLocation;
-    this.#$cursorVisible = signal(false);
+    this.#cursorVisible = signal(false);
 
-    this.#$layout = computed(() => {
-      const cells = this.buffer.cells;
-      if (cells.length === 0) return null;
+    this.#layout = computed(() => {
+      const items = this.buffer.itemsCell.value;
+      if (items.length === 0) return null;
       return new TextLayout({
-        cells,
-        origin: { x: this.buffer.originX, y: 0 },
+        items,
+        origin: { x: this.buffer.originXCell.value, y: 0 },
         font: this.#font,
         positioner: this.#positioner,
         designLocation: this.#designLocation,
       });
     });
 
-    this.#$caret = computed(() => {
-      const layout = this.#$layout.value;
+    this.#caret = computed(() => {
+      const layout = this.#layout.value;
       if (!layout) return null;
-      return Caret.atCluster(layout, this.buffer.cursor);
+      return Caret.atCluster(layout, this.buffer.cursorCell.value);
     });
 
-    this.#$selectionRects = computed(() => {
-      const layout = this.#$layout.value;
+    this.#selectionRects = computed(() => {
+      const layout = this.#layout.value;
+      this.buffer.anchorCell.value;
+      this.buffer.cursorCell.value;
       if (!layout || !this.buffer.hasSelection) return [];
       return computeSelectionRects(layout, this.buffer.range);
     });
@@ -94,61 +107,66 @@ export class TextRun {
 
   /** @knipclassignore — read by TextRunRenderer when it lands */
   get cursorVisible(): boolean {
-    return this.#$cursorVisible.value;
+    return this.#cursorVisible.peek();
   }
 
-  /** @knipclassignore — read by TextRunRenderer / Caret-via-effect callers */
-  get $layout(): Signal<TextLayout | null> {
-    return this.#$layout;
+  get cursorVisibleCell(): Signal<boolean> {
+    return this.#cursorVisible;
   }
 
-  /** @knipclassignore — read by TextRunRenderer / Caret callers */
-  get $caret(): Signal<Caret | null> {
-    return this.#$caret;
+  get layoutCell(): Signal<TextLayout | null> {
+    return this.#layout;
   }
 
-  /** @knipclassignore — read by TextRunRenderer */
-  get $selectionRects(): Signal<readonly SelectionRect[]> {
-    return this.#$selectionRects;
+  get caretCell(): Signal<Caret | null> {
+    return this.#caret;
+  }
+
+  get selectionRectsCell(): Signal<readonly SelectionRect[]> {
+    return this.#selectionRects;
   }
 
   setCursorVisible(visible: boolean): void {
-    (this.#$cursorVisible as ReturnType<typeof signal<boolean>>).set(visible);
+    this.#cursorVisible.set(visible);
   }
 
   /**
-   * Initialize the run with a single seed cell at originX. Combines
+   * Initialize the run with a single seed item at originX. Combines
    * `buffer.seed` + `buffer.setOriginX` so Text-tool activation is one call.
    *
-   * No-op when the buffer already has cells. Critically, this means originX
+   * No-op when the buffer already has items. Critically, this means originX
    * is *not* re-applied on re-activation — without that guard, the run
    * shifts every time the user toggles between Select and Text after
    * drawOffset has moved (e.g. via double-clicking a slot to edit it).
    */
-  seed(cell: Cell, originX: number): void {
+  seed(item: TextItem, originX: number): void {
     if (this.buffer.length > 0) return;
-    this.buffer.seed(cell);
+    this.buffer.seed(item);
     this.buffer.setOriginX(originX);
   }
 
   /**
-   * Insert one cell at the cursor. Replaces selection if any; adjusts the
+   * Insert one item at the cursor. Replaces selection if any; adjusts the
    * editing context's held indices for the buffer mutation; resets goalX.
    */
-  insert(cell: Cell): void {
+  insert(item: TextItem): void {
     const before = this.buffer.range;
     const deleteCount = before.end - before.start;
-    this.buffer.insert(cell);
+    this.buffer.insert(item);
     this.interaction.adjustForBufferChange(before.start, deleteCount, 1);
     this.#resetGoalX();
   }
 
   /** @knipclassignore — called via editor.textRun.insertMany (paste, IME commit) */
-  insertMany(cells: readonly Cell[]): void {
+  insertMany(items: readonly TextItem[]): void {
     const before = this.buffer.range;
     const deleteCount = before.end - before.start;
-    this.buffer.insertMany(cells);
-    this.interaction.adjustForBufferChange(before.start, deleteCount, cells.length);
+    this.buffer.insertMany(items);
+    this.interaction.adjustForBufferChange(
+      before.start,
+      deleteCount,
+      items.length,
+    );
     this.#resetGoalX();
   }
 
@@ -159,7 +177,11 @@ export class TextRun {
     const deleted = this.buffer.delete();
     if (!deleted) return false;
     if (wasSelection) {
-      this.interaction.adjustForBufferChange(before.start, before.end - before.start, 0);
+      this.interaction.adjustForBufferChange(
+        before.start,
+        before.end - before.start,
+        0,
+      );
     } else {
       this.interaction.adjustForBufferChange(before.start - 1, 1, 0);
     }
@@ -174,7 +196,11 @@ export class TextRun {
     const deleted = this.buffer.deleteForward();
     if (!deleted) return false;
     if (wasSelection) {
-      this.interaction.adjustForBufferChange(before.start, before.end - before.start, 0);
+      this.interaction.adjustForBufferChange(
+        before.start,
+        before.end - before.start,
+        0,
+      );
     } else {
       this.interaction.adjustForBufferChange(before.start, 1, 0);
     }
@@ -184,7 +210,7 @@ export class TextRun {
 
   /** @knipclassignore — called via Select tool's text-run hit-test (TODO) */
   placeCaretAtPoint(p: { x: number; y: number }): void {
-    const layout = this.#$layout.peek();
+    const layout = this.#layout.peek();
     if (!layout) return;
     const hit = layout.hitTest(p);
     if (!hit) return;
@@ -194,7 +220,7 @@ export class TextRun {
   }
 
   anchorAtPoint(p: Point2D, padding = 0): GlyphAnchor | null {
-    const layout = this.#$layout.peek();
+    const layout = this.#layout.peek();
     return layout?.anchorAtPoint(this.id, p, padding) ?? null;
   }
 
@@ -206,7 +232,7 @@ export class TextRun {
    *                              click
    *      │
    *      ▼
-   *   GlyphAnchor { runId: run.id, cellId: s1 }
+   *   GlyphAnchor { runId: run.id, itemId: s1 }
    *      │
    *      ▼
    *   resolveAnchor(anchor)
@@ -216,33 +242,34 @@ export class TextRun {
    */
   resolveAnchor(anchor: GlyphAnchor): FocusedGlyph | null {
     if (anchor.runId !== this.id) return null;
-    const cell = this.buffer.cellById(anchor.cellId);
-    if (!cell || cell.kind !== "glyph") return null;
+    const item = this.buffer.itemById(anchor.itemId);
+    if (!item || item.kind !== "glyph") return null;
 
-    const editOrigin = this.#$layout.peek()?.editOriginForCell(anchor.cellId) ?? null;
+    const editOrigin =
+      this.#layout.peek()?.editOriginForItem(anchor.itemId) ?? null;
     if (!editOrigin) return null;
 
     return {
       anchor,
-      cell,
+      item,
       glyph: {
-        name: cell.glyphName,
-        ...(cell.codepoint !== null ? { unicode: cell.codepoint } : {}),
+        name: item.glyphName,
+        ...(item.codepoint !== null ? { unicode: item.codepoint } : {}),
       },
       editOrigin,
     };
   }
 
   setSingleGlyph(handle: GlyphHandle): GlyphAnchor {
-    const cell = glyphCell(handle.name, handle.unicode ?? null);
+    const item = glyphTextItem(handle.name, handle.unicode ?? null);
     this.buffer.restore({
-      cells: [cell],
+      items: [item],
       cursor: 1,
       anchor: 1,
       originX: 0,
     });
     this.interaction.clear();
-    return { runId: this.id, cellId: cell.id };
+    return { runId: this.id, itemId: item.id };
   }
 
   /** @knipclassignore — keyboard nav via HiddenTextInput */
@@ -263,7 +290,7 @@ export class TextRun {
 
   /** @knipclassignore — keyboard nav via HiddenTextInput */
   moveCursorUp(extend = false): void {
-    const caret = this.#$caret.peek();
+    const caret = this.#caret.peek();
     if (!caret) return;
     this.#goalX ??= caret.position().x;
     const next = caret.previousLine(this.#goalX);
@@ -273,7 +300,7 @@ export class TextRun {
 
   /** @knipclassignore — keyboard nav via HiddenTextInput */
   moveCursorDown(extend = false): void {
-    const caret = this.#$caret.peek();
+    const caret = this.#caret.peek();
     if (!caret) return;
     this.#goalX ??= caret.position().x;
     const next = caret.nextLine(this.#goalX);
@@ -284,26 +311,30 @@ export class TextRun {
   /** @knipclassignore — keyboard nav via HiddenTextInput */
   moveCursorByWord(direction: -1 | 1, extend = false): void {
     this.#resetGoalX();
-    const cells = this.buffer.cells;
+    const items = this.buffer.items;
     let pos = this.buffer.cursor;
 
     if (direction === -1) {
       if (pos <= 0) return;
       pos--;
-      while (pos > 0 && isWhitespaceCell(cells[pos - 1])) pos--;
-      while (pos > 0 && !isWhitespaceCell(cells[pos - 1]) && !isPunctuationCell(cells[pos - 1])) {
+      while (pos > 0 && isWhitespaceItem(items[pos - 1])) pos--;
+      while (
+        pos > 0 &&
+        !isWhitespaceItem(items[pos - 1]) &&
+        !isPunctuationItem(items[pos - 1])
+      ) {
         pos--;
       }
     } else {
-      if (pos >= cells.length) return;
+      if (pos >= items.length) return;
       while (
-        pos < cells.length &&
-        !isWhitespaceCell(cells[pos]) &&
-        !isPunctuationCell(cells[pos])
+        pos < items.length &&
+        !isWhitespaceItem(items[pos]) &&
+        !isPunctuationItem(items[pos])
       ) {
         pos++;
       }
-      // while (pos < cells.length && isWhitespaceCell(cells[pos])) pos++;
+      // while (pos < items.length && isWhitespaceItem(items[pos])) pos++;
     }
 
     if (extend) this.buffer.extendSelection(pos);
@@ -315,7 +346,7 @@ export class TextRun {
     this.#resetGoalX();
     const lineIdx = this.#findCurrentLineIndex();
     if (lineIdx < 0) return;
-    const target = this.#$layout.peek()!.lines[lineIdx].clusterStart;
+    const target = this.#layout.peek()!.lines[lineIdx].clusterStart;
     if (extend) this.buffer.extendSelection(target);
     else this.buffer.placeCaret(target);
   }
@@ -325,7 +356,7 @@ export class TextRun {
     this.#resetGoalX();
     const lineIdx = this.#findCurrentLineIndex();
     if (lineIdx < 0) return;
-    const target = this.#$layout.peek()!.lines[lineIdx].clusterEnd - 1;
+    const target = this.#layout.peek()!.lines[lineIdx].clusterEnd - 1;
     if (extend) this.buffer.extendSelection(target);
     else this.buffer.placeCaret(target);
   }
@@ -335,7 +366,7 @@ export class TextRun {
   }
 
   #findCurrentLineIndex(): number {
-    const layout = this.#$layout.peek();
+    const layout = this.#layout.peek();
     if (!layout) return -1;
     const cursor = this.buffer.cursor;
     for (const [i, line] of layout.lines.entries()) {
@@ -345,15 +376,19 @@ export class TextRun {
   }
 }
 
-function isWhitespaceCell(cell: Cell): boolean {
-  if (cell.kind === "linebreak") return true;
-  if (cell.codepoint === null) return false;
-  return cell.codepoint === 0x20 || cell.codepoint === 0x09 || cell.codepoint === 0x0a;
+function isWhitespaceItem(item: TextItem): boolean {
+  if (item.kind === "linebreak") return true;
+  if (item.codepoint === null) return false;
+  return (
+    item.codepoint === 0x20 ||
+    item.codepoint === 0x09 ||
+    item.codepoint === 0x0a
+  );
 }
 
-function isPunctuationCell(cell: Cell): boolean {
-  if (cell.kind !== "glyph" || cell.codepoint === null) return false;
-  const cp = cell.codepoint;
+function isPunctuationItem(item: TextItem): boolean {
+  if (item.kind !== "glyph" || item.codepoint === null) return false;
+  const cp = item.codepoint;
   return (
     (cp >= 0x21 && cp <= 0x2f) ||
     (cp >= 0x3a && cp <= 0x40) ||

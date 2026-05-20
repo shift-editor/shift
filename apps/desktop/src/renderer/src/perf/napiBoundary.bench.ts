@@ -2,7 +2,7 @@
  * NAPI boundary benchmarks — measure the cost of crossing JS/Rust.
  *
  * Key scenarios:
- * - layer.setPositions — JS patch + native position sync
+ * - source.applyPositionPatch — local sparse patch + native sparse commit
  */
 
 import { bench, describe } from "vitest";
@@ -20,14 +20,14 @@ const marks = [
 
 for (const { label, pm } of marks) {
   describe(`NAPI boundary — ${label} points`, () => {
-    bench("layer.setPositions — all points", () => {
+    bench("source.applyPositionPatch — all points", () => {
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      pm.editor.activeGlyphSource!.setPositions(updates);
+      pm.editor.editGlyphSource!.applyPositionPatch(updates);
     });
 
-    bench("layer.setPositions — single point", () => {
+    bench("source.applyPositionPatch — single point", () => {
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      pm.editor.activeGlyphSource!.setPositions(updates);
+      pm.editor.editGlyphSource!.applyPositionPatch(updates);
     });
   });
 }

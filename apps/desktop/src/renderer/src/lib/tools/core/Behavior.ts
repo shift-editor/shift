@@ -16,8 +16,9 @@
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEvent, ToolEventOf } from "./GestureDetector";
 
-export interface ToolContext<S> {
+export interface ToolContext<S, TTool = unknown> {
   readonly editor: Editor;
+  readonly tool: TTool;
   getState(): S;
   setState(next: S): void;
 }
@@ -31,25 +32,73 @@ export interface ToolContext<S> {
  * state computation. Use `onTransition` for post-transition side effects
  * that need both the previous and next states.
  */
-export interface Behavior<S> {
+export interface Behavior<S, TTool = unknown> {
   // New explicit event handlers
-  onPointerMove?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"pointerMove">): boolean;
-  onClick?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"click">): boolean;
-  onDoubleClick?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"doubleClick">): boolean;
-  onDragStart?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"dragStart">): boolean;
-  onDrag?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"drag">): boolean;
-  onDragEnd?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"dragEnd">): boolean;
-  onDragCancel?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"dragCancel">): boolean;
-  onKeyDown?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"keyDown">): boolean;
-  onKeyUp?(state: S, ctx: ToolContext<S>, event: ToolEventOf<"keyUp">): boolean;
-  onStateExit?(prev: S, next: S, ctx: ToolContext<S>, event: ToolEvent): void;
-  onStateEnter?(prev: S, next: S, ctx: ToolContext<S>, event: ToolEvent): void;
+  onPointerMove?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"pointerMove">,
+  ): boolean;
+  onClick?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"click">,
+  ): boolean;
+  onDoubleClick?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"doubleClick">,
+  ): boolean;
+  onDragStart?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"dragStart">,
+  ): boolean;
+  onDrag?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"drag">,
+  ): boolean;
+  onDragEnd?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"dragEnd">,
+  ): boolean;
+  onDragCancel?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"dragCancel">,
+  ): boolean;
+  onKeyDown?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"keyDown">,
+  ): boolean;
+  onKeyUp?(
+    state: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEventOf<"keyUp">,
+  ): boolean;
+  onStateExit?(
+    prev: S,
+    next: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEvent,
+  ): void;
+  onStateEnter?(
+    prev: S,
+    next: S,
+    ctx: ToolContext<S, TTool>,
+    event: ToolEvent,
+  ): void;
 }
 
 /**
  * Identity helper for defining a behavior as a plain object literal with
  * full type inference. Avoids the boilerplate of `satisfies Behavior<...>`.
  */
-export function createBehavior<S>(impl: Behavior<S>): Behavior<S> {
+export function createBehavior<S, TTool = unknown>(
+  impl: Behavior<S, TTool>,
+): Behavior<S, TTool> {
   return impl;
 }

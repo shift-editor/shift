@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Font } from "@/lib/model/Font";
 import { Positioner } from "./Positioner";
-import { glyphCell as glyph } from "./types";
+import { glyphTextItem as glyph } from "./types";
 import { loadTestFont, ltrRun } from "./testUtils";
 import { signal } from "@/lib/signals/signal";
 
@@ -17,7 +17,11 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66), glyph("C", 67)]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(
+      run,
+      font,
+      signal(font.defaultLocation()),
+    );
 
     const sum = positioned.glyphs.reduce((s, g) => s + g.xAdvance, 0);
     expect(positioned.advance).toBe(sum);
@@ -29,7 +33,11 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66)], /* clusterStart */ 7);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(
+      run,
+      font,
+      signal(font.defaultLocation()),
+    );
 
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
@@ -40,15 +48,18 @@ describe("Positioner", () => {
     const a = glyph("A", 65);
     const run = ltrRun([a]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
-    const source = font.defaultSource();
-    if (!source) throw new Error("Expected source");
+    const positioned = positioner.position(
+      run,
+      font,
+      signal(font.defaultLocation()),
+    );
+    const source = font.defaultSource;
     const expectedBounds = font
       .glyph({ name: "A" }, source)
       ?.outline(signal(font.defaultLocation())).bounds;
 
     expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);
-    expect(positioned.glyphs[0].cellIds).toEqual([a.id]);
+    expect(positioned.glyphs[0].sourceItemIds).toEqual([a.id]);
     expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
   });
 
@@ -57,7 +68,11 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("nonexistent-glyph-xyz", 65)]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(
+      run,
+      font,
+      signal(font.defaultLocation()),
+    );
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
     expect(positioned.glyphs[0].bounds).toBeNull();
@@ -68,7 +83,11 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([]);
 
-    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
+    const positioned = positioner.position(
+      run,
+      font,
+      signal(font.defaultLocation()),
+    );
 
     expect(positioned.glyphs).toEqual([]);
     expect(positioned.advance).toBe(0);

@@ -9,7 +9,7 @@ import { Font } from "@/lib/model/Font";
 import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
 import { TextLayout } from "./TextLayout";
 import { Positioner } from "./Positioner";
-import type { Cell, GlyphCell, SegmentedRun } from "./types";
+import type { TextItem, GlyphTextItem, SegmentedRun } from "./types";
 import { signal } from "@/lib/signals/signal";
 import { createBridge } from "@shift/bridge";
 
@@ -21,13 +21,16 @@ export function loadTestFont(): Font {
   return font;
 }
 
-export function ltrRun(glyphs: readonly GlyphCell[], clusterStart = 0): SegmentedRun {
+export function ltrRun(
+  glyphs: readonly GlyphTextItem[],
+  clusterStart = 0,
+): SegmentedRun {
   return { glyphs, direction: "ltr", clusterStart };
 }
 
-export function makeLayout(cells: readonly Cell[], font: Font): TextLayout {
+export function makeLayout(items: readonly TextItem[], font: Font): TextLayout {
   return new TextLayout({
-    cells,
+    items,
     origin: { x: 0, y: 0 },
     font,
     positioner: new Positioner(),

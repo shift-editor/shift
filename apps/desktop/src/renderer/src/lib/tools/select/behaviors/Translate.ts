@@ -1,21 +1,30 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
+import type {
+  GeometryAnchorHit,
+  GeometryPointHit,
+  GeometrySegmentHit,
+} from "@shift/glyph-state";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import { getPointIdFromHit, isAnchorHit, isSegmentHit, type HitResult } from "@/types/hitResult";
+import type { Selectable } from "@/lib/editor/Selection";
 
 import {
   constrainPreparedDrag,
   prepareConstrainedDrag,
   type PreparedConstrainDrag,
 } from "@shift/rules";
-import type { GlyphSource, SourcePositions } from "@/lib/model/Glyph";
+import type {
+  GlyphInstanceGeometry,
+  GlyphSource,
+  SourcePositionTarget,
+  SourcePositions,
+} from "@/lib/model/Glyph";
 import type { SourceEditDraft } from "@/lib/editor/SourceEditDraft";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
-type TranslateStartState = SelectState & { type: "ready" | "selected" };
 
 export class Translate implements SelectBehavior {
   #drag: TranslateDrag | null = null;
@@ -25,18 +34,22 @@ export class Translate implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"dragStart">,
   ): boolean {
-    if (state.type !== "ready" && state.type !== "selected") return false;
+    if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const target = TranslateTarget.fromDragStart(ctx.editor, state, event);
+    const target = TranslateTarget.fromDragStart(ctx.editor, event);
     if (!target) return false;
 
     target.applySelection(ctx.editor);
-    this.#drag = new TranslateDrag(ctx.editor, target);
-    ctx.setState(translatingState(event.point));
+    this.#drag = new TranslateDrag(ctx.editor, target, event.coords.glyphLocal);
+    ctx.setState(translatingState(this.#drag.startPos));
     return true;
   }
 
-  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
+  onDrag(
+    state: SelectState,
+    ctx: ToolContext<SelectState>,
+    event: ToolEventOf<"drag">,
+  ): boolean {
     if (state.type !== "translating") return false;
     if (!this.#drag) return false;
 
@@ -48,44 +61,40 @@ export class Translate implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
     this.#drag?.commit();
-    this.#cleanup();
-    ctx.setState({ type: "selected" });
+    ctx.setState({ type: "ready" });
     return true;
   }
 
   onDragCancel(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
-    this.#drag?.discard();
-    this.#cleanup();
-    ctx.setState({ type: "selected" });
+    ctx.setState({ type: "ready" });
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState>,
+  ): void {
     const editor = ctx.editor;
     if (prev.type !== "translating" && next.type === "translating") {
-      editor.clearHover();
-    }
-
-    if (prev.type === "translating" && next.type !== "translating") {
-      this.#cleanup();
+      editor.hover.clear();
     }
   }
 
-  #cleanup(): void {
-    this.#drag?.discard();
-    this.#drag = null;
-  }
-
-  #nextTranslatingState(state: TranslatingState, event: ToolEventOf<"drag">): TranslatingState {
-    const totalDelta = Vec2.sub(event.point, state.translate.startPos);
+  #nextTranslatingState(
+    state: TranslatingState,
+    event: ToolEventOf<"drag">,
+  ): TranslatingState {
+    const currentPos = this.#drag!.positionForPointer(event.coords.glyphLocal);
+    const totalDelta = Vec2.sub(currentPos, state.translate.startPos);
     this.#drag!.preview(totalDelta);
 
     return {
       type: "translating",
       translate: {
         ...state.translate,
-        lastPos: event.point,
+        lastPos: currentPos,
         totalDelta,
       },
     };
@@ -95,126 +104,185 @@ export class Translate implements SelectBehavior {
 class TranslateTarget {
   readonly pointIds: readonly PointId[];
   readonly anchorIds: readonly AnchorId[];
-
-  readonly #select: ((editor: Editor) => void) | null;
+  readonly selection: readonly Selectable[] | null;
+  readonly dragAnchor: SourcePositionTarget | null;
 
   private constructor(
     pointIds: readonly PointId[],
     anchorIds: readonly AnchorId[],
-    select: ((editor: Editor) => void) | null,
+    selection: readonly Selectable[] | null,
+    dragAnchor: SourcePositionTarget | null,
   ) {
     this.pointIds = [...pointIds];
     this.anchorIds = [...anchorIds];
-    this.#select = select;
+    this.selection = selection ? [...selection] : null;
+    this.dragAnchor = dragAnchor;
   }
 
   static fromDragStart(
     editor: Editor,
-    state: TranslateStartState,
     event: ToolEventOf<"dragStart">,
   ): TranslateTarget | null {
-    const hit = editor.hitTest(event.coords);
+    const instance = editor.editGlyphSource;
+    if (!instance) return null;
+
+    const geometry = instance.geometry;
+    const pos = event.coords.glyphLocal;
+    const radius = editor.hitRadius;
+
+    const anchorHit = geometry.hitAnchor(pos, radius);
+    const pointHit = geometry.hitPoint(pos, radius);
+    const segmentHit = geometry.hitSegment(pos, radius);
 
     return (
-      TranslateTarget.fromAnchorHit(editor, state, hit) ??
-      TranslateTarget.fromPointHit(editor, state, event, hit) ??
-      TranslateTarget.fromSegmentHit(editor, state, event, hit)
+      TranslateTarget.fromAnchorHit(editor, anchorHit) ??
+      TranslateTarget.fromPointHit(editor, event, pointHit) ??
+      TranslateTarget.fromSegmentHit(editor, geometry, event, segmentHit) ??
+      TranslateTarget.fromInsideSelectionBounds(editor, pos)
     );
   }
 
   applySelection(editor: Editor): void {
-    if (!this.#select) return;
-    this.#select(editor);
+    if (!this.selection) return;
+    editor.selection.select(this.selection);
   }
 
   static fromAnchorHit(
     editor: Editor,
-    state: TranslateStartState,
-    hit: HitResult,
+    hit: GeometryAnchorHit | null,
   ): TranslateTarget | null {
-    if (!isAnchorHit(hit)) return null;
+    if (!hit) return null;
 
-    const selected =
-      state.type === "selected" &&
-      editor.selection.isSelected({ kind: "anchor", id: hit.anchorId });
+    const selected = editor.selection.isSelected({
+      kind: "anchor",
+      id: hit.anchorId,
+    });
 
     if (selected) {
-      return TranslateTarget.fromSelection(editor);
+      return TranslateTarget.fromSelection(editor, {
+        kind: "anchor",
+        id: hit.anchorId,
+      });
     }
 
-    return new TranslateTarget([], [hit.anchorId], (editor) => {
-      editor.selection.select([{ kind: "anchor", id: hit.anchorId }]);
-    });
+    return new TranslateTarget(
+      [],
+      [hit.anchorId],
+      [{ kind: "anchor", id: hit.anchorId }],
+      {
+        kind: "anchor",
+        id: hit.anchorId,
+      },
+    );
   }
 
   static fromPointHit(
     editor: Editor,
-    state: TranslateStartState,
     event: ToolEventOf<"dragStart">,
-    hit: HitResult,
+    hit: GeometryPointHit | null,
   ): TranslateTarget | null {
-    const pointId = getPointIdFromHit(hit);
-    if (pointId === null) return null;
+    if (!hit) return null;
 
     if (event.altKey) {
       return TranslateTarget.fromDuplicatedSelection(editor);
     }
 
-    const selected =
-      state.type === "selected" && editor.selection.isSelected({ kind: "point", id: pointId });
+    const selected = editor.selection.isSelected({
+      kind: "point",
+      id: hit.pointId,
+    });
 
     if (selected) {
-      return TranslateTarget.fromSelection(editor);
+      return TranslateTarget.fromSelection(editor, {
+        kind: "point",
+        id: hit.pointId,
+      });
     }
 
-    return new TranslateTarget([pointId], [], (editor) => {
-      editor.selection.select([{ kind: "point", id: pointId }]);
-    });
+    return new TranslateTarget(
+      [hit.pointId],
+      [],
+      [{ kind: "point", id: hit.pointId }],
+      {
+        kind: "point",
+        id: hit.pointId,
+      },
+    );
   }
 
   static fromSegmentHit(
     editor: Editor,
-    state: TranslateStartState,
+    geometry: GlyphInstanceGeometry,
     event: ToolEventOf<"dragStart">,
-    hit: HitResult,
+    hit: GeometrySegmentHit | null,
   ): TranslateTarget | null {
-    if (!isSegmentHit(hit)) return null;
+    if (!hit) return null;
 
-    const segmentPointIds = hit.segment.pointIds;
+    const segment = geometry.segment(hit.segmentId);
+    if (!segment) return null;
+
+    const segmentPointIds = segment.pointIds;
     if (segmentPointIds.length === 0) return null;
 
     if (event.altKey) {
       return TranslateTarget.fromDuplicatedSelection(editor);
     }
 
-    const selected =
-      state.type === "selected" &&
-      editor.selection.isSelected({ kind: "segment", id: hit.segmentId });
+    const selected = editor.selection.isSelected({
+      kind: "segment",
+      id: hit.segmentId,
+    });
 
     if (selected) {
       return TranslateTarget.fromSelection(editor);
     }
 
-    const pointIds = segmentPointIds.map((id) => ({ kind: "point" as const, id }));
-    return new TranslateTarget(segmentPointIds, [], (editor) => {
-      editor.selection.select([{ kind: "segment", id: hit.segmentId }, ...pointIds]);
-    });
+    const pointIds = segmentPointIds.map((id) => ({
+      kind: "point" as const,
+      id,
+    }));
+    return new TranslateTarget(
+      segmentPointIds,
+      [],
+      [{ kind: "segment", id: hit.segmentId }, ...pointIds],
+      { kind: "point", id: segmentPointIds[0] },
+    );
+  }
+
+  static fromInsideSelectionBounds(
+    editor: Editor,
+    pos: Point2D,
+  ): TranslateTarget | null {
+    const bounds = editor.selection.bounds;
+    if (!bounds) return null;
+
+    const inBounds = Bounds.containsPoint(bounds, pos);
+    if (!inBounds) return null;
+
+    return TranslateTarget.fromSelection(editor);
   }
 
   static fromDuplicatedSelection(editor: Editor): TranslateTarget | null {
     const pointIds = editor.duplicateSelection();
     if (pointIds.length === 0) return null;
 
-    return new TranslateTarget(pointIds, [], (editor) => {
-      editor.selection.select(pointIds.map((id) => ({ kind: "point" as const, id })));
-    });
+    return new TranslateTarget(
+      pointIds,
+      [],
+      pointIds.map((id) => ({ kind: "point" as const, id })),
+      { kind: "point", id: pointIds[0] },
+    );
   }
 
-  static fromSelection(editor: Editor): TranslateTarget {
+  static fromSelection(
+    editor: Editor,
+    dragAnchor: SourcePositionTarget | null = null,
+  ): TranslateTarget {
     return new TranslateTarget(
       [...editor.selection.pointIds],
       [...editor.selection.anchorIds],
       null,
+      dragAnchor,
     );
   }
 }
@@ -234,17 +302,28 @@ class TranslateDrag {
   readonly #target: TranslateTarget;
   readonly #draft: SourceEditDraft;
   readonly #constraint: ConstrainedTranslate | null;
+  readonly #pointerOffset: Point2D;
+  readonly startPos: Point2D;
 
-  constructor(editor: Editor, target: TranslateTarget) {
+  constructor(editor: Editor, target: TranslateTarget, pointerStart: Point2D) {
     this.#target = target;
+
     this.#draft = editor.beginSourceEditDraft({
       points: target.pointIds,
       anchors: target.anchorIds,
     });
+
     this.#constraint = ConstrainedTranslate.fromGlyphSource(
       this.#draft.glyphSource,
       target.pointIds,
     );
+
+    this.startPos = pointerStart;
+    this.#pointerOffset = Vec2.sub(pointerStart, this.startPos);
+  }
+
+  positionForPointer(pointer: Point2D): Point2D {
+    return Vec2.sub(pointer, this.#pointerOffset);
   }
 
   preview(delta: Point2D): void {
@@ -253,8 +332,12 @@ class TranslateDrag {
       return;
     }
 
-    this.#draft.previewPositions(
-      this.#constraint.positionsFor(this.#draft.basePositions, this.#target, delta),
+    this.#draft.previewPositionPatch(
+      this.#constraint.positionsFor(
+        this.#draft.basePositions,
+        this.#target,
+        delta,
+      ),
     );
   }
 
@@ -280,12 +363,19 @@ class ConstrainedTranslate {
   ): ConstrainedTranslate | null {
     if (pointIds.length === 0) return null;
 
-    return new ConstrainedTranslate(prepareConstrainedDrag(glyphSource, new Set(pointIds)));
+    const rules = prepareConstrainedDrag(glyphSource, new Set(pointIds));
+    return new ConstrainedTranslate(rules);
   }
 
-  positionsFor(base: SourcePositions, target: TranslateTarget, delta: Point2D): SourcePositions {
+  positionsFor(
+    base: SourcePositions,
+    target: TranslateTarget,
+    delta: Point2D,
+  ): SourcePositions {
     const updates: SourcePositions[number][] = [];
-    const patch = constrainPreparedDrag(this.#rules, delta, { includeMatchedRules: false });
+    const patch = constrainPreparedDrag(this.#rules, delta, {
+      includeMatchedRules: false,
+    });
 
     for (const update of patch.pointUpdates) {
       updates.push({ kind: "point", id: update.id, x: update.x, y: update.y });

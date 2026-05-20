@@ -18,7 +18,10 @@ function loadFont(): Font {
   return font;
 }
 
-function locationOverride(font: Font, override: Record<string, number>): AxisLocation {
+function locationOverride(
+  font: Font,
+  override: Record<string, number>,
+): AxisLocation {
   let location = defaultAxisLocation(font.getAxes());
   for (const axis of font.getAxes()) {
     if (override[axis.tag] !== undefined) {
@@ -53,7 +56,21 @@ describe("Font", () => {
     expect(font.glyphHandleForUnicode(65)).toEqual({ name: "A", unicode: 65 });
     expect(font.nameForUnicode(65)).toBe("A");
     expect(font.glyphHandleForName("notdef")).toBeNull();
-    expect(font.glyphHandleForUnicode(0xffff)).toBeNull();
+    expect(font.glyphHandleForUnicode(0xffff)).toEqual({
+      name: "uniFFFF",
+      unicode: 0xffff,
+    });
+  });
+
+  it("creates a fresh loaded font with a default source", () => {
+    const font = new Font(createBridge());
+
+    font.create();
+
+    expect(font.loaded).toBe(true);
+    expect(font.sources).toHaveLength(1);
+    expect(font.defaultSource.name).toBe("Regular");
+    expect(font.sourceAt(emptyAxisLocation())?.id).toBe(font.defaultSource.id);
   });
 
   it("exposes component dependency information from glyph records", () => {
@@ -66,8 +83,6 @@ describe("Font", () => {
 
   it("returns a stable Glyph instance per glyph name", () => {
     const font = loadFont();
-    const source = font.defaultSource();
-    if (!source) throw new Error("Expected source");
 
     const a = font.glyph({ name: "A", unicode: 65 });
 
@@ -77,8 +92,7 @@ describe("Font", () => {
 
   it("returns a stable GlyphSource instance per glyph source", () => {
     const font = loadFont();
-    const source = font.defaultSource();
-    if (!source) throw new Error("Expected source");
+    const source = font.defaultSource;
 
     const a = font.glyphSource({ name: "A", unicode: 65 }, source);
 
@@ -102,7 +116,9 @@ describe("Font", () => {
 
     expect(source).toBeDefined();
     expect(font.source(source.id)).toEqual(source);
-    expect(font.sourceAt(axisLocationFromLocation(source.location))?.id).toBe(source.id);
+    expect(font.sourceAt(axisLocationFromLocation(source.location))?.id).toBe(
+      source.id,
+    );
   });
 
   it("matches omitted location axes against axis defaults", () => {
@@ -111,7 +127,9 @@ describe("Font", () => {
       font
         .getAxes()
         .every(
-          (axis) => axisValue(axisLocationFromLocation(source.location), axis) === axis.default,
+          (axis) =>
+            axisValue(axisLocationFromLocation(source.location), axis) ===
+            axis.default,
         ),
     );
 
@@ -127,16 +145,16 @@ describe("Font", () => {
     expect(font.nearestSource(inBetween)).not.toBeNull();
   });
 
-  it("reset clears loaded directory state", () => {
+  it("close clears loaded directory state", () => {
     const font = loadFont();
     const location = signal(font.defaultLocation());
-    const source = font.defaultSource();
-    if (!source) throw new Error("Expected source");
 
     const glyph = font.glyph({ name: "A", unicode: 65 });
 
-    expect(glyph ? glyph.outline(location).svgPath.length : 0).toBeGreaterThan(0);
-    font.reset();
+    expect(glyph ? glyph.outline(location).svgPath.length : 0).toBeGreaterThan(
+      0,
+    );
+    font.close();
 
     expect(font.loaded).toBe(false);
     expect(font.glyphRecords()).toEqual([]);
