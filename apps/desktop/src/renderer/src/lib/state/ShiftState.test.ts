@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ShiftStateImpl, StateRegistry } from "./ShiftState";
-import { effect } from "@/lib/reactive/signal";
+import { effect } from "@/lib/signals/signal";
 
 describe("ShiftState", () => {
   it("initializes with the factory value", () => {

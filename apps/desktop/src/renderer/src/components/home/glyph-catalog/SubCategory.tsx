@@ -20,13 +20,13 @@ export const SubCategory = ({
   return (
     <Button
       key={`${category}:${subCategory}`}
-      className="w-full justify-between"
+      className="w-full justify-between pl-4"
       variant="ghost"
       size="sm"
       onClick={() => onSelectSubCategory(category, subCategory)}
-      data-active={isActive}
+      isActive={isActive}
     >
-      <span className="text-ui">{subCategory}</span>
+      <span className="text-sm">{subCategory}</span>
     </Button>
   );
 };

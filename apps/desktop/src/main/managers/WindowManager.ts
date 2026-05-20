@@ -27,6 +27,7 @@ export class WindowManager {
     this.window = new BrowserWindow({
       width: 800,
       height: 600,
+      minWidth: 1200,
       title: "Shift",
       titleBarStyle: "hidden",
       trafficLightPosition: { x: -100, y: -100 },

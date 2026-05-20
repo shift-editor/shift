@@ -8,7 +8,7 @@ Lightweight 2D geometry library providing pure-functional vector math, bezier cu
 
 **Architecture Invariant:** `Mat` is the sole exception to the pure-function rule. It is a mutable class whose instance methods (`multiply`, `translate`, `scale`, `rotate`, `invert`) mutate in place and return `this` for chaining. Static factory methods (`Identity`, `Translate`, `Scale`, `Rotate`, `Compose`) return new instances. WHY: matrix chaining is a hot path where allocation matters; the mutable API mirrors Canvas2D's `setTransform`.
 
-**Architecture Invariant:** All geometry operates on `Point2D` = `{ x: number; y: number }` from `@shift/types`. Functions accept any object with `x` and `y` properties -- no wrapper class required. WHY: avoids forcing callers to convert between vector types; any `{ x, y }` works.
+**Architecture Invariant:** All geometry operates on `Point2D` = `{ x: number; y: number }` from `@shift/geo`. Functions accept any object with `x` and `y` properties -- no wrapper class required. WHY: avoids forcing callers to convert between vector types; any `{ x, y }` works.
 
 **Architecture Invariant:** Floating-point comparisons in `Vec2` use `EPSILON = 1e-10` (module-level constant in Vec2.ts). `Curve` uses separate constants: `NEWTON_TOLERANCE = 1e-6` and `CURVE_SUBDIVISIONS = 32`. These are not configurable at runtime. WHY: consistent precision across all call sites; epsilon tuning should be a deliberate library-wide change, not per-call.
 
@@ -19,7 +19,7 @@ Lightweight 2D geometry library providing pure-functional vector math, bezier cu
 ```
 src/
   index.ts       -- public re-exports for all symbols
-  types.ts       -- re-exports Point2D, Rect2D from @shift/types
+  types.ts       -- Point2D and Rect2D geometry primitives
   Vec2.ts        -- 2D vector operations namespace (~50 functions)
   Bounds.ts      -- axis-aligned bounding box (interface + namespace)
   Curve.ts       -- line/quadratic/cubic bezier primitives with hit-testing
@@ -29,8 +29,8 @@ src/
 
 ## Key Types
 
-- `Point2D` -- `{ x: number; y: number }` (re-exported from `@shift/types`). The universal 2D coordinate type used by every function in the library.
-- `Rect2D` -- `{ x, y, width, height, left, top, right, bottom }` (re-exported from `@shift/types`). Returned by `Bounds.toRect` and `Polygon.boundingRect`.
+- `Point2D` -- `{ x: number; y: number }`. The universal 2D coordinate type used by every function in the library.
+- `Rect2D` -- `{ x, y, width, height, left, top, right, bottom }`. Returned by `Bounds.toRect` and `Polygon.boundingRect`.
 - `Bounds` -- `{ min: Point2D; max: Point2D }` axis-aligned bounding box. Both an interface and a namespace.
 - `LineCurve` -- `{ type: "line"; p0; p1 }`. Straight segment between two points.
 - `QuadraticCurve` -- `{ type: "quadratic"; p0; c; p1 }`. One control point.
@@ -42,7 +42,7 @@ src/
 
 ## How it works
 
-**Vec2** is the core building block. It provides construction (`create`, `zero`, `fromAngle`), arithmetic (`add`, `sub`, `scale`, `dot`, `cross`), geometry (`normalize`, `project`, `reflect`, `rotate`, `rotateAround`, `mirror`, `perp`), interpolation (`lerp`, `lerpInt`), predicates (`equals`, `isParallel`, `isWithin`), and snapping (`constrainToAxis`, `snapToAngle`, `snapAngleWithHysteresis`). Every function takes and returns plain `{ x, y }` objects.
+**Vec2** is the core building block. It provides construction (`create`, `zero`, `fromAngle`), arithmetic (`add`, `sub`, `scale`, `dot`, `cross`), geometry (`normalize`, `project`, `reflect`, `rotate`, `rotateAround`, `mirror`, `perp`), interpolation (`lerp`, `lerpInt`), and predicates (`equals`, `isParallel`, `isWithin`). Every function takes and returns plain `{ x, y }` objects.
 
 **Curve** implements bezier math with a discriminated-union pattern. You construct curves with `Curve.line`, `Curve.quadratic`, or `Curve.cubic`, then pass them to polymorphic functions: `pointAt(curve, t)`, `tangentAt`, `normalAt`, `closestPoint`, `bounds`, `splitAt`, `length`, `sample`. Closest-point queries use a two-phase algorithm: coarse subdivision scan (32 samples) followed by Newton-Raphson refinement (up to 8 iterations at 1e-6 tolerance). `quadraticToCubic` performs lossless degree elevation.
 
@@ -50,7 +50,7 @@ src/
 
 **Polygon** uses the shoelace formula for `signedArea` and winding-direction detection (`isClockwise`, `isCounterClockwise`).
 
-**Mat** is a 3x2 affine matrix (implicit bottom row `[0, 0, 1]`). Instance methods mutate and chain; static methods create new matrices. `Mat.fromDecomposed` / `Mat.toDecomposed` round-trip with `DecomposedTransform` (from `@shift/types`) for the UI's translate/rotate/scale/skew controls. `Mat.applyToPoint` transforms a `Point2D`.
+**Mat** is a 3x2 affine matrix (implicit bottom row `[0, 0, 1]`). Instance methods mutate and chain; static methods create new matrices. `Mat.fromDecomposed` / `Mat.toDecomposed` round-trip with `DecomposedTransform` for the UI's translate/rotate/scale/skew controls. `Mat.applyToPoint` transforms a `Point2D`.
 
 ## Workflow recipes
 
@@ -95,7 +95,7 @@ pnpm --filter @shift/geo typecheck   # TypeScript type checking
 
 ## Related
 
-- `@shift/types` -- defines `Point2D`, `Rect2D`, and `DecomposedTransform` used throughout this package
-- `@shift/font` -- uses `Vec2`, `Curve`, and `Bounds` for glyph geometry and contour operations
+- `@shift/types` -- defines shared branded IDs and bridge DTOs used by consumers
+- `@shift/glyph-state` -- uses `Vec2`, `Curve`, and `Bounds` for glyph geometry and contour operations
 - `@shift/rules` -- uses `Vec2` and `Point2D` for constraint evaluation
 - `Transform` (in `apps/desktop`) -- uses `Mat` for selection transforms (rotate, scale, reflect)

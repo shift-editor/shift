@@ -11,7 +11,7 @@
  *
  * @module
  */
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { Coordinates } from "@/types/coordinates";
 
 /** Well-known key names that tools handle directly. */

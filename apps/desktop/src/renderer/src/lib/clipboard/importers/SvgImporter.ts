@@ -1,4 +1,10 @@
-import type { ClipboardContent, ClipboardImporter, ContourContent, PointContent } from "../types";
+import type {
+  ClipboardContent,
+  ClipboardImporter,
+  ClipboardOffer,
+  ContourContent,
+  PointContent,
+} from "../types";
 
 type PathCommand = {
   type: string;
@@ -6,16 +12,24 @@ type PathCommand = {
 };
 
 export class SvgImporter implements ClipboardImporter {
-  readonly name = "SVG";
+  readonly id = "svg";
 
-  canImport(text: string): boolean {
-    const trimmed = text.trim();
+  pick(offers: readonly ClipboardOffer[]): ClipboardOffer | null {
     return (
-      trimmed.includes("<svg") || trimmed.includes("<path") || this.#looksLikePathData(trimmed)
+      offers.find((offer) => offer.text !== undefined && this.#canImportText(offer.text)) ?? null
     );
   }
 
-  import(text: string): ClipboardContent | null {
+  import(offer: ClipboardOffer): ClipboardContent | null {
+    if (offer.text === undefined) return null;
+    return this.importText(offer.text);
+  }
+
+  canImportText(text: string): boolean {
+    return this.#canImportText(text);
+  }
+
+  importText(text: string): ClipboardContent | null {
     const trimmed = text.trim();
 
     const pathData = this.#extractPathData(trimmed);
@@ -28,6 +42,13 @@ export class SvgImporter implements ClipboardImporter {
     if (contours.length === 0) return null;
 
     return { contours };
+  }
+
+  #canImportText(text: string): boolean {
+    const trimmed = text.trim();
+    return (
+      trimmed.includes("<svg") || trimmed.includes("<path") || this.#looksLikePathData(trimmed)
+    );
   }
 
   #looksLikePathData(text: string): boolean {

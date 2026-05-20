@@ -1,17 +1,16 @@
 import { BaseTool, type ToolName } from "../core/BaseTool";
+import { TypingBehavior } from "./behaviors/TypingBehavior";
 import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "@/types/editor";
-import { TypingBehavior } from "./behaviors/TypingBehaviour";
+import { glyphTextItem } from "@/lib/text/layout";
 
-export class Text extends BaseTool<TextState> {
+export class TextTool extends BaseTool<TextState> {
   readonly id: ToolName = "text";
-
   readonly behaviors: TextBehavior[] = [new TypingBehavior()];
-  #hadEditingSlot = false;
-  #pendingOriginX: number | null = null;
 
-  override getCursor(_state: TextState): CursorType {
-    return { type: "text" };
+  override getCursor(state: TextState): CursorType {
+    if (state.type === "typing") return { type: "text" };
+    return { type: "default" };
   }
 
   initialState(): TextState {
@@ -19,75 +18,35 @@ export class Text extends BaseTool<TextState> {
   }
 
   override activate(): void {
-    const ctrl = this.editor.textRunController;
-    const hasExistingRun = ctrl.length > 0;
-    const drawOffset = this.editor.drawOffset;
-    const activeGlyphName = this.editor.getActiveGlyphName();
-    const activeUnicode = this.editor.getActiveGlyphUnicode();
-    const activeGlyph =
-      activeGlyphName !== null ? { glyphName: activeGlyphName, unicode: activeUnicode } : null;
-
-    this.#hadEditingSlot = ctrl.state.value?.editingIndex !== null;
-
-    if (activeGlyph) ctrl.seed(activeGlyph);
-    this.#pendingOriginX = hasExistingRun ? null : drawOffset.x;
-
-    const editingIndex = ctrl.state.value?.editingIndex;
-    if (editingIndex !== null && editingIndex !== undefined) {
-      ctrl.placeCaret(editingIndex + 1);
-    } else {
-      ctrl.moveCursorToEnd();
+    // Run owner = MAIN glyph, not the currently-active editing glyph.
+    // Double-clicking a slot changes the active glyph (so its outline becomes
+    // editable in place) but the run still belongs to whoever owned it —
+    // the main glyph the user opened from the grid. Keying on activeGlyph
+    // here would silently switch to a fresh per-active-glyph run when the
+    // user toggles tools mid-slot-edit, wiping the run they were in.
+    const owner = this.editor.rootGlyphHandle;
+    if (!owner) {
+      this.state = { type: "typing" };
+      this.editor.glyphDisplay;
+      return;
     }
+
+    const ownerName = owner.name;
+    const run = this.editor.textRuns.switchTo(ownerName);
+    run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
+    run.interaction.suspend();
+    run.setCursorVisible(true);
 
     this.state = { type: "typing" };
-    ctrl.suspendEditing();
-    ctrl.setCursorVisible(true);
-    this.editor.setPreviewMode(true);
-    if (this.#pendingOriginX !== null) {
-      ctrl.setOriginX(this.#pendingOriginX);
-      this.#pendingOriginX = null;
-    }
+    this.editor.enableProofMode();
   }
 
   override deactivate(): void {
-    const ctrl = this.editor.textRunController;
-    ctrl.setCursorVisible(false);
-    this.editor.setPreviewMode(false);
-    this.#restoreEditingContext();
+    const run = this.editor.textRun;
+    run.setCursorVisible(false);
+    run.interaction.resume();
+
+    this.editor.disableProofMode();
     this.state = { type: "idle" };
-    this.#hadEditingSlot = false;
-    this.#pendingOriginX = null;
-  }
-
-  #restoreEditingContext(): void {
-    const ctrl = this.editor.textRunController;
-
-    if (!this.#hadEditingSlot) {
-      this.editor.setDrawOffset({ x: 0, y: 0 });
-      ctrl.resetEditingContext();
-      return;
-    }
-
-    const restored = ctrl.resumeEditing();
-    if (!restored) {
-      this.editor.setDrawOffset({ x: 0, y: 0 });
-      ctrl.resetEditingContext();
-      return;
-    }
-
-    const textRunState = ctrl.state.value;
-    const slot = textRunState?.layout.slots[restored.index];
-    if (slot) {
-      this.editor.setDrawOffsetForGlyph(
-        { x: slot.x, y: slot.y },
-        restored.glyph.glyphName,
-        restored.glyph.unicode,
-      );
-    } else {
-      this.editor.setDrawOffset({ x: 0, y: 0 });
-      ctrl.resetEditingContext();
-    }
   }
 }
-
-export default Text;

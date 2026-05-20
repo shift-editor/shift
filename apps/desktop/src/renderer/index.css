@@ -61,6 +61,15 @@
   --text-xs: 0.625rem /* 10px */;
 }
 
+/* Hide scrollbar while preserving scroll behavior */
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Custom titlebar styles */
 .titlebar-drag {
   -webkit-app-region: drag;

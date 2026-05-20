@@ -3,7 +3,7 @@ import { useContext } from "react";
 import { CanvasContext } from "@/context/CanvasContext";
 
 export const StaticScene = () => {
-  const { backgroundCanvasRef, sceneCanvasRef, gpuHandlesCanvasRef } = useContext(CanvasContext);
+  const { backgroundCanvasRef, sceneCanvasRef, markerCanvasRef } = useContext(CanvasContext);
 
   return (
     <>
@@ -18,8 +18,8 @@ export const StaticScene = () => {
         className="pointer-events-none absolute inset-0 h-full w-full"
       />
       <canvas
-        id="gpu-handles-canvas"
-        ref={gpuHandlesCanvasRef}
+        id="marker-canvas"
+        ref={markerCanvasRef}
         className="pointer-events-none absolute inset-0 h-full w-full"
       />
     </>

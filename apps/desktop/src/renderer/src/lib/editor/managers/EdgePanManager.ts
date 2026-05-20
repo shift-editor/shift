@@ -1,4 +1,4 @@
-import type { Point2D, Rect2D } from "@shift/types";
+import type { Point2D, Rect2D } from "@shift/geo";
 import { Vec2 } from "@shift/geo";
 
 interface EdgePanConfig {
@@ -12,8 +12,10 @@ const DEFAULT_CONFIG: EdgePanConfig = {
 };
 
 type EdgePanEditor = {
-  toolManager: {
+  gesture: {
     isDragging: boolean;
+  };
+  toolManager: {
     handlePointerMove(
       position: Point2D,
       modifiers: { shiftKey: boolean; altKey: boolean },
@@ -22,7 +24,6 @@ type EdgePanEditor = {
   };
   pan: Point2D;
   setPan(pan: Point2D): void;
-  requestRedraw(): void;
 };
 
 export class EdgePanManager {
@@ -41,9 +42,8 @@ export class EdgePanManager {
 
   update(screenPos: Point2D, canvasBounds: Rect2D): void {
     this.lastScreenPos = screenPos;
-    const toolManager = this.editor.toolManager;
 
-    if (!toolManager.isDragging) {
+    if (!this.editor.gesture.isDragging) {
       this.stop();
       return;
     }
@@ -74,8 +74,6 @@ export class EdgePanManager {
       { shiftKey: false, altKey: false },
       { force: true },
     );
-
-    this.editor.requestRedraw();
     requestAnimationFrame(() => this.tick());
   }
 

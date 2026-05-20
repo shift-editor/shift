@@ -1,5 +1,5 @@
 import type { Editor } from "@/lib/editor/Editor";
-import { effect, type Effect } from "@/lib/reactive/signal";
+import { effect, type Effect } from "@/lib/signals/signal";
 import { PersistedRootSchema } from "@shift/validation";
 import type { PersistenceModule } from "./module";
 import { toolStateAppModule, toolStateDocumentModule } from "./modules/toolState";
@@ -93,6 +93,18 @@ export class DocumentStatePersistence {
     this.scheduleSave();
   }
 
+  openUntitledDocument(docId: string): void {
+    if (!this.#editor) return;
+    this.flushNow();
+
+    this.#currentDocId = docId;
+    this.#currentPath = null;
+    this.touchLru(docId);
+
+    this.hydrateDocumentModules(docId);
+    this.scheduleSave();
+  }
+
   closeDocument(): void {
     this.flushNow();
     this.#currentDocId = null;
@@ -153,7 +165,10 @@ export class DocumentStatePersistence {
     const state = this.getState();
 
     const paths = new Set(
-      state.registry.lruDocIds.slice(0, 10).map((docId) => state.registry.docIdToPath[docId]),
+      state.registry.lruDocIds
+        .slice(0, 10)
+        .map((docId) => state.registry.docIdToPath[docId])
+        .filter((path): path is string => Boolean(path)),
     );
 
     if (paths.size === 0) return [];
@@ -201,7 +216,7 @@ export class DocumentStatePersistence {
 
     this.#effects.push(
       effect(() => {
-        editor.toolStateVersion.value;
+        editor.toolStateVersionCell.value;
         this.scheduleSave();
       }),
     );

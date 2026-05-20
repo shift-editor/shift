@@ -147,6 +147,12 @@ Before committing a test, run through these. Any miss means the test is wrong.
 - No wrapper factories around `TestEditor`. If you need a reusable helper, it belongs as a method on `TestEditor` itself (see `pointerMove`, `click`, `escape`).
 - If your test needs a pre-drawn shape, draw it with the pen/shape tool in `beforeEach` — don't construct glyph snapshots inline.
 
+## Naming
+
+- `describe()` names should explain the behavior or contract under test, not just repeat a class or file name.
+- Prefer `describe("glyph source geometry follows coordinate patches", ...)` over `describe("GlyphSourceState", ...)`.
+- A class name can appear inside a larger phrase when it adds clarity, but the phrase should still tell the reader what invariant is being protected.
+
 ## When testing is genuinely hard
 
 Some code resists clean unit testing — DOM event handlers, focus management, IME composition, React effect lifecycle.

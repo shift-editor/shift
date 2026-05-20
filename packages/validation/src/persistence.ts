@@ -1,33 +1,35 @@
 import { z } from "zod";
 
-export const GlyphRefSchema = z.object({
+export const GlyphTextItemSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("glyph"),
   glyphName: z.string().min(1),
-  unicode: z.number().int().nonnegative().nullable(),
+  codepoint: z.number().int().nonnegative().nullable(),
+});
+
+export const LineBreakTextItemSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("linebreak"),
+});
+
+export const TextItemSchema = z.discriminatedUnion("kind", [
+  GlyphTextItemSchema,
+  LineBreakTextItemSchema,
+]);
+
+export const TextBufferSnapshotSchema = z.object({
+  items: z.array(TextItemSchema),
+  cursor: z.number().int().nonnegative(),
+  anchor: z.number().int().nonnegative(),
+  originX: z.number().finite(),
 });
 
 export const PersistedTextRunSchema = z.object({
-  glyphs: z.array(GlyphRefSchema),
-  cursorPosition: z.number().int().nonnegative(),
-  originX: z.number().finite(),
-  editingIndex: z.number().int().nonnegative().nullable(),
-  editingGlyph: GlyphRefSchema.nullable(),
+  buffer: TextBufferSnapshotSchema,
 });
 
 export const TextRunModuleSchema = z.object({
   runsByGlyph: z.record(z.string(), PersistedTextRunSchema),
-});
-
-export const SnapPreferencesSchema = z.object({
-  enabled: z.boolean(),
-  angle: z.boolean(),
-  metrics: z.boolean(),
-  pointToPoint: z.boolean(),
-  angleIncrementDeg: z.number().finite(),
-  pointRadiusPx: z.number().finite(),
-});
-
-export const UserPreferencesSchema = z.object({
-  snap: SnapPreferencesSchema,
 });
 
 export const PersistedModuleEnvelopeSchema = z.object({
@@ -57,8 +59,6 @@ export const PersistedRootSchema = z.object({
 
 export type PersistedTextRun = z.infer<typeof PersistedTextRunSchema>;
 export type TextRunModule = z.infer<typeof TextRunModuleSchema>;
-export type SnapPreferencesShape = z.infer<typeof SnapPreferencesSchema>;
-export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
 export type PersistedModuleEnvelope = z.infer<typeof PersistedModuleEnvelopeSchema>;
 export type PersistenceRegistry = z.infer<typeof PersistenceRegistrySchema>;
 export type PersistedDocument = z.infer<typeof PersistedDocumentSchema>;

@@ -9,7 +9,7 @@ Point editing rules engine that enforces geometric constraints (tangency, collin
 - **Architecture Invariant:** `constrainDrag` operates on a **base glyph snapshot** (positions before the drag started). The drag delta (`mousePosition`) is applied internally. Callers must not pre-apply the delta to the glyph.
 - **Architecture Invariant:** Rule moves override selected-point moves in the final `DragPatch`. If a rule computes a position for a point that is also selected, the rule position wins.
 - **Architecture Invariant:** Precedence score is `patternLength * 1000 + priority`. Window size dominates by default (5-char patterns outscore 3-char patterns); `priority` breaks ties within the same length.
-- **Architecture Invariant:** `prepareConstrainDrag` short-circuits rule resolution entirely when `selectionNeedsRuleResolution` returns false (all selected points are non-smooth corners with no adjacent handles or smooth points). In this case `allowsUniformTranslationCommit` is true and no rules are evaluated.
+- **Architecture Invariant:** `prepareConstrainedDrag` short-circuits rule resolution entirely when `selectionNeedsRuleResolution` returns false (all selected points are non-smooth corners with no adjacent handles or smooth points). In this case `allowsUniformTranslationCommit` is true and no rules are evaluated.
 
 ## Codemap
 
@@ -19,7 +19,7 @@ rules/src/
   parser.ts       -- expandPattern: template string -> concrete pattern strings
   rules.ts        -- RULE_SPECS definitions, buildRuleTable, getRuleTable singleton
   matcher.ts      -- pickRule, diagnoseSelectionPatterns: pattern building + table lookup
-  actions.ts      -- constrainDrag, prepareConstrainDrag, applyRule: execute matched rules
+  actions.ts      -- constrainDrag, prepareConstrainedDrag, applyRule: execute matched rules
   constraints.ts  -- maintainTangency, maintainCollinearity: vector math primitives
   index.ts        -- public re-exports
 ```
@@ -33,7 +33,7 @@ rules/src/
 - `RuleMatch` -- expanded entry stored in the rule table: resolved `Rule`, affected specs, precedence score, source template
 - `MatchedRule` -- runtime match result: `pointId`, `ruleId`, `pattern`, and `affected` (role-keyed map of resolved `PointId` values)
 - `DragPatch` -- output of `constrainDrag`: absolute `pointUpdates` and the list of `matched` rules
-- `PreparedConstrainDrag` -- pre-computed state from `prepareConstrainDrag` (point index, matched rules, selected points) reusable across frames with different `mousePosition` values
+- `PreparedConstrainDrag` -- pre-computed state from `prepareConstrainedDrag` (point index, matched rules, selected points) reusable across frames with different `mousePosition` values
 - `SelectionRuleDiagnostics` -- per-point probe results for debugging pattern matches in dev tools
 
 ## How it works
@@ -44,7 +44,7 @@ rules/src/
 
 ### Pattern matching (drag start)
 
-`prepareConstrainDrag` builds a `PointIndex` from the base glyph snapshot, then iterates each selected point. For each point, `pickRuleAtIndex` tries window sizes 5 and 3 (in that order). For each window size, `buildPattern` reads the point neighborhood from the contour using `Contours.at` for wrap-around on closed contours, maps each point to a token (`N`/`C`/`S`/`H`/`@`), and concatenates them into a concrete pattern string. The string is looked up in the rule table. The highest-precedence match wins. `computeAffectedPoints` resolves each `AffectedPointSpec` offset into a concrete `PointId`.
+`prepareConstrainedDrag` builds a `PointIndex` from the base glyph snapshot, then iterates each selected point. For each point, `pickRuleAtIndex` tries window sizes 5 and 3 (in that order). For each window size, `buildPattern` reads the point neighborhood from the contour using `Contours.at` for wrap-around on closed contours, maps each point to a token (`N`/`C`/`S`/`H`/`@`), and concatenates them into a concrete pattern string. The string is looked up in the rule table. The highest-precedence match wins. `computeAffectedPoints` resolves each `AffectedPointSpec` offset into a concrete `PointId`.
 
 ### Rule application (every frame)
 
@@ -98,7 +98,7 @@ cd packages/rules && npx tsc --noEmit
 ## Related
 
 - `NativeBridge.applySmartEdits` -- primary consumer; calls `constrainDrag` during drag operations
-- `GlyphDraft` -- draft lifecycle that feeds `DragPatch.pointUpdates` into `Glyph.apply`
+- `SourceEditDraft` -- draft lifecycle that feeds drag patches into local preview and sparse commit paths
 - `dumpSelectionPatternsToConsole` -- dev-tool that calls `diagnoseSelectionPatterns` for debugging
 - `Contours.at` -- wrapping point accessor used by the matcher for closed/open contour handling
 - `Glyphs.findPoint` -- locates a point's contour and index, used by `diagnoseSelectionPatterns`

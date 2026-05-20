@@ -3,20 +3,22 @@
  *
  * Usage:
  *   const editor = new TestEditor();
- *   editor.startSession("A");
+ *   editor.startSession();
  *   editor.selectTool("pen");
  *   editor.click(100, 200);
  *   expect(editor.pointCount).toBe(1);
  */
 
-import type { Point2D, PointId, GlyphSnapshot } from "@shift/types";
-import type { Glyph } from "@/lib/model/Glyph";
-import { Glyphs } from "@shift/font";
+import type { GlyphHandle } from "@shared/bridge/BridgeApi";
+import type { PointId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { Glyph, GlyphInstance, GlyphInstanceEdit } from "@/lib/model/Glyph";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { createBridge } from "./engine";
+import { createBridge } from "@shift/bridge";
 import type { SystemClipboard } from "@/lib/clipboard";
+import { MUTATORSANS_DESIGNSPACE } from "./fixtures";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -49,8 +51,16 @@ export class TestEditor extends Editor {
     return this.#clipboard.buffer;
   }
 
-  startSession(glyphName = "A"): this {
-    this.open(glyphName);
+  startSession(handle: GlyphHandle = { name: "A", unicode: 65 }): this {
+    if (!this.font.loaded) {
+      this.loadFont(MUTATORSANS_DESIGNSPACE);
+    }
+
+    const source = this.font.defaultSource;
+    const glyphSource = this.openGlyphSource(handle, source.id);
+    if (glyphSource) {
+      glyphSource.removePoints(glyphSource.allPoints.map((point) => point.id));
+    }
     return this;
   }
 
@@ -104,27 +114,29 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  get snapshot(): GlyphSnapshot | null {
-    return this.bridge.getEditingSnapshot();
-  }
-
   get currentGlyph(): Glyph | null {
     return this.glyph.peek();
   }
 
+  get currentGlyphInstance(): GlyphInstance | null {
+    return this.glyphInstance;
+  }
+
+  get currentEdit(): GlyphInstanceEdit | null {
+    return this.glyphInstance?.edit ?? null;
+  }
+
   get pointCount(): number {
-    const glyph = this.currentGlyph;
-    if (!glyph) return 0;
-    return Glyphs.getAllPoints(glyph).length;
+    return this.currentGlyphInstance?.geometry.allPoints.length ?? 0;
   }
 
   getPointPosition(pointId: PointId): Point2D | null {
-    const glyph = this.currentGlyph;
-    if (!glyph) return null;
+    const geometry = this.currentGlyphInstance?.geometry;
+    if (!geometry) return null;
 
-    const found = Glyphs.findPoint(glyph, pointId);
-    if (!found) return null;
+    const point = geometry.point(pointId);
+    if (!point) return null;
 
-    return { x: found.point.x, y: found.point.y };
+    return { x: point.x, y: point.y };
   }
 }

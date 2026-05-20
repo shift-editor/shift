@@ -15,7 +15,7 @@ Pure geometry transformation system for rotating, scaling, reflecting, aligning,
 ```
 transform/
   Transform.ts        — Pure transform functions (rotate, scale, reflect, applyMatrix)
-  Alignment.ts        — Point alignment (snap to edge/center) and distribution
+  Alignment.ts        — Point alignment (edge/center) and distribution
   SelectionBounds.ts  — Segment-aware bounding box that accounts for bezier curves
   anchor.ts           — Maps a 9-position anchor grid to a concrete Point2D on bounds
   zoomFromWheel.ts    — Converts wheel deltaY into a zoom multiplier
@@ -25,7 +25,7 @@ transform/
 
 ## Key Types
 
-- `PointPosition` (internal) -- `{ id: PointId; x: number; y: number }`. Local helper shape used inside transform/model internals for stable point identity plus absolute position.
+- Coordinate-bearing items -- transform helpers accept any object with `x` and `y` and preserve its other fields.
 - `ReflectAxis` -- `"horizontal" | "vertical" | { angle: number }`. Named axes or arbitrary angle for reflection.
 - `AlignmentType` -- `"left" | "center-h" | "right" | "top" | "center-v" | "bottom"`. Edge or center to align against.
 - `DistributeType` -- `"horizontal" | "vertical"`. Axis along which to space points evenly.
@@ -38,7 +38,7 @@ transform/
 
 ### Pure functions layer
 
-`Transform` is a namespace object with pure functions. All three geometric operations -- `rotatePoints`, `scalePoints`, `reflectPoints` -- build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. These helpers operate on a small internal `PointPosition` shape rather than exporting transform-specific point vocabulary into the wider app. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
+`Transform` is a namespace object with pure functions. All three geometric operations -- `rotatePoints`, `scalePoints`, `reflectPoints` -- build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. These helpers operate on generic coordinate-bearing objects and preserve metadata such as `kind` and `id`. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
 
 The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scale`, etc.) for callers that need to compose custom transforms.
 
@@ -51,7 +51,7 @@ Undo/redo is handled by command classes in `commands/transform/`, re-exported th
 
 ### Alignment
 
-`Alignment.alignPoints` snaps every point to one edge or center of the selection's own bounding box (computed via `Bounds.fromPoints`). `Alignment.distributePoints` sorts points along an axis and spaces the interior ones equally between the two extremes.
+`Alignment.alignPoints` moves every point to one edge or center of the selection's own bounding box (computed via `Bounds.fromPoints`). `Alignment.distributePoints` sorts points along an axis and spaces the interior ones equally between the two extremes.
 
 ### Selection bounds
 

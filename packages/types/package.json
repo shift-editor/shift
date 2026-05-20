@@ -10,13 +10,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./generated": {
-      "types": "./src/generated/index.ts",
-      "import": "./src/generated/index.ts"
     }
   },
   "scripts": {
+    "generate:bridge-types": "node ../../scripts/generate-bridge-types.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

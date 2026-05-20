@@ -8,8 +8,7 @@
 
 import type { PointId } from "@shift/types";
 import type { ContourContent, PointContent } from "@/lib/clipboard/types";
-import type { NodePositionUpdateList } from "@/types/positionUpdate";
-import { Glyphs } from "@shift/font";
+import type { SourcePositions } from "@/lib/model/Glyph";
 import { TestEditor } from "./TestEditor";
 
 /**
@@ -109,25 +108,28 @@ export interface PointMarkEditor {
  */
 export function createPointMark(scale: PointScale): PointMarkEditor {
   const editor = new TestEditor();
-  editor.startSession("bench");
+  editor.startSession({ name: "A", unicode: 65 });
 
   const contours = generateContours(scale);
-  const result = editor.bridge.pasteContours(contours, 0, 0);
+  const edit = editor.currentEdit;
+  if (!edit) throw new Error("No editable instance after startSession");
 
-  if (!result.success) {
-    throw new Error(`Failed to create point mark at scale ${scale}`);
+  edit.removePoints(editor.currentGlyphInstance!.geometry.allPoints.map((point) => point.id));
+  for (const contour of contours) {
+    const contourId = edit.addContour();
+    for (const point of contour.points) {
+      edit.addPoint(contourId, point);
+    }
+    if (contour.closed) edit.closeContour(contourId);
   }
 
-  const glyph = editor.currentGlyph;
-  if (!glyph) throw new Error("No glyph after pasteContours");
-
-  const pointIds = Glyphs.getAllPoints(glyph).map((p) => p.id);
+  const pointIds = editor.currentGlyphInstance!.geometry.allPoints.map((p) => p.id);
 
   return { editor, pointIds, pointCount: pointIds.length };
 }
 
 /**
- * Build a NodePositionUpdateList that shifts every point by (dx, dy).
+ * Build a SourcePositions list that shifts every point by (dx, dy).
  * Pre-computed outside the benchmark loop to isolate the operation under test.
  */
 export function buildPositionUpdates(
@@ -136,9 +138,10 @@ export function buildPositionUpdates(
   dy: number,
   baseX = 0,
   baseY = 0,
-): NodePositionUpdateList {
+): SourcePositions {
   return pointIds.map((id, i) => ({
-    node: { kind: "point" as const, id },
+    kind: "point" as const,
+    id,
     x: baseX + i + dx,
     y: baseY + i + dy,
   }));

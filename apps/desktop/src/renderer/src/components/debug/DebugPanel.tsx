@@ -1,15 +1,36 @@
-import { useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
 import { getEditor } from "@/store/store";
 import { Separator } from "@shift/ui";
-import { effect } from "@/lib/reactive";
+import { effect } from "@/lib/signals";
+import { useSignalState, useSignalTrigger } from "@/lib/signals/useSignal";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function DebugPanel() {
   const editor = getEditor();
+  const instance = useSignalState(editor.glyphInstanceCell);
+  useSignalTrigger(instance?.xAdvanceCell);
+
+  const glyphStats = useMemo(() => {
+    if (!instance) return { pointCount: "0", snapshotSize: "—" };
+
+    const snapshot = instance.edit?.state ?? null;
+    const bytes = snapshot ? new Blob([JSON.stringify(snapshot)]).size : null;
+
+    return {
+      pointCount: `${instance.geometry.allPoints.length}`,
+      snapshotSize: bytes === null ? "—" : formatBytes(bytes),
+    };
+  }, [instance]);
 
   useEffect(() => {
     editor.startFpsMonitor();
@@ -28,33 +49,13 @@ export function DebugPanel() {
     return `${editor.fps.value}`;
   });
 
-  const pointCountRef = useSignalText(() => {
-    const glyph = editor.glyph.value;
-    if (!glyph) return "0";
-
-    return `${glyph.allPoints.length}`;
-  });
-
-  const glyphMemoryRef = useSignalText(() => {
-    const glyph = editor.glyph.value;
-    if (!glyph) return "—";
-
-    const snapshot = glyph.toSnapshot();
-    const json = JSON.stringify(snapshot);
-    const bytes = new Blob([json]).size;
-
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  });
-
   const upmRef = useRef<HTMLTableCellElement>(null);
   const screenRef = useRef<HTMLTableCellElement>(null);
   const worldRef = useRef<HTMLTableCellElement>(null);
 
   useEffect(() => {
     const fx = effect(() => {
-      const screen = editor.screenMousePosition.value;
+      const screen = editor.screenMousePositionCell.value;
       const coords = editor.fromScreen(screen);
       if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
       if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
@@ -64,10 +65,10 @@ export function DebugPanel() {
     return () => fx.dispose();
   }, [editor]);
 
-  const cellClass = "px-2 py-1 border border-line-subtle";
+  const cellClass = "px-2 py-1 border";
 
   return (
-    <div className="absolute bottom-4 left-4 z-[100] max-w-100 min-h-50 border border-e bg-surface p-3 shadow-md">
+    <div className="absolute bottom-4 left-4 z-[100] max-w-100 border border-app/5 min-h-50 bg-surface p-3 shadow-md">
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-primary">Debug Panel</span>
@@ -89,13 +90,14 @@ export function DebugPanel() {
           <h2 className="text-ui font-medium">Canvas</h2>
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Total Points</span>
-            <span ref={pointCountRef} className="font-mono tabular-nums" />
+            <span className="font-mono tabular-nums">{glyphStats.pointCount}</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Snapshot Size</span>
-            <span ref={glyphMemoryRef} className="font-mono tabular-nums" />
+            <span className="font-mono tabular-nums">{glyphStats.snapshotSize}</span>
           </div>
         </div>
+        <Separator className="bg-gray-300" />
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">
           <h2 className="text-sm font-medium">Coordinates</h2>

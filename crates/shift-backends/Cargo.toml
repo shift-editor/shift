@@ -9,9 +9,14 @@ license = "MIT OR Apache-2.0"
 crate-type = ["rlib"]
 
 [dependencies]
-shift-ir = { path = "../shift-ir" }
+shift-ir = { workspace = true }
+
 norad = "0.16.0"
 skrifa = "0.32.0"
 fontc = "0.2.0"
 glyphs-reader = "0.2.0"
 plist = "1"
+thiserror = "2.0.18"
+
+[dev-dependencies]
+tempfile = "3"

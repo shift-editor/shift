@@ -22,13 +22,10 @@
  */
 
 export { Validate } from "./Validate";
-export { ValidateSnapshot } from "./ValidateSnapshot";
 export { ValidateClipboard } from "./ValidateClipboard";
 export {
   PersistedTextRunSchema,
   TextRunModuleSchema,
-  SnapPreferencesSchema,
-  UserPreferencesSchema,
   PersistedModuleEnvelopeSchema,
   PersistenceRegistrySchema,
   PersistedDocumentSchema,
@@ -39,8 +36,6 @@ export type { ValidationResult, ValidationError, ValidationErrorCode, PointLike 
 export type {
   PersistedTextRun,
   TextRunModule,
-  SnapPreferencesShape,
-  UserPreferences,
   PersistedModuleEnvelope,
   PersistenceRegistry,
   PersistedDocument,

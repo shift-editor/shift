@@ -1,63 +1,59 @@
 /**
- * @shift/types - Shared TypeScript types for Shift font editor
- *
- * This package contains:
- * - Auto-generated types from Rust (via ts-rs)
- * - Core mathematical types
- * - Branded ID types for type safety
- * - Font-related types and utilities
+ * @shift/types - shared DTO and primitive types.
  */
 
-// Math types
-export type { Point2D, Rect2D, TransformMatrix, A, B, C, D, E, F } from "./math";
-
 // ID types
-export type { PointId, ContourId, AnchorId } from "./ids";
+export type {
+  PointId,
+  ContourId,
+  AnchorId,
+  ComponentId,
+  GuidelineId,
+  LayerId,
+  SourceId,
+} from "./ids";
 export {
   asPointId,
   asContourId,
   asAnchorId,
+  asComponentId,
+  asGuidelineId,
+  asLayerId,
+  asSourceId,
   isValidPointId,
   isValidContourId,
   isValidAnchorId,
+  isValidComponentId,
+  isValidGuidelineId,
+  isValidLayerId,
+  isValidSourceId,
 } from "./ids";
 
-// Font types (includes generated types)
 export type {
-  PointType,
-  PointSnapshot,
-  ContourSnapshot,
-  AnchorSnapshot,
-  RenderPointSnapshot,
-  RenderContourSnapshot,
-  GlyphSnapshot,
-  GlyphGeometry,
-  MasterSnapshot,
-  InterpolationResult,
-  SourceError,
+  AnchorData,
+  Axis,
   AxisTent,
-  GlyphVariationData,
-  CommandResult,
-  RuleId,
-  MatchedRule,
+  BridgeApi,
+  ComponentData,
+  ContourData,
   FontMetadata,
   FontMetrics,
-  DecomposedTransform,
-  Axis,
-  Component,
-  GlyphData,
-} from "./font";
-
-// Domain types (for Editor API)
-export type {
-  Point,
-  Anchor,
-  RenderPoint,
-  Contour,
-  RenderContour,
-  Glyph,
-  CompositeComponent,
-  CompositeGlyph,
-  AxisLocation,
+  GlyphChangedEntities,
+  GlyphHandle,
+  GlyphMaster,
+  GlyphName,
+  GlyphRecord,
+  GlyphState,
+  GlyphStructure,
+  GlyphStructureChange,
+  GlyphValueChange,
+  GlyphVariationData,
+  GlyphVariationDiagnostic,
+  GlyphVariationDiagnosticSource,
+  GlyphVariationReport,
+  Location,
+  PointData,
+  PointType,
   Source,
-} from "./font";
+  Unicode,
+} from "./bridge";

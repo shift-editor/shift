@@ -8,13 +8,14 @@ use crate::GlyphName;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Glyph {
     id: GlyphId,
     name: GlyphName,
     unicodes: Vec<u32>,
-    layers: HashMap<LayerId, GlyphLayer>,
+    layers: HashMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
 }
 
@@ -65,6 +66,10 @@ impl GlyphLayer {
         self.contours.values()
     }
 
+    pub fn contours_iter_mut(&mut self) -> impl Iterator<Item = &mut Contour> {
+        self.contours.values_mut()
+    }
+
     pub fn contour(&self, id: ContourId) -> Option<&Contour> {
         self.contours.get(&id)
     }
@@ -107,6 +112,10 @@ impl GlyphLayer {
 
     pub fn remove_component(&mut self, id: ComponentId) -> Option<Component> {
         self.components.remove(&id)
+    }
+
+    pub fn clear_components(&mut self) {
+        self.components.clear();
     }
 
     pub fn anchors(&self) -> &[Anchor] {
@@ -185,20 +194,20 @@ impl GlyphLayer {
 }
 
 impl Glyph {
-    pub fn new(name: GlyphName) -> Self {
+    pub fn new(name: impl Into<GlyphName>) -> Self {
         Self {
             id: GlyphId::new(),
-            name,
+            name: name.into(),
             unicodes: Vec::new(),
             layers: HashMap::new(),
             lib: LibData::new(),
         }
     }
 
-    pub fn with_unicode(name: GlyphName, unicode: u32) -> Self {
+    pub fn with_unicode(name: impl Into<GlyphName>, unicode: u32) -> Self {
         Self {
             id: GlyphId::new(),
-            name,
+            name: name.into(),
             unicodes: vec![unicode],
             layers: HashMap::new(),
             lib: LibData::new(),
@@ -210,11 +219,15 @@ impl Glyph {
     }
 
     pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn glyph_name(&self) -> &GlyphName {
         &self.name
     }
 
-    pub fn set_name(&mut self, name: GlyphName) {
-        self.name = name;
+    pub fn set_name(&mut self, name: impl Into<GlyphName>) {
+        self.name = name.into();
     }
 
     pub fn unicodes(&self) -> &[u32] {
@@ -239,28 +252,28 @@ impl Glyph {
         self.unicodes = unicodes;
     }
 
-    pub fn layers(&self) -> &HashMap<LayerId, GlyphLayer> {
+    pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
     }
 
     pub fn layer(&self, id: LayerId) -> Option<&GlyphLayer> {
-        self.layers.get(&id)
+        self.layers.get(&id).map(Arc::as_ref)
     }
 
     pub fn layer_mut(&mut self, id: LayerId) -> Option<&mut GlyphLayer> {
-        self.layers.get_mut(&id)
+        self.layers.get_mut(&id).map(Arc::make_mut)
     }
 
     pub fn get_or_create_layer(&mut self, id: LayerId) -> &mut GlyphLayer {
-        self.layers.entry(id).or_default()
+        Arc::make_mut(self.layers.entry(id).or_default())
     }
 
     pub fn set_layer(&mut self, id: LayerId, layer: GlyphLayer) {
-        self.layers.insert(id, layer);
+        self.layers.insert(id, Arc::new(layer));
     }
 
     pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
-        self.layers.remove(&id)
+        self.layers.remove(&id).map(Arc::unwrap_or_clone)
     }
 
     pub fn lib(&self) -> &LibData {
@@ -276,6 +289,7 @@ impl Glyph {
 mod tests {
     use super::*;
     use crate::Anchor;
+    use std::sync::Arc;
 
     #[test]
     fn glyph_creation() {
@@ -293,6 +307,32 @@ mod tests {
         layer.set_width(600.0);
 
         assert_eq!(g.layer(layer_id).unwrap().width(), 600.0);
+    }
+
+    #[test]
+    fn cloned_glyph_shares_layers_until_one_layer_is_mutated() {
+        let mut glyph = Glyph::new("A".to_string());
+        let first_layer_id = LayerId::new();
+        let second_layer_id = LayerId::new();
+        glyph.set_layer(first_layer_id, GlyphLayer::with_width(500.0));
+        glyph.set_layer(second_layer_id, GlyphLayer::with_width(600.0));
+        let snapshot = glyph.clone();
+
+        glyph
+            .layer_mut(first_layer_id)
+            .expect("first layer should exist")
+            .set_width(700.0);
+
+        assert_eq!(glyph.layer(first_layer_id).unwrap().width(), 700.0);
+        assert_eq!(snapshot.layer(first_layer_id).unwrap().width(), 500.0);
+        assert!(!Arc::ptr_eq(
+            glyph.layers.get(&first_layer_id).unwrap(),
+            snapshot.layers.get(&first_layer_id).unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            glyph.layers.get(&second_layer_id).unwrap(),
+            snapshot.layers.get(&second_layer_id).unwrap()
+        ));
     }
 
     #[test]

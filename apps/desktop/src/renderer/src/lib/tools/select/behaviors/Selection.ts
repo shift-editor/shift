@@ -1,157 +1,68 @@
+import type { Selectable } from "@/lib/editor/Selection";
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
-import type { Editor } from "@/lib/editor/Editor";
 import type { SelectBehavior, SelectState } from "../types";
-import type { PointId, AnchorId } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
-import { getPointIdFromHit, isAnchorHit, isSegmentHit } from "@/types/hitResult";
-
-function nextSelectionStateAfterToggle(
-  isSelected: boolean,
-  selectedInTypeCount: number,
-  selectedInOtherTypesCount: number,
-): "ready" | "selected" {
-  const nextInTypeCount = selectedInTypeCount + (isSelected ? -1 : 1);
-  return nextInTypeCount + selectedInOtherTypesCount > 0 ? "selected" : "ready";
-}
 
 export class Selection implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
-    if (state.type !== "ready" && state.type !== "selected") return false;
+    if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
+
     const editor = ctx.editor;
+    const instance = editor.glyphInstance;
+    if (!instance) return false;
 
-    const hit = editor.hitTest(event.coords);
-    const pointId = getPointIdFromHit(hit);
-    const anchorId = isAnchorHit(hit) ? hit.anchorId : null;
+    const geometry = instance.geometry;
+    const pos = event.coords.glyphLocal;
+    const radius = editor.hitRadius;
+    let items: Selectable[] | null = null;
 
-    // Anchor hit + shift toggle
-    if (anchorId !== null && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.selection.pointIds;
-      const selectedAnchors = editor.selection.anchorIds;
-      const selectedSegments = editor.selection.segmentIds;
-      const isSelected = editor.selection.isSelected({ kind: "anchor", id: anchorId });
-      const type = nextSelectionStateAfterToggle(
-        isSelected,
-        selectedAnchors.size,
-        selectedPoints.size + selectedSegments.size,
-      );
-      editor.selection.toggle({ kind: "anchor", id: anchorId });
-      ctx.setState({ type });
-      return true;
+    const anchorHit = geometry.hitAnchor(pos, radius);
+    if (anchorHit) {
+      items = [{ kind: "anchor", id: anchorHit.anchorId }];
     }
 
-    if (anchorId !== null) {
-      this.selectAnchor(editor, anchorId, event.shiftKey);
-      ctx.setState({ type: "selected" });
-      return true;
+    if (!items) {
+      const pointHit = geometry.hitPoint(pos, radius);
+      if (pointHit) {
+        items = [{ kind: "point", id: pointHit.pointId }];
+      }
     }
 
-    // Point hit + shift toggle
-    if (pointId !== null && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.selection.pointIds;
-      const selectedAnchors = editor.selection.anchorIds;
-      const selectedSegments = editor.selection.segmentIds;
-      const isSelected = editor.selection.isSelected({ kind: "point", id: pointId });
-      const type = nextSelectionStateAfterToggle(
-        isSelected,
-        selectedPoints.size,
-        selectedAnchors.size + selectedSegments.size,
-      );
-      editor.selection.toggle({ kind: "point", id: pointId });
-      ctx.setState({ type });
-      return true;
+    if (!items) {
+      const segmentHit = geometry.hitSegment(pos, radius);
+      const segment = segmentHit ? geometry.segment(segmentHit.segmentId) : null;
+
+      if (segmentHit && segment) {
+        items = [
+          { kind: "segment", id: segmentHit.segmentId },
+          ...segment.pointIds.map((id) => ({ kind: "point" as const, id })),
+        ];
+      }
     }
 
-    if (pointId !== null) {
-      this.selectPoint(editor, pointId, event.shiftKey);
-      ctx.setState({ type: "selected" });
-      return true;
-    }
+    if (!items) {
+      if (event.shiftKey || !editor.selection.hasSelection()) return false;
 
-    // Segment hit + shift toggle
-    if (hit !== null && isSegmentHit(hit) && state.type === "selected" && event.shiftKey) {
-      const selectedPoints = editor.selection.pointIds;
-      const selectedAnchors = editor.selection.anchorIds;
-      const selectedSegments = editor.selection.segmentIds;
-      const isSelected = editor.selection.isSelected({ kind: "segment", id: hit.segmentId });
-      const type = nextSelectionStateAfterToggle(
-        isSelected,
-        selectedSegments.size,
-        selectedPoints.size + selectedAnchors.size,
-      );
-      this.toggleSegment(editor, hit.segmentId);
-      ctx.setState({ type });
-      return true;
-    }
-
-    // Segment hit (no shift)
-    if (hit !== null && isSegmentHit(hit)) {
-      this.selectSegment(editor, hit.segmentId, event.shiftKey);
-      ctx.setState({ type: "selected" });
-      return true;
-    }
-
-    // Clear selection if anything is selected
-    if (state.type === "selected" || editor.selection.hasSelection()) {
       editor.selection.clear();
       ctx.setState({ type: "ready" });
       return true;
     }
 
-    return false;
-  }
+    if (event.shiftKey) {
+      const selected = items.every((item) => editor.selection.isSelected(item));
 
-  private selectPoint(editor: Editor, pointId: PointId, additive: boolean): void {
-    if (additive) {
-      editor.selection.add({ kind: "point", id: pointId });
-      return;
-    }
-
-    editor.selection.select([{ kind: "point", id: pointId }]);
-  }
-
-  private selectAnchor(editor: Editor, anchorId: AnchorId, additive: boolean): void {
-    if (additive) {
-      editor.selection.add({ kind: "anchor", id: anchorId });
-      return;
-    }
-
-    editor.selection.select([{ kind: "anchor", id: anchorId }]);
-  }
-
-  private selectSegment(editor: Editor, segmentId: SegmentId, additive: boolean): void {
-    const segment = editor.getSegmentById(segmentId);
-    if (!segment) return;
-    const pointIds = segment.pointIds;
-
-    if (additive) {
-      editor.selection.add({ kind: "segment", id: segmentId });
-      for (const pointId of pointIds) {
-        editor.selection.add({ kind: "point", id: pointId });
+      for (const item of items) {
+        if (selected) {
+          editor.selection.remove(item);
+        } else {
+          editor.selection.add(item);
+        }
       }
-      return;
+    } else {
+      editor.selection.select(items);
     }
 
-    editor.selection.select([
-      { kind: "segment", id: segmentId },
-      ...pointIds.map((id) => ({ kind: "point" as const, id })),
-    ]);
-  }
-
-  private toggleSegment(editor: Editor, segmentId: SegmentId): void {
-    const wasSelected = editor.selection.isSelected({ kind: "segment", id: segmentId });
-    editor.selection.toggle({ kind: "segment", id: segmentId });
-
-    const segment = editor.getSegmentById(segmentId);
-    if (!segment) return;
-    const pointIds = segment.pointIds;
-
-    for (const pointId of pointIds) {
-      if (wasSelected) {
-        editor.selection.remove({ kind: "point", id: pointId });
-      } else {
-        editor.selection.add({ kind: "point", id: pointId });
-      }
-    }
+    ctx.setState({ type: "ready" });
+    return true;
   }
 }

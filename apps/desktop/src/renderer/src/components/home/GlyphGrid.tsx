@@ -45,8 +45,7 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { codepointToHex } from "@/lib/utils/unicode";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
-import { getGlyphInfo } from "@/store/glyphInfo";
-import { getEditor } from "@/store/store";
+import { getEditor, getGlyphInfo } from "@/store/store";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button } from "@shift/ui";
 

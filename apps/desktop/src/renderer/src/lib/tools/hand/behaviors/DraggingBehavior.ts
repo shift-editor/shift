@@ -8,7 +8,6 @@ export const HandDraggingBehavior = createBehavior<HandState>({
     if (state.type !== "dragging") return false;
     const newPan = Vec2.add(state.startPan, event.screenDelta);
     ctx.editor.setPan(newPan);
-    ctx.editor.requestRedraw();
     return true;
   },
 

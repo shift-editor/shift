@@ -3,7 +3,14 @@ import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Behavior, ToolContext } from "./Behavior";
-import { batch, computed, type ComputedSignal } from "../../reactive/signal";
+import {
+  batch,
+  computed,
+  signal,
+  type ComputedSignal,
+  type Signal,
+  type WritableSignal,
+} from "../../signals/signal";
 import type { CursorType } from "@/types/editor";
 
 export type { ToolName, ToolState };
@@ -22,26 +29,35 @@ export type { ToolName, ToolState };
  * - `behaviors` — ordered list of {@link Behavior} objects.
  * - `preTransition()` — optional short-circuit before the behavior loop.
  * - `onStateChange()` — optional hook after every committed transition.
- * - `render()` / `renderBelowHandles()` — per-frame drawing on the overlay.
+ * - `drawBackground()` / `drawScene()` / `drawOverlay()` — per-frame drawing hooks.
  *
  * @typeParam S - The tool's state union (must extend `ToolState`).
+ * @typeParam TTool - Concrete tool type exposed to typed behavior contexts.
  * @typeParam Settings - Optional per-tool settings object.
  */
-export abstract class BaseTool<S extends ToolState, Settings = Record<string, never>> {
+export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = object> {
   abstract readonly id: ToolName;
   /** Ordered behavior list -- first match wins on each event. */
-  abstract readonly behaviors: Behavior<S>[];
-  readonly $cursor: ComputedSignal<CursorType>;
+  abstract readonly behaviors: Behavior<S, TTool>[];
+  readonly cursorCell: ComputedSignal<CursorType>;
+  readonly stateCell: Signal<S>;
+  readonly #stateCell: WritableSignal<S>;
   state: S;
   /** @knipclassignore */
   settings: Settings;
-  protected editor: Editor;
+  readonly editor: Editor;
 
   constructor(editor: Editor) {
     this.editor = editor;
     this.state = this.initialState();
+    this.#stateCell = signal<S>(this.state, {
+      name: `tool.${this.constructor.name}.state`,
+    });
+    this.stateCell = this.#stateCell;
     this.settings = this.defaultSettings();
-    this.$cursor = computed(() => this.getCursor(this.editor.getActiveToolState() as S));
+    this.cursorCell = computed(() => this.getCursor(this.stateCell.value), {
+      name: `tool.${this.constructor.name}.cursor`,
+    });
   }
 
   getCursor(state: S): CursorType {
@@ -65,17 +81,18 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
   protected onStateChange?(prev: S, next: S, event: ToolEvent): void;
 
   /** Layer 0 — rarely redraws (viewport/font change only). Text runs, background elements. */
-  renderBackground?(canvas: Canvas): void;
+  drawBackground?(canvas: Canvas): void;
 
   /** Layer 1 — redraws on edit/selection/hover change. Guides, outline, handles, segments. */
-  renderScene?(canvas: Canvas): void;
+  drawScene?(canvas: Canvas): void;
 
-  /** Layer 2 — redraws every mouse move. Snap indicators, selection marquee, cursor. */
-  renderOverlay?(canvas: Canvas): void;
+  /** Layer 2 — redraws every mouse move. Selection marquee, cursor. */
+  drawOverlay?(canvas: Canvas): void;
 
   activate?(): void;
   deactivate?(): void;
 
+  /** @knipclassignore — pure transition API used by tool tests/debugging. */
   transition(state: S, event: ToolEvent): S {
     return this.#runBehaviors(state, event).state;
   }
@@ -95,13 +112,12 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
           if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
         }
 
-        this.state = next;
-        this.editor.setActiveToolState(next);
+        this.setState(next);
 
         const postCommitContext = this.#createContext(
           () => this.state,
           (nextState: S) => {
-            this.state = nextState;
+            this.setState(nextState);
           },
         );
         for (const behavior of this.behaviors) {
@@ -119,7 +135,14 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     return this.state;
   }
 
+  protected setState(next: S): void {
+    this.state = next;
+    this.#stateCell.set(next);
+    this.editor.setActiveToolState(next);
+  }
+
   /** Execute `fn` inside a named command batch. Automatically rolls back on exception. */
+  /** @knipclassignore — command batching helper for tool subclasses. */
   protected batch<T>(name: string, fn: () => T): T {
     return this.editor.commands.withBatch(name, fn);
   }
@@ -157,54 +180,55 @@ export abstract class BaseTool<S extends ToolState, Settings = Record<string, ne
     return { state: nextState, handled: false };
   }
 
-  #createContext(getState: () => S, setState: (next: S) => void): ToolContext<S> {
+  #createContext(getState: () => S, setState: (next: S) => void): ToolContext<S, TTool> {
     return {
       editor: this.editor,
+      tool: this as unknown as TTool,
       getState,
       setState,
     };
   }
 
   #getEventHandler(
-    behavior: Behavior<S>,
+    behavior: Behavior<S, TTool>,
     type: ToolEvent["type"],
-  ): ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined) | undefined {
+  ): ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined) | undefined {
     switch (type) {
       case "pointerMove":
         return behavior.onPointerMove as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "click":
         return behavior.onClick as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "doubleClick":
         return behavior.onDoubleClick as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragStart":
         return behavior.onDragStart as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "drag":
         return behavior.onDrag as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragEnd":
         return behavior.onDragEnd as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragCancel":
         return behavior.onDragCancel as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "keyDown":
         return behavior.onKeyDown as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "keyUp":
         return behavior.onKeyUp as
-          | ((state: S, ctx: ToolContext<S>, event: ToolEvent) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       default:
         return undefined;

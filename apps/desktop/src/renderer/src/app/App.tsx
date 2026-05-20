@@ -8,7 +8,7 @@ import { DebugProvider } from "@/context/DebugContext";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
-import { clearDirty, getEditor, setFilePath } from "@/store/store";
+import { getDocument } from "@/store/store";
 import { documentPersistence } from "@/persistence";
 
 import { RouteDispatcher } from "./RouteDispatcher";
@@ -26,6 +26,10 @@ function isLandingHash(hash: string): boolean {
   return hash === "" || hash === "#" || hash === "#/";
 }
 
+function needsLoadedDocument(hash: string): boolean {
+  return !isLandingHash(hash);
+}
+
 function parseEditorUnicodeFromHash(hash: string): number | null {
   const match = hash.match(EDITOR_HASH_RE);
   if (!match) return null;
@@ -35,7 +39,8 @@ function parseEditorUnicodeFromHash(hash: string): number | null {
 
 export const App = () => {
   useEffect(() => {
-    const editor = getEditor();
+    const fontDocument = getDocument();
+    const editor = fontDocument.editor;
     documentPersistence.init(editor);
     let didOpenFont = false;
 
@@ -50,19 +55,14 @@ export const App = () => {
       }
 
       try {
-        editor.loadFont(filePath);
-        editor.updateMetricsFromFont();
-        setFilePath(filePath);
-        clearDirty();
-        documentPersistence.openDocument(filePath);
+        fontDocument.openFont(filePath);
         didOpenFont = true;
+
         if (source === "restore") {
           const unicode = parseEditorUnicodeFromHash(window.location.hash);
           if (unicode !== null) {
-            const glyphName = editor.font.glyphName(unicode);
-            editor.setMainGlyphUnicode(unicode);
-            editor.open(glyphName);
-            editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
+            const handle = editor.font.glyphHandleForUnicode(unicode);
+            editor.getGlyph(handle);
           }
         } else {
           navigateToHome();
@@ -83,16 +83,20 @@ export const App = () => {
         const mostRecentDocId = state.registry.lruDocIds[0];
         const mostRecentPath = mostRecentDocId ? state.registry.docIdToPath[mostRecentDocId] : null;
         if (!mostRecentPath) {
+          fontDocument.createFont();
           return;
         }
 
         const exists = await window.electronAPI?.pathsExist([mostRecentPath]);
         if (!exists?.[0]) {
+          fontDocument.createFont();
           return;
         }
 
         handleOpenFont(mostRecentPath, "restore");
       })();
+    } else if (needsLoadedDocument(window.location.hash) && !fontDocument.loaded) {
+      fontDocument.createFont();
     }
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
@@ -100,12 +104,7 @@ export const App = () => {
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
-        await editor.saveFont(savePath);
-        setFilePath(savePath);
-        clearDirty();
-        documentPersistence.onDocumentPathChanged(savePath);
-        documentPersistence.flushNow();
-        await window.electronAPI?.saveCompleted(savePath);
+        await fontDocument.saveFont(savePath);
       } catch (error) {
         console.error("Failed to save font:", error);
       }

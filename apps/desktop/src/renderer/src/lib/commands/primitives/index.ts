@@ -1,14 +1,14 @@
-export { AddPointCommand } from "./PointCommands";
+export { AddPointCommand, ToggleSmoothCommand } from "./PointCommands";
+export { DrawRectangleCommand } from "./ShapeCommands";
 export {
   CloseContourCommand,
-  SetActiveContourCommand,
   ReverseContourCommand,
   NudgePointsCommand,
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
-export { SnapshotCommand } from "./SnapshotCommand";
-export { SetNodePositionsCommand } from "./SetNodePositionsCommand";
+export { BooleanOperationCommand, type BooleanOperation } from "./BooleanOperationCommand";
+export { ApplyPositionPatchCommand } from "./ApplyPositionPatchCommand";
 export {
   SetXAdvanceCommand,
   SetLeftSidebearingCommand,

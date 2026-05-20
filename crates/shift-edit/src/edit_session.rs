@@ -1,0 +1,1194 @@
+use crate::{
+    error::{CoreError, CoreResult},
+    state::apply_state_to_layer,
+    GlyphStructure, PointId, PointType, Transform,
+};
+use shift_ir::{boolean, Anchor, AnchorId, BooleanOp, Contour, ContourId, GlyphLayer, Point};
+use shift_wire::{GlyphChangedEntities, GlyphValue};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditableNode {
+    Point(PointId),
+    Anchor(AnchorId),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NodePosition {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BulkNodePositionUpdates<'a> {
+    pub point_ids: Option<&'a [u64]>,
+    pub point_coords: Option<&'a [GlyphValue]>,
+    pub anchor_ids: Option<&'a [u64]>,
+    pub anchor_coords: Option<&'a [GlyphValue]>,
+}
+
+#[derive(Default)]
+struct NodeGroups {
+    points: Vec<PointId>,
+    anchors: Vec<AnchorId>,
+}
+
+#[derive(Default)]
+struct NodePositionGroups {
+    points: HashMap<PointId, NodePosition>,
+    anchors: HashMap<AnchorId, NodePosition>,
+}
+
+struct BulkPositionUpdateReader {
+    groups: NodePositionGroups,
+}
+
+impl BulkPositionUpdateReader {
+    fn new() -> Self {
+        Self {
+            groups: NodePositionGroups::default(),
+        }
+    }
+
+    fn read_points(
+        &mut self,
+        ids: Option<&[u64]>,
+        coords: Option<&[GlyphValue]>,
+    ) -> CoreResult<()> {
+        let Some(ids) = ids else {
+            return Ok(());
+        };
+
+        let coords = coords.ok_or_else(|| {
+            invalid_position_update_input("point positions", "missing coordinates")
+        })?;
+        let mut coords = BulkPositionCoords::new(coords, ids.len(), "point positions")?;
+
+        for id in ids {
+            let (x, y) = coords.next()?;
+            self.groups
+                .points
+                .insert(PointId::from_raw(*id as u128), NodePosition { x, y });
+        }
+
+        coords.finish()
+    }
+
+    fn read_anchors(
+        &mut self,
+        ids: Option<&[u64]>,
+        coords: Option<&[GlyphValue]>,
+    ) -> CoreResult<()> {
+        let Some(ids) = ids else {
+            return Ok(());
+        };
+
+        let coords = coords.ok_or_else(|| {
+            invalid_position_update_input("anchor positions", "missing coordinates")
+        })?;
+        let mut coords = BulkPositionCoords::new(coords, ids.len(), "anchor positions")?;
+
+        for id in ids {
+            let (x, y) = coords.next()?;
+            self.groups
+                .anchors
+                .insert(AnchorId::from_raw(*id as u128), NodePosition { x, y });
+        }
+
+        coords.finish()
+    }
+
+    fn finish(self) -> NodePositionGroups {
+        self.groups
+    }
+}
+
+struct BulkPositionCoords<'a> {
+    coords: &'a [GlyphValue],
+    index: usize,
+    kind: &'static str,
+}
+
+impl<'a> BulkPositionCoords<'a> {
+    fn new(coords: &'a [GlyphValue], id_count: usize, kind: &'static str) -> CoreResult<Self> {
+        let expected_coords = id_count * 2;
+        if coords.len() != expected_coords {
+            return Err(invalid_position_update_input(
+                kind,
+                format!(
+                    "expected {expected_coords} coordinates, got {}",
+                    coords.len()
+                ),
+            ));
+        }
+
+        Ok(Self {
+            coords,
+            index: 0,
+            kind,
+        })
+    }
+
+    fn next(&mut self) -> CoreResult<(GlyphValue, GlyphValue)> {
+        let x = self.read()?;
+        let y = self.read()?;
+        Ok((x, y))
+    }
+
+    fn finish(self) -> CoreResult<()> {
+        if self.index == self.coords.len() {
+            Ok(())
+        } else {
+            Err(invalid_position_update_input(
+                self.kind,
+                format!(
+                    "expected {} coordinates, read {}",
+                    self.coords.len(),
+                    self.index
+                ),
+            ))
+        }
+    }
+
+    fn read(&mut self) -> CoreResult<GlyphValue> {
+        let index = self.index;
+        let value = self.coords.get(index).copied().ok_or_else(|| {
+            invalid_position_update_input(self.kind, format!("missing coordinate at index {index}"))
+        })?;
+
+        self.index += 1;
+        Ok(value)
+    }
+}
+
+fn invalid_position_update_input(kind: &'static str, message: impl Into<String>) -> CoreError {
+    CoreError::InvalidPositionUpdateInput {
+        kind,
+        message: message.into(),
+    }
+}
+
+pub struct EditSession {
+    layer: GlyphLayer,
+    glyph_name: String,
+    unicode: u32,
+}
+
+impl EditSession {
+    pub fn new(name: String, unicode: u32, layer: GlyphLayer) -> Self {
+        Self {
+            layer,
+            glyph_name: name,
+            unicode,
+        }
+    }
+
+    pub fn layer(&self) -> &GlyphLayer {
+        &self.layer
+    }
+
+    pub fn layer_mut(&mut self) -> &mut GlyphLayer {
+        &mut self.layer
+    }
+
+    pub fn into_layer(self) -> GlyphLayer {
+        self.layer
+    }
+
+    pub fn glyph_name(&self) -> &str {
+        &self.glyph_name
+    }
+
+    pub fn unicode(&self) -> u32 {
+        self.unicode
+    }
+
+    pub fn width(&self) -> f64 {
+        self.layer.width()
+    }
+}
+
+impl EditSession {
+    fn contour_mut_or_err(&mut self, id: ContourId) -> CoreResult<&mut Contour> {
+        let contour = self
+            .layer
+            .contour_mut(id)
+            .ok_or(CoreError::ContourNotFound(id))?;
+
+        Ok(contour)
+    }
+
+    fn point_mut_or_err(
+        &mut self,
+        contour_id: ContourId,
+        point_id: PointId,
+    ) -> CoreResult<&mut Point> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        contour
+            .get_point_mut(point_id)
+            .ok_or(CoreError::PointNotFound(point_id))
+    }
+
+    fn point_contour_or_err(&self, point_id: PointId) -> CoreResult<ContourId> {
+        self.find_point_contour(point_id)
+            .ok_or(CoreError::PointInContourNotFound(point_id))
+    }
+
+    fn point_mut_by_id_or_err(&mut self, point_id: PointId) -> CoreResult<&mut Point> {
+        let contour_id = self.point_contour_or_err(point_id)?;
+        self.point_mut_or_err(contour_id, point_id)
+    }
+
+    fn anchor_mut_or_err(&mut self, anchor_id: AnchorId) -> CoreResult<&mut Anchor> {
+        self.layer
+            .anchor_mut(anchor_id)
+            .ok_or(CoreError::AnchorNotFound(anchor_id))
+    }
+
+    fn point_contours_or_err(
+        &self,
+        point_ids: &[PointId],
+    ) -> CoreResult<Vec<(PointId, ContourId)>> {
+        point_ids
+            .iter()
+            .map(|&point_id| {
+                self.point_contour_or_err(point_id)
+                    .map(|contour_id| (point_id, contour_id))
+            })
+            .collect()
+    }
+
+    fn points_exist_or_err(&self, point_ids: &[PointId]) -> CoreResult<()> {
+        for point_id in point_ids {
+            self.point_contour_or_err(*point_id)?;
+        }
+        Ok(())
+    }
+
+    fn point_positions_exist_or_err(
+        &self,
+        updates: &HashMap<PointId, NodePosition>,
+    ) -> CoreResult<()> {
+        for point_id in updates.keys() {
+            self.point_contour_or_err(*point_id)?;
+        }
+        Ok(())
+    }
+
+    fn anchors_exist_or_err(&self, anchor_ids: &[AnchorId]) -> CoreResult<()> {
+        for anchor_id in anchor_ids {
+            if self.layer.anchor(*anchor_id).is_none() {
+                return Err(CoreError::AnchorNotFound(*anchor_id));
+            }
+        }
+        Ok(())
+    }
+
+    fn anchor_positions_exist_or_err(
+        &self,
+        updates: &HashMap<AnchorId, NodePosition>,
+    ) -> CoreResult<()> {
+        for anchor_id in updates.keys() {
+            if self.layer.anchor(*anchor_id).is_none() {
+                return Err(CoreError::AnchorNotFound(*anchor_id));
+            }
+        }
+        Ok(())
+    }
+
+    fn update_points(
+        &mut self,
+        point_ids: &[PointId],
+        mut update: impl FnMut(&mut Point),
+    ) -> CoreResult<()> {
+        self.points_exist_or_err(point_ids)?;
+
+        let mut remaining: HashSet<PointId> = point_ids.iter().copied().collect();
+        if remaining.is_empty() {
+            return Ok(());
+        }
+
+        for contour in self.layer.contours_iter_mut() {
+            for point in contour.points_mut() {
+                if remaining.remove(&point.id()) {
+                    update(point);
+                }
+            }
+        }
+
+        if let Some(point_id) = remaining.into_iter().next() {
+            Err(CoreError::PointNotFound(point_id))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_point_positions_validated(
+        &mut self,
+        updates: &HashMap<PointId, NodePosition>,
+    ) -> CoreResult<()> {
+        let mut remaining: HashSet<PointId> = updates.keys().copied().collect();
+        if remaining.is_empty() {
+            return Ok(());
+        }
+
+        for contour in self.layer.contours_iter_mut() {
+            for point in contour.points_mut() {
+                let point_id = point.id();
+                if let Some(position) = updates.get(&point_id) {
+                    point.set_position(position.x, position.y);
+                    remaining.remove(&point_id);
+                    if remaining.is_empty() {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        if let Some(point_id) = remaining.into_iter().next() {
+            Err(CoreError::PointNotFound(point_id))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_anchor_positions_validated(
+        &mut self,
+        updates: &HashMap<AnchorId, NodePosition>,
+    ) -> CoreResult<()> {
+        for (anchor_id, position) in updates {
+            self.anchor_mut_or_err(*anchor_id)?
+                .set_position(position.x, position.y);
+        }
+        Ok(())
+    }
+
+    fn split_nodes(nodes: &[EditableNode]) -> NodeGroups {
+        let mut groups = NodeGroups::default();
+
+        for node in nodes {
+            match node {
+                EditableNode::Point(point_id) => groups.points.push(*point_id),
+                EditableNode::Anchor(anchor_id) => groups.anchors.push(*anchor_id),
+            }
+        }
+
+        groups
+    }
+
+    fn bulk_node_position_updates(
+        updates: BulkNodePositionUpdates<'_>,
+    ) -> CoreResult<NodePositionGroups> {
+        let mut reader = BulkPositionUpdateReader::new();
+        reader.read_points(updates.point_ids, updates.point_coords)?;
+        reader.read_anchors(updates.anchor_ids, updates.anchor_coords)?;
+        Ok(reader.finish())
+    }
+
+    fn apply_node_position_groups(&mut self, groups: &NodePositionGroups) -> CoreResult<()> {
+        self.point_positions_exist_or_err(&groups.points)?;
+        self.anchor_positions_exist_or_err(&groups.anchors)?;
+
+        self.set_point_positions_validated(&groups.points)?;
+        self.set_anchor_positions_validated(&groups.anchors)
+    }
+}
+
+impl EditSession {
+    pub fn set_x_advance(&mut self, width: f64) {
+        self.layer.set_width(width);
+    }
+
+    /// Translate all editable glyph geometry in the active layer.
+    ///
+    /// This moves contour points, anchors, and component transforms.
+    /// Glyph advance width is intentionally left unchanged.
+    pub fn translate_layer(&mut self, dx: f64, dy: f64) {
+        for contour in self.layer.contours_iter_mut() {
+            for point in contour.points_mut() {
+                point.translate(dx, dy);
+            }
+        }
+
+        let anchor_ids: Vec<_> = self
+            .layer
+            .anchors_iter()
+            .map(|anchor| anchor.id())
+            .collect();
+        self.layer.move_anchors(&anchor_ids, dx, dy);
+
+        let component_ids: Vec<_> = self.layer.components().keys().cloned().collect();
+        for component_id in component_ids {
+            if let Some(mut component) = self.layer.remove_component(component_id) {
+                component.translate(dx, dy);
+                self.layer.add_component(component);
+            }
+        }
+    }
+
+    pub fn restore_layer(
+        &mut self,
+        structure: &GlyphStructure,
+        values: &[GlyphValue],
+    ) -> CoreResult<()> {
+        let mut new_layer = self.layer.clone();
+        apply_state_to_layer(&mut new_layer, structure, values)?;
+        self.layer = new_layer;
+        Ok(())
+    }
+}
+
+impl EditSession {
+    pub fn add_empty_contour(&mut self) -> ContourId {
+        let contour = Contour::new();
+        let contour_id = contour.id();
+        self.layer.add_contour(contour);
+        contour_id
+    }
+
+    pub fn remove_contour(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
+        self.layer
+            .remove_contour(contour_id)
+            .ok_or(CoreError::ContourNotFound(contour_id))
+    }
+
+    pub fn close_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        contour.close();
+        Ok(())
+    }
+
+    pub fn open_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        contour.open();
+        Ok(())
+    }
+
+    pub fn reverse_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        contour.reverse();
+        Ok(())
+    }
+
+    pub fn apply_boolean_op(
+        &mut self,
+        contour_id_a: ContourId,
+        contour_id_b: ContourId,
+        op: BooleanOp,
+    ) -> CoreResult<Vec<ContourId>> {
+        let a = self
+            .layer
+            .contour(contour_id_a)
+            .ok_or(CoreError::ContourNotFound(contour_id_a))?
+            .clone();
+        let b = self
+            .layer
+            .contour(contour_id_b)
+            .ok_or(CoreError::ContourNotFound(contour_id_b))?
+            .clone();
+
+        let result =
+            boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
+
+        self.remove_contour(contour_id_a)?;
+        self.remove_contour(contour_id_b)?;
+
+        let mut created_ids = Vec::new();
+        for contour in result.0 {
+            let id = self.layer.add_contour(contour);
+            created_ids.push(id);
+        }
+
+        Ok(created_ids)
+    }
+
+    pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {
+        for contour in self.layer.contours_iter() {
+            if contour.get_point(point_id).is_some() {
+                return Some(contour.id());
+            }
+        }
+        None
+    }
+}
+
+impl EditSession {
+    pub fn add_point_to_contour(
+        &mut self,
+        contour_id: ContourId,
+        x: f64,
+        y: f64,
+        point_type: PointType,
+        is_smooth: bool,
+    ) -> CoreResult<PointId> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        let point_id = contour.add_point(x, y, point_type, is_smooth);
+
+        Ok(point_id)
+    }
+
+    pub fn insert_point_before(
+        &mut self,
+        before_id: PointId,
+        x: f64,
+        y: f64,
+        point_type: PointType,
+        is_smooth: bool,
+    ) -> CoreResult<PointId> {
+        let contour_id = self.point_contour_or_err(before_id)?;
+        let contour = self.contour_mut_or_err(contour_id)?;
+
+        let point_id = contour
+            .insert_point_before(before_id, x, y, point_type, is_smooth)
+            .ok_or(CoreError::PointNotFound(before_id))?;
+
+        Ok(point_id)
+    }
+
+    pub fn remove_point(&mut self, point_id: PointId) -> CoreResult<()> {
+        let contour_id = self.point_contour_or_err(point_id)?;
+        let contour = self.contour_mut_or_err(contour_id)?;
+        contour
+            .remove_point(point_id)
+            .ok_or(CoreError::PointNotFound(point_id))?;
+        Ok(())
+    }
+
+    pub fn move_points(&mut self, point_ids: &[PointId], dx: f64, dy: f64) -> CoreResult<()> {
+        self.update_points(point_ids, |point| point.translate(dx, dy))
+    }
+
+    pub fn transform_points(
+        &mut self,
+        point_ids: &[PointId],
+        transform: Transform,
+    ) -> CoreResult<()> {
+        self.update_points(point_ids, |point| {
+            let (x, y) = transform.transform_point(point.x(), point.y());
+            point.set_position(x, y);
+        })
+    }
+
+    /// Set absolute position for a single point
+    pub fn set_point_position(&mut self, point_id: PointId, x: f64, y: f64) -> CoreResult<()> {
+        self.move_point(point_id, x, y)
+    }
+
+    pub fn move_point(&mut self, point_id: PointId, x: f64, y: f64) -> CoreResult<()> {
+        self.point_mut_by_id_or_err(point_id)?.set_position(x, y);
+        Ok(())
+    }
+
+    pub fn translate_point(&mut self, point_id: PointId, dx: f64, dy: f64) -> CoreResult<()> {
+        self.point_mut_by_id_or_err(point_id)?.translate(dx, dy);
+        Ok(())
+    }
+
+    pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<()> {
+        let contour_id = self.point_contour_or_err(point_id)?;
+        let point = self.point_mut_or_err(contour_id, point_id)?;
+
+        point.toggle_smooth();
+
+        Ok(())
+    }
+
+    pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<()> {
+        let point_contours = self.point_contours_or_err(point_ids)?;
+
+        for (point_id, contour_id) in point_contours {
+            let contour = self.contour_mut_or_err(contour_id)?;
+            contour
+                .remove_point(point_id)
+                .ok_or(CoreError::PointNotFound(point_id))?;
+        }
+
+        Ok(())
+    }
+}
+
+impl EditSession {
+    /// Set absolute position for a single anchor
+    pub fn set_anchor_position(&mut self, anchor_id: AnchorId, x: f64, y: f64) -> CoreResult<()> {
+        self.anchor_mut_or_err(anchor_id)?.set_position(x, y);
+        Ok(())
+    }
+
+    pub fn move_anchors(&mut self, anchor_ids: &[AnchorId], dx: f64, dy: f64) -> CoreResult<()> {
+        self.anchors_exist_or_err(anchor_ids)?;
+
+        for anchor_id in anchor_ids {
+            self.anchor_mut_or_err(*anchor_id)?.translate(dx, dy);
+        }
+        Ok(())
+    }
+
+    pub fn transform_anchors(
+        &mut self,
+        anchor_ids: &[AnchorId],
+        transform: Transform,
+    ) -> CoreResult<()> {
+        self.anchors_exist_or_err(anchor_ids)?;
+
+        for anchor_id in anchor_ids {
+            let anchor = self.anchor_mut_or_err(*anchor_id)?;
+            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
+            anchor.set_position(x, y);
+        }
+        Ok(())
+    }
+
+    pub fn move_nodes(&mut self, nodes: &[EditableNode], dx: f64, dy: f64) -> CoreResult<()> {
+        let groups = Self::split_nodes(nodes);
+        self.points_exist_or_err(&groups.points)?;
+        self.anchors_exist_or_err(&groups.anchors)?;
+
+        self.move_points(&groups.points, dx, dy)?;
+        self.move_anchors(&groups.anchors, dx, dy)
+    }
+
+    pub fn transform_nodes(
+        &mut self,
+        nodes: &[EditableNode],
+        transform: Transform,
+    ) -> CoreResult<()> {
+        let groups = Self::split_nodes(nodes);
+        self.points_exist_or_err(&groups.points)?;
+        self.anchors_exist_or_err(&groups.anchors)?;
+
+        self.transform_points(&groups.points, transform)?;
+        self.transform_anchors(&groups.anchors, transform)
+    }
+
+    pub fn set_bulk_node_positions(
+        &mut self,
+        updates: BulkNodePositionUpdates<'_>,
+    ) -> CoreResult<GlyphChangedEntities> {
+        let groups = Self::bulk_node_position_updates(updates)?;
+        let changed = GlyphChangedEntities {
+            point_ids: groups.points.keys().copied().collect(),
+            anchor_ids: groups.anchors.keys().copied().collect(),
+            ..Default::default()
+        };
+
+        self.apply_node_position_groups(&groups)?;
+        Ok(changed)
+    }
+
+    pub fn apply_bulk_node_positions(
+        &mut self,
+        updates: BulkNodePositionUpdates<'_>,
+    ) -> CoreResult<()> {
+        let groups = Self::bulk_node_position_updates(updates)?;
+        self.apply_node_position_groups(&groups)
+    }
+}
+
+impl EditSession {
+    pub fn contour(&self, id: ContourId) -> Option<&Contour> {
+        self.layer.contour(id)
+    }
+
+    pub fn contour_mut(&mut self, id: ContourId) -> Option<&mut Contour> {
+        self.layer.contour_mut(id)
+    }
+
+    pub fn contours_iter(&self) -> impl Iterator<Item = &Contour> {
+        self.layer.contours_iter()
+    }
+
+    pub fn contours_count(&self) -> usize {
+        self.layer.contours().len()
+    }
+}
+
+impl EditSession {
+    pub fn paste_contours(
+        &mut self,
+        contours: Vec<PasteContour>,
+        offset_x: f64,
+        offset_y: f64,
+    ) -> PasteResult {
+        let mut created_point_ids = Vec::new();
+        let mut created_contour_ids = Vec::new();
+
+        for paste_contour in contours {
+            let mut contour = Contour::new();
+
+            for point in paste_contour.points {
+                let point_id = contour.add_point(
+                    point.x + offset_x,
+                    point.y + offset_y,
+                    point.point_type,
+                    point.smooth,
+                );
+                created_point_ids.push(point_id);
+            }
+
+            if paste_contour.closed {
+                contour.close();
+            }
+
+            let contour_id = self.layer.add_contour(contour);
+            created_contour_ids.push(contour_id);
+        }
+
+        PasteResult {
+            created_point_ids,
+            created_contour_ids,
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PastePoint {
+    pub x: f64,
+    pub y: f64,
+    pub point_type: PointType,
+    pub smooth: bool,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasteContour {
+    pub points: Vec<PastePoint>,
+    pub closed: bool,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasteResult {
+    pub created_point_ids: Vec<PointId>,
+    pub created_contour_ids: Vec<ContourId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shift_ir::{Anchor, Component};
+
+    fn create_session() -> EditSession {
+        EditSession::new("test".to_string(), 65, GlyphLayer::with_width(500.0))
+    }
+
+    fn session_with_contour() -> (EditSession, ContourId) {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour();
+        (session, contour_id)
+    }
+
+    fn add_point(session: &mut EditSession, contour_id: ContourId, x: f64, y: f64) -> PointId {
+        session
+            .add_point_to_contour(contour_id, x, y, PointType::OnCurve, false)
+            .unwrap()
+    }
+
+    fn add_anchor(session: &mut EditSession, x: f64, y: f64) -> AnchorId {
+        session
+            .layer_mut()
+            .add_anchor(Anchor::new(Some("top".to_string()), x, y))
+    }
+
+    fn point_position(
+        session: &EditSession,
+        contour_id: ContourId,
+        point_id: PointId,
+    ) -> (f64, f64) {
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        (point.x(), point.y())
+    }
+
+    fn anchor_position(session: &EditSession, anchor_id: AnchorId) -> (f64, f64) {
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        (anchor.x(), anchor.y())
+    }
+
+    #[test]
+    fn remove_contour_removes_contour() {
+        let (mut session, contour_id) = session_with_contour();
+
+        session.remove_contour(contour_id).unwrap();
+
+        assert_eq!(session.contours_count(), 0);
+    }
+
+    #[test]
+    fn remove_contour_missing_returns_typed_error() {
+        let mut session = create_session();
+        let contour_id = ContourId::new();
+
+        assert!(matches!(
+            session.remove_contour(contour_id),
+            Err(CoreError::ContourNotFound(id)) if id == contour_id
+        ));
+    }
+
+    #[test]
+    fn move_nodes_moves_points_and_anchors() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 10.0, 20.0);
+        let anchor_id = add_anchor(&mut session, 100.0, 200.0);
+
+        session
+            .move_nodes(
+                &[
+                    EditableNode::Point(point_id),
+                    EditableNode::Anchor(anchor_id),
+                ],
+                5.0,
+                -10.0,
+            )
+            .unwrap();
+
+        assert_eq!(point_position(&session, contour_id, point_id), (15.0, 10.0));
+        assert_eq!(anchor_position(&session, anchor_id), (105.0, 190.0));
+    }
+
+    #[test]
+    fn transform_nodes_applies_affine_transform_to_points_and_anchors() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 10.0, 20.0);
+        let anchor_id = add_anchor(&mut session, 100.0, 200.0);
+
+        session
+            .transform_nodes(
+                &[
+                    EditableNode::Point(point_id),
+                    EditableNode::Anchor(anchor_id),
+                ],
+                Transform {
+                    xx: 2.0,
+                    xy: 0.0,
+                    yx: 0.0,
+                    yy: 3.0,
+                    dx: 5.0,
+                    dy: -10.0,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(point_position(&session, contour_id, point_id), (25.0, 50.0));
+        assert_eq!(anchor_position(&session, anchor_id), (205.0, 590.0));
+    }
+
+    #[test]
+    fn set_bulk_node_positions_sets_points_and_anchors() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 10.0, 20.0);
+        let anchor_id = add_anchor(&mut session, 100.0, 200.0);
+        let point_ids = [point_id.raw()];
+        let point_coords = [300.0, 400.0];
+        let anchor_ids = [anchor_id.raw()];
+        let anchor_coords = [500.0, 600.0];
+
+        session
+            .set_bulk_node_positions(BulkNodePositionUpdates {
+                point_ids: Some(&point_ids),
+                point_coords: Some(&point_coords),
+                anchor_ids: Some(&anchor_ids),
+                anchor_coords: Some(&anchor_coords),
+            })
+            .unwrap();
+
+        assert_eq!(
+            point_position(&session, contour_id, point_id),
+            (300.0, 400.0)
+        );
+        assert_eq!(anchor_position(&session, anchor_id), (500.0, 600.0));
+    }
+
+    #[test]
+    fn move_point_sets_absolute_position() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 0.0, 0.0);
+
+        session.move_point(point_id, 50.0, 75.0).unwrap();
+
+        assert_eq!(point_position(&session, contour_id, point_id), (50.0, 75.0));
+    }
+
+    #[test]
+    fn move_point_missing_returns_typed_error() {
+        let mut session = create_session();
+        let point_id = PointId::new();
+
+        assert!(matches!(
+            session.move_point(point_id, 50.0, 75.0),
+            Err(CoreError::PointInContourNotFound(id)) if id == point_id
+        ));
+    }
+
+    #[test]
+    fn add_point_to_missing_contour_returns_typed_error() {
+        let mut session = create_session();
+        let contour_id = ContourId::new();
+
+        assert!(matches!(
+            session.add_point_to_contour(contour_id, 1.0, 2.0, PointType::OnCurve, false),
+            Err(CoreError::ContourNotFound(id)) if id == contour_id
+        ));
+    }
+
+    #[test]
+    fn move_points_multiple() {
+        let (mut session, contour_id) = session_with_contour();
+        let p1 = add_point(&mut session, contour_id, 0.0, 0.0);
+        let p2 = add_point(&mut session, contour_id, 100.0, 100.0);
+
+        session.move_points(&[p1, p2], 10.0, 20.0).unwrap();
+
+        assert_eq!(point_position(&session, contour_id, p1), (10.0, 20.0));
+        assert_eq!(point_position(&session, contour_id, p2), (110.0, 120.0));
+    }
+
+    #[test]
+    fn move_points_across_contours() {
+        let mut session = create_session();
+        let c1_id = session.add_empty_contour();
+        let p1 = session
+            .add_point_to_contour(c1_id, 0.0, 0.0, PointType::OnCurve, false)
+            .unwrap();
+
+        let c2_id = session.add_empty_contour();
+        let p2 = session
+            .add_point_to_contour(c2_id, 50.0, 50.0, PointType::OnCurve, false)
+            .unwrap();
+
+        session.move_points(&[p1, p2], 5.0, 5.0).unwrap();
+
+        let c1 = session.contour(c1_id).unwrap();
+        let c2 = session.contour(c2_id).unwrap();
+
+        assert_eq!(c1.get_point(p1).unwrap().x(), 5.0);
+        assert_eq!(c2.get_point(p2).unwrap().x(), 55.0);
+    }
+
+    #[test]
+    fn move_points_missing_point_does_not_partially_move_existing_points() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 0.0, 0.0);
+        let missing_id = PointId::new();
+
+        let result = session.move_points(&[point_id, missing_id], 10.0, 20.0);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::PointInContourNotFound(id)) if id == missing_id
+        ));
+        assert_eq!(point_position(&session, contour_id, point_id), (0.0, 0.0));
+    }
+
+    #[test]
+    fn move_anchors_missing_anchor_does_not_partially_move_existing_anchors() {
+        let mut session = create_session();
+        let anchor_id = add_anchor(&mut session, 10.0, 20.0);
+        let missing_id = AnchorId::new();
+
+        let result = session.move_anchors(&[anchor_id, missing_id], 5.0, 6.0);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::AnchorNotFound(id)) if id == missing_id
+        ));
+        assert_eq!(anchor_position(&session, anchor_id), (10.0, 20.0));
+    }
+
+    #[test]
+    fn move_nodes_missing_anchor_does_not_move_points() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 10.0, 20.0);
+        let missing_id = AnchorId::new();
+
+        let result = session.move_nodes(
+            &[
+                EditableNode::Point(point_id),
+                EditableNode::Anchor(missing_id),
+            ],
+            5.0,
+            6.0,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::AnchorNotFound(id)) if id == missing_id
+        ));
+        assert_eq!(point_position(&session, contour_id, point_id), (10.0, 20.0));
+    }
+
+    #[test]
+    fn set_bulk_node_positions_missing_anchor_does_not_move_points() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 10.0, 20.0);
+        let missing_id = AnchorId::new();
+        let point_ids = [point_id.raw()];
+        let point_coords = [300.0, 400.0];
+        let anchor_ids = [missing_id.raw()];
+        let anchor_coords = [500.0, 600.0];
+
+        let result = session.set_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: Some(&point_ids),
+            point_coords: Some(&point_coords),
+            anchor_ids: Some(&anchor_ids),
+            anchor_coords: Some(&anchor_coords),
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::AnchorNotFound(id)) if id == missing_id
+        ));
+        assert_eq!(point_position(&session, contour_id, point_id), (10.0, 20.0));
+    }
+
+    #[test]
+    fn translate_layer_moves_points_and_anchors_without_changing_width() {
+        let mut session = create_session();
+        let original_width = session.width();
+        let contour_id = session.add_empty_contour();
+        let point_id = session
+            .add_point_to_contour(contour_id, 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap();
+        let anchor_id =
+            session
+                .layer_mut()
+                .add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
+
+        session.translate_layer(5.0, -3.0);
+
+        let point = session
+            .contour(contour_id)
+            .unwrap()
+            .get_point(point_id)
+            .unwrap();
+        let anchor = session.layer().anchor(anchor_id).unwrap();
+        assert_eq!(point.x(), 15.0);
+        assert_eq!(point.y(), 17.0);
+        assert_eq!(anchor.x(), 35.0);
+        assert_eq!(anchor.y(), 37.0);
+        assert_eq!(session.width(), original_width);
+    }
+
+    #[test]
+    fn translate_layer_moves_component_transforms() {
+        let mut session = create_session();
+        let component_id = session
+            .layer_mut()
+            .add_component(Component::new("base".to_string()));
+
+        session.translate_layer(12.0, -7.0);
+
+        let component = session.layer().component(component_id).unwrap();
+        let matrix = component.matrix();
+        assert_eq!(matrix.dx, 12.0);
+        assert_eq!(matrix.dy, -7.0);
+    }
+
+    #[test]
+    fn remove_points_removes_all_requested_points() {
+        let (mut session, contour_id) = session_with_contour();
+        let p1 = add_point(&mut session, contour_id, 0.0, 0.0);
+        let p2 = add_point(&mut session, contour_id, 100.0, 100.0);
+        let p3 = add_point(&mut session, contour_id, 200.0, 200.0);
+
+        session.remove_points(&[p1, p3]).unwrap();
+
+        assert!(session.find_point_contour(p2).is_some());
+        assert!(session.find_point_contour(p1).is_none());
+        assert!(session.find_point_contour(p3).is_none());
+    }
+
+    #[test]
+    fn remove_points_missing_point_does_not_partially_remove_existing_points() {
+        let (mut session, contour_id) = session_with_contour();
+        let point_id = add_point(&mut session, contour_id, 0.0, 0.0);
+        let missing_id = PointId::new();
+
+        let result = session.remove_points(&[point_id, missing_id]);
+
+        assert!(matches!(
+            result,
+            Err(CoreError::PointInContourNotFound(id)) if id == missing_id
+        ));
+        assert!(session.find_point_contour(point_id).is_some());
+    }
+
+    #[test]
+    fn insert_point_before_creates_bezier_pattern() {
+        let (mut session, contour_id) = session_with_contour();
+        let anchor1 = add_point(&mut session, contour_id, 0.0, 0.0);
+        let anchor2 = add_point(&mut session, contour_id, 100.0, 100.0);
+
+        let control = session
+            .insert_point_before(anchor2, 50.0, 75.0, PointType::OffCurve, false)
+            .unwrap();
+
+        let contour = session.contour(contour_id).unwrap();
+        let points: Vec<_> = contour.points().iter().collect();
+
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0].id(), anchor1);
+        assert_eq!(points[1].id(), control);
+        assert_eq!(points[2].id(), anchor2);
+
+        assert_eq!(points[0].point_type(), PointType::OnCurve);
+        assert_eq!(points[1].point_type(), PointType::OffCurve);
+        assert_eq!(points[2].point_type(), PointType::OnCurve);
+    }
+
+    #[test]
+    fn insert_point_before_nonexistent_fails() {
+        let (mut session, contour_id) = session_with_contour();
+        add_point(&mut session, contour_id, 0.0, 0.0);
+        let fake_id = PointId::new();
+
+        assert!(matches!(
+            session.insert_point_before(fake_id, 50.0, 50.0, PointType::OffCurve, false),
+            Err(CoreError::PointInContourNotFound(id)) if id == fake_id
+        ));
+    }
+
+    #[test]
+    fn paste_contours_creates_offset_contours_and_points() {
+        let mut session = create_session();
+
+        let result = session.paste_contours(
+            vec![PasteContour {
+                points: vec![
+                    PastePoint {
+                        x: 10.0,
+                        y: 20.0,
+                        point_type: PointType::OnCurve,
+                        smooth: false,
+                    },
+                    PastePoint {
+                        x: 30.0,
+                        y: 40.0,
+                        point_type: PointType::OffCurve,
+                        smooth: true,
+                    },
+                ],
+                closed: true,
+            }],
+            5.0,
+            -10.0,
+        );
+
+        let contour_id = result.created_contour_ids[0];
+        let contour = session.contour(contour_id).unwrap();
+
+        assert!(contour.is_closed());
+        assert_eq!(result.created_point_ids.len(), 2);
+        assert_eq!(
+            point_position(&session, contour_id, result.created_point_ids[0]),
+            (15.0, 10.0)
+        );
+        assert_eq!(
+            point_position(&session, contour_id, result.created_point_ids[1]),
+            (35.0, 30.0)
+        );
+    }
+}

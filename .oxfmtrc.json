@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "useTabs": false,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "out",
+    ".turbo",
+    "*.min.js",
+    "*.min.css",
+    "pnpm-lock.yaml",
+    "packages/types/src/generated",
+    "packages/types/src/bridge/generated.ts",
+    "packages/types/__fixtures__",
+    "crates/shift-bridge/index.js",
+    "crates/shift-bridge/index.d.ts",
+    "**/vendor",
+    "packages/glyph-info/resources"
+  ]
+}

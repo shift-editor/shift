@@ -1,99 +1,90 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   SetLeftSidebearingCommand,
   SetRightSidebearingCommand,
   SetXAdvanceCommand,
 } from "./SidebearingCommands";
-import { createBridge, getAllPoints } from "@/testing";
-import type { NativeBridge } from "@/bridge";
-import type { CommandContext } from "../core";
-
-let bridge: NativeBridge;
-
-function ctx(): CommandContext {
-  return { glyph: bridge.$glyph.peek()! };
-}
-
-beforeEach(() => {
-  bridge = createBridge();
-  bridge.startEditSession("A");
-});
+import { addContour, addPoint, commandSourceFixture, point } from "../testUtils";
 
 describe("SetXAdvanceCommand", () => {
   it("sets xAdvance on execute", () => {
-    const cmd = new SetXAdvanceCommand(500, 530);
+    const { source, ctx } = commandSourceFixture();
+    const command = new SetXAdvanceCommand(500, 530);
 
-    cmd.execute(ctx());
+    command.execute(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(530);
+    expect(source.geometry.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
-    const cmd = new SetXAdvanceCommand(500, 530);
+    const { source, ctx } = commandSourceFixture();
+    const command = new SetXAdvanceCommand(500, 530);
 
-    cmd.execute(ctx());
-    cmd.undo(ctx());
+    command.execute(ctx);
+    command.undo(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
+    expect(source.geometry.xAdvance).toBe(500);
   });
 });
 
 describe("SetRightSidebearingCommand", () => {
   it("sets xAdvance on execute", () => {
-    const cmd = new SetRightSidebearingCommand(500, 530);
+    const { source, ctx } = commandSourceFixture();
+    const command = new SetRightSidebearingCommand(500, 530);
 
-    cmd.execute(ctx());
+    command.execute(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(530);
+    expect(source.geometry.xAdvance).toBe(530);
   });
 
   it("restores xAdvance on undo", () => {
-    const cmd = new SetRightSidebearingCommand(500, 530);
+    const { source, ctx } = commandSourceFixture();
+    const command = new SetRightSidebearingCommand(500, 530);
 
-    cmd.execute(ctx());
-    cmd.undo(ctx());
+    command.execute(ctx);
+    command.undo(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
+    expect(source.geometry.xAdvance).toBe(500);
   });
 });
 
 describe("SetLeftSidebearingCommand", () => {
   it("translates geometry then sets advance on execute", () => {
-    bridge.addContour();
-    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
-    const cmd = new SetLeftSidebearingCommand(500, 520, 20);
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
+    const command = new SetLeftSidebearingCommand(500, 520, 20);
 
-    cmd.execute(ctx());
+    command.execute(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(520);
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.x).toBe(120);
+    expect(source.geometry.xAdvance).toBe(520);
+    expect(point(source, pointId).x).toBe(120);
   });
 
   it("reverts advance and translation on undo", () => {
-    bridge.addContour();
-    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
-    const cmd = new SetLeftSidebearingCommand(500, 520, 20);
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
+    const command = new SetLeftSidebearingCommand(500, 520, 20);
 
-    cmd.execute(ctx());
-    cmd.undo(ctx());
+    command.execute(ctx);
+    command.undo(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(500);
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.x).toBe(100);
+    expect(source.geometry.xAdvance).toBe(500);
+    expect(point(source, pointId).x).toBe(100);
   });
 
   it("reapplies translation and advance on redo", () => {
-    bridge.addContour();
-    bridge.addPoint({ x: 100, y: 200, pointType: "onCurve", smooth: false });
-    const cmd = new SetLeftSidebearingCommand(500, 520, 20);
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const pointId = addPoint(source, contourId, { x: 100, y: 200 });
+    const command = new SetLeftSidebearingCommand(500, 520, 20);
 
-    cmd.execute(ctx());
-    cmd.undo(ctx());
-    cmd.redo(ctx());
+    command.execute(ctx);
+    command.undo(ctx);
+    command.redo(ctx);
 
-    expect(bridge.getEditingSnapshot()!.xAdvance).toBe(520);
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.x).toBe(120);
+    expect(source.geometry.xAdvance).toBe(520);
+    expect(point(source, pointId).x).toBe(120);
   });
 });

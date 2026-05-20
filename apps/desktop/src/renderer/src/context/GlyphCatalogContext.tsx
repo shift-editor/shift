@@ -1,8 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import type { GlyphCategory, GlyphCategoryCatalog, GlyphCategorySummary } from "@shift/glyph-info";
-import { useSignalState } from "@/lib/reactive";
-import { getEditor } from "@/store/store";
-import { getGlyphInfo } from "@/store/glyphInfo";
+import { useSignalState } from "@/lib/signals";
+import { getEditor, getGlyphInfo } from "@/store/store";
 import { ADOBE_LATIN_1 } from "@data/adobe-latin-1";
 
 export interface GlyphCatalogState {
@@ -40,10 +39,13 @@ const useGlyphCatalogState = (): GlyphCatalogState => {
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
 
+  const starterUnicodes = useMemo(
+    () => Object.values(ADOBE_LATIN_1).map((g) => parseInt(g.unicode, 16)),
+    [],
+  );
   const availableUnicodes = useMemo(
-    () =>
-      fontLoaded ? fontUnicodes : Object.values(ADOBE_LATIN_1).map((g) => parseInt(g.unicode, 16)),
-    [fontLoaded, fontUnicodes],
+    () => (fontLoaded && fontUnicodes.length > 0 ? fontUnicodes : starterUnicodes),
+    [fontLoaded, fontUnicodes, starterUnicodes],
   );
 
   const categoryCatalog = useMemo<GlyphCategoryCatalog>(

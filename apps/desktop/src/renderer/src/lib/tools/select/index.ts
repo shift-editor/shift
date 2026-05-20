@@ -1,7 +1,6 @@
 export { Select, type BoundingRectEdge, type SelectState } from "./Select";
-export type { SelectionDrag, TranslateDrag, ResizeDrag, SelectBehavior } from "./types";
+export type { BrushingDrag, TranslateDrag, ResizeDrag, SelectBehavior } from "./types";
 export { edgeToCursor } from "./cursor";
-export { normalizeRect, pointInRect } from "./utils";
 export {
   Selection,
   Marquee,
@@ -13,5 +12,5 @@ export {
   ToggleSmooth,
   UpgradeSegment,
   BendCurve,
-  ContourDoubleClick,
+  SegmentDoubleClick,
 } from "./behaviors";

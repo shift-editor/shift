@@ -21,6 +21,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.574.0",
+    "react-resizable-panels": "^3.0.6",
     "tailwind-merge": "^3.3.1"
   },
   "peerDependencies": {

@@ -2,14 +2,17 @@ import { FC, useEffect, useRef, useState } from "react";
 
 import { CanvasContextProvider } from "@/context/CanvasContext";
 import { useDebugSafe } from "@/context/DebugContext";
-import { effect } from "@/lib/reactive/signal";
+import { effect } from "@/lib/signals/signal";
+import { useSignalState } from "@/lib/signals";
 import { getEditor } from "@/store/store";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
-import { HiddenTextInput } from "./HiddenTextInput";
+import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
+
+const GLYPH_ID_RE = /^[0-9a-f]+$/i;
 
 interface EditorViewProps {
   glyphId: string;
@@ -19,34 +22,33 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
   const editor = getEditor();
   const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
+  const fontLoaded = useSignalState(editor.font.$loaded);
 
   const [cursorStyle, setCursorStyle] = useState(() => editor.cursor);
 
   useEffect(() => {
     const fx = effect(() => {
-      setCursorStyle(editor.cursor);
+      setCursorStyle(editor.cursorCell.value);
     });
     return () => fx.dispose();
   }, [editor]);
 
   useEffect(() => {
+    if (!fontLoaded) return undefined;
+    if (!GLYPH_ID_RE.test(glyphId)) return undefined;
+
     const parsed = Number.parseInt(glyphId, 16);
-    const unicode = Number.isNaN(parsed) ? 0x41 : parsed;
-    const glyphName = editor.font.glyphName(unicode);
+    if (Number.isNaN(parsed)) return undefined;
 
-    const initEditor = () => {
-      editor.setMainGlyphUnicode(unicode);
-      editor.open(glyphName);
+    const unicode = parsed;
+    const handle = editor.font.glyphHandleForUnicode(unicode);
 
-      editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, glyphName, unicode);
+    const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
 
-      // Update viewport with actual font metrics (UPM, descender, guides)
-      editor.updateMetricsFromFont();
+    editor.openGlyph(handle);
+    editor.openGlyphSource(handle, source.id);
 
-      editor.requestRedraw();
-    };
-
-    initEditor();
+    editor.updateMetricsFromFont();
 
     const toolManager = editor.toolManager;
     const activeToolId = editor.getActiveTool();
@@ -56,7 +58,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       toolManager.reset();
       editor.close();
     };
-  }, [glyphId]);
+  }, [editor, fontLoaded, glyphId]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -71,7 +73,6 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         e.preventDefault();
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
         editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
-        editor.requestRedraw();
       } else {
         const currentPan = editor.pan;
         const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
@@ -84,9 +85,8 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
             altKey: e.altKey,
             metaKey: e.metaKey,
           },
-          { force: true, skipHover: true },
+          { force: true },
         );
-        editor.requestRedraw();
       }
     };
 
@@ -107,7 +107,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>
-      <HiddenTextInput />
+      <TextInput />
       {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );

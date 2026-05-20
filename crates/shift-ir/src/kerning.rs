@@ -24,10 +24,14 @@ impl KerningPair {
         }
     }
 
-    pub fn glyph_pair(first: GlyphName, second: GlyphName, value: f64) -> Self {
+    pub fn glyph_pair(
+        first: impl Into<GlyphName>,
+        second: impl Into<GlyphName>,
+        value: f64,
+    ) -> Self {
         Self {
-            first: KerningSide::Glyph(first),
-            second: KerningSide::Glyph(second),
+            first: KerningSide::Glyph(first.into()),
+            second: KerningSide::Glyph(second.into()),
             value,
         }
     }
@@ -53,23 +57,23 @@ impl KerningData {
         self.pairs.push(pair);
     }
 
-    pub fn get_kerning(&self, first: &GlyphName, second: &GlyphName) -> Option<f64> {
+    pub fn get_kerning(&self, first: &str, second: &str) -> Option<f64> {
         for pair in &self.pairs {
             let first_matches = match &pair.first {
-                KerningSide::Glyph(g) => g == first,
+                KerningSide::Glyph(g) => g.as_str() == first,
                 KerningSide::Group(group) => self
                     .groups1
                     .get(group)
-                    .map(|members| members.contains(first))
+                    .map(|members| members.iter().any(|member| member.as_str() == first))
                     .unwrap_or(false),
             };
 
             let second_matches = match &pair.second {
-                KerningSide::Glyph(g) => g == second,
+                KerningSide::Glyph(g) => g.as_str() == second,
                 KerningSide::Group(group) => self
                     .groups2
                     .get(group)
-                    .map(|members| members.contains(second))
+                    .map(|members| members.iter().any(|member| member.as_str() == second))
                     .unwrap_or(false),
             };
 
@@ -114,14 +118,8 @@ mod tests {
             -50.0,
         ));
 
-        assert_eq!(
-            kerning.get_kerning(&"A".to_string(), &"V".to_string()),
-            Some(-50.0)
-        );
-        assert_eq!(
-            kerning.get_kerning(&"A".to_string(), &"B".to_string()),
-            None
-        );
+        assert_eq!(kerning.get_kerning("A", "V"), Some(-50.0));
+        assert_eq!(kerning.get_kerning("A", "B"), None);
     }
 
     #[test]
@@ -129,25 +127,16 @@ mod tests {
         let mut kerning = KerningData::new();
         kerning.set_group1(
             "public.kern1.A".to_string(),
-            vec!["A".to_string(), "Aacute".to_string()],
+            vec!["A".into(), "Aacute".into()],
         );
-        kerning.set_group2(
-            "public.kern2.V".to_string(),
-            vec!["V".to_string(), "W".to_string()],
-        );
+        kerning.set_group2("public.kern2.V".to_string(), vec!["V".into(), "W".into()]);
         kerning.add_pair(KerningPair::new(
             KerningSide::Group("public.kern1.A".to_string()),
             KerningSide::Group("public.kern2.V".to_string()),
             -40.0,
         ));
 
-        assert_eq!(
-            kerning.get_kerning(&"A".to_string(), &"V".to_string()),
-            Some(-40.0)
-        );
-        assert_eq!(
-            kerning.get_kerning(&"Aacute".to_string(), &"W".to_string()),
-            Some(-40.0)
-        );
+        assert_eq!(kerning.get_kerning("A", "V"), Some(-40.0));
+        assert_eq!(kerning.get_kerning("Aacute", "W"), Some(-40.0));
     }
 }

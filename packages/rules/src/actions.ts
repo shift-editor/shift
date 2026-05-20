@@ -2,9 +2,10 @@
  * Rule Actions - Apply matched rules to compute point positions
  */
 
-import { Vec2 } from "@shift/geo";
-import type { ContourSnapshot, Point, PointId, GlyphSnapshot, Point2D } from "@shift/types";
+import { Vec2, type Point2D } from "@shift/geo";
+import type { PointId } from "@shift/types";
 import type {
+  ConstrainDragGlyph,
   DragPatch,
   MatchedRule,
   MatchedRuleById,
@@ -15,9 +16,12 @@ import type {
 import { pickRuleAtIndex } from "./matcher";
 import { maintainCollinearity, maintainTangency } from "./constraints";
 
+type ConstrainDragContour = ConstrainDragGlyph["contours"][number];
+type ConstrainDragPoint = ConstrainDragContour["points"][number];
+
 type IndexedPoint = {
-  point: Point;
-  contour: ContourSnapshot;
+  point: ConstrainDragPoint;
+  contour: ConstrainDragContour;
   index: number;
 };
 
@@ -26,16 +30,16 @@ type PointIndex = Map<PointId, IndexedPoint>;
 export interface PreparedConstrainDrag {
   selectedIds: ReadonlySet<PointId>;
   pointIndex: PointIndex;
-  selectedPoints: readonly Point[];
+  selectedPoints: readonly ConstrainDragPoint[];
   matchedRules: readonly MatchedRule[];
   allowsUniformTranslationCommit: boolean;
 }
 
 function getPointAtContourOffset(
-  contour: ContourSnapshot,
+  contour: ConstrainDragContour,
   centerIndex: number,
   offset: number,
-): Point | undefined {
+): ConstrainDragPoint | undefined {
   const nextIndex = centerIndex + offset;
   if (contour.closed) {
     const total = contour.points.length;
@@ -46,7 +50,7 @@ function getPointAtContourOffset(
   return contour.points[nextIndex];
 }
 
-function buildPointIndex(glyph: GlyphSnapshot): PointIndex {
+function buildPointIndex(glyph: ConstrainDragGlyph): PointIndex {
   const index = new Map<PointId, IndexedPoint>();
 
   for (const contour of glyph.contours) {
@@ -64,7 +68,10 @@ function buildPointIndex(glyph: GlyphSnapshot): PointIndex {
   return index;
 }
 
-function findPointById(pointIndex: PointIndex, pointId: PointId | undefined): Point | null {
+function findPointById(
+  pointIndex: PointIndex,
+  pointId: PointId | undefined,
+): ConstrainDragPoint | null {
   if (!pointId) return null;
   const found = pointIndex.get(pointId);
   if (!found) return null;
@@ -75,7 +82,7 @@ function findAffectedPointByRole<Id extends RuleId, Role extends RuleAffectedRol
   pointIndex: PointIndex,
   rule: MatchedRuleById<Id>,
   role: Role,
-): Point | null {
+): ConstrainDragPoint | null {
   return findPointById(pointIndex, rule.affected[role]);
 }
 
@@ -86,13 +93,17 @@ function findAffectedPointsByRole<
   pointIndex: PointIndex,
   rule: MatchedRuleById<Id>,
   ...roles: Roles
-): { [K in keyof Roles]: Point | null } {
+): { [K in keyof Roles]: ConstrainDragPoint | null } {
   return roles.map((role) => findAffectedPointByRole(pointIndex, rule, role)) as {
-    [K in keyof Roles]: Point | null;
+    [K in keyof Roles]: ConstrainDragPoint | null;
   };
 }
 
-function pushTranslatedMove(moves: PointMove[], point: Point | null, mousePos: Point2D): void {
+function pushTranslatedMove(
+  moves: PointMove[],
+  point: ConstrainDragPoint | null,
+  mousePos: Point2D,
+): void {
   if (!point) return;
   moves.push({
     id: point.id,
@@ -128,12 +139,12 @@ function selectionNeedsRuleResolution(
   return false;
 }
 
-export function prepareConstrainDrag(
-  glyph: GlyphSnapshot,
+export function prepareConstrainedDrag(
+  glyph: ConstrainDragGlyph,
   selectedIds: ReadonlySet<PointId>,
 ): PreparedConstrainDrag {
   const pointIndex = buildPointIndex(glyph);
-  const selectedPoints: Point[] = [];
+  const selectedPoints: ConstrainDragPoint[] = [];
   const matchedRules: MatchedRule[] = [];
   const needsRuleResolution = selectionNeedsRuleResolution(pointIndex, selectedIds);
 
@@ -317,7 +328,7 @@ function applyRule(pointIndex: PointIndex, rule: MatchedRule, mousePos: Point2D)
  * `glyph` is the **base** glyph (unchanged). The delta is applied internally.
  */
 export interface ConstrainDragInput {
-  glyph: GlyphSnapshot;
+  glyph: ConstrainDragGlyph;
   selectedIds: ReadonlySet<PointId>;
   mousePosition: Point2D;
 }
@@ -331,7 +342,7 @@ export function constrainDrag(
   options?: ConstrainDragOptions,
 ): DragPatch {
   const { glyph, selectedIds, mousePosition } = input;
-  return constrainPreparedDrag(prepareConstrainDrag(glyph, selectedIds), mousePosition, options);
+  return constrainPreparedDrag(prepareConstrainedDrag(glyph, selectedIds), mousePosition, options);
 }
 
 export function constrainPreparedDrag(

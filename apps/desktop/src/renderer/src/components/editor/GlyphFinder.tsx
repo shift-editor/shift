@@ -9,9 +9,9 @@ import {
   Separator,
 } from "@shift/ui";
 import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
-import { getGlyphInfo } from "@/store/glyphInfo";
 import type { SearchResult } from "@shift/glyph-info";
 import { useFocusZone } from "@/context/FocusZoneContext";
+import { getGlyphInfo } from "@/store/store";
 
 interface GlyphFinderProps {
   open: boolean;
@@ -29,9 +29,12 @@ function glyphChar(codepoint: number): string {
 
 export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) {
   const { lockToZone, unlock } = useFocusZone();
+
   const [query, setQuery] = useState("");
+
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -141,7 +144,7 @@ export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) 
                 <div
                   ref={listRef}
                   role="listbox"
-                  className="mt-2 max-h-80 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  className="mt-2 max-h-80 overflow-y-auto scrollbar-hidden"
                 >
                   {results.map((result, index) => (
                     <div

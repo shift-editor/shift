@@ -34,6 +34,9 @@ export type { Point2D, Rect2D } from "./types";
 // Bounds operations
 export { Bounds } from "./Bounds";
 
+// Rectangle operations
+export { Rect } from "./Rect";
+
 // Core vector operations
 export { Vec2 } from "./Vec2";
 
@@ -45,4 +48,4 @@ export { Polygon } from "./Polygon";
 export type { LineCurve, QuadraticCurve, CubicCurve, CurveType, ClosestPoint } from "./Curve";
 
 // Matrix transformations
-export { Mat, type MatModel } from "./Mat";
+export { Mat, type DecomposedTransform, type MatModel } from "./Mat";

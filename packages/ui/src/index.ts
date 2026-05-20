@@ -34,5 +34,14 @@ export {
   type CollapsiblePanelProps,
   type CollapsibleChevronProps,
 } from "./components/collapsible";
+export {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+  type ResizablePanelGroupProps,
+  type ResizablePanelProps,
+  type ResizableHandleProps,
+  type ResizablePanelHandle,
+} from "./components/resizable";
 export { cn } from "./lib/utils";
-export { Search } from "lucide-react";
+export { Search, X } from "lucide-react";

@@ -1,69 +1,69 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { AddPointCommand } from "./PointCommands";
-import { createBridge, getAllPoints, getPointCount } from "@/testing";
-import type { NativeBridge } from "@/bridge";
-import type { CommandContext } from "../core";
-
-let bridge: NativeBridge;
-
-function ctx(): CommandContext {
-  return { glyph: bridge.$glyph.peek()! };
-}
-
-beforeEach(() => {
-  bridge = createBridge();
-  bridge.startEditSession("A");
-});
+import { describe, expect, it } from "vitest";
+import type { ContourId } from "@shift/types";
+import { AddPointCommand, ToggleSmoothCommand } from "./PointCommands";
+import { addContour, addPoint, commandSourceFixture, contourPoints, point } from "../testUtils";
 
 describe("AddPointCommand", () => {
-  it("should add a point at specified coordinates", () => {
-    bridge.addContour();
-    const cmd = new AddPointCommand(100, 200, "onCurve");
+  it("adds a point at specified coordinates", () => {
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const command = new AddPointCommand(100, 200, "onCurve", false, contourId);
 
-    const pointId = cmd.execute(ctx());
+    const pointId = command.execute(ctx);
 
-    expect(pointId).toBeTruthy();
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
-
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.x).toBe(100);
-    expect(points[0]!.y).toBe(200);
-    expect(points[0]!.pointType).toBe("onCurve");
+    expect(contourPoints(source, contourId).length).toBe(1);
+    expect(point(source, pointId)).toMatchObject({ x: 100, y: 200, pointType: "onCurve" });
   });
 
-  it("should add a smooth point", () => {
-    bridge.addContour();
-    const cmd = new AddPointCommand(50, 75, "onCurve", true);
+  it("adds a smooth point", () => {
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const command = new AddPointCommand(50, 75, "onCurve", true, contourId);
 
-    cmd.execute(ctx());
+    const pointId = command.execute(ctx);
 
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.smooth).toBe(true);
+    expect(point(source, pointId).smooth).toBe(true);
   });
 
-  it("should add an offCurve point", () => {
-    bridge.addContour();
-    const cmd = new AddPointCommand(30, 40, "offCurve");
+  it("adds an off-curve point", () => {
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const command = new AddPointCommand(30, 40, "offCurve", false, contourId);
 
-    cmd.execute(ctx());
+    const pointId = command.execute(ctx);
 
-    const points = getAllPoints(bridge.getEditingSnapshot());
-    expect(points[0]!.pointType).toBe("offCurve");
+    expect(point(source, pointId).pointType).toBe("offCurve");
   });
 
-  it("should remove the point on undo", () => {
-    bridge.addContour();
-    const cmd = new AddPointCommand(100, 200, "onCurve");
+  it("removes the point on undo", () => {
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const command = new AddPointCommand(100, 200, "onCurve", false, contourId);
 
-    cmd.execute(ctx());
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(1);
+    command.execute(ctx);
+    expect(contourPoints(source, contourId).length).toBe(1);
 
-    cmd.undo(ctx());
-    expect(getPointCount(bridge.getEditingSnapshot())).toBe(0);
+    command.undo(ctx);
+    expect(contourPoints(source, contourId).length).toBe(0);
   });
 
-  it("should have the correct name", () => {
-    const cmd = new AddPointCommand(0, 0, "onCurve");
-    expect(cmd.name).toBe("Add Point");
+  it("has the correct name", () => {
+    const command = new AddPointCommand(0, 0, "onCurve", false, 0 as ContourId);
+    expect(command.name).toBe("Add Point");
+  });
+});
+
+describe("ToggleSmoothCommand", () => {
+  it("toggles smooth and toggles back on undo", () => {
+    const { source, ctx } = commandSourceFixture();
+    const contourId = addContour(source);
+    const pointId = addPoint(source, contourId, { x: 100, y: 200, smooth: false });
+    const command = new ToggleSmoothCommand(pointId);
+
+    command.execute(ctx);
+    expect(point(source, pointId).smooth).toBe(true);
+
+    command.undo(ctx);
+    expect(point(source, pointId).smooth).toBe(false);
   });
 });

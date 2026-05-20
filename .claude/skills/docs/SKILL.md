@@ -48,9 +48,10 @@ This is the most valuable section because it captures knowledge that is invisibl
 
 Each invariant states a rule and explains why it exists:
 
-> **Architecture Invariant:** Rust is never touched during the draft hot path. `GlyphDraft.setPositions` calls only `glyph.apply()` — a JS-only signal update. Rust sees the final result once when `finish()` calls `bridge.sync()`. This exists because NAPI struct marshaling at thousands of points per frame causes ~450ms frames + GC pressure.
+> **Architecture Invariant:** Rust is never touched during the draft preview hot path. `SourceEditDraft.previewPositionPatch()` applies a sparse patch to local reactive geometry only. Rust sees the final sparse patch once when `commit()` calls `GlyphSource.commitPositionPatch()`. This exists because round-tripping full glyph values for thousands of points per frame causes long frames and GC pressure.
 
 Good invariants describe:
+
 - What never happens and why ("X never imports Y because Z")
 - Performance-motivated design choices ("uses flat arrays, never JSON, because Y")
 - Semantic distinctions invisible in types ("`$glyph` fires on identity changes, not data changes")

@@ -94,7 +94,7 @@ describe("ToolManager", () => {
     it("should provide cursor signal when activating tool normally", () => {
       toolManager.activate("pen");
 
-      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "pen" });
+      expect(toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen" });
     });
 
     it("should provide cursor signal when activating temporary hand tool", () => {
@@ -102,7 +102,9 @@ describe("ToolManager", () => {
 
       editor.requestTemporaryTool("hand");
 
-      expect(toolManager.activeTool?.$cursor.value).toEqual({ type: "grab" });
+      expect(toolManager.activeTool?.cursorCell.value).toEqual({
+        type: "grab",
+      });
     });
   });
 
@@ -150,7 +152,9 @@ describe("ToolManager", () => {
       toolManager.activate("pen");
       let activated = false;
 
-      editor.requestTemporaryTool("hand", { onActivate: () => (activated = true) });
+      editor.requestTemporaryTool("hand", {
+        onActivate: () => (activated = true),
+      });
 
       expect(activated).toBe(true);
     });
@@ -159,7 +163,9 @@ describe("ToolManager", () => {
       toolManager.activate("pen");
       let returned = false;
 
-      editor.requestTemporaryTool("hand", { onReturn: () => (returned = true) });
+      editor.requestTemporaryTool("hand", {
+        onReturn: () => (returned = true),
+      });
       editor.returnFromTemporaryTool();
 
       expect(returned).toBe(true);
@@ -184,11 +190,16 @@ describe("ToolManager", () => {
     it("drag (down, move, up) drives tool with dragStart, drag, dragEnd and does not emit click", () => {
       toolManager.activate("hand");
       toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+      expect(editor.gesture.phase).toBe("pressed");
+
       toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
       toolManager.flushPointerMoves();
+      expect(editor.gesture.phase).toBe("dragging");
+
       toolManager.handlePointerUp({ x: 120, y: 100 });
 
-      expect(toolManager.isDragging).toBe(false);
+      expect(editor.gesture.isDragging).toBe(false);
+      expect(editor.gesture.phase).toBe("idle");
       const lastState = editor.getActiveToolState() as { type?: string };
       expect(lastState?.type).toBe("ready");
     });
@@ -218,7 +229,11 @@ describe("ToolManager", () => {
       toolManager.activate("select");
 
       toolManager.handleKeyDown(
-        createKeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: false }),
+        createKeyboardEvent("keydown", {
+          key: "Alt",
+          altKey: true,
+          shiftKey: false,
+        }),
       );
 
       expect(editor.currentModifiers).toEqual({

@@ -3,24 +3,20 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "index.js", "index.d.ts", "*.node"],
       "inputs": ["src/**", "package.json", "tsconfig.json"]
     },
     "build:native": {
       "inputs": ["crates/*/src/**", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"],
       "outputs": [
-        "crates/shift-node/index.js",
-        "crates/shift-node/index.d.ts",
-        "crates/shift-node/*.node"
+        "crates/shift-bridge/index.js",
+        "crates/shift-bridge/index.d.ts",
+        "crates/shift-bridge/*.node"
       ]
     },
-    "generate:types": {
-      "inputs": [
-        "crates/shift-core/src/**",
-        "crates/shift-ir/src/**",
-        "scripts/patch-generated-types.ts"
-      ],
-      "outputs": ["packages/types/src/generated/*.ts"]
+    "generate:bridge-types": {
+      "inputs": ["../../crates/shift-bridge/index.d.ts", "../../scripts/generate-bridge-types.mjs"],
+      "outputs": ["src/bridge/generated.ts"]
     },
     "dev": {
       "dependsOn": ["build:native"],
@@ -28,7 +24,7 @@
       "persistent": true
     },
     "typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^generate:bridge-types", "generate:bridge-types"],
       "outputs": []
     },
     "lint": {

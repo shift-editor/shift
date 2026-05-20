@@ -1,4 +1,222 @@
-# Shift Feature Roadmap
+# Shift Roadmap
+
+This roadmap has two layers:
+
+- **Release roadmap:** the default order of work for shipping usable versions.
+- **Feature inventory:** the broader backlog of implemented, planned, and experimental work.
+
+The release roadmap wins when priorities conflict. Exploration is still useful, but every release should have one clear promise and a small set of acceptance tests.
+
+## Current Stage
+
+Current repo state: `0.0.1-dev` / pre-alpha source development.
+
+Current capability level: roughly `0.2.x-alpha` feature maturity. Core editing work is significantly ahead of release infrastructure, so the first public binary does not need to start at `0.1.0` if the changelog honestly explains what already exists.
+
+Recommended first public binary: `0.2.0-alpha.1`.
+
+Why:
+
+- Basic vector editing, selection, undo/redo, delete, clipboard, segment hover, snapping pieces, transform tools, glyph thumbnails/search, boolean operations, and some variable/text work already exist.
+- Public release basics are not done yet: no release tags, no root changelog, no release workflow, no signed/notarized binary, no published artifacts, and version files disagree.
+
+## Release Roadmap
+
+### 0.2.0-alpha.1 — First Installable Editing Alpha
+
+Promise: a tester can install Shift, launch it, open a font, and try the existing core editor without building from source.
+
+Scope:
+
+- GitHub Release with release notes and checksums.
+- Version files aligned.
+- Root `CHANGELOG.md`.
+- macOS artifact, signed and notarized if possible.
+- Windows and Linux artifacts if CI can produce them without derailing the release.
+- README and `shift.graphics` use the same alpha language.
+- Known limitations documented prominently.
+- Existing editor workflows are not blocked by obvious packaging/native-module issues.
+
+Acceptance tests:
+
+- Download the release artifact on a clean macOS machine.
+- Launch the app without Gatekeeper workarounds, or clearly label the build as unsigned if signing is deferred.
+- Open a UFO/TTF/OTF.
+- Select a glyph, edit points, undo/redo, copy/paste, and close the app.
+
+### 0.3.0-alpha — Persistence And Export Alpha
+
+Promise: a tester can use Shift on a toy font and verify save/reopen/export behavior.
+
+Scope:
+
+- UFO save and Save As are reliable enough for alpha testing.
+- Dirty state and close/quit save prompts are trustworthy.
+- Reopen after save preserves expected glyph edits.
+- TTF/OTF export path exists for simple fonts.
+- Export errors are visible and actionable.
+- Round-trip tests cover representative UFO edits.
+- Data-loss risks are documented.
+
+Acceptance tests:
+
+- Open UFO, edit glyph, save, quit, reopen, verify edit.
+- Save As to a new UFO and reopen it.
+- Export a simple TTF/OTF and install or inspect it externally.
+- Try saving a non-writable source format and verify Shift forces Save As.
+
+### 0.4.0-alpha — Glyph Workflow Alpha
+
+Promise: a tester can work across multiple glyphs without fighting navigation or glyph metadata.
+
+Scope:
+
+- Recent files are functional.
+- Glyph grid supports the common navigation path.
+- Glyph add, duplicate, delete, and rename basics.
+- Unicode/name editing basics.
+- Open Recent and core File/Glyph menu items.
+- Keyboard navigation in the grid.
+- Basic validation for empty/missing/problem glyphs if cheap.
+
+Acceptance tests:
+
+- Open a font, find a glyph by name/unicode/character, edit it, move to another glyph, return to the first.
+- Add or duplicate a glyph and save/reopen.
+- Rename or edit unicode metadata and verify the result survives save/reopen where supported.
+
+### 0.5.0-alpha — Drawing Workflow Depth
+
+Promise: contour editing feels useful beyond simple point movement.
+
+Scope:
+
+- Boolean operations are stabilized in the UI.
+- Remove overlap or path direction cleanup, whichever is more valuable first.
+- Shape tools for rectangle/ellipse if they support real glyph work.
+- Better point/segment indicators: extrema, open endpoints, smooth tangent lines, or equivalent.
+- Measurement/guides if they unblock precision work.
+- Zoom to selection / center glyph.
+
+Acceptance tests:
+
+- Draw overlapping contours, run boolean/remove-overlap workflow, save/reopen.
+- Build a simple glyph from shapes and manual point edits.
+- Use precision aids to align or measure a contour without guessing.
+
+### 0.6.0-alpha — Components And Accents Alpha
+
+Promise: Shift can represent and edit composite glyph workflows at an alpha level.
+
+Scope:
+
+- Component data model and snapshots.
+- Add component to glyph.
+- Move/transform component.
+- Render component bounds/ghosting.
+- Decompose component.
+- Basic anchors.
+- Simple accented glyph generation path.
+
+Acceptance tests:
+
+- Build an accented glyph from a base and mark component.
+- Move/transform a component and save/reopen.
+- Decompose a component and continue editing outlines.
+
+### 0.7.0-alpha — Variable Font Alpha
+
+Promise: Shift can inspect and test variable font/designspace workflows, even if editing is incomplete.
+
+Scope:
+
+- Designspace loading is user-facing.
+- Master switching.
+- Add/remove or copy master workflow if feasible.
+- Interpolation preview is reliable enough for tester feedback.
+- Named instances.
+- Instance export for simple cases.
+- Compatibility errors are understandable.
+
+Acceptance tests:
+
+- Open designspace, switch masters, preview interpolation.
+- Detect incompatible glyphs and show a useful message.
+- Export or generate a simple instance.
+
+### 0.8.0-alpha — Spacing And Proofing Alpha
+
+Promise: a tester can evaluate glyphs in text context.
+
+Scope:
+
+- Sidebearing handles or numeric sidebearing editing.
+- Spacing strings and presets.
+- Preview/proofing panel.
+- Waterfall view.
+- Basic kerning preview or editing if ready.
+- HarfBuzz shaping preview if the plumbing is ready.
+
+Acceptance tests:
+
+- Edit spacing for a glyph while viewing it in context.
+- Save/reopen spacing changes.
+- Preview a sample string at multiple sizes.
+
+### 0.9.0-beta.1 — Beta Candidate
+
+Promise: a type designer can complete a small real task end-to-end, and the beta line is primarily about fixing bugs.
+
+Scope:
+
+- Feature freeze for the 1.0 core workflow.
+- Packaging works on the supported platforms.
+- macOS signing/notarization is mandatory.
+- Windows/Linux packaging status is clearly documented.
+- Documentation for install, open, edit, save, export, and known limitations.
+- Crash/diagnostic story or at least useful error reporting.
+- File-format/data-loss risks have explicit tests.
+
+Acceptance tests:
+
+- Complete a small real project from install to exported font.
+- Verify clean install on each supported platform.
+- Verify release notes, changelog, and website match the actual release state.
+
+### 1.0.0 — Stable
+
+Promise: Shift is a production-quality font editor for the documented core workflow.
+
+Scope:
+
+- Main workflow is dependable: install, open/create, edit, save/reopen, export.
+- Documentation is sufficient for non-contributors.
+- Compatibility and file-format expectations are explicit.
+- Update path exists or the absence of auto-update is intentional and documented.
+- Known critical data-loss issues are fixed.
+
+## Priority Rules
+
+Use these rules when deciding what to work on next:
+
+1. If the current milestone has a broken acceptance test, fix that before adding unrelated feature surface.
+2. Prefer work that completes an end-to-end workflow over work that adds isolated capability.
+3. Keep experimental work behind the current release promise unless it directly reduces release risk.
+4. Patch releases fix regressions only; minor releases add a new workflow promise.
+5. Beta means feature freeze for the beta line, not a larger feature bucket.
+
+## Flexible Exploration Backlog
+
+These are allowed to jump around when energy is high, but they should not silently become release blockers:
+
+- Components and accents.
+- Variable fonts.
+- Spacing and kerning.
+- OpenType feature editing.
+- Scripting.
+- AI/MCP integration.
+- Collaboration.
+- Advanced rendering/performance work.
 
 ## Current Implementation Status
 
@@ -687,54 +905,67 @@ interface ShiftScriptContext {
 
 ## 📊 Version Milestones
 
-### v0.1 - Alpha (MVP)
+The authoritative milestone plan is the release roadmap at the top of this file. This section is a compact index.
 
-- Basic bezier drawing ✓
-- Point selection and manipulation ✓
-- Undo/redo ✓
-- Delete points ✓
-- Open/save UFO files
-- Export to TTF
+### v0.2-alpha — First Installable Editing Alpha
 
-### v0.2 - Beta
+- Release infrastructure and installable binaries.
+- Existing core vector editing exposed to testers.
+- Clear alpha limitations.
 
-- Full editing toolkit (copy/paste ✓, snapping)
-- Segment hover/highlighting
-- Grid panel improvements (thumbnails, search)
-- Glyph add/delete/rename
+### v0.3-alpha — Persistence And Export Alpha
 
-### v0.3 - Components
+- Save/reopen loop.
+- Save As and dirty state.
+- Basic TTF/OTF export.
+- Round-trip tests.
 
-- Component system
-- Anchors
-- Accented glyph generation
+### v0.4-alpha — Glyph Workflow Alpha
 
-### v0.4 - Variable Fonts
+- Recent files.
+- Better glyph grid navigation.
+- Glyph add/duplicate/delete/rename.
+- Unicode/name editing basics.
 
-- Designspace support
-- Master switching
-- Interpolation preview
+### v0.5-alpha — Drawing Workflow Depth
 
-### v0.5 - Professional
+- Stabilized boolean/path operations.
+- Shape and precision workflow improvements.
+- Better contour indicators and validation basics.
 
-- Full menu system
-- Preferences
-- Incremental compilation
-- HarfBuzz preview
+### v0.6-alpha — Components And Accents Alpha
 
-### v1.0 - Stable Release
+- Component data model.
+- Component editing/rendering/decomposition.
+- Anchors.
+- Accented glyph generation basics.
 
-- Production ready
-- Full documentation
-- Signed distributions
-- Auto-updates
-- Scripting v1
+### v0.7-alpha — Variable Font Alpha
 
-### Post-1.0
+- User-facing designspace workflow.
+- Master switching.
+- Interpolation preview.
+- Named instances and simple instance export.
 
-- Collaboration features
-- AI integration
-- Plugin ecosystem
+### v0.8-alpha — Spacing And Proofing Alpha
+
+- Sidebearing editing.
+- Spacing strings.
+- Preview/proofing panel.
+- Waterfall view.
+
+### v0.9-beta — Beta Candidate
+
+- Feature freeze for the 1.0 core workflow.
+- Cross-platform packaging.
+- Documentation.
+- File-format and data-loss hardening.
+
+### v1.0 — Stable Release
+
+- Production-quality documented core workflow.
+- Signed distributions.
+- Clear compatibility and update posture.
 
 ---
 

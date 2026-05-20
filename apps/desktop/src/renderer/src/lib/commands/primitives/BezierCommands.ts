@@ -1,8 +1,7 @@
-import type { PointId, ContourId, Point2D } from "@shift/types";
+import type { PointId, ContourId } from "@shift/types";
 import { BaseCommand, type CommandContext } from "../core/Command";
-import { type CubicCurve, type QuadraticCurve } from "@shift/geo";
-import type { LineSegment } from "@/types/segments";
-import type { Segment } from "@/lib/model/Segment";
+import { Point2D, type CubicCurve, type QuadraticCurve } from "@shift/geo";
+import { Point, type LineSegmentPoints, type Segment } from "@shift/glyph-state";
 
 /**
  * Closes the active contour, connecting the last point back to the first.
@@ -12,29 +11,28 @@ import type { Segment } from "@/lib/model/Segment";
 export class CloseContourCommand extends BaseCommand<void> {
   readonly name = "Close Contour";
 
-  #contourId: ContourId | null = null;
+  #contourId: ContourId;
   #wasClosed: boolean = false;
 
-  constructor() {
+  constructor(contourId: ContourId) {
     super();
+    this.#contourId = contourId;
   }
 
   execute(ctx: CommandContext): void {
-    this.#contourId = ctx.glyph.activeContourId;
+    const contour = ctx.source.contour(this.#contourId);
+    if (!contour) throw new Error("Expected contour");
 
-    if (this.#contourId) {
-      const contour = ctx.glyph.contour(this.#contourId);
-      this.#wasClosed = contour?.closed ?? false;
-    }
+    this.#wasClosed = contour.closed;
 
     if (!this.#wasClosed) {
-      ctx.glyph.closeContour();
+      ctx.source.closeContour(this.#contourId);
     }
   }
 
   undo(ctx: CommandContext): void {
-    if (this.#contourId && !this.#wasClosed) {
-      ctx.glyph.openContour(this.#contourId);
+    if (!this.#wasClosed) {
+      ctx.source.openContour(this.#contourId);
     }
   }
 }
@@ -69,35 +67,7 @@ export class NudgePointsCommand extends BaseCommand<void> {
   #apply(ctx: CommandContext, dx: number, dy: number): void {
     if (this.#pointIds.length === 0) return;
 
-    ctx.glyph.translate(this.#pointIds, { x: dx, y: dy });
-  }
-}
-
-/**
- * Switches the active contour in the font engine. New points are appended
- * to the active contour, so this controls where subsequent drawing lands.
- * Undo restores the previously active contour.
- */
-export class SetActiveContourCommand extends BaseCommand<void> {
-  readonly name = "Set Active Contour";
-
-  #contourId: ContourId;
-  #previousActiveId: ContourId | null = null;
-
-  constructor(contourId: ContourId) {
-    super();
-    this.#contourId = contourId;
-  }
-
-  execute(ctx: CommandContext): void {
-    this.#previousActiveId = ctx.glyph.activeContourId;
-    ctx.glyph.setActiveContour(this.#contourId);
-  }
-
-  undo(ctx: CommandContext): void {
-    if (this.#previousActiveId) {
-      ctx.glyph.setActiveContour(this.#previousActiveId);
-    }
+    ctx.source.translate(this.#pointIds, { x: dx, y: dy });
   }
 }
 
@@ -117,11 +87,11 @@ export class ReverseContourCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    ctx.glyph.reverseContour(this.#contourId);
+    ctx.source.reverseContour(this.#contourId);
   }
 
   undo(ctx: CommandContext): void {
-    ctx.glyph.reverseContour(this.#contourId);
+    ctx.source.reverseContour(this.#contourId);
   }
 }
 
@@ -162,58 +132,43 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
   #splitLine(ctx: CommandContext): PointId {
     const splitPoint = this.#segment.pointAt(this.#t);
 
-    const anchor2Id = this.#segment.anchor2.id;
+    const anchor2Id = this.#segment.endId;
 
-    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
-      x: splitPoint.x,
-      y: splitPoint.y,
-      pointType: "onCurve",
-      smooth: false,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, Point.onCurve(splitPoint));
     this.#insertedPointIds.push(this.#splitPointId);
 
     return this.#splitPointId;
   }
 
   #splitQuadratic(ctx: CommandContext): PointId {
-    const data = this.#segment.asQuad()!;
+    const points = this.#segment.asQuad()!;
     const [curveA, curveB] = this.#segment.splitAt(this.#t) as [QuadraticCurve, QuadraticCurve];
 
     const cA = curveA.c;
     const mid = curveA.p1;
     const cB = curveB.c;
 
-    const controlId = data.points.control.id;
-    const anchor2Id = data.points.anchor2.id;
+    const controlId = points.control.id;
+    const anchor2Id = points.end.id;
 
     this.#originalPositions.set(controlId, {
-      x: data.points.control.x,
-      y: data.points.control.y,
+      x: points.control.x,
+      y: points.control.y,
     });
 
-    this.#splitPointId = ctx.glyph.insertPointBefore(anchor2Id, {
-      x: mid.x,
-      y: mid.y,
-      pointType: "onCurve",
-      smooth: true,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(anchor2Id, Point.smooth(mid));
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const cBId = ctx.glyph.insertPointBefore(anchor2Id, {
-      x: cB.x,
-      y: cB.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const cBId = ctx.source.insertPointBefore(anchor2Id, Point.offCurve(cB));
     this.#insertedPointIds.push(cBId);
 
-    ctx.glyph.movePointTo(controlId, cA);
+    ctx.source.movePointTo(controlId, cA);
 
     return this.#splitPointId;
   }
 
   #splitCubic(ctx: CommandContext): PointId {
-    const data = this.#segment.asCubic()!;
+    const points = this.#segment.asCubic()!;
     const [curveA, curveB] = this.#segment.splitAt(this.#t) as [CubicCurve, CubicCurve];
 
     const c0A = curveA.c0;
@@ -222,55 +177,40 @@ export class SplitSegmentCommand extends BaseCommand<PointId> {
     const c0B = curveB.c0;
     const c1B = curveB.c1;
 
-    const control1Id = data.points.control1.id;
-    const control2Id = data.points.control2.id;
+    const control1Id = points.controlStart.id;
+    const control2Id = points.controlEnd.id;
 
     this.#originalPositions.set(control1Id, {
-      x: data.points.control1.x,
-      y: data.points.control1.y,
+      x: points.controlStart.x,
+      y: points.controlStart.y,
     });
     this.#originalPositions.set(control2Id, {
-      x: data.points.control2.x,
-      y: data.points.control2.y,
+      x: points.controlEnd.x,
+      y: points.controlEnd.y,
     });
 
-    const c1AId = ctx.glyph.insertPointBefore(control2Id, {
-      x: c1A.x,
-      y: c1A.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const c1AId = ctx.source.insertPointBefore(control2Id, Point.offCurve(c1A));
     this.#insertedPointIds.push(c1AId);
 
-    this.#splitPointId = ctx.glyph.insertPointBefore(control2Id, {
-      x: mid.x,
-      y: mid.y,
-      pointType: "onCurve",
-      smooth: true,
-    });
+    this.#splitPointId = ctx.source.insertPointBefore(control2Id, Point.smooth(mid));
     this.#insertedPointIds.push(this.#splitPointId);
 
-    const c0BId = ctx.glyph.insertPointBefore(control2Id, {
-      x: c0B.x,
-      y: c0B.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    const c0BId = ctx.source.insertPointBefore(control2Id, Point.offCurve(c0B));
     this.#insertedPointIds.push(c0BId);
 
-    ctx.glyph.movePointTo(control1Id, c0A);
-    ctx.glyph.movePointTo(control2Id, c1B);
+    ctx.source.movePointTo(control1Id, c0A);
+    ctx.source.movePointTo(control2Id, c1B);
 
     return this.#splitPointId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#insertedPointIds.length > 0) {
-      ctx.glyph.removePoints(this.#insertedPointIds);
+      ctx.source.removePoints(this.#insertedPointIds);
     }
 
     for (const [pointId, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(pointId, pos);
+      ctx.source.movePointTo(pointId, pos);
     }
   }
 
@@ -302,10 +242,10 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   #control1Id: PointId | null = null;
   #control2Id: PointId | null = null;
 
-  constructor(segment: LineSegment) {
+  constructor(segment: LineSegmentPoints) {
     super();
-    const p1 = segment.points.anchor1;
-    const p2 = segment.points.anchor2;
+    const p1 = segment.start;
+    const p2 = segment.end;
     this.#anchor2Id = p2.id;
 
     this.#control1Pos = {
@@ -319,24 +259,20 @@ export class UpgradeLineToCubicCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#control2Id = ctx.glyph.insertPointBefore(this.#anchor2Id, {
-      x: this.#control2Pos.x,
-      y: this.#control2Pos.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
-    this.#control1Id = ctx.glyph.insertPointBefore(this.#control2Id, {
-      x: this.#control1Pos.x,
-      y: this.#control1Pos.y,
-      pointType: "offCurve",
-      smooth: false,
-    });
+    this.#control2Id = ctx.source.insertPointBefore(
+      this.#anchor2Id,
+      Point.offCurve(this.#control2Pos),
+    );
+    this.#control1Id = ctx.source.insertPointBefore(
+      this.#control2Id,
+      Point.offCurve(this.#control1Pos),
+    );
   }
 
   undo(ctx: CommandContext): void {
     const toRemove = [this.#control1Id, this.#control2Id].filter(Boolean) as PointId[];
     if (toRemove.length > 0) {
-      ctx.glyph.removePoints(toRemove);
+      ctx.source.removePoints(toRemove);
     }
   }
 

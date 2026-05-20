@@ -6,14 +6,15 @@
  * classification, and bounding box computation.
  *
  * Key scenarios:
- * - renderToolScene — glyph outline + handles + control lines
- * - renderToolBackground — guides + bounding box
- * - renderOverlay — bounding box handles + snap lines
+ * - SceneLayer — glyph outline + handles + control lines
+ * - BackgroundLayer — guides + tool background
+ * - OverlayLayer — tool overlays
  */
 
 import { bench, describe } from "vitest";
 import { createPointMark } from "@/testing/pointMark";
 import { createStubCanvas } from "@/testing/stubCanvas";
+import { BackgroundLayer, OverlayLayer, SceneLayer } from "@/lib/editor/rendering/RenderFrame";
 
 const canvas = createStubCanvas();
 
@@ -33,35 +34,39 @@ const marks = [
 ] as const;
 
 for (const { label, pm } of marks) {
+  const background = new BackgroundLayer(pm.editor);
+  const scene = new SceneLayer(pm.editor);
+  const overlay = new OverlayLayer(pm.editor);
+
   describe(`rendering — ${label} points`, () => {
-    bench("renderToolScene — no selection", () => {
+    bench("SceneLayer — no selection", () => {
       pm.editor.selection.clear();
-      pm.editor.renderToolScene(canvas);
+      scene.draw(canvas);
     });
 
-    bench("renderToolScene — all points selected", () => {
+    bench("SceneLayer — all points selected", () => {
       pm.editor.selectAll();
-      pm.editor.renderToolScene(canvas);
+      scene.draw(canvas);
     });
 
-    bench("renderToolBackground — no selection", () => {
+    bench("BackgroundLayer — no selection", () => {
       pm.editor.selection.clear();
-      pm.editor.renderToolBackground(canvas);
+      background.draw(canvas);
     });
 
-    bench("renderToolBackground — all points selected", () => {
+    bench("BackgroundLayer — all points selected", () => {
       pm.editor.selectAll();
-      pm.editor.renderToolBackground(canvas);
+      background.draw(canvas);
     });
 
-    bench("renderOverlay — no selection", () => {
+    bench("OverlayLayer — no selection", () => {
       pm.editor.selection.clear();
-      pm.editor.renderOverlay(canvas);
+      overlay.draw(canvas);
     });
 
-    bench("renderOverlay — all points selected", () => {
+    bench("OverlayLayer — all points selected", () => {
       pm.editor.selectAll();
-      pm.editor.renderOverlay(canvas);
+      overlay.draw(canvas);
     });
   });
 }

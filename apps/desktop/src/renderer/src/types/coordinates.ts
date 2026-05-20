@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 
 /**
  * A point in all three coordinate spaces: screen (canvas pixels), scene (UPM

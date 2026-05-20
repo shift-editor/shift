@@ -2,9 +2,8 @@ import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
-import { getEditor } from "@/store/store";
-import { useSignalState } from "@/lib/reactive";
-import { getGlyphInfo } from "@/store/glyphInfo";
+import { getEditor, getGlyphInfo } from "@/store/store";
+import { useSignalState } from "@/lib/signals";
 import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
 import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
 
@@ -16,9 +15,11 @@ export const GlyphSection = () => {
   const glyphInfo = getGlyphInfo();
 
   const unicode = formatCodepointAsUPlus(glyph?.unicode ?? 0);
-  const lsb = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
-  const rsb = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
-  const sidebearingsEnabled = lsb !== null && rsb !== null;
+  const lsb =
+    sidebearings.sidebearings.lsb === null ? null : Math.round(sidebearings.sidebearings.lsb);
+  const rsb =
+    sidebearings.sidebearings.rsb === null ? null : Math.round(sidebearings.sidebearings.rsb);
+  const sidebearingsEnabled = sidebearings.editable && lsb !== null && rsb !== null;
 
   return (
     <SidebarSection title="Glyph">
@@ -49,7 +50,8 @@ export const GlyphSection = () => {
         <div className="mt-2">
           <EditableSidebarInput
             className="text-center"
-            value={Math.round(xAdvance)}
+            value={Math.round(xAdvance.xAdvance)}
+            disabled={!xAdvance.editable}
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>

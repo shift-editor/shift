@@ -1,4 +1,5 @@
-import type { Point2D, PointId } from "@shift/types";
+import type { PointId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import { BaseCommand, type CommandContext } from "../core/Command";
 import type { ReflectAxis } from "@/types/transform";
 
@@ -16,14 +17,14 @@ abstract class BaseTransformCommand extends BaseCommand<void> {
   protected captureOriginalPositions(ctx: CommandContext): void {
     if (this.#originalPositions.size > 0 || this.pointIds.length === 0) return;
 
-    for (const point of ctx.glyph.points(this.pointIds)) {
+    for (const point of ctx.source.points(this.pointIds)) {
       this.#originalPositions.set(point.id, { x: point.x, y: point.y });
     }
   }
 
   protected restoreOriginalPositions(ctx: CommandContext): void {
     for (const [id, pos] of this.#originalPositions) {
-      ctx.glyph.movePointTo(id, pos);
+      ctx.source.movePointTo(id, pos);
     }
   }
 }
@@ -46,7 +47,7 @@ export class RotatePointsCommand extends BaseTransformCommand {
 
   execute(ctx: CommandContext): void {
     this.captureOriginalPositions(ctx);
-    ctx.glyph.rotate(this.pointIds, this.#angle, this.#origin);
+    ctx.source.rotate(this.pointIds, this.#angle, this.#origin);
   }
 
   undo(ctx: CommandContext): void {
@@ -54,7 +55,7 @@ export class RotatePointsCommand extends BaseTransformCommand {
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.rotate(this.pointIds, this.#angle, this.#origin);
+    ctx.source.rotate(this.pointIds, this.#angle, this.#origin);
   }
 }
 
@@ -78,7 +79,7 @@ export class ScalePointsCommand extends BaseTransformCommand {
 
   execute(ctx: CommandContext): void {
     this.captureOriginalPositions(ctx);
-    ctx.glyph.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
+    ctx.source.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
   }
 
   undo(ctx: CommandContext): void {
@@ -86,7 +87,7 @@ export class ScalePointsCommand extends BaseTransformCommand {
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
+    ctx.source.scale(this.pointIds, this.#sx, this.#sy, this.#origin);
   }
 }
 
@@ -108,7 +109,7 @@ export class ReflectPointsCommand extends BaseTransformCommand {
 
   execute(ctx: CommandContext): void {
     this.captureOriginalPositions(ctx);
-    ctx.glyph.reflect(this.pointIds, this.#axis, this.#origin);
+    ctx.source.reflect(this.pointIds, this.#axis, this.#origin);
   }
 
   undo(ctx: CommandContext): void {
@@ -116,13 +117,13 @@ export class ReflectPointsCommand extends BaseTransformCommand {
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.reflect(this.pointIds, this.#axis, this.#origin);
+    ctx.source.reflect(this.pointIds, this.#axis, this.#origin);
   }
 }
 
 /**
  * Translates selected points so that a given anchor position lands on a
- * target position. Computes the delta internally. Used for snap-to-position
+ * target position. Computes the delta internally. Used for move-to-position
  * and alignment workflows where the destination is absolute.
  */
 export class MoveSelectionToCommand extends BaseTransformCommand {
@@ -139,7 +140,7 @@ export class MoveSelectionToCommand extends BaseTransformCommand {
 
   execute(ctx: CommandContext): void {
     this.captureOriginalPositions(ctx);
-    ctx.glyph.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
+    ctx.source.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
   }
 
   undo(ctx: CommandContext): void {
@@ -147,6 +148,6 @@ export class MoveSelectionToCommand extends BaseTransformCommand {
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
+    ctx.source.moveSelectionTo(this.pointIds, this.#target, this.#anchor);
   }
 }

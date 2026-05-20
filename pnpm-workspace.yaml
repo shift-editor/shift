@@ -1,4 +1,4 @@
 packages:
   - 'apps/*'
   - 'packages/*'
-  - 'crates/shift-node'
+  - 'crates/shift-bridge'

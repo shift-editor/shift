@@ -1,16 +1,25 @@
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
-import { isSegmentHit } from "@/types/hitResult";
 
 export class UpgradeSegment implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
-    if ((state.type !== "ready" && state.type !== "selected") || !event.altKey) return false;
+    if (state.type !== "ready" || !event.altKey) return false;
 
-    const hit = ctx.editor.hitTest(event.coords);
-    if (!isSegmentHit(hit) || hit.segment.type !== "line") return false;
+    const instance = ctx.editor.glyphInstance;
+    if (!instance?.edit) return false;
 
-    ctx.editor.upgradeLineToCubic(hit.segment);
+    const geometry = instance.geometry;
+    const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
+    if (!hit) return false;
+
+    const segment = geometry.segment(hit.segmentId);
+    if (!segment) return false;
+
+    const line = segment.asLine();
+    if (!line) return false;
+
+    ctx.editor.upgradeLineToCubic(line);
     return true;
   }
 }

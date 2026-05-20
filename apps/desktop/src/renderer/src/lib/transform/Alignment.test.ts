@@ -2,10 +2,14 @@ import { describe, it, expect } from "vitest";
 import { Alignment } from "./Alignment";
 import { Bounds } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import { expectAt } from "@/testing";
-import type { PointPosition } from "./PointPosition";
 
-function createPoint(id: number, x: number, y: number): PointPosition {
+interface TestPosition {
+  readonly id: PointId;
+  readonly x: number;
+  readonly y: number;
+}
+
+function createPoint(id: number, x: number, y: number): TestPosition {
   return { id: `0:${id}` as PointId, x, y };
 }
 
@@ -59,8 +63,8 @@ describe("Alignment", () => {
     it("preserves point IDs", () => {
       const points = [createPoint(1, 100, 150), createPoint(2, 150, 100)];
       const aligned = Alignment.alignPoints(points, "left", bounds);
-      expect(expectAt(aligned, 0).id).toBe(expectAt(points, 0).id);
-      expect(expectAt(aligned, 1).id).toBe(expectAt(points, 1).id);
+      expect(aligned[0]?.id).toBe(points[0]?.id);
+      expect(aligned[1]?.id).toBe(points[1]?.id);
     });
   });
 
@@ -70,9 +74,9 @@ describe("Alignment", () => {
       const distributed = Alignment.distributePoints(points, "horizontal");
 
       const sorted = distributed.sort((a, b) => a.x - b.x);
-      expect(expectAt(sorted, 0).x).toBe(100);
-      expect(expectAt(sorted, 1).x).toBe(200);
-      expect(expectAt(sorted, 2).x).toBe(300);
+      expect(sorted[0]?.x).toBe(100);
+      expect(sorted[1]?.x).toBe(200);
+      expect(sorted[2]?.x).toBe(300);
     });
 
     it("distributes points vertically with equal spacing", () => {
@@ -80,9 +84,9 @@ describe("Alignment", () => {
       const distributed = Alignment.distributePoints(points, "vertical");
 
       const sorted = distributed.sort((a, b) => a.y - b.y);
-      expect(expectAt(sorted, 0).y).toBe(100);
-      expect(expectAt(sorted, 1).y).toBe(250);
-      expect(expectAt(sorted, 2).y).toBe(400);
+      expect(sorted[0]?.y).toBe(100);
+      expect(sorted[1]?.y).toBe(250);
+      expect(sorted[2]?.y).toBe(400);
     });
 
     it("keeps first and last points in place horizontally", () => {
@@ -111,10 +115,10 @@ describe("Alignment", () => {
       const distributed = Alignment.distributePoints(points, "horizontal");
 
       const sorted = distributed.sort((a, b) => a.x - b.x);
-      expect(expectAt(sorted, 0).x).toBe(0);
-      expect(expectAt(sorted, 1).x).toBeCloseTo(100);
-      expect(expectAt(sorted, 2).x).toBeCloseTo(200);
-      expect(expectAt(sorted, 3).x).toBe(300);
+      expect(sorted[0]?.x).toBe(0);
+      expect(sorted[1]?.x).toBeCloseTo(100);
+      expect(sorted[2]?.x).toBeCloseTo(200);
+      expect(sorted[3]?.x).toBe(300);
     });
 
     it("preserves point IDs during distribution", () => {

@@ -1,33 +1,47 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@shift/ui";
 import { routes } from "@/app/routes";
+import { FontInfoDialog } from "./FontInfoDialog";
 
 export const NavigationPane = () => {
   const navigate = useNavigate();
+  const [fontInfoOpen, setFontInfoOpen] = useState(false);
 
   return (
     <section className="h-full flex flex-1 items-center ml-1">
       <div className="flex flex-1 items-center">
         <div className="bg-white rounded-lg border-b border-line p-0.5">
           {routes.map((route) => {
-            if (route.icon) {
-              const Icon = route.icon;
-              return (
-                <Button
-                  key={route.id}
-                  icon={<Icon width={20} height={20} className="text-primary" />}
-                  aria-label={route.description}
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate(route.path)}
-                />
-              );
-            }
-            return null;
+            if (!route.icon) return null;
+            const Icon = route.icon;
+
+            const onClick = () => {
+              switch (route.kind) {
+                case "route":
+                  navigate(route.path);
+                  return;
+                case "dialog":
+                  if (route.dialogId === "font-info") setFontInfoOpen(true);
+                  return;
+              }
+            };
+
+            return (
+              <Button
+                key={route.id}
+                icon={<Icon width={20} height={20} className="text-primary" />}
+                aria-label={route.description}
+                variant="ghost"
+                size="icon"
+                onClick={onClick}
+              />
+            );
           })}
         </div>
       </div>
+      <FontInfoDialog open={fontInfoOpen} onOpenChange={setFontInfoOpen} />
     </section>
   );
 };

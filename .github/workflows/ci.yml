@@ -89,7 +89,7 @@ jobs:
 
       - name: Lint (oxlint)
         run: pnpm test:lint
-      - name: Format check (prettier)
+      - name: Format check (oxfmt)
         run: pnpm format:check
 
   typecheck:
@@ -171,7 +171,7 @@ jobs:
         id: native-cache
         uses: actions/cache@v4
         with:
-          path: crates/shift-node/*.node
+          path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
 
       - name: Build native module
@@ -262,7 +262,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --exclude shift-node
+        run: cargo test --workspace --exclude shift-bridge
 
   integration:
     name: Integration Tests
@@ -308,7 +308,7 @@ jobs:
       - name: Build native module
         run: pnpm build:native
 
-      - name: Run shift-node tests
+      - name: Run shift-bridge tests
         run: pnpm test:native
 
   # ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ jobs:
         id: native-cache
         uses: actions/cache@v4
         with:
-          path: crates/shift-node/*.node
+          path: crates/shift-bridge/*.node
           key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
 
       - name: Build native module

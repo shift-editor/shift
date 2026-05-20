@@ -23,38 +23,42 @@ const marks = [
 
 for (const { label, pm } of marks) {
   describe(`point manipulation — ${label} points`, () => {
-    bench("draft.setPositions — single point", () => {
-      const draft = pm.editor.createDraft();
+    bench("draft.previewPositionPatch — single point", () => {
+      const draft = pm.editor.beginSourceEditDraft({
+        points: [pm.pointIds[0]],
+      });
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      draft.setPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 
-    bench("draft.setPositions — all points", () => {
-      const draft = pm.editor.createDraft();
+    bench("draft.previewPositionPatch — all points", () => {
+      const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      draft.setPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 
-    bench("draft.finish — single point", () => {
-      const draft = pm.editor.createDraft();
+    bench("draft.commit — single point", () => {
+      const draft = pm.editor.beginSourceEditDraft({
+        points: [pm.pointIds[0]],
+      });
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      draft.setPositions(updates);
-      draft.finish("bench move");
+      draft.previewPositionPatch(updates);
+      draft.commit("bench move");
     });
 
-    bench("draft.finish — all points", () => {
-      const draft = pm.editor.createDraft();
+    bench("draft.commit — all points", () => {
+      const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      draft.setPositions(updates);
-      draft.finish("bench move");
+      draft.previewPositionPatch(updates);
+      draft.commit("bench move");
     });
 
     bench("draft.discard — after all-points update", () => {
-      const draft = pm.editor.createDraft();
+      const draft = pm.editor.beginSourceEditDraft({ points: pm.pointIds });
       const updates = buildPositionUpdates(pm.pointIds, 5, 5);
-      draft.setPositions(updates);
+      draft.previewPositionPatch(updates);
       draft.discard();
     });
 

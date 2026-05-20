@@ -15,7 +15,7 @@ export type ButtonProps = BaseButtonProps & {
 const variantStyles = {
   primary: "bg-accent text-white hover:bg-accent/90 rounded-md",
   default: "bg-surface border border-line-subtle hover:bg-surface-hover",
-  ghost: "hover:bg-hover",
+  ghost: "hover:bg-hover/40 data-[active]:bg-hover/50",
 };
 
 const sizeStyles = {

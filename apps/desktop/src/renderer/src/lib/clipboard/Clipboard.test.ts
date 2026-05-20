@@ -71,7 +71,7 @@ describe("Clipboard (via Editor)", () => {
     await editor.paste();
     await editor.paste();
 
-    const contours = editor.currentGlyph?.contours ?? [];
+    const contours = (editor.currentGlyph?.contours ?? []).filter((contour) => !contour.isEmpty);
     expect(contours).toHaveLength(3);
 
     // Each paste translates the original by DEFAULT_PASTE_OFFSET (20) *

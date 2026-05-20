@@ -9,7 +9,7 @@ export class Nudge implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"keyDown">,
   ): boolean {
-    if (state.type !== "selected") return false;
+    if (state.type !== "ready") return false;
 
     const pointIds = [...ctx.editor.selection.pointIds];
     if (pointIds.length === 0) return false;

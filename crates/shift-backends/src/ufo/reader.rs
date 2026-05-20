@@ -147,12 +147,12 @@ impl UfoReader {
             if key_str.starts_with("public.kern1.") {
                 kerning.set_group1(
                     key_str.to_string(),
-                    members.iter().map(|n| n.to_string()).collect(),
+                    members.iter().map(|n| n.to_string().into()).collect(),
                 );
             } else if key_str.starts_with("public.kern2.") {
                 kerning.set_group2(
                     key_str.to_string(),
-                    members.iter().map(|n| n.to_string()).collect(),
+                    members.iter().map(|n| n.to_string().into()).collect(),
                 );
             }
         }
@@ -162,7 +162,7 @@ impl UfoReader {
             let first_side = if first_str.starts_with("public.kern1.") {
                 KerningSide::Group(first_str.to_string())
             } else {
-                KerningSide::Glyph(first_str.to_string())
+                KerningSide::Glyph(first_str.into())
             };
 
             for (second, value) in seconds.iter() {
@@ -170,7 +170,7 @@ impl UfoReader {
                 let second_side = if second_str.starts_with("public.kern2.") {
                     KerningSide::Group(second_str.to_string())
                 } else {
-                    KerningSide::Glyph(second_str.to_string())
+                    KerningSide::Glyph(second_str.into())
                 };
 
                 kerning.add_pair(KerningPair::new(first_side.clone(), second_side, *value));

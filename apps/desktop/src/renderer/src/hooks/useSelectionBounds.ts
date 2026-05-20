@@ -1,6 +1,6 @@
 import type { Bounds } from "@shift/geo";
 import { getEditor } from "@/store/store";
-import { useSignalState, useSignalTrigger } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 
 /**
  * Current selection bounds (axis-aligned, point-based), live-updating.
@@ -17,8 +17,5 @@ import { useSignalState, useSignalTrigger } from "@/lib/reactive";
  */
 export function useSelectionBounds(): Bounds | null {
   const editor = getEditor();
-  const glyph = useSignalState(editor.glyph);
-  useSignalTrigger(glyph?.$contours);
-  useSignalTrigger(editor.selection.$pointIds);
-  return editor.selection.bounds;
+  return useSignalState(editor.selection.boundsCell, { schedule: "frame" });
 }

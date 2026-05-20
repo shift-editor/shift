@@ -8,4 +8,5 @@ export { Escape } from "./Escape";
 export { ToggleSmooth } from "./ToggleSmooth";
 export { UpgradeSegment } from "./UpgradeSegment";
 export { BendCurve } from "./BendCurve";
-export { ContourDoubleClick } from "./ContourDoubleClick";
+export { SegmentDoubleClick } from "./SegmentDoubleClick";
+export { SelectHover } from "./SelectHover";

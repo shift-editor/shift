@@ -1,4 +1,4 @@
-use crate::traits::FontWriter;
+use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_ir::{
     Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
@@ -203,8 +203,8 @@ impl Default for UfoWriter {
     }
 }
 
-impl FontWriter for UfoWriter {
-    fn save(&self, font: &Font, path: &str) -> Result<(), String> {
+impl UfoWriter {
+    pub fn save_view(&self, font: &impl FontView, path: &str) -> Result<(), String> {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             std::fs::remove_dir_all(path_obj)
@@ -280,7 +280,7 @@ impl FontWriter for UfoWriter {
         let default_layer_id = font.default_layer_id();
         let default_layer = norad_font.layers.default_layer_mut();
 
-        for glyph in font.glyphs().values() {
+        for glyph in font.glyphs() {
             if let Some(layer_data) = glyph.layer(default_layer_id) {
                 let norad_glyph = Self::convert_glyph(glyph, layer_data);
                 default_layer.insert_glyph(norad_glyph);
@@ -288,7 +288,7 @@ impl FontWriter for UfoWriter {
         }
 
         for (layer_id, layer) in font.layers() {
-            if *layer_id == default_layer_id {
+            if layer_id == default_layer_id {
                 continue;
             }
 
@@ -297,8 +297,8 @@ impl FontWriter for UfoWriter {
                 .new_layer(layer.name())
                 .map_err(|e| e.to_string())?;
 
-            for glyph in font.glyphs().values() {
-                if let Some(layer_data) = glyph.layer(*layer_id) {
+            for glyph in font.glyphs() {
+                if let Some(layer_data) = glyph.layer(layer_id) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data);
                     norad_layer.insert_glyph(norad_glyph);
                 }
@@ -312,5 +312,11 @@ impl FontWriter for UfoWriter {
         }
 
         norad_font.save(path).map_err(|e| e.to_string())
+    }
+}
+
+impl FontWriter for UfoWriter {
+    fn save(&self, font: &Font, path: &str) -> Result<(), String> {
+        self.save_view(font, path)
     }
 }

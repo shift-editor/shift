@@ -1,4 +1,5 @@
 import type { ContourId, PointType, PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
 import { BaseCommand, type CommandContext } from "../core/Command";
 
 /**
@@ -9,7 +10,7 @@ import { BaseCommand, type CommandContext } from "../core/Command";
 export class AddPointCommand extends BaseCommand<PointId> {
   readonly name = "Add Point";
 
-  #contourId: ContourId | null;
+  #contourId: ContourId;
   #x: number;
   #y: number;
   #pointType: PointType;
@@ -22,7 +23,7 @@ export class AddPointCommand extends BaseCommand<PointId> {
     y: number,
     pointType: PointType,
     smooth: boolean = false,
-    contourId: ContourId | null = null,
+    contourId: ContourId,
   ) {
     super();
     this.#contourId = contourId;
@@ -33,26 +34,39 @@ export class AddPointCommand extends BaseCommand<PointId> {
   }
 
   execute(ctx: CommandContext): PointId {
-    const contourId = this.#contourId ?? ctx.glyph.activeContourId;
-    if (!contourId) {
-      throw new Error("No active contour");
-    }
-    this.#resultId = ctx.glyph.addPointToContour(contourId, {
-      x: this.#x,
-      y: this.#y,
-      pointType: this.#pointType,
-      smooth: this.#smooth,
-    });
+    this.#resultId = ctx.source.addPoint(
+      this.#contourId,
+      Point.create({ x: this.#x, y: this.#y }, this.#pointType, this.#smooth),
+    );
     return this.#resultId;
   }
 
   undo(ctx: CommandContext): void {
     if (this.#resultId) {
-      ctx.glyph.removePoints([this.#resultId]);
+      ctx.source.removePoints([this.#resultId]);
     }
   }
 
   override redo(ctx: CommandContext): PointId {
     return this.execute(ctx);
+  }
+}
+
+export class ToggleSmoothCommand extends BaseCommand<void> {
+  readonly name = "Toggle Smooth";
+
+  readonly #pointId: PointId;
+
+  constructor(pointId: PointId) {
+    super();
+    this.#pointId = pointId;
+  }
+
+  execute(ctx: CommandContext): void {
+    ctx.source.toggleSmooth(this.#pointId);
+  }
+
+  undo(ctx: CommandContext): void {
+    ctx.source.toggleSmooth(this.#pointId);
   }
 }

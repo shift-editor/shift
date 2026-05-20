@@ -1,20 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { clearDirty, getEditor, setFilePath } from "@/store/store";
-import { documentPersistence } from "@/persistence";
+import { getDocument } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
 import { Button } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 
 export const Landing = () => {
   const navigate = useNavigate();
+  const fontDocument = getDocument();
 
   const openFont = (filePath: string) => {
-    const editor = getEditor();
-    editor.loadFont(filePath);
-    editor.updateMetricsFromFont();
-    setFilePath(filePath);
-    clearDirty();
-    documentPersistence.openDocument(filePath);
+    fontDocument.openFont(filePath);
     navigate("/home");
   };
 
@@ -26,15 +21,7 @@ export const Landing = () => {
   };
 
   const handleNewFont = () => {
-    const editor = getEditor();
-    const name = editor.font.glyphName(65);
-    editor.setMainGlyphUnicode(65);
-    editor.open(name);
-    editor.setDrawOffsetForGlyph({ x: 0, y: 0 }, name, 65);
-    editor.font.reset();
-    setFilePath(null);
-    clearDirty();
-    documentPersistence.closeDocument();
+    fontDocument.createFont();
     navigate("/home");
   };
 

@@ -1,4 +1,5 @@
-import type { Point2D, PointId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { PointId } from "@shift/types";
 import type { Behavior } from "../core/Behavior";
 
 export interface Anchor {
@@ -13,14 +14,13 @@ export interface Handles {
 
 export type PenState =
   | { type: "idle" }
-  | { type: "ready"; mousePos: Point2D }
+  | { type: "ready" }
   | { type: "anchored"; anchor: Anchor }
   | {
       type: "dragging";
       anchor: Anchor;
       handles: Handles;
       mousePos: Point2D;
-      snappedPos?: Point2D;
     };
 
 export type PenBehavior = Behavior<PenState>;

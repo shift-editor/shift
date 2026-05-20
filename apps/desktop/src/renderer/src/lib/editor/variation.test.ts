@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { AxisLocation } from "@shift/types";
-import type { Glyph } from "@/lib/model/Glyph";
+import type { Glyph, GlyphGeometry } from "@/lib/model/Glyph";
 import { TestEditor, MUTATORSANS_DESIGNSPACE } from "@/testing";
+import { emptyAxisLocation, withAxisValue } from "@/lib/variation/location";
+import type { AxisLocation } from "@/types/variation";
 
 function boldLocation(editor: TestEditor): AxisLocation {
-  const out: AxisLocation = {};
-  for (const axis of editor.font.getAxes()) out[axis.tag] = axis.maximum;
+  let out = emptyAxisLocation();
+  for (const axis of editor.font.getAxes()) {
+    out = withAxisValue(out, axis, axis.maximum);
+  }
   return out;
 }
 
-function flattenPoints(g: Glyph): number[] {
+function flattenPoints(g: Glyph | GlyphGeometry): number[] {
   const out: number[] = [];
   for (const c of g.contours) for (const p of c.points) out.push(p.x, p.y);
   return out;
@@ -21,17 +24,64 @@ describe("Editor.open — variation-aware edit sessions", () => {
     // edit session at the master's stored coordinates, so the canvas didn't
     // match what the user clicked when the slider was off-default.
     const editor = new TestEditor();
-    editor.font.load(MUTATORSANS_DESIGNSPACE);
+    editor.loadFont(MUTATORSANS_DESIGNSPACE);
 
-    const atDefault = editor.open("A")!;
-    const defaultAdvance = atDefault.xAdvance;
-    const defaultPoints = flattenPoints(atDefault);
+    const atDefault = editor.getGlyph({ name: "A", unicode: 65 })!;
+    const defaultGeometry = atDefault.geometryAt(editor.designLocation);
+    const defaultAdvance = defaultGeometry.xAdvance;
+    const defaultPoints = flattenPoints(defaultGeometry);
     editor.close();
 
-    editor.font.setVariationLocation(boldLocation(editor));
-    const atBold = editor.open("A")!;
+    editor.setDesignLocation(boldLocation(editor));
+    const atBold = editor.getGlyph({ name: "A", unicode: 65 })!;
 
-    expect(atBold.xAdvance).not.toBe(defaultAdvance);
-    expect(flattenPoints(atBold)).not.toEqual(defaultPoints);
+    const boldGeometry = atBold.geometryAt(editor.designLocation);
+    expect(boldGeometry.xAdvance).not.toBe(defaultAdvance);
+    expect(flattenPoints(boldGeometry)).not.toEqual(defaultPoints);
+  });
+
+  it("edits to a glyph persist across close + reopen of that same glyph", () => {
+    // Reproduces the user-reported flow: edit a point, leave the editor (back
+    // to the grid), then re-open the same glyph. The re-opened glyph should
+    // carry the edit, not revert to the unedited geometry.
+    const editor = new TestEditor();
+    editor.loadFont(MUTATORSANS_DESIGNSPACE);
+
+    const opened = editor.getGlyph({ name: "A", unicode: 65 })!;
+    const point = opened.contours[0].points[0];
+    const movedX = point.x + 250;
+
+    const draft = editor.beginSourceEditDraft({ points: [point.id] });
+    draft.previewPositionPatch([{ kind: "point", id: point.id, x: movedX, y: point.y }]);
+    draft.commit("Move");
+
+    editor.close();
+
+    const reopened = editor.getGlyph({ name: "A", unicode: 65 })!;
+    const samePoint = reopened.point(point.id);
+
+    expect(samePoint?.x).toBe(movedX);
+  });
+
+  it("edits to a glyph are visible from the registry after closing the session", () => {
+    // The grid renders via `font.glyph(name)` (not the editor) — so after a
+    // session ends, the registry's Glyph must reflect the edits the user
+    // just made. Otherwise the grid shows the pre-edit outline.
+    const editor = new TestEditor();
+    editor.loadFont(MUTATORSANS_DESIGNSPACE);
+
+    const opened = editor.getGlyph({ name: "A", unicode: 65 })!;
+    const point = opened.contours[0].points[0];
+    const movedX = point.x + 250;
+
+    const draft = editor.beginSourceEditDraft({ points: [point.id] });
+    draft.previewPositionPatch([{ kind: "point", id: point.id, x: movedX, y: point.y }]);
+    draft.commit("Move");
+
+    editor.close();
+
+    // Same Glyph instance the grid would read — registry single-source-of-truth.
+    const fromRegistry = editor.font.glyph({ name: "A" })!;
+    expect(fromRegistry.outline(editor.$designLocation).svgPath).toContain(String(movedX));
   });
 });

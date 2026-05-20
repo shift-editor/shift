@@ -1,32 +1,32 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import type { Theme } from "./Theme";
 import { DEFAULT_THEME } from "./Theme";
-import type { ViewportTransform } from "./Viewport";
+import type { CameraTransform } from "../managers/Camera";
 
 /**
  * Single 2D rendering API wrapping CanvasRenderingContext2D.
  *
- * Owns viewport state + theme. Converts px→UPM internally.
+ * Owns camera state + theme. Converts px→UPM internally.
  * Generic — knows nothing about fonts or glyphs.
  */
 export class Canvas {
   readonly ctx: CanvasRenderingContext2D;
   readonly theme: Theme;
-  viewport: ViewportTransform;
+  camera: CameraTransform;
 
   constructor(
     ctx: CanvasRenderingContext2D,
-    viewport: ViewportTransform,
+    camera: CameraTransform,
     theme: Theme = DEFAULT_THEME,
   ) {
     this.ctx = ctx;
-    this.viewport = viewport;
+    this.camera = camera;
     this.theme = theme;
   }
 
   /** Convert screen pixels to UPM units at the current zoom level. */
   pxToUpm(px: number): number {
-    return px / (this.viewport.upmScale * this.viewport.zoom);
+    return px / (this.camera.upmScale * this.camera.zoom);
   }
 
   line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
@@ -92,6 +92,36 @@ export class Canvas {
     this.ctx.setLineDash([]);
     this.ctx.stroke(path);
     this.ctx.restore();
+  }
+
+  /**
+   * Run a drawing callback in glyph-local UPM coordinates.
+   *
+   * @param drawOffset - Glyph-local offset applied after the camera transform.
+   * @param draw - Drawing operation to run while the context is in glyph space.
+   */
+  withGlyphSpace(drawOffset: Point2D, draw: (canvas: Canvas) => void): void {
+    const camera = this.camera;
+
+    this.ctx.save();
+    this.ctx.transform(
+      camera.zoom,
+      0,
+      0,
+      camera.zoom,
+      camera.panX + camera.centre.x * (1 - camera.zoom),
+      camera.panY + camera.centre.y * (1 - camera.zoom),
+    );
+
+    const baselineY = camera.layoutHeight - camera.padding - camera.descender * camera.upmScale;
+    this.ctx.transform(camera.upmScale, 0, 0, -camera.upmScale, camera.padding, baselineY);
+    this.ctx.translate(drawOffset.x, drawOffset.y);
+
+    try {
+      draw(this);
+    } finally {
+      this.ctx.restore();
+    }
   }
 
   /** @knipclassignore */

@@ -10,7 +10,7 @@ export class Escape implements SelectBehavior {
   ): boolean {
     if (event.key !== "Escape") return false;
 
-    if (state.type === "selected") {
+    if (ctx.editor.selection.hasSelection()) {
       ctx.editor.selection.clear();
       ctx.setState({ type: "ready" });
       return true;

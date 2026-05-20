@@ -1,4 +1,4 @@
-import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 
 const UPDATE_INTERVAL_MS = 250;
 

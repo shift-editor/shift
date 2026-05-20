@@ -5,7 +5,7 @@ import { IconButton } from "./IconButton";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { getEditor } from "@/store/store";
 import { anchorToPoint } from "@/lib/transform/anchor";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
@@ -92,7 +92,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = getEditor();
   const { anchor } = useTransformOrigin();
-  const selectedPointIds = useSignalState(editor.selection.$pointIds);
+  const selectedPointIds = useSignalState(editor.selection.stateCell).pointIds;
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
@@ -117,7 +117,6 @@ export const TransformSection = () => {
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
       editor.alignSelection(alignment);
-      editor.requestRedraw();
     },
     [editor],
   );
@@ -125,7 +124,6 @@ export const TransformSection = () => {
   const handleDistribute = useCallback(
     (type: DistributeType) => {
       editor.distributeSelection(type);
-      editor.requestRedraw();
     },
     [editor],
   );
@@ -160,7 +158,6 @@ export const TransformSection = () => {
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
       editor.moveSelectionTo(target, anchorPoint);
-      editor.requestRedraw();
     },
     [anchor, editor, selectionBounds],
   );

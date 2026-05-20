@@ -1,14 +1,12 @@
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { SelectBehavior, SelectState } from "../types";
-import { hitTestTextSlot } from "../../text/layout";
-import { resolveComponentAtPoint } from "@/lib/editor/hit/composite";
 
 /**
- * Updates hover indicator on text run glyphs during pointer movement.
+ * Updates hover indicator on text run items during pointer movement.
  *
- * This is a visual-only behavior — it returns false so that
- * subsequent behaviors can also process the pointer move event.
+ * Visual-only: returns false so subsequent pointer-move behaviors still run.
+ * Uses advance-box hit-test (not shape-precise) — fine for hover highlight.
  */
 export class TextRunHover implements SelectBehavior {
   onPointerMove(
@@ -16,36 +14,17 @@ export class TextRunHover implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"pointerMove">,
   ): boolean {
-    if (state.type !== "ready" && state.type !== "selected") return false;
+    if (state.type !== "ready") return false;
 
-    const ctrl = ctx.editor.textRunController;
-    const textRunState = ctrl.state.value;
-    if (!textRunState) return false;
-
-    const metrics = ctx.editor.font.getMetrics();
-    const hitIndex = hitTestTextSlot(textRunState.layout, event.point, metrics, ctx.editor.font, {
-      outlineRadius: ctx.editor.hitRadius,
-      includeFill: true,
-      requireShape: true,
-    });
-
-    ctrl.setHovered(hitIndex);
-    const inspection = textRunState.compositeInspection;
-    if (!inspection || hitIndex !== inspection.slotIndex) {
-      ctrl.setInspectionHoveredComponent(null);
+    const run = ctx.editor.textRun;
+    const layout = run.layoutCell.peek();
+    if (!layout) {
+      run.interaction.setHovered(null);
       return false;
     }
 
-    const slot = textRunState.layout.slots[inspection.slotIndex];
-    if (!slot) {
-      ctrl.setInspectionHoveredComponent(null);
-      return false;
-    }
-
-    const composite = ctx.editor.getGlyphCompositeComponents(slot.glyph.glyphName);
-    const localPoint = { x: event.point.x - slot.x, y: event.point.y };
-    const hitComponent = resolveComponentAtPoint(composite, localPoint);
-    ctrl.setInspectionHoveredComponent(hitComponent?.index ?? null);
+    const hit = layout.hitTest(event.point, ctx.editor.hitRadius);
+    run.interaction.setHovered(hit?.cluster ?? null);
 
     return false;
   }

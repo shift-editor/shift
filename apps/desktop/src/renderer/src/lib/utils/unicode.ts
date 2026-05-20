@@ -1,4 +1,5 @@
-import type { GlyphRef } from "@/lib/tools/text/layout";
+import type { GlyphTextItem } from "@/lib/text/layout/types";
+import { glyphTextItem } from "@/lib/text/layout/types";
 
 /**
  * Convert a Unicode codepoint to its hex representation without prefix (e.g. for URLs).
@@ -37,11 +38,11 @@ export function resolveGlyphNameFromUnicode(unicode: number, deps: GlyphNameReso
   return fallbackGlyphNameForUnicode(unicode);
 }
 
-export function glyphRefFromUnicode(unicode: number, deps: GlyphNameResolverDeps): GlyphRef {
-  return {
-    glyphName: resolveGlyphNameFromUnicode(unicode, deps),
-    unicode,
-  };
+export function textItemFromCodepoint(
+  codepoint: number,
+  deps: GlyphNameResolverDeps,
+): GlyphTextItem {
+  return glyphTextItem(resolveGlyphNameFromUnicode(codepoint, deps), codepoint);
 }
 
 const nonSpacingCache = new Map<number, boolean>();

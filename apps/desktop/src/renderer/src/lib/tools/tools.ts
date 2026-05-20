@@ -10,7 +10,7 @@ import { Hand } from "./hand";
 import { Pen } from "./pen";
 import { Select } from "./select";
 import { Shape } from "./shape";
-import TextTool from "./text/Text";
+import { TextTool } from "./text/Text";
 
 export function registerBuiltInTools(editor: Editor): void {
   editor.registerTool({

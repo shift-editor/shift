@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Source } from "@shift/types";
 import { getEditor } from "@/store/store";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 
 /**
  * Variation sources/masters, or empty array when the font is not variable.
@@ -11,8 +11,6 @@ import { useSignalState } from "@/lib/reactive";
 export const useSources = (): Source[] => {
   const font = getEditor().font;
   const fontLoaded = useSignalState(font.$loaded);
-  return useMemo(
-    () => (fontLoaded && font.isVariable() ? font.getSources() : []),
-    [fontLoaded, font],
-  );
+
+  return useMemo(() => (fontLoaded ? font.sources : []), [fontLoaded, font]);
 };

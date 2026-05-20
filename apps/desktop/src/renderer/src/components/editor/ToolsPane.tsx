@@ -1,7 +1,7 @@
 import { FC } from "react";
 
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { getEditor } from "@/store/store";
 import { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
@@ -14,19 +14,17 @@ interface ToolbarIconProps {
   onClick: () => void;
 }
 export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeTool, onClick }) => {
+  const isActive = activeTool === name;
+
   return (
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
         <Button
-          className={cn("w-7 h-7 rounded-md", activeTool === name && "bg-accent hover:bg-accent")}
-          icon={
-            <Icon
-              className={cn("w-full h-full", activeTool === name ? "text-white" : "text-primary")}
-            />
-          }
+          className={cn("w-7 h-7 rounded-md")}
+          variant={isActive ? "primary" : "ghost"}
+          icon={<Icon className={cn("w-full h-full", isActive ? "text-white" : "text-primary")} />}
           aria-label={tooltip}
-          variant="ghost"
-          isActive={activeTool === name}
+          isActive={isActive}
           onClick={onClick}
           size="icon"
         />
@@ -44,7 +42,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeT
 
 export const ToolsPane: FC = () => {
   const editor = getEditor();
-  const activeTool = useSignalState(editor.activeTool);
+  const activeTool = useSignalState(editor.activeToolCell);
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">

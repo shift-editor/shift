@@ -33,10 +33,10 @@
         "message": "Do not use export *. Use named exports to keep the public API explicit."
       }
     ],
-    "shift/no-raw-contour-access": "error",
     "shift/prefer-instance-method-on-glyph": "error",
     "shift/no-raw-segment-parse": "error",
     "shift/no-get-signal-value-method": "error",
+    "shift/no-reactive-value-outside-boundary": "error",
     "shift/no-unbranded-ids": "error",
     "shift/no-snapshot-in-domain": "error",
     "shift/no-raw-point-type-check": "error",

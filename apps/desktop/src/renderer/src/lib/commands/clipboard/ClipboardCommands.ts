@@ -1,6 +1,9 @@
 import { BaseCommand, type CommandContext } from "../core/Command";
-import type { PointId, ContourId, GlyphSnapshot } from "@shift/types";
+import type { PointId, ContourId, GlyphState } from "@shift/types";
+import { Point } from "@shift/glyph-state";
+import type { GlyphSource } from "@/lib/model/Glyph";
 import type { ClipboardContent, PasteOptions } from "../../clipboard/types";
+import { Vec2 } from "@shift/geo";
 
 /**
  * Removes the specified points from the glyph as part of a cut operation.
@@ -12,7 +15,7 @@ export class CutCommand extends BaseCommand<void> {
   readonly name = "Cut";
 
   #pointIds: PointId[];
-  #beforeSnapshot: GlyphSnapshot | null = null;
+  #beforeState: GlyphState | null = null;
 
   constructor(pointIds: PointId[]) {
     super();
@@ -20,18 +23,18 @@ export class CutCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#beforeSnapshot = ctx.glyph.toSnapshot();
-    ctx.glyph.removePoints(this.#pointIds);
+    this.#beforeState = ctx.source.state;
+    ctx.source.removePoints(this.#pointIds);
   }
 
   undo(ctx: CommandContext): void {
-    if (this.#beforeSnapshot) {
-      ctx.glyph.restoreSnapshot(this.#beforeSnapshot);
+    if (this.#beforeState) {
+      ctx.source.restore(this.#beforeState);
     }
   }
 
   override redo(ctx: CommandContext): void {
-    ctx.glyph.removePoints(this.#pointIds);
+    ctx.source.removePoints(this.#pointIds);
   }
 }
 
@@ -46,8 +49,8 @@ export class PasteCommand extends BaseCommand<void> {
 
   #content: ClipboardContent;
   #options: PasteOptions;
-  #beforeSnapshot: GlyphSnapshot | null = null;
-  #afterSnapshot: GlyphSnapshot | null = null;
+  #beforeState: GlyphState | null = null;
+  #afterState: GlyphState | null = null;
   #createdPointIds: PointId[] = [];
   #createdContourIds: ContourId[] = [];
 
@@ -58,28 +61,22 @@ export class PasteCommand extends BaseCommand<void> {
   }
 
   execute(ctx: CommandContext): void {
-    this.#beforeSnapshot = ctx.glyph.toSnapshot();
-
-    const result = ctx.glyph.pasteContours(
-      this.#content.contours,
-      this.#options.offset.x,
-      this.#options.offset.y,
-    );
-
+    this.#beforeState = ctx.source.state;
+    const result = pasteContours(ctx.source, this.#content, this.#options);
     this.#createdPointIds = result.createdPointIds;
     this.#createdContourIds = result.createdContourIds;
-    this.#afterSnapshot = ctx.glyph.toSnapshot();
+    this.#afterState = ctx.source.state;
   }
 
   undo(ctx: CommandContext): void {
-    if (this.#beforeSnapshot) {
-      ctx.glyph.restoreSnapshot(this.#beforeSnapshot);
+    if (this.#beforeState) {
+      ctx.source.restore(this.#beforeState);
     }
   }
 
   override redo(ctx: CommandContext): void {
-    if (this.#afterSnapshot) {
-      ctx.glyph.restoreSnapshot(this.#afterSnapshot);
+    if (this.#afterState) {
+      ctx.source.restore(this.#afterState);
     } else {
       this.execute(ctx);
     }
@@ -92,4 +89,33 @@ export class PasteCommand extends BaseCommand<void> {
   get createdContourIds(): ContourId[] {
     return this.#createdContourIds;
   }
+}
+
+function pasteContours(
+  source: GlyphSource,
+  content: ClipboardContent,
+  options: PasteOptions,
+): { createdPointIds: PointId[]; createdContourIds: ContourId[] } {
+  const createdPointIds: PointId[] = [];
+  const createdContourIds: ContourId[] = [];
+
+  for (const contour of content.contours) {
+    const contourId = source.addContour();
+    createdContourIds.push(contourId);
+
+    for (const point of contour.points) {
+      const newPos = Vec2.add(point, options.offset);
+      const pointId = source.addPoint(
+        contourId,
+        Point.create(newPos, point.pointType, point.smooth),
+      );
+      createdPointIds.push(pointId);
+    }
+
+    if (contour.closed) {
+      source.closeContour(contourId);
+    }
+  }
+
+  return { createdPointIds, createdContourIds };
 }

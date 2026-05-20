@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import type { Rect2D } from "@shift/types";
+import type { Rect2D } from "@shift/geo";
 
 const canvasBounds: Rect2D = {
   x: 0,
@@ -23,7 +23,7 @@ describe("EdgePanManager", () => {
   });
 
   it("pans the viewport when the cursor is near the edge during a drag", () => {
-    // Start a hand-tool drag so toolManager.isDragging is true.
+    // Start a hand-tool drag so editor.gesture.isDragging is true.
     editor.pointerDown(400, 300);
     editor.pointerMove(420, 300); // crosses drag threshold, starts dragging
     const panBeforeEdgePan = { ...editor.pan };

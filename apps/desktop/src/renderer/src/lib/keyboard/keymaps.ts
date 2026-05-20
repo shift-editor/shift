@@ -77,7 +77,6 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         (event.code === "Equal" || event.code === "NumpadAdd"),
       run: (ctx) => {
         ctx.editor.zoomIn();
-        ctx.editor.requestRedraw();
         return true;
       },
     },
@@ -91,7 +90,6 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         (event.code === "Minus" || event.code === "NumpadSubtract"),
       run: (ctx) => {
         ctx.editor.zoomOut();
-        ctx.editor.requestRedraw();
         return true;
       },
     },
@@ -130,7 +128,6 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
           );
         if (!shortcut) return false;
         ctx.editor.setActiveTool(shortcut.toolId);
-        ctx.editor.requestRedraw();
         return true;
       },
     },

@@ -44,6 +44,7 @@ impl FontReader for DesignspaceReader {
 
         let ufo_reader = UfoReader::new();
         let mut font = ufo_reader.load(default_ufo_str)?;
+        font.clear_sources();
 
         if let Some(ref family) = default_ds_source.familyname {
             font.metadata_mut().family_name = Some(family.clone());

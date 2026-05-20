@@ -1,4 +1,2 @@
-export { HoverManager } from "./HoverManager";
-export { ViewportManager } from "./ViewportManager";
+export { Camera, VisibleSceneBounds, type CameraTransform } from "./Camera";
 export { EdgePanManager } from "./EdgePanManager";
-export { SnapManager } from "./SnapManager";

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Axis } from "@shift/types";
 import { getEditor } from "@/store/store";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 
 /**
  * Active variation axes, or empty array when the font is not variable.

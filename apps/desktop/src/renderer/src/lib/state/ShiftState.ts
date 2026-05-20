@@ -9,7 +9,7 @@
  * App-scoped states persist across documents (settings, preferences).
  * Document-scoped states persist per font file (text runs, viewport).
  */
-import { signal, type Signal, type WritableSignal } from "@/lib/reactive/signal";
+import { signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 
 export type StateScope = "app" | "document";
 
@@ -57,6 +57,7 @@ export class ShiftStateImpl<T> implements ShiftState<T> {
   }
 
   get value(): T {
+    // oxlint-disable-next-line shift/no-reactive-value-outside-boundary -- ShiftState.value is the public reactive read for this state primitive.
     return this.#signal.value;
   }
 

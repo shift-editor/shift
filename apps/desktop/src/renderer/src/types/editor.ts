@@ -1,7 +1,5 @@
 import type { ToolName } from "@/lib/tools/core";
 
-export type SelectionMode = "preview" | "committed";
-
 export type ToolStateScope = "app" | "document";
 
 export type CursorType =
@@ -37,15 +35,6 @@ export interface ToolRegistryItem {
 export interface TemporaryToolOptions {
   onActivate?: () => void;
   onReturn?: () => void;
-}
-
-export interface SnapPreferences {
-  enabled: boolean;
-  angle: boolean;
-  metrics: boolean;
-  pointToPoint: boolean;
-  angleIncrementDeg: number;
-  pointRadiusPx: number;
 }
 
 export interface ToolSwitchHandler {

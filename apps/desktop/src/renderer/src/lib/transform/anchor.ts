@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/types";
+import type { Point2D } from "@shift/geo";
 import { Bounds } from "@shift/geo";
 import type { AnchorPosition } from "@/components/editor/sidebar-right/TransformGrid";
 

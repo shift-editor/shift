@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   fallbackGlyphNameForUnicode,
-  glyphRefFromUnicode,
   resolveGlyphNameFromUnicode,
+  textItemFromCodepoint,
 } from "./unicode";
 
 describe("resolveGlyphNameFromUnicode", () => {
@@ -34,13 +34,18 @@ describe("resolveGlyphNameFromUnicode", () => {
   });
 });
 
-describe("glyphRefFromUnicode", () => {
-  it("returns a full glyph ref", () => {
-    const ref = glyphRefFromUnicode(0x41, {
+describe("textItemFromCodepoint", () => {
+  it("returns a glyph text item with the resolved name and codepoint", () => {
+    const item = textItemFromCodepoint(0x41, {
       getExistingGlyphNameForUnicode: () => "A",
       getMappedGlyphName: () => null,
     });
 
-    expect(ref).toEqual({ glyphName: "A", unicode: 0x41 });
+    expect(item).toMatchObject({
+      kind: "glyph",
+      glyphName: "A",
+      codepoint: 0x41,
+    });
+    expect(item.id).toEqual(expect.any(String));
   });
 });

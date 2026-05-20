@@ -8,18 +8,25 @@ import type { AnchorId } from "@shift/types";
 
 export const AnchorSection = () => {
   const editor = getEditor();
+
   const [singleAnchorId, setSingleAnchorId] = useState<AnchorId | null>(null);
+
   const [anchorName, setAnchorName] = useState<string | null>(null);
+  const [editable, setEditable] = useState(false);
+
   const [anchorX, setAnchorX] = useState(0);
   const [anchorY, setAnchorY] = useState(0);
+
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
 
   useSignalEffect(() => {
-    const glyph = editor.glyph.value;
-    const ids = [...editor.selection.$anchorIds.value];
+    const instance = editor.glyphInstanceCell.value;
+    const ids = [...editor.selection.stateCell.value.anchorIds];
 
-    if (!glyph || ids.length !== 1) {
+    setEditable(instance?.editable ?? false);
+
+    if (!instance || ids.length !== 1) {
       setSingleAnchorId(null);
       setAnchorName(ids.length > 1 ? "Multiple" : null);
       setAnchorX(0);
@@ -29,7 +36,7 @@ export const AnchorSection = () => {
       return;
     }
 
-    const selected = glyph.anchors.find((anchor) => anchor.id === ids[0]);
+    const selected = ids[0] ? instance.geometry.anchor(ids[0]) : null;
     if (!selected) {
       setSingleAnchorId(null);
       setAnchorName(null);
@@ -46,13 +53,13 @@ export const AnchorSection = () => {
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {
     if (!singleAnchorId) return;
-    const glyph = editor.glyph.peek();
-    if (!glyph) return;
+
+    const edit = editor.glyphInstance?.edit;
+    if (!edit) return;
 
     const nextX = axis === "x" ? value : anchorX;
     const nextY = axis === "y" ? value : anchorY;
-    glyph.setNodePositions([{ node: { kind: "anchor", id: singleAnchorId }, x: nextX, y: nextY }]);
-    editor.requestRedraw();
+    edit.applyPositionPatch([{ kind: "anchor", id: singleAnchorId, x: nextX, y: nextY }]);
   };
 
   return (
@@ -62,13 +69,13 @@ export const AnchorSection = () => {
         <EditableSidebarInput
           ref={xRef}
           label="X"
-          disabled={singleAnchorId === null}
+          disabled={singleAnchorId === null || !editable}
           onValueChange={(value) => handlePositionChange("x", value)}
         />
         <EditableSidebarInput
           ref={yRef}
           label="Y"
-          disabled={singleAnchorId === null}
+          disabled={singleAnchorId === null || !editable}
           onValueChange={(value) => handlePositionChange("y", value)}
         />
       </div>

@@ -1,8 +1,8 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import { getPointIdFromHit } from "@/types/hitResult";
 import { Validate } from "@shift/validation";
+import { ToggleSmoothCommand } from "@/lib/commands/primitives";
 
 export class ToggleSmooth implements SelectBehavior {
   onDoubleClick(
@@ -10,19 +10,19 @@ export class ToggleSmooth implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"doubleClick">,
   ): boolean {
-    if (state.type !== "ready" && state.type !== "selected") return false;
+    if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
+    const instance = ctx.editor.glyphInstance;
+    if (!instance?.edit) return false;
 
-    const hit = ctx.editor.hitTest(event.coords);
-    const pointId = getPointIdFromHit(hit);
-    if (pointId === null) return false;
+    const geometry = instance.geometry;
+    const hit = geometry.hitPoint(event.coords.glyphLocal, ctx.editor.hitRadius);
+    if (!hit) return false;
 
-    const point = ctx.editor.getAllPoints().find((p) => p.id === pointId);
+    const pointId = hit.pointId;
+    const point = geometry.point(hit.pointId);
     if (!point || !Validate.isOnCurve(point)) return false;
 
-    const glyph = ctx.editor.glyph.peek();
-    if (!glyph) return false;
-
-    glyph.toggleSmooth(pointId);
+    ctx.editor.commandHistory.execute(new ToggleSmoothCommand(pointId));
     return true;
   }
 }

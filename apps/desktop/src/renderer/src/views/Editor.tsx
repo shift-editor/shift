@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
@@ -9,22 +10,19 @@ import { GlyphFinder } from "@/components/editor/GlyphFinder";
 import { EditorView } from "@/components/editor/EditorView";
 import { getEditor } from "@/store/store";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
-import { useSignalState } from "@/lib/reactive";
+import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
 import { codepointToHex } from "@/lib/utils/unicode";
 
-interface EditorProps {
-  glyphId?: string;
-}
-
-export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
-  const { glyphId: glyphIdParam } = useParams();
-  const glyphId = glyphIdProp ?? glyphIdParam;
-  const { activeZone } = useFocusZone();
-  const navigate = useNavigate();
+export const Editor = () => {
+  const { glyphId } = useParams();
   const editor = getEditor();
-  const glyphFinderOpen = useSignalState(editor.glyphFinderOpen);
+
+  const { activeZone } = useFocusZone();
+
+  const navigate = useNavigate();
+  const glyphFinderOpen = useSignalState(editor.glyphFinderOpenCell);
 
   const handleGlyphFinderOpenChange = useCallback(
     (open: boolean) => {
@@ -99,20 +97,50 @@ export const Editor = ({ glyphId: glyphIdProp }: EditorProps = {}) => {
     };
   }, []);
 
+  if (!glyphId) return null;
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-white">
+    <div className="flex h-screen w-screen min-w-[600px] flex-col bg-white">
       <Toolbar />
-      <div className="flex flex-1 overflow-hidden">
-        <ZoneContainer zone="sidebar">
-          <LeftSidebar />
-        </ZoneContainer>
-        <ZoneContainer zone="canvas" className="flex-1">
-          <EditorView glyphId={glyphId ?? ""} />
-        </ZoneContainer>
-        <ZoneContainer zone="sidebar">
-          <RightSidebar />
-        </ZoneContainer>
-      </div>
+      <ResizablePanelGroup
+        direction="horizontal"
+        autoSaveId="shift:editor-layout"
+        className="flex-1 overflow-hidden"
+      >
+        <ResizablePanel
+          id="left-sidebar"
+          order={1}
+          defaultSize={15}
+          minSize={10}
+          maxSize={30}
+          collapsible
+          collapsedSize={0}
+        >
+          <ZoneContainer zone="sidebar" className="h-full">
+            <LeftSidebar />
+          </ZoneContainer>
+        </ResizablePanel>
+        <ResizableHandle inset="start" />
+        <ResizablePanel id="canvas" order={2} minSize={30}>
+          <ZoneContainer zone="canvas" className="h-full">
+            <EditorView glyphId={glyphId} />
+          </ZoneContainer>
+        </ResizablePanel>
+        <ResizableHandle inset="end" />
+        <ResizablePanel
+          id="right-sidebar"
+          order={3}
+          defaultSize={15}
+          minSize={10}
+          maxSize={30}
+          collapsible
+          collapsedSize={0}
+        >
+          <ZoneContainer zone="sidebar" className="h-full">
+            <RightSidebar />
+          </ZoneContainer>
+        </ResizablePanel>
+      </ResizablePanelGroup>
       <GlyphFinder
         open={glyphFinderOpen}
         onOpenChange={handleGlyphFinderOpenChange}

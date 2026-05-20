@@ -1,21 +1,14 @@
-import type { Contour, Point, PointId, Rect2D } from "@shift/types";
-import type { SegmentId } from "@/types/indicator";
-import type { Glyph } from "@/lib/model/Glyph";
-import type { Signal } from "@/lib/reactive/signal";
-import type { Selection } from "@/types/selection";
-import type { CommandHistory } from "@/lib/commands";
-import { CutCommand, PasteCommand } from "@/lib/commands";
-import { Contours } from "@shift/font";
+import type { Rect2D } from "@shift/geo";
 import { Polygon } from "@shift/geo";
-import { Validate } from "@shift/validation";
 import { ValidateClipboard } from "@shift/validation";
 import type {
   SystemClipboard,
   ClipboardContent,
   ClipboardImporter,
+  ClipboardOffer,
   ClipboardPayload,
-  ContourContent,
-  PointContent,
+  ClipboardReadResult,
+  ClipboardWriteMetadata,
 } from "./types";
 import { SvgImporter } from "./importers/SvgImporter";
 
@@ -32,13 +25,6 @@ const EMPTY_BOUNDS: Rect2D = {
   bottom: 0,
 };
 
-export interface ClipboardDeps {
-  readonly glyph: Signal<Glyph | null>;
-  readonly selection: Selection;
-  readonly commands: CommandHistory;
-  readonly clipboard: SystemClipboard;
-}
-
 interface ClipboardState {
   content: ClipboardContent | null;
   bounds: Rect2D | null;
@@ -46,11 +32,12 @@ interface ClipboardState {
 }
 
 /**
- * Clipboard — owns copy/cut/paste orchestration, content resolution,
- * serialization, and external format importing.
+ * Clipboard owns OS clipboard IO, serialization, and external format parsing.
+ * It returns glyph content to callers; Editor decides how that content mutates
+ * the active source.
  */
 export class Clipboard {
-  readonly #deps: ClipboardDeps;
+  readonly #system: SystemClipboard;
   readonly #importers: ClipboardImporter[] = [];
   #internalState: ClipboardState = {
     content: null,
@@ -59,58 +46,14 @@ export class Clipboard {
   };
   #pasteCount = 0;
 
-  constructor(deps: ClipboardDeps) {
-    this.#deps = deps;
+  constructor(system: SystemClipboard) {
+    this.#system = system;
     this.#importers.push(new SvgImporter());
   }
 
-  async copy(): Promise<boolean> {
-    const content = this.#resolveContent();
+  async write(content: ClipboardContent, metadata: ClipboardWriteMetadata = {}): Promise<boolean> {
     if (!content || content.contours.length === 0) return false;
 
-    const glyph = this.#deps.glyph.peek();
-    return this.#write(content, glyph?.name);
-  }
-
-  async cut(): Promise<boolean> {
-    const content = this.#resolveContent();
-    if (!content || content.contours.length === 0) return false;
-
-    const glyph = this.#deps.glyph.peek();
-    const written = await this.#write(content, glyph?.name);
-    if (!written) return false;
-
-    const pointIds = [...this.#deps.selection.pointIds];
-    this.#deps.commands.execute(new CutCommand(pointIds));
-    this.#deps.selection.clear();
-    return true;
-  }
-
-  async paste(): Promise<void> {
-    const state = await this.#read();
-    if (!state.content || state.content.contours.length === 0) return;
-
-    const offset = DEFAULT_PASTE_OFFSET * (this.#pasteCount + 1);
-    this.#pasteCount++;
-    const cmd = new PasteCommand(state.content, { offset: { x: offset, y: -offset } });
-    this.#deps.commands.execute(cmd);
-
-    if (cmd.createdPointIds.length > 0) {
-      this.#deps.selection.select(cmd.createdPointIds.map((id) => ({ kind: "point", id })));
-    }
-  }
-
-  #resolveContent(): ClipboardContent | null {
-    const glyph = this.#deps.glyph.peek();
-    if (!glyph) return null;
-    return resolveClipboardContent(
-      glyph,
-      this.#deps.selection.pointIds,
-      this.#deps.selection.segmentIds,
-    );
-  }
-
-  async #write(content: ClipboardContent, sourceGlyph?: string): Promise<boolean> {
     const bounds = Polygon.boundingRect(content.contours.flatMap((c) => c.points)) ?? EMPTY_BOUNDS;
     this.#internalState = { content, bounds, timestamp: Date.now() };
     this.#pasteCount = 0;
@@ -120,80 +63,67 @@ export class Clipboard {
         version: 1,
         format: "shift/glyph-data",
         content,
-        metadata: { bounds, timestamp: Date.now(), ...(sourceGlyph ? { sourceGlyph } : {}) },
+        metadata: {
+          bounds,
+          timestamp: Date.now(),
+          sourceApp: "shift",
+          ...(metadata.sourceGlyph ? { sourceGlyph: metadata.sourceGlyph } : {}),
+        },
       };
-      this.#deps.clipboard.writeText(JSON.stringify(payload));
+
+      this.#system.writeText(JSON.stringify(payload));
+
       return true;
     } catch {
       return false;
     }
   }
 
-  async #read(): Promise<{ content: ClipboardContent | null }> {
+  async read(): Promise<ClipboardReadResult> {
     try {
-      const text = this.#deps.clipboard.readText();
+      const text = this.#system.readText();
+      const offers = this.#offersFromText(text);
 
       const native = tryDeserialize(text);
-      if (native) return { content: native };
+      if (native) return { kind: "glyph", content: native, source: "shift" };
 
       for (const importer of this.#importers) {
-        if (importer.canImport(text)) {
-          const imported = importer.import(text);
-          if (imported) return { content: imported };
-        }
+        const offer = importer.pick(offers);
+        if (!offer) continue;
+
+        const imported = await importer.import(offer);
+        if (imported) return { kind: "glyph", content: imported, source: importer.id };
+      }
+
+      if (text.trim().length > 0) {
+        return {
+          kind: "unsupported",
+          offeredTypes: offers.map((offer) => offer.mimeType),
+        };
       }
     } catch {
-      // Fall through
-    }
-    return this.#internalState;
-  }
-}
-
-/** Resolve selected points/segments into copyable contour content. */
-export function resolveClipboardContent(
-  glyph: Glyph,
-  pointIds: ReadonlySet<PointId>,
-  segmentIds: ReadonlySet<SegmentId>,
-): ClipboardContent | null {
-  const allPointIds = new Set(pointIds);
-  for (const segId of segmentIds) {
-    const [id1, id2] = segId.split(":");
-    allPointIds.add(id1 as PointId);
-    allPointIds.add(id2 as PointId);
-  }
-
-  if (allPointIds.size === 0) return null;
-
-  const contours: ContourContent[] = [];
-
-  for (const contour of glyph.contours) {
-    const selectedIndices = new Set<number>();
-
-    for (const [idx, point] of contour.points.entries()) {
-      if (allPointIds.has(point.id)) {
-        selectedIndices.add(idx);
+      if (this.#internalState.content) {
+        return { kind: "glyph", content: this.#internalState.content, source: "shift" };
       }
     }
 
-    if (selectedIndices.size === 0) continue;
-
-    if (selectedIndices.size === contour.points.length) {
-      contours.push({
-        points: contour.points.map(toContent),
-        closed: contour.closed,
-      });
-    } else {
-      const expanded = expandPartialSelection(contour, selectedIndices);
-      if (!Validate.hasValidAnchor(expanded)) continue;
-      contours.push({ points: expanded.map(toContent), closed: false });
-    }
+    return { kind: "empty" };
   }
 
-  return contours.length > 0 ? { contours } : null;
-}
+  nextPasteOffset(): { x: number; y: number } {
+    const offset = DEFAULT_PASTE_OFFSET * (this.#pasteCount + 1);
+    this.#pasteCount++;
+    return { x: offset, y: -offset };
+  }
 
-function toContent(point: Point): PointContent {
-  return { x: point.x, y: point.y, pointType: point.pointType, smooth: point.smooth };
+  /** @knipclassignore — public clipboard API for edit-session resets. */
+  resetPasteOffset(): void {
+    this.#pasteCount = 0;
+  }
+
+  #offersFromText(text: string): readonly ClipboardOffer[] {
+    return text.length > 0 ? [{ mimeType: "text/plain", text }] : [];
+  }
 }
 
 function tryDeserialize(text: string): ClipboardContent | null {
@@ -205,47 +135,4 @@ function tryDeserialize(text: string): ClipboardContent | null {
   } catch {
     return null;
   }
-}
-
-function expandPartialSelection(contour: Contour, selectedIndices: Set<number>): readonly Point[] {
-  const expanded = new Set<number>(selectedIndices);
-
-  for (const idx of selectedIndices) {
-    const point = Contours.at(contour, idx, false);
-    if (!point) continue;
-
-    if (Validate.isOnCurve(point)) {
-      expandForOnCurve(contour, idx, expanded);
-    } else {
-      expandForOffCurve(contour, idx, expanded);
-    }
-  }
-
-  return [...expanded]
-    .sort((a, b) => a - b)
-    .map((idx) => Contours.at(contour, idx, false))
-    .filter((p): p is Point => p !== null);
-}
-
-function expandForOnCurve(contour: Contour, idx: number, expanded: Set<number>): void {
-  const prev = Contours.at(contour, idx - 1, false);
-  if (prev && Validate.isOffCurve(prev)) {
-    expanded.add(idx - 1);
-    const prevPrev = Contours.at(contour, idx - 2, false);
-    if (prevPrev && Validate.isOffCurve(prevPrev)) expanded.add(idx - 2);
-  }
-
-  const next = Contours.at(contour, idx + 1, false);
-  if (next && Validate.isOffCurve(next)) {
-    expanded.add(idx + 1);
-    const nextNext = Contours.at(contour, idx + 2, false);
-    if (nextNext && Validate.isOffCurve(nextNext)) expanded.add(idx + 2);
-  }
-}
-
-function expandForOffCurve(contour: Contour, idx: number, expanded: Set<number>): void {
-  const prev = Contours.at(contour, idx - 1, false);
-  if (prev) expanded.add(idx - 1);
-  const next = Contours.at(contour, idx + 1, false);
-  if (next) expanded.add(idx + 1);
 }

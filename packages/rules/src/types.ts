@@ -1,4 +1,13 @@
-import type { PointId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { ContourId, PointData, PointId } from "@shift/types";
+
+export interface ConstrainDragGlyph {
+  readonly contours: readonly {
+    readonly id: ContourId;
+    readonly closed: boolean;
+    readonly points: readonly (PointData & Point2D)[];
+  }[];
+}
 
 /**
  * Rule identifiers matching the Rust implementation
