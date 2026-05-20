@@ -18,7 +18,7 @@ export class Resize implements SelectBehavior {
     if (!ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
-    if (!editor.editGlyphSource) return false;
+    if (!editor.glyphInstance?.edit) return false;
 
     const bbHit = ctx.tool.boundingBox.hit(event.coords);
     if (!bbHit) return false;

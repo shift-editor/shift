@@ -86,7 +86,7 @@ export class Select extends BaseTool<SelectState, Select> {
     const display = this.editor.glyphDisplay;
     if (display.proofMode || !display.editableGlyphVisible) return;
 
-    const instance = this.editor.previewInstance;
+    const instance = this.editor.glyphInstance;
     if (!instance) return;
 
     this.#segments.draw(

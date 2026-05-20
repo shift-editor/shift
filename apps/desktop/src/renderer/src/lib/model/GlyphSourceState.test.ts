@@ -127,4 +127,20 @@ describe("glyph source geometry follows coordinate patches", () => {
 
     expect([...state.state.values]).toEqual([500, 10, 20, 75, 125, 330, 440]);
   });
+
+  it("keeps the xAdvance signal fresh after replacing packed values", () => {
+    const state = new GlyphSourceState(sourceState());
+    const xAdvance = state.xAdvanceCell;
+    const sidebearings = state.sidebearingsCell;
+
+    expect(xAdvance.peek()).toBe(500);
+    expect(sidebearings.peek()).toEqual({ lsb: 10, rsb: 470 });
+
+    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
+
+    expect(xAdvance.peek()).toBe(650);
+    expect(state.xAdvance).toBe(650);
+    expect(sidebearings.peek()).toEqual({ lsb: 10, rsb: 620 });
+    expect(state.sidebearings).toEqual({ lsb: 10, rsb: 620 });
+  });
 });

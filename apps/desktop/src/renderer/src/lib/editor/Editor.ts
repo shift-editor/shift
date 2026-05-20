@@ -465,14 +465,21 @@ export class Editor {
     return this.#glyphDisplay.proofModeCell;
   }
 
+  /**
+   * Sets whether the editable glyph is drawn as filled proof artwork.
+   *
+   * @param enabled - `true` to show proof artwork and suppress edit handles.
+   */
   public setProofMode(enabled: boolean): void {
     this.#glyphDisplay.setProofMode(enabled);
   }
 
+  /** Enables proof rendering for the active glyph. */
   public enableProofMode(): void {
     this.setProofMode(true);
   }
 
+  /** Disables proof rendering for the active glyph. */
   public disableProofMode(): void {
     this.setProofMode(false);
   }
@@ -485,14 +492,21 @@ export class Editor {
     return this.#glyphDisplay.handlesVisibleCell;
   }
 
+  /**
+   * Sets whether point handles and edit affordances are visible.
+   *
+   * @param visible - `true` to draw handles for editable glyph instances.
+   */
   public setHandlesVisible(visible: boolean): void {
     this.#glyphDisplay.setHandlesVisible(visible);
   }
 
+  /** Shows point handles and edit affordances. */
   public showHandles(): void {
     this.setHandlesVisible(true);
   }
 
+  /** Hides point handles and edit affordances. */
   public hideHandles(): void {
     this.setHandlesVisible(false);
   }
@@ -693,27 +707,12 @@ export class Editor {
     return this.#glyph.edit.source.peek();
   }
 
-  /**
-   * Editable glyph source for the current edit target.
-   *
-   * This is the domain object commands and tools mutate. `null` means there is
-   * no open glyph, no resolved edit source, or no glyph data for that source.
-   */
-  public get editGlyphSource(): GlyphSource | null {
-    return this.#glyph.edit.glyphSource.peek();
-  }
-
-  /** Reactive editable glyph source for UI consumers that need source changes. */
-  public get $editGlyphSource(): Signal<GlyphSource | null> {
-    return this.#glyph.edit.glyphSource;
-  }
-
-  /** Glyph resolved at the current design location. */
-  public get previewInstance(): GlyphInstance | null {
+  /** Glyph instance resolved at the current design location. */
+  public get glyphInstance(): GlyphInstance | null {
     return this.#glyph.preview.instance.peek();
   }
 
-  public get previewInstanceCell(): Signal<GlyphInstance | null> {
+  public get glyphInstanceCell(): Signal<GlyphInstance | null> {
     return this.#glyph.preview.instance;
   }
 
@@ -727,6 +726,7 @@ export class Editor {
   public setDesignLocation(location: AxisLocation): void {
     batch(() => {
       this.#glyph.design.set(location);
+
       const source = this.font.sourceAt(location);
       if (source) {
         this.#glyph.edit.selectSource(source.id);
@@ -744,11 +744,14 @@ export class Editor {
    * authored source point IDs that commands can mutate.
    */
   public selectAll(): void {
-    const source = this.editGlyphSource;
-    if (!source) return;
+    const instance = this.glyphInstance;
+    if (!instance?.edit) return;
 
     this.selection.select(
-      source.allPoints.map((point) => ({ kind: "point", id: point.id })),
+      instance.geometry.allPoints.map((point) => ({
+        kind: "point",
+        id: point.id,
+      })),
     );
     return;
   }
@@ -942,28 +945,41 @@ export class Editor {
   }
 
   public get xAdvance(): number {
-    return this.glyph.peek()?.xAdvance ?? 0;
+    return this.glyphInstance?.xAdvance ?? 0;
   }
 
+  /**
+   * Sets the active editable glyph's horizontal advance through command history.
+   *
+   * @param width - New advance width in UPM units.
+   */
   public setXAdvance(width: number): void {
-    const glyph = this.#glyph.open.glyph.peek();
-    if (!glyph) return;
-    if (glyph.xAdvance === width) return;
+    const instance = this.glyphInstance;
+    if (!instance?.edit) return;
 
-    this.#commandHistory.execute(new SetXAdvanceCommand(glyph.xAdvance, width));
+    if (instance.xAdvance === width) return;
+
+    this.#commandHistory.execute(
+      new SetXAdvanceCommand(instance.xAdvance, width),
+    );
   }
 
+  /**
+   * Sets the active editable glyph's left sidebearing by translating its outline.
+   *
+   * @param value - Desired left sidebearing in UPM units.
+   */
   public setLeftSidebearing(value: number): void {
-    const glyph = this.#glyph.open.glyph.peek();
-    if (!glyph) return;
+    const instance = this.glyphInstance;
+    if (!instance?.edit) return;
 
-    const bbox = this.previewInstance?.render.outline.bounds;
+    const bbox = instance.render.outline.bounds;
     if (!bbox) return;
 
     const delta = Math.round(value) - Math.round(bbox.min.x);
     if (delta === 0) return;
 
-    const beforeXAdvance = glyph.xAdvance;
+    const beforeXAdvance = instance.xAdvance;
     this.#commandHistory.execute(
       new SetLeftSidebearingCommand(
         beforeXAdvance,
@@ -973,18 +989,23 @@ export class Editor {
     );
   }
 
+  /**
+   * Sets the active editable glyph's right sidebearing by changing its advance.
+   *
+   * @param value - Desired right sidebearing in UPM units.
+   */
   public setRightSidebearing(value: number): void {
-    const glyph = this.#glyph.open.glyph.peek();
-    if (!glyph) return;
+    const instance = this.glyphInstance;
+    if (!instance?.edit) return;
 
-    const bbox = this.previewInstance?.render.outline.bounds;
+    const bbox = instance.render.outline.bounds;
     if (!bbox) return;
 
-    const currentRsb = glyph.xAdvance - bbox.max.x;
+    const currentRsb = instance.xAdvance - bbox.max.x;
     const delta = Math.round(value) - Math.round(currentRsb);
     if (delta === 0) return;
 
-    const beforeXAdvance = glyph.xAdvance;
+    const beforeXAdvance = instance.xAdvance;
     this.#commandHistory.execute(
       new SetRightSidebearingCommand(beforeXAdvance, beforeXAdvance + delta),
     );
@@ -1178,13 +1199,14 @@ export class Editor {
     this.#renderer.fpsMonitor.stop();
   }
 
+  /** Deletes currently selected points from the active editable glyph. */
   public deleteSelectedPoints(): void {
-    const glyphSource = this.editGlyphSource;
-    if (!glyphSource) return;
+    const edit = this.glyphInstance?.edit;
+    if (!edit) return;
 
     const selectedIds = [...this.selection.pointIds];
     if (selectedIds.length > 0) {
-      glyphSource.removePoints(selectedIds);
+      edit.removePoints(selectedIds);
       this.selection.clear();
     }
   }
@@ -1358,10 +1380,7 @@ export class Editor {
     const activeContourId = this.getActiveContourId();
     if (!activeContourId) return null;
 
-    const source = this.editGlyphSource;
-    if (!source) return null;
-
-    return source.contour(activeContourId) ?? null;
+    return this.glyphInstance?.geometry.contour(activeContourId) ?? null;
   }
 
   public continueContour(

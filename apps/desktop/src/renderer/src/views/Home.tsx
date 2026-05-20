@@ -29,11 +29,11 @@ export const Home = () => (
         >
           <LeftSidebar />
         </ResizablePanel>
-        <ResizableHandle />
+        <ResizableHandle inset="start" />
         <ResizablePanel id="grid" order={2} minSize={30}>
           <GlyphGrid />
         </ResizablePanel>
-        <ResizableHandle />
+        <ResizableHandle inset="end" />
         <ResizablePanel
           id="right-sidebar"
           order={3}

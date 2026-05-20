@@ -4,18 +4,27 @@ import { useSignalState, useSignalTrigger } from "@/lib/signals";
 
 const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
 
+export interface GlyphSidebearingsState {
+  readonly sidebearings: GlyphSidebearings;
+  readonly editable: boolean;
+}
+
 /**
  * Current glyph sidebearings (LSB/RSB), live-updating.
  *
- * Subscribes to glyph identity, contour patches, and xAdvance; pulls the
- * lazy `glyph.sidebearings` getter at render time. Keeps the sidebearings
- * computation out of the drag hot path.
+ * Subscribes to the displayed glyph instance. Interpolated instances still
+ * expose resolved values, but report `editable: false` so inputs can display
+ * them without mutating a missing authored source.
  *
- * @returns `{ lsb, rsb }` — both `null` when the glyph is unavailable.
+ * @returns Current values and whether the displayed instance can be edited.
  */
-export function useGlyphSidebearings(): GlyphSidebearings {
+export function useGlyphSidebearings(): GlyphSidebearingsState {
   const editor = getEditor();
-  const glyphSource = useSignalState(editor.$editGlyphSource);
-  useSignalTrigger(glyphSource?.$sidebearings, { schedule: "frame" });
-  return glyphSource?.sidebearings ?? EMPTY_SIDEBEARINGS;
+  const instance = useSignalState(editor.glyphInstanceCell);
+
+  useSignalTrigger(instance?.sidebearingsCell, { schedule: "frame" });
+  return {
+    sidebearings: instance?.sidebearings ?? EMPTY_SIDEBEARINGS,
+    editable: instance?.editable ?? false,
+  };
 }

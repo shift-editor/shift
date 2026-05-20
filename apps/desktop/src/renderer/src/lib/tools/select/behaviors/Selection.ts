@@ -13,7 +13,7 @@ export class Selection implements SelectBehavior {
       return false;
 
     const editor = ctx.editor;
-    const instance = editor.previewInstance;
+    const instance = editor.glyphInstance;
     if (!instance) return false;
 
     const geometry = instance.geometry;

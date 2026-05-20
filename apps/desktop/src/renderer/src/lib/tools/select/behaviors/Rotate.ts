@@ -113,8 +113,8 @@ export class Rotate implements SelectBehavior {
     editor: Editor,
     tool: Select,
   ): SelectState | null {
-    const source = editor.editGlyphSource;
-    if (!source) return null;
+    const instance = editor.glyphInstance;
+    if (!instance?.edit) return null;
 
     const bbHit = tool.boundingBox.hit(event.coords);
     if (!bbHit) return null;

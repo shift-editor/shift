@@ -3,8 +3,8 @@ import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
 import type {
+  GlyphInstanceEdit,
   GlyphInstanceGeometry,
-  GlyphSource,
   SourcePositions,
 } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
@@ -12,34 +12,40 @@ import { Anchor, Handles } from "./types";
 
 export class PenStroke {
   readonly #editor: Editor;
-  readonly #source: GlyphSource;
+  readonly #geometry: GlyphInstanceGeometry;
+  readonly #edit: GlyphInstanceEdit;
 
-  private constructor(editor: Editor, source: GlyphSource) {
+  private constructor(
+    editor: Editor,
+    geometry: GlyphInstanceGeometry,
+    edit: GlyphInstanceEdit,
+  ) {
     this.#editor = editor;
-    this.#source = source;
+    this.#geometry = geometry;
+    this.#edit = edit;
   }
 
   static active(editor: Editor): PenStroke | null {
-    const source = editor.editGlyphSource;
-    if (!source) return null;
+    const instance = editor.glyphInstance;
+    if (!instance?.edit) return null;
 
-    return new PenStroke(editor, source);
+    return new PenStroke(editor, instance.geometry, instance.edit);
   }
 
   get activeContour(): Contour | null {
     const contourId = this.#editor.getActiveContourId();
     if (!contourId) return null;
 
-    return this.#source.contour(contourId);
+    return this.#geometry.contour(contourId);
   }
 
   get geometry(): GlyphInstanceGeometry {
-    return this.#source.geometry;
+    return this.#geometry;
   }
 
   startContour(position: Point2D): PointId {
-    const contourId = this.#source.addContour();
-    const pointId = this.#source.addOnCurvePoint(contourId, position);
+    const contourId = this.#edit.addContour();
+    const pointId = this.#edit.addOnCurvePoint(contourId, position);
     this.#editor.setActiveContour(contourId);
     return pointId;
   }
@@ -47,14 +53,14 @@ export class PenStroke {
   appendOnCurve(position: Point2D): PointId | null {
     const contour = this.activeContour;
     if (!contour) return null;
-    return this.#source.addOnCurvePoint(contour.id, position);
+    return this.#edit.addOnCurvePoint(contour.id, position);
   }
 
   closeActiveContour(): boolean {
     const contour = this.activeContour;
     if (!contour) return false;
 
-    this.#source.closeContour(contour.id);
+    this.#edit.closeContour(contour.id);
     this.#editor.clearActiveContour();
     return true;
   }
@@ -73,7 +79,7 @@ export class PenStroke {
   }
 
   splitSegment(segmentId: SegmentId, t: number): PointId | null {
-    const segment = this.#source.geometry.segment(segmentId);
+    const segment = this.#geometry.segment(segmentId);
     if (!segment) return null;
     return this.#editor.splitSegment(segment, t);
   }
@@ -95,11 +101,11 @@ export class PenStroke {
     const prevOnCurve = contour.lastOnCurvePoint;
     const isFirstPoint = contour.isEmpty;
 
-    const anchorId = this.#source.addSmoothPoint(contour.id, position);
+    const anchorId = this.#edit.addSmoothPoint(contour.id, position);
     anchor.pointId = anchorId;
 
     if (isFirstPoint) {
-      const cpOutId = this.#source.addOffCurvePoint(contour.id, handlePos);
+      const cpOutId = this.#edit.addOffCurvePoint(contour.id, handlePos);
       return { cpOut: cpOutId };
     }
 
@@ -107,11 +113,11 @@ export class PenStroke {
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(handlePos, position);
-      const cpInId = this.#source.insertPointBefore(
+      const cpInId = this.#edit.insertPointBefore(
         anchorId,
         Point.offCurve(cpInPos),
       );
-      const cpOutId = this.#source.addOffCurvePoint(contour.id, handlePos);
+      const cpOutId = this.#edit.addOffCurvePoint(contour.id, handlePos);
 
       return { cpIn: cpInId, cpOut: cpOutId };
     }
@@ -119,11 +125,11 @@ export class PenStroke {
     if (prevOnCurve) {
       const cp1Pos = Vec2.lerp(prevOnCurve, position, 1 / 3);
 
-      this.#source.insertPointBefore(anchorId, Point.offCurve(cp1Pos));
+      this.#edit.insertPointBefore(anchorId, Point.offCurve(cp1Pos));
     }
 
     const cpInPos = Vec2.mirror(handlePos, position);
-    const cpInId = this.#source.insertPointBefore(
+    const cpInId = this.#edit.insertPointBefore(
       anchorId,
       Point.offCurve(cpInPos),
     );
@@ -152,6 +158,6 @@ export class PenStroke {
       });
     }
 
-    this.#source.applyPositionPatch(positions);
+    this.#edit.applyPositionPatch(positions);
   }
 }

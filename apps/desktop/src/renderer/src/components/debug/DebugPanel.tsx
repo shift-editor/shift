@@ -17,21 +17,20 @@ function formatBytes(bytes: number): string {
 
 export function DebugPanel() {
   const editor = getEditor();
-  const glyphSource = useSignalState(editor.$editGlyphSource);
-  useSignalTrigger(glyphSource?.structureCell);
-  const glyphStructure = glyphSource?.structureCell.peek() ?? null;
+  const instance = useSignalState(editor.glyphInstanceCell);
+  useSignalTrigger(instance?.xAdvanceCell);
 
   const glyphStats = useMemo(() => {
-    if (!glyphSource) return { pointCount: "0", snapshotSize: "—" };
+    if (!instance) return { pointCount: "0", snapshotSize: "—" };
 
-    const snapshot = glyphSource.state;
-    const bytes = new Blob([JSON.stringify(snapshot)]).size;
+    const snapshot = instance.edit?.state ?? null;
+    const bytes = snapshot ? new Blob([JSON.stringify(snapshot)]).size : null;
 
     return {
-      pointCount: `${glyphSource.pointCount}`,
-      snapshotSize: formatBytes(bytes),
+      pointCount: `${instance.geometry.allPoints.length}`,
+      snapshotSize: bytes === null ? "—" : formatBytes(bytes),
     };
-  }, [glyphSource, glyphStructure]);
+  }, [instance]);
 
   useEffect(() => {
     editor.startFpsMonitor();

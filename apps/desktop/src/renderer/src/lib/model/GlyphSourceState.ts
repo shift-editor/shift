@@ -42,6 +42,8 @@ interface PointBufferLocation {
 export class GlyphSourceState {
   readonly #structure: WritableSignal<GlyphStructure>;
   readonly #coordinates: WritableSignal<SourceCoordinateBuffers>;
+  readonly #xAdvance: ComputedSignal<number>;
+  readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
   readonly #coordinateBuffersChanged: ComputedSignal<SourceCoordinateBuffers>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
@@ -52,6 +54,15 @@ export class GlyphSourceState {
     this.#coordinates = signal(SourceCoordinateBuffers.fromState(state), {
       name: "glyphSource.coordinateBuffers",
     });
+    this.#xAdvance = computed(() => this.#coordinates.value.xAdvance.value, {
+      name: "glyphSource.xAdvance",
+    });
+    this.#sidebearings = computed(
+      () => this.#coordinates.value.sidebearings.value,
+      {
+        name: "glyphSource.sidebearings",
+      },
+    );
     this.#coordinateBuffersChanged = computed(
       () => {
         const buffers = this.#coordinates.value;
@@ -92,8 +103,16 @@ export class GlyphSourceState {
     return this.#coordinates;
   }
 
+  get xAdvanceCell(): Signal<number> {
+    return this.#xAdvance;
+  }
+
   get xAdvance(): number {
-    return this.#coordinates.peek().xAdvance.peek();
+    return this.#xAdvance.peek();
+  }
+
+  get sidebearingsCell(): Signal<GlyphSidebearings> {
+    return this.#sidebearings;
   }
 
   /**
@@ -111,7 +130,7 @@ export class GlyphSourceState {
   }
 
   get sidebearings(): GlyphSidebearings {
-    return this.#coordinates.peek().sidebearings.peek();
+    return this.#sidebearings.peek();
   }
 
   get pointCount(): number {
@@ -176,11 +195,14 @@ export class GlyphSourceState {
  */
 export class SourceCoordinateBuffers {
   readonly xAdvance: WritableSignal<number>;
+
   readonly contours: readonly SourceContourCoordinates[];
   readonly anchors: WritableSignal<Float64Array>;
   readonly components: readonly SourceComponentTransform[];
+
   readonly snapshot: ComputedSignal<Float64Array>;
   readonly changedCell: ComputedSignal<SourceCoordinateBuffers>;
+
   readonly bounds: ComputedSignal<BoundsType | null>;
   readonly sidebearings: ComputedSignal<GlyphSidebearings>;
 

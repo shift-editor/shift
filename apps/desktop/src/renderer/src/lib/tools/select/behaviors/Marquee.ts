@@ -78,7 +78,7 @@ export class Marquee implements SelectBehavior {
     rect: Rect2D,
     ctx: ToolContext<SelectState>,
   ): Set<PointId> {
-    const instance = ctx.editor.previewInstance;
+    const instance = ctx.editor.glyphInstance;
     if (!instance) return new Set();
 
     const hitPoints = instance.geometry.allPoints.filter((p) =>

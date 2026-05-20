@@ -100,11 +100,16 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     const glyph = this.#editor.glyph.value;
     if (!glyph) return null;
 
+    const instance = this.#editor.glyphInstanceCell.value;
+    if (!instance) return null;
+
+    const xAdvance = instance.xAdvanceCell.value;
+
     const display = this.#editor.glyphDisplayCell.value;
     if (!display.editableGlyphVisible && display.proofMode) return null;
 
     const unicode = Number.isFinite(glyph.unicode) ? glyph.unicode : null;
-    const advance = displayAdvance(glyph.xAdvance, glyph.name, unicode);
+    const advance = displayAdvance(xAdvance, glyph.name, unicode);
 
     return { glyph: { model: glyph, display, advance } };
   }
@@ -225,7 +230,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.activeToolCell.value;
     this.#editor.activeToolStateCell.value;
 
-    const instance = this.#editor.previewInstanceCell.value;
+    const instance = this.#editor.glyphInstanceCell.value;
     if (instance) instance.render.trackShape();
 
     return {

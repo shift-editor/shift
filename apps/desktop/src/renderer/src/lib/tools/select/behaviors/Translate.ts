@@ -18,7 +18,6 @@ import {
 } from "@shift/rules";
 import type {
   GlyphInstanceGeometry,
-  GlyphSource,
   SourcePositionTarget,
   SourcePositions,
 } from "@/lib/model/Glyph";
@@ -123,8 +122,8 @@ class TranslateTarget {
     editor: Editor,
     event: ToolEventOf<"dragStart">,
   ): TranslateTarget | null {
-    const instance = editor.editGlyphSource;
-    if (!instance) return null;
+    const instance = editor.glyphInstance;
+    if (!instance?.edit) return null;
 
     const geometry = instance.geometry;
     const pos = event.coords.glyphLocal;
@@ -307,16 +306,16 @@ class TranslateDrag {
 
   constructor(editor: Editor, target: TranslateTarget, pointerStart: Point2D) {
     this.#target = target;
+    const instance = editor.glyphInstance;
 
     this.#draft = editor.beginSourceEditDraft({
       points: target.pointIds,
       anchors: target.anchorIds,
     });
 
-    this.#constraint = ConstrainedTranslate.fromGlyphSource(
-      this.#draft.glyphSource,
-      target.pointIds,
-    );
+    this.#constraint = instance
+      ? ConstrainedTranslate.fromGeometry(instance.geometry, target.pointIds)
+      : null;
 
     this.startPos = pointerStart;
     this.#pointerOffset = Vec2.sub(pointerStart, this.startPos);
@@ -357,13 +356,13 @@ class ConstrainedTranslate {
     this.#rules = rules;
   }
 
-  static fromGlyphSource(
-    glyphSource: GlyphSource,
+  static fromGeometry(
+    geometry: GlyphInstanceGeometry,
     pointIds: readonly PointId[],
   ): ConstrainedTranslate | null {
     if (pointIds.length === 0) return null;
 
-    const rules = prepareConstrainedDrag(glyphSource, new Set(pointIds));
+    const rules = prepareConstrainedDrag(geometry, new Set(pointIds));
     return new ConstrainedTranslate(rules);
   }
 

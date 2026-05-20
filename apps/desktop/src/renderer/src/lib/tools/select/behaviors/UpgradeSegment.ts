@@ -10,10 +10,10 @@ export class UpgradeSegment implements SelectBehavior {
   ): boolean {
     if (state.type !== "ready" || !event.altKey) return false;
 
-    const source = ctx.editor.editGlyphSource;
-    if (!source) return false;
+    const instance = ctx.editor.glyphInstance;
+    if (!instance?.edit) return false;
 
-    const geometry = source.geometry;
+    const geometry = instance.geometry;
     const hit = geometry.hitSegment(
       event.coords.glyphLocal,
       ctx.editor.hitRadius,

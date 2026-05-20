@@ -124,13 +124,13 @@ export const Editor = () => {
             <LeftSidebar />
           </ZoneContainer>
         </ResizablePanel>
-        <ResizableHandle />
+        <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
             <EditorView glyphId={glyphId} />
           </ZoneContainer>
         </ResizablePanel>
-        <ResizableHandle />
+        <ResizableHandle inset="end" />
         <ResizablePanel
           id="right-sidebar"
           order={3}

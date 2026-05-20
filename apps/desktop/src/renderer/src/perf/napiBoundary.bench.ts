@@ -22,12 +22,12 @@ for (const { label, pm } of marks) {
   describe(`NAPI boundary — ${label} points`, () => {
     bench("source.applyPositionPatch — all points", () => {
       const updates = buildPositionUpdates(pm.pointIds, 1, 1);
-      pm.editor.editGlyphSource!.applyPositionPatch(updates);
+      pm.editor.currentEdit!.applyPositionPatch(updates);
     });
 
     bench("source.applyPositionPatch — single point", () => {
       const updates = buildPositionUpdates([pm.pointIds[0]], 1, 1);
-      pm.editor.editGlyphSource!.applyPositionPatch(updates);
+      pm.editor.currentEdit!.applyPositionPatch(updates);
     });
   });
 }

@@ -111,19 +111,23 @@ export function createPointMark(scale: PointScale): PointMarkEditor {
   editor.startSession({ name: "A", unicode: 65 });
 
   const contours = generateContours(scale);
-  const source = editor.currentGlyphSource;
-  if (!source) throw new Error("No source after startSession");
+  const edit = editor.currentEdit;
+  if (!edit) throw new Error("No editable instance after startSession");
 
-  source.removePoints(source.allPoints.map((point) => point.id));
+  edit.removePoints(
+    editor.currentGlyphInstance!.geometry.allPoints.map((point) => point.id),
+  );
   for (const contour of contours) {
-    const contourId = source.addContour();
+    const contourId = edit.addContour();
     for (const point of contour.points) {
-      source.addPoint(contourId, point);
+      edit.addPoint(contourId, point);
     }
-    if (contour.closed) source.closeContour(contourId);
+    if (contour.closed) edit.closeContour(contourId);
   }
 
-  const pointIds = source.allPoints.map((p) => p.id);
+  const pointIds = editor.currentGlyphInstance!.geometry.allPoints.map(
+    (p) => p.id,
+  );
 
   return { editor, pointIds, pointCount: pointIds.length };
 }

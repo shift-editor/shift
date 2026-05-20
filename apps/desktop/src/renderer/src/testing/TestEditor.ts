@@ -12,7 +12,11 @@
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { PointId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
-import type { Glyph, GlyphSource } from "@/lib/model/Glyph";
+import type {
+  Glyph,
+  GlyphInstance,
+  GlyphInstanceEdit,
+} from "@/lib/model/Glyph";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
@@ -133,19 +137,23 @@ export class TestEditor extends Editor {
     return this.glyph.peek();
   }
 
-  get currentGlyphSource(): GlyphSource | null {
-    return this.editGlyphSource;
+  get currentGlyphInstance(): GlyphInstance | null {
+    return this.glyphInstance;
+  }
+
+  get currentEdit(): GlyphInstanceEdit | null {
+    return this.glyphInstance?.edit ?? null;
   }
 
   get pointCount(): number {
-    return this.currentGlyphSource?.allPoints.length ?? 0;
+    return this.currentGlyphInstance?.geometry.allPoints.length ?? 0;
   }
 
   getPointPosition(pointId: PointId): Point2D | null {
-    const source = this.currentGlyphSource;
-    if (!source) return null;
+    const geometry = this.currentGlyphInstance?.geometry;
+    if (!geometry) return null;
 
-    const point = source.point(pointId);
+    const point = geometry.point(pointId);
     if (!point) return null;
 
     return { x: point.x, y: point.y };
