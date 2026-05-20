@@ -38,6 +38,54 @@ export interface GlyphDisplayState {
   readonly editableGlyphVisible: boolean;
 }
 
+export type EditorGesturePhase = "idle" | "pressed" | "dragging";
+
+export interface EditorGestureSnapshot {
+  readonly phase: EditorGesturePhase;
+}
+
+export class EditorGesture {
+  readonly #cell: WritableSignal<EditorGestureSnapshot>;
+  readonly cell: Signal<EditorGestureSnapshot>;
+
+  constructor() {
+    this.#cell = signal<EditorGestureSnapshot>(
+      { phase: "idle" },
+      { name: "editor.gesture" },
+    );
+    this.cell = this.#cell;
+  }
+
+  get state(): EditorGestureSnapshot {
+    return this.#cell.peek();
+  }
+
+  get phase(): EditorGesturePhase {
+    return this.state.phase;
+  }
+
+  get isDragging(): boolean {
+    return this.phase === "dragging";
+  }
+
+  setPressed(): void {
+    this.#setPhase("pressed");
+  }
+
+  setDragging(): void {
+    this.#setPhase("dragging");
+  }
+
+  reset(): void {
+    this.#setPhase("idle");
+  }
+
+  #setPhase(phase: EditorGesturePhase): void {
+    if (this.phase === phase) return;
+    this.#cell.set({ phase });
+  }
+}
+
 export class GlyphDisplay {
   readonly proofModeCell: WritableSignal<boolean>;
   readonly handlesVisibleCell: WritableSignal<boolean>;

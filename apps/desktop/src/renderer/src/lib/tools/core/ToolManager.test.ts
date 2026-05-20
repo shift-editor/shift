@@ -206,11 +206,16 @@ describe("ToolManager", () => {
     it("drag (down, move, up) drives tool with dragStart, drag, dragEnd and does not emit click", () => {
       toolManager.activate("hand");
       toolManager.handlePointerDown({ x: 100, y: 100 }, modifiers);
+      expect(editor.gesture.phase).toBe("pressed");
+
       toolManager.handlePointerMove({ x: 120, y: 100 }, modifiers);
       toolManager.flushPointerMoves();
+      expect(editor.gesture.phase).toBe("dragging");
+
       toolManager.handlePointerUp({ x: 120, y: 100 });
 
-      expect(toolManager.isDragging).toBe(false);
+      expect(editor.gesture.isDragging).toBe(false);
+      expect(editor.gesture.phase).toBe("idle");
       const lastState = editor.getActiveToolState() as { type?: string };
       expect(lastState?.type).toBe("ready");
     });

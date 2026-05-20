@@ -89,6 +89,7 @@ import { Contour } from "@shift/glyph-state";
 import { SourceEditDraft, type SourceEditSubject } from "./SourceEditDraft";
 import {
   EditorGlyphState,
+  EditorGesture,
   GlyphDisplay,
   EditorInput,
   EditorViewState,
@@ -209,6 +210,7 @@ export class Editor {
    * `TextEditingSession` or `TextRunController` grouping.
    */
   #text: TextEditingState;
+  readonly gesture: EditorGesture;
   #glyphDisplay: GlyphDisplay;
   readonly input: EditorInput;
   #toolState: {
@@ -231,6 +233,7 @@ export class Editor {
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
+    this.gesture = new EditorGesture();
 
     this.#commandHistory = new CommandHistory(this.#glyph.edit.glyphSource);
 

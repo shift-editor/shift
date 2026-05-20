@@ -55,7 +55,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   get isDragging(): boolean {
-    return this.gesture.isDragging;
+    return this.editor.gesture.isDragging;
   }
 
   register(manifest: ToolManifest): void {
@@ -77,6 +77,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     if (this.primaryTool?.deactivate) this.primaryTool.deactivate();
     this.gesture.reset();
+    this.editor.gesture.reset();
 
     const nextTool = this.createToolInstance(id);
     if (!nextTool) {
@@ -92,7 +93,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   requestTemporary(toolId: ToolName, options?: TemporaryToolOptions): void {
-    if (this.overrideTool || this.gesture.isDragging) return;
+    if (this.overrideTool || this.editor.gesture.isDragging) return;
 
     const nextTool = this.createToolInstance(toolId);
     if (!nextTool) return;
@@ -123,6 +124,7 @@ export class ToolManager implements ToolSwitchHandler {
     const coords = this.editor.fromScreen(screenPoint);
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
+    this.editor.gesture.setPressed();
     this.gesture.pointerDown(coords, screenPoint, modifiers);
   }
 
@@ -182,6 +184,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setPointer(coords);
 
     const events = this.gesture.pointerMove(coords, screenPoint, modifiers);
+    if (this.gesture.isDragging) this.editor.gesture.setDragging();
     this.dispatchEvents(events);
   }
 
@@ -190,6 +193,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setPointer(coords);
     const events = this.gesture.pointerUp(coords, screenPoint);
     this.dispatchEvents(events);
+    this.editor.gesture.reset();
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
@@ -201,6 +205,7 @@ export class ToolManager implements ToolSwitchHandler {
 
     if (e.key === "Escape" && this.gesture.isDragging) {
       this.gesture.reset();
+      this.editor.gesture.reset();
       this.activeTool?.handleEvent({ type: "dragCancel" });
       return true;
     }
@@ -264,6 +269,7 @@ export class ToolManager implements ToolSwitchHandler {
   /** @knipclassignore */
   reset(): void {
     this.gesture.reset();
+    this.editor.gesture.reset();
     if (this.overrideTool) {
       this.releaseOverride();
     }

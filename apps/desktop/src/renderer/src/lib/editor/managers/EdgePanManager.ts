@@ -12,8 +12,10 @@ const DEFAULT_CONFIG: EdgePanConfig = {
 };
 
 type EdgePanEditor = {
-  toolManager: {
+  gesture: {
     isDragging: boolean;
+  };
+  toolManager: {
     handlePointerMove(
       position: Point2D,
       modifiers: { shiftKey: boolean; altKey: boolean },
@@ -40,9 +42,8 @@ export class EdgePanManager {
 
   update(screenPos: Point2D, canvasBounds: Rect2D): void {
     this.lastScreenPos = screenPos;
-    const toolManager = this.editor.toolManager;
 
-    if (!toolManager.isDragging) {
+    if (!this.editor.gesture.isDragging) {
       this.stop();
       return;
     }
