@@ -1,9 +1,6 @@
 import { useRef } from "react";
 import { SidebarSection } from "./SidebarSection";
-import {
-  EditableSidebarInput,
-  type EditableSidebarInputHandle,
-} from "./EditableSidebarInput";
+import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { getEditor } from "@/store/store";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { useState } from "react";
@@ -62,16 +59,12 @@ export const AnchorSection = () => {
 
     const nextX = axis === "x" ? value : anchorX;
     const nextY = axis === "y" ? value : anchorY;
-    edit.applyPositionPatch([
-      { kind: "anchor", id: singleAnchorId, x: nextX, y: nextY },
-    ]);
+    edit.applyPositionPatch([{ kind: "anchor", id: singleAnchorId, x: nextX, y: nextY }]);
   };
 
   return (
     <SidebarSection title="Anchor">
-      <div className="text-xs text-secondary">
-        {anchorName ?? "No anchor selected"}
-      </div>
+      <div className="text-xs text-secondary">{anchorName ?? "No anchor selected"}</div>
       <div className="flex gap-2">
         <EditableSidebarInput
           ref={xRef}

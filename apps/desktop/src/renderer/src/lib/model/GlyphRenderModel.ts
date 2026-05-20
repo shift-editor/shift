@@ -1,19 +1,9 @@
-import type {
-  AnchorData,
-  AnchorId,
-  ContourData,
-  ContourId,
-} from "@shift/types";
+import type { AnchorData, AnchorId, ContourData, ContourId } from "@shift/types";
 import { Point, type Anchor, type Contour } from "@shift/glyph-state";
 import type { GlyphOutline } from "./GlyphOutline";
 import type { GlyphGeometry } from "./Glyph";
 import type { SourceContourCoordinates } from "./GlyphSourceState";
-import {
-  computed,
-  track,
-  type ComputedSignal,
-  type Signal,
-} from "@/lib/signals/signal";
+import { computed, track, type ComputedSignal, type Signal } from "@/lib/signals/signal";
 
 /**
  * Contour shape as consumed by render code.
@@ -90,9 +80,7 @@ export class GlyphRenderModel {
    * @returns Render contour items backed directly by the geometry snapshot.
    */
   static geometryContours(geometry: GlyphGeometry): readonly RenderContour[] {
-    return geometry.contours.map(
-      (contour) => new GeometryRenderContour(contour),
-    );
+    return geometry.contours.map((contour) => new GeometryRenderContour(contour));
   }
 
   /**

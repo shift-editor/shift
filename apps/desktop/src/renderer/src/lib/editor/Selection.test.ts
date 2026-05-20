@@ -32,9 +32,7 @@ describe("Selection", () => {
   describe("point selection", () => {
     it("should select a single point", () => {
       selection.select([{ kind: "point", id: asPointId("p1") }]);
-      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(
-        true,
-      );
+      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(true);
       expect(selection.stateCell.peek().pointIds.size).toBe(1);
     });
 
@@ -60,9 +58,7 @@ describe("Selection", () => {
       ]);
       selection.remove({ kind: "point", id: asPointId("p1") });
       expect(selection.stateCell.peek().pointIds.size).toBe(1);
-      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(
-        false,
-      );
+      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(false);
     });
 
     it("should toggle point selection (add)", () => {
@@ -78,37 +74,27 @@ describe("Selection", () => {
       ]);
       selection.toggle({ kind: "point", id: asPointId("p1") });
       expect(selection.stateCell.peek().pointIds.size).toBe(1);
-      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(
-        false,
-      );
+      expect(selection.stateCell.peek().pointIds.has(asPointId("p1"))).toBe(false);
     });
 
     it("should check if point is selected", () => {
       selection.select([{ kind: "point", id: asPointId("p1") }]);
-      expect(selection.isSelected({ kind: "point", id: asPointId("p1") })).toBe(
-        true,
-      );
-      expect(selection.isSelected({ kind: "point", id: asPointId("p2") })).toBe(
-        false,
-      );
+      expect(selection.isSelected({ kind: "point", id: asPointId("p1") })).toBe(true);
+      expect(selection.isSelected({ kind: "point", id: asPointId("p2") })).toBe(false);
     });
 
     it("should replace selection when selecting new point", () => {
       selection.select([{ kind: "point", id: asPointId("p1") }]);
       selection.select([{ kind: "point", id: asPointId("p2") }]);
       expect(selection.stateCell.peek().pointIds.size).toBe(1);
-      expect(selection.stateCell.peek().pointIds.has(asPointId("p2"))).toBe(
-        true,
-      );
+      expect(selection.stateCell.peek().pointIds.has(asPointId("p2"))).toBe(true);
     });
   });
 
   describe("segment selection", () => {
     it("should select a single segment", () => {
       selection.select([{ kind: "segment", id: asSegmentId("p1:p2") }]);
-      expect(
-        selection.stateCell.peek().segmentIds.has(asSegmentId("p1:p2")),
-      ).toBe(true);
+      expect(selection.stateCell.peek().segmentIds.has(asSegmentId("p1:p2"))).toBe(true);
       expect(selection.stateCell.peek().segmentIds.size).toBe(1);
     });
 
@@ -137,12 +123,8 @@ describe("Selection", () => {
 
     it("should check if segment is selected", () => {
       selection.select([{ kind: "segment", id: asSegmentId("p1:p2") }]);
-      expect(
-        selection.isSelected({ kind: "segment", id: asSegmentId("p1:p2") }),
-      ).toBe(true);
-      expect(
-        selection.isSelected({ kind: "segment", id: asSegmentId("p2:p3") }),
-      ).toBe(false);
+      expect(selection.isSelected({ kind: "segment", id: asSegmentId("p1:p2") })).toBe(true);
+      expect(selection.isSelected({ kind: "segment", id: asSegmentId("p2:p3") })).toBe(false);
     });
   });
 

@@ -26,8 +26,7 @@ export const GlyphCatalog = () => {
     selectSubCategory,
   } = useGlyphCatalog();
 
-  const isTopLevelCategorySelected =
-    selectedCategory !== null && selectedSubCategoryKey === null;
+  const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -51,9 +50,7 @@ export const GlyphCatalog = () => {
             variant="ghost"
             size="sm"
             onClick={selectAll}
-            isActive={
-              selectedCategory === null && selectedSubCategoryKey === null
-            }
+            isActive={selectedCategory === null && selectedSubCategoryKey === null}
           >
             <AllIcon className="w-4 h-4" />
             <span className="text-sm">All</span>
@@ -65,8 +62,7 @@ export const GlyphCatalog = () => {
             key={categoryNode.category}
             className={cn(
               "mt-1",
-              isTopLevelCategorySelected &&
-                selectedCategory === categoryNode.category
+              isTopLevelCategorySelected && selectedCategory === categoryNode.category
                 ? "bg-hover/50 rounded-sm"
                 : null,
             )}

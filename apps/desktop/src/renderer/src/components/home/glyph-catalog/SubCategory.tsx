@@ -6,10 +6,7 @@ export interface SubCategoryProps {
   subCategory: string;
   selectedCategory: GlyphCategory | null;
   selectedSubCategoryKey: string | null;
-  onSelectSubCategory: (
-    category: GlyphCategory,
-    subCategoryKey: string,
-  ) => void;
+  onSelectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
 }
 export const SubCategory = ({
   category,
@@ -18,8 +15,7 @@ export const SubCategory = ({
   selectedSubCategoryKey,
   onSelectSubCategory,
 }: SubCategoryProps) => {
-  const isActive =
-    selectedCategory === category && selectedSubCategoryKey === subCategory;
+  const isActive = selectedCategory === category && selectedSubCategoryKey === subCategory;
 
   return (
     <Button

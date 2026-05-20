@@ -26,10 +26,7 @@ function ctx(source: GlyphSource): CommandContext {
   return { source };
 }
 
-function pointPosition(
-  source: GlyphSource,
-  pointId: PointId,
-): { x: number; y: number } {
+function pointPosition(source: GlyphSource, pointId: PointId): { x: number; y: number } {
   const point = source.point(pointId);
   if (!point) throw new Error("Expected point");
 
@@ -57,11 +54,7 @@ describe("ApplyPositionPatchCommand", () => {
         y: before[0].y + 5,
       },
     ];
-    const command = new ApplyPositionPatchCommand(
-      "Move Selection",
-      before,
-      after,
-    );
+    const command = new ApplyPositionPatchCommand("Move Selection", before, after);
 
     command.execute(ctx(source));
     expect(pointPosition(source, point.id)).toEqual({
@@ -88,14 +81,8 @@ describe("ApplyPositionPatchCommand", () => {
     if (!point) throw new Error("Expected point");
 
     const start = pointPosition(source, point.id);
-    const after = [
-      { kind: "point" as const, id: point.id, x: start.x + 15, y: start.y + 5 },
-    ];
-    const command = ApplyPositionPatchCommand.fromSource(
-      "Move Selection",
-      source,
-      after,
-    );
+    const after = [{ kind: "point" as const, id: point.id, x: start.x + 15, y: start.y + 5 }];
+    const command = ApplyPositionPatchCommand.fromSource("Move Selection", source, after);
     if (!command) throw new Error("Expected command");
 
     command.execute(ctx(source));

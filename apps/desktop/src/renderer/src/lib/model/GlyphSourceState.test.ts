@@ -77,9 +77,7 @@ describe("glyph source geometry follows coordinate patches", () => {
       x: 75,
       y: 125,
     });
-    expect(
-      state.geometry.allPoints.find((point) => point.id === pointId(2)),
-    ).toMatchObject({
+    expect(state.geometry.allPoints.find((point) => point.id === pointId(2))).toMatchObject({
       x: 75,
       y: 125,
     });
@@ -90,9 +88,7 @@ describe("glyph source geometry follows coordinate patches", () => {
 
     state.patchPositions([{ kind: "anchor", id: anchorId(1), x: 330, y: 440 }]);
 
-    expect(
-      state.positionsFor([{ kind: "anchor", id: anchorId(1) }])[0],
-    ).toMatchObject({
+    expect(state.positionsFor([{ kind: "anchor", id: anchorId(1) }])[0]).toMatchObject({
       x: 330,
       y: 440,
     });

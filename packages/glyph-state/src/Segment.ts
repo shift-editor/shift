@@ -1,10 +1,4 @@
-import {
-  Curve,
-  Vec2,
-  type Bounds,
-  type CurveType,
-  type Point2D,
-} from "@shift/geo";
+import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { Point } from "./Point";
 import { Contour } from "./Contour";
@@ -69,10 +63,7 @@ export type CubicSegmentPoints = {
   readonly end: Point;
 };
 
-export type SegmentPoints =
-  | LineSegmentPoints
-  | QuadSegmentPoints
-  | CubicSegmentPoints;
+export type SegmentPoints = LineSegmentPoints | QuadSegmentPoints | CubicSegmentPoints;
 
 export interface SegmentHit {
   readonly t: number;
@@ -282,12 +273,7 @@ export class Segment {
           this.#flatPoints = [points.start, points.control, points.end];
           break;
         case "cubic":
-          this.#flatPoints = [
-            points.start,
-            points.controlStart,
-            points.controlEnd,
-            points.end,
-          ];
+          this.#flatPoints = [points.start, points.controlStart, points.controlEnd, points.end];
           break;
       }
     }
@@ -323,11 +309,7 @@ export class Segment {
           this.#curve = Curve.line(points.start, points.end);
           break;
         case "quad":
-          this.#curve = Curve.quadratic(
-            points.start,
-            points.control,
-            points.end,
-          );
+          this.#curve = Curve.quadratic(points.start, points.control, points.end);
           break;
         case "cubic":
           this.#curve = Curve.cubic(

@@ -1,11 +1,7 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import { Transform } from "@/lib/transform/Transform";
-import type {
-  SourcePosition,
-  SourcePositions,
-  SourcePositionTarget,
-} from "./Glyph";
+import type { SourcePosition, SourcePositions, SourcePositionTarget } from "./Glyph";
 
 export interface SourcePositionSubject {
   readonly points?: readonly PointId[];
@@ -54,10 +50,7 @@ export class SourcePositionList {
     source: SourcePositionLookup,
     subject: SourcePositionSubject,
   ): SourcePositionList {
-    return SourcePositionList.fromTargets(
-      source,
-      SourcePositionList.targetsFromSubject(subject),
-    );
+    return SourcePositionList.fromTargets(source, SourcePositionList.targetsFromSubject(subject));
   }
 
   static fromTargets(
@@ -67,19 +60,13 @@ export class SourcePositionList {
     return new SourcePositionList(source.positionsFor(targets));
   }
 
-  static targetsFromSubject(
-    subject: SourcePositionSubject,
-  ): SourcePositionTarget[] {
+  static targetsFromSubject(subject: SourcePositionSubject): SourcePositionTarget[] {
     const targets: SourcePositionTarget[] = [];
     if (subject.points) {
-      targets.push(
-        ...subject.points.map((id) => ({ kind: "point" as const, id })),
-      );
+      targets.push(...subject.points.map((id) => ({ kind: "point" as const, id })));
     }
     if (subject.anchors) {
-      targets.push(
-        ...subject.anchors.map((id) => ({ kind: "anchor" as const, id })),
-      );
+      targets.push(...subject.anchors.map((id) => ({ kind: "anchor" as const, id })));
     }
 
     return targets;
@@ -97,10 +84,7 @@ export class SourcePositionList {
     });
   }
 
-  includeFrom(
-    source: SourcePositionLookup,
-    positions: SourcePositions,
-  ): SourcePositionList {
+  includeFrom(source: SourcePositionLookup, positions: SourcePositions): SourcePositionList {
     let missing: SourcePositionTarget[] | null = null;
 
     for (const position of positions) {
@@ -132,14 +116,10 @@ export class SourcePositionList {
   }
 
   rotate(angle: number, origin: Point2D): SourcePositionList {
-    return new SourcePositionList(
-      Transform.rotatePoints(this.positions, angle, origin),
-    );
+    return new SourcePositionList(Transform.rotatePoints(this.positions, angle, origin));
   }
 
   scale(sx: number, sy: number, origin: Point2D): SourcePositionList {
-    return new SourcePositionList(
-      Transform.scalePoints(this.positions, sx, sy, origin),
-    );
+    return new SourcePositionList(Transform.scalePoints(this.positions, sx, sy, origin));
   }
 }

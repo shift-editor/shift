@@ -155,11 +155,7 @@ For complex tools (Select, Pen) where behaviors need private helper methods or h
 
 ```typescript
 export class MyBehavior implements Behavior<MyState> {
-  onDragStart(
-    state: MyState,
-    ctx: ToolContext<MyState>,
-    event: ToolEventOf<"dragStart">,
-  ): boolean {
+  onDragStart(state: MyState, ctx: ToolContext<MyState>, event: ToolEventOf<"dragStart">): boolean {
     if (state.type !== "ready") return false;
     ctx.setState({ type: "dragging", startPos: event.point });
     return true;

@@ -4,13 +4,8 @@ import type { ToolEventOf } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class Selection implements SelectBehavior {
-  onClick(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"click">,
-  ): boolean {
-    if (state.type !== "ready" && ctx.editor.selection.hasSelection())
-      return false;
+  onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"click">): boolean {
+    if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
 
     const editor = ctx.editor;
     const instance = editor.glyphInstance;
@@ -35,9 +30,7 @@ export class Selection implements SelectBehavior {
 
     if (!items) {
       const segmentHit = geometry.hitSegment(pos, radius);
-      const segment = segmentHit
-        ? geometry.segment(segmentHit.segmentId)
-        : null;
+      const segment = segmentHit ? geometry.segment(segmentHit.segmentId) : null;
 
       if (segmentHit && segment) {
         items = [

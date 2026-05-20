@@ -47,14 +47,8 @@ export class Point implements PointInput {
     };
   }
 
-  static create(
-    position: Point2D,
-    pointType: PointType,
-    smooth = false,
-  ): NewPoint {
-    return pointType === "onCurve"
-      ? Point.onCurve(position, smooth)
-      : Point.offCurve(position);
+  static create(position: Point2D, pointType: PointType, smooth = false): NewPoint {
+    return pointType === "onCurve" ? Point.onCurve(position, smooth) : Point.offCurve(position);
   }
 
   static smooth(position: Point2D): NewPoint {

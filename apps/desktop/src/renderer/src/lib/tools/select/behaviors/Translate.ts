@@ -1,10 +1,6 @@
 import { Bounds, Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
-import type {
-  GeometryAnchorHit,
-  GeometryPointHit,
-  GeometrySegmentHit,
-} from "@shift/glyph-state";
+import type { GeometryAnchorHit, GeometryPointHit, GeometrySegmentHit } from "@shift/glyph-state";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolEventOf } from "../../core/GestureDetector";
@@ -44,11 +40,7 @@ export class Translate implements SelectBehavior {
     return true;
   }
 
-  onDrag(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "translating") return false;
     if (!this.#drag) return false;
 
@@ -70,21 +62,14 @@ export class Translate implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(
-    prev: SelectState,
-    next: SelectState,
-    ctx: ToolContext<SelectState>,
-  ): void {
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
     const editor = ctx.editor;
     if (prev.type !== "translating" && next.type === "translating") {
       editor.hover.clear();
     }
   }
 
-  #nextTranslatingState(
-    state: TranslatingState,
-    event: ToolEventOf<"drag">,
-  ): TranslatingState {
+  #nextTranslatingState(state: TranslatingState, event: ToolEventOf<"drag">): TranslatingState {
     const currentPos = this.#drag!.positionForPointer(event.coords.glyphLocal);
     const totalDelta = Vec2.sub(currentPos, state.translate.startPos);
     this.#drag!.preview(totalDelta);
@@ -118,10 +103,7 @@ class TranslateTarget {
     this.dragAnchor = dragAnchor;
   }
 
-  static fromDragStart(
-    editor: Editor,
-    event: ToolEventOf<"dragStart">,
-  ): TranslateTarget | null {
+  static fromDragStart(editor: Editor, event: ToolEventOf<"dragStart">): TranslateTarget | null {
     const instance = editor.glyphInstance;
     if (!instance?.edit) return null;
 
@@ -146,10 +128,7 @@ class TranslateTarget {
     editor.selection.select(this.selection);
   }
 
-  static fromAnchorHit(
-    editor: Editor,
-    hit: GeometryAnchorHit | null,
-  ): TranslateTarget | null {
+  static fromAnchorHit(editor: Editor, hit: GeometryAnchorHit | null): TranslateTarget | null {
     if (!hit) return null;
 
     const selected = editor.selection.isSelected({
@@ -164,15 +143,10 @@ class TranslateTarget {
       });
     }
 
-    return new TranslateTarget(
-      [],
-      [hit.anchorId],
-      [{ kind: "anchor", id: hit.anchorId }],
-      {
-        kind: "anchor",
-        id: hit.anchorId,
-      },
-    );
+    return new TranslateTarget([], [hit.anchorId], [{ kind: "anchor", id: hit.anchorId }], {
+      kind: "anchor",
+      id: hit.anchorId,
+    });
   }
 
   static fromPointHit(
@@ -198,15 +172,10 @@ class TranslateTarget {
       });
     }
 
-    return new TranslateTarget(
-      [hit.pointId],
-      [],
-      [{ kind: "point", id: hit.pointId }],
-      {
-        kind: "point",
-        id: hit.pointId,
-      },
-    );
+    return new TranslateTarget([hit.pointId], [], [{ kind: "point", id: hit.pointId }], {
+      kind: "point",
+      id: hit.pointId,
+    });
   }
 
   static fromSegmentHit(
@@ -248,10 +217,7 @@ class TranslateTarget {
     );
   }
 
-  static fromInsideSelectionBounds(
-    editor: Editor,
-    pos: Point2D,
-  ): TranslateTarget | null {
+  static fromInsideSelectionBounds(editor: Editor, pos: Point2D): TranslateTarget | null {
     const bounds = editor.selection.bounds;
     if (!bounds) return null;
 
@@ -332,11 +298,7 @@ class TranslateDrag {
     }
 
     this.#draft.previewPositionPatch(
-      this.#constraint.positionsFor(
-        this.#draft.basePositions,
-        this.#target,
-        delta,
-      ),
+      this.#constraint.positionsFor(this.#draft.basePositions, this.#target, delta),
     );
   }
 
@@ -366,11 +328,7 @@ class ConstrainedTranslate {
     return new ConstrainedTranslate(rules);
   }
 
-  positionsFor(
-    base: SourcePositions,
-    target: TranslateTarget,
-    delta: Point2D,
-  ): SourcePositions {
+  positionsFor(base: SourcePositions, target: TranslateTarget, delta: Point2D): SourcePositions {
     const updates: SourcePositions[number][] = [];
     const patch = constrainPreparedDrag(this.#rules, delta, {
       includeMatchedRules: false,

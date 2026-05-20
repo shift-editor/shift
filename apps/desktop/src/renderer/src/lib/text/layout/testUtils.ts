@@ -21,10 +21,7 @@ export function loadTestFont(): Font {
   return font;
 }
 
-export function ltrRun(
-  glyphs: readonly GlyphTextItem[],
-  clusterStart = 0,
-): SegmentedRun {
+export function ltrRun(glyphs: readonly GlyphTextItem[], clusterStart = 0): SegmentedRun {
   return { glyphs, direction: "ltr", clusterStart };
 }
 

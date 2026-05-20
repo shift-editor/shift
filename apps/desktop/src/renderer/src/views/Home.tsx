@@ -1,8 +1,4 @@
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@shift/ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { GlyphGrid } from "@/components/home/GlyphGrid";
 import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";

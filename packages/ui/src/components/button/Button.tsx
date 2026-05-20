@@ -27,18 +27,7 @@ const sizeStyles = {
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant = "default",
-      size = "md",
-      isActive,
-      icon,
-      children,
-      ...props
-    },
-    ref,
-  ) => {
+  ({ className, variant = "default", size = "md", isActive, icon, children, ...props }, ref) => {
     return (
       <BaseButton
         ref={ref}

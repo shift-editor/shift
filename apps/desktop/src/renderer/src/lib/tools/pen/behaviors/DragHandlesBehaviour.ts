@@ -9,11 +9,7 @@ import { PenStroke } from "../PenStroke";
 const DRAG_THRESHOLD = 3;
 
 export class HandleBehavior implements PenBehavior {
-  onDrag(
-    state: PenState,
-    ctx: ToolContext<PenState>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"drag">): boolean {
     if (state.type === "anchored") {
       const next = this.#nextAnchoredState(state, event, ctx.editor);
       if (next) ctx.setState(next);
@@ -46,11 +42,7 @@ export class HandleBehavior implements PenBehavior {
     return true;
   }
 
-  onKeyDown(
-    state: PenState,
-    ctx: ToolContext<PenState>,
-    event: ToolEventOf<"keyDown">,
-  ): boolean {
+  onKeyDown(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"keyDown">): boolean {
     if (event.key !== "Escape") return false;
     if (state.type !== "anchored" && state.type !== "dragging") return false;
 
@@ -64,8 +56,7 @@ export class HandleBehavior implements PenBehavior {
     editor: Editor,
   ): (PenState & { type: "dragging" }) | null {
     const localPoint = event.coords.glyphLocal;
-    if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD)
-      return null;
+    if (Vec2.dist(state.anchor.position, localPoint) <= DRAG_THRESHOLD) return null;
 
     const handles = this.#createHandles(state.anchor, localPoint, editor);
 
@@ -96,12 +87,7 @@ export class HandleBehavior implements PenBehavior {
     return PenStroke.active(editor)?.createHandles(anchor, handlePos) ?? {};
   }
 
-  #updateHandles(
-    anchor: Anchor,
-    handles: Handles,
-    handlePos: Point2D,
-    editor: Editor,
-  ): void {
+  #updateHandles(anchor: Anchor, handles: Handles, handlePos: Point2D, editor: Editor): void {
     PenStroke.active(editor)?.moveHandles(anchor, handles, handlePos);
   }
 }

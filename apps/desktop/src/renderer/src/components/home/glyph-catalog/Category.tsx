@@ -8,11 +8,7 @@ export interface CategoryProps {
   selectedCategory: GlyphCategory | null;
   onSelectCategory: (category: GlyphCategory) => void;
 }
-export const Category = ({
-  category,
-  selectedCategory,
-  onSelectCategory,
-}: CategoryProps) => {
+export const Category = ({ category, selectedCategory, onSelectCategory }: CategoryProps) => {
   const isActive = selectedCategory === category;
 
   return (

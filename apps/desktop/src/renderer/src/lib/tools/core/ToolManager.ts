@@ -2,11 +2,7 @@ import type { Point2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
-import {
-  GestureDetector,
-  type ToolEvent,
-  type Modifiers,
-} from "./GestureDetector";
+import { GestureDetector, type ToolEvent, type Modifiers } from "./GestureDetector";
 import type { BaseTool } from "./BaseTool";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";

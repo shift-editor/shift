@@ -42,13 +42,7 @@ export class Canvas {
   }
 
   /** @knipclassignore */
-  dashedLine(
-    from: Point2D,
-    to: Point2D,
-    stroke: string,
-    widthPx: number,
-    dashPx: number[],
-  ): void {
+  dashedLine(from: Point2D, to: Point2D, stroke: string, widthPx: number, dashPx: number[]): void {
     this.ctx.save();
     this.ctx.strokeStyle = stroke;
     this.ctx.lineWidth = this.pxToUpm(widthPx);
@@ -119,16 +113,8 @@ export class Canvas {
       camera.panY + camera.centre.y * (1 - camera.zoom),
     );
 
-    const baselineY =
-      camera.layoutHeight - camera.padding - camera.descender * camera.upmScale;
-    this.ctx.transform(
-      camera.upmScale,
-      0,
-      0,
-      -camera.upmScale,
-      camera.padding,
-      baselineY,
-    );
+    const baselineY = camera.layoutHeight - camera.padding - camera.descender * camera.upmScale;
+    this.ctx.transform(camera.upmScale, 0, 0, -camera.upmScale, camera.padding, baselineY);
     this.ctx.translate(drawOffset.x, drawOffset.y);
 
     try {
@@ -150,12 +136,7 @@ export class Canvas {
   }
 
   /** @knipclassignore */
-  strokeCircle(
-    center: Point2D,
-    radiusPx: number,
-    stroke: string,
-    widthPx: number,
-  ): void {
+  strokeCircle(center: Point2D, radiusPx: number, stroke: string, widthPx: number): void {
     const r = this.pxToUpm(radiusPx);
     this.ctx.save();
     this.ctx.strokeStyle = stroke;

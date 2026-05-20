@@ -13,14 +13,9 @@ export interface OutlineDrawOptions {
 
 /** Draws glyph outline parts with canvas styling chosen by the caller. */
 export class OutlineRenderer {
-  draw(
-    canvas: Canvas,
-    outline: GlyphOutline,
-    options: OutlineDrawOptions,
-  ): void {
+  draw(canvas: Canvas, outline: GlyphOutline, options: OutlineDrawOptions): void {
     const path = outline.drawPath;
     if (options.fill) canvas.fillPath(path, options.fill);
-    if (options.stroke)
-      canvas.strokePath(path, options.stroke.color, options.stroke.widthPx);
+    if (options.stroke) canvas.strokePath(path, options.stroke.color, options.stroke.widthPx);
   }
 }

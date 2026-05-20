@@ -64,10 +64,7 @@ export class Resize implements SelectBehavior {
     return true;
   }
 
-  onDragEnd(
-    state: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): boolean {
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
     this.#draft?.commit("Scale Points");
@@ -77,10 +74,7 @@ export class Resize implements SelectBehavior {
     return true;
   }
 
-  onDragCancel(
-    state: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): boolean {
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "resizing") return false;
 
     this.#draft?.discard();
@@ -90,11 +84,7 @@ export class Resize implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(
-    prev: SelectState,
-    next: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): void {
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState, Select>): void {
     const editor = ctx.editor;
     if (prev.type !== "resizing" && next.type === "resizing") {
       editor.hover.clear();
@@ -106,10 +96,7 @@ export class Resize implements SelectBehavior {
     this.#origin = null;
   }
 
-  private nextResizingState(
-    state: SelectState,
-    event: ToolEventOf<"drag">,
-  ): SelectState {
+  private nextResizingState(state: SelectState, event: ToolEventOf<"drag">): SelectState {
     if (state.type !== "resizing") return state;
 
     const uniformScale = event.shiftKey;
@@ -134,14 +121,8 @@ export class Resize implements SelectBehavior {
     };
   }
 
-  private getAnchorPointForEdge(
-    edge: Exclude<BoundingRectEdge, null>,
-    rect: Rect2D,
-  ): Point2D {
-    const center = Vec2.midpoint(
-      { x: rect.left, y: rect.top },
-      { x: rect.right, y: rect.bottom },
-    );
+  private getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
+    const center = Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
 
     switch (edge) {
       case "top-left":
@@ -205,11 +186,7 @@ export class Resize implements SelectBehavior {
 
     if (edge === "left" || edge === "top-left" || edge === "bottom-left") {
       flipX = currentPos.x > anchorPoint.x;
-    } else if (
-      edge === "right" ||
-      edge === "top-right" ||
-      edge === "bottom-right"
-    ) {
+    } else if (edge === "right" || edge === "top-right" || edge === "bottom-right") {
       flipX = currentPos.x < anchorPoint.x;
     }
 

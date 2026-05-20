@@ -52,8 +52,7 @@ export class PointHandleItem {
     if (this.count === 1) return "corner";
     if (this.index === 0) return this.contourClosed ? "direction" : "first";
     if (this.index === this.count - 1 && !this.contourClosed) return "last";
-    if (PointModel.isOnCurve(this.point))
-      return this.point.smooth ? "smooth" : "corner";
+    if (PointModel.isOnCurve(this.point)) return this.point.smooth ? "smooth" : "corner";
     return "control";
   }
 
@@ -63,9 +62,7 @@ export class PointHandleItem {
       case "first":
         return this.next ? Vec2.angleTo(this.point, this.next) : 0;
       case "last":
-        return this.prev
-          ? Vec2.angleTo(this.point, this.prev) + Math.PI / 2
-          : 0;
+        return this.prev ? Vec2.angleTo(this.point, this.prev) + Math.PI / 2 : 0;
       default:
         return 0;
     }
@@ -77,11 +74,6 @@ export class PointHandleItem {
   ): boolean {
     const x = this.point.x + drawOffset.x;
     const y = this.point.y + drawOffset.y;
-    return (
-      x >= bounds.minX &&
-      x <= bounds.maxX &&
-      y >= bounds.minY &&
-      y <= bounds.maxY
-    );
+    return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY;
   }
 }

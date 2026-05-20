@@ -10,16 +10,12 @@ export class ToggleSmooth implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     event: ToolEventOf<"doubleClick">,
   ): boolean {
-    if (state.type !== "ready" && ctx.editor.selection.hasSelection())
-      return false;
+    if (state.type !== "ready" && ctx.editor.selection.hasSelection()) return false;
     const instance = ctx.editor.glyphInstance;
     if (!instance?.edit) return false;
 
     const geometry = instance.geometry;
-    const hit = geometry.hitPoint(
-      event.coords.glyphLocal,
-      ctx.editor.hitRadius,
-    );
+    const hit = geometry.hitPoint(event.coords.glyphLocal, ctx.editor.hitRadius);
     if (!hit) return false;
 
     const pointId = hit.pointId;

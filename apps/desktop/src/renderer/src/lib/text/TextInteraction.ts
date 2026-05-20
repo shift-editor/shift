@@ -18,12 +18,7 @@
  * will live in its own `CompositeInspection` class when that feature is
  * rebuilt — intentionally not folded in here.
  */
-import {
-  signal,
-  batch,
-  type WritableSignal,
-  type Signal,
-} from "@/lib/signals/signal";
+import { signal, batch, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import type { TextItem } from "./layout";
 
 export interface EditingTarget {
@@ -140,11 +135,7 @@ export class TextInteraction {
    * Called by TextRun after every TextBuffer mutation that changes item
    * positions, to keep the editing context coherent with the buffer.
    */
-  adjustForBufferChange(
-    at: number,
-    deleteCount: number,
-    insertCount: number,
-  ): void {
+  adjustForBufferChange(at: number, deleteCount: number, insertCount: number): void {
     const adjust = (t: EditingTarget | null): EditingTarget | null => {
       if (!t) return null;
       let i = t.index;
@@ -191,8 +182,7 @@ export class TextInteraction {
     batch(() => {
       if (patch.editing !== undefined) this.#editing.set(patch.editing);
       if (patch.suspended !== undefined) this.#suspended.set(patch.suspended);
-      if (patch.hoveredIndex !== undefined)
-        this.#hoveredIndex.set(patch.hoveredIndex);
+      if (patch.hoveredIndex !== undefined) this.#hoveredIndex.set(patch.hoveredIndex);
     });
   }
 }

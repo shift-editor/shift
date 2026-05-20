@@ -23,20 +23,14 @@ function editableSource(): GlyphSource {
   return glyphSource;
 }
 
-function pointPosition(
-  source: GlyphSource,
-  pointId: PointId,
-): { x: number; y: number } {
+function pointPosition(source: GlyphSource, pointId: PointId): { x: number; y: number } {
   const point = source.point(pointId);
   if (!point) throw new Error("Expected point");
 
   return { x: point.x, y: point.y };
 }
 
-function pointBase(
-  draft: SourceEditDraft,
-  pointId: PointId,
-): { x: number; y: number } {
+function pointBase(draft: SourceEditDraft, pointId: PointId): { x: number; y: number } {
   const position = draft.basePositions.find(
     (position) => position.kind === "point" && position.id === pointId,
   );

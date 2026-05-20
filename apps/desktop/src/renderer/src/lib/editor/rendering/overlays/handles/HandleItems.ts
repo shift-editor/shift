@@ -33,18 +33,8 @@ export class HandleItems {
 
       for (let index = 0; index < count; index++) {
         const point = points[index]!;
-        const prev =
-          index > 0
-            ? points[index - 1]!
-            : contour.closed
-              ? points[count - 1]!
-              : null;
-        const next =
-          index + 1 < count
-            ? points[index + 1]!
-            : contour.closed
-              ? points[0]!
-              : null;
+        const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;
+        const next = index + 1 < count ? points[index + 1]! : contour.closed ? points[0]! : null;
         const state = this.#state(point.id, source);
         const item = this.#pool[itemCount];
 
@@ -74,8 +64,7 @@ export class HandleItems {
   #state(pointId: PointId, source: HandleStateSource): HandleState {
     if (source.selection.pointIds.has(pointId)) return "selected";
 
-    if (source.hover?.type === "point" && source.hover.pointId === pointId)
-      return "hovered";
+    if (source.hover?.type === "point" && source.hover.pointId === pointId) return "hovered";
 
     return "idle";
   }

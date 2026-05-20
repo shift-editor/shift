@@ -3,8 +3,7 @@ import { useContext } from "react";
 import { CanvasContext } from "@/context/CanvasContext";
 
 export const StaticScene = () => {
-  const { backgroundCanvasRef, sceneCanvasRef, markerCanvasRef } =
-    useContext(CanvasContext);
+  const { backgroundCanvasRef, sceneCanvasRef, markerCanvasRef } = useContext(CanvasContext);
 
   return (
     <>

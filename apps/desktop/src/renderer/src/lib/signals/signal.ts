@@ -118,10 +118,7 @@ function captureWriteDebugInfo(
   };
 }
 
-function collectAncestorEpochs(
-  node: Computation,
-  ancestors: Map<SignalNode, number>,
-): void {
+function collectAncestorEpochs(node: Computation, ancestors: Map<SignalNode, number>): void {
   for (const dependency of node.dependencies) {
     ancestors.set(dependency, dependency.lastChangedEpoch);
     if (dependency.kind === "computed") {
@@ -157,10 +154,7 @@ function collectChangedAncestors(
   return changed;
 }
 
-function formatWriteDebugInfo(
-  write: SignalWriteDebugInfo | null,
-  indent: number,
-): string {
+function formatWriteDebugInfo(write: SignalWriteDebugInfo | null, indent: number): string {
   if (!write) return "";
 
   const prefix = `\n${" ".repeat(indent)}last ${write.operation}:`;
@@ -229,9 +223,7 @@ function formatGraphNode(
   depth: number,
 ): string {
   const indent = "  ".repeat(depth);
-  const lines = [
-    `${indent}${describeNode(node)} epoch=${node.lastChangedEpoch}`,
-  ];
+  const lines = [`${indent}${describeNode(node)} epoch=${node.lastChangedEpoch}`];
 
   if (depth >= options.depth) return lines.join("\n");
   if (visited.has(node.debugId)) {
@@ -263,9 +255,7 @@ function formatGraphNode(
   return lines.join("\n");
 }
 
-function resolveDebugNode(
-  node: Signal<unknown> | Effect | undefined,
-): DebugNode | undefined {
+function resolveDebugNode(node: Signal<unknown> | Effect | undefined): DebugNode | undefined {
   return node as DebugNode | undefined;
 }
 
@@ -438,10 +428,7 @@ class SignalImpl<T> implements WritableSignal<T>, SignalNode {
  *   notification. Pass `() => false` to always notify (useful for stable
  *   object references that mutate internally).
  */
-export function signal<T>(
-  initialValue: T,
-  options?: SignalOptions<T>,
-): WritableSignal<T> {
+export function signal<T>(initialValue: T, options?: SignalOptions<T>): WritableSignal<T> {
   return new SignalImpl(initialValue, options);
 }
 
@@ -599,10 +586,7 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
  * Create a computed signal that derives from other signals.
  * Dependencies are automatically tracked.
  */
-export function computed<T>(
-  fn: () => T,
-  options?: ComputedOptions,
-): ComputedSignal<T> {
+export function computed<T>(fn: () => T, options?: ComputedOptions): ComputedSignal<T> {
   return new ComputedImpl(fn, options);
 }
 
@@ -775,10 +759,7 @@ class EffectImpl implements Effect, Computation {
  * count.value = 1; // logs: "Cleanup", "Count: 1"
  * fx.dispose();    // logs: "Cleanup"
  */
-export function effect(
-  fn: () => void | (() => void),
-  options?: EffectOptions,
-): Effect {
+export function effect(fn: () => void | (() => void), options?: EffectOptions): Effect {
   return new EffectImpl(fn, options);
 }
 
@@ -875,10 +856,7 @@ export const signalDebug = {
     traceSignalWrites = enabled;
   },
 
-  dump(
-    node?: Signal<unknown> | Effect,
-    options?: SignalDebugDumpOptions,
-  ): string {
+  dump(node?: Signal<unknown> | Effect, options?: SignalDebugDumpOptions): string {
     const resolvedOptions: Required<SignalDebugDumpOptions> = {
       direction: options?.direction ?? "both",
       depth: options?.depth ?? 4,
@@ -890,9 +868,7 @@ export const signalDebug = {
     }
 
     return Array.from(debugNodes.values())
-      .map((debugNode) =>
-        formatGraphNode(debugNode, resolvedOptions, new Set(), 0),
-      )
+      .map((debugNode) => formatGraphNode(debugNode, resolvedOptions, new Set(), 0))
       .join("\n\n");
   },
 
@@ -905,13 +881,10 @@ export const signalDebug = {
     const matches = Array.from(debugNodes.values()).filter((node) =>
       matchesDebugQuery(node, query),
     );
-    if (matches.length === 0)
-      return `No signal debug nodes matched ${String(query)}.`;
+    if (matches.length === 0) return `No signal debug nodes matched ${String(query)}.`;
 
     return matches
-      .map((debugNode) =>
-        formatGraphNode(debugNode, resolvedOptions, new Set(), 0),
-      )
+      .map((debugNode) => formatGraphNode(debugNode, resolvedOptions, new Set(), 0))
       .join("\n\n");
   },
 

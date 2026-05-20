@@ -12,11 +12,7 @@
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { PointId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
-import type {
-  Glyph,
-  GlyphInstance,
-  GlyphInstanceEdit,
-} from "@/lib/model/Glyph";
+import type { Glyph, GlyphInstance, GlyphInstanceEdit } from "@/lib/model/Glyph";
 import { Editor } from "@/lib/editor/Editor";
 import type { ToolName } from "@/lib/tools/core";
 import { registerBuiltInTools } from "@/lib/tools/tools";
@@ -68,34 +64,19 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  click(
-    x: number,
-    y: number,
-    options?: Partial<typeof DEFAULT_MODIFIERS>,
-  ): this {
+  click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
     this.toolManager.handlePointerDown({ x, y }, mods);
     this.toolManager.handlePointerUp({ x, y });
     return this;
   }
 
-  pointerDown(
-    x: number,
-    y: number,
-    options?: Partial<typeof DEFAULT_MODIFIERS>,
-  ): this {
-    this.toolManager.handlePointerDown(
-      { x, y },
-      { ...DEFAULT_MODIFIERS, ...options },
-    );
+  pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    this.toolManager.handlePointerDown({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
     return this;
   }
 
-  pointerMove(
-    x: number,
-    y: number,
-    options?: Partial<typeof DEFAULT_MODIFIERS>,
-  ): this {
+  pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     this.toolManager.handlePointerMove(
       { x, y },
       { ...DEFAULT_MODIFIERS, ...options },

@@ -24,10 +24,7 @@ function scheduleFrame(execute: () => void): void {
  * const editor = getEditor();
  * const activeTool = useSignalState(editor.activeTool);
  */
-export function useSignalState<T>(
-  signal: Signal<T>,
-  options?: UseSignalOptions,
-): T {
+export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions): T {
   return useSyncExternalStore(
     (callback) => {
       const fx = effect(

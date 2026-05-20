@@ -17,15 +17,9 @@ export type ResizableHandleProps = PanelResizeHandleProps & {
 };
 export type ResizablePanelHandle = ImperativePanelHandle;
 
-export const ResizablePanelGroup = ({
-  className,
-  ...props
-}: ResizablePanelGroupProps) => (
+export const ResizablePanelGroup = ({ className, ...props }: ResizablePanelGroupProps) => (
   <PanelGroup
-    className={cn(
-      "flex h-full w-full data-[panel-group-direction=vertical]:flex-col",
-      className,
-    )}
+    className={cn("flex h-full w-full data-[panel-group-direction=vertical]:flex-col", className)}
     {...props}
   />
 );

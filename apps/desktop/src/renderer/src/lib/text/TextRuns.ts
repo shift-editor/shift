@@ -39,11 +39,7 @@ export class TextRuns {
   readonly #designLocation: Signal<AxisLocation>;
   readonly #editorRun: TextRun;
 
-  constructor(
-    font: Font,
-    positioner: Positioner,
-    designLocation: Signal<AxisLocation>,
-  ) {
+  constructor(font: Font, positioner: Positioner, designLocation: Signal<AxisLocation>) {
     this.#runs = new Map();
     this.#activeKey = signal(DEFAULT_RUN_KEY);
     this.#font = font;
@@ -141,12 +137,7 @@ export class TextRuns {
   deserialize(persisted: Record<string, PersistedTextRun>): void {
     this.#runs.clear();
     for (const [key, entry] of Object.entries(persisted)) {
-      const run = new TextRun(
-        key,
-        this.#font,
-        this.#positioner,
-        this.#designLocation,
-      );
+      const run = new TextRun(key, this.#font, this.#positioner, this.#designLocation);
       run.buffer.restore(entry.buffer);
       this.#runs.set(key, run);
     }

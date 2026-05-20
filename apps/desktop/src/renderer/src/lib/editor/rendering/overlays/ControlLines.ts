@@ -10,10 +10,7 @@ export class ControlLines {
   draw(
     canvas: Canvas,
     contours: readonly GlyphRenderContour[],
-    isLineVisible?: (
-      from: { x: number; y: number },
-      to: { x: number; y: number },
-    ) => boolean,
+    isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
   ): void {
     const { stroke, widthPx } = canvas.theme.glyph;
     const lw = canvas.pxToUpm(widthPx);
@@ -34,10 +31,8 @@ export class ControlLines {
         const current = points[i]!;
         if (!Validate.isOffCurve(current)) continue;
 
-        const next =
-          i + 1 < len ? points[i + 1] : contour.closed ? points[0] : undefined;
-        const prev =
-          i > 0 ? points[i - 1] : contour.closed ? points[len - 1] : undefined;
+        const next = i + 1 < len ? points[i + 1] : contour.closed ? points[0] : undefined;
+        const prev = i > 0 ? points[i - 1] : contour.closed ? points[len - 1] : undefined;
 
         const anchor = next && Validate.isOffCurve(next) ? prev : next;
         if (!anchor || Validate.isOffCurve(anchor)) continue;

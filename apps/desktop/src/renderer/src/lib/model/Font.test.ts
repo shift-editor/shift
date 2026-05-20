@@ -18,10 +18,7 @@ function loadFont(): Font {
   return font;
 }
 
-function locationOverride(
-  font: Font,
-  override: Record<string, number>,
-): AxisLocation {
+function locationOverride(font: Font, override: Record<string, number>): AxisLocation {
   let location = defaultAxisLocation(font.getAxes());
   for (const axis of font.getAxes()) {
     if (override[axis.tag] !== undefined) {
@@ -116,9 +113,7 @@ describe("Font", () => {
 
     expect(source).toBeDefined();
     expect(font.source(source.id)).toEqual(source);
-    expect(font.sourceAt(axisLocationFromLocation(source.location))?.id).toBe(
-      source.id,
-    );
+    expect(font.sourceAt(axisLocationFromLocation(source.location))?.id).toBe(source.id);
   });
 
   it("matches omitted location axes against axis defaults", () => {
@@ -127,9 +122,7 @@ describe("Font", () => {
       font
         .getAxes()
         .every(
-          (axis) =>
-            axisValue(axisLocationFromLocation(source.location), axis) ===
-            axis.default,
+          (axis) => axisValue(axisLocationFromLocation(source.location), axis) === axis.default,
         ),
     );
 
@@ -151,9 +144,7 @@ describe("Font", () => {
 
     const glyph = font.glyph({ name: "A", unicode: 65 });
 
-    expect(glyph ? glyph.outline(location).svgPath.length : 0).toBeGreaterThan(
-      0,
-    );
+    expect(glyph ? glyph.outline(location).svgPath.length : 0).toBeGreaterThan(0);
     font.close();
 
     expect(font.loaded).toBe(false);

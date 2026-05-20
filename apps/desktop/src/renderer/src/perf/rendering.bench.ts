@@ -14,11 +14,7 @@
 import { bench, describe } from "vitest";
 import { createPointMark } from "@/testing/pointMark";
 import { createStubCanvas } from "@/testing/stubCanvas";
-import {
-  BackgroundLayer,
-  OverlayLayer,
-  SceneLayer,
-} from "@/lib/editor/rendering/RenderFrame";
+import { BackgroundLayer, OverlayLayer, SceneLayer } from "@/lib/editor/rendering/RenderFrame";
 
 const canvas = createStubCanvas();
 

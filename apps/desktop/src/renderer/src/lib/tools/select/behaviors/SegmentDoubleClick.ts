@@ -14,10 +14,7 @@ export class SegmentDoubleClick implements SelectBehavior {
     if (!instance?.edit) return false;
 
     const geometry = instance.geometry;
-    const segmentHit = geometry.hitSegment(
-      event.coords.glyphLocal,
-      ctx.editor.hitRadius,
-    );
+    const segmentHit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
     if (!segmentHit) return false;
 
     const segment = geometry.segment(segmentHit.segmentId);

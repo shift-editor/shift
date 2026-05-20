@@ -33,11 +33,7 @@ export class ApplyPositionPatchCommand extends BaseCommand<void> {
     ctx.source.applyPositionPatch(this.#after);
   }
 
-  static fromSource(
-    label: string,
-    source: GlyphSource,
-    after: SourcePositions,
-  ) {
+  static fromSource(label: string, source: GlyphSource, after: SourcePositions) {
     if (after.length === 0) return null;
 
     const before = source.positionsFor(after);

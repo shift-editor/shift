@@ -19,10 +19,7 @@ export class BendCurve implements SelectBehavior {
     if (!instance?.edit) return false;
 
     const geometry = instance.geometry;
-    const hit = geometry.hitSegment(
-      event.coords.glyphLocal,
-      ctx.editor.hitRadius,
-    );
+    const hit = geometry.hitSegment(event.coords.glyphLocal, ctx.editor.hitRadius);
     if (!hit) return false;
 
     const { t, closestPoint, segmentId } = hit;
@@ -54,11 +51,7 @@ export class BendCurve implements SelectBehavior {
     return true;
   }
 
-  onDrag(
-    state: SelectState,
-    _ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: SelectState, _ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "bending") return false;
     if (!this.#draft) return false;
 

@@ -9,12 +9,7 @@ export class SelectSegments {
   readonly #overlay = new SegmentOverlay();
   readonly #selected: Segment[] = [];
 
-  draw(
-    canvas: Canvas,
-    geometry: GlyphInstanceGeometry,
-    selection: Selection,
-    hover: Hover,
-  ): void {
+  draw(canvas: Canvas, geometry: GlyphInstanceGeometry, selection: Selection, hover: Hover): void {
     this.#selected.length = 0;
 
     for (const segmentId of selection.segmentIds) {
@@ -22,17 +17,10 @@ export class SelectSegments {
       if (segment) this.#selected.push(segment);
     }
 
-    this.#overlay.draw(
-      canvas,
-      this.#hoveredSegment(geometry, hover),
-      this.#selected,
-    );
+    this.#overlay.draw(canvas, this.#hoveredSegment(geometry, hover), this.#selected);
   }
 
-  #hoveredSegment(
-    geometry: GlyphInstanceGeometry,
-    hover: Hover,
-  ): Segment | null {
+  #hoveredSegment(geometry: GlyphInstanceGeometry, hover: Hover): Segment | null {
     const segmentId = hover.segmentId;
     if (!segmentId) return null;
 

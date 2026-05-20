@@ -1,16 +1,5 @@
-import type {
-  AnchorId,
-  ContourId,
-  GlyphState,
-  GlyphStructure,
-  PointId,
-} from "@shift/types";
-import {
-  Bounds,
-  Mat,
-  type Bounds as BoundsType,
-  type MatModel,
-} from "@shift/geo";
+import type { AnchorId, ContourId, GlyphState, GlyphStructure, PointId } from "@shift/types";
+import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import {
   GlyphStateGeometry as GlyphGeometry,
   type GlyphPosition,
@@ -57,12 +46,9 @@ export class GlyphSourceState {
     this.#xAdvance = computed(() => this.#coordinates.value.xAdvance.value, {
       name: "glyphSource.xAdvance",
     });
-    this.#sidebearings = computed(
-      () => this.#coordinates.value.sidebearings.value,
-      {
-        name: "glyphSource.sidebearings",
-      },
-    );
+    this.#sidebearings = computed(() => this.#coordinates.value.sidebearings.value, {
+      name: "glyphSource.sidebearings",
+    });
     this.#coordinateBuffersChanged = computed(
       () => {
         const buffers = this.#coordinates.value;
@@ -72,11 +58,7 @@ export class GlyphSourceState {
       { name: "glyphSource.coordinateBuffers.changed" },
     );
     this.#geometry = computed(
-      () =>
-        new GlyphGeometry(
-          this.#structure.value,
-          this.#coordinates.value.snapshot.value,
-        ),
+      () => new GlyphGeometry(this.#structure.value, this.#coordinates.value.snapshot.value),
       { name: "glyphSource.geometry" },
     );
   }
@@ -161,9 +143,7 @@ export class GlyphSourceState {
   }
 
   contourIdOfPoint(pointId: PointId): ContourId | null {
-    return this.#coordinates
-      .peek()
-      .contourIdOfPoint(this.#structure.peek(), pointId);
+    return this.#coordinates.peek().contourIdOfPoint(this.#structure.peek(), pointId);
   }
 
   replace(state: GlyphState): void {
@@ -244,10 +224,7 @@ export class SourceCoordinateBuffers {
       { name: "glyphSource.coordinates.changed" },
     );
     this.bounds = computed(
-      () =>
-        SourceCoordinateBuffers.#bounds(
-          this.contours.map((contour) => contour.bounds.value),
-        ),
+      () => SourceCoordinateBuffers.#bounds(this.contours.map((contour) => contour.bounds.value)),
       { name: "glyphSource.coordinates.bounds" },
     );
     this.sidebearings = computed(
@@ -266,11 +243,7 @@ export class SourceCoordinateBuffers {
     const contours: SourceContourCoordinates[] = [];
     const lookup = SourceLookupIndex.fromStructure(state.structure);
 
-    for (
-      let contourIndex = 0;
-      contourIndex < state.structure.contours.length;
-      contourIndex++
-    ) {
+    for (let contourIndex = 0; contourIndex < state.structure.contours.length; contourIndex++) {
       const contour = state.structure.contours[contourIndex];
       const length = contour.points.length * 2;
       const values = state.values.slice(cursor, cursor + length);
@@ -289,13 +262,7 @@ export class SourceCoordinateBuffers {
       return new SourceComponentTransform(values, componentIndex);
     });
 
-    return new SourceCoordinateBuffers(
-      xAdvance,
-      contours,
-      anchors,
-      components,
-      lookup,
-    );
+    return new SourceCoordinateBuffers(xAdvance, contours, anchors, components, lookup);
   }
 
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
@@ -337,10 +304,7 @@ export class SourceCoordinateBuffers {
     return positions;
   }
 
-  contourIdOfPoint(
-    structure: GlyphStructure,
-    pointId: PointId,
-  ): ContourId | null {
+  contourIdOfPoint(structure: GlyphStructure, pointId: PointId): ContourId | null {
     return this.#lookup.contourIdOfPoint(structure, pointId);
   }
 
@@ -412,9 +376,7 @@ export class SourceCoordinateBuffers {
     return values;
   }
 
-  static #bounds(
-    contourBounds: readonly (BoundsType | null)[],
-  ): BoundsType | null {
+  static #bounds(contourBounds: readonly (BoundsType | null)[]): BoundsType | null {
     let result: BoundsType | null = null;
     for (const bounds of contourBounds) {
       if (!bounds) continue;
@@ -440,17 +402,9 @@ class SourceLookupIndex {
     const pointLocations = new Map<PointId, PointBufferLocation>();
     const anchorOffsets = new Map<AnchorId, number>();
 
-    for (
-      let contourIndex = 0;
-      contourIndex < structure.contours.length;
-      contourIndex++
-    ) {
+    for (let contourIndex = 0; contourIndex < structure.contours.length; contourIndex++) {
       const contour = structure.contours[contourIndex];
-      for (
-        let pointIndex = 0;
-        pointIndex < contour.points.length;
-        pointIndex++
-      ) {
+      for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex++) {
         pointLocations.set(contour.points[pointIndex].id, {
           contourIndex,
           offset: pointIndex * 2,
@@ -473,10 +427,7 @@ class SourceLookupIndex {
     return this.#anchorOffsets.get(anchorId) ?? null;
   }
 
-  contourIdOfPoint(
-    structure: GlyphStructure,
-    pointId: PointId,
-  ): ContourId | null {
+  contourIdOfPoint(structure: GlyphStructure, pointId: PointId): ContourId | null {
     const location = this.pointLocation(pointId);
     if (!location) return null;
     return structure.contours[location.contourIndex]?.id ?? null;
@@ -492,12 +443,9 @@ export class SourceContourCoordinates {
       equals: () => false,
       name: `glyphSource.contour[${contourIndex}].coordinates`,
     });
-    this.bounds = computed(
-      () => SourceContourCoordinates.#bounds(this.values.value),
-      {
-        name: `glyphSource.contour[${contourIndex}].bounds`,
-      },
-    );
+    this.bounds = computed(() => SourceContourCoordinates.#bounds(this.values.value), {
+      name: `glyphSource.contour[${contourIndex}].bounds`,
+    });
   }
 
   patch(

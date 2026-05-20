@@ -1,18 +1,7 @@
-import {
-  Bounds,
-  Mat,
-  type Bounds as BoundsType,
-  type MatModel,
-  type Point2D,
-} from "@shift/geo";
+import { Bounds, Mat, type Bounds as BoundsType, type MatModel, type Point2D } from "@shift/geo";
 import type { GlyphHandle } from "@shift/bridge";
 import type { Signal } from "@/lib/signals/signal";
-import {
-  computed,
-  signal,
-  track,
-  type ComputedSignal,
-} from "@/lib/signals/signal";
+import { computed, signal, track, type ComputedSignal } from "@/lib/signals/signal";
 import type { AxisLocation } from "@/types/variation";
 import { Contour, Segment } from "@shift/glyph-state";
 import type { Glyph } from "./Glyph";
@@ -90,11 +79,7 @@ class SourceOutlinePart implements OutlinePart {
    * @param values - Coordinate buffer for the contour's current source values.
    * @param matrix - Component transform applied to the contour.
    */
-  constructor(
-    contour: ContourData,
-    values: SourceContourCoordinates,
-    matrix: Signal<MatModel>,
-  ) {
+  constructor(contour: ContourData, values: SourceContourCoordinates, matrix: Signal<MatModel>) {
     this.#contour = contour;
     this.#values = values;
     this.#matrix = matrix;
@@ -105,13 +90,9 @@ class SourceOutlinePart implements OutlinePart {
         this.#matrix.value,
       ),
     );
-    this.#path = computed(() =>
-      SourceOutlinePart.#commandsToPath(this.#commands.value),
-    );
+    this.#path = computed(() => SourceOutlinePart.#commandsToPath(this.#commands.value));
     this.#svgPath = computed(() =>
-      this.#commands.value
-        .map((command) => OutlineCommands.toSvg(command))
-        .join(" "),
+      this.#commands.value.map((command) => OutlineCommands.toSvg(command)).join(" "),
     );
 
     this.#bounds = computed(() => OutlineCommands.bounds(this.#commands.value));
@@ -145,12 +126,7 @@ class SourceOutlinePart implements OutlinePart {
           path.lineTo(command.to.x, command.to.y);
           break;
         case "quad":
-          path.quadraticCurveTo(
-            command.control.x,
-            command.control.y,
-            command.to.x,
-            command.to.y,
-          );
+          path.quadraticCurveTo(command.control.x, command.control.y, command.to.x, command.to.y);
           break;
         case "cubic":
           path.bezierCurveTo(
@@ -200,9 +176,7 @@ class GeometryOutlinePart implements OutlinePart {
 
   get svgPath(): string {
     if (this.#svgPath === null) {
-      this.#svgPath = this.#commands
-        .map((command) => OutlineCommands.toSvg(command))
-        .join(" ");
+      this.#svgPath = this.#commands.map((command) => OutlineCommands.toSvg(command)).join(" ");
     }
     return this.#svgPath;
   }
@@ -224,12 +198,7 @@ class GeometryOutlinePart implements OutlinePart {
           path.lineTo(command.to.x, command.to.y);
           break;
         case "quad":
-          path.quadraticCurveTo(
-            command.control.x,
-            command.control.y,
-            command.to.x,
-            command.to.y,
-          );
+          path.quadraticCurveTo(command.control.x, command.control.y, command.to.x, command.to.y);
           break;
         case "cubic":
           path.bezierCurveTo(
@@ -274,20 +243,13 @@ export class GlyphOutline {
    * @param variationLocation - Design location that selects source-backed or geometry-backed outline parts.
    * @param resolver - Glyph lookup used to expand component references.
    */
-  constructor(
-    glyph: Glyph,
-    variationLocation: Signal<AxisLocation>,
-    resolver: GlyphResolver,
-  ) {
+  constructor(glyph: Glyph, variationLocation: Signal<AxisLocation>, resolver: GlyphResolver) {
     this.#glyph = glyph;
     this.#variationLocation = variationLocation;
     this.#resolver = resolver;
 
     this.#data = computed(() =>
-      new GlyphOutlineBuilder(
-        this.#variationLocation.value,
-        this.#resolver,
-      ).build(this.#glyph),
+      new GlyphOutlineBuilder(this.#variationLocation.value, this.#resolver).build(this.#glyph),
     );
 
     this.#bounds = computed(() => {
@@ -420,13 +382,7 @@ class GlyphOutlineBuilder {
       for (let index = 0; index < structure.contours.length; index++) {
         const contourValues = coordinates.contours[index];
         if (contourValues) {
-          parts.push(
-            new SourceOutlinePart(
-              structure.contours[index],
-              contourValues,
-              matrixSignal,
-            ),
-          );
+          parts.push(new SourceOutlinePart(structure.contours[index], contourValues, matrixSignal));
         }
       }
 
@@ -459,10 +415,7 @@ class GlyphOutlineBuilder {
         });
         if (!componentGlyph) continue;
 
-        const child = this.#collect(
-          componentGlyph,
-          Mat.Compose(matrix, component.matrix),
-        );
+        const child = this.#collect(componentGlyph, Mat.Compose(matrix, component.matrix));
         parts.push(...child.parts);
       }
     }
@@ -473,10 +426,7 @@ class GlyphOutlineBuilder {
 }
 
 class OutlineCommands {
-  static fromContour(
-    contour: Contour,
-    matrix: MatModel,
-  ): readonly OutlineCommand[] {
+  static fromContour(contour: Contour, matrix: MatModel): readonly OutlineCommand[] {
     const segments = Segment.parse(contour);
     const first = segments[0];
     if (!first) return [];

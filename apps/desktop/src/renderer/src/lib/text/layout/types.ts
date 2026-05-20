@@ -47,9 +47,7 @@ export function glyphTextItem(
 }
 
 /** Build a line break text item — structural paragraph separator. */
-export function lineBreakTextItem(
-  id: TextItemId = createTextItemId(),
-): LineBreakTextItem {
+export function lineBreakTextItem(id: TextItemId = createTextItemId()): LineBreakTextItem {
   return { id, kind: "linebreak" };
 }
 

@@ -2,11 +2,7 @@ import { useCallback, useEffect } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@shift/ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";

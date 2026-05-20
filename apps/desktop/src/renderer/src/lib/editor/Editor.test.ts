@@ -94,17 +94,11 @@ describe("Editor", () => {
       editor.textRun.insert(lineBreakTextItem());
       editor.selectTool("select");
 
-      const secondLineOrigin = editor.textRun.layoutCell
-        .peek()
-        ?.editOriginForItem(s.id);
+      const secondLineOrigin = editor.textRun.layoutCell.peek()?.editOriginForItem(s.id);
       expect(editor.focusedGlyph?.anchor.itemId).toBe(s.id);
       expect(editor.focusedGlyph?.glyph.name).toBe("S");
-      expect(secondLineOrigin?.y).toBe(
-        editor.textRun.layoutCell.peek()?.lines[1].y,
-      );
-      expect(editor.glyphPlacement?.focused.editOrigin).toEqual(
-        secondLineOrigin,
-      );
+      expect(secondLineOrigin?.y).toBe(editor.textRun.layoutCell.peek()?.lines[1].y);
+      expect(editor.glyphPlacement?.focused.editOrigin).toEqual(secondLineOrigin);
       expect(editor.drawOffset).toEqual(secondLineOrigin);
       expect(editor.drawOffset).not.toEqual(firstLineOrigin);
     });
@@ -127,12 +121,10 @@ describe("Editor", () => {
       editor.openGlyph({ name: "S", unicode: 83 });
 
       expect(editor.focusedGlyph?.glyph.name).toBe("S");
-      expect(
-        editor.textRuns.resolveAnchor(editor.focusedGlyph!.anchor),
-      ).toEqual(editor.focusedGlyph);
-      expect(editor.drawOffset).toEqual(
-        editor.glyphPlacement?.focused.editOrigin,
+      expect(editor.textRuns.resolveAnchor(editor.focusedGlyph!.anchor)).toEqual(
+        editor.focusedGlyph,
       );
+      expect(editor.drawOffset).toEqual(editor.glyphPlacement?.focused.editOrigin);
     });
   });
 });

@@ -35,11 +35,7 @@ export type { ToolName, ToolState };
  * @typeParam TTool - Concrete tool type exposed to typed behavior contexts.
  * @typeParam Settings - Optional per-tool settings object.
  */
-export abstract class BaseTool<
-  S extends ToolState,
-  TTool = unknown,
-  Settings = object,
-> {
+export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = object> {
   abstract readonly id: ToolName;
   /** Ordered behavior list -- first match wins on each event. */
   abstract readonly behaviors: Behavior<S, TTool>[];
@@ -113,8 +109,7 @@ export abstract class BaseTool<
           () => {},
         );
         for (const behavior of this.behaviors) {
-          if (behavior.onStateExit)
-            behavior.onStateExit(prev, next, preCommitContext, event);
+          if (behavior.onStateExit) behavior.onStateExit(prev, next, preCommitContext, event);
         }
 
         this.setState(next);
@@ -126,8 +121,7 @@ export abstract class BaseTool<
           },
         );
         for (const behavior of this.behaviors) {
-          if (behavior.onStateEnter)
-            behavior.onStateEnter(prev, next, postCommitContext, event);
+          if (behavior.onStateEnter) behavior.onStateEnter(prev, next, postCommitContext, event);
         }
 
         if (this.onStateChange) this.onStateChange(prev, next, event);
@@ -176,12 +170,7 @@ export abstract class BaseTool<
     for (const behavior of this.behaviors) {
       const handler = this.#getEventHandler(behavior, event.type);
       if (handler) {
-        const handled = handler.call(
-          behavior,
-          nextState,
-          dispatchContext,
-          event as never,
-        );
+        const handled = handler.call(behavior, nextState, dispatchContext, event as never);
         if (handled) {
           return { state: nextState, handled: true };
         }
@@ -191,10 +180,7 @@ export abstract class BaseTool<
     return { state: nextState, handled: false };
   }
 
-  #createContext(
-    getState: () => S,
-    setState: (next: S) => void,
-  ): ToolContext<S, TTool> {
+  #createContext(getState: () => S, setState: (next: S) => void): ToolContext<S, TTool> {
     return {
       editor: this.editor,
       tool: this as unknown as TTool,
@@ -206,85 +192,43 @@ export abstract class BaseTool<
   #getEventHandler(
     behavior: Behavior<S, TTool>,
     type: ToolEvent["type"],
-  ):
-    | ((
-        state: S,
-        ctx: ToolContext<S, TTool>,
-        event: ToolEvent,
-      ) => boolean | undefined)
-    | undefined {
+  ): ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined) | undefined {
     switch (type) {
       case "pointerMove":
         return behavior.onPointerMove as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "click":
         return behavior.onClick as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "doubleClick":
         return behavior.onDoubleClick as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragStart":
         return behavior.onDragStart as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "drag":
         return behavior.onDrag as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragEnd":
         return behavior.onDragEnd as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "dragCancel":
         return behavior.onDragCancel as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "keyDown":
         return behavior.onKeyDown as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       case "keyUp":
         return behavior.onKeyUp as
-          | ((
-              state: S,
-              ctx: ToolContext<S, TTool>,
-              event: ToolEvent,
-            ) => boolean | undefined)
+          | ((state: S, ctx: ToolContext<S, TTool>, event: ToolEvent) => boolean | undefined)
           | undefined;
       default:
         return undefined;

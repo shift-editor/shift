@@ -1,10 +1,5 @@
 import type { Point2D, Rect2D } from "@shift/geo";
-import {
-  BaseTool,
-  type ToolName,
-  type ToolEvent,
-  defineStateDiagram,
-} from "../core";
+import { BaseTool, type ToolName, type ToolEvent, defineStateDiagram } from "../core";
 import type { ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
@@ -32,11 +27,7 @@ export class Shape extends BaseTool<ShapeState> {
     return { type: "idle" };
   }
 
-  protected override onStateChange(
-    prev: ShapeState,
-    next: ShapeState,
-    event: ToolEvent,
-  ): void {
+  protected override onStateChange(prev: ShapeState, next: ShapeState, event: ToolEvent): void {
     if (prev.type === "dragging" && next.type === "ready") {
       if (event.type === "dragEnd") {
         this.commitRectangle(prev);
@@ -86,10 +77,7 @@ export class Shape extends BaseTool<ShapeState> {
     };
   }
 
-  private commitRectangle(state: {
-    startPos: Point2D;
-    currentPos: Point2D;
-  }): void {
+  private commitRectangle(state: { startPos: Point2D; currentPos: Point2D }): void {
     const rect = this.getRect(state);
     if (Math.abs(rect.width) < 3 || Math.abs(rect.height) < 3) return;
 

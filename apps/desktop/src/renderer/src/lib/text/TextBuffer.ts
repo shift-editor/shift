@@ -18,12 +18,7 @@
  * cursorVisible (transient UI state). Those live in `TextInteraction` /
  * `TextRun`.
  */
-import {
-  signal,
-  batch,
-  type WritableSignal,
-  type Signal,
-} from "@/lib/signals/signal";
+import { signal, batch, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import type { TextItem, TextItemId } from "./layout";
 import { clamp } from "@/lib/utils/utils";
 
@@ -147,11 +142,7 @@ export class TextBuffer {
    */
   insert(item: TextItem): void {
     const { start, end } = this.range;
-    const next = [
-      ...this.items.slice(0, start),
-      item,
-      ...this.items.slice(end),
-    ];
+    const next = [...this.items.slice(0, start), item, ...this.items.slice(end)];
     const pos = start + 1;
 
     this.#update({ items: next, cursor: pos, anchor: pos });
@@ -163,11 +154,7 @@ export class TextBuffer {
    */
   insertMany(items: readonly TextItem[]): void {
     const { start, end } = this.range;
-    const next = [
-      ...this.items.slice(0, start),
-      ...items,
-      ...this.items.slice(end),
-    ];
+    const next = [...this.items.slice(0, start), ...items, ...this.items.slice(end)];
     const pos = start + items.length;
 
     this.#update({ items: next, cursor: pos, anchor: pos });
@@ -226,10 +213,7 @@ export class TextBuffer {
 
     if (this.cursor >= this.length) return false;
 
-    const next = [
-      ...this.items.slice(0, this.cursor),
-      ...this.items.slice(this.cursor + 1),
-    ];
+    const next = [...this.items.slice(0, this.cursor), ...this.items.slice(this.cursor + 1)];
     this.#update({ items: next });
     return true;
   }

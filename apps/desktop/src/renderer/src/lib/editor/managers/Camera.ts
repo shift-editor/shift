@@ -51,10 +51,7 @@ export class VisibleSceneBounds {
 
   contains(point: Point2D): boolean {
     return (
-      point.x >= this.minX &&
-      point.x <= this.maxX &&
-      point.y >= this.minY &&
-      point.y <= this.maxY
+      point.x >= this.minX && point.x <= this.maxX && point.y >= this.minY && point.y <= this.maxY
     );
   }
 }
@@ -127,19 +124,14 @@ export class Camera {
         this.#upm.value;
         const scale = this.upmScale;
         const padding = this.padding;
-        const baselineY =
-          this.layoutHeight - padding - this.#descender.value * scale;
+        const baselineY = this.layoutHeight - padding - this.#descender.value * scale;
         const zoom = this.#zoom.value;
 
-        const upmTransform = Mat.Identity()
-          .translate(padding, baselineY)
-          .scale(scale, -scale);
+        const upmTransform = Mat.Identity().translate(padding, baselineY).scale(scale, -scale);
 
         const panX = this.#panX.value + this.centre.x * (1 - zoom);
         const panY = this.#panY.value + this.centre.y * (1 - zoom);
-        const viewTransform = Mat.Identity()
-          .translate(panX, panY)
-          .scale(zoom, zoom);
+        const viewTransform = Mat.Identity().translate(panX, panY).scale(zoom, zoom);
 
         return Mat.Compose(viewTransform, upmTransform);
       },
@@ -155,11 +147,8 @@ export class Camera {
   }
 
   setRect(rect: Rect2D) {
-    const shouldPreserveProjection =
-      this.logicalWidth > 0 && this.logicalHeight > 0;
-    const before = shouldPreserveProjection
-      ? this.projectScreenToScene(0, 0)
-      : null;
+    const shouldPreserveProjection = this.logicalWidth > 0 && this.logicalHeight > 0;
+    const before = shouldPreserveProjection ? this.projectScreenToScene(0, 0) : null;
 
     this.#canvasRect = rect;
     if (this.#layoutHeight <= 0 && rect.height > 0) {
@@ -317,11 +306,7 @@ export class Camera {
    * Zooms toward or away from a screen-space point, adjusting pan so the
    * point under the cursor stays fixed. Used for scroll-wheel zoom.
    */
-  public zoomToPoint(
-    screenX: number,
-    screenY: number,
-    zoomDelta: number,
-  ): void {
+  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
     const before = this.projectScreenToScene(screenX, screenY);
 
     const newZoom = clamp(this.#zoom.peek() * zoomDelta, MIN_ZOOM, MAX_ZOOM);
@@ -358,8 +343,7 @@ export class Camera {
     const zoom = this.zoomLevel;
     const viewTranslateX = this.panX + centreX * (1 - zoom);
     const viewTranslateY = this.panY + centreY * (1 - zoom);
-    const baselineY =
-      this.layoutHeight - this.padding - this.descender * this.upmScale;
+    const baselineY = this.layoutHeight - this.padding - this.descender * this.upmScale;
     const zoomedScale = this.upmScale * zoom;
     const minScreenX = -cullMarginPx;
     const maxScreenX = logicalWidth + cullMarginPx;

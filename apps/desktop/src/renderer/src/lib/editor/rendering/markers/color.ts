@@ -11,8 +11,7 @@ export function parseCssColor(input?: string): GpuColor {
   if (color === "black") return [0, 0, 0, 1];
 
   if (color.startsWith("#")) return parseHex(color);
-  if (color.startsWith("rgba(") || color.startsWith("rgb("))
-    return parseRgb(color);
+  if (color.startsWith("rgba(") || color.startsWith("rgb(")) return parseRgb(color);
 
   return TRANSPARENT;
 }

@@ -81,10 +81,6 @@ export class MarkerCanvasSurface extends CanvasSurface {
   }
 
   static from(canvas: HTMLCanvasElement): MarkerCanvasSurface {
-    return new MarkerCanvasSurface(
-      canvas,
-      CanvasSurface.readRect(canvas),
-      window.devicePixelRatio,
-    );
+    return new MarkerCanvasSurface(canvas, CanvasSurface.readRect(canvas), window.devicePixelRatio);
   }
 }

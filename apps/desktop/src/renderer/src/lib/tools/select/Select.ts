@@ -89,12 +89,7 @@ export class Select extends BaseTool<SelectState, Select> {
     const instance = this.editor.glyphInstance;
     if (!instance) return;
 
-    this.#segments.draw(
-      canvas,
-      instance.geometry,
-      this.editor.selection,
-      this.editor.hover,
-    );
+    this.#segments.draw(canvas, instance.geometry, this.editor.selection, this.editor.hover);
   }
 
   override drawOverlay(canvas: Canvas): void {

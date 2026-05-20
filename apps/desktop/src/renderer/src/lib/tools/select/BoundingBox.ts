@@ -9,11 +9,7 @@ import type { Select } from "./Select";
 
 type YAxisDirection = "up" | "down";
 
-export type CornerHandle =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type BoundingBoxHitResult =
   | {
@@ -117,18 +113,11 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (state.type === "brushing") return null;
 
     const display = this.#editor.glyphDisplayCell.value;
-    if (
-      !display.handlesVisible ||
-      display.proofMode ||
-      !display.editableGlyphVisible
-    )
-      return null;
+    if (!display.handlesVisible || display.proofMode || !display.editableGlyphVisible) return null;
 
     const selection = this.#editor.selection.stateCell.value;
     const selectedCount =
-      selection.pointIds.size +
-      selection.anchorIds.size +
-      selection.segmentIds.size;
+      selection.pointIds.size + selection.anchorIds.size + selection.segmentIds.size;
     if (selectedCount <= 1) return null;
 
     const bounds = this.#editor.selection.boundsCell.value;
@@ -140,12 +129,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const screenRect = this.#screenRect(rect);
     const upmHandles = getHandlePositions(
       rect,
-      this.#editor.screenToUpmDistance(
-        SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
-      ),
-      this.#editor.screenToUpmDistance(
-        SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
-      ),
+      this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
+      this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
     );
     const screenHandles = getHandlePositions(
       screenRect,
@@ -273,26 +258,13 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
 
   #drawRect(canvas: Canvas, rect: Rect2D): void {
     const { stroke, widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
-    canvas.strokeRect(
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      stroke,
-      widthPx,
-      dashPx,
-    );
+    canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
   }
 
   #drawHandles(canvas: Canvas, handles: HandlePositions): void {
     const styles = SELECT_BOUNDING_BOX_STYLE;
 
-    const cornerKeys = [
-      "topLeft",
-      "topRight",
-      "bottomLeft",
-      "bottomRight",
-    ] as const;
+    const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
     for (const key of cornerKeys) {
       drawHandle(canvas, handles.corners[key], styles.handle);
     }
@@ -350,16 +322,8 @@ function getHandlePositions(
   rotationZoneOffset: number,
   yAxisDirection: YAxisDirection = "up",
 ): HandlePositions {
-  const alignmentRect = getExpandedHandleRect(
-    rect,
-    handleOffset,
-    yAxisDirection,
-  );
-  const rotationRect = getExpandedHandleRect(
-    rect,
-    rotationZoneOffset,
-    yAxisDirection,
-  );
+  const alignmentRect = getExpandedHandleRect(rect, handleOffset, yAxisDirection);
+  const rotationRect = getExpandedHandleRect(rect, rotationZoneOffset, yAxisDirection);
   const centerX = (alignmentRect.left + alignmentRect.right) / 2;
   const centerY = (alignmentRect.top + alignmentRect.bottom) / 2;
 
@@ -417,13 +381,12 @@ function hitTestRotationZones(
   rotationZones: HandlePositions["rotationZones"],
   hitRadius: number,
 ): RawRotateHitResult {
-  const corners: Array<[keyof HandlePositions["rotationZones"], CornerHandle]> =
-    [
-      ["topLeft", "top-left"],
-      ["topRight", "top-right"],
-      ["bottomLeft", "bottom-left"],
-      ["bottomRight", "bottom-right"],
-    ];
+  const corners: Array<[keyof HandlePositions["rotationZones"], CornerHandle]> = [
+    ["topLeft", "top-left"],
+    ["topRight", "top-right"],
+    ["bottomLeft", "bottom-left"],
+    ["bottomRight", "bottom-right"],
+  ];
 
   for (const [key, corner] of corners) {
     if (Vec2.dist(pos, rotationZones[key]) < hitRadius) {
@@ -435,10 +398,7 @@ function hitTestRotationZones(
 }
 
 function rectCenter(rect: Rect2D): Point2D {
-  return Vec2.midpoint(
-    { x: rect.left, y: rect.top },
-    { x: rect.right, y: rect.bottom },
-  );
+  return Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
 }
 
 function hitTestResize(
@@ -458,9 +418,7 @@ function hitTestResizeHandles(
   handles: HandlePositions,
   hitRadius: number,
 ): RawResizeHitResult {
-  const cornerChecks: Array<
-    [keyof HandlePositions["corners"], Exclude<BoundingRectEdge, null>]
-  > = [
+  const cornerChecks: Array<[keyof HandlePositions["corners"], Exclude<BoundingRectEdge, null>]> = [
     ["topLeft", "top-left"],
     ["topRight", "top-right"],
     ["bottomLeft", "bottom-left"],
@@ -491,11 +449,7 @@ function hitTestResizeHandles(
   return null;
 }
 
-function hitTestResizeEdges(
-  rect: Rect2D,
-  pos: Point2D,
-  hitRadius: number,
-): RawResizeHitResult {
+function hitTestResizeEdges(rect: Rect2D, pos: Point2D, hitRadius: number): RawResizeHitResult {
   const withinX = pos.x >= rect.left && pos.x <= rect.right;
   const withinY = pos.y >= rect.top && pos.y <= rect.bottom;
 

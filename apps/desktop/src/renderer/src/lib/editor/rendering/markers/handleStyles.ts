@@ -43,9 +43,7 @@ function buildSimpleStyle(
     lineWidth: style.lineWidth,
     fillColor: parseCssColor(style.fill),
     strokeColor: parseCssColor(style.stroke),
-    overlayColor: style.overlayColor
-      ? parseCssColor(style.overlayColor)
-      : TRANSPARENT,
+    overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
     barSize: 0,
     barStrokeColor: TRANSPARENT,
     extentX: halfSize + padding,
@@ -65,9 +63,7 @@ function buildDirectionalStyle(
       lineWidth: style.lineWidth,
       fillColor: parseCssColor(style.fill),
       strokeColor: parseCssColor(style.stroke),
-      overlayColor: style.overlayColor
-        ? parseCssColor(style.overlayColor)
-        : TRANSPARENT,
+      overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
       barSize: 0,
       barStrokeColor: TRANSPARENT,
       extentX: style.size + style.lineWidth + 2,
@@ -86,9 +82,7 @@ function buildDirectionalStyle(
       lineWidth: style.lineWidth,
       fillColor: parseCssColor(style.fill),
       strokeColor: parseCssColor(style.stroke),
-      overlayColor: style.overlayColor
-        ? parseCssColor(style.overlayColor)
-        : TRANSPARENT,
+      overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
       barSize: style.barSize,
       barStrokeColor: parseCssColor(style.barStroke),
       extentX: triangleTip + style.lineWidth + 2,
@@ -103,9 +97,7 @@ function buildDirectionalStyle(
     lineWidth: style.lineWidth,
     fillColor: parseCssColor(style.fill),
     strokeColor: parseCssColor(style.stroke),
-    overlayColor: style.overlayColor
-      ? parseCssColor(style.overlayColor)
-      : TRANSPARENT,
+    overlayColor: style.overlayColor ? parseCssColor(style.overlayColor) : TRANSPARENT,
     barSize: style.size,
     barStrokeColor: parseCssColor(style.stroke),
     extentX: style.size / 2 + style.lineWidth + 2,

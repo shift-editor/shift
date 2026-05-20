@@ -24,7 +24,6 @@ export const routes: NavRoute[] = [
     kind: "dialog",
     dialogId: "font-info",
     icon: InfoSvg,
-    description:
-      "Display and edit font information, such as family name, weight, style, etc.",
+    description: "Display and edit font information, such as family name, weight, style, etc.",
   },
 ];

@@ -41,8 +41,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
     {
       id: "global.undo",
       preventDefault: true,
-      match: (event) =>
-        matchChord(event, { key: "z", primaryModifier: true, shiftKey: false }),
+      match: (event) => matchChord(event, { key: "z", primaryModifier: true, shiftKey: false }),
       run: (ctx) => {
         ctx.editor.undo();
         return true;
@@ -51,8 +50,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
     {
       id: "global.redo",
       preventDefault: true,
-      match: (event) =>
-        matchChord(event, { key: "z", primaryModifier: true, shiftKey: true }),
+      match: (event) => matchChord(event, { key: "z", primaryModifier: true, shiftKey: true }),
       run: (ctx) => {
         ctx.editor.redo();
         return true;
@@ -67,9 +65,7 @@ export function createTextKeyDownBindings(): KeyBinding[] {
   return [];
 }
 
-export function createCanvasKeyDownBindings(
-  handlers: KeymapHandlers,
-): KeyBinding[] {
+export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBinding[] {
   return [
     {
       id: "canvas.zoomIn",
@@ -116,14 +112,11 @@ export function createCanvasKeyDownBindings(
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event, ctx) => {
-        if (event.primaryModifier || event.shiftKey || event.altKey)
-          return false;
+        if (event.primaryModifier || event.shiftKey || event.altKey) return false;
         return ctx.editor
           .getToolShortcuts()
           .some(
-            (entry) =>
-              entry.shortcut === event.key ||
-              entry.shortcut === event.key.toLowerCase(),
+            (entry) => entry.shortcut === event.key || entry.shortcut === event.key.toLowerCase(),
           );
       },
       run: (ctx, e) => {
@@ -131,9 +124,7 @@ export function createCanvasKeyDownBindings(
         const shortcut = ctx.editor
           .getToolShortcuts()
           .find(
-            (entry) =>
-              entry.shortcut === event.key ||
-              entry.shortcut === event.key.toLowerCase(),
+            (entry) => entry.shortcut === event.key || entry.shortcut === event.key.toLowerCase(),
           );
         if (!shortcut) return false;
         ctx.editor.setActiveTool(shortcut.toolId);
@@ -171,9 +162,7 @@ export function createCanvasKeyDownBindings(
   ];
 }
 
-export function createGlobalKeyUpBindings(
-  handlers: KeymapHandlers,
-): KeyBinding[] {
+export function createGlobalKeyUpBindings(handlers: KeymapHandlers): KeyBinding[] {
   return [
     {
       id: "global.temporaryHand.release",

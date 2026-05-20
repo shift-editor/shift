@@ -1,13 +1,7 @@
 import type { Point2D } from "@shift/geo";
 export const MARKER_INSTANCE_FLOATS = 25;
 
-export type MarkerShape =
-  | "corner"
-  | "smooth"
-  | "control"
-  | "direction"
-  | "first"
-  | "last";
+export type MarkerShape = "corner" | "smooth" | "control" | "direction" | "first" | "last";
 
 export type MarkerColour = [number, number, number, number];
 

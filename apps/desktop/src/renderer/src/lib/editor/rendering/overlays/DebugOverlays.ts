@@ -34,14 +34,7 @@ export class DebugOverlays {
   #drawSegmentBounds(canvas: Canvas, glyph: Glyph, color: string): void {
     for (const { segment } of glyph.segments()) {
       const b = segment.bounds;
-      canvas.strokeRect(
-        b.min.x,
-        b.min.y,
-        b.max.x - b.min.x,
-        b.max.y - b.min.y,
-        color,
-        1,
-      );
+      canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
     }
   }
 
@@ -55,24 +48,12 @@ export class DebugOverlays {
     for (const { segment } of glyph.segments()) {
       if (segment.id !== hoveredSegmentId) continue;
       const b = segment.bounds;
-      canvas.strokeRect(
-        b.min.x,
-        b.min.y,
-        b.max.x - b.min.x,
-        b.max.y - b.min.y,
-        color,
-        1,
-      );
+      canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
       return;
     }
   }
 
-  #drawHitRadii(
-    canvas: Canvas,
-    glyph: Glyph,
-    hitRadiusUpm: number,
-    color: string,
-  ): void {
+  #drawHitRadii(canvas: Canvas, glyph: Glyph, hitRadiusUpm: number, color: string): void {
     const r = hitRadiusUpm * canvas.camera.upmScale * canvas.camera.zoom;
     for (const point of glyph.allPoints) {
       canvas.strokeCircle({ x: point.x, y: point.y }, r, color, 1);
@@ -82,13 +63,6 @@ export class DebugOverlays {
   #drawGlyphBbox(canvas: Canvas, glyph: Glyph, color: string): void {
     const b = glyph.bounds;
     if (!b) return;
-    canvas.strokeRect(
-      b.min.x,
-      b.min.y,
-      b.max.x - b.min.x,
-      b.max.y - b.min.y,
-      color,
-      1,
-    );
+    canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
   }
 }

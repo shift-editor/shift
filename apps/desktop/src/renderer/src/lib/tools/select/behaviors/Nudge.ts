@@ -14,11 +14,7 @@ export class Nudge implements SelectBehavior {
     const pointIds = [...ctx.editor.selection.pointIds];
     if (pointIds.length === 0) return false;
 
-    const modifier: NudgeMagnitude = event.metaKey
-      ? "large"
-      : event.shiftKey
-        ? "medium"
-        : "small";
+    const modifier: NudgeMagnitude = event.metaKey ? "large" : event.shiftKey ? "medium" : "small";
     const nudgeValue = NUDGES_VALUES[modifier];
 
     let dx = 0;

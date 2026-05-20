@@ -82,35 +82,16 @@ export class MarkerLayer {
     logicalWidth: number,
     logicalHeight: number,
   ): boolean {
-    if (
-      !this.#regl ||
-      !this.#instanceBuffer ||
-      !this.#drawCommand ||
-      !this.#available
-    )
+    if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;
 
     if (!this.uploadInstances(packedInstances, instanceCount)) return false;
 
-    return this.drawUploaded(
-      instanceCount,
-      camera,
-      drawOffset,
-      logicalWidth,
-      logicalHeight,
-    );
+    return this.drawUploaded(instanceCount, camera, drawOffset, logicalWidth, logicalHeight);
   }
 
-  uploadInstances(
-    packedInstances: Float32Array,
-    instanceCount: number,
-  ): boolean {
-    if (
-      !this.#regl ||
-      !this.#instanceBuffer ||
-      !this.#drawCommand ||
-      !this.#available
-    )
+  uploadInstances(packedInstances: Float32Array, instanceCount: number): boolean {
+    if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;
 
     if (instanceCount === 0) return true;
@@ -138,12 +119,7 @@ export class MarkerLayer {
     logicalWidth: number,
     logicalHeight: number,
   ): boolean {
-    if (
-      !this.#regl ||
-      !this.#instanceBuffer ||
-      !this.#drawCommand ||
-      !this.#available
-    )
+    if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;
 
     if (instanceCount === 0) {
@@ -257,10 +233,7 @@ export class MarkerLayer {
       this.#instanceCapacity = 0;
       this.#available = true;
     } catch (error) {
-      console.warn(
-        "[MarkerLayer] Failed to initialize WebGL marker renderer",
-        error,
-      );
+      console.warn("[MarkerLayer] Failed to initialize WebGL marker renderer", error);
       this.#available = false;
       this.#regl = null;
       this.#instanceBuffer = null;

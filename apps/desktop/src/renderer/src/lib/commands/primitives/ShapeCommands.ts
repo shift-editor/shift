@@ -22,10 +22,7 @@ export class DrawRectangleCommand extends BaseCommand<ContourId> {
     const origin = Vec2.create(this.#rect.x, this.#rect.y);
     const topLeft = origin;
     const topRight = Vec2.add(origin, Vec2.create(this.#rect.width, 0));
-    const bottomRight = Vec2.add(
-      origin,
-      Vec2.create(this.#rect.width, this.#rect.height),
-    );
+    const bottomRight = Vec2.add(origin, Vec2.create(this.#rect.width, this.#rect.height));
     const bottomLeft = Vec2.add(origin, Vec2.create(0, this.#rect.height));
 
     const topLeftPoint = Point.onCurve(topLeft);

@@ -38,10 +38,7 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onDragEnd(
-    state: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): boolean {
+  onDragEnd(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "rotating") return false;
 
     this.#draft?.commit("Rotate Points");
@@ -51,10 +48,7 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onDragCancel(
-    state: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): boolean {
+  onDragCancel(state: SelectState, ctx: ToolContext<SelectState, Select>): boolean {
     if (state.type !== "rotating") return false;
 
     this.#draft?.discard();
@@ -64,11 +58,7 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(
-    prev: SelectState,
-    next: SelectState,
-    ctx: ToolContext<SelectState, Select>,
-  ): void {
+  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState, Select>): void {
     const editor = ctx.editor;
     if (prev.type !== "rotating" && next.type === "rotating") {
       // editor.setHandlesVisible(false);

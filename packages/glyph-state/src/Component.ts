@@ -1,9 +1,4 @@
-import type {
-  ComponentData,
-  ComponentId,
-  GlyphName,
-  GlyphStructure,
-} from "@shift/types";
+import type { ComponentData, ComponentId, GlyphName, GlyphStructure } from "@shift/types";
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
 
 export type ComponentTransform = DecomposedTransform;
@@ -20,18 +15,13 @@ export class Component {
     this.#cursor = cursor;
   }
 
-  static fromStructure(
-    structure: GlyphStructure,
-    values: Float64Array,
-  ): readonly Component[] {
+  static fromStructure(structure: GlyphStructure, values: Float64Array): readonly Component[] {
     let cursor = 1;
-    for (const contour of structure.contours)
-      cursor += contour.points.length * 2;
+    for (const contour of structure.contours) cursor += contour.points.length * 2;
     cursor += structure.anchors.length * 2;
 
     return structure.components.map(
-      (component, index) =>
-        new Component(component, values, cursor + index * 9),
+      (component, index) => new Component(component, values, cursor + index * 9),
     );
   }
 

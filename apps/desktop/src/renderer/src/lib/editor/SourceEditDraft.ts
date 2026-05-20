@@ -1,9 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphSource, SourcePositions } from "@/lib/model/Glyph";
-import {
-  SourcePositionList,
-  type SourcePositionSubject,
-} from "@/lib/model/SourcePositionList";
+import { SourcePositionList, type SourcePositionSubject } from "@/lib/model/SourcePositionList";
 import { ApplyPositionPatchCommand } from "@/lib/commands/primitives/ApplyPositionPatchCommand";
 import type { CommandHistory } from "@/lib/commands/core/CommandHistory";
 
@@ -78,11 +75,7 @@ export class SourceEditDraft {
 
     this.glyphSource.commitPositionPatch(this.#preview.positions);
     this.#commandHistory.record(
-      new ApplyPositionPatchCommand(
-        label,
-        this.#base.positions,
-        this.#preview.positions,
-      ),
+      new ApplyPositionPatchCommand(label, this.#base.positions, this.#preview.positions),
     );
   }
 

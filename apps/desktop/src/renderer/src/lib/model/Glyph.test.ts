@@ -60,20 +60,14 @@ function addTriangle(layer: GlyphSource): readonly Point[] {
   return contour.points;
 }
 
-function pointPosition(
-  layer: GlyphSource,
-  pointId: PointId,
-): { x: number; y: number } {
+function pointPosition(layer: GlyphSource, pointId: PointId): { x: number; y: number } {
   const point = layer.point(pointId);
   if (!point) throw new Error("Expected point");
 
   return { x: point.x, y: point.y };
 }
 
-function sourcePosition(
-  layer: GlyphSource,
-  pointId: PointId,
-): { x: number; y: number } {
+function sourcePosition(layer: GlyphSource, pointId: PointId): { x: number; y: number } {
   const position = layer.positionsFor([{ kind: "point", id: pointId }])[0];
   if (!position) throw new Error("Expected source position");
 
@@ -87,10 +81,7 @@ function loadMutatorSans(): Font {
   return font;
 }
 
-function locationOverride(
-  font: Font,
-  override: Record<string, number>,
-): AxisLocation {
+function locationOverride(font: Font, override: Record<string, number>): AxisLocation {
   let location = defaultAxisLocation(font.getAxes());
   for (const axis of font.getAxes()) {
     if (override[axis.tag] !== undefined) {
@@ -197,16 +188,12 @@ describe("glyph sources keep public geometry coherent across position edits", ()
   it("previews point patches through every public source geometry view", () => {
     const [, second] = addTriangle(layer);
 
-    layer.previewPositionPatch([
-      { kind: "point", id: second.id, x: 25, y: 75 },
-    ]);
+    layer.previewPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
 
     expect(sourcePosition(layer, second.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second.id)).toEqual({ x: 25, y: 75 });
     expect(layer.contours.at(-1)?.points[1]).toMatchObject({ x: 25, y: 75 });
-    expect(
-      layer.allPoints.find((point) => point.id === second.id),
-    ).toMatchObject({
+    expect(layer.allPoints.find((point) => point.id === second.id)).toMatchObject({
       x: 25,
       y: 75,
     });
@@ -226,9 +213,7 @@ describe("glyph sources keep public geometry coherent across position edits", ()
   it("commits a preview without stale geometry or double-applying local positions", () => {
     const [, second] = addTriangle(layer);
 
-    layer.previewPositionPatch([
-      { kind: "point", id: second.id, x: 25, y: 75 },
-    ]);
+    layer.previewPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
     layer.commitPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
 
     expect(sourcePosition(layer, second.id)).toEqual({ x: 25, y: 75 });
@@ -268,21 +253,14 @@ describe("Glyph variation interpolation", () => {
     }
 
     expect(resolved.length).toBeGreaterThan(0);
-    expect(
-      resolved.every((glyphSource) => glyphSource.source.id === glyphSource.id),
-    ).toBe(true);
+    expect(resolved.every((glyphSource) => glyphSource.source.id === glyphSource.id)).toBe(true);
   });
 
   it("root glyph svgPath changes when the variation location moves", () => {
     const location = signal(font.defaultLocation());
     const atDefault = glyph!.outline(location).svgPath;
     const axes = font.getAxes();
-    location.set(
-      locationOverride(
-        font,
-        Object.fromEntries(axes.map((a) => [a.tag, a.maximum])),
-      ),
-    );
+    location.set(locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum]))));
 
     expect(glyph!.outline(location).svgPath).not.toBe(atDefault);
   });
@@ -291,10 +269,7 @@ describe("Glyph variation interpolation", () => {
     const axes = font.getAxes();
     const atDefault = glyph!.instanceAt(font.defaultLocation()).geometry;
     const atMaximum = glyph!.instanceAt(
-      locationOverride(
-        font,
-        Object.fromEntries(axes.map((axis) => [axis.tag, axis.maximum])),
-      ),
+      locationOverride(font, Object.fromEntries(axes.map((axis) => [axis.tag, axis.maximum]))),
     ).geometry;
 
     expect(atMaximum.xAdvance).not.toBe(atDefault.xAdvance);
@@ -312,12 +287,7 @@ describe("Glyph variation interpolation", () => {
     const location = signal(font.defaultLocation());
     const atDefault = glyph!.outline(location).svgPath;
     const axes = font.getAxes();
-    location.set(
-      locationOverride(
-        font,
-        Object.fromEntries(axes.map((a) => [a.tag, a.maximum])),
-      ),
-    );
+    location.set(locationOverride(font, Object.fromEntries(axes.map((a) => [a.tag, a.maximum]))));
 
     expect(glyph!.contours).toEqual([]);
     expect(atDefault.length).toBeGreaterThan(0);

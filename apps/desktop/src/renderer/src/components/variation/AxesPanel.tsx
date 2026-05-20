@@ -9,8 +9,7 @@ export const AxesPanel = () => {
   const axes = useAxes();
   const [location, setDesignLocation] = useDesignLocation();
 
-  if (axes.length === 0)
-    return <p className="text-ui text-muted">No axes defined</p>;
+  if (axes.length === 0) return <p className="text-ui text-muted">No axes defined</p>;
 
   const onAxisChange = (axis: Axis, value: number) => {
     const nextLocation = withAxisValue(location, axis, value);
@@ -51,11 +50,5 @@ interface AxisSliderProps {
 }
 
 const AxisSlider = ({ axis, value, onChange }: AxisSliderProps) => (
-  <Slider
-    min={axis.minimum}
-    max={axis.maximum}
-    step={1}
-    value={value}
-    onValueChange={onChange}
-  />
+  <Slider min={axis.minimum} max={axis.maximum} step={1} value={value} onValueChange={onChange} />
 );

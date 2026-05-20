@@ -59,9 +59,7 @@ export const PersistedRootSchema = z.object({
 
 export type PersistedTextRun = z.infer<typeof PersistedTextRunSchema>;
 export type TextRunModule = z.infer<typeof TextRunModuleSchema>;
-export type PersistedModuleEnvelope = z.infer<
-  typeof PersistedModuleEnvelopeSchema
->;
+export type PersistedModuleEnvelope = z.infer<typeof PersistedModuleEnvelopeSchema>;
 export type PersistenceRegistry = z.infer<typeof PersistenceRegistrySchema>;
 export type PersistedDocument = z.infer<typeof PersistedDocumentSchema>;
 export type PersistedRoot = z.infer<typeof PersistedRootSchema>;

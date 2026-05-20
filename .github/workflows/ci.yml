@@ -89,7 +89,7 @@ jobs:
 
       - name: Lint (oxlint)
         run: pnpm test:lint
-      - name: Format check (prettier)
+      - name: Format check (oxfmt)
         run: pnpm format:check
 
   typecheck:

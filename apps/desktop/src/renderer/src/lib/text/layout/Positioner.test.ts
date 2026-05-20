@@ -17,11 +17,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66), glyph("C", 67)]);
 
-    const positioned = positioner.position(
-      run,
-      font,
-      signal(font.defaultLocation()),
-    );
+    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
 
     const sum = positioned.glyphs.reduce((s, g) => s + g.xAdvance, 0);
     expect(positioned.advance).toBe(sum);
@@ -33,11 +29,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("A", 65), glyph("B", 66)], /* clusterStart */ 7);
 
-    const positioned = positioner.position(
-      run,
-      font,
-      signal(font.defaultLocation()),
-    );
+    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
 
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
@@ -48,11 +40,7 @@ describe("Positioner", () => {
     const a = glyph("A", 65);
     const run = ltrRun([a]);
 
-    const positioned = positioner.position(
-      run,
-      font,
-      signal(font.defaultLocation()),
-    );
+    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
     const source = font.defaultSource;
     const expectedBounds = font
       .glyph({ name: "A" }, source)
@@ -68,11 +56,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([glyph("nonexistent-glyph-xyz", 65)]);
 
-    const positioned = positioner.position(
-      run,
-      font,
-      signal(font.defaultLocation()),
-    );
+    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
     expect(positioned.glyphs[0].bounds).toBeNull();
@@ -83,11 +67,7 @@ describe("Positioner", () => {
     const positioner = new Positioner();
     const run = ltrRun([]);
 
-    const positioned = positioner.position(
-      run,
-      font,
-      signal(font.defaultLocation()),
-    );
+    const positioned = positioner.position(run, font, signal(font.defaultLocation()));
 
     expect(positioned.glyphs).toEqual([]);
     expect(positioned.advance).toBe(0);

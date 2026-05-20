@@ -485,10 +485,7 @@ describe("Camera", () => {
       const upmBefore = camera.projectScreenToScene(screenPos.x, screenPos.y);
 
       camera.zoomToPoint(screenPos.x, screenPos.y, 1.5);
-      const upmAfterZoom = camera.projectScreenToScene(
-        screenPos.x,
-        screenPos.y,
-      );
+      const upmAfterZoom = camera.projectScreenToScene(screenPos.x, screenPos.y);
 
       expect(upmAfterZoom.x).toBeCloseTo(upmBefore.x, -1);
       expect(upmAfterZoom.y).toBeCloseTo(upmBefore.y, -1);

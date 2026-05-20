@@ -55,9 +55,7 @@ export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
                 onClick={() => setCategory(c.id)}
                 className={cn(
                   "w-full justify-start p-0 pl-2",
-                  category === c.id
-                    ? "font-medium text-primary"
-                    : "text-primary hover:bg-hover",
+                  category === c.id ? "font-medium text-primary" : "text-primary hover:bg-hover",
                 )}
               >
                 {c.label}
@@ -92,21 +90,14 @@ const CategoryPanel = ({ category }: { category: CategoryId }) => {
     case "sources":
     case "features":
     case "shortcuts":
-      return (
-        <PlaceholderPanel
-          label={CATEGORIES.find((c) => c.id === category)!.label}
-        />
-      );
+      return <PlaceholderPanel label={CATEGORIES.find((c) => c.id === category)!.label} />;
   }
 };
 
 const FontPanel = () => {
   const editor = getEditor();
   const m = editor.font.metadata;
-  const version =
-    m.versionMajor !== undefined
-      ? `${m.versionMajor}.${m.versionMinor ?? 0}`
-      : "";
+  const version = m.versionMajor !== undefined ? `${m.versionMajor}.${m.versionMinor ?? 0}` : "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -142,11 +133,7 @@ const FieldGrid = ({ fields }: { fields: Field[] }) => (
 const FieldRow = ({ field }: { field: Field }) => (
   <>
     <label className="text-sm text-primary">{field.label}</label>
-    <Input
-      defaultValue={field.text}
-      readOnly
-      className="h-7 text-sm bg-white"
-    />
+    <Input defaultValue={field.text} readOnly className="h-7 text-sm bg-white" />
   </>
 );
 

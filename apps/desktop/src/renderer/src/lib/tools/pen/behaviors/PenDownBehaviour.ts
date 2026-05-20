@@ -5,11 +5,7 @@ import { PenTargets } from "../PenTargets";
 import type { PenState, PenBehavior } from "../types";
 
 export class PenDownBehaviour implements PenBehavior {
-  onClick(
-    state: PenState,
-    ctx: ToolContext<PenState>,
-    event: ToolEventOf<"click">,
-  ): boolean {
+  onClick(state: PenState, ctx: ToolContext<PenState>, event: ToolEventOf<"click">): boolean {
     if (state.type !== "ready") return false;
 
     const editor = ctx.editor;

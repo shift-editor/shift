@@ -4,11 +4,7 @@ import type { HandState } from "../types";
 import { Vec2 } from "@shift/geo";
 
 export const HandDraggingBehavior = createBehavior<HandState>({
-  onDrag(
-    state: HandState,
-    ctx: ToolContext<HandState>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: HandState, ctx: ToolContext<HandState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "dragging") return false;
     const newPan = Vec2.add(state.startPan, event.screenDelta);
     ctx.editor.setPan(newPan);

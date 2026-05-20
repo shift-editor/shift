@@ -137,10 +137,7 @@ test.describe("Performance — 50K points", () => {
     const base = baseline[stats.label];
     // For near-zero baselines (sub-millisecond ops), allow up to 1ms absolute
     // jitter instead of a percentage — 0.00ms → 0.10ms isn't a real regression.
-    const allowed = Math.max(
-      base.p95 * (1 + REGRESSION_TOLERANCE),
-      base.p95 + 1,
-    );
+    const allowed = Math.max(base.p95 * (1 + REGRESSION_TOLERANCE), base.p95 + 1);
 
     expect(
       stats.p95,
@@ -153,10 +150,7 @@ test.describe("Performance — 50K points", () => {
 
     const pointCount = await page.evaluate((data) => {
       const shift = (window as any).__shift;
-      if (!shift)
-        throw new Error(
-          "__shift not exposed — was the app built with __PLAYWRIGHT__?",
-        );
+      if (!shift) throw new Error("__shift not exposed — was the app built with __PLAYWRIGHT__?");
 
       const editor = shift.getEditor();
       const result = editor.bridge.pasteContours(data, 0, 0);
@@ -178,12 +172,8 @@ test.describe("Performance — 50K points", () => {
         const editor = (window as any).__shift.getEditor();
         editor.bridge.pasteContours(contours, 0, 0);
 
-        const pointIds = editor.editGlyphSource.allPoints
-          .slice(0, 5)
-          .map((p: any) => p.id);
-        editor.selection.select(
-          pointIds.map((id: string) => ({ kind: "point", id })),
-        );
+        const pointIds = editor.editGlyphSource.allPoints.slice(0, 5).map((p: any) => p.id);
+        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
 
         const draft = editor.beginSourceEditDraft({ points: pointIds });
         const times: number[] = [];
@@ -221,9 +211,7 @@ test.describe("Performance — 50K points", () => {
 
         const allPoints = editor.editGlyphSource.allPoints;
         const pointIds = allPoints.slice(0, 1000).map((p: any) => p.id);
-        editor.selection.select(
-          pointIds.map((id: string) => ({ kind: "point", id })),
-        );
+        editor.selection.select(pointIds.map((id: string) => ({ kind: "point", id })));
 
         const draft = editor.beginSourceEditDraft({ points: pointIds });
         const times: number[] = [];
@@ -367,9 +355,7 @@ test.describe("Performance — 50K points", () => {
     assertPerf(redoStats);
   });
 
-  test("pen tool — rapid point placement on complex glyph", async ({
-    page,
-  }) => {
+  test("pen tool — rapid point placement on complex glyph", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(

@@ -24,9 +24,7 @@ export const RightSidebar = () => {
     const nextPoints = pointIds.size > 0;
     const nextAnchors = anchorIds.size > 0;
     setHasPointSelection((prev) => (prev === nextPoints ? prev : nextPoints));
-    setHasAnchorSelection((prev) =>
-      prev === nextAnchors ? prev : nextAnchors,
-    );
+    setHasAnchorSelection((prev) => (prev === nextAnchors ? prev : nextAnchors));
   });
 
   return (

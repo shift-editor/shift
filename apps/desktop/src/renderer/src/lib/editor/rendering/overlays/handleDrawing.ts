@@ -140,11 +140,7 @@ function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   canvas.ctx.restore();
 }
 
-function drawCircleHandle(
-  canvas: Canvas,
-  point: Point2D,
-  style: HandleStyle,
-): void {
+function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   const radiusUpm = canvas.pxToUpm(style.size);
 
   canvas.ctx.save();

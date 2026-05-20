@@ -2,12 +2,7 @@ export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentTransform, type Matrix } from "./Component";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
-export {
-  Point,
-  type NewPoint,
-  type PointHit,
-  type PointWithNeighbors,
-} from "./Point";
+export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export {
   GlyphGeometry as GlyphStateGeometry,
   type GeometryAnchorHit,

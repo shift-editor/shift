@@ -2,11 +2,7 @@ import { Vec2, type Point2D } from "@shift/geo";
 import { Validate } from "@shift/validation";
 import type { ContourId, PointId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
-import type {
-  GlyphInstanceEdit,
-  GlyphInstanceGeometry,
-  SourcePositions,
-} from "@/lib/model/Glyph";
+import type { GlyphInstanceEdit, GlyphInstanceGeometry, SourcePositions } from "@/lib/model/Glyph";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import { Anchor, Handles } from "./types";
 
@@ -15,11 +11,7 @@ export class PenStroke {
   readonly #geometry: GlyphInstanceGeometry;
   readonly #edit: GlyphInstanceEdit;
 
-  private constructor(
-    editor: Editor,
-    geometry: GlyphInstanceGeometry,
-    edit: GlyphInstanceEdit,
-  ) {
+  private constructor(editor: Editor, geometry: GlyphInstanceGeometry, edit: GlyphInstanceEdit) {
     this.#editor = editor;
     this.#geometry = geometry;
     this.#edit = edit;
@@ -70,11 +62,7 @@ export class PenStroke {
     return contour ? contour.canClose(position, hitRadius) : false;
   }
 
-  continueContour(
-    contourId: ContourId,
-    side: "start" | "end",
-    pointId: PointId,
-  ): void {
+  continueContour(contourId: ContourId, side: "start" | "end", pointId: PointId): void {
     this.#editor.continueContour(contourId, side === "start", pointId);
   }
 
@@ -113,10 +101,7 @@ export class PenStroke {
 
     if (prevIsOffCurve) {
       const cpInPos = Vec2.mirror(handlePos, position);
-      const cpInId = this.#edit.insertPointBefore(
-        anchorId,
-        Point.offCurve(cpInPos),
-      );
+      const cpInId = this.#edit.insertPointBefore(anchorId, Point.offCurve(cpInPos));
       const cpOutId = this.#edit.addOffCurvePoint(contour.id, handlePos);
 
       return { cpIn: cpInId, cpOut: cpOutId };
@@ -129,10 +114,7 @@ export class PenStroke {
     }
 
     const cpInPos = Vec2.mirror(handlePos, position);
-    const cpInId = this.#edit.insertPointBefore(
-      anchorId,
-      Point.offCurve(cpInPos),
-    );
+    const cpInId = this.#edit.insertPointBefore(anchorId, Point.offCurve(cpInPos));
     return { cpIn: cpInId };
   }
 

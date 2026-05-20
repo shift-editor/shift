@@ -13,10 +13,7 @@ export interface FirstHandleStyle extends HandleStyle {
   barStroke: string;
 }
 
-export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<
-  HandleState,
-  T
->;
+export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<HandleState, T>;
 
 export interface Theme {
   cursor: { color: string; widthPx: number };
@@ -185,13 +182,7 @@ export const DEFAULT_THEME: Theme = {
     hoverOutline: "#0C92F4",
     hoverOutlineWidthPx: 3,
     compositeArmFill: "rgba(128, 128, 128, 0.22)",
-    componentOverlay: [
-      "rgba(169, 236, 183, 0.26)",
-      "rgba(255, 182, 207, 0.26)",
-    ],
-    componentOverlayHover: [
-      "rgba(124, 220, 150, 0.4)",
-      "rgba(255, 151, 186, 0.4)",
-    ],
+    componentOverlay: ["rgba(169, 236, 183, 0.26)", "rgba(255, 182, 207, 0.26)"],
+    componentOverlayHover: ["rgba(124, 220, 150, 0.4)", "rgba(255, 151, 186, 0.4)"],
   },
 };

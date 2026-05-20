@@ -14,13 +14,7 @@ import { CanvasItem } from "./CanvasItem";
 import type { Canvas } from "./Canvas";
 import { OutlineRenderer } from "./Outline";
 import { Text as TextRunDrawer } from "./Text";
-import {
-  Anchors,
-  ControlLines,
-  DebugOverlays,
-  Guides,
-  Handles,
-} from "./overlays";
+import { Anchors, ControlLines, DebugOverlays, Guides, Handles } from "./overlays";
 import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 
 export interface BackgroundLayerProps {

@@ -59,21 +59,13 @@ export class TextLayout {
     this.bufferLength = items.length;
 
     // splitParagraphs → segmentRuns → position → assemble
-    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map(
-      (p) => ({
-        runs: segmentRuns(p).map((run) =>
-          positioner.position(run, font, designLocation),
-        ),
-        clusterStart: p.clusterStart,
-        clusterEnd: p.clusterStart + p.glyphs.length + 1,
-      }),
-    );
+    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p) => ({
+      runs: segmentRuns(p).map((run) => positioner.position(run, font, designLocation)),
+      clusterStart: p.clusterStart,
+      clusterEnd: p.clusterStart + p.glyphs.length + 1,
+    }));
 
-    const { lines, totalAdvance, bounds } = assembleLayout(
-      paragraphs,
-      origin,
-      this.metrics,
-    );
+    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
@@ -130,10 +122,7 @@ export class TextLayout {
    * cluster falls on a linebreak, or past the buffer end).
    */
   pointAt(cluster: number): CaretPosition | null {
-    const lineHeight =
-      this.metrics.ascender -
-      this.metrics.descender +
-      (this.metrics.lineGap ?? 0);
+    const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
     for (const line of this.lines) {
       let runBase = this.origin.x;
       for (const run of line.runs) {
@@ -198,11 +187,7 @@ export class TextLayout {
     return null;
   }
 
-  anchorAtPoint(
-    runId: TextRunId,
-    p: Point2D,
-    padding: number = 0,
-  ): GlyphAnchor | null {
+  anchorAtPoint(runId: TextRunId, p: Point2D, padding: number = 0): GlyphAnchor | null {
     const hit = this.hitTest(p, padding);
     if (!hit) return null;
     const item = this.#items[hit.cluster];
@@ -329,8 +314,7 @@ function assembleLayout(
   origin: Point2D,
   metrics: FontMetrics,
 ): AssembledLayout {
-  const lineHeight =
-    metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,

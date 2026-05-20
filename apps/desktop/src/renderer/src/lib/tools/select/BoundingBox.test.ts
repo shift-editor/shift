@@ -5,12 +5,7 @@ import { signal } from "@/lib/signals";
 import { SELECT_BOUNDING_BOX_STYLE, SelectBoundingBox } from "./BoundingBox";
 import type { Select } from "./Select";
 
-const createRect = (
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-): Rect2D => ({
+const createRect = (x: number, y: number, width: number, height: number): Rect2D => ({
   x,
   y,
   width,
@@ -30,9 +25,7 @@ function createBoundingBox(rect: Rect2D) {
   const editor = {
     selection: {
       bounds: Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height),
-      boundsCell: signal(
-        Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height),
-      ),
+      boundsCell: signal(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height)),
       stateCell: signal({
         pointIds: new Set(["p1", "p2"]),
         anchorIds: new Set(),
@@ -69,36 +62,28 @@ describe("SelectBoundingBox.hit", () => {
 
   describe("resize corner handles", () => {
     it("detects top-left resize handle", () => {
-      expect(
-        hit({ x: 100 - handleOffset, y: 200 + handleOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 100 - handleOffset, y: 200 + handleOffset })).toMatchObject({
         type: "resize",
         edge: "top-left",
       });
     });
 
     it("detects top-right resize handle", () => {
-      expect(
-        hit({ x: 300 + handleOffset, y: 200 + handleOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 300 + handleOffset, y: 200 + handleOffset })).toMatchObject({
         type: "resize",
         edge: "top-right",
       });
     });
 
     it("detects bottom-left resize handle", () => {
-      expect(
-        hit({ x: 100 - handleOffset, y: 100 - handleOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 100 - handleOffset, y: 100 - handleOffset })).toMatchObject({
         type: "resize",
         edge: "bottom-left",
       });
     });
 
     it("detects bottom-right resize handle", () => {
-      expect(
-        hit({ x: 300 + handleOffset, y: 100 - handleOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 300 + handleOffset, y: 100 - handleOffset })).toMatchObject({
         type: "resize",
         edge: "bottom-right",
       });
@@ -137,36 +122,28 @@ describe("SelectBoundingBox.hit", () => {
 
   describe("rotation zones", () => {
     it("detects top-left rotation zone", () => {
-      expect(
-        hit({ x: 100 - rotationZoneOffset, y: 200 + rotationZoneOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 100 - rotationZoneOffset, y: 200 + rotationZoneOffset })).toMatchObject({
         type: "rotate",
         corner: "top-left",
       });
     });
 
     it("detects top-right rotation zone", () => {
-      expect(
-        hit({ x: 300 + rotationZoneOffset, y: 200 + rotationZoneOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 300 + rotationZoneOffset, y: 200 + rotationZoneOffset })).toMatchObject({
         type: "rotate",
         corner: "top-right",
       });
     });
 
     it("detects bottom-left rotation zone", () => {
-      expect(
-        hit({ x: 100 - rotationZoneOffset, y: 100 - rotationZoneOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 100 - rotationZoneOffset, y: 100 - rotationZoneOffset })).toMatchObject({
         type: "rotate",
         corner: "bottom-left",
       });
     });
 
     it("detects bottom-right rotation zone", () => {
-      expect(
-        hit({ x: 300 + rotationZoneOffset, y: 100 - rotationZoneOffset }),
-      ).toMatchObject({
+      expect(hit({ x: 300 + rotationZoneOffset, y: 100 - rotationZoneOffset })).toMatchObject({
         type: "rotate",
         corner: "bottom-right",
       });

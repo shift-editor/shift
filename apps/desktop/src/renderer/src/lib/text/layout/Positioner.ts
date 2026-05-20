@@ -15,11 +15,7 @@ import type { Source } from "@shift/types";
  *
  */
 export class Positioner {
-  position(
-    run: SegmentedRun,
-    font: Font,
-    designLocation: Signal<AxisLocation>,
-  ): PositionedRun {
+  position(run: SegmentedRun, font: Font, designLocation: Signal<AxisLocation>): PositionedRun {
     let totalAdvance = 0;
     const glyphs: PositionedRun["glyphs"] = [];
     const source = font.sourceAtOrDefault(designLocation.peek());
@@ -58,14 +54,8 @@ export class Positioner {
 }
 
 /** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(
-  item: GlyphTextItem,
-  font: Font,
-  source: Source | null,
-): number {
-  const raw = source
-    ? (font.glyphSource({ name: item.glyphName }, source)?.xAdvance ?? 0)
-    : 0;
+export function resolveAdvance(item: GlyphTextItem, font: Font, source: Source | null): number {
+  const raw = source ? (font.glyphSource({ name: item.glyphName }, source)?.xAdvance ?? 0) : 0;
   return displayAdvance(raw, item.glyphName, item.codepoint);
 }
 

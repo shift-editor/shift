@@ -42,10 +42,7 @@ export const Rect = {
    */
   containsPoint(rect: Rect2D, point: Point2D): boolean {
     return (
-      point.x >= rect.left &&
-      point.x <= rect.right &&
-      point.y >= rect.top &&
-      point.y <= rect.bottom
+      point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
     );
   },
 } as const;

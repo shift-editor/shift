@@ -7,10 +7,7 @@ export {
   SplitSegmentCommand,
   UpgradeLineToCubicCommand,
 } from "./BezierCommands";
-export {
-  BooleanOperationCommand,
-  type BooleanOperation,
-} from "./BooleanOperationCommand";
+export { BooleanOperationCommand, type BooleanOperation } from "./BooleanOperationCommand";
 export { ApplyPositionPatchCommand } from "./ApplyPositionPatchCommand";
 export {
   SetXAdvanceCommand,

@@ -49,10 +49,7 @@ export const App = () => {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    const handleOpenFont = (
-      filePath: string,
-      source: "event" | "restore" = "event",
-    ) => {
+    const handleOpenFont = (filePath: string, source: "event" | "restore" = "event") => {
       if (source === "restore" && didOpenFont) {
         return;
       }
@@ -84,9 +81,7 @@ export const App = () => {
 
         const state = documentPersistence.getState();
         const mostRecentDocId = state.registry.lruDocIds[0];
-        const mostRecentPath = mostRecentDocId
-          ? state.registry.docIdToPath[mostRecentDocId]
-          : null;
+        const mostRecentPath = mostRecentDocId ? state.registry.docIdToPath[mostRecentDocId] : null;
         if (!mostRecentPath) {
           fontDocument.createFont();
           return;
@@ -100,31 +95,24 @@ export const App = () => {
 
         handleOpenFont(mostRecentPath, "restore");
       })();
-    } else if (
-      needsLoadedDocument(window.location.hash) &&
-      !fontDocument.loaded
-    ) {
+    } else if (needsLoadedDocument(window.location.hash) && !fontDocument.loaded) {
       fontDocument.createFont();
     }
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
-    const unsubscribeExternalOpen =
-      window.electronAPI?.onExternalOpenFont(handleOpenFont);
+    const unsubscribeExternalOpen = window.electronAPI?.onExternalOpenFont(handleOpenFont);
 
-    const unsubscribeSave = window.electronAPI?.onMenuSaveFont(
-      async (savePath) => {
-        try {
-          await fontDocument.saveFont(savePath);
-        } catch (error) {
-          console.error("Failed to save font:", error);
-        }
-      },
-    );
+    const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
+      try {
+        await fontDocument.saveFont(savePath);
+      } catch (error) {
+        console.error("Failed to save font:", error);
+      }
+    });
 
-    const unsubscribePatternDump =
-      window.electronAPI?.onDebugDumpSelectionPatterns(() => {
-        dumpSelectionPatternsToConsole();
-      });
+    const unsubscribePatternDump = window.electronAPI?.onDebugDumpSelectionPatterns(() => {
+      dumpSelectionPatternsToConsole();
+    });
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);

@@ -33,10 +33,7 @@ export class TextTool extends BaseTool<TextState> {
 
     const ownerName = owner.name;
     const run = this.editor.textRuns.switchTo(ownerName);
-    run.seed(
-      glyphTextItem(ownerName, owner.unicode ?? null),
-      this.editor.drawOffset.x,
-    );
+    run.seed(glyphTextItem(ownerName, owner.unicode ?? null), this.editor.drawOffset.x);
     run.interaction.suspend();
     run.setCursorVisible(true);
 

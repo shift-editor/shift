@@ -25,22 +25,13 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  onDrag(
-    state: SelectState,
-    ctx: ToolContext<SelectState>,
-    event: ToolEventOf<"drag">,
-  ): boolean {
+  onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: ToolEventOf<"drag">): boolean {
     if (state.type !== "brushing") return false;
     const localPoint = event.coords.glyphLocal;
 
-    const rect = Rect.fromPoints(
-      state.selection.startPos,
-      state.selection.currentPos,
-    );
+    const rect = Rect.fromPoints(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select(
-      [...pointIds].map((id) => ({ kind: "point", id })),
-    );
+    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
 
     ctx.setState({
       type: "brushing",
@@ -52,14 +43,9 @@ export class Marquee implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "brushing") return false;
 
-    const rect = Rect.fromPoints(
-      state.selection.startPos,
-      state.selection.currentPos,
-    );
+    const rect = Rect.fromPoints(state.selection.startPos, state.selection.currentPos);
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select(
-      [...pointIds].map((id) => ({ kind: "point", id })),
-    );
+    ctx.editor.selection.select([...pointIds].map((id) => ({ kind: "point", id })));
 
     ctx.setState({ type: "ready" });
     return true;
@@ -74,16 +60,11 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  private getPointsInRect(
-    rect: Rect2D,
-    ctx: ToolContext<SelectState>,
-  ): Set<PointId> {
+  private getPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<PointId> {
     const instance = ctx.editor.glyphInstance;
     if (!instance) return new Set();
 
-    const hitPoints = instance.geometry.allPoints.filter((p) =>
-      Rect.containsPoint(rect, p),
-    );
+    const hitPoints = instance.geometry.allPoints.filter((p) => Rect.containsPoint(rect, p));
     return new Set(hitPoints.map((p) => p.id));
   }
 }

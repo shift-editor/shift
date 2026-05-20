@@ -1,9 +1,4 @@
-import type {
-  ContourData,
-  ContourId,
-  GlyphStructure,
-  PointId,
-} from "@shift/types";
+import type { ContourData, ContourId, GlyphStructure, PointId } from "@shift/types";
 import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import { Segment } from "./Segment";
 import { Point, type PointWithNeighbors } from "./Point";
@@ -31,10 +26,7 @@ export class Contour {
     this.#cursor = cursor;
   }
 
-  static fromStructure(
-    structure: GlyphStructure,
-    values: Float64Array,
-  ): readonly Contour[] {
+  static fromStructure(structure: GlyphStructure, values: Float64Array): readonly Contour[] {
     let cursor = 1;
     return structure.contours.map((contour) => {
       const result = new Contour(contour, values, cursor);
@@ -139,8 +131,7 @@ export class Contour {
     for (let index = 0; index < points.length; index++) {
       yield {
         point: points[index],
-        prev:
-          points[index - 1] ?? (this.closed ? points[points.length - 1] : null),
+        prev: points[index - 1] ?? (this.closed ? points[points.length - 1] : null),
         next: points[index + 1] ?? (this.closed ? points[0] : null),
       };
     }
@@ -176,9 +167,7 @@ export class Contour {
       }
     }
 
-    parts.push(
-      Bounds.fromPoints(this.points.filter((point) => ids.has(point.id))),
-    );
+    parts.push(Bounds.fromPoints(this.points.filter((point) => ids.has(point.id))));
 
     return Bounds.unionAll(parts);
   }

@@ -1,9 +1,4 @@
-import {
-  Bounds,
-  type Bounds as BoundsType,
-  Vec2,
-  type Point2D,
-} from "@shift/geo";
+import { Bounds, type Bounds as BoundsType, Vec2, type Point2D } from "@shift/geo";
 import type {
   AnchorId,
   ComponentId,
@@ -62,10 +57,7 @@ export interface GeometrySegmentHit extends SegmentHit {
   readonly segmentId: SegmentId;
 }
 
-export type GeometryHit =
-  | GeometryPointHit
-  | GeometryAnchorHit
-  | GeometrySegmentHit;
+export type GeometryHit = GeometryPointHit | GeometryAnchorHit | GeometrySegmentHit;
 
 /**
  * Immutable geometry view over a glyph structure and value buffer.
@@ -323,15 +315,13 @@ class GeometryCache {
 
     let points: readonly Point[] | null = null;
     this.#points = new IdIndex(
-      () =>
-        (points ??= this.contours.flatMap((contour) => [...contour.points])),
+      () => (points ??= this.contours.flatMap((contour) => [...contour.points])),
       (point) => point.id,
     );
 
     let segments: readonly Segment[] | null = null;
     this.#segments = new IdIndex(
-      () =>
-        (segments ??= this.contours.flatMap((contour) => contour.segments())),
+      () => (segments ??= this.contours.flatMap((contour) => contour.segments())),
       (segment) => segment.id,
     );
 
@@ -410,9 +400,7 @@ class GeometryCache {
 
   get bounds(): BoundsType | null {
     if (this.#bounds === undefined) {
-      this.#bounds = Bounds.unionAll(
-        this.contours.map((contour) => contour.bounds),
-      );
+      this.#bounds = Bounds.unionAll(this.contours.map((contour) => contour.bounds));
     }
 
     return this.#bounds;

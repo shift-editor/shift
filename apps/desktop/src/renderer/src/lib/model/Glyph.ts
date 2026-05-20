@@ -13,32 +13,14 @@ import type {
   Unicode,
 } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
-import {
-  computed,
-  keyedCache,
-  signal,
-  type ComputedSignal,
-  type Signal,
-} from "@/lib/signals";
+import { computed, keyedCache, signal, type ComputedSignal, type Signal } from "@/lib/signals";
 import { interpolate, normalize } from "@/lib/interpolation/interpolate";
-import {
-  axisLocationFromLocation,
-  axisLocationsEqual,
-} from "@/lib/variation/location";
+import { axisLocationFromLocation, axisLocationsEqual } from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
 import { Transform } from "@/lib/transform/Transform";
 import { Alignment } from "@/lib/transform/Alignment";
-import type {
-  AlignmentType,
-  DistributeType,
-  ReflectAxis,
-} from "@/types/transform";
-import {
-  Bounds,
-  Vec2,
-  type Bounds as BoundsType,
-  type Point2D,
-} from "@shift/geo";
+import type { AlignmentType, DistributeType, ReflectAxis } from "@/types/transform";
+import { Bounds, Vec2, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import {
   Anchor,
   Component,
@@ -120,12 +102,7 @@ class GlyphEditSession {
   readonly #source: Source;
   readonly #state: GlyphEditState;
 
-  constructor(
-    font: Font,
-    handle: GlyphHandle,
-    source: Source,
-    state: GlyphEditState,
-  ) {
+  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphEditState) {
     this.#font = font;
     this.#handle = handle;
     this.#source = source;
@@ -181,8 +158,7 @@ class GlyphEditSession {
     const change = this.#font.bridge.addContour();
     this.#applyStructureChange(change);
     const contourId = change.changed.contourIds[0];
-    if (!contourId)
-      throw new Error("Bridge did not return a created contour ID");
+    if (!contourId) throw new Error("Bridge did not return a created contour ID");
     return contourId;
   }
 
@@ -241,9 +217,7 @@ class GlyphEditSession {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     this.#ensureActiveSession();
-    this.#applyStructureChange(
-      this.#font.bridge.applyBooleanOp(contourIdA, contourIdB, operation),
-    );
+    this.#applyStructureChange(this.#font.bridge.applyBooleanOp(contourIdA, contourIdB, operation));
   }
 
   removePoints(pointIds: readonly PointId[]): void {
@@ -259,9 +233,7 @@ class GlyphEditSession {
 
   restore(state: GlyphState): void {
     this.#ensureActiveSession();
-    this.#applyStructureChange(
-      this.#font.bridge.restoreState(state.structure, state.values),
-    );
+    this.#applyStructureChange(this.#font.bridge.restoreState(state.structure, state.values));
   }
 
   #ensureActiveSession(): void {
@@ -427,10 +399,7 @@ export class GlyphSource {
    * ```
    */
   positionsFor(targets: readonly SourcePositionTarget[]): SourcePosition[] {
-    const list = SourcePositionList.fromTargets(
-      this.#edit.sourceState,
-      targets,
-    );
+    const list = SourcePositionList.fromTargets(this.#edit.sourceState, targets);
     return [...list.positions];
   }
 
@@ -622,9 +591,7 @@ export class GlyphSource {
    * @param position - Destination in glyph-local UPM units.
    */
   movePointTo(pointId: PointId, position: Point2D): void {
-    this.applyPositionPatch([
-      { kind: "point", id: pointId, x: position.x, y: position.y },
-    ]);
+    this.applyPositionPatch([{ kind: "point", id: pointId, x: position.x, y: position.y }]);
   }
 
   /**
@@ -634,9 +601,7 @@ export class GlyphSource {
    * @param delta - Relative movement in glyph-local UPM units.
    */
   movePoints(pointIds: readonly PointId[], delta: Point2D): void {
-    const positions = this.positionsFor(
-      pointIds.map((id) => ({ kind: "point", id })),
-    );
+    const positions = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
     const nextPositions = positions.map((position) => {
       const next = Vec2.add(position, delta);
       return { ...position, x: next.x, y: next.y };
@@ -662,11 +627,7 @@ export class GlyphSource {
    * @param target - Destination for the anchor point.
    * @param anchor - Existing anchor position used to compute the delta.
    */
-  moveSelectionTo(
-    pointIds: readonly PointId[],
-    target: Point2D,
-    anchor: Point2D,
-  ): void {
+  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
     this.movePoints(pointIds, Vec2.sub(target, anchor));
   }
 
@@ -695,12 +656,7 @@ export class GlyphSource {
    * @param sy - Vertical scale factor.
    * @param origin - Scale origin in glyph-local UPM units.
    */
-  scale(
-    pointIds: readonly PointId[],
-    sx: number,
-    sy: number,
-    origin: Point2D,
-  ): void {
+  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
     this.applyPositionPatch(
       Transform.scalePoints(
         this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
@@ -718,11 +674,7 @@ export class GlyphSource {
    * @param axis - Reflection axis.
    * @param origin - Axis origin in glyph-local UPM units.
    */
-  reflect(
-    pointIds: readonly PointId[],
-    axis: ReflectAxis,
-    origin: Point2D,
-  ): void {
+  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
     this.applyPositionPatch(
       Transform.reflectPoints(
         this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
@@ -739,9 +691,7 @@ export class GlyphSource {
    * @param alignment - Alignment operation to apply.
    */
   align(pointIds: readonly PointId[], alignment: AlignmentType): void {
-    const points = this.positionsFor(
-      pointIds.map((id) => ({ kind: "point", id })),
-    );
+    const points = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
     const bounds = Bounds.fromPoints(points);
     if (!bounds) return;
 
@@ -1116,11 +1066,7 @@ export class GlyphInstanceEdit {
    * @param target - Destination for the anchor point.
    * @param anchor - Existing anchor position used to compute the delta.
    */
-  moveSelectionTo(
-    pointIds: readonly PointId[],
-    target: Point2D,
-    anchor: Point2D,
-  ): void {
+  moveSelectionTo(pointIds: readonly PointId[], target: Point2D, anchor: Point2D): void {
     this.#source.moveSelectionTo(pointIds, target, anchor);
   }
 
@@ -1143,12 +1089,7 @@ export class GlyphInstanceEdit {
    * @param sy - Vertical scale factor.
    * @param origin - Scale origin in glyph-local UPM units.
    */
-  scale(
-    pointIds: readonly PointId[],
-    sx: number,
-    sy: number,
-    origin: Point2D,
-  ): void {
+  scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
     this.#source.scale(pointIds, sx, sy, origin);
   }
 
@@ -1159,11 +1100,7 @@ export class GlyphInstanceEdit {
    * @param axis - Reflection axis.
    * @param origin - Axis origin in glyph-local UPM units.
    */
-  reflect(
-    pointIds: readonly PointId[],
-    axis: ReflectAxis,
-    origin: Point2D,
-  ): void {
+  reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
     this.#source.reflect(pointIds, axis, origin);
   }
 
@@ -1219,30 +1156,20 @@ class InstanceRender {
       const currentLocation = location.value;
       const source = glyph.sourceAt(currentLocation);
       if (source) {
-        return this.#sourceContours(
-          source.structureCell.value,
-          source.coordinateBuffersCell.value,
-        );
+        return this.#sourceContours(source.structureCell.value, source.coordinateBuffersCell.value);
       }
 
-      return GlyphRenderModel.geometryContours(
-        glyph.geometryAt(currentLocation),
-      );
+      return GlyphRenderModel.geometryContours(glyph.geometryAt(currentLocation));
     });
 
     const anchors = computed<readonly RenderAnchor[]>(() => {
       const currentLocation = location.value;
       const source = glyph.sourceAt(currentLocation);
       if (source) {
-        return this.#sourceAnchors(
-          source.structureCell.value,
-          source.coordinateBuffersCell.value,
-        );
+        return this.#sourceAnchors(source.structureCell.value, source.coordinateBuffersCell.value);
       }
 
-      return GlyphRenderModel.geometryAnchors(
-        glyph.geometryAt(currentLocation),
-      );
+      return GlyphRenderModel.geometryAnchors(glyph.geometryAt(currentLocation));
     });
 
     this.model = new GlyphRenderModel(contours, anchors, outline);
@@ -1252,9 +1179,7 @@ class InstanceRender {
     structure: GlyphStructure,
     coordinates: SourceCoordinateBuffers,
   ): readonly RenderContour[] {
-    return this.#contours.map(
-      this.#currentContourInputs(structure, coordinates),
-    );
+    return this.#contours.map(this.#currentContourInputs(structure, coordinates));
   }
 
   #currentContourInputs(
@@ -1266,8 +1191,7 @@ class InstanceRender {
     for (let index = 0; index < structure.contours.length; index++) {
       const data = structure.contours[index];
       const contourCoordinates = coordinates.contours[index];
-      if (data && contourCoordinates)
-        inputs.push({ data, coordinates: contourCoordinates });
+      if (data && contourCoordinates) inputs.push({ data, coordinates: contourCoordinates });
     }
 
     return inputs;
@@ -1456,21 +1380,14 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     this.#source = source;
 
     this.#sourceContours = computed(() =>
-      this.#contoursFromSource(
-        source.structureCell.value,
-        source.coordinateBuffersCell.value,
-      ),
+      this.#contoursFromSource(source.structureCell.value, source.coordinateBuffersCell.value),
     );
-    this.#contours = computed(() =>
-      this.#sourceContours.value.map((contour) => contour.contour),
-    );
+    this.#contours = computed(() => this.#sourceContours.value.map((contour) => contour.contour));
 
     this.#points = computed(() =>
       this.#sourceContours.value.flatMap((contour) => contour.pointsCell.value),
     );
-    this.#pointOwners = computed(() =>
-      this.#pointOwnersFromSource(this.#sourceContours.value),
-    );
+    this.#pointOwners = computed(() => this.#pointOwnersFromSource(this.#sourceContours.value));
 
     const anchors = computed(() =>
       this.#anchorsFromSource(
@@ -1483,9 +1400,7 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
       (anchor) => anchor.id,
     );
 
-    this.#segmentOwners = computed(() =>
-      this.#segmentOwnersFromSource(this.#sourceContours.value),
-    );
+    this.#segmentOwners = computed(() => this.#segmentOwnersFromSource(this.#sourceContours.value));
   }
 
   get allPoints(): readonly Point[] {
@@ -1513,10 +1428,7 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
   }
 
   contour(contourId: ContourId): Contour | null {
-    return (
-      this.#sourceContours.peek().find((contour) => contour.id === contourId)
-        ?.contour ?? null
-    );
+    return this.#sourceContours.peek().find((contour) => contour.id === contourId)?.contour ?? null;
   }
 
   point(pointId: PointId): Point | null {
@@ -1587,9 +1499,7 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     structure: GlyphStructure,
     coordinates: SourceCoordinateBuffers,
   ): readonly ContourCache[] {
-    return this.#contourCache.map(
-      this.#currentContourInputs(structure, coordinates),
-    );
+    return this.#contourCache.map(this.#currentContourInputs(structure, coordinates));
   }
 
   #currentContourInputs(
@@ -1601,16 +1511,13 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     for (let index = 0; index < structure.contours.length; index++) {
       const data = structure.contours[index];
       const contourCoordinates = coordinates.contours[index];
-      if (data && contourCoordinates)
-        inputs.push({ data, coordinates: contourCoordinates });
+      if (data && contourCoordinates) inputs.push({ data, coordinates: contourCoordinates });
     }
 
     return inputs;
   }
 
-  #pointOwnersFromSource(
-    contours: readonly ContourCache[],
-  ): ReadonlyMap<PointId, ContourCache> {
+  #pointOwnersFromSource(contours: readonly ContourCache[]): ReadonlyMap<PointId, ContourCache> {
     const owners = new Map<PointId, ContourCache>();
     for (const contour of contours) {
       for (const pointId of contour.pointIds) {
@@ -1632,13 +1539,8 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     return owners;
   }
 
-  #anchorsFromSource(
-    structure: GlyphStructure,
-    values: Float64Array,
-  ): readonly Anchor[] {
-    return structure.anchors.map(
-      (anchor, index) => new Anchor(anchor, values, index * 2),
-    );
+  #anchorsFromSource(structure: GlyphStructure, values: Float64Array): readonly Anchor[] {
+    return structure.anchors.map((anchor, index) => new Anchor(anchor, values, index * 2));
   }
 }
 
@@ -1662,9 +1564,7 @@ class ContourCache {
 
   constructor(input: Signal<ContourInput>) {
     this.#input = input;
-    this.#pointIds = computed(() =>
-      this.#input.value.data.points.map((point) => point.id),
-    );
+    this.#pointIds = computed(() => this.#input.value.data.points.map((point) => point.id));
     this.contourCell = computed(() => {
       const { data, coordinates } = this.#input.value;
       return new Contour(data, coordinates.values.value, 0);
@@ -1688,9 +1588,7 @@ class ContourCache {
       const { data, coordinates } = this.#input.value;
       return new Contour(data, coordinates.values.value, 0).segments();
     });
-    this.#segmentIds = computed(() =>
-      this.segmentsCell.value.map((segment) => segment.id),
-    );
+    this.#segmentIds = computed(() => this.segmentsCell.value.map((segment) => segment.id));
 
     this.#points = new IdIndex(
       () => this.pointsCell.peek(),
@@ -1753,12 +1651,7 @@ export class Glyph {
   readonly #instances = new WeakMap<Signal<AxisLocation>, GlyphInstance>();
   readonly #outlines = new WeakMap<Signal<AxisLocation>, GlyphOutline>();
 
-  constructor(
-    font: Font,
-    handle: GlyphHandle,
-    source: Source,
-    state: GlyphState,
-  ) {
+  constructor(font: Font, handle: GlyphHandle, source: Source, state: GlyphState) {
     this.handle = handle;
     this.#font = font;
     this.#source = source;
@@ -1768,9 +1661,7 @@ export class Glyph {
 
     this.#geometry = computed(() => this.#sourceState.geometryCell.value);
 
-    this.#xAdvance = computed(
-      () => this.#sourceState.coordinateBuffersCell.value.xAdvance.value,
-    );
+    this.#xAdvance = computed(() => this.#sourceState.coordinateBuffersCell.value.xAdvance.value);
 
     this.#edit = new GlyphEditSession(font, handle, source, {
       state: this.#sourceState,
@@ -1860,28 +1751,20 @@ export class Glyph {
    */
   geometryAt(location: AxisLocation): GlyphGeometry {
     const sourceLocation = axisLocationFromLocation(this.#source.location);
-    if (
-      axisLocationsEqual(location, sourceLocation, [...this.#font.getAxes()])
-    ) {
+    if (axisLocationsEqual(location, sourceLocation, [...this.#font.getAxes()])) {
       return this.#geometry.peek();
     }
 
     const exactSource = this.#font.sourceAt(location);
     if (exactSource) {
-      return (
-        this.#font.glyphSource(this.handle, exactSource)?.geometry ??
-        this.#geometry.peek()
-      );
+      return this.#font.glyphSource(this.handle, exactSource)?.geometry ?? this.#geometry.peek();
     }
 
     if (!this.#variationData) {
       return this.#geometry.peek();
     }
 
-    const values = interpolate(
-      this.#variationData,
-      normalize(location, [...this.#font.getAxes()]),
-    );
+    const values = interpolate(this.#variationData, normalize(location, [...this.#font.getAxes()]));
 
     if (values.length === 0) {
       return this.#geometry.peek();
@@ -1936,13 +1819,9 @@ export class Glyph {
   }
 
   /** @internal GlyphSource caching is owned by Font.glyphSource(). */
-  createGlyphSource(
-    source: Source,
-    state?: GlyphState | null,
-  ): GlyphSource | null {
+  createGlyphSource(source: Source, state?: GlyphState | null): GlyphSource | null {
     if (!this.#font.source(source.id)) return null;
-    if (this.isPrimarySource(source))
-      return new GlyphSource(source, this.#edit);
+    if (this.isPrimarySource(source)) return new GlyphSource(source, this.#edit);
     if (!state) return null;
 
     const sourceState = new GlyphSourceState(state);

@@ -52,9 +52,7 @@ export class PenTargets {
   }
 
   #hitOpenTerminal(pos: Point2D, radius: number): PenTarget | null {
-    let best:
-      | (PenTarget & { readonly type: "terminal"; readonly distance: number })
-      | null = null;
+    let best: (PenTarget & { readonly type: "terminal"; readonly distance: number }) | null = null;
 
     for (const contour of this.#geometry.contours) {
       if (contour.closed) continue;

@@ -49,10 +49,7 @@ export class EditorGesture {
   readonly cell: Signal<EditorGestureSnapshot>;
 
   constructor() {
-    this.#cell = signal<EditorGestureSnapshot>(
-      { phase: "idle" },
-      { name: "editor.gesture" },
-    );
+    this.#cell = signal<EditorGestureSnapshot>({ phase: "idle" }, { name: "editor.gesture" });
     this.cell = this.#cell;
   }
 
@@ -108,8 +105,7 @@ export class GlyphDisplay {
         return {
           proofMode: this.proofModeCell.value,
           handlesVisible: this.handlesVisibleCell.value,
-          editableGlyphVisible:
-            !hasTextActivity || focusedGlyph?.anchor.runId === run.id,
+          editableGlyphVisible: !hasTextActivity || focusedGlyph?.anchor.runId === run.id,
         };
       },
       { name: "editor.glyph.display" },

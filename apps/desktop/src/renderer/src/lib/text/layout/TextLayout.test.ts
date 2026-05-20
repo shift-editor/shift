@@ -12,10 +12,7 @@ describe("TextLayout", () => {
 
   // Levien invariant via the public class surface.
   it("measure equals sum of xAdvance across all runs", () => {
-    const layout = makeLayout(
-      [glyph("A", 65), glyph("B", 66), glyph("C", 67)],
-      font,
-    );
+    const layout = makeLayout([glyph("A", 65), glyph("B", 66), glyph("C", 67)], font);
 
     const sum = layout.lines
       .flatMap((l) => l.runs)
@@ -37,10 +34,7 @@ describe("TextLayout", () => {
 
   // Linebreak item splits the buffer into two lines.
   it("splits on linebreak item into separate lines", () => {
-    const layout = makeLayout(
-      [glyph("A", 65), lineBreakTextItem(), glyph("B", 66)],
-      font,
-    );
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
 
     expect(layout.lines).toHaveLength(2);
     expect(layout.lines[1].y).toBeLessThan(layout.lines[0].y);
@@ -48,13 +42,9 @@ describe("TextLayout", () => {
 
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
-    const layout = makeLayout(
-      [glyph("A", 65), lineBreakTextItem(), glyph("B", 66)],
-      font,
-    );
+    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], font);
     const metrics = font.metrics;
-    const lineHeight =
-      metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+    const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
     expect(layout.lines[0].y).toBe(0);
     expect(layout.lines[1].y).toBe(-lineHeight);

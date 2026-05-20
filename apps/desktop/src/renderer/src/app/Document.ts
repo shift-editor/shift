@@ -44,8 +44,7 @@ export class Document {
     this.#setFilePath = services.setFilePath;
     this.#clearDirty = services.clearDirty;
     this.#createUntitledId = services.createUntitledId ?? createUntitledId;
-    this.#notifySaveCompleted =
-      services.notifySaveCompleted ?? (() => undefined);
+    this.#notifySaveCompleted = services.notifySaveCompleted ?? (() => undefined);
   }
 
   get identity(): DocumentIdentity | null {
@@ -84,8 +83,7 @@ export class Document {
   }
 
   async saveFont(path?: string): Promise<void> {
-    const savePath =
-      path ?? (this.#identity?.kind === "file" ? this.#identity.path : null);
+    const savePath = path ?? (this.#identity?.kind === "file" ? this.#identity.path : null);
     if (!savePath) {
       throw new Error("Cannot save an untitled document without a file path");
     }
@@ -111,7 +109,5 @@ export class Document {
 }
 
 function createUntitledId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ?? `untitled-${Date.now().toString(36)}`
-  );
+  return globalThis.crypto?.randomUUID?.() ?? `untitled-${Date.now().toString(36)}`;
 }

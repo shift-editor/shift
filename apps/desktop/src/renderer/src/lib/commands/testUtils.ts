@@ -47,11 +47,7 @@ export function addPoint(
 ): PointId {
   return source.addPoint(
     contourId,
-    Point.create(
-      { x: edit.x, y: edit.y },
-      edit.pointType ?? "onCurve",
-      edit.smooth ?? false,
-    ),
+    Point.create({ x: edit.x, y: edit.y }, edit.pointType ?? "onCurve", edit.smooth ?? false),
   );
 }
 
@@ -61,10 +57,7 @@ export function point(source: GlyphSource, pointId: PointId): Point {
   return result;
 }
 
-export function contourPoints(
-  source: GlyphSource,
-  contourId: ContourId,
-): readonly Point[] {
+export function contourPoints(source: GlyphSource, contourId: ContourId): readonly Point[] {
   const contour = source.contour(contourId);
   if (!contour) throw new Error("Expected contour");
   return contour.points;

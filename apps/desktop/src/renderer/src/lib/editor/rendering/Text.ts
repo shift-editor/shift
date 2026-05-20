@@ -51,18 +51,11 @@ export class Text {
 
     // Selection rects (under glyphs)
     for (const rect of run.selectionRectsCell.peek()) {
-      canvas.fillRect(
-        rect.x,
-        rect.bottom,
-        rect.width,
-        rect.top - rect.bottom,
-        theme.selectionFill,
-      );
+      canvas.fillRect(rect.x, rect.bottom, rect.width, rect.top - rect.bottom, theme.selectionFill);
     }
 
     // Glyphs
-    const focusedItemId =
-      focusedGlyph?.anchor.runId === run.id ? focusedGlyph.anchor.itemId : null;
+    const focusedItemId = focusedGlyph?.anchor.runId === run.id ? focusedGlyph.anchor.itemId : null;
     const hoveredCluster = run.interaction.hoveredIndex;
 
     for (const line of layout.lines) {
@@ -81,10 +74,7 @@ export class Text {
           const outline = glyph.instance(designLocation).render.outline;
 
           canvas.save();
-          canvas.translate(
-            runBase + g.origin.x + g.xOffset,
-            line.y + g.origin.y + g.yOffset,
-          );
+          canvas.translate(runBase + g.origin.x + g.xOffset, line.y + g.origin.y + g.yOffset);
           this.#outlineRenderer.draw(canvas, outline, {
             fill: canvas.theme.glyph.fill,
           });

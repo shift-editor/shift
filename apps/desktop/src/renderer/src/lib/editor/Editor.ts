@@ -3,10 +3,7 @@ import type { PointId, ContourId, Source, SourceId } from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
 import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
-import {
-  axisLocationFromLocation,
-  emptyAxisLocation,
-} from "@/lib/variation/location";
+import { axisLocationFromLocation, emptyAxisLocation } from "@/lib/variation/location";
 import type { ToolName, ActiveToolState } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Segment } from "@shift/glyph-state";
@@ -55,10 +52,7 @@ import { cursorToCSS } from "../styles/cursor";
 import { EdgePanManager } from "./managers";
 import { Hover } from "./Hover";
 import { Renderer } from "./rendering/Renderer";
-import type {
-  Canvas2DSurface,
-  MarkerCanvasSurface,
-} from "./rendering/CanvasSurface";
+import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { CameraTransform } from "./managers";
 import type { FocusZone } from "@/types/focus";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
@@ -77,11 +71,7 @@ import type { TextRunModule } from "@/persistence/types";
 import type { ToolManifest, ToolShortcutEntry } from "@/types/tools";
 import type { ToolStateScope } from "@/types/editor";
 import { EventEmitter } from "./lifecycle";
-import {
-  StateRegistry,
-  type ShiftState,
-  type ShiftStateOptions,
-} from "@/lib/state/ShiftState";
+import { StateRegistry, type ShiftState, type ShiftStateOptions } from "@/lib/state/ShiftState";
 
 import type { LineSegmentPoints } from "@shift/glyph-state";
 import type { ShiftBridge } from "@shift/bridge";
@@ -267,11 +257,7 @@ export class Editor {
 
     this.#clipboard = new Clipboard(options.clipboard);
 
-    this.#textRuns = new TextRuns(
-      this.font,
-      new Positioner(),
-      this.#glyph.design.location,
-    );
+    this.#textRuns = new TextRuns(this.font, new Positioner(), this.#glyph.design.location);
     this.#text = new TextEditingState(this.#textRuns);
     this.#glyphDisplay = new GlyphDisplay(this.#text, this.#textRuns);
 
@@ -331,10 +317,7 @@ export class Editor {
 
   public registerTool(descriptor: ToolManifest): void {
     const { id, icon, tooltip, shortcut } = descriptor;
-    this.#toolMetadata.set(
-      id,
-      shortcut ? { icon, tooltip, shortcut } : { icon, tooltip },
-    );
+    this.#toolMetadata.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
     this.toolManager.register(descriptor);
   }
 
@@ -406,10 +389,7 @@ export class Editor {
     return this.#toolManager;
   }
 
-  public requestTemporaryTool(
-    toolId: ToolName,
-    options?: TemporaryToolOptions,
-  ): void {
+  public requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void {
     this.toolManager.requestTemporary(toolId, options);
   }
 
@@ -432,9 +412,7 @@ export class Editor {
   public beginSourceEditDraft(subject: SourceEditSubject): SourceEditDraft {
     const glyphSource = this.#glyph.edit.glyphSource.peek();
     if (!glyphSource) {
-      throw new Error(
-        "Cannot begin a source edit draft without an active glyph source",
-      );
+      throw new Error("Cannot begin a source edit draft without an active glyph source");
     }
 
     return new SourceEditDraft(glyphSource, this.#commandHistory, subject);
@@ -594,10 +572,7 @@ export class Editor {
    *
    * @returns The editable glyph source, or `null` when the source/glyph cannot be opened.
    */
-  public openGlyphSource(
-    handle: GlyphHandle,
-    sourceId: SourceId,
-  ): GlyphSource | null {
+  public openGlyphSource(handle: GlyphHandle, sourceId: SourceId): GlyphSource | null {
     this.setRootGlyphHandle(handle);
     const source = this.font.source(sourceId);
     if (!source) return null;
@@ -807,20 +782,11 @@ export class Editor {
     return this.#glyphDisplay.cell.peek().editableGlyphVisible;
   }
 
-  public getToolState(
-    scope: ToolStateScope,
-    toolId: string,
-    key: string,
-  ): unknown {
+  public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
     return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
   }
 
-  public setToolState(
-    scope: ToolStateScope,
-    toolId: string,
-    key: string,
-    value: unknown,
-  ): void {
+  public setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void {
     const scopedState = this.#getToolScopeMap(scope);
     const stateKey = this.#toolStateKey(toolId, key);
     if (scopedState.get(stateKey) === value) return;
@@ -828,11 +794,7 @@ export class Editor {
     this.#bumpToolStateVersion();
   }
 
-  public deleteToolState(
-    scope: ToolStateScope,
-    toolId: string,
-    key: string,
-  ): void {
+  public deleteToolState(scope: ToolStateScope, toolId: string, key: string): void {
     const scopedState = this.#getToolScopeMap(scope);
     const stateKey = this.#toolStateKey(toolId, key);
     if (!scopedState.delete(stateKey)) return;
@@ -847,10 +809,7 @@ export class Editor {
     return out;
   }
 
-  public hydrateToolState(
-    scope: ToolStateScope,
-    state: Record<string, unknown>,
-  ): void {
+  public hydrateToolState(scope: ToolStateScope, state: Record<string, unknown>): void {
     const scopedState = this.#getToolScopeMap(scope);
     scopedState.clear();
     for (const [key, value] of Object.entries(state)) {
@@ -962,9 +921,7 @@ export class Editor {
 
     if (instance.xAdvance === width) return;
 
-    this.#commandHistory.execute(
-      new SetXAdvanceCommand(instance.xAdvance, width),
-    );
+    this.#commandHistory.execute(new SetXAdvanceCommand(instance.xAdvance, width));
   }
 
   /**
@@ -984,11 +941,7 @@ export class Editor {
 
     const beforeXAdvance = instance.xAdvance;
     this.#commandHistory.execute(
-      new SetLeftSidebearingCommand(
-        beforeXAdvance,
-        beforeXAdvance + delta,
-        delta,
-      ),
+      new SetLeftSidebearingCommand(beforeXAdvance, beforeXAdvance + delta, delta),
     );
   }
 
@@ -1121,11 +1074,7 @@ export class Editor {
     this.#camera.zoomOut();
   }
 
-  public zoomToPoint(
-    screenX: number,
-    screenY: number,
-    zoomDelta: number,
-  ): void {
+  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
     this.#camera.zoomToPoint(screenX, screenY, zoomDelta);
   }
 
@@ -1254,9 +1203,7 @@ export class Editor {
     this.#commandHistory.execute(command);
 
     if (command.createdPointIds.length > 0) {
-      this.selection.select(
-        command.createdPointIds.map((id) => ({ kind: "point", id })),
-      );
+      this.selection.select(command.createdPointIds.map((id) => ({ kind: "point", id })));
     }
   }
 
@@ -1386,11 +1333,7 @@ export class Editor {
     return this.glyphInstance?.geometry.contour(activeContourId) ?? null;
   }
 
-  public continueContour(
-    contourId: ContourId,
-    fromStart: boolean,
-    pointId: PointId,
-  ): void {
+  public continueContour(contourId: ContourId, fromStart: boolean, pointId: PointId): void {
     this.#glyph.open.activeContourId.set(contourId);
     if (fromStart) {
       this.#commandHistory.execute(new ReverseContourCommand(contourId));
@@ -1402,34 +1345,17 @@ export class Editor {
     return this.#commandHistory.execute(new SplitSegmentCommand(segment, t));
   }
 
-  public scalePoints(
-    pointIds: readonly PointId[],
-    sx: number,
-    sy: number,
-    anchor: Point2D,
-  ): void {
+  public scalePoints(pointIds: readonly PointId[], sx: number, sy: number, anchor: Point2D): void {
     if (pointIds.length === 0 || (sx === 1 && sy === 1)) return;
-    this.#commandHistory.execute(
-      new ScalePointsCommand([...pointIds], sx, sy, anchor),
-    );
+    this.#commandHistory.execute(new ScalePointsCommand([...pointIds], sx, sy, anchor));
   }
 
-  public rotatePoints(
-    pointIds: readonly PointId[],
-    angle: number,
-    center: Point2D,
-  ): void {
+  public rotatePoints(pointIds: readonly PointId[], angle: number, center: Point2D): void {
     if (pointIds.length === 0 || angle === 0) return;
-    this.#commandHistory.execute(
-      new RotatePointsCommand([...pointIds], angle, center),
-    );
+    this.#commandHistory.execute(new RotatePointsCommand([...pointIds], angle, center));
   }
 
-  public nudgePoints(
-    pointIds: readonly PointId[],
-    dx: number,
-    dy: number,
-  ): void {
+  public nudgePoints(pointIds: readonly PointId[], dx: number, dy: number): void {
     if (pointIds.length === 0 || (dx === 0 && dy === 0)) return;
     this.#commandHistory.execute(new NudgePointsCommand([...pointIds], dx, dy));
   }
@@ -1443,9 +1369,7 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
-    this.#commandHistory.execute(
-      new BooleanOperationCommand(contourIdA, contourIdB, operation),
-    );
+    this.#commandHistory.execute(new BooleanOperationCommand(contourIdA, contourIdB, operation));
   }
 
   public duplicateSelection(): PointId[] {

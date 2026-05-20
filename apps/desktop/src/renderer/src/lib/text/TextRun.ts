@@ -14,22 +14,11 @@
  * previousLine so vertical motion preserves horizontal position across short
  * lines. goalX resets on horizontal nav, click, and edits.
  */
-import {
-  signal,
-  computed,
-  type Signal,
-  type ComputedSignal,
-} from "@/lib/signals/signal";
+import { signal, computed, type Signal, type ComputedSignal } from "@/lib/signals/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphTextItem, TextLayout } from "./layout";
-import type {
-  TextItem,
-  GlyphAnchor,
-  GlyphTextItem,
-  Positioner,
-  TextRunId,
-} from "./layout";
+import type { TextItem, GlyphAnchor, GlyphTextItem, Positioner, TextRunId } from "./layout";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphHandle } from "@shared/bridge/BridgeApi";
 import type { Point2D } from "@shift/geo";
@@ -162,11 +151,7 @@ export class TextRun {
     const before = this.buffer.range;
     const deleteCount = before.end - before.start;
     this.buffer.insertMany(items);
-    this.interaction.adjustForBufferChange(
-      before.start,
-      deleteCount,
-      items.length,
-    );
+    this.interaction.adjustForBufferChange(before.start, deleteCount, items.length);
     this.#resetGoalX();
   }
 
@@ -177,11 +162,7 @@ export class TextRun {
     const deleted = this.buffer.delete();
     if (!deleted) return false;
     if (wasSelection) {
-      this.interaction.adjustForBufferChange(
-        before.start,
-        before.end - before.start,
-        0,
-      );
+      this.interaction.adjustForBufferChange(before.start, before.end - before.start, 0);
     } else {
       this.interaction.adjustForBufferChange(before.start - 1, 1, 0);
     }
@@ -196,11 +177,7 @@ export class TextRun {
     const deleted = this.buffer.deleteForward();
     if (!deleted) return false;
     if (wasSelection) {
-      this.interaction.adjustForBufferChange(
-        before.start,
-        before.end - before.start,
-        0,
-      );
+      this.interaction.adjustForBufferChange(before.start, before.end - before.start, 0);
     } else {
       this.interaction.adjustForBufferChange(before.start, 1, 0);
     }
@@ -245,8 +222,7 @@ export class TextRun {
     const item = this.buffer.itemById(anchor.itemId);
     if (!item || item.kind !== "glyph") return null;
 
-    const editOrigin =
-      this.#layout.peek()?.editOriginForItem(anchor.itemId) ?? null;
+    const editOrigin = this.#layout.peek()?.editOriginForItem(anchor.itemId) ?? null;
     if (!editOrigin) return null;
 
     return {
@@ -318,11 +294,7 @@ export class TextRun {
       if (pos <= 0) return;
       pos--;
       while (pos > 0 && isWhitespaceItem(items[pos - 1])) pos--;
-      while (
-        pos > 0 &&
-        !isWhitespaceItem(items[pos - 1]) &&
-        !isPunctuationItem(items[pos - 1])
-      ) {
+      while (pos > 0 && !isWhitespaceItem(items[pos - 1]) && !isPunctuationItem(items[pos - 1])) {
         pos--;
       }
     } else {
@@ -379,11 +351,7 @@ export class TextRun {
 function isWhitespaceItem(item: TextItem): boolean {
   if (item.kind === "linebreak") return true;
   if (item.codepoint === null) return false;
-  return (
-    item.codepoint === 0x20 ||
-    item.codepoint === 0x09 ||
-    item.codepoint === 0x0a
-  );
+  return item.codepoint === 0x20 || item.codepoint === 0x09 || item.codepoint === 0x0a;
 }
 
 function isPunctuationItem(item: TextItem): boolean {

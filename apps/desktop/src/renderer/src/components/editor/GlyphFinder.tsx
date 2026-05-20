@@ -27,11 +27,7 @@ function glyphChar(codepoint: number): string {
   }
 }
 
-export function GlyphFinder({
-  open,
-  onOpenChange,
-  onSelect,
-}: GlyphFinderProps) {
+export function GlyphFinder({ open, onOpenChange, onSelect }: GlyphFinderProps) {
   const { lockToZone, unlock } = useFocusZone();
 
   const [query, setQuery] = useState("");
@@ -121,9 +117,7 @@ export function GlyphFinder({
   };
 
   const selectedColour = (index: number) =>
-    index === selectedIndex
-      ? "bg-accent/10 text-accent"
-      : "text-primary hover:bg-muted/10";
+    index === selectedIndex ? "bg-accent/10 text-accent" : "text-primary hover:bg-muted/10";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal>
@@ -134,11 +128,7 @@ export function GlyphFinder({
           finalFocus={false}
           className="max-w-[300px] shadow-sm bg-panel"
         >
-          <div
-            className="px-1 py-1.5"
-            onKeyDown={handleKeyDown}
-            onKeyUp={stopPropagation}
-          >
+          <div className="px-1 py-1.5" onKeyDown={handleKeyDown} onKeyUp={stopPropagation}>
             <Input
               ref={inputRef}
               value={query}

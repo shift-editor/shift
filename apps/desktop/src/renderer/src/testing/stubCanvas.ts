@@ -67,8 +67,6 @@ function createStubContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
-export function createStubCanvas(
-  camera: CameraTransform = DEFAULT_CAMERA,
-): Canvas {
+export function createStubCanvas(camera: CameraTransform = DEFAULT_CAMERA): Canvas {
   return new Canvas(createStubContext(), camera);
 }

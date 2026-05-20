@@ -17,9 +17,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (element.isContentEditable === true) return true;
   const tag = (element.tagName ?? "").toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return !!element.closest?.(
-    '[contenteditable="true"], input, textarea, select',
-  );
+  return !!element.closest?.('[contenteditable="true"], input, textarea, select');
 }
 
 export class KeyboardRouter {
@@ -33,10 +31,8 @@ export class KeyboardRouter {
   constructor(getContext: () => KeyContext) {
     this.#getContext = getContext;
     const handlers = {
-      activateTemporaryHand: (ctx: KeyContext) =>
-        this.#activateTemporaryHand(ctx),
-      releaseTemporaryHand: (ctx: KeyContext) =>
-        this.#releaseTemporaryHand(ctx),
+      activateTemporaryHand: (ctx: KeyContext) => this.#activateTemporaryHand(ctx),
+      releaseTemporaryHand: (ctx: KeyContext) => this.#releaseTemporaryHand(ctx),
     };
     this.#globalKeyDown = createGlobalKeyDownBindings();
     this.#textKeyDown = createTextKeyDownBindings();
@@ -88,11 +84,7 @@ export class KeyboardRouter {
     return ctx.toolManager.handleKeyUp(e);
   }
 
-  #runBindings(
-    bindings: readonly KeyBinding[],
-    ctx: KeyContext,
-    e: KeyboardEvent,
-  ): boolean {
+  #runBindings(bindings: readonly KeyBinding[], ctx: KeyContext, e: KeyboardEvent): boolean {
     const event = normalizeKeyboardEvent(e);
 
     for (const binding of bindings) {

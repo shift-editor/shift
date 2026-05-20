@@ -10,10 +10,7 @@ export const MARGIN_TOP_RATIO = 0.2;
 export const MARGIN_BOTTOM_RATIO = 0.05;
 export const MARGIN_SIDE_RATIO = 0;
 
-export function glyphPreviewViewBox(
-  metrics: FontMetrics,
-  advance: number | null,
-): string {
+export function glyphPreviewViewBox(metrics: FontMetrics, advance: number | null): string {
   const upm = metrics.unitsPerEm;
   const marginTop = upm * MARGIN_TOP_RATIO;
   const marginBottom = upm * MARGIN_BOTTOM_RATIO;
@@ -52,48 +49,20 @@ interface GlyphPreviewProps {
   height?: number;
 }
 
-export function GlyphPreview({
-  unicode,
-  font,
-  height = CELL_HEIGHT,
-}: GlyphPreviewProps) {
+export function GlyphPreview({ unicode, font, height = CELL_HEIGHT }: GlyphPreviewProps) {
   if (!font.loaded) {
-    return (
-      <FallbackCell
-        unicode={unicode}
-        font={font}
-        height={height}
-        advance={null}
-      />
-    );
+    return <FallbackCell unicode={unicode} font={font} height={height} advance={null} />;
   }
 
   const handle = font.glyphHandleForUnicode(unicode);
-  if (!handle)
-    return (
-      <FallbackCell
-        unicode={unicode}
-        font={font}
-        height={height}
-        advance={null}
-      />
-    );
+  if (!handle) return <FallbackCell unicode={unicode} font={font} height={height} advance={null} />;
 
   const glyph = font.glyph(handle);
   if (!glyph) {
-    return (
-      <FallbackCell
-        unicode={unicode}
-        font={font}
-        height={height}
-        advance={null}
-      />
-    );
+    return <FallbackCell unicode={unicode} font={font} height={height} advance={null} />;
   }
 
-  return (
-    <GlyphCell unicode={unicode} font={font} height={height} glyph={glyph} />
-  );
+  return <GlyphCell unicode={unicode} font={font} height={height} glyph={glyph} />;
 }
 
 function GlyphCell({
@@ -119,14 +88,7 @@ function GlyphCell({
   const containerStyle = { width: cellWidth, height };
 
   if (!svgPath) {
-    return (
-      <FallbackCell
-        unicode={unicode}
-        font={font}
-        height={height}
-        advance={advance}
-      />
-    );
+    return <FallbackCell unicode={unicode} font={font} height={height} advance={advance} />;
   }
 
   const viewBox = glyphPreviewViewBox(fontMetrics, advance);

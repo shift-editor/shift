@@ -65,8 +65,7 @@ export class Caret {
     // Find which line owns this cluster (uses clusterStart / clusterEnd
     // so empty paragraphs land on their own line, not line 0).
     for (const line of layout.lines) {
-      if (this.cluster < line.clusterStart || this.cluster >= line.clusterEnd)
-        continue;
+      if (this.cluster < line.clusterStart || this.cluster >= line.clusterEnd) continue;
 
       // On this line. Walk to find the trailing edge of the item whose
       // cluster + 1 === this.cluster (i.e. caret sits right after that item).
@@ -100,15 +99,9 @@ export class Caret {
     if (idx < 0) return this;
     const targetIdx = idx + 1;
     if (targetIdx >= this.layout.lines.length) {
-      return Caret.atCluster(
-        this.layout,
-        this.layout.lines[idx].clusterEnd - 1,
-      );
+      return Caret.atCluster(this.layout, this.layout.lines[idx].clusterEnd - 1);
     }
-    return Caret.atCluster(
-      this.layout,
-      this.#nearestClusterOnLine(targetIdx, goalX),
-    );
+    return Caret.atCluster(this.layout, this.#nearestClusterOnLine(targetIdx, goalX));
   }
 
   /**
@@ -122,16 +115,12 @@ export class Caret {
     if (targetIdx < 0) {
       return Caret.atCluster(this.layout, this.layout.lines[idx].clusterStart);
     }
-    return Caret.atCluster(
-      this.layout,
-      this.#nearestClusterOnLine(targetIdx, goalX),
-    );
+    return Caret.atCluster(this.layout, this.#nearestClusterOnLine(targetIdx, goalX));
   }
 
   #findLineIndex(): number {
     for (const [i, line] of this.layout.lines.entries()) {
-      if (this.cluster >= line.clusterStart && this.cluster < line.clusterEnd)
-        return i;
+      if (this.cluster >= line.clusterStart && this.cluster < line.clusterEnd) return i;
     }
     return -1;
   }

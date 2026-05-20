@@ -143,11 +143,7 @@ export class Selection {
 
   hasSelection(): boolean {
     const state = this.#state.peek();
-    return (
-      state.pointIds.size > 0 ||
-      state.anchorIds.size > 0 ||
-      state.segmentIds.size > 0
-    );
+    return state.pointIds.size > 0 || state.anchorIds.size > 0 || state.segmentIds.size > 0;
   }
 
   selected(): Selectable[] {

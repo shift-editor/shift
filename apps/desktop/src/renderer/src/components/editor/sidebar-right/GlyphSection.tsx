@@ -16,15 +16,10 @@ export const GlyphSection = () => {
 
   const unicode = formatCodepointAsUPlus(glyph?.unicode ?? 0);
   const lsb =
-    sidebearings.sidebearings.lsb === null
-      ? null
-      : Math.round(sidebearings.sidebearings.lsb);
+    sidebearings.sidebearings.lsb === null ? null : Math.round(sidebearings.sidebearings.lsb);
   const rsb =
-    sidebearings.sidebearings.rsb === null
-      ? null
-      : Math.round(sidebearings.sidebearings.rsb);
-  const sidebearingsEnabled =
-    sidebearings.editable && lsb !== null && rsb !== null;
+    sidebearings.sidebearings.rsb === null ? null : Math.round(sidebearings.sidebearings.rsb);
+  const sidebearingsEnabled = sidebearings.editable && lsb !== null && rsb !== null;
 
   return (
     <SidebarSection title="Glyph">
@@ -60,9 +55,7 @@ export const GlyphSection = () => {
             onValueChange={(width) => editor.setXAdvance(width)}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">
-          {glyphInfo.getGlyphName(glyph?.unicode ?? 0)}
-        </div>
+        <div className="font-sans mt-2 text-sm">{glyphInfo.getGlyphName(glyph?.unicode ?? 0)}</div>
       </main>
     </SidebarSection>
   );

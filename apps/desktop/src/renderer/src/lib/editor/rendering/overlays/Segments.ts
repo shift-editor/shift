@@ -2,11 +2,7 @@ import type { Canvas } from "../Canvas";
 import type { Segment } from "@shift/glyph-state";
 
 export class Segments {
-  draw(
-    canvas: Canvas,
-    hovered: Segment | null,
-    selected: readonly Segment[],
-  ): void {
+  draw(canvas: Canvas, hovered: Segment | null, selected: readonly Segment[]): void {
     if (!hovered && selected.length === 0) return;
 
     const theme = canvas.theme.segment;
@@ -39,10 +35,7 @@ export class Segments {
   }
 }
 
-function appendSegmentCurve(
-  ctx: CanvasRenderingContext2D,
-  segment: Segment,
-): void {
+function appendSegmentCurve(ctx: CanvasRenderingContext2D, segment: Segment): void {
   const curve = segment.toCurve();
   ctx.moveTo(curve.p0.x, curve.p0.y);
 
@@ -54,14 +47,7 @@ function appendSegmentCurve(
       ctx.quadraticCurveTo(curve.c.x, curve.c.y, curve.p1.x, curve.p1.y);
       break;
     case "cubic":
-      ctx.bezierCurveTo(
-        curve.c0.x,
-        curve.c0.y,
-        curve.c1.x,
-        curve.c1.y,
-        curve.p1.x,
-        curve.p1.y,
-      );
+      ctx.bezierCurveTo(curve.c0.x, curve.c0.y, curve.c1.x, curve.c1.y, curve.p1.x, curve.p1.y);
       break;
   }
 }

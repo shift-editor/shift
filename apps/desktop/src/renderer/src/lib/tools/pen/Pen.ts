@@ -13,11 +13,7 @@ export class Pen extends BaseTool<PenState> {
 
   #penPreview: PenPreview = new PenPreview(this);
 
-  readonly behaviors = [
-    new EscapeBehavior(),
-    new PenDownBehaviour(),
-    new HandleBehavior(),
-  ];
+  readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
 
   override getCursor(state: PenState): CursorType {
     if (state.type !== "ready") return { type: "pen" };
@@ -33,11 +29,7 @@ export class Pen extends BaseTool<PenState> {
 
     switch (target.type) {
       case "terminal": {
-        if (
-          activeContour &&
-          target.side == "start" &&
-          activeContour.points.length > 1
-        ) {
+        if (activeContour && target.side == "start" && activeContour.points.length > 1) {
           return { type: "pen-end" };
         }
 

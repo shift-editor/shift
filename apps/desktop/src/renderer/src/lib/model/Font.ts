@@ -11,12 +11,7 @@ import type {
   SourceId,
   Unicode,
 } from "@shift/types";
-import {
-  computed,
-  signal,
-  type WritableSignal,
-  type Signal,
-} from "@/lib/signals/signal";
+import { computed, signal, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import { Glyph, type GlyphSource } from "./Glyph";
 import { GlyphOutline } from "./GlyphOutline";
 import type { GlyphHandle, ShiftBridge } from "@shift/bridge";
@@ -39,10 +34,8 @@ class GlyphDirectory {
 
   readonly recordsByName: ReadonlyMap<GlyphName, GlyphRecord> = new Map();
   readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName> = new Map();
-  readonly componentBasesByName: ReadonlyMap<GlyphName, readonly GlyphName[]> =
-    new Map();
-  readonly dependentsByName: ReadonlyMap<GlyphName, ReadonlySet<GlyphName>> =
-    new Map();
+  readonly componentBasesByName: ReadonlyMap<GlyphName, readonly GlyphName[]> = new Map();
+  readonly dependentsByName: ReadonlyMap<GlyphName, ReadonlySet<GlyphName>> = new Map();
 
   private constructor(records: readonly GlyphRecord[]) {
     const recordsByName = new Map<GlyphName, GlyphRecord>();
@@ -332,9 +325,7 @@ export class Font {
     const glyph = this.glyph(handle);
     if (!glyph) return null;
 
-    const state = glyph.isPrimarySource(source)
-      ? undefined
-      : this.glyphState(handle, source);
+    const state = glyph.isPrimarySource(source) ? undefined : this.glyphState(handle, source);
     const glyphSource = glyph.createGlyphSource(source, state);
     if (!glyphSource) return null;
 
@@ -447,11 +438,7 @@ export class Font {
 
     for (const source of this.sources) {
       const sourceLocation = axisLocationFromLocation(source.location);
-      const distance = axisLocationDistanceSquared(
-        sourceLocation,
-        location,
-        axes,
-      );
+      const distance = axisLocationDistanceSquared(sourceLocation, location, axes);
 
       if (!nearest || distance < nearest.distance) {
         nearest = { source, distance };
@@ -524,9 +511,7 @@ export class Font {
   }
 
   defaultLocation(): AxisLocation {
-    return this.isVariable()
-      ? defaultAxisLocation(this.#bridge.getAxes())
-      : emptyAxisLocation();
+    return this.isVariable() ? defaultAxisLocation(this.#bridge.getAxes()) : emptyAxisLocation();
   }
 
   #hydrateFromBridge(): void {

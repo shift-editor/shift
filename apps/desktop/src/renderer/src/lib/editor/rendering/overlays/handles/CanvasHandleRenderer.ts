@@ -1,10 +1,5 @@
 import type { Canvas } from "../../Canvas";
-import {
-  drawHandle,
-  drawHandleDirection,
-  drawHandleFirst,
-  drawHandleLast,
-} from "../handleDrawing";
+import { drawHandle, drawHandleDirection, drawHandleFirst, drawHandleLast } from "../handleDrawing";
 import type { PointHandleItem } from "./PointHandleItem";
 
 export class CanvasHandleRenderer {
@@ -18,8 +13,7 @@ export class CanvasHandleRenderer {
           drawHandleFirst(canvas, item.point, item.rotation, item.state);
           break;
         case "last":
-          if (item.prev)
-            drawHandleLast(canvas, item.point, item.prev, item.state);
+          if (item.prev) drawHandleLast(canvas, item.point, item.prev, item.state);
           break;
         default:
           drawHandle(canvas, item.point, item.shape, item.state);

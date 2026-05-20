@@ -15,23 +15,14 @@ export class SelectMarquee extends CanvasItem<Rect2D> {
     const state = this.#select.stateCell.value;
     if (state.type !== "brushing") return null;
 
-    return Rect.fromPoints(
-      state.selection.startPos,
-      state.selection.currentPos,
-    );
+    return Rect.fromPoints(state.selection.startPos, state.selection.currentPos);
   }
 
   draw(canvas: Canvas): void {
     const rect = this.propsCell.value;
     if (!rect) return;
 
-    canvas.fillRect(
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      canvas.theme.selection.fill,
-    );
+    canvas.fillRect(rect.x, rect.y, rect.width, rect.height, canvas.theme.selection.fill);
     canvas.strokeRect(
       rect.x,
       rect.y,

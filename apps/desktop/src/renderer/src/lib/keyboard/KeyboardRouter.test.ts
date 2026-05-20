@@ -3,15 +3,10 @@ import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
 
 type KeyboardEventOptions = Partial<
-  Pick<
-    KeyboardEvent,
-    "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target"
-  >
+  Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
 >;
 
-function createKeyboardEvent(
-  options: KeyboardEventOptions = {},
-): KeyboardEvent {
+function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent {
   const event: Pick<
     KeyboardEvent,
     | "key"

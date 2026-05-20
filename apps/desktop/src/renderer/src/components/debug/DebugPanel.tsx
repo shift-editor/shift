@@ -57,18 +57,10 @@ export function DebugPanel() {
     const fx = effect(() => {
       const screen = editor.screenMousePositionCell.value;
       const coords = editor.fromScreen(screen);
-      if (upmRef.current)
-        upmRef.current.textContent = formatCoords(
-          coords.scene.x,
-          coords.scene.y,
-        );
-      if (screenRef.current)
-        screenRef.current.textContent = formatCoords(screen.x, screen.y);
+      if (upmRef.current) upmRef.current.textContent = formatCoords(coords.scene.x, coords.scene.y);
+      if (screenRef.current) screenRef.current.textContent = formatCoords(screen.x, screen.y);
       if (worldRef.current)
-        worldRef.current.textContent = formatCoords(
-          coords.glyphLocal.x,
-          coords.glyphLocal.y,
-        );
+        worldRef.current.textContent = formatCoords(coords.glyphLocal.x, coords.glyphLocal.y);
     });
     return () => fx.dispose();
   }, [editor]);
@@ -91,25 +83,18 @@ export function DebugPanel() {
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">
           <h2 className="text-ui font-medium">FPS</h2>
-          <span
-            ref={fpsRef}
-            className="text-ui text-muted font-mono tabular-nums"
-          />
+          <span ref={fpsRef} className="text-ui text-muted font-mono tabular-nums" />
         </div>
         <Separator className="bg-gray-300" />
         <div className="flex flex-col">
           <h2 className="text-ui font-medium">Canvas</h2>
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Total Points</span>
-            <span className="font-mono tabular-nums">
-              {glyphStats.pointCount}
-            </span>
+            <span className="font-mono tabular-nums">{glyphStats.pointCount}</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-ui text-muted">
             <span>Snapshot Size</span>
-            <span className="font-mono tabular-nums">
-              {glyphStats.snapshotSize}
-            </span>
+            <span className="font-mono tabular-nums">{glyphStats.snapshotSize}</span>
           </div>
         </div>
         <Separator className="bg-gray-300" />
@@ -120,35 +105,22 @@ export function DebugPanel() {
           <table className="w-full text-ui border-collapse table-fixed">
             <thead>
               <tr className="bg-line-subtle">
-                <th className={`text-left font-medium w-16 ${cellClass}`}>
-                  Space
-                </th>
-                <th className={`text-left font-medium ${cellClass}`}>
-                  Coordinates
-                </th>
+                <th className={`text-left font-medium w-16 ${cellClass}`}>Space</th>
+                <th className={`text-left font-medium ${cellClass}`}>Coordinates</th>
               </tr>
             </thead>
             <tbody className="text-muted">
               <tr>
                 <td className={cellClass}>UPM</td>
-                <td
-                  ref={upmRef}
-                  className={`${cellClass} font-mono tabular-nums`}
-                />
+                <td ref={upmRef} className={`${cellClass} font-mono tabular-nums`} />
               </tr>
               <tr>
                 <td className={cellClass}>Screen</td>
-                <td
-                  ref={screenRef}
-                  className={`${cellClass} font-mono tabular-nums`}
-                />
+                <td ref={screenRef} className={`${cellClass} font-mono tabular-nums`} />
               </tr>
               <tr>
                 <td className={cellClass}>World</td>
-                <td
-                  ref={worldRef}
-                  className={`${cellClass} font-mono tabular-nums`}
-                />
+                <td ref={worldRef} className={`${cellClass} font-mono tabular-nums`} />
               </tr>
             </tbody>
           </table>
