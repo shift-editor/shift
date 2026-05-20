@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { X } from "lucide-react";
 import {
   Button,
   Dialog,
@@ -9,6 +8,7 @@ import {
   DialogPortal,
   DialogTitle,
   Input,
+  X,
   cn,
 } from "@shift/ui";
 import { getEditor } from "@/store/store";

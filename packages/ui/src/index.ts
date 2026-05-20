@@ -44,4 +44,4 @@ export {
   type ResizablePanelHandle,
 } from "./components/resizable";
 export { cn } from "./lib/utils";
-export { Search } from "lucide-react";
+export { Search, X } from "lucide-react";

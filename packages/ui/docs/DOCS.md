@@ -15,7 +15,7 @@ Shared UI component library for Shift, wrapping Base UI primitives with Tailwind
 ```
 packages/ui/
   src/
-    index.ts               -- barrel re-export of all components, types, cn, and Search icon
+    index.ts               -- barrel re-export of all components, types, cn, and shared icons
     lib/
       utils.ts             -- cn utility (clsx + tailwind-merge)
     components/
@@ -51,7 +51,7 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 
 **Tooltip** supports an optional per-instance `delayDuration` override. When provided, it wraps the tooltip root in its own `TooltipProvider`; otherwise it inherits from the nearest ancestor `TooltipProvider`.
 
-The package also re-exports the `Search` icon from `lucide-react` as a convenience for the glyph finder UI.
+The package also re-exports shared icons from `lucide-react` so app code does not need a direct icon dependency.
 
 ## Workflow recipes
 
@@ -76,7 +76,7 @@ Pass a `className` prop -- `cn` (tailwind-merge) will resolve conflicts with the
 - **No tests yet**: `vitest.config.ts` is configured with `passWithNoTests: true`. The test infrastructure (jsdom, testing-library) is wired up but no test files exist.
 - **Toast timeout**: `ToastProvider` defaults to 2000ms. Consumers that need longer-lived toasts must pass an explicit `timeout` prop to `ToastProvider`, not to individual toasts.
 - **Tooltip delay inheritance**: `Tooltip` with `delayDuration` creates its own `TooltipProvider`, overriding any ancestor. Without it, delay comes from the nearest `TooltipProvider` (default 0ms). Mixing both patterns in the same tree can produce surprising delay behavior.
-- **`Search` icon re-export**: The `Search` icon from `lucide-react` is re-exported from the package barrel. This is a convenience coupling -- if more icons are needed, they should be added here rather than importing `lucide-react` directly in the app.
+- **Icon re-exports**: Shared icons from `lucide-react` are re-exported from the package barrel. This is a convenience coupling -- if more icons are needed, they should be added here rather than importing `lucide-react` directly in the app.
 
 ## Verification
 
