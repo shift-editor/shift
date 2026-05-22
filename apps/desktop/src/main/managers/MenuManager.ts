@@ -4,6 +4,7 @@ import type { WindowManager } from "./WindowManager";
 import type { ThemeName, DebugOverlays, Debug } from "../../shared/ipc/types";
 import type { IpcEvents } from "../../shared/ipc/channels";
 import * as ipc from "../../shared/ipc/main";
+import { mainLog } from "../logger";
 
 export class MenuManager {
   private documentState: DocumentState;
@@ -38,7 +39,12 @@ export class MenuManager {
     ...args: Parameters<IpcEvents[K]>
   ): void {
     const webContents = this.windowManager.getWindow()?.webContents;
-    if (!webContents) return;
+    if (!webContents) {
+      mainLog("menu", `drop ${String(channel)}: no renderer window`);
+      return;
+    }
+
+    mainLog("menu", `send ${String(channel)}`, ...args);
     ipc.send(webContents, channel, ...args);
   }
 
@@ -188,6 +194,18 @@ export class MenuManager {
             label: "Select All",
             click: () => {
               this.sendToRenderer("menu:select-all");
+            },
+          },
+        ],
+      },
+      {
+        label: "Glyph",
+        submenu: [
+          {
+            label: "New Glyph...",
+            accelerator: "CmdOrCtrl+Shift+N",
+            click: () => {
+              this.sendToRenderer("menu:new-glyph");
             },
           },
         ],

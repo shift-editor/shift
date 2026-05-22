@@ -14,8 +14,8 @@ import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalog = () => {
   const {
-    availableUnicodes,
-    filteredUnicodes,
+    availableGlyphs,
+    filteredGlyphs,
     categories,
     query,
     selectedCategory,
@@ -41,7 +41,7 @@ export const GlyphCatalog = () => {
       <div className="flex-1 overflow-y-auto scrollbar-hidden">
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
-          <span className="text-xs">{`${filteredUnicodes.length}/${availableUnicodes.length}`}</span>
+          <span className="text-xs">{`${filteredGlyphs.length}/${availableGlyphs.length}`}</span>
         </div>
 
         <div className="w-full">

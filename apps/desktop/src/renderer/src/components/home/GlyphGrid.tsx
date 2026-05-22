@@ -44,10 +44,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { codepointToHex } from "@/lib/utils/unicode";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
 import { getEditor, getGlyphInfo, markDocumentDirty } from "@/store/store";
-import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { type GlyphCatalogItem, useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Button, Input } from "@shift/ui";
 import type { GlyphName } from "@shift/types";
 
@@ -68,7 +67,7 @@ function computeLayout(width: number) {
 export const GlyphGrid = memo(function GlyphGrid() {
   const navigate = useNavigate();
   const editor = getEditor();
-  const { filteredUnicodes: unicodes } = useGlyphCatalog();
+  const { filteredGlyphs: glyphs } = useGlyphCatalog();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -96,7 +95,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
 
   const { columns, cellWidth } = layout;
 
-  const rowCount = Math.ceil(unicodes.length / columns);
+  const rowCount = Math.ceil(glyphs.length / columns);
 
   const virtualizer = useVirtualizer({
     count: rowCount,
@@ -106,8 +105,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
   });
 
   const handleCellClick = useCallback(
-    (unicode: number) => {
-      navigate(`/editor/${codepointToHex(unicode)}`);
+    (glyph: GlyphCatalogItem) => {
+      navigate(`/editor/glyph/${encodeURIComponent(glyph.name)}`);
     },
     [navigate],
   );
@@ -117,7 +116,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
       ref={scrollContainerRef}
       className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden p-5"
     >
-      {unicodes.length === 0 ? (
+      {glyphs.length === 0 ? (
         <div className="flex h-full items-center justify-center px-4 text-sm text-muted">
           No glyphs match this filter.
         </div>
@@ -131,7 +130,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const startIndex = virtualRow.index * columns;
-            const rowUnicodes = unicodes.slice(startIndex, startIndex + columns);
+            const rowGlyphs = glyphs.slice(startIndex, startIndex + columns);
             return (
               <div
                 key={virtualRow.key}
@@ -144,9 +143,9 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 }}
                 className="flex gap-2 px-4"
               >
-                {rowUnicodes.map((unicode) => (
+                {rowGlyphs.map((glyph) => (
                   <div
-                    key={unicode}
+                    key={glyph.name}
                     className="flex min-w-0 flex-col items-center gap-2"
                     style={{ minHeight: CELL_HEIGHT + 20, width: cellWidth, maxWidth: cellWidth }}
                   >
@@ -154,11 +153,15 @@ export const GlyphGrid = memo(function GlyphGrid() {
                       variant="ghost"
                       className="w-full min-w-0 overflow-hidden"
                       style={{ height: CELL_HEIGHT }}
-                      onClick={() => handleCellClick(unicode)}
+                      onClick={() => handleCellClick(glyph)}
                     >
-                      <GlyphPreview unicode={unicode} font={editor.font} height={CELL_HEIGHT} />
+                      <GlyphPreview
+                        handle={editor.font.glyphHandleForName(glyph.name)}
+                        font={editor.font}
+                        height={CELL_HEIGHT}
+                      />
                     </Button>
-                    <GlyphNameInput unicode={unicode} />
+                    <GlyphNameInput glyph={glyph} />
                   </div>
                 ))}
               </div>
@@ -170,11 +173,11 @@ export const GlyphGrid = memo(function GlyphGrid() {
   );
 });
 
-function GlyphNameInput({ unicode }: { readonly unicode: number }) {
+function GlyphNameInput({ glyph }: { readonly glyph: GlyphCatalogItem }) {
   const editor = getEditor();
   const glyphInfo = getGlyphInfo();
-  const glyphName = editor.font.nameForUnicode(unicode);
-  const glyphExists = editor.font.hasGlyph(glyphName);
+  const glyphName = glyph.name;
+  const glyphExists = glyph.exists;
   const [draft, setDraft] = useState(glyphName);
 
   useEffect(() => {
@@ -193,7 +196,7 @@ function GlyphNameInput({ unicode }: { readonly unicode: number }) {
       return;
     }
 
-    const resolved = glyphInfo.getAllGlyph().find((glyph) => glyph.name === next);
+    const resolved = glyphInfo.getGlyphByName(next);
     editor.font.updateGlyphIdentity(glyphName, next, resolved ? [resolved.codepoint] : []);
     markDocumentDirty();
   };

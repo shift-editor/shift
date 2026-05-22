@@ -11,14 +11,26 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
+import type { GlyphName } from "@shift/types";
+import type { GlyphHandle } from "@shift/bridge";
 
 const GLYPH_ID_RE = /^[0-9a-f]+$/i;
 
-interface EditorViewProps {
-  glyphId: string;
+function handleFromGlyphId(glyphId: string | undefined): GlyphHandle | null {
+  if (!glyphId || !GLYPH_ID_RE.test(glyphId)) return null;
+
+  const parsed = Number.parseInt(glyphId, 16);
+  if (Number.isNaN(parsed)) return null;
+
+  return getEditor().font.glyphHandleForUnicode(parsed);
 }
 
-export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
+interface EditorViewProps {
+  glyphId?: string;
+  glyphName?: GlyphName;
+}
+
+export const EditorView: FC<EditorViewProps> = ({ glyphId, glyphName }) => {
   const editor = getEditor();
   const debug = useDebugSafe();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,13 +47,11 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
 
   useEffect(() => {
     if (!fontLoaded) return undefined;
-    if (!GLYPH_ID_RE.test(glyphId)) return undefined;
 
-    const parsed = Number.parseInt(glyphId, 16);
-    if (Number.isNaN(parsed)) return undefined;
-
-    const unicode = parsed;
-    const handle = editor.font.glyphHandleForUnicode(unicode);
+    const handle = glyphName
+      ? editor.font.glyphHandleForName(glyphName)
+      : handleFromGlyphId(glyphId);
+    if (!handle) return undefined;
 
     const source = editor.font.sourceAtOrDefault(editor.font.defaultLocation());
 
@@ -58,7 +68,7 @@ export const EditorView: FC<EditorViewProps> = ({ glyphId }) => {
       toolManager.reset();
       editor.close();
     };
-  }, [editor, fontLoaded, glyphId]);
+  }, [editor, fontLoaded, glyphId, glyphName]);
 
   useEffect(() => {
     const element = containerRef.current;

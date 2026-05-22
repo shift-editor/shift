@@ -34,6 +34,7 @@ export interface ElectronAPI {
   onMenuOpenFont: EventListener<"menu:open-font">;
   onExternalOpenFont: EventListener<"external:open-font">;
   onMenuSaveFont: EventListener<"menu:save-font">;
+  onMenuNewGlyph: EventListener<"menu:new-glyph">;
   onMenuUndo: EventListener<"menu:undo">;
   onMenuRedo: EventListener<"menu:redo">;
   onMenuDelete: EventListener<"menu:delete">;

@@ -121,10 +121,11 @@ class GlyphDirectory {
     return [...(this.dependentsByName.get(name) ?? [])].sort();
   }
 
-  glyphHandleForName(name: GlyphName): GlyphHandle | null {
+  glyphHandleForName(name: GlyphName): GlyphHandle {
     const record = this.recordForName(name);
-    if (!record) return null;
-    const unicode = this.primaryUnicodeForName(name);
+    const unicode = record
+      ? this.primaryUnicodeForName(name)
+      : (this.#glyphDatabase.getGlyphByName(name)?.codepoint ?? null);
     return unicode === null ? { name } : { name, unicode };
   }
 
@@ -156,6 +157,7 @@ export class Font {
   readonly #$metrics: WritableSignal<FontMetrics>;
   readonly #$sources: WritableSignal<Source[]>;
   readonly #$unicodes: Signal<Unicode[]>;
+  readonly #$glyphRecords: Signal<readonly GlyphRecord[]>;
 
   readonly #directory = signal(GlyphDirectory.empty());
   readonly #glyphs = new Map<GlyphName, Glyph>();
@@ -168,6 +170,7 @@ export class Font {
     this.#$metrics = signal<FontMetrics>(this.#defaultMetrics);
     this.#$sources = signal<Source[]>([]);
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
+    this.#$glyphRecords = computed(() => this.#directory.value.records);
   }
 
   /** @knipclassignore */
@@ -199,6 +202,11 @@ export class Font {
   /** @knipclassignore */
   get $unicodes(): Signal<Unicode[]> {
     return this.#$unicodes;
+  }
+
+  /** Reactive committed glyph directory records for UI lists and grids. */
+  get glyphRecordsCell(): Signal<readonly GlyphRecord[]> {
+    return this.#$glyphRecords;
   }
 
   /** @knipclassignore */
@@ -246,7 +254,19 @@ export class Font {
     return this.#directory.peek().dependentNamesForName(name);
   }
 
-  glyphHandleForName(name: GlyphName): GlyphHandle | null {
+  /**
+   * Resolve a glyph name to an editor handle, even when the glyph is not yet
+   * committed in the font.
+   *
+   * @remarks
+   * Name-first flows such as New Glyph need a stable handle before source data
+   * exists. Existing font records provide their committed Unicode assignment;
+   * otherwise the glyph database is used as a best-effort Unicode hint.
+   *
+   * @param name - Production glyph name to open, create, or query.
+   * @returns A glyph identity handle. The handle may refer to a missing glyph.
+   */
+  glyphHandleForName(name: GlyphName): GlyphHandle {
     return this.#directory.peek().glyphHandleForName(name);
   }
 

@@ -49,6 +49,7 @@ const electronAPI: ElectronAPI = {
   onMenuOpenFont: on("menu:open-font"),
   onExternalOpenFont: on("external:open-font"),
   onMenuSaveFont: on("menu:save-font"),
+  onMenuNewGlyph: on("menu:new-glyph"),
   onMenuUndo: on("menu:undo"),
   onMenuRedo: on("menu:redo"),
   onMenuDelete: on("menu:delete"),

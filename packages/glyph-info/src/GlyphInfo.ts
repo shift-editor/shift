@@ -126,6 +126,7 @@ function toSortedCategorySummaries(
  */
 export class GlyphInfo {
   #glyphData: Map<number, Glyph>;
+  #glyphDataByName: Map<string, Glyph>;
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
@@ -133,6 +134,7 @@ export class GlyphInfo {
 
   constructor(resources: GlyphInfoResources) {
     this.#glyphData = new Map(resources.glyphData.map((g) => [g.codepoint, g]));
+    this.#glyphDataByName = new Map(resources.glyphData.map((g) => [g.name, g]));
 
     this.#decomposed = new Map(
       Object.entries(resources.decomposition.decomposed).map(([k, v]) => [Number(k), v]),
@@ -165,6 +167,11 @@ export class GlyphInfo {
     if (!data) return null;
 
     return data.name;
+  }
+
+  /** Look up the full metadata record for a production glyph name. */
+  getGlyphByName(name: string): Glyph | null {
+    return this.#glyphDataByName.get(name) ?? null;
   }
 
   getAllGlyph(): Glyph[] {

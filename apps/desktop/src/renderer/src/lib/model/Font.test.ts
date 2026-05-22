@@ -52,7 +52,7 @@ describe("Font", () => {
     expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
     expect(font.glyphHandleForUnicode(65)).toEqual({ name: "A", unicode: 65 });
     expect(font.nameForUnicode(65)).toBe("A");
-    expect(font.glyphHandleForName("notdef")).toBeNull();
+    expect(font.glyphHandleForName("notdef")).toEqual({ name: "notdef" });
     expect(font.glyphHandleForUnicode(0xffff)).toEqual({
       name: "uniFFFF",
       unicode: 0xffff,
@@ -92,7 +92,7 @@ describe("Font", () => {
 
     font.updateGlyphIdentity("A", "A.alt", []);
 
-    expect(font.glyphHandleForName("A")).toBeNull();
+    expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
     expect(font.glyphHandleForName("A.alt")).toEqual({ name: "A.alt" });
     expect(font.nameForUnicode(65)).toBe("A");
     expect(font.glyph({ name: "A", unicode: 65 })).toBeNull();
@@ -171,7 +171,7 @@ describe("Font", () => {
 
     expect(font.loaded).toBe(false);
     expect(font.glyphRecords()).toEqual([]);
-    expect(font.glyphHandleForName("A")).toBeNull();
+    expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
     expect(font.metrics.unitsPerEm).toBe(1000);
   });
 });

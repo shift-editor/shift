@@ -1,6 +1,7 @@
 import "./App.css";
-import { useEffect } from "react";
-import { HashRouter, Route, Routes } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { HashRouter, Route, Routes, useNavigate } from "react-router-dom";
+import type { GlyphHandle } from "@shift/bridge";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
@@ -10,6 +11,7 @@ import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
 import { getDocument } from "@/store/store";
 import { documentPersistence } from "@/persistence";
+import { NewGlyphDialog } from "@/components/chrome/NewGlyphDialog";
 
 import { RouteDispatcher } from "./RouteDispatcher";
 
@@ -139,6 +141,7 @@ export const App = () => {
               <Routes>
                 <Route path="*" element={<RouteDispatcher />} />
               </Routes>
+              <NewGlyphDialogHost />
             </HashRouter>
           </FocusZoneProvider>
         </ZoomToast>
@@ -148,3 +151,28 @@ export const App = () => {
 };
 
 export default App;
+
+function NewGlyphDialogHost() {
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onMenuNewGlyph(() => setOpen(true));
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const openGlyph = useCallback(
+    (handle: GlyphHandle) => {
+      const fontDocument = getDocument();
+      if (!fontDocument.editor.font.loaded) {
+        fontDocument.createFont();
+      }
+      navigate(`/editor/glyph/${encodeURIComponent(handle.name)}`);
+    },
+    [navigate],
+  );
+
+  return <NewGlyphDialog open={open} onOpenChange={setOpen} onOpenGlyph={openGlyph} />;
+}
