@@ -114,9 +114,18 @@ export class MenuManager {
         label: "File",
         submenu: [
           {
+            label: "New Font",
+            accelerator: "CmdOrCtrl+N",
+            click: async () => {
+              if (!(await this.documentState.confirmClose())) return;
+              this.sendToRenderer("document:new");
+            },
+          },
+          {
             label: "Open Font...",
             accelerator: "CmdOrCtrl+O",
             click: async () => {
+              if (!(await this.documentState.confirmClose())) return;
               const result = await dialog.showOpenDialog({
                 properties: ["openFile", "openDirectory"],
                 filters: [

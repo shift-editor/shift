@@ -4,11 +4,11 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
-use shift_backends::{font_loader::FontLoader, ufo::UfoWriter, FontView};
+use shift_backends::{font_loader::FontLoader, FontView};
 use shift_edit::{
   edit_session::{BulkNodePositionUpdates, EditSession},
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
-  BooleanOp, ContourId, Font, Glyph, GlyphLayer, LayerId, PointId, SourceId,
+  BooleanOp, ContourId, Font, Glyph, GlyphLayer, GlyphName, LayerId, PointId, SourceId,
 };
 use shift_wire::{
   bridges::napi::{
@@ -111,6 +111,14 @@ impl FontSaveSnapshot {
   fn version(&self) -> DocumentVersion {
     self.version
   }
+
+  fn to_font(&self) -> Font {
+    let mut font = self.font.clone();
+    if let Some(active_glyph) = self.active_glyph_override.as_ref() {
+      font.put_glyph(active_glyph.as_ref().clone());
+    }
+    font
+  }
 }
 
 impl FontView for FontSaveSnapshot {
@@ -204,9 +212,10 @@ impl Task for SaveFontTask {
   type JsValue = u32;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    UfoWriter::new()
-      .save_view(&self.snapshot, &self.path)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("Failed to save font: {e}")))?;
+    let font = self.snapshot.to_font();
+    FontLoader::new()
+      .write_font(&font, &self.path)
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
 
     Ok(self.snapshot.version())
   }
@@ -375,6 +384,67 @@ impl Bridge {
       .collect();
     records.sort_by(|a: &NapiGlyphRecord, b: &NapiGlyphRecord| a.name.cmp(&b.name));
     records
+  }
+
+  #[napi]
+  pub fn update_glyph_identity(
+    &mut self,
+    #[napi(ts_arg_type = "GlyphName")] from_name: String,
+    #[napi(ts_arg_type = "GlyphName")] name: String,
+    #[napi(ts_arg_type = "Array<Unicode>")] unicodes: Vec<u32>,
+  ) -> errors::Result<()> {
+    let name = name.trim();
+
+    let existing = self
+      .font
+      .glyph(&from_name)
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "glyph name",
+        value: from_name.clone(),
+      })?;
+    if from_name == name && existing.unicodes() == unicodes.as_slice() {
+      return Ok(());
+    }
+
+    if self.active_edit.is_some() {
+      return Err(BridgeError::InvalidInput {
+        kind: "glyph identity update",
+        value: "cannot update while an edit session is active".to_string(),
+      });
+    }
+
+    if name.is_empty() {
+      return Err(BridgeError::InvalidInput {
+        kind: "glyph name",
+        value: name.to_string(),
+      });
+    }
+
+    if from_name != name && self.font.glyph(name).is_some() {
+      return Err(BridgeError::InvalidInput {
+        kind: "glyph name",
+        value: format!("{name} already exists"),
+      });
+    }
+
+    let Some(mut glyph) = self.font.take_glyph(&from_name) else {
+      return Err(BridgeError::InvalidInput {
+        kind: "glyph name",
+        value: from_name,
+      });
+    };
+
+    let glyph_name = GlyphName::new(name.to_string()).map_err(|_| BridgeError::InvalidInput {
+      kind: "glyph name",
+      value: name.to_string(),
+    })?;
+
+    glyph.set_name(glyph_name);
+    glyph.set_unicodes(unicodes);
+    self.font.put_glyph(glyph);
+    self.mark_committed_changed();
+
+    Ok(())
   }
 
   #[napi]
@@ -1112,6 +1182,7 @@ mod tests {
 
     assert!(!bridge.has_edit_session());
     assert_eq!(bridge.get_glyph_count(), 0);
+    assert!(bridge.get_axes().is_empty());
     assert_eq!(bridge.get_sources().len(), 1);
     assert_eq!(bridge.get_sources()[0].name, "Regular");
   }
@@ -1215,6 +1286,48 @@ mod tests {
         .to_string(),
       point_id
     );
+  }
+
+  #[test]
+  fn save_task_routes_designspace_paths_through_font_loader() {
+    let mut bridge = Bridge::new();
+    bridge
+      .start_edit_session(glyph_handle("A", Some(65)), default_source_id(&bridge))
+      .unwrap();
+    bridge.add_contour().unwrap();
+
+    let dir = std::env::temp_dir().join("shift_bridge_designspace_save_task");
+    let designspace_path = dir.join("Smoke.designspace");
+    let ufo_path = dir.join("Smoke.ufo");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let mut task = SaveFontTask {
+      snapshot: bridge.save_snapshot(),
+      persisted_version: bridge.persisted_version.clone(),
+      path: designspace_path.to_string_lossy().into_owned(),
+    };
+
+    task.compute().unwrap();
+
+    assert!(
+      designspace_path.is_file(),
+      "designspace save should create an XML file, not a UFO directory"
+    );
+    assert!(
+      ufo_path.is_dir(),
+      "designspace save should create a companion UFO source"
+    );
+
+    let mut reloaded = Bridge::new();
+    reloaded
+      .load_font(designspace_path.to_string_lossy().into_owned())
+      .unwrap();
+    let glyphs = reloaded.get_glyphs();
+    assert_eq!(glyphs.len(), 1);
+    assert_eq!(glyphs[0].name, "A");
+
+    let _ = std::fs::remove_dir_all(&dir);
   }
 
   #[test]

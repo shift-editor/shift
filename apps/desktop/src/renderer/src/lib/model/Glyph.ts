@@ -1382,7 +1382,9 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
     this.#sourceContours = computed(() =>
       this.#contoursFromSource(source.structureCell.value, source.coordinateBuffersCell.value),
     );
-    this.#contours = computed(() => this.#sourceContours.value.map((contour) => contour.contour));
+    this.#contours = computed(() =>
+      this.#sourceContours.value.map((contour) => contour.contourCell.value),
+    );
 
     this.#points = computed(() =>
       this.#sourceContours.value.flatMap((contour) => contour.pointsCell.value),
@@ -1428,7 +1430,12 @@ class SourceGeometryCache implements GlyphInstanceGeometry {
   }
 
   contour(contourId: ContourId): Contour | null {
-    return this.#sourceContours.peek().find((contour) => contour.id === contourId)?.contour ?? null;
+    return (
+      this.#sourceContours
+        .peek()
+        .find((contour) => contour.id === contourId)
+        ?.contourCell.peek() ?? null
+    );
   }
 
   point(pointId: PointId): Point | null {

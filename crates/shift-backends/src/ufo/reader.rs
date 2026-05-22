@@ -1,3 +1,4 @@
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_ir::{
@@ -200,8 +201,9 @@ impl Default for UfoReader {
 }
 
 impl FontReader for UfoReader {
-    fn load(&self, path: &str) -> Result<Font, String> {
-        let norad_font = NoradFont::load(path).map_err(|e| e.to_string())?;
+    fn load(&self, path: &str) -> FormatBackendResult<Font> {
+        let norad_font =
+            NoradFont::load(path).map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
         let ufo_path = Path::new(path);
 
         let mut font = Font::new();

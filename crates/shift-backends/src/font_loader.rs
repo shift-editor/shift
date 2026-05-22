@@ -3,38 +3,18 @@ use std::path::Path;
 
 use shift_ir::Font;
 
-use crate::designspace::DesignspaceReader;
-use crate::errors::{BackendError, BackendResult};
+use crate::designspace::{DesignspaceReader, DesignspaceWriter};
+use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
+use crate::format::FontFormat;
 use crate::glyphs::GlyphsReader;
 use crate::traits::{FontReader, FontWriter};
 use crate::ufo::{UfoReader, UfoWriter};
 
 use crate::binary::BytesFontAdaptor;
 
-#[derive(Hash, Eq, PartialEq)]
-pub enum FontFormat {
-    Ufo,
-    Glyphs,
-    Designspace,
-    Ttf,
-    Otf,
-}
-
-impl FontFormat {
-    fn name(&self) -> &'static str {
-        match self {
-            FontFormat::Ufo => "ufo",
-            FontFormat::Glyphs => "glyphs",
-            FontFormat::Designspace => "designspace",
-            FontFormat::Ttf => "ttf",
-            FontFormat::Otf => "otf",
-        }
-    }
-}
-
 pub trait FontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String>;
-    fn write_font(&self, font: &Font, path: &str) -> Result<(), String>;
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font>;
+    fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()>;
 }
 
 struct UfoFontAdaptor;
@@ -42,32 +22,32 @@ struct GlyphsFontAdaptor;
 struct DesignspaceFontAdaptor;
 
 impl FontAdaptor for UfoFontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String> {
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
         UfoReader::new().load(path)
     }
 
-    fn write_font(&self, font: &Font, path: &str) -> Result<(), String> {
+    fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         UfoWriter::new().save(font, path)
     }
 }
 
 impl FontAdaptor for GlyphsFontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String> {
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
         GlyphsReader::new().load(path)
     }
 
-    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
-        Err("Glyphs writing is not supported; save as .ufo instead".to_string())
+    fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
+        Err(FormatBackendError::WriteUnsupported)
     }
 }
 
 impl FontAdaptor for DesignspaceFontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String> {
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
         DesignspaceReader::new().load(path)
     }
 
-    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
-        Err("Designspace writing is not supported; save as .ufo instead".to_string())
+    fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
+        DesignspaceWriter::new().save(font, path)
     }
 }
 
@@ -89,15 +69,21 @@ fn format_from_extension(ext: &str) -> BackendResult<FontFormat> {
         "designspace" => Ok(FontFormat::Designspace),
         "ttf" => Ok(FontFormat::Ttf),
         "otf" => Ok(FontFormat::Otf),
-        _ => Err(BackendError::UnsupportedFormat(ext.to_string())),
+        _ => Err(BackendError::UnsupportedFormat {
+            extension: ext.to_string(),
+        }),
     }
 }
 
 fn extension_from_path(path: &Path) -> BackendResult<&str> {
     path.extension()
-        .ok_or(BackendError::MissingExtension)?
+        .ok_or_else(|| BackendError::MissingExtension {
+            path: path.to_path_buf(),
+        })?
         .to_str()
-        .ok_or(BackendError::InvalidExtensionUtf8)
+        .ok_or_else(|| BackendError::InvalidExtensionUtf8 {
+            path: path.to_path_buf(),
+        })
 }
 
 impl FontLoader {
@@ -120,12 +106,17 @@ impl FontLoader {
         let path = Path::new(path);
         let ext = extension_from_path(path)?;
         let format = format_from_extension(ext)?;
+        let path_buf = path.to_path_buf();
         let adaptor = self
             .adaptors
             .get(&format)
-            .ok_or_else(|| BackendError::MissingAdaptor(format.name()))?;
-        let path = path.to_str().ok_or(BackendError::InvalidPathUtf8)?;
-        adaptor.read_font(path).map_err(BackendError::Load)
+            .ok_or(BackendError::MissingAdaptor { format })?;
+        let path = path.to_str().ok_or_else(|| BackendError::InvalidPathUtf8 {
+            path: path_buf.clone(),
+        })?;
+        adaptor
+            .read_font(path)
+            .map_err(|source| BackendError::load(format, path_buf, source))
     }
 
     pub fn write_font(&self, font: &Font, path: &str) -> BackendResult<()> {
@@ -134,22 +125,32 @@ impl FontLoader {
         let format = format_from_extension(ext)?;
 
         match format {
-            FontFormat::Ufo => {}
-            _ => return Err(BackendError::UnsupportedWriteFormat(ext.to_string())),
+            FontFormat::Ufo | FontFormat::Designspace => {}
+            _ => {
+                return Err(BackendError::UnsupportedWriteFormat {
+                    extension: ext.to_string(),
+                })
+            }
         }
 
+        let path_buf = path.to_path_buf();
         let adaptor = self
             .adaptors
             .get(&format)
-            .ok_or_else(|| BackendError::MissingAdaptor(format.name()))?;
-        let path = path.to_str().ok_or(BackendError::InvalidPathUtf8)?;
-        adaptor.write_font(font, path).map_err(BackendError::Save)
+            .ok_or(BackendError::MissingAdaptor { format })?;
+        let path = path.to_str().ok_or_else(|| BackendError::InvalidPathUtf8 {
+            path: path_buf.clone(),
+        })?;
+        adaptor
+            .write_font(font, path)
+            .map_err(|source| BackendError::save(format, path_buf, source))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{format_from_extension, FontFormat};
+    use super::format_from_extension;
+    use crate::format::FontFormat;
 
     #[test]
     fn supports_glyphs_extensions() {

@@ -23,6 +23,7 @@ export interface BridgeApi {
   getMetrics(): FontMetrics
   getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
+  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
   getGlyphVariationReport(glyphRef: GlyphHandle): GlyphVariationReport | null
   getVariationReports(): Array<GlyphVariationReport>

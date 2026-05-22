@@ -40,6 +40,7 @@ src/
 - `FontBackend` -- auto-implemented marker trait for types implementing both `FontReader` + `FontWriter`
 - `UfoReader` -- loads `.ufo` bundles via `norad`
 - `UfoWriter` -- writes `.ufo` bundles via `norad`; rounds coordinates to integers
+- `DesignspaceWriter` -- writes a `.designspace` file plus a companion `.ufo`; additional Shift sources are represented as layers in that companion UFO and referenced by source layer names
 - `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
 - `GlyphsReader` -- loads `.glyphs` and `.glyphspackage` files via `glyphs-reader`; read-only (no writer)
 

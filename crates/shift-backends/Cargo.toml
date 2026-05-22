@@ -16,6 +16,7 @@ skrifa = "0.32.0"
 fontc = "0.2.0"
 glyphs-reader = "0.2.0"
 plist = "1"
+quick-xml = "0.37.5"
 thiserror = "2.0.18"
 
 [dev-dependencies]

@@ -40,14 +40,16 @@
  *   Each virtual row: unicodes.slice(rowIndex * columns, (rowIndex + 1) * columns)
  *   Row DOM: flex gap-2 px-4; each cell width/maxWidth = cellWidth, min-w-0.
  */
+
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { codepointToHex } from "@/lib/utils/unicode";
 import { CELL_HEIGHT, GlyphPreview } from "@/components/home/GlyphPreview";
-import { getEditor, getGlyphInfo } from "@/store/store";
+import { getEditor, getGlyphInfo, markDocumentDirty } from "@/store/store";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
-import { Button } from "@shift/ui";
+import { Button, Input } from "@shift/ui";
+import type { GlyphName } from "@shift/types";
 
 const ROW_HEIGHT = CELL_HEIGHT + 40 + 8;
 const NOMINAL_CELL_WIDTH = 100;
@@ -103,8 +105,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
     overscan: OVERSCAN,
   });
 
-  const glyphInfo = getGlyphInfo();
-
   const handleCellClick = useCallback(
     (unicode: number) => {
       navigate(`/editor/${codepointToHex(unicode)}`);
@@ -147,7 +147,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                 {rowUnicodes.map((unicode) => (
                   <div
                     key={unicode}
-                    className="flex min-w-0 flex-col items-center gap-2 overflow-hidden"
+                    className="flex min-w-0 flex-col items-center gap-2"
                     style={{ minHeight: CELL_HEIGHT + 20, width: cellWidth, maxWidth: cellWidth }}
                   >
                     <Button
@@ -158,9 +158,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
                     >
                       <GlyphPreview unicode={unicode} font={editor.font} height={CELL_HEIGHT} />
                     </Button>
-                    <span className="w-full truncate text-center text-xs text-muted-foreground">
-                      {glyphInfo.getGlyphName(unicode) ?? String.fromCodePoint(unicode)}
-                    </span>
+                    <GlyphNameInput unicode={unicode} />
                   </div>
                 ))}
               </div>
@@ -171,3 +169,60 @@ export const GlyphGrid = memo(function GlyphGrid() {
     </section>
   );
 });
+
+function GlyphNameInput({ unicode }: { readonly unicode: number }) {
+  const editor = getEditor();
+  const glyphInfo = getGlyphInfo();
+  const glyphName = editor.font.nameForUnicode(unicode);
+  const glyphExists = editor.font.hasGlyph(glyphName);
+  const [draft, setDraft] = useState(glyphName);
+
+  useEffect(() => {
+    setDraft(glyphName);
+  }, [glyphName]);
+
+  const commit = () => {
+    const next = draft.trim() as GlyphName;
+    if (!glyphExists || next === glyphName) {
+      setDraft(glyphName);
+      return;
+    }
+
+    if (!next || editor.font.hasGlyph(next)) {
+      setDraft(glyphName);
+      return;
+    }
+
+    const resolved = glyphInfo.getAllGlyph().find((glyph) => glyph.name === next);
+    editor.font.updateGlyphIdentity(glyphName, next, resolved ? [resolved.codepoint] : []);
+    markDocumentDirty();
+  };
+
+  return (
+    <Input
+      value={draft}
+      readOnly={!glyphExists}
+      onChange={(event) => setDraft(event.currentTarget.value as GlyphName)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        event.nativeEvent.stopImmediatePropagation();
+
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+          return;
+        }
+
+        if (event.key === "Escape") {
+          setDraft(glyphName);
+          event.currentTarget.blur();
+          return;
+        }
+
+        if (event.metaKey && event.key === "a") {
+          event.currentTarget.select();
+        }
+      }}
+      className="h-7 w-full truncate text-center text-xs text-muted-foreground focus:ring-inset read-only:cursor-default read-only:bg-transparent read-only:focus:ring-0"
+    />
+  );
+}

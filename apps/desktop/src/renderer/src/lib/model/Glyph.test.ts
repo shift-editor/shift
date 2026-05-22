@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createBridge, type ShiftBridge } from "@shift/bridge";
 import { effect, signal } from "@/lib/signals/signal";
-import { defaultAxisLocation, withAxisValue } from "@/lib/variation/location";
+import {
+  axisLocationFromLocation,
+  defaultAxisLocation,
+  withAxisValue,
+} from "@/lib/variation/location";
 import type { AxisLocation } from "@/types/variation";
 import { MUTATORSANS_DESIGNSPACE } from "@/testing/fixtures";
 import { Font } from "./Font";
@@ -227,6 +231,41 @@ describe("glyph sources keep public geometry coherent across position edits", ()
     ]);
 
     expect(pointPosition(layer, second.id)).toEqual({ x: 35, y: 80 });
+  });
+
+  it("keeps source-backed instance geometry contours fresh after position edits", () => {
+    const [, second] = addTriangle(layer);
+    const instance = glyph.instanceAt(axisLocationFromLocation(layer.source.location));
+
+    layer.applyPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+
+    expect(instance.geometry.point(second.id)).toMatchObject({ x: 25, y: 75 });
+    expect(instance.geometry.allPoints.find((point) => point.id === second.id)).toMatchObject({
+      x: 25,
+      y: 75,
+    });
+    expect(
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
+    ).toMatchObject({
+      x: 25,
+      y: 75,
+    });
+  });
+
+  it("invalidates source-backed instance contours that were read before a position edit", () => {
+    const [, second] = addTriangle(layer);
+    const instance = glyph.instanceAt(axisLocationFromLocation(layer.source.location));
+
+    expect(
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
+    ).toMatchObject({ x: 100, y: 0 });
+
+    layer.applyPositionPatch([{ kind: "point", id: second.id, x: 25, y: 75 }]);
+
+    expect(instance.geometry.point(second.id)).toMatchObject({ x: 25, y: 75 });
+    expect(
+      instance.geometry.contours.at(-1)?.points.find((point) => point.id === second.id),
+    ).toMatchObject({ x: 25, y: 75 });
   });
 });
 

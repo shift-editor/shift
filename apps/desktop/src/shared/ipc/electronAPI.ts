@@ -30,6 +30,7 @@ export interface ElectronAPI {
   pathsExist: CommandInvoker<"fs:pathsExist">;
 
   // Events
+  onDocumentNew: EventListener<"document:new">;
   onMenuOpenFont: EventListener<"menu:open-font">;
   onExternalOpenFont: EventListener<"external:open-font">;
   onMenuSaveFont: EventListener<"menu:save-font">;

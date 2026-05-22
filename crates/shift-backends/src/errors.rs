@@ -1,28 +1,80 @@
+use std::path::PathBuf;
+
+use crate::designspace::DesignspaceError;
+use crate::format::FontFormat;
+
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
-    #[error("file has no extension")]
-    MissingExtension,
+    #[error("file has no extension: {path}")]
+    MissingExtension { path: PathBuf },
 
-    #[error("invalid UTF-8 in path")]
-    InvalidPathUtf8,
+    #[error("invalid UTF-8 in path: {path}")]
+    InvalidPathUtf8 { path: PathBuf },
 
-    #[error("invalid UTF-8 in extension")]
-    InvalidExtensionUtf8,
+    #[error("invalid UTF-8 in extension for path: {path}")]
+    InvalidExtensionUtf8 { path: PathBuf },
 
-    #[error("unsupported font format: {0}")]
-    UnsupportedFormat(String),
+    #[error("unsupported font format: {extension}")]
+    UnsupportedFormat { extension: String },
 
-    #[error("unsupported font format for writing: {0}")]
-    UnsupportedWriteFormat(String),
+    #[error("unsupported font format for writing: {extension}")]
+    UnsupportedWriteFormat { extension: String },
 
-    #[error("font format adaptor is not registered: {0}")]
-    MissingAdaptor(&'static str),
+    #[error("font format adaptor is not registered: {}", format.name())]
+    MissingAdaptor { format: FontFormat },
 
-    #[error("failed to load font: {0}")]
-    Load(String),
+    #[error("failed to load {} font from '{path}': {source}", format.name())]
+    Load {
+        format: FontFormat,
+        path: PathBuf,
+        #[source]
+        source: FormatBackendError,
+    },
 
-    #[error("failed to save font: {0}")]
-    Save(String),
+    #[error("failed to save {} font to '{path}': {source}", format.name())]
+    Save {
+        format: FontFormat,
+        path: PathBuf,
+        #[source]
+        source: FormatBackendError,
+    },
+}
+
+impl BackendError {
+    pub fn load(format: FontFormat, path: impl Into<PathBuf>, source: FormatBackendError) -> Self {
+        Self::Load {
+            format,
+            path: path.into(),
+            source,
+        }
+    }
+
+    pub fn save(format: FontFormat, path: impl Into<PathBuf>, source: FormatBackendError) -> Self {
+        Self::Save {
+            format,
+            path: path.into(),
+            source,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FormatBackendError {
+    #[error(transparent)]
+    Designspace(#[from] DesignspaceError),
+
+    #[error("UFO backend error: {0}")]
+    Ufo(String),
+
+    #[error("Glyphs backend error: {0}")]
+    Glyphs(String),
+
+    #[error("binary font backend error: {0}")]
+    Binary(String),
+
+    #[error("writing is not supported for this format")]
+    WriteUnsupported,
 }
 
 pub type BackendResult<T> = Result<T, BackendError>;
+pub type FormatBackendResult<T> = Result<T, FormatBackendError>;

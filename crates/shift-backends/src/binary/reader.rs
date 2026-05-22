@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
 use fontc::JobTimer;
 use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
@@ -161,15 +162,15 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
 
 pub struct BytesFontAdaptor;
 impl FontAdaptor for BytesFontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String> {
-        let bytes =
-            std::fs::read(path).map_err(|e| format!("Failed to read font file '{path}': {e}"))?;
+    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
+        let bytes = std::fs::read(path)
+            .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
         let font = FontRef::new(&bytes)
-            .map_err(|e| format!("Failed to parse font data from '{path}': {e}"))?;
+            .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
         Ok(font_from_skrifa(&font))
     }
 
-    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
+    fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
         Ok(())
     }
 }

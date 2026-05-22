@@ -251,6 +251,28 @@ export class Font {
   }
 
   /**
+   * Updates an existing glyph's name and Unicode assignment.
+   *
+   * @remarks
+   * Glyphs are keyed by name in the native font model. This method re-keys the
+   * glyph through the bridge and replaces its Unicode list, then clears cached
+   * glyph models because existing model objects still carry their original
+   * identity handle.
+   *
+   * @param fromName - Existing committed glyph name.
+   * @param name - New unique glyph name after trimming whitespace.
+   * @param unicodes - Complete Unicode assignment for the renamed glyph.
+   * @throws {Error} when `fromName` is missing, `name` is empty, `name` already
+   *   exists, or an edit session is active.
+   */
+  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: readonly Unicode[]): void {
+    this.#bridge.updateGlyphIdentity(fromName, name.trim() as GlyphName, [...unicodes]);
+    this.#glyphs.clear();
+    this.#glyphSources.clear();
+    this.#hydrateFromBridge();
+  }
+
+  /**
    * Return the preferred glyph handle for a Unicode codepoint.
    *
    * The returned handle can name a glyph that does not exist in the font yet.

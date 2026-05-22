@@ -12,6 +12,8 @@ describe("openFontPath", () => {
       expect(isSupportedFontPath("/tmp/font.glyphs")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.glyphspackage")).toBe(true);
       expect(isSupportedFontPath("/tmp/font.GLYPHSPACKAGE")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.designspace")).toBe(true);
+      expect(isSupportedFontPath("/tmp/font.DESIGNSPACE")).toBe(true);
     });
 
     it("rejects unsupported extensions", () => {
