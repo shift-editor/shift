@@ -60,11 +60,13 @@ export const RecentFiles = ({ onOpenFile }: RecentFilesProps) => {
   const visibleFiles = recentFiles.slice(0, VISIBLE_COUNT);
 
   return (
-    <div className="flex w-90 flex-col gap-[1px]">
+    <div className="flex w-[350px] flex-col gap-[1px]">
       <span className="text-sm font-medium">Recent files</span>
-      {visibleFiles.map((file) => (
-        <FileRow key={file.path} file={file} onOpenFile={onOpenFile} />
-      ))}
+      <div className="pl-0.5 flex flex-col justify-between">
+        {visibleFiles.map((file) => (
+          <FileRow key={file.path} file={file} onOpenFile={onOpenFile} />
+        ))}
+      </div>
     </div>
   );
 };

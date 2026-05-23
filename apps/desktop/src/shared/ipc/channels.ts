@@ -2,9 +2,11 @@ import type { ThemeName, Debug, DebugOverlays } from "./types";
 
 /** Main -> Renderer broadcasts (webContents.send / ipcRenderer.on) */
 export type IpcEvents = {
+  "document:new": () => void;
   "menu:open-font": (path: string) => void;
   "external:open-font": (path: string) => void;
   "menu:save-font": (path: string) => void;
+  "menu:export-font": (path: string) => void;
   "menu:undo": () => void;
   "menu:redo": () => void;
   "menu:delete": () => void;

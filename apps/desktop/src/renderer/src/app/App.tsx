@@ -101,12 +101,25 @@ export const App = () => {
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
     const unsubscribeExternalOpen = window.electronAPI?.onExternalOpenFont(handleOpenFont);
+    const unsubscribeNew = window.electronAPI?.onDocumentNew(() => {
+      fontDocument.createFont();
+      didOpenFont = true;
+      navigateToHome();
+    });
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
         await fontDocument.saveFont(savePath);
       } catch (error) {
         console.error("Failed to save font:", error);
+      }
+    });
+
+    const unsubscribeExport = window.electronAPI?.onMenuExportFont(async (exportPath) => {
+      try {
+        await fontDocument.exportFont(exportPath);
+      } catch (error) {
+        console.error("Failed to export font:", error);
       }
     });
 
@@ -117,9 +130,11 @@ export const App = () => {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       documentPersistence.dispose();
+      if (unsubscribeNew) unsubscribeNew();
       if (unsubscribeOpen) unsubscribeOpen();
       if (unsubscribeExternalOpen) unsubscribeExternalOpen();
       if (unsubscribeSave) unsubscribeSave();
+      if (unsubscribeExport) unsubscribeExport();
       if (unsubscribePatternDump) unsubscribePatternDump();
     };
   }, []);

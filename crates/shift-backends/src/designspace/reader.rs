@@ -1,8 +1,13 @@
+use super::error::{DesignspaceError, DesignspaceResult};
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::FontReader;
 use crate::ufo::UfoReader;
 use norad::designspace::DesignSpaceDocument;
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::Reader;
 use shift_ir::{Axis, Font, Layer, LayerId, Location, Source};
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 
 pub struct DesignspaceReader;
@@ -20,17 +25,36 @@ impl Default for DesignspaceReader {
 }
 
 impl FontReader for DesignspaceReader {
-    fn load(&self, path: &str) -> Result<Font, String> {
+    fn load(&self, path: &str) -> FormatBackendResult<Font> {
+        self.load_designspace(path)
+            .map_err(FormatBackendError::from)
+    }
+}
+
+impl DesignspaceReader {
+    fn load_designspace(&self, path: &str) -> DesignspaceResult<Font> {
         let ds_path = Path::new(path);
         let ds_dir = ds_path
             .parent()
-            .ok_or_else(|| format!("Cannot determine directory of '{path}'"))?;
+            .ok_or_else(|| DesignspaceError::MissingParent {
+                path: ds_path.to_path_buf(),
+            })?;
 
-        let doc = DesignSpaceDocument::load(ds_path)
-            .map_err(|e| format!("Failed to load designspace '{path}': {e}"))?;
+        let doc = match DesignSpaceDocument::load(ds_path) {
+            Ok(doc) => doc,
+            Err(error) => {
+                let original_error = error.to_string();
+                return load_axisless_designspace(ds_path, ds_dir, &original_error).map_err(
+                    |fallback_error| DesignspaceError::LoadDesignspace {
+                        path: ds_path.to_path_buf(),
+                        details: format!("{original_error}; {fallback_error}"),
+                    },
+                );
+            }
+        };
 
         if doc.sources.is_empty() {
-            return Err("Designspace has no sources".to_string());
+            return Err(DesignspaceError::NoSources);
         }
 
         let default_idx = find_default_source_index(&doc);
@@ -38,12 +62,21 @@ impl FontReader for DesignspaceReader {
         // Load the default source first to establish the base font.
         let default_ds_source = &doc.sources[default_idx];
         let default_ufo_path = ds_dir.join(&default_ds_source.filename);
-        let default_ufo_str = default_ufo_path
-            .to_str()
-            .ok_or_else(|| "Invalid UTF-8 in default UFO path".to_string())?;
+        let default_ufo_str =
+            default_ufo_path
+                .to_str()
+                .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
+                    path: default_ufo_path.clone(),
+                })?;
 
         let ufo_reader = UfoReader::new();
-        let mut font = ufo_reader.load(default_ufo_str)?;
+        let mut font =
+            ufo_reader
+                .load(default_ufo_str)
+                .map_err(|source| DesignspaceError::LoadUfo {
+                    path: default_ufo_path.clone(),
+                    details: source.to_string(),
+                })?;
         font.clear_sources();
 
         if let Some(ref family) = default_ds_source.familyname {
@@ -88,13 +121,21 @@ impl FontReader for DesignspaceReader {
             let ufo_path = ds_dir.join(&ds_source.filename);
             let ufo_str = ufo_path
                 .to_str()
-                .ok_or_else(|| format!("Invalid UTF-8 in UFO path: {ufo_path:?}"))?
+                .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
+                    path: ufo_path.clone(),
+                })?
                 .to_string();
 
             let source_font = match ufo_cache.get(&ufo_str) {
                 Some(f) => f,
                 None => {
-                    let loaded = ufo_reader.load(&ufo_str)?;
+                    let loaded =
+                        ufo_reader
+                            .load(&ufo_str)
+                            .map_err(|source| DesignspaceError::LoadUfo {
+                                path: ufo_path.clone(),
+                                details: source.to_string(),
+                            })?;
                     ufo_cache.insert(ufo_str.clone(), loaded);
                     ufo_cache.get(&ufo_str).unwrap()
                 }
@@ -104,10 +145,10 @@ impl FontReader for DesignspaceReader {
             let source_layer_id = match &ds_source.layer {
                 Some(layer_name) => {
                     find_layer_by_name(source_font, layer_name).ok_or_else(|| {
-                        format!(
-                            "Layer '{}' not found in '{}'",
-                            layer_name, ds_source.filename
-                        )
+                        DesignspaceError::MissingLayer {
+                            layer: layer_name.clone(),
+                            filename: ds_source.filename.clone(),
+                        }
                     })?
                 }
                 None => source_font.default_layer_id(),
@@ -137,6 +178,194 @@ impl FontReader for DesignspaceReader {
 
         Ok(font)
     }
+}
+
+#[derive(Clone, Debug)]
+struct AxislessSource {
+    filename: String,
+    familyname: Option<String>,
+    stylename: Option<String>,
+    name: Option<String>,
+    layer: Option<String>,
+}
+
+fn load_axisless_designspace(
+    ds_path: &Path,
+    ds_dir: &Path,
+    original_error: &str,
+) -> DesignspaceResult<Font> {
+    let xml = fs::read_to_string(ds_path).map_err(|source| DesignspaceError::ReadFile {
+        path: ds_path.to_path_buf(),
+        source,
+    })?;
+    let sources = parse_axisless_sources(&xml).map_err(|fallback_error| {
+        DesignspaceError::LoadDesignspace {
+            path: ds_path.to_path_buf(),
+            details: format!(
+                "{fallback_error}; axisless fallback was used after parser error: {original_error}"
+            ),
+        }
+    })?;
+    if sources.is_empty() {
+        return Err(DesignspaceError::NoSources);
+    }
+
+    let default_source = &sources[0];
+    let default_ufo_path = ds_dir.join(&default_source.filename);
+    let default_ufo_str =
+        default_ufo_path
+            .to_str()
+            .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
+                path: default_ufo_path.clone(),
+            })?;
+
+    let ufo_reader = UfoReader::new();
+    let mut font =
+        ufo_reader
+            .load(default_ufo_str)
+            .map_err(|source| DesignspaceError::LoadUfo {
+                path: default_ufo_path.clone(),
+                details: source.to_string(),
+            })?;
+    font.clear_sources();
+
+    if let Some(family) = &default_source.familyname {
+        font.metadata_mut().family_name = Some(family.clone());
+    }
+
+    let default_source_id = font.add_source(Source::with_filename(
+        axisless_source_name(default_source, 0),
+        Location::new(),
+        font.default_layer_id(),
+        default_source.filename.clone(),
+    ));
+    font.set_default_source_id(default_source_id);
+
+    let mut ufo_cache: HashMap<String, Font> = HashMap::new();
+    for (idx, ds_source) in sources.iter().enumerate().skip(1) {
+        let ufo_path = ds_dir.join(&ds_source.filename);
+        let ufo_str = ufo_path
+            .to_str()
+            .ok_or_else(|| DesignspaceError::InvalidPathUtf8 {
+                path: ufo_path.clone(),
+            })?
+            .to_string();
+
+        let source_font = match ufo_cache.get(&ufo_str) {
+            Some(f) => f,
+            None => {
+                let loaded =
+                    ufo_reader
+                        .load(&ufo_str)
+                        .map_err(|source| DesignspaceError::LoadUfo {
+                            path: ufo_path.clone(),
+                            details: source.to_string(),
+                        })?;
+                ufo_cache.insert(ufo_str.clone(), loaded);
+                ufo_cache.get(&ufo_str).unwrap()
+            }
+        };
+
+        let source_layer_id = match &ds_source.layer {
+            Some(layer_name) => find_layer_by_name(source_font, layer_name).ok_or_else(|| {
+                DesignspaceError::MissingLayer {
+                    layer: layer_name.clone(),
+                    filename: ds_source.filename.clone(),
+                }
+            })?,
+            None => source_font.default_layer_id(),
+        };
+
+        let name = axisless_source_name(ds_source, idx);
+        let layer = Layer::new(name.clone());
+        let layer_id = font.add_layer(layer);
+
+        for (glyph_name, source_glyph) in source_font.glyphs() {
+            if let Some(source_layer) = source_glyph.layer(source_layer_id) {
+                if let Some(existing_glyph) = font.glyph_mut(glyph_name) {
+                    existing_glyph.set_layer(layer_id, source_layer.clone());
+                }
+            }
+        }
+
+        font.add_source(Source::with_filename(
+            name,
+            Location::new(),
+            layer_id,
+            ds_source.filename.clone(),
+        ));
+    }
+
+    Ok(font)
+}
+
+fn axisless_source_name(source: &AxislessSource, index: usize) -> String {
+    source
+        .name
+        .clone()
+        .or_else(|| source.stylename.clone())
+        .unwrap_or_else(|| format!("Source {index}"))
+}
+
+fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<AxislessSource>> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut sources = Vec::new();
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
+                b"axis" => {
+                    return Err(DesignspaceError::AxislessNotApplicable {
+                        reason: "axes are present".to_string(),
+                    })
+                }
+                b"source" => {
+                    if let Some(filename) = xml_attr(&reader, &event, b"filename")? {
+                        sources.push(AxislessSource {
+                            filename,
+                            familyname: xml_attr(&reader, &event, b"familyname")?,
+                            stylename: xml_attr(&reader, &event, b"stylename")?,
+                            name: xml_attr(&reader, &event, b"name")?,
+                            layer: xml_attr(&reader, &event, b"layer")?,
+                        });
+                    }
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(error) => {
+                return Err(DesignspaceError::ParseAxislessXml {
+                    details: error.to_string(),
+                })
+            }
+            _ => {}
+        }
+    }
+
+    Ok(sources)
+}
+
+fn xml_attr(
+    reader: &Reader<&[u8]>,
+    event: &BytesStart,
+    name: &[u8],
+) -> DesignspaceResult<Option<String>> {
+    for attribute in event.attributes() {
+        let attribute = attribute.map_err(|error| DesignspaceError::ParseAxislessXml {
+            details: error.to_string(),
+        })?;
+        if attribute.key.as_ref() == name {
+            return attribute
+                .decode_and_unescape_value(reader.decoder())
+                .map(|value| Some(value.into_owned()))
+                .map_err(|error| DesignspaceError::ParseAxislessXml {
+                    details: error.to_string(),
+                });
+        }
+    }
+
+    Ok(None)
 }
 
 fn source_name(source: &norad::designspace::Source, index: usize) -> String {

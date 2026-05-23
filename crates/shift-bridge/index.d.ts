@@ -14,10 +14,12 @@ export declare class Bridge {
   createFont(): void
   loadFont(path: string): void
   saveFont(path: string): Promise<number>
+  exportFont(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
   getGlyphCount(): number
   getGlyphs(): Array<NapiGlyphRecord>
+  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): NapiGlyphState | null
   getGlyphVariationReport(glyphRef: GlyphHandle): NapiGlyphVariationReport | null
   getVariationReports(): Array<NapiGlyphVariationReport>
@@ -54,6 +56,16 @@ export declare class Bridge {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface NapiFontExportRequest {
+  path: string
+  format: string
+}
+
+export interface NapiFontExportResult {
+  path: string
+  format: string
 }
 
 export interface NapiGlyphVariationDiagnostic {

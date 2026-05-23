@@ -99,6 +99,10 @@ export class Document {
     await this.#notifySaveCompleted(savePath);
   }
 
+  async exportFont(path: string): Promise<void> {
+    await this.editor.exportFont(path);
+  }
+
   close(): void {
     this.#persistence.closeDocument();
     this.editor.closeFont();

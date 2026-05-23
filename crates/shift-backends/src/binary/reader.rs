@@ -1,18 +1,19 @@
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-
-use crate::font_loader::FontAdaptor;
-use fontc::JobTimer;
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
     raw::TableProvider,
+    string::StringId,
     FontRef, MetadataProvider,
 };
 
-pub fn load_font(font_bytes: &[u8]) -> Result<FontRef<'_>, String> {
-    FontRef::new(font_bytes).map_err(|e| format!("Failed to load font: {e}"))
+pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
+    let font = FontRef::new(&bytes)
+        .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
+    Ok(font_from_skrifa(&font))
 }
 
 #[derive(Default)]
@@ -132,6 +133,13 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     ir_font.metrics_mut().cap_height = Some(metrics.cap_height.unwrap_or(0.0) as f64);
     ir_font.metrics_mut().x_height = Some(metrics.x_height.unwrap_or(0.0) as f64);
 
+    if let Some(family_name) = localized_string(font, StringId::FAMILY_NAME) {
+        ir_font.metadata_mut().family_name = Some(family_name);
+    }
+    if let Some(style_name) = localized_string(font, StringId::SUBFAMILY_NAME) {
+        ir_font.metadata_mut().style_name = Some(style_name);
+    }
+
     for (unicode, glyph_id) in char_map.mappings() {
         let outline = outlines.get(glyph_id).unwrap();
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
@@ -159,28 +167,11 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     ir_font
 }
 
-pub struct BytesFontAdaptor;
-impl FontAdaptor for BytesFontAdaptor {
-    fn read_font(&self, path: &str) -> Result<Font, String> {
-        let bytes =
-            std::fs::read(path).map_err(|e| format!("Failed to read font file '{path}': {e}"))?;
-        let font = FontRef::new(&bytes)
-            .map_err(|e| format!("Failed to parse font data from '{path}': {e}"))?;
-        Ok(font_from_skrifa(&font))
-    }
-
-    fn write_font(&self, _font: &Font, _path: &str) -> Result<(), String> {
-        Ok(())
-    }
-}
-
-pub fn compile_font(path: &str, build_dir: &Path, output_name: &str) -> Result<(), String> {
-    let mut args = fontc::Args::new(build_dir, PathBuf::from(path));
-
-    args.output_file = Some(PathBuf::from(output_name));
-    let timer = JobTimer::new(Instant::now());
-    fontc::run(args, timer).map_err(|e| format!("Failed to compile font: {e}"))?;
-    Ok(())
+fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {
+    font.localized_strings(id)
+        .english_or_first()
+        .map(|string| string.to_string())
+        .filter(|string| !string.is_empty())
 }
 
 #[cfg(test)]

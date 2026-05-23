@@ -52,7 +52,7 @@ describe("Font", () => {
     expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
     expect(font.glyphHandleForUnicode(65)).toEqual({ name: "A", unicode: 65 });
     expect(font.nameForUnicode(65)).toBe("A");
-    expect(font.glyphHandleForName("notdef")).toBeNull();
+    expect(font.glyphHandleForName("notdef")).toEqual({ name: "notdef" });
     expect(font.glyphHandleForUnicode(0xffff)).toEqual({
       name: "uniFFFF",
       unicode: 0xffff,
@@ -85,6 +85,47 @@ describe("Font", () => {
 
     expect(a).not.toBeNull();
     expect(font.glyph({ name: "A" })).toBe(a);
+  });
+
+  it("updates a glyph identity through the font index", () => {
+    const font = loadFont();
+
+    font.updateGlyphIdentity("A", "A.alt", []);
+
+    expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
+    expect(font.glyphHandleForName("A.alt")).toEqual({ name: "A.alt" });
+    expect(font.nameForUnicode(65)).toBe("A");
+    expect(font.glyph({ name: "A", unicode: 65 })).toBeNull();
+    expect(font.glyph({ name: "A.alt" })).not.toBeNull();
+  });
+
+  it("creates an empty committed glyph through the bridge", () => {
+    const font = loadFont();
+
+    const handle = font.createGlyph("newGlyph");
+
+    expect(handle).toEqual({ name: "newGlyph" });
+    expect(font.hasGlyph("newGlyph")).toBe(true);
+    expect(font.glyphRecords().some((record) => record.name === "newGlyph")).toBe(true);
+    expect(font.glyph(handle)).not.toBeNull();
+  });
+
+  it("auto-increments duplicate quick glyph names", () => {
+    const font = loadFont();
+
+    expect(font.createGlyph("newGlyph")).toEqual({ name: "newGlyph" });
+    expect(font.createGlyph("newGlyph")).toEqual({ name: "newGlyph.1" });
+    expect(font.createGlyph("newGlyph")).toEqual({ name: "newGlyph.2" });
+  });
+
+  it("moves Unicode assignment when updating glyph identity", () => {
+    const font = loadFont();
+
+    font.updateGlyphIdentity("A", "agrave", [0x00e0]);
+
+    expect(font.glyphHandleForName("agrave")).toEqual({ name: "agrave", unicode: 0x00e0 });
+    expect(font.nameForUnicode(0x00e0)).toBe("agrave");
+    expect(font.nameForUnicode(65)).toBe("A");
   });
 
   it("returns a stable GlyphSource instance per glyph source", () => {
@@ -149,7 +190,7 @@ describe("Font", () => {
 
     expect(font.loaded).toBe(false);
     expect(font.glyphRecords()).toEqual([]);
-    expect(font.glyphHandleForName("A")).toBeNull();
+    expect(font.glyphHandleForName("A")).toEqual({ name: "A", unicode: 65 });
     expect(font.metrics.unitsPerEm).toBe(1000);
   });
 });

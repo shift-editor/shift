@@ -26,6 +26,16 @@ import type { AxisLocation } from "@/types/variation";
 import { defaultResources, GlyphInfo } from "@shift/glyph-info";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 
+/**
+ * Immutable lookup index for committed glyph records.
+ *
+ * @remarks
+ * `GlyphDirectory` is rebuilt whenever the bridge glyph list changes. It keeps
+ * source-of-truth font records separate from fallback glyph database knowledge:
+ * methods named `record*`, `has*`, and dependency lookups only describe glyphs
+ * committed in the font, while handle/name resolution methods may fall back to
+ * bundled glyph metadata so UI flows can address missing glyphs.
+ */
 class GlyphDirectory {
   #glyphDatabase: GlyphInfo = new GlyphInfo(defaultResources);
 
@@ -70,14 +80,35 @@ class GlyphDirectory {
     this.dependentsByName = dependentsByName;
   }
 
+  /**
+   * Builds a directory snapshot from bridge glyph records.
+   *
+   * @param records - Committed glyph records from the current font snapshot.
+   * @returns A new immutable lookup index; later record changes are not observed.
+   */
   static fromRecords(records: readonly GlyphRecord[]): GlyphDirectory {
     return new GlyphDirectory(records);
   }
 
+  /**
+   * Builds an empty directory for an unloaded or freshly reset font model.
+   *
+   * @returns A directory with no committed glyph records.
+   */
   static empty(): GlyphDirectory {
     return new GlyphDirectory([]);
   }
 
+  /**
+   * Resolves the preferred glyph name for a Unicode scalar.
+   *
+   * @remarks
+   * Existing font mappings win. Missing codepoints fall back to bundled glyph
+   * metadata and finally to a deterministic `uniXXXX`-style name.
+   *
+   * @param unicode - Unicode scalar value to resolve.
+   * @returns A production glyph name suitable for opening or creating a glyph.
+   */
   nameForUnicode(unicode: Unicode): GlyphName {
     const nameFromFont = this.nameByUnicode.get(unicode);
     if (nameFromFont) return nameFromFont;
@@ -89,45 +120,104 @@ class GlyphDirectory {
     return fallbackName as GlyphName;
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Reports whether the current font has a committed glyph with this name.
+   *
+   * @param name - Glyph name to test against committed font records.
+   * @returns `true` only for glyphs present in the loaded font, not database fallbacks.
+   * @knipclassignore
+   */
   hasGlyph(name: GlyphName): boolean {
     return this.recordsByName.has(name);
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the committed glyph record for a name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns The committed record, or `null` when the font does not contain the glyph.
+   * @knipclassignore
+   */
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.recordsByName.get(name) ?? null;
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the committed Unicode assignments for a glyph name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns A read-only assignment list; empty when the glyph is missing or unencoded.
+   * @knipclassignore
+   */
   unicodesForName(name: GlyphName): readonly Unicode[] {
     return this.recordsByName.get(name)?.unicodes ?? [];
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the first committed Unicode assignment for a glyph name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns The primary codepoint, or `null` when the glyph is missing or unencoded.
+   * @knipclassignore
+   */
   primaryUnicodeForName(name: GlyphName): Unicode | null {
     return this.unicodesForName(name)[0] ?? null;
   }
 
+  /**
+   * Returns all committed Unicode values in ascending order.
+   *
+   * @returns A read-only snapshot derived from the current font records.
+   */
   allUnicodes(): readonly Unicode[] {
     return this.unicodes;
   }
 
+  /**
+   * Returns committed component bases used by a glyph.
+   *
+   * @param name - Glyph name whose component references should be inspected.
+   * @returns Base glyph names from the committed record; empty when absent.
+   */
   componentBaseNamesForName(name: GlyphName): readonly GlyphName[] {
     return this.componentBasesByName.get(name) ?? [];
   }
 
+  /**
+   * Returns committed glyphs that reference a base glyph as a component.
+   *
+   * @param name - Base glyph name to reverse-resolve.
+   * @returns Sorted dependent glyph names; empty when no committed glyph references it.
+   */
   dependentNamesForName(name: GlyphName): readonly GlyphName[] {
     return [...(this.dependentsByName.get(name) ?? [])].sort();
   }
 
-  glyphHandleForName(name: GlyphName): GlyphHandle | null {
+  /**
+   * Resolves a glyph name to an editor handle.
+   *
+   * @remarks
+   * Existing records include their committed primary Unicode. Missing glyphs
+   * may still get a Unicode hint from bundled glyph metadata; otherwise the
+   * handle remains name-only.
+   *
+   * @param name - Glyph name to address.
+   * @returns A handle suitable for opening, creating, or querying glyph state.
+   */
+  glyphHandleForName(name: GlyphName): GlyphHandle {
     const record = this.recordForName(name);
-    if (!record) return null;
-    const unicode = this.primaryUnicodeForName(name);
+    const unicode = record
+      ? this.primaryUnicodeForName(name)
+      : (this.#glyphDatabase.getGlyphByName(name)?.codepoint ?? null);
     return unicode === null ? { name } : { name, unicode };
   }
 
+  /**
+   * Resolves a Unicode scalar to an editor handle.
+   *
+   * @param unicode - Unicode scalar value to address.
+   * @returns A handle with a resolved name and Unicode value.
+   */
   glyphHandleForUnicode(unicode: Unicode): GlyphHandle | null {
     const name = this.nameForUnicode(unicode);
     return name ? { name, unicode } : null;
@@ -156,6 +246,7 @@ export class Font {
   readonly #$metrics: WritableSignal<FontMetrics>;
   readonly #$sources: WritableSignal<Source[]>;
   readonly #$unicodes: Signal<Unicode[]>;
+  readonly #$glyphRecords: Signal<readonly GlyphRecord[]>;
 
   readonly #directory = signal(GlyphDirectory.empty());
   readonly #glyphs = new Map<GlyphName, Glyph>();
@@ -168,6 +259,7 @@ export class Font {
     this.#$metrics = signal<FontMetrics>(this.#defaultMetrics);
     this.#$sources = signal<Source[]>([]);
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
+    this.#$glyphRecords = computed(() => this.#directory.value.records);
   }
 
   /** @knipclassignore */
@@ -201,6 +293,11 @@ export class Font {
     return this.#$unicodes;
   }
 
+  /** Reactive committed glyph directory records for UI lists and grids. */
+  get glyphRecordsCell(): Signal<readonly GlyphRecord[]> {
+    return this.#$glyphRecords;
+  }
+
   /** @knipclassignore */
   get metadata(): FontMetadata {
     return this.#bridge.getMetadata();
@@ -210,44 +307,175 @@ export class Font {
     return this.#bridge;
   }
 
+  /**
+   * Returns committed glyph records from the current font snapshot.
+   *
+   * @returns A read-only record list rebuilt after load, create, rename, or reset.
+   */
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directory.peek().records;
   }
 
+  /**
+   * Resolves the preferred glyph name for a Unicode scalar.
+   *
+   * @remarks
+   * Existing font mappings win. Missing codepoints fall back to bundled glyph
+   * metadata and finally to a deterministic fallback name.
+   *
+   * @param unicode - Unicode scalar value to resolve.
+   * @returns A production glyph name suitable for opening or creating a glyph.
+   */
   nameForUnicode(unicode: Unicode): GlyphName {
     return this.#directory.peek().nameForUnicode(unicode);
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Reports whether the current font has a committed glyph with this name.
+   *
+   * @param name - Glyph name to test against committed font records.
+   * @returns `true` only for glyphs present in the loaded font.
+   * @knipclassignore
+   */
   hasGlyph(name: GlyphName): boolean {
     return this.#directory.peek().hasGlyph(name);
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the committed glyph record for a name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns The committed record, or `null` when the font does not contain the glyph.
+   * @knipclassignore
+   */
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.#directory.peek().recordForName(name);
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the committed Unicode assignments for a glyph name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns A read-only assignment list; empty when the glyph is missing or unencoded.
+   * @knipclassignore
+   */
   unicodesForName(name: GlyphName): readonly Unicode[] {
     return this.#directory.peek().unicodesForName(name);
   }
 
-  /** @knipclassignore — public glyph directory API. */
+  /**
+   * Returns the first committed Unicode assignment for a glyph name.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns The primary codepoint, or `null` when the glyph is missing or unencoded.
+   * @knipclassignore
+   */
   primaryUnicodeForName(name: GlyphName): Unicode | null {
     return this.#directory.peek().primaryUnicodeForName(name);
   }
 
+  /**
+   * Returns committed component bases used by a glyph.
+   *
+   * @param name - Glyph name whose component references should be inspected.
+   * @returns Base glyph names from the committed record; empty when absent.
+   */
   componentBaseNamesForName(name: GlyphName): readonly GlyphName[] {
     return this.#directory.peek().componentBaseNamesForName(name);
   }
 
+  /**
+   * Returns committed glyphs that reference a base glyph as a component.
+   *
+   * @param name - Base glyph name to reverse-resolve.
+   * @returns Sorted dependent glyph names; empty when no committed glyph references it.
+   */
   dependentNamesForName(name: GlyphName): readonly GlyphName[] {
     return this.#directory.peek().dependentNamesForName(name);
   }
 
-  glyphHandleForName(name: GlyphName): GlyphHandle | null {
+  /**
+   * Resolve a glyph name to an editor handle, even when the glyph is not yet
+   * committed in the font.
+   *
+   * @remarks
+   * Name-first flows such as New Glyph need a stable handle before source data
+   * exists. Existing font records provide their committed Unicode assignment;
+   * otherwise the glyph database is used as a best-effort Unicode hint.
+   *
+   * @param name - Production glyph name to open, create, or query.
+   * @returns A glyph identity handle. The handle may refer to a missing glyph.
+   */
+  glyphHandleForName(name: GlyphName): GlyphHandle {
     return this.#directory.peek().glyphHandleForName(name);
+  }
+
+  /**
+   * Updates an existing glyph's name and Unicode assignment.
+   *
+   * @remarks
+   * Glyphs are keyed by name in the native font model. This method re-keys the
+   * glyph through the bridge and replaces its Unicode list, then clears cached
+   * glyph models because existing model objects still carry their original
+   * identity handle.
+   *
+   * @param fromName - Existing committed glyph name.
+   * @param name - New unique glyph name after trimming whitespace.
+   * @param unicodes - Complete Unicode assignment for the renamed glyph.
+   * @throws {Error} when `fromName` is missing, `name` is empty, `name` already
+   *   exists, or an edit session is active.
+   */
+  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: readonly Unicode[]): void {
+    this.#bridge.updateGlyphIdentity(fromName, name.trim() as GlyphName, [...unicodes]);
+    this.#glyphs.clear();
+    this.#glyphSources.clear();
+    this.#hydrateFromBridge();
+  }
+
+  /**
+   * Creates an empty committed glyph at the default source.
+   *
+   * @remarks
+   * If the requested name already exists, a numeric suffix is appended using
+   * {@link nextAvailableGlyphName}. The bridge edit session is opened and
+   * immediately ended so downstream save/export paths see a real committed
+   * glyph record, not a UI-only placeholder.
+   *
+   * @param name - Preferred glyph name. Blank input falls back to `newGlyph`.
+   * @returns The handle for the glyph that was actually created.
+   * @throws {Error} when the bridge rejects session creation or commit.
+   */
+  createGlyph(name: GlyphName): GlyphHandle {
+    const glyphName = this.nextAvailableGlyphName(name);
+    if (this.#bridge.hasEditSession()) {
+      this.#bridge.endEditSession();
+    }
+
+    const handle = this.glyphHandleForName(glyphName);
+    this.#bridge.startEditSession(handle, this.defaultSource.id);
+    this.#bridge.endEditSession();
+
+    this.#glyphs.clear();
+    this.#glyphSources.clear();
+    this.#hydrateFromBridge();
+
+    return handle;
+  }
+
+  /**
+   * Finds the next unused glyph name for an auto-incrementing base name.
+   *
+   * @param name - Preferred base name. Blank input falls back to `newGlyph`.
+   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on.
+   */
+  nextAvailableGlyphName(name: GlyphName): GlyphName {
+    const baseName = (name.trim() || "newGlyph") as GlyphName;
+    if (!this.hasGlyph(baseName)) return baseName;
+
+    for (let index = 1; ; index += 1) {
+      const candidate = `${baseName}.${index}` as GlyphName;
+      if (!this.hasGlyph(candidate)) return candidate;
+    }
   }
 
   /**
@@ -496,6 +724,10 @@ export class Font {
 
   async save(path: string): Promise<number> {
     return this.#bridge.saveFont(path);
+  }
+
+  async export(path: string): Promise<void> {
+    await this.#bridge.exportFont({ path, format: "ttf" });
   }
 
   /** @knipclassignore — called when closing a document */

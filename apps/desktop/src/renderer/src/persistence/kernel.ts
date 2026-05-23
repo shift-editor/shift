@@ -178,7 +178,7 @@ export class DocumentStatePersistence {
         p
           .split("/")
           .pop()
-          ?.replace(/\.(otf|ttf|ufo|glyphs|woff2?)$/i, "") ?? p,
+          ?.replace(/\.(designspace|otf|ttf|ufo|glyphs|woff2?)$/i, "") ?? p,
       path: p,
     }));
 

@@ -4,6 +4,7 @@ import type { WindowManager } from "./WindowManager";
 import type { ThemeName, DebugOverlays, Debug } from "../../shared/ipc/types";
 import type { IpcEvents } from "../../shared/ipc/channels";
 import * as ipc from "../../shared/ipc/main";
+import { mainLog } from "../logger";
 
 export class MenuManager {
   private documentState: DocumentState;
@@ -38,7 +39,12 @@ export class MenuManager {
     ...args: Parameters<IpcEvents[K]>
   ): void {
     const webContents = this.windowManager.getWindow()?.webContents;
-    if (!webContents) return;
+    if (!webContents) {
+      mainLog("menu", `drop ${String(channel)}: no renderer window`);
+      return;
+    }
+
+    mainLog("menu", `send ${String(channel)}`, ...args);
     ipc.send(webContents, channel, ...args);
   }
 
@@ -114,9 +120,18 @@ export class MenuManager {
         label: "File",
         submenu: [
           {
+            label: "New Font",
+            accelerator: "CmdOrCtrl+N",
+            click: async () => {
+              if (!(await this.documentState.confirmClose())) return;
+              this.sendToRenderer("document:new");
+            },
+          },
+          {
             label: "Open Font...",
             accelerator: "CmdOrCtrl+O",
             click: async () => {
+              if (!(await this.documentState.confirmClose())) return;
               const result = await dialog.showOpenDialog({
                 properties: ["openFile", "openDirectory"],
                 filters: [
@@ -141,6 +156,26 @@ export class MenuManager {
             label: "Save As...",
             accelerator: "CmdOrCtrl+Shift+S",
             click: () => this.documentState.save(true),
+          },
+          {
+            label: "Export TTF...",
+            accelerator: "CmdOrCtrl+E",
+            click: async () => {
+              const baseName = this.documentState
+                .getFileName()
+                .replace(/\.[^.]+$/, "")
+                .replace(/\.designspace$/, "");
+              const result = await dialog.showSaveDialog({
+                defaultPath: `${baseName || "Untitled"}.ttf`,
+                filters: [{ name: "TrueType Font", extensions: ["ttf"] }],
+              });
+              if (!result.canceled && result.filePath) {
+                const exportPath = result.filePath.endsWith(".ttf")
+                  ? result.filePath
+                  : `${result.filePath}.ttf`;
+                this.sendToRenderer("menu:export-font", exportPath);
+              }
+            },
           },
           { type: "separator" },
           isMac ? { role: "close" } : { role: "quit" },

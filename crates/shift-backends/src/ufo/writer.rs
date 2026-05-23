@@ -1,3 +1,4 @@
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_ir::{
@@ -316,7 +317,8 @@ impl UfoWriter {
 }
 
 impl FontWriter for UfoWriter {
-    fn save(&self, font: &Font, path: &str) -> Result<(), String> {
+    fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         self.save_view(font, path)
+            .map_err(|error| FormatBackendError::Ufo(error.to_string()))
     }
 }

@@ -45,9 +45,11 @@ const electronAPI: ElectronAPI = {
   pathsExist: invoke("fs:pathsExist"),
 
   // Events
+  onDocumentNew: on("document:new"),
   onMenuOpenFont: on("menu:open-font"),
   onExternalOpenFont: on("external:open-font"),
   onMenuSaveFont: on("menu:save-font"),
+  onMenuExportFont: on("menu:export-font"),
   onMenuUndo: on("menu:undo"),
   onMenuRedo: on("menu:redo"),
   onMenuDelete: on("menu:delete"),
