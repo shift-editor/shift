@@ -1119,6 +1119,10 @@ export class Editor {
     return this.font.save(filePath);
   }
 
+  public async exportFont(filePath: string): Promise<void> {
+    await this.font.export(filePath);
+  }
+
   public setCursor(cursor: CursorType): void {
     this.#view.cursorCell.set(cursorToCSS(cursor));
   }

@@ -157,6 +157,26 @@ export class MenuManager {
             accelerator: "CmdOrCtrl+Shift+S",
             click: () => this.documentState.save(true),
           },
+          {
+            label: "Export TTF...",
+            accelerator: "CmdOrCtrl+E",
+            click: async () => {
+              const baseName = this.documentState
+                .getFileName()
+                .replace(/\.[^.]+$/, "")
+                .replace(/\.designspace$/, "");
+              const result = await dialog.showSaveDialog({
+                defaultPath: `${baseName || "Untitled"}.ttf`,
+                filters: [{ name: "TrueType Font", extensions: ["ttf"] }],
+              });
+              if (!result.canceled && result.filePath) {
+                const exportPath = result.filePath.endsWith(".ttf")
+                  ? result.filePath
+                  : `${result.filePath}.ttf`;
+                this.sendToRenderer("menu:export-font", exportPath);
+              }
+            },
+          },
           { type: "separator" },
           isMac ? { role: "close" } : { role: "quit" },
         ],

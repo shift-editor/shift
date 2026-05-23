@@ -19,6 +19,7 @@ export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
   saveFont(path: string): Promise<number>
+  exportFont(request: FontExportRequest): Promise<FontExportResult>
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   getGlyphCount(): number
@@ -60,6 +61,16 @@ export interface BridgeApi {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface FontExportRequest {
+  path: string
+  format: string
+}
+
+export interface FontExportResult {
+  path: string
+  format: string
 }
 
 export interface GlyphVariationDiagnostic {

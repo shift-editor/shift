@@ -4,7 +4,10 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
-use shift_backends::{font_loader::FontLoader, FontView};
+use shift_backends::{
+  font_loader::FontLoader, ExportFormat, FontExportRequest, FontExportResult, FontExporter,
+  FontView,
+};
 use shift_edit::{
   edit_session::{BulkNodePositionUpdates, EditSession},
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
@@ -30,6 +33,42 @@ pub struct GlyphHandle {
   pub name: String,
   #[napi(ts_type = "Unicode")]
   pub unicode: Option<u32>,
+}
+
+#[napi(object)]
+#[derive(Clone, Debug)]
+pub struct NapiFontExportRequest {
+  pub path: String,
+  pub format: String,
+}
+
+#[napi(object)]
+pub struct NapiFontExportResult {
+  pub path: String,
+  pub format: String,
+}
+
+impl TryFrom<NapiFontExportRequest> for FontExportRequest {
+  type Error = Error;
+
+  fn try_from(request: NapiFontExportRequest) -> Result<Self> {
+    let format = ExportFormat::try_from(request.format.as_str())
+      .map_err(|e| Error::new(Status::InvalidArg, e.to_string()))?;
+
+    Ok(Self {
+      path: request.path.into(),
+      format,
+    })
+  }
+}
+
+impl From<FontExportResult> for NapiFontExportResult {
+  fn from(result: FontExportResult) -> Self {
+    Self {
+      path: result.path.to_string_lossy().into_owned(),
+      format: result.format.as_str().to_string(),
+    }
+  }
 }
 
 #[napi(object)]
@@ -226,6 +265,26 @@ impl Task for SaveFontTask {
   }
 }
 
+pub struct ExportFontTask {
+  snapshot: FontSaveSnapshot,
+  request: FontExportRequest,
+}
+
+impl Task for ExportFontTask {
+  type Output = FontExportResult;
+  type JsValue = NapiFontExportResult;
+
+  fn compute(&mut self) -> Result<Self::Output> {
+    FontExporter::new()
+      .export(&self.snapshot, self.request.clone())
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
+  }
+
+  fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+    Ok(output.into())
+  }
+}
+
 pub struct ActiveEdit {
   session: EditSession,
   glyph: Glyph,
@@ -355,6 +414,17 @@ impl Bridge {
       persisted_version: self.persisted_version.clone(),
       path,
     })
+  }
+
+  #[napi(ts_return_type = "Promise<NapiFontExportResult>")]
+  pub fn export_font(
+    &mut self,
+    request: NapiFontExportRequest,
+  ) -> Result<AsyncTask<ExportFontTask>> {
+    Ok(AsyncTask::new(ExportFontTask {
+      snapshot: self.save_snapshot(),
+      request: request.try_into()?,
+    }))
   }
 
   #[napi]

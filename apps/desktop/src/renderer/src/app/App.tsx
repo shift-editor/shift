@@ -117,6 +117,14 @@ export const App = () => {
       }
     });
 
+    const unsubscribeExport = window.electronAPI?.onMenuExportFont(async (exportPath) => {
+      try {
+        await fontDocument.exportFont(exportPath);
+      } catch (error) {
+        console.error("Failed to export font:", error);
+      }
+    });
+
     const unsubscribePatternDump = window.electronAPI?.onDebugDumpSelectionPatterns(() => {
       dumpSelectionPatternsToConsole();
     });
@@ -128,6 +136,7 @@ export const App = () => {
       if (unsubscribeOpen) unsubscribeOpen();
       if (unsubscribeExternalOpen) unsubscribeExternalOpen();
       if (unsubscribeSave) unsubscribeSave();
+      if (unsubscribeExport) unsubscribeExport();
       if (unsubscribePatternDump) unsubscribePatternDump();
     };
   }, []);

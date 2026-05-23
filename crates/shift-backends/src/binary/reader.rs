@@ -1,9 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use crate::font_loader::FontAdaptor;
-use fontc::JobTimer;
 use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
 use skrifa::{
     outline::{DrawSettings, OutlinePen},
@@ -12,8 +7,12 @@ use skrifa::{
     FontRef, MetadataProvider,
 };
 
-pub fn load_font(font_bytes: &[u8]) -> Result<FontRef<'_>, String> {
-    FontRef::new(font_bytes).map_err(|e| format!("Failed to load font: {e}"))
+pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
+    let font = FontRef::new(&bytes)
+        .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
+    Ok(font_from_skrifa(&font))
 }
 
 #[derive(Default)]
@@ -158,30 +157,6 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     }
 
     ir_font
-}
-
-pub struct BytesFontAdaptor;
-impl FontAdaptor for BytesFontAdaptor {
-    fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
-        let bytes = std::fs::read(path)
-            .map_err(|e| FormatBackendError::Binary(format!("failed to read '{path}': {e}")))?;
-        let font = FontRef::new(&bytes)
-            .map_err(|e| FormatBackendError::Binary(format!("failed to parse '{path}': {e}")))?;
-        Ok(font_from_skrifa(&font))
-    }
-
-    fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
-        Ok(())
-    }
-}
-
-pub fn compile_font(path: &str, build_dir: &Path, output_name: &str) -> Result<(), String> {
-    let mut args = fontc::Args::new(build_dir, PathBuf::from(path));
-
-    args.output_file = Some(PathBuf::from(output_name));
-    let timer = JobTimer::new(Instant::now());
-    fontc::run(args, timer).map_err(|e| format!("Failed to compile font: {e}"))?;
-    Ok(())
 }
 
 #[cfg(test)]

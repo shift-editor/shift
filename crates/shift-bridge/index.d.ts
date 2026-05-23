@@ -14,6 +14,7 @@ export declare class Bridge {
   createFont(): void
   loadFont(path: string): void
   saveFont(path: string): Promise<number>
+  exportFont(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
   getGlyphCount(): number
@@ -55,6 +56,16 @@ export declare class Bridge {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface NapiFontExportRequest {
+  path: string
+  format: string
+}
+
+export interface NapiFontExportResult {
+  path: string
+  format: string
 }
 
 export interface NapiGlyphVariationDiagnostic {

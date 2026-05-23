@@ -540,6 +540,10 @@ export class Font {
     return this.#bridge.saveFont(path);
   }
 
+  async export(path: string): Promise<void> {
+    await this.#bridge.exportFont({ path, format: "ttf" });
+  }
+
   /** @knipclassignore — called when closing a document */
   close(): void {
     this.#$loaded.set(false);
