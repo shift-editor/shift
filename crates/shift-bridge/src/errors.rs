@@ -23,11 +23,11 @@ pub enum BridgeError {
 pub fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
-    | BridgeError::Backend(BackendError::MissingExtension)
-    | BridgeError::Backend(BackendError::InvalidPathUtf8)
-    | BridgeError::Backend(BackendError::InvalidExtensionUtf8)
-    | BridgeError::Backend(BackendError::UnsupportedFormat(_))
-    | BridgeError::Backend(BackendError::UnsupportedWriteFormat(_)) => Status::InvalidArg,
+    | BridgeError::Backend(BackendError::MissingExtension { .. })
+    | BridgeError::Backend(BackendError::InvalidPathUtf8 { .. })
+    | BridgeError::Backend(BackendError::InvalidExtensionUtf8 { .. })
+    | BridgeError::Backend(BackendError::UnsupportedFormat { .. })
+    | BridgeError::Backend(BackendError::UnsupportedWriteFormat { .. }) => Status::InvalidArg,
     BridgeError::NoActiveEdit
     | BridgeError::ActiveEditAlreadyExists
     | BridgeError::Core(_)

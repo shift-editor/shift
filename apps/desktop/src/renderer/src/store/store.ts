@@ -100,6 +100,7 @@ const AppState = create<AppState>()(createStore);
 
 export const getDocument = () => AppState.getState().document;
 export const getEditor = () => AppState.getState().editor;
+export const markDocumentDirty = () => AppState.getState().markDirty();
 
 // Expose editor on window for Playwright E2E tests.
 declare const __PLAYWRIGHT__: boolean | undefined;

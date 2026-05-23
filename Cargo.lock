@@ -1634,6 +1634,7 @@ dependencies = [
  "glyphs-reader",
  "norad 0.16.0",
  "plist",
+ "quick-xml",
  "shift-ir",
  "skrifa",
  "tempfile",

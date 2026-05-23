@@ -1,5 +1,6 @@
 import type { GlyphCategory } from "@shift/glyph-info";
 import type { SVG } from "@/types/common";
+
 import LetterIcon from "@/assets/sidebar-left/letters.svg";
 import MarkIcon from "@/assets/sidebar-left/marks.svg";
 import NumberIcon from "@/assets/sidebar-left/numbers.svg";

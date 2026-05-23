@@ -7,6 +7,7 @@ export const WorkspaceLayout = () => {
     <div className="h-full w-full">
       <Routes>
         <Route path="/home" element={<Home />} />
+        <Route path="/editor/glyph/:glyphName" element={<Editor />} />
         <Route path="/editor/:glyphId" element={<Editor />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

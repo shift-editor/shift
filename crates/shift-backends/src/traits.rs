@@ -1,3 +1,4 @@
+use crate::errors::FormatBackendResult;
 use shift_ir::{
     Axis, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName, Guideline, KerningData,
     Layer, LayerId, LibData, Source,
@@ -72,7 +73,7 @@ impl FontView for Font {
 }
 
 pub trait FontReader: Send + Sync {
-    fn load(&self, path: &str) -> Result<Font, String>;
+    fn load(&self, path: &str) -> FormatBackendResult<Font>;
 
     fn get_glyph(&self, font: &Font, name: &GlyphName) -> Option<Glyph> {
         font.glyph(name).cloned()
@@ -88,7 +89,7 @@ pub trait FontReader: Send + Sync {
 }
 
 pub trait FontWriter: Send + Sync {
-    fn save(&self, font: &Font, path: &str) -> Result<(), String>;
+    fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()>;
 }
 
 pub trait FontBackend: FontReader + FontWriter {}

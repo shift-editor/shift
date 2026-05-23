@@ -6,6 +6,7 @@ use shift_ir::{
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::traits::FontReader;
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -124,9 +125,9 @@ impl Default for GlyphsReader {
 }
 
 impl FontReader for GlyphsReader {
-    fn load(&self, path: &str) -> Result<Font, String> {
-        let glyphs_font =
-            GlyphsFont::load(Path::new(path)).map_err(|e| format!("Failed to load glyphs: {e}"))?;
+    fn load(&self, path: &str) -> FormatBackendResult<Font> {
+        let glyphs_font = GlyphsFont::load(Path::new(path))
+            .map_err(|e| FormatBackendError::Glyphs(e.to_string()))?;
 
         let mut font = Font::empty();
         let default_layer_id = font.default_layer_id();

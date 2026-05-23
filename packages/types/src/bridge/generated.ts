@@ -19,10 +19,12 @@ export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
   saveFont(path: string): Promise<number>
+  exportFont(request: FontExportRequest): Promise<FontExportResult>
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
+  updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void
   getGlyphState(glyphHandle: GlyphHandle, sourceId: SourceId): GlyphState | null
   getGlyphVariationReport(glyphRef: GlyphHandle): GlyphVariationReport | null
   getVariationReports(): Array<GlyphVariationReport>
@@ -59,6 +61,16 @@ export interface BridgeApi {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface FontExportRequest {
+  path: string
+  format: string
+}
+
+export interface FontExportResult {
+  path: string
+  format: string
 }
 
 export interface GlyphVariationDiagnostic {

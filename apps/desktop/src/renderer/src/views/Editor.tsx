@@ -14,9 +14,10 @@ import { useSignalState } from "@/lib/signals";
 import { KeyboardRouter } from "@/lib/keyboard";
 
 import { codepointToHex } from "@/lib/utils/unicode";
+import type { GlyphName } from "@shift/types";
 
 export const Editor = () => {
-  const { glyphId } = useParams();
+  const { glyphId, glyphName } = useParams();
   const editor = getEditor();
 
   const { activeZone } = useFocusZone();
@@ -72,7 +73,7 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [glyphId, activeZone]);
+  }, [glyphId, glyphName, activeZone]);
 
   useEffect(() => {
     const editor = getEditor();
@@ -97,7 +98,7 @@ export const Editor = () => {
     };
   }, []);
 
-  if (!glyphId) return null;
+  if (!glyphId && !glyphName) return null;
 
   return (
     <div className="flex h-screen w-screen min-w-[600px] flex-col bg-white">
@@ -123,7 +124,7 @@ export const Editor = () => {
         <ResizableHandle inset="start" />
         <ResizablePanel id="canvas" order={2} minSize={30}>
           <ZoneContainer zone="canvas" className="h-full">
-            <EditorView glyphId={glyphId} />
+            <EditorView glyphId={glyphId} glyphName={glyphName as GlyphName | undefined} />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle inset="end" />

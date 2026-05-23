@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { getDocument } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
-import { Button } from "@shift/ui";
+import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 
 export const Landing = () => {
@@ -26,7 +26,7 @@ export const Landing = () => {
   };
 
   return (
-    <section className="bg-canvas flex h-screen flex-col items-center justify-center gap-8">
+    <section className="bg-canvas flex h-screen flex-col items-center justify-center gap-4">
       <div className="flex flex-col items-center gap-2">
         <div className="flex items-center gap-2 flex-col">
           <img src={logo} alt="Shift" className="h-16 w-16" />
@@ -43,7 +43,8 @@ export const Landing = () => {
           Load font
         </Button>
       </div>
-      <div className="mt-8">
+      <div className="flex flex-col gap-4 mt-4">
+        <Separator className="bg-secondary/30" />
         <RecentFiles onOpenFile={openFont} />
       </div>
     </section>

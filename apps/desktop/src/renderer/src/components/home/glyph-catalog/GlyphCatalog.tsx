@@ -7,20 +7,24 @@ import {
   Input,
   Search,
 } from "@shift/ui";
+
 import AllIcon from "@/assets/sidebar-left/all.svg";
+import PlusIcon from "@/assets/plus.svg";
+
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalog = () => {
   const {
-    availableUnicodes,
-    filteredUnicodes,
+    availableGlyphs,
+    filteredGlyphs,
     categories,
     query,
     selectedCategory,
     selectedSubCategoryKey,
     setQuery,
+    createQuickGlyph,
     selectAll,
     selectCategory,
     selectSubCategory,
@@ -41,19 +45,30 @@ export const GlyphCatalog = () => {
       <div className="flex-1 overflow-y-auto scrollbar-hidden">
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
-          <span className="text-xs">{`${filteredUnicodes.length}/${availableUnicodes.length}`}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Create glyph"
+            title="Create glyph"
+            onClick={createQuickGlyph}
+          >
+            <PlusIcon className="w-3 h-3 text-muted" />
+          </Button>
         </div>
 
         <div className="w-full">
           <Button
-            className="w-full justify-start"
+            className="w-full justify-between"
             variant="ghost"
             size="sm"
             onClick={selectAll}
             isActive={selectedCategory === null && selectedSubCategoryKey === null}
           >
-            <AllIcon className="w-4 h-4" />
-            <span className="text-sm">All</span>
+            <div className="flex gap-2 items-center justify-center">
+              <AllIcon className="w-4 h-4" />
+              <span className="text-sm">All</span>
+            </div>
+            <span className="text-xs">{`${filteredGlyphs.length}/${availableGlyphs.length}`}</span>
           </Button>
         </div>
 

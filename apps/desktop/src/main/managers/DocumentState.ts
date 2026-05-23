@@ -45,7 +45,7 @@ export class DocumentState {
 
   private isWritableFormat(filePath: string | null): boolean {
     if (!filePath) return false;
-    return filePath.endsWith(".ufo");
+    return filePath.endsWith(".designspace") || filePath.endsWith(".ufo");
   }
 
   async save(saveAs = false): Promise<boolean> {
@@ -56,15 +56,18 @@ export class DocumentState {
     let savePath = this.filePath;
 
     if (!savePath || saveAs || !this.isWritableFormat(savePath)) {
-      let defaultPath = "Untitled.ufo";
+      let defaultPath = "Untitled.designspace";
       if (this.filePath) {
         const baseName = path.basename(this.filePath, path.extname(this.filePath));
-        defaultPath = `${baseName}.ufo`;
+        defaultPath = `${baseName}.designspace`;
       }
 
       const result = await dialog.showSaveDialog({
         defaultPath,
-        filters: [{ name: "UFO Files", extensions: ["ufo"] }],
+        filters: [
+          { name: "Designspace Files", extensions: ["designspace"] },
+          { name: "UFO Files", extensions: ["ufo"] },
+        ],
       });
 
       if (result.canceled || !result.filePath) {
@@ -72,8 +75,8 @@ export class DocumentState {
       }
 
       savePath = result.filePath;
-      if (!savePath.endsWith(".ufo")) {
-        savePath += ".ufo";
+      if (!savePath.endsWith(".designspace") && !savePath.endsWith(".ufo")) {
+        savePath += ".designspace";
       }
     }
 

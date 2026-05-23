@@ -5,18 +5,19 @@ pub use reader::UfoReader;
 pub use writer::UfoWriter;
 
 use crate::traits::{FontReader, FontWriter};
+use crate::FormatBackendResult;
 use shift_ir::Font;
 
 pub struct UfoBackend;
 
 impl FontReader for UfoBackend {
-    fn load(&self, path: &str) -> Result<Font, String> {
+    fn load(&self, path: &str) -> FormatBackendResult<Font> {
         UfoReader::new().load(path)
     }
 }
 
 impl FontWriter for UfoBackend {
-    fn save(&self, font: &Font, path: &str) -> Result<(), String> {
+    fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
         UfoWriter::new().save(font, path)
     }
 }
