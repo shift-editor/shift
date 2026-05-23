@@ -4,6 +4,7 @@ use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
     raw::TableProvider,
+    string::StringId,
     FontRef, MetadataProvider,
 };
 
@@ -132,6 +133,13 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     ir_font.metrics_mut().cap_height = Some(metrics.cap_height.unwrap_or(0.0) as f64);
     ir_font.metrics_mut().x_height = Some(metrics.x_height.unwrap_or(0.0) as f64);
 
+    if let Some(family_name) = localized_string(font, StringId::FAMILY_NAME) {
+        ir_font.metadata_mut().family_name = Some(family_name);
+    }
+    if let Some(style_name) = localized_string(font, StringId::SUBFAMILY_NAME) {
+        ir_font.metadata_mut().style_name = Some(style_name);
+    }
+
     for (unicode, glyph_id) in char_map.mappings() {
         let outline = outlines.get(glyph_id).unwrap();
         let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
@@ -157,6 +165,13 @@ fn font_from_skrifa(font: &FontRef<'_>) -> Font {
     }
 
     ir_font
+}
+
+fn localized_string(font: &FontRef<'_>, id: StringId) -> Option<String> {
+    font.localized_strings(id)
+        .english_or_first()
+        .map(|string| string.to_string())
+        .filter(|string| !string.is_empty())
 }
 
 #[cfg(test)]
