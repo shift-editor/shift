@@ -146,28 +146,9 @@ const SourceEditor = ({ source, axes }: SourceEditorProps) => {
           type="number"
         />
       ))}
-
-      <ReadOnlyField label="Source ID" value={source.id} />
-      <ReadOnlyField label="Layer ID" value={source.layerId} />
-      <ReadOnlyField label="Filename" value={source.filename ?? ""} />
     </div>
   );
 };
-
-interface ReadOnlyFieldProps {
-  label: string;
-  value: string;
-}
-
-const ReadOnlyField = ({ label, value }: ReadOnlyFieldProps) => (
-  <InfoField
-    label={label}
-    value={value}
-    onChange={() => undefined}
-    onCommit={() => undefined}
-    readOnly
-  />
-);
 
 function sourceLocationValues(source: Source, axes: readonly Axis[]): Record<string, number> {
   const values: Record<string, number> = {};

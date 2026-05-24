@@ -90,6 +90,20 @@ describe("font domain model", () => {
     expect(noChange.revision).toBe(result.revision);
   });
 
+  it("updates font metrics through the bridge and refreshes the local snapshot", () => {
+    const font = loadFont();
+    const initialRevision = font.revision;
+
+    const result = font.updateMetrics({
+      ...font.metrics,
+      unitsPerEm: 2048,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.revision).toBeGreaterThan(initialRevision);
+    expect(font.metrics.unitsPerEm).toBe(2048);
+  });
+
   it("exposes component dependency information from glyph records", () => {
     const font = loadFont();
     const bases = font.componentBaseNamesForName("Aacute");

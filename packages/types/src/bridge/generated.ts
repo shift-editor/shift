@@ -24,6 +24,7 @@ export interface BridgeApi {
   getDocumentRevision(): number
   updateMetadata(metadata: FontMetadata): DocumentMutationResult
   getMetrics(): FontMetrics
+  updateMetrics(metrics: FontMetrics): DocumentMutationResult
   getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void

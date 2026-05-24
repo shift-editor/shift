@@ -314,6 +314,10 @@ export class Font {
     return this.#$metadata as Signal<FontMetadata>;
   }
 
+  get metricsCell(): Signal<FontMetrics> {
+    return this.#$metrics as Signal<FontMetrics>;
+  }
+
   get sourcesCell(): Signal<readonly Source[]> {
     return this.#$sources as Signal<readonly Source[]>;
   }
@@ -457,6 +461,19 @@ export class Font {
       ...metadata,
     });
     this.#$metadata.set(this.#bridge.getMetadata());
+    return result;
+  }
+
+  /**
+   * Updates font-wide metrics and refreshes the local metrics snapshot.
+   *
+   * @param metrics - Complete font metrics snapshot to commit.
+   * @returns A mutation result for the committed document revision.
+   * @throws {Error} when the bridge rejects invalid metric values.
+   */
+  updateMetrics(metrics: FontMetrics): DocumentMutationResult {
+    const result = this.#bridge.updateMetrics(metrics);
+    this.#$metrics.set(this.#bridge.getMetrics());
     return result;
   }
 

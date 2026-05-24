@@ -19,6 +19,7 @@ export declare class Bridge {
   getDocumentRevision(): number
   updateMetadata(metadata: NapiFontMetadata): NapiDocumentMutationResult
   getMetrics(): NapiFontMetrics
+  updateMetrics(metrics: NapiFontMetrics): NapiDocumentMutationResult
   getGlyphCount(): number
   getGlyphs(): Array<NapiGlyphRecord>
   updateGlyphIdentity(fromName: GlyphName, name: GlyphName, unicodes: Array<Unicode>): void

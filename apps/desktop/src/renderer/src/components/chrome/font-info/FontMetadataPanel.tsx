@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
 import { getEditor, getWorkingCopy } from "@/store/store";
 import { useSignalState } from "@/lib/signals";
-import type { FontMetadata } from "@shift/types";
+import type { FontMetadata, FontMetrics } from "@shift/types";
 import { InfoField } from "./InfoField";
 import { parseVersion, versionText } from "./version";
 
 export const FontMetadataPanel = () => {
   const editor = getEditor();
   const metadata = useSignalState(editor.font.metadataCell);
-  const [draft, setDraft] = useState(() => metadataDraft(metadata));
+  const metrics = useSignalState(editor.font.metricsCell);
+  const [draft, setDraft] = useState(() => metadataDraft(metadata, metrics));
 
   useEffect(() => {
-    setDraft(metadataDraft(metadata));
-  }, [metadata]);
+    setDraft(metadataDraft(metadata, metrics));
+  }, [metadata, metrics]);
 
-  const updateDraft = (field: MetadataFieldId, value: string) => {
+  const updateDraft = (field: DraftFieldId, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
@@ -27,12 +28,24 @@ export const FontMetadataPanel = () => {
   const commitVersion = (value: string) => {
     const version = parseVersion(value);
     if (!version) {
-      setDraft((current) => ({ ...current, version: versionText(metadata) }));
+      updateDraft("version", versionText(metadata));
       return;
     }
 
     getWorkingCopy().commitMutation(() => {
       editor.font.updateMetadata(version);
+    });
+  };
+
+  const commitUnitsPerEm = (value: string) => {
+    const unitsPerEm = Number.parseFloat(value);
+    if (!Number.isFinite(unitsPerEm) || unitsPerEm <= 0) {
+      updateDraft("unitsPerEm", String(metrics.unitsPerEm));
+      return;
+    }
+
+    getWorkingCopy().commitMutation(() => {
+      editor.font.updateMetrics({ ...metrics, unitsPerEm });
     });
   };
 
@@ -46,6 +59,15 @@ export const FontMetadataPanel = () => {
             value={draft.version}
             onChange={(value) => updateDraft("version", value)}
             onCommit={commitVersion}
+          />
+        ) : field.id === "unitsPerEm" ? (
+          <InfoField
+            key={field.id}
+            label={field.label}
+            value={draft.unitsPerEm}
+            onChange={(value) => updateDraft("unitsPerEm", value)}
+            onCommit={commitUnitsPerEm}
+            type="number"
           />
         ) : (
           <InfoField
@@ -77,6 +99,8 @@ type TextMetadataField =
   | "note";
 
 type MetadataFieldId = TextMetadataField | "version";
+type MetricsFieldId = "unitsPerEm";
+type DraftFieldId = MetadataFieldId | MetricsFieldId;
 
 interface TextField {
   id: TextMetadataField;
@@ -84,12 +108,13 @@ interface TextField {
   multiline?: boolean;
 }
 
-type Field = TextField | { id: "version"; label: string };
+type Field = TextField | { id: "version"; label: string } | { id: "unitsPerEm"; label: string };
 
 const SUPPORTED_FIELDS: readonly Field[] = [
   { id: "familyName", label: "Family name" },
   { id: "styleName", label: "Style name" },
   { id: "version", label: "Version" },
+  { id: "unitsPerEm", label: "Units per em" },
   { id: "copyright", label: "Copyright" },
   { id: "trademark", label: "Trademark" },
   { id: "designer", label: "Designer" },
@@ -102,9 +127,9 @@ const SUPPORTED_FIELDS: readonly Field[] = [
   { id: "note", label: "Note", multiline: true },
 ];
 
-type MetadataDraft = Record<MetadataFieldId, string>;
+type MetadataDraft = Record<DraftFieldId, string>;
 
-function metadataDraft(metadata: FontMetadata): MetadataDraft {
+function metadataDraft(metadata: FontMetadata, metrics: FontMetrics): MetadataDraft {
   return {
     familyName: metadata.familyName ?? "",
     styleName: metadata.styleName ?? "",
@@ -119,5 +144,6 @@ function metadataDraft(metadata: FontMetadata): MetadataDraft {
     licenseUrl: metadata.licenseUrl ?? "",
     note: metadata.note ?? "",
     version: versionText(metadata),
+    unitsPerEm: String(metrics.unitsPerEm),
   };
 }

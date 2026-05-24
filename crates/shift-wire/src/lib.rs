@@ -131,7 +131,7 @@ pub struct DocumentPersistResult {
     pub revision: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetrics {
     pub units_per_em: f64,
@@ -147,6 +147,22 @@ pub struct FontMetrics {
 
 impl From<&IrFontMetrics> for FontMetrics {
     fn from(metrics: &IrFontMetrics) -> Self {
+        Self {
+            units_per_em: metrics.units_per_em,
+            ascender: metrics.ascender,
+            descender: metrics.descender,
+            cap_height: metrics.cap_height,
+            x_height: metrics.x_height,
+            line_gap: metrics.line_gap,
+            italic_angle: metrics.italic_angle,
+            underline_position: metrics.underline_position,
+            underline_thickness: metrics.underline_thickness,
+        }
+    }
+}
+
+impl From<FontMetrics> for IrFontMetrics {
+    fn from(metrics: FontMetrics) -> Self {
         Self {
             units_per_em: metrics.units_per_em,
             ascender: metrics.ascender,

@@ -135,6 +135,44 @@ fn record_persisted_version(persisted_version: &SharedPersistedVersion, version:
   }
 }
 
+fn validate_metrics(metrics: &FontMetrics) -> BridgeResult<()> {
+  if !metrics.units_per_em.is_finite() || metrics.units_per_em <= 0.0 {
+    return Err(BridgeError::InvalidInput {
+      kind: "units per em",
+      value: metrics.units_per_em.to_string(),
+    });
+  }
+
+  validate_metric_value("ascender", metrics.ascender)?;
+  validate_metric_value("descender", metrics.descender)?;
+  validate_optional_metric_value("cap height", metrics.cap_height)?;
+  validate_optional_metric_value("x-height", metrics.x_height)?;
+  validate_optional_metric_value("line gap", metrics.line_gap)?;
+  validate_optional_metric_value("italic angle", metrics.italic_angle)?;
+  validate_optional_metric_value("underline position", metrics.underline_position)?;
+  validate_optional_metric_value("underline thickness", metrics.underline_thickness)?;
+
+  Ok(())
+}
+
+fn validate_metric_value(kind: &'static str, value: f64) -> BridgeResult<()> {
+  if value.is_finite() {
+    return Ok(());
+  }
+
+  Err(BridgeError::InvalidInput {
+    kind,
+    value: value.to_string(),
+  })
+}
+
+fn validate_optional_metric_value(kind: &'static str, value: Option<f64>) -> BridgeResult<()> {
+  match value {
+    Some(value) => validate_metric_value(kind, value),
+    None => Ok(()),
+  }
+}
+
 #[derive(Clone)]
 pub struct FontSaveSnapshot {
   version: DocumentVersion,
@@ -473,6 +511,37 @@ impl Bridge {
   #[napi]
   pub fn get_metrics(&self) -> NapiFontMetrics {
     FontMetrics::from(self.font.metrics()).into()
+  }
+
+  #[napi]
+  pub fn update_metrics(
+    &mut self,
+    metrics: NapiFontMetrics,
+  ) -> errors::Result<NapiDocumentMutationResult> {
+    let next = FontMetrics::from(metrics);
+    validate_metrics(&next)?;
+
+    let current = FontMetrics::from(self.font.metrics());
+    if current == next {
+      return Ok(
+        DocumentMutationResult {
+          changed: false,
+          revision: self.live_version().as_u32(),
+        }
+        .into(),
+      );
+    }
+
+    *self.font.metrics_mut() = next.into();
+    self.mark_committed_changed();
+
+    Ok(
+      DocumentMutationResult {
+        changed: true,
+        revision: self.live_version().as_u32(),
+      }
+      .into(),
+    )
   }
 
   #[napi]
@@ -1395,6 +1464,20 @@ mod tests {
     }
   }
 
+  fn napi_metrics(units_per_em: f64) -> NapiFontMetrics {
+    NapiFontMetrics {
+      units_per_em,
+      ascender: 800.0,
+      descender: -200.0,
+      cap_height: Some(700.0),
+      x_height: Some(500.0),
+      line_gap: None,
+      italic_angle: None,
+      underline_position: None,
+      underline_thickness: None,
+    }
+  }
+
   fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
     eprintln!(
       "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
@@ -1469,6 +1552,33 @@ mod tests {
     let metadata = bridge.get_metadata();
     assert_eq!(metadata.family_name, None);
     assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
+  }
+
+  #[test]
+  fn update_metrics_returns_revision_only_when_data_changes() {
+    let mut bridge = Bridge::new();
+
+    let no_op = bridge.update_metrics(napi_metrics(1000.0)).unwrap();
+    assert!(!no_op.changed);
+    assert_eq!(no_op.revision, 0);
+    assert!(!bridge.is_dirty());
+
+    let changed = bridge.update_metrics(napi_metrics(2048.0)).unwrap();
+    assert!(changed.changed);
+    assert_eq!(changed.revision, 1);
+    assert!(bridge.is_dirty());
+    assert_eq!(bridge.get_metrics().units_per_em, 2048.0);
+  }
+
+  #[test]
+  fn update_metrics_rejects_invalid_units_per_em() {
+    let mut bridge = Bridge::new();
+
+    let result = bridge.update_metrics(napi_metrics(0.0));
+
+    assert!(result.is_err());
+    assert_eq!(bridge.get_metrics().units_per_em, 1000.0);
+    assert!(!bridge.is_dirty());
   }
 
   #[test]
