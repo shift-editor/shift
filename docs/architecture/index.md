@@ -59,6 +59,10 @@ These modules have stricter change rules. Changes affect multiple layers and req
 - **`@shift/types/bridge`** (`packages/types/src/bridge/`) — generated bridge DTO facade sourced from `crates/shift-bridge/index.d.ts`.
 - **`NativeBridge`** (`apps/desktop/src/renderer/src/bridge/`) — the single class wrapping NAPI bindings. All Rust access goes through NativeBridge.
 
+## Architecture Decisions
+
+- [ADR 0001: Font Working Copy Owns Document State](decisions/0001-font-working-copy.md)
+
 ## Validation
 
 Run `python scripts/context-drift-check.py` from the repo root to check for broken links, stale docs, and missing documentation.
