@@ -53,6 +53,31 @@ describe("Bridge", () => {
     ]);
   });
 
+  it("updates metadata and returns explicit revision results", () => {
+    const noOp = bridge.updateMetadata({
+      familyName: "Untitled Font",
+      styleName: "Regular",
+      versionMajor: 1,
+      versionMinor: 0,
+    });
+    expect(noOp).toEqual({ changed: false, revision: 0 });
+    expect(bridge.isDirty()).toBe(false);
+
+    const changed = bridge.updateMetadata({
+      familyName: "Dogfood Sans",
+      styleName: "Text",
+      versionMajor: 1,
+      versionMinor: 0,
+    });
+    expect(changed).toEqual({ changed: true, revision: 1 });
+    expect(bridge.getDocumentRevision()).toBe(1);
+    expect(bridge.isDirty()).toBe(true);
+    expect(bridge.getMetadata()).toMatchObject({
+      familyName: "Dogfood Sans",
+      styleName: "Text",
+    });
+  });
+
   it("saves the active edit snapshot without ending the session", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-save-"));
     try {
@@ -61,9 +86,9 @@ describe("Bridge", () => {
       bridge.addPoint(contourId, 10, 20, "onCurve", false);
 
       const outputPath = join(tempDir, "output.ufo");
-      const savedVersion = await bridge.saveFont(outputPath);
+      const saveResult = await bridge.saveFont(outputPath);
 
-      expect(savedVersion).toBe(2);
+      expect(saveResult).toEqual({ path: outputPath, revision: 2 });
       expect(bridge.hasEditSession()).toBe(true);
       expect(bridge.getPersistedVersion()).toBe(2);
       expect(bridge.isDirty()).toBe(false);
@@ -86,9 +111,9 @@ describe("Bridge", () => {
       bridge.addContour();
 
       const outputPath = join(tempDir, "async-output.ufo");
-      const savedVersion = await bridge.saveFont(outputPath);
+      const saveResult = await bridge.saveFont(outputPath);
 
-      expect(savedVersion).toBe(1);
+      expect(saveResult).toEqual({ path: outputPath, revision: 1 });
       expect(bridge.getPersistedVersion()).toBe(1);
       expect(bridge.isDirty()).toBe(false);
       expect(existsSync(outputPath)).toBe(true);

@@ -32,7 +32,7 @@ pub type GlyphValue = f64;
 
 pub type GlyphValues = Vec<GlyphValue>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
     pub family_name: Option<String>,

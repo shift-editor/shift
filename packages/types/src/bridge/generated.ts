@@ -18,9 +18,11 @@ export type Unicode = number;
 export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
-  saveFont(path: string): Promise<number>
+  saveFont(path: string): Promise<DocumentPersistResult>
   exportFont(request: FontExportRequest): Promise<FontExportResult>
   getMetadata(): FontMetadata
+  getDocumentRevision(): number
+  updateMetadata(metadata: FontMetadata): DocumentMutationResult
   getMetrics(): FontMetrics
   getGlyphCount(): number
   getGlyphs(): Array<GlyphRecord>
@@ -61,6 +63,16 @@ export interface BridgeApi {
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface DocumentMutationResult {
+  changed: boolean
+  revision: number
+}
+
+export interface DocumentPersistResult {
+  path: string
+  revision: number
 }
 
 export interface FontExportRequest {

@@ -48,6 +48,18 @@ pub struct NapiFontExportResult {
   pub format: String,
 }
 
+#[napi(object)]
+pub struct NapiDocumentMutationResult {
+  pub changed: bool,
+  pub revision: u32,
+}
+
+#[napi(object)]
+pub struct NapiDocumentPersistResult {
+  pub path: String,
+  pub revision: u32,
+}
+
 impl TryFrom<NapiFontExportRequest> for FontExportRequest {
   type Error = Error;
 
@@ -248,7 +260,7 @@ pub struct SaveFontTask {
 
 impl Task for SaveFontTask {
   type Output = DocumentVersion;
-  type JsValue = u32;
+  type JsValue = NapiDocumentPersistResult;
 
   fn compute(&mut self) -> Result<Self::Output> {
     let font = self.snapshot.to_font();
@@ -261,7 +273,10 @@ impl Task for SaveFontTask {
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     record_persisted_version(&self.persisted_version, output);
-    Ok(output.as_u32())
+    Ok(NapiDocumentPersistResult {
+      path: self.path.clone(),
+      revision: output.as_u32(),
+    })
   }
 }
 
@@ -407,7 +422,7 @@ impl Bridge {
     Ok(())
   }
 
-  #[napi(ts_return_type = "Promise<number>")]
+  #[napi(ts_return_type = "Promise<NapiDocumentPersistResult>")]
   pub fn save_font(&mut self, path: String) -> AsyncTask<SaveFontTask> {
     AsyncTask::new(SaveFontTask {
       snapshot: self.save_snapshot(),
@@ -430,6 +445,32 @@ impl Bridge {
   #[napi]
   pub fn get_metadata(&self) -> NapiFontMetadata {
     FontMetadata::from(self.font.metadata()).into()
+  }
+
+  #[napi]
+  pub fn get_document_revision(&self) -> u32 {
+    self.live_version().as_u32()
+  }
+
+  #[napi]
+  pub fn update_metadata(&mut self, metadata: NapiFontMetadata) -> NapiDocumentMutationResult {
+    let next = normalize_metadata(metadata);
+    let current = FontMetadata::from(self.font.metadata());
+
+    if current == next {
+      return NapiDocumentMutationResult {
+        changed: false,
+        revision: self.live_version().as_u32(),
+      };
+    }
+
+    apply_metadata(self.font.metadata_mut(), next);
+    self.mark_committed_changed();
+
+    NapiDocumentMutationResult {
+      changed: true,
+      revision: self.live_version().as_u32(),
+    }
   }
 
   #[napi]
@@ -1135,6 +1176,48 @@ impl Bridge {
   }
 }
 
+fn normalize_metadata(metadata: NapiFontMetadata) -> FontMetadata {
+  FontMetadata {
+    family_name: normalize_metadata_string(metadata.family_name),
+    style_name: normalize_metadata_string(metadata.style_name),
+    version_major: metadata.version_major,
+    version_minor: metadata.version_minor,
+    copyright: normalize_metadata_string(metadata.copyright),
+    trademark: normalize_metadata_string(metadata.trademark),
+    designer: normalize_metadata_string(metadata.designer),
+    designer_url: normalize_metadata_string(metadata.designer_url),
+    manufacturer: normalize_metadata_string(metadata.manufacturer),
+    manufacturer_url: normalize_metadata_string(metadata.manufacturer_url),
+    license: normalize_metadata_string(metadata.license),
+    license_url: normalize_metadata_string(metadata.license_url),
+    description: normalize_metadata_string(metadata.description),
+    note: normalize_metadata_string(metadata.note),
+  }
+}
+
+fn normalize_metadata_string(value: Option<String>) -> Option<String> {
+  value
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+}
+
+fn apply_metadata(target: &mut shift_ir::FontMetadata, metadata: FontMetadata) {
+  target.family_name = metadata.family_name;
+  target.style_name = metadata.style_name;
+  target.version_major = metadata.version_major;
+  target.version_minor = metadata.version_minor;
+  target.copyright = metadata.copyright;
+  target.trademark = metadata.trademark;
+  target.designer = metadata.designer;
+  target.designer_url = metadata.designer_url;
+  target.manufacturer = metadata.manufacturer;
+  target.manufacturer_url = metadata.manufacturer_url;
+  target.license = metadata.license;
+  target.license_url = metadata.license_url;
+  target.description = metadata.description;
+  target.note = metadata.note;
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1212,6 +1295,25 @@ mod tests {
     bridge.get_sources()[0].id.clone()
   }
 
+  fn napi_metadata(family_name: &str, style_name: &str) -> NapiFontMetadata {
+    NapiFontMetadata {
+      family_name: Some(family_name.to_string()),
+      style_name: Some(style_name.to_string()),
+      version_major: Some(1),
+      version_minor: Some(0),
+      copyright: None,
+      trademark: None,
+      designer: None,
+      designer_url: None,
+      manufacturer: None,
+      manufacturer_url: None,
+      license: None,
+      license_url: None,
+      description: None,
+      note: None,
+    }
+  }
+
   fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
     eprintln!(
       "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
@@ -1239,6 +1341,53 @@ mod tests {
     assert_eq!(metrics.units_per_em, 1000.0);
     assert_eq!(metrics.ascender, 800.0);
     assert_eq!(metrics.descender, -200.0);
+  }
+
+  #[test]
+  fn update_metadata_returns_revision_only_when_data_changes() {
+    let mut bridge = Bridge::new();
+
+    let no_op = bridge.update_metadata(napi_metadata("Untitled Font", "Regular"));
+    assert!(!no_op.changed);
+    assert_eq!(no_op.revision, 0);
+    assert!(!bridge.is_dirty());
+
+    let changed = bridge.update_metadata(napi_metadata("Dogfood Sans", "Text"));
+    assert!(changed.changed);
+    assert_eq!(changed.revision, 1);
+    assert!(bridge.is_dirty());
+
+    let metadata = bridge.get_metadata();
+    assert_eq!(metadata.family_name.as_deref(), Some("Dogfood Sans"));
+    assert_eq!(metadata.style_name.as_deref(), Some("Text"));
+  }
+
+  #[test]
+  fn update_metadata_normalizes_empty_strings_to_absent_values() {
+    let mut bridge = Bridge::new();
+
+    let changed = bridge.update_metadata(NapiFontMetadata {
+      family_name: Some("  ".to_string()),
+      style_name: Some(" Regular  ".to_string()),
+      version_major: Some(1),
+      version_minor: Some(0),
+      copyright: None,
+      trademark: None,
+      designer: None,
+      designer_url: None,
+      manufacturer: None,
+      manufacturer_url: None,
+      license: None,
+      license_url: None,
+      description: None,
+      note: None,
+    });
+
+    assert!(changed.changed);
+    assert_eq!(changed.revision, 1);
+    let metadata = bridge.get_metadata();
+    assert_eq!(metadata.family_name, None);
+    assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
   }
 
   #[test]

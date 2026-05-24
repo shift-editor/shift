@@ -5,6 +5,8 @@ export type {
   BridgeApi,
   ComponentData,
   ContourData,
+  DocumentMutationResult,
+  DocumentPersistResult,
   FontMetadata,
   FontMetrics,
   GlyphChangedEntities,

@@ -10,6 +10,8 @@ import type {
   GlyphName,
   SourceId,
   Unicode,
+  DocumentMutationResult,
+  DocumentPersistResult,
 } from "@shift/types";
 import { computed, signal, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import { Glyph, type GlyphSource } from "./Glyph";
@@ -303,6 +305,10 @@ export class Font {
     return this.#bridge.getMetadata();
   }
 
+  get revision(): number {
+    return this.#bridge.getDocumentRevision();
+  }
+
   get bridge(): ShiftBridge {
     return this.#bridge;
   }
@@ -430,6 +436,10 @@ export class Font {
     this.#glyphs.clear();
     this.#glyphSources.clear();
     this.#hydrateFromBridge();
+  }
+
+  updateMetadata(metadata: FontMetadata): DocumentMutationResult {
+    return this.#bridge.updateMetadata(metadata);
   }
 
   /**
@@ -722,7 +732,7 @@ export class Font {
     this.#hydrateFromBridge();
   }
 
-  async save(path: string): Promise<number> {
+  async save(path: string): Promise<DocumentPersistResult> {
     return this.#bridge.saveFont(path);
   }
 

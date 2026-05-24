@@ -1,5 +1,12 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
-import type { PointId, ContourId, Source, SourceId, GlyphName } from "@shift/types";
+import type {
+  PointId,
+  ContourId,
+  Source,
+  SourceId,
+  GlyphName,
+  DocumentPersistResult,
+} from "@shift/types";
 import type { AxisLocation } from "@/types/variation";
 import type { Coordinates } from "@/types/coordinates";
 import type { Glyph, GlyphInstance, GlyphSource } from "@/lib/model/Glyph";
@@ -1129,7 +1136,7 @@ export class Editor {
     this.setDesignLocation(emptyAxisLocation());
   }
 
-  public async saveFont(filePath: string): Promise<number> {
+  public async saveFont(filePath: string): Promise<DocumentPersistResult> {
     return this.font.save(filePath);
   }
 
