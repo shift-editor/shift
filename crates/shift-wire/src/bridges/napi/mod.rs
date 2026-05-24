@@ -5,10 +5,10 @@ use napi_derive::napi;
 use shift_ir::PointType as IrPointType;
 
 use crate::{
-    AnchorData, Axis, AxisTent, ComponentData, ContourData, FontMetadata, FontMetrics,
-    GlyphChangedEntities, GlyphMaster, GlyphRecord, GlyphState, GlyphStructure,
-    GlyphStructureChange, GlyphValueChange, GlyphVariationData, Location, PointData, PointType,
-    Source,
+    AnchorData, Axis, AxisTent, ComponentData, ContourData, DocumentMutationResult,
+    DocumentPersistResult, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphMaster,
+    GlyphRecord, GlyphState, GlyphStructure, GlyphStructureChange, GlyphValueChange,
+    GlyphVariationData, Location, PointData, PointType, Source,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -78,6 +78,57 @@ impl From<FontMetadata> for NapiFontMetadata {
             license_url: metadata.license_url,
             description: metadata.description,
             note: metadata.note,
+        }
+    }
+}
+
+impl From<NapiFontMetadata> for FontMetadata {
+    fn from(metadata: NapiFontMetadata) -> Self {
+        Self {
+            family_name: metadata.family_name,
+            style_name: metadata.style_name,
+            version_major: metadata.version_major,
+            version_minor: metadata.version_minor,
+            copyright: metadata.copyright,
+            trademark: metadata.trademark,
+            designer: metadata.designer,
+            designer_url: metadata.designer_url,
+            manufacturer: metadata.manufacturer,
+            manufacturer_url: metadata.manufacturer_url,
+            license: metadata.license,
+            license_url: metadata.license_url,
+            description: metadata.description,
+            note: metadata.note,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiDocumentMutationResult {
+    pub changed: bool,
+    pub revision: u32,
+}
+
+impl From<DocumentMutationResult> for NapiDocumentMutationResult {
+    fn from(result: DocumentMutationResult) -> Self {
+        Self {
+            changed: result.changed,
+            revision: result.revision,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiDocumentPersistResult {
+    pub path: String,
+    pub revision: u32,
+}
+
+impl From<DocumentPersistResult> for NapiDocumentPersistResult {
+    fn from(result: DocumentPersistResult) -> Self {
+        Self {
+            path: result.path,
+            revision: result.revision,
         }
     }
 }

@@ -51,6 +51,24 @@ pub struct FontMetadata {
     pub note: Option<String>,
 }
 
+impl FontMetadata {
+    pub fn normalized(mut self) -> Self {
+        self.family_name = normalize_metadata_string(self.family_name);
+        self.style_name = normalize_metadata_string(self.style_name);
+        self.copyright = normalize_metadata_string(self.copyright);
+        self.trademark = normalize_metadata_string(self.trademark);
+        self.designer = normalize_metadata_string(self.designer);
+        self.designer_url = normalize_metadata_string(self.designer_url);
+        self.manufacturer = normalize_metadata_string(self.manufacturer);
+        self.manufacturer_url = normalize_metadata_string(self.manufacturer_url);
+        self.license = normalize_metadata_string(self.license);
+        self.license_url = normalize_metadata_string(self.license_url);
+        self.description = normalize_metadata_string(self.description);
+        self.note = normalize_metadata_string(self.note);
+        self
+    }
+}
+
 impl From<&IrFontMetadata> for FontMetadata {
     fn from(metadata: &IrFontMetadata) -> Self {
         Self {
@@ -70,6 +88,47 @@ impl From<&IrFontMetadata> for FontMetadata {
             note: metadata.note.clone(),
         }
     }
+}
+
+impl From<FontMetadata> for IrFontMetadata {
+    fn from(metadata: FontMetadata) -> Self {
+        Self {
+            family_name: metadata.family_name,
+            style_name: metadata.style_name,
+            version_major: metadata.version_major,
+            version_minor: metadata.version_minor,
+            copyright: metadata.copyright,
+            trademark: metadata.trademark,
+            designer: metadata.designer,
+            designer_url: metadata.designer_url,
+            manufacturer: metadata.manufacturer,
+            manufacturer_url: metadata.manufacturer_url,
+            license: metadata.license,
+            license_url: metadata.license_url,
+            description: metadata.description,
+            note: metadata.note,
+        }
+    }
+}
+
+fn normalize_metadata_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentMutationResult {
+    pub changed: bool,
+    pub revision: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPersistResult {
+    pub path: String,
+    pub revision: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -491,4 +550,38 @@ fn push_transform_values(values: &mut Vec<f64>, transform: &IrTransform) {
     values.push(transform.skew_y);
     values.push(transform.t_center_x);
     values.push(transform.t_center_y);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn font_metadata_normalization_trims_strings_and_removes_empty_values() {
+        let metadata = FontMetadata {
+            family_name: Some("  Test Sans  ".to_string()),
+            style_name: Some("   ".to_string()),
+            version_major: Some(1),
+            version_minor: Some(0),
+            copyright: None,
+            trademark: None,
+            designer: Some(" Designer ".to_string()),
+            designer_url: None,
+            manufacturer: None,
+            manufacturer_url: None,
+            license: None,
+            license_url: None,
+            description: Some("\nDescription\t".to_string()),
+            note: Some("".to_string()),
+        }
+        .normalized();
+
+        assert_eq!(metadata.family_name.as_deref(), Some("Test Sans"));
+        assert_eq!(metadata.style_name, None);
+        assert_eq!(metadata.designer.as_deref(), Some("Designer"));
+        assert_eq!(metadata.description.as_deref(), Some("Description"));
+        assert_eq!(metadata.note, None);
+        assert_eq!(metadata.version_major, Some(1));
+        assert_eq!(metadata.version_minor, Some(0));
+    }
 }

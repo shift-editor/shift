@@ -15,11 +15,13 @@ use shift_edit::{
 };
 use shift_wire::{
   bridges::napi::{
-    NapiAxis, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphState,
-    NapiGlyphStructure, NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
+    NapiAxis, NapiDocumentMutationResult, NapiDocumentPersistResult, NapiFontMetadata,
+    NapiFontMetrics, NapiGlyphRecord, NapiGlyphState, NapiGlyphStructure, NapiGlyphStructureChange,
+    NapiGlyphValueChange, NapiPointType, NapiSource,
   },
-  Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
-  GlyphStructureChange, GlyphValueChange, Source,
+  Axis, DocumentMutationResult, DocumentPersistResult, FontMetadata, FontMetrics,
+  GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure, GlyphStructureChange,
+  GlyphValueChange, Source,
 };
 use std::sync::{
   atomic::{AtomicU64, Ordering},
@@ -46,18 +48,6 @@ pub struct NapiFontExportRequest {
 pub struct NapiFontExportResult {
   pub path: String,
   pub format: String,
-}
-
-#[napi(object)]
-pub struct NapiDocumentMutationResult {
-  pub changed: bool,
-  pub revision: u32,
-}
-
-#[napi(object)]
-pub struct NapiDocumentPersistResult {
-  pub path: String,
-  pub revision: u32,
 }
 
 impl TryFrom<NapiFontExportRequest> for FontExportRequest {
@@ -273,10 +263,13 @@ impl Task for SaveFontTask {
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
     record_persisted_version(&self.persisted_version, output);
-    Ok(NapiDocumentPersistResult {
-      path: self.path.clone(),
-      revision: output.as_u32(),
-    })
+    Ok(
+      DocumentPersistResult {
+        path: self.path.clone(),
+        revision: output.as_u32(),
+      }
+      .into(),
+    )
   }
 }
 
@@ -454,23 +447,25 @@ impl Bridge {
 
   #[napi]
   pub fn update_metadata(&mut self, metadata: NapiFontMetadata) -> NapiDocumentMutationResult {
-    let next = normalize_metadata(metadata);
+    let next = FontMetadata::from(metadata).normalized();
     let current = FontMetadata::from(self.font.metadata());
 
     if current == next {
-      return NapiDocumentMutationResult {
+      return DocumentMutationResult {
         changed: false,
         revision: self.live_version().as_u32(),
-      };
+      }
+      .into();
     }
 
-    apply_metadata(self.font.metadata_mut(), next);
+    *self.font.metadata_mut() = next.into();
     self.mark_committed_changed();
 
-    NapiDocumentMutationResult {
+    DocumentMutationResult {
       changed: true,
       revision: self.live_version().as_u32(),
     }
+    .into()
   }
 
   #[napi]
@@ -1174,48 +1169,6 @@ impl Bridge {
     self.mark_active_edit_changed();
     Ok(change.into())
   }
-}
-
-fn normalize_metadata(metadata: NapiFontMetadata) -> FontMetadata {
-  FontMetadata {
-    family_name: normalize_metadata_string(metadata.family_name),
-    style_name: normalize_metadata_string(metadata.style_name),
-    version_major: metadata.version_major,
-    version_minor: metadata.version_minor,
-    copyright: normalize_metadata_string(metadata.copyright),
-    trademark: normalize_metadata_string(metadata.trademark),
-    designer: normalize_metadata_string(metadata.designer),
-    designer_url: normalize_metadata_string(metadata.designer_url),
-    manufacturer: normalize_metadata_string(metadata.manufacturer),
-    manufacturer_url: normalize_metadata_string(metadata.manufacturer_url),
-    license: normalize_metadata_string(metadata.license),
-    license_url: normalize_metadata_string(metadata.license_url),
-    description: normalize_metadata_string(metadata.description),
-    note: normalize_metadata_string(metadata.note),
-  }
-}
-
-fn normalize_metadata_string(value: Option<String>) -> Option<String> {
-  value
-    .map(|value| value.trim().to_string())
-    .filter(|value| !value.is_empty())
-}
-
-fn apply_metadata(target: &mut shift_ir::FontMetadata, metadata: FontMetadata) {
-  target.family_name = metadata.family_name;
-  target.style_name = metadata.style_name;
-  target.version_major = metadata.version_major;
-  target.version_minor = metadata.version_minor;
-  target.copyright = metadata.copyright;
-  target.trademark = metadata.trademark;
-  target.designer = metadata.designer;
-  target.designer_url = metadata.designer_url;
-  target.manufacturer = metadata.manufacturer;
-  target.manufacturer_url = metadata.manufacturer_url;
-  target.license = metadata.license;
-  target.license_url = metadata.license_url;
-  target.description = metadata.description;
-  target.note = metadata.note;
 }
 
 #[cfg(test)]
