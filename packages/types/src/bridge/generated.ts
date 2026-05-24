@@ -65,16 +65,6 @@ export interface GlyphHandle {
   unicode?: Unicode
 }
 
-export interface DocumentMutationResult {
-  changed: boolean
-  revision: number
-}
-
-export interface DocumentPersistResult {
-  path: string
-  revision: number
-}
-
 export interface FontExportRequest {
   path: string
   format: string
@@ -138,6 +128,16 @@ export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+export interface DocumentMutationResult {
+  changed: boolean
+  revision: number
+}
+
+export interface DocumentPersistResult {
+  path: string
+  revision: number
 }
 
 export interface FontMetadata {

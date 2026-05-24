@@ -60,16 +60,6 @@ export interface GlyphHandle {
   unicode?: Unicode
 }
 
-export interface NapiDocumentMutationResult {
-  changed: boolean
-  revision: number
-}
-
-export interface NapiDocumentPersistResult {
-  path: string
-  revision: number
-}
-
 export interface NapiFontExportRequest {
   path: string
   format: string
@@ -133,6 +123,16 @@ export interface NapiContourData {
   id: ContourId
   points: Array<NapiPointData>
   closed: boolean
+}
+
+export interface NapiDocumentMutationResult {
+  changed: boolean
+  revision: number
+}
+
+export interface NapiDocumentPersistResult {
+  path: string
+  revision: number
 }
 
 export interface NapiFontMetadata {
