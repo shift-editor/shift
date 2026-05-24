@@ -59,7 +59,7 @@ export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
 
 const FontPanel = () => {
   const editor = getEditor();
-  const metadata = useSignalState(editor.font.$metadata);
+  const metadata = useSignalState(editor.font.metadataCell);
   const [draft, setDraft] = useState(() => metadataDraft(metadata));
 
   useEffect(() => {

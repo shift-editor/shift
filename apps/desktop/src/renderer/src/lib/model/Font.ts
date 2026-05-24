@@ -307,7 +307,7 @@ export class Font {
     return this.#$metadata.peek();
   }
 
-  get $metadata(): Signal<FontMetadata> {
+  get metadataCell(): Signal<FontMetadata> {
     return this.#$metadata as Signal<FontMetadata>;
   }
 

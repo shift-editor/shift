@@ -36,19 +36,22 @@ export class FontWorkingCopy {
   readonly #notifySaveCompleted: (path: string) => Promise<void> | void;
   readonly #effects: Effect[];
 
-  readonly #$identity = signal<DocumentIdentity | null>(null, { name: "workingCopy.identity" });
-  readonly #$filePath = signal<string | null>(null, { name: "workingCopy.filePath" });
-  readonly #$currentRevision = signal(0, { name: "workingCopy.currentRevision" });
-  readonly #$savedRevision = signal(0, { name: "workingCopy.savedRevision" });
-  readonly #$saving = signal(false, { name: "workingCopy.saving" });
-  readonly #$exporting = signal(false, { name: "workingCopy.exporting" });
+  readonly #identityCell = signal<DocumentIdentity | null>(null, { name: "workingCopy.identity" });
+  readonly #filePathCell = signal<string | null>(null, { name: "workingCopy.filePath" });
+  readonly #currentRevisionCell = signal(0, { name: "workingCopy.currentRevision" });
+  readonly #savedRevisionCell = signal(0, { name: "workingCopy.savedRevision" });
+  readonly #savingCell = signal(false, { name: "workingCopy.saving" });
+  readonly #exportingCell = signal(false, { name: "workingCopy.exporting" });
 
-  readonly #$fileName = computed(() => fileNameFromPath(this.#$filePath.value), {
+  readonly #fileNameCell = computed(() => fileNameFromPath(this.#filePathCell.value), {
     name: "workingCopy.fileName",
   });
-  readonly #$dirty = computed(() => this.#$savedRevision.value < this.#$currentRevision.value, {
-    name: "workingCopy.dirty",
-  });
+  readonly #dirtyCell = computed(
+    () => this.#savedRevisionCell.value < this.#currentRevisionCell.value,
+    {
+      name: "workingCopy.dirty",
+    },
+  );
 
   constructor(editor: Editor, services: FontWorkingCopyServices) {
     this.editor = editor;
@@ -62,68 +65,142 @@ export class FontWorkingCopy {
 
     this.#effects = [
       effect(() => {
-        if (services.setNativeFilePath) services.setNativeFilePath(this.#$filePath.value);
+        if (services.setNativeFilePath) services.setNativeFilePath(this.#filePathCell.value);
       }),
       effect(() => {
-        if (services.setNativeDirty) services.setNativeDirty(this.#$dirty.value);
+        if (services.setNativeDirty) services.setNativeDirty(this.#dirtyCell.value);
       }),
     ];
   }
 
+  /**
+   * Returns the current document identity as a snapshot.
+   *
+   * @returns null when no font document is loaded.
+   * @see {@link identityCell}
+   */
   get identity(): DocumentIdentity | null {
-    return this.#$identity.peek();
+    return this.#identityCell.peek();
   }
 
-  get $identity(): Signal<DocumentIdentity | null> {
-    return this.#$identity;
+  /**
+   * Reactive document identity for UI and host-shell projections.
+   *
+   * @remarks
+   * Cells expose live reactive state. Read `.value` inside computed/effect
+   * contexts or use `useSignalState`; use `.peek()` or {@link identity} for
+   * non-reactive reads.
+   */
+  get identityCell(): Signal<DocumentIdentity | null> {
+    return this.#identityCell;
   }
 
+  /**
+   * Returns the current file path as a snapshot.
+   *
+   * @returns null for untitled documents and when no document is loaded.
+   * @see {@link filePathCell}
+   */
   get filePath(): string | null {
-    return this.#$filePath.peek();
+    return this.#filePathCell.peek();
   }
 
-  get $filePath(): Signal<string | null> {
-    return this.#$filePath;
+  /**
+   * Reactive path for the loaded file-backed document.
+   *
+   * @remarks
+   * Untitled documents publish `null` until saved to a path.
+   */
+  get filePathCell(): Signal<string | null> {
+    return this.#filePathCell;
   }
 
+  /**
+   * Returns the current display file name as a snapshot.
+   *
+   * @returns null when the working copy has no file path.
+   * @see {@link fileNameCell}
+   */
   get fileName(): string | null {
-    return this.#$fileName.peek();
+    return this.#fileNameCell.peek();
   }
 
-  get $fileName(): Signal<string | null> {
-    return this.#$fileName;
+  /**
+   * Reactive display file name derived from {@link filePathCell}.
+   */
+  get fileNameCell(): Signal<string | null> {
+    return this.#fileNameCell;
   }
 
+  /**
+   * Returns the live document revision as a snapshot.
+   *
+   * @see {@link currentRevisionCell}
+   */
   get currentRevision(): number {
-    return this.#$currentRevision.peek();
+    return this.#currentRevisionCell.peek();
   }
 
-  get $currentRevision(): Signal<number> {
-    return this.#$currentRevision;
+  /**
+   * Reactive revision of the in-memory document state.
+   *
+   * @remarks
+   * This advances after committed bridge mutations. Dirty state is derived by
+   * comparing it with {@link savedRevisionCell}.
+   */
+  get currentRevisionCell(): Signal<number> {
+    return this.#currentRevisionCell;
   }
 
+  /**
+   * Returns the last persisted document revision as a snapshot.
+   *
+   * @see {@link savedRevisionCell}
+   */
   get savedRevision(): number {
-    return this.#$savedRevision.peek();
+    return this.#savedRevisionCell.peek();
   }
 
-  get $savedRevision(): Signal<number> {
-    return this.#$savedRevision;
+  /**
+   * Reactive revision that last completed a save.
+   */
+  get savedRevisionCell(): Signal<number> {
+    return this.#savedRevisionCell;
   }
 
+  /**
+   * Returns whether the working copy has unsaved committed changes.
+   *
+   * @see {@link dirtyCell}
+   */
   get dirty(): boolean {
-    return this.#$dirty.peek();
+    return this.#dirtyCell.peek();
   }
 
-  get $dirty(): Signal<boolean> {
-    return this.#$dirty;
+  /**
+   * Reactive dirty state derived from current and saved revisions.
+   *
+   * @remarks
+   * This is not mutable state. A save only clears dirty when the saved revision
+   * catches up to the current revision, so edits that land during a save keep
+   * the document dirty.
+   */
+  get dirtyCell(): Signal<boolean> {
+    return this.#dirtyCell;
   }
 
-  get $saving(): Signal<boolean> {
-    return this.#$saving;
+  /**
+   * Reactive flag for an in-flight save operation.
+   */
+  get savingCell(): Signal<boolean> {
+    return this.#savingCell;
   }
 
-  get $exporting(): Signal<boolean> {
-    return this.#$exporting;
+  /**
+   * Reactive flag for an in-flight export operation.
+   */
+  get exportingCell(): Signal<boolean> {
+    return this.#exportingCell;
   }
 
   get loaded(): boolean {
@@ -131,7 +208,7 @@ export class FontWorkingCopy {
   }
 
   recordCurrentRevision(): void {
-    this.#$currentRevision.set(this.editor.font.revision);
+    this.#currentRevisionCell.set(this.editor.font.revision);
   }
 
   commitMutation<TResult>(mutate: () => TResult): TResult {
@@ -148,10 +225,10 @@ export class FontWorkingCopy {
     const revision = this.editor.font.revision;
 
     batch(() => {
-      this.#$identity.set({ kind: "untitled", id });
-      this.#$filePath.set(null);
-      this.#$currentRevision.set(revision);
-      this.#$savedRevision.set(revision);
+      this.#identityCell.set({ kind: "untitled", id });
+      this.#filePathCell.set(null);
+      this.#currentRevisionCell.set(revision);
+      this.#savedRevisionCell.set(revision);
     });
 
     this.#persistence.openUntitledDocument(id);
@@ -165,10 +242,10 @@ export class FontWorkingCopy {
     const revision = this.editor.font.revision;
 
     batch(() => {
-      this.#$identity.set({ kind: "file", path });
-      this.#$filePath.set(path);
-      this.#$currentRevision.set(revision);
-      this.#$savedRevision.set(revision);
+      this.#identityCell.set({ kind: "file", path });
+      this.#filePathCell.set(path);
+      this.#currentRevisionCell.set(revision);
+      this.#savedRevisionCell.set(revision);
     });
 
     this.#persistence.openDocument(path);
@@ -176,35 +253,35 @@ export class FontWorkingCopy {
   }
 
   async saveFont(path?: string): Promise<void> {
-    const identity = this.#$identity.peek();
+    const identity = this.#identityCell.peek();
     const savePath = path ?? (identity?.kind === "file" ? identity.path : null);
     if (!savePath) {
       throw new Error("Cannot save an untitled document without a file path");
     }
 
-    this.#$saving.set(true);
+    this.#savingCell.set(true);
     try {
       const result = await this.editor.saveFont(savePath);
       batch(() => {
-        this.#$identity.set({ kind: "file", path: result.path });
-        this.#$filePath.set(result.path);
-        this.#$savedRevision.set(result.revision);
+        this.#identityCell.set({ kind: "file", path: result.path });
+        this.#filePathCell.set(result.path);
+        this.#savedRevisionCell.set(result.revision);
       });
 
       this.#persistence.onDocumentPathChanged(result.path);
       this.#persistence.flushNow();
       await this.#notifySaveCompleted(result.path);
     } finally {
-      this.#$saving.set(false);
+      this.#savingCell.set(false);
     }
   }
 
   async exportFont(path: string): Promise<void> {
-    this.#$exporting.set(true);
+    this.#exportingCell.set(true);
     try {
       await this.editor.exportFont(path);
     } finally {
-      this.#$exporting.set(false);
+      this.#exportingCell.set(false);
     }
   }
 
@@ -212,10 +289,10 @@ export class FontWorkingCopy {
     this.#persistence.closeDocument();
     this.editor.closeFont();
     batch(() => {
-      this.#$identity.set(null);
-      this.#$filePath.set(null);
-      this.#$currentRevision.set(0);
-      this.#$savedRevision.set(0);
+      this.#identityCell.set(null);
+      this.#filePathCell.set(null);
+      this.#currentRevisionCell.set(0);
+      this.#savedRevisionCell.set(0);
     });
   }
 

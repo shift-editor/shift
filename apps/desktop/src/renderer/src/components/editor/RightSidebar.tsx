@@ -13,7 +13,7 @@ import { BooleanOps } from "./BooleanOps";
 export const RightSidebar = () => {
   const editor = getEditor();
   const zoom = useSignalState(editor.zoomCell);
-  const metadata = useSignalState(editor.font.$metadata);
+  const metadata = useSignalState(editor.font.metadataCell);
   const zoomPercent = Math.round(zoom * 100);
 
   const [hasPointSelection, setHasPointSelection] = useState(false);
