@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import {
+  Button,
   Dialog,
   DialogBackdrop,
   DialogClose,
@@ -30,12 +31,21 @@ export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
         <DialogBackdrop />
         <DialogPopup
           className={cn(
-            "fixed inset-8 left-8 top-8 max-w-none translate-x-0 translate-y-0 max-w-[640px] max-h-[800px] m-auto",
-            "overflow-hidden rounded-lg border border-line-subtle bg-canvas",
+            "fixed inset-8 left-8 top-8 max-w-none translate-x-0 translate-y-0 max-w-[1200px] max-h-[800px] m-auto",
+            "grid grid-cols-[200px_minmax(0,1fr)] overflow-hidden rounded-lg border border-line-subtle",
             "shadow-lg",
           )}
         >
-          <section className="relative p-6 overflow-auto">
+          <nav className="flex flex-col gap-1 items-start bg-white p-2">
+            <Button
+              variant="ghost"
+              className="w-full justify-start p-0 pl-2 font-medium text-primary"
+            >
+              Font information
+            </Button>
+          </nav>
+
+          <section className="relative bg-canvas p-6 overflow-auto">
             <DialogClose
               className={cn(
                 "absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center cursor-pointer",
