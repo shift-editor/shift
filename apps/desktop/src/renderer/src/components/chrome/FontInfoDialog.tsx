@@ -1,6 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import {
-  Button,
   Dialog,
   DialogBackdrop,
   DialogClose,
@@ -20,19 +19,8 @@ interface FontInfoDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type CategoryId = "general" | "font" | "sources" | "features" | "shortcuts";
-
-const CATEGORIES: { id: CategoryId; label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "font", label: "Font" },
-  { id: "sources", label: "Sources" },
-  { id: "features", label: "Features" },
-  { id: "shortcuts", label: "Shortcuts" },
-];
-
 export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
   const editor = getEditor();
-  const [category, setCategory] = useState<CategoryId>("font");
 
   if (!editor.font.loaded) return null;
 
@@ -42,30 +30,12 @@ export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
         <DialogBackdrop />
         <DialogPopup
           className={cn(
-            "fixed inset-8 left-8 top-8 max-w-none translate-x-0 translate-y-0 max-w-[1200px] max-h-[800px] m-auto",
-            "grid grid-cols-[200px_minmax(0,1fr)] overflow-hidden rounded-lg border border-line-subtle",
+            "fixed inset-8 left-8 top-8 max-w-none translate-x-0 translate-y-0 max-w-[640px] max-h-[800px] m-auto",
+            "overflow-hidden rounded-lg border border-line-subtle bg-canvas",
             "shadow-lg",
           )}
         >
-          <DialogTitle className="sr-only">Font information</DialogTitle>
-
-          <nav className="flex flex-col gap-1 items-start bg-white p-2">
-            {CATEGORIES.map((c) => (
-              <Button
-                key={c.id}
-                variant="ghost"
-                onClick={() => setCategory(c.id)}
-                className={cn(
-                  "w-full justify-start p-0 pl-2",
-                  category === c.id ? "font-medium text-primary" : "text-primary hover:bg-hover",
-                )}
-              >
-                {c.label}
-              </Button>
-            ))}
-          </nav>
-
-          <section className="relative bg-canvas p-6 overflow-auto">
+          <section className="relative p-6 overflow-auto">
             <DialogClose
               className={cn(
                 "absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center cursor-pointer",
@@ -76,24 +46,15 @@ export const FontInfoDialog = ({ open, onOpenChange }: FontInfoDialogProps) => {
               <X className="h-5 w-5" />
             </DialogClose>
 
-            <CategoryPanel category={category} />
+            <DialogTitle className="mb-6 text-sm font-medium text-primary">
+              Font information
+            </DialogTitle>
+            <FontPanel />
           </section>
         </DialogPopup>
       </DialogPortal>
     </Dialog>
   );
-};
-
-const CategoryPanel = ({ category }: { category: CategoryId }) => {
-  switch (category) {
-    case "font":
-      return <FontPanel />;
-    case "general":
-    case "sources":
-    case "features":
-    case "shortcuts":
-      return <PlaceholderPanel label={CATEGORIES.find((c) => c.id === category)!.label} />;
-  }
 };
 
 const FontPanel = () => {
@@ -128,25 +89,27 @@ const FontPanel = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2 className="text-sm font-medium text-primary">Font</h2>
-      <div className="grid grid-cols-[120px_minmax(0,320px)] gap-x-4 gap-y-3 items-center">
-        {TEXT_FIELDS.map((field) => (
+    <div className="grid grid-cols-[128px_minmax(0,1fr)] gap-x-4 gap-y-3 items-center">
+      {SUPPORTED_FIELDS.map((field) =>
+        field.id === "version" ? (
+          <FieldRow
+            key={field.id}
+            label={field.label}
+            value={draft.version}
+            onChange={(value) => updateDraft("version", value)}
+            onCommit={commitVersion}
+          />
+        ) : (
           <FieldRow
             key={field.id}
             label={field.label}
             value={draft[field.id]}
             onChange={(value) => updateDraft(field.id, value)}
             onCommit={(value) => commitTextField(field.id, value)}
+            multiline={field.multiline}
           />
-        ))}
-        <FieldRow
-          label="Version"
-          value={draft.version}
-          onChange={(value) => updateDraft("version", value)}
-          onCommit={commitVersion}
-        />
-      </div>
+        ),
+      )}
     </div>
   );
 };
@@ -158,23 +121,37 @@ type TextMetadataField =
   | "trademark"
   | "description"
   | "designer"
-  | "designerUrl";
+  | "designerUrl"
+  | "manufacturer"
+  | "manufacturerUrl"
+  | "license"
+  | "licenseUrl"
+  | "note";
 
 type MetadataFieldId = TextMetadataField | "version";
 
 interface TextField {
   id: TextMetadataField;
   label: string;
+  multiline?: boolean;
 }
 
-const TEXT_FIELDS: readonly TextField[] = [
+type Field = TextField | { id: "version"; label: string };
+
+const SUPPORTED_FIELDS: readonly Field[] = [
   { id: "familyName", label: "Family name" },
   { id: "styleName", label: "Style name" },
+  { id: "version", label: "Version" },
   { id: "copyright", label: "Copyright" },
   { id: "trademark", label: "Trademark" },
-  { id: "description", label: "Sample text" },
   { id: "designer", label: "Designer" },
   { id: "designerUrl", label: "Design URL" },
+  { id: "manufacturer", label: "Manufacturer" },
+  { id: "manufacturerUrl", label: "Manufacturer URL" },
+  { id: "license", label: "License" },
+  { id: "licenseUrl", label: "License URL" },
+  { id: "description", label: "Description", multiline: true },
+  { id: "note", label: "Note", multiline: true },
 ];
 
 type MetadataDraft = Record<MetadataFieldId, string>;
@@ -188,6 +165,11 @@ function metadataDraft(metadata: FontMetadata): MetadataDraft {
     description: metadata.description ?? "",
     designer: metadata.designer ?? "",
     designerUrl: metadata.designerUrl ?? "",
+    manufacturer: metadata.manufacturer ?? "",
+    manufacturerUrl: metadata.manufacturerUrl ?? "",
+    license: metadata.license ?? "",
+    licenseUrl: metadata.licenseUrl ?? "",
+    note: metadata.note ?? "",
     version: versionText(metadata),
   };
 }
@@ -216,32 +198,46 @@ interface FieldRowProps {
   value: string;
   onChange: (value: string) => void;
   onCommit: (value: string) => void;
+  multiline?: boolean;
 }
 
-const FieldRow = ({ label, value, onChange, onCommit }: FieldRowProps) => {
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+const FieldRow = ({ label, value, onChange, onCommit, multiline = false }: FieldRowProps) => {
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+  };
+
+  const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && event.metaKey) {
       event.currentTarget.blur();
     }
   };
 
   return (
     <>
-      <label className="text-sm text-primary">{label}</label>
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        onBlur={(event) => onCommit(event.currentTarget.value)}
-        onKeyDown={handleKeyDown}
-        className="h-7 text-sm bg-white"
-      />
+      <label className="text-sm text-primary self-start pt-1.5">{label}</label>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          onBlur={(event) => onCommit(event.currentTarget.value)}
+          onKeyDown={handleTextareaKeyDown}
+          rows={3}
+          className={cn(
+            "w-full resize-none rounded bg-white px-2 py-1 text-sm text-primary",
+            "focus:outline-none focus:ring-1 focus:ring-accent",
+          )}
+        />
+      ) : (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          onBlur={(event) => onCommit(event.currentTarget.value)}
+          onKeyDown={handleInputKeyDown}
+          className="h-7 text-sm bg-white"
+        />
+      )}
     </>
   );
 };
-
-const PlaceholderPanel = ({ label }: { label: string }) => (
-  <div className="flex flex-col gap-2">
-    <h2 className="text-sm font-medium text-primary">{label}</h2>
-    <p className="text-sm text-secondary">Coming soon.</p>
-  </div>
-);
