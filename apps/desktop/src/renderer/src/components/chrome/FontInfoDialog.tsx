@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import {
   Button,
   Dialog,
@@ -11,7 +11,9 @@ import {
   X,
   cn,
 } from "@shift/ui";
-import { getEditor } from "@/store/store";
+import { getEditor, getWorkingCopy } from "@/store/store";
+import { useSignalState } from "@/lib/signals";
+import type { FontMetadata } from "@shift/types";
 
 interface FontInfoDialogProps {
   open: boolean;
@@ -96,46 +98,146 @@ const CategoryPanel = ({ category }: { category: CategoryId }) => {
 
 const FontPanel = () => {
   const editor = getEditor();
-  const m = editor.font.metadata;
-  const version = m.versionMajor !== undefined ? `${m.versionMajor}.${m.versionMinor ?? 0}` : "";
+  const metadata = useSignalState(editor.font.$metadata);
+  const [draft, setDraft] = useState(() => metadataDraft(metadata));
+
+  useEffect(() => {
+    setDraft(metadataDraft(metadata));
+  }, [metadata]);
+
+  const updateDraft = (field: MetadataFieldId, value: string) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const commitTextField = (field: TextMetadataField, value: string) => {
+    getWorkingCopy().commitMutation(() => {
+      editor.font.updateMetadata({ [field]: value });
+    });
+  };
+
+  const commitVersion = (value: string) => {
+    const version = parseVersion(value);
+    if (!version) {
+      setDraft((current) => ({ ...current, version: versionText(metadata) }));
+      return;
+    }
+
+    getWorkingCopy().commitMutation(() => {
+      editor.font.updateMetadata(version);
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <h2 className="text-sm font-medium text-primary">Font</h2>
-      <FieldGrid
-        fields={[
-          { label: "Name", text: m.familyName ?? "" },
-          { label: "Version", text: version },
-          { label: "Copyright", text: m.copyright ?? "" },
-          { label: "Trademark", text: m.trademark ?? "" },
-          { label: "Sample text", text: m.description ?? "" },
-          { label: "Designer", text: m.designer ?? "" },
-          { label: "Design URL", text: m.designerUrl ?? "" },
-        ]}
-      />
+      <div className="grid grid-cols-[120px_minmax(0,320px)] gap-x-4 gap-y-3 items-center">
+        {TEXT_FIELDS.map((field) => (
+          <FieldRow
+            key={field.id}
+            label={field.label}
+            value={draft[field.id]}
+            onChange={(value) => updateDraft(field.id, value)}
+            onCommit={(value) => commitTextField(field.id, value)}
+          />
+        ))}
+        <FieldRow
+          label="Version"
+          value={draft.version}
+          onChange={(value) => updateDraft("version", value)}
+          onCommit={commitVersion}
+        />
+      </div>
     </div>
   );
 };
 
-interface Field {
+type TextMetadataField =
+  | "familyName"
+  | "styleName"
+  | "copyright"
+  | "trademark"
+  | "description"
+  | "designer"
+  | "designerUrl";
+
+type MetadataFieldId = TextMetadataField | "version";
+
+interface TextField {
+  id: TextMetadataField;
   label: string;
-  text: string;
 }
 
-const FieldGrid = ({ fields }: { fields: Field[] }) => (
-  <div className="grid grid-cols-[120px_minmax(0,320px)] gap-x-4 gap-y-3 items-center">
-    {fields.map((f) => (
-      <FieldRow key={f.label} field={f} />
-    ))}
-  </div>
-);
+const TEXT_FIELDS: readonly TextField[] = [
+  { id: "familyName", label: "Family name" },
+  { id: "styleName", label: "Style name" },
+  { id: "copyright", label: "Copyright" },
+  { id: "trademark", label: "Trademark" },
+  { id: "description", label: "Sample text" },
+  { id: "designer", label: "Designer" },
+  { id: "designerUrl", label: "Design URL" },
+];
 
-const FieldRow = ({ field }: { field: Field }) => (
-  <>
-    <label className="text-sm text-primary">{field.label}</label>
-    <Input defaultValue={field.text} readOnly className="h-7 text-sm bg-white" />
-  </>
-);
+type MetadataDraft = Record<MetadataFieldId, string>;
+
+function metadataDraft(metadata: FontMetadata): MetadataDraft {
+  return {
+    familyName: metadata.familyName ?? "",
+    styleName: metadata.styleName ?? "",
+    copyright: metadata.copyright ?? "",
+    trademark: metadata.trademark ?? "",
+    description: metadata.description ?? "",
+    designer: metadata.designer ?? "",
+    designerUrl: metadata.designerUrl ?? "",
+    version: versionText(metadata),
+  };
+}
+
+function versionText(metadata: FontMetadata): string {
+  return metadata.versionMajor === undefined
+    ? ""
+    : `${metadata.versionMajor}.${metadata.versionMinor ?? 0}`;
+}
+
+function parseVersion(value: string): Pick<FontMetadata, "versionMajor" | "versionMinor"> | null {
+  const trimmed = value.trim();
+  if (!trimmed) return { versionMajor: undefined, versionMinor: undefined };
+
+  const match = trimmed.match(/^(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+
+  return {
+    versionMajor: Number.parseInt(match[1], 10),
+    versionMinor: match[2] ? Number.parseInt(match[2], 10) : 0,
+  };
+}
+
+interface FieldRowProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onCommit: (value: string) => void;
+}
+
+const FieldRow = ({ label, value, onChange, onCommit }: FieldRowProps) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+  };
+
+  return (
+    <>
+      <label className="text-sm text-primary">{label}</label>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        onBlur={(event) => onCommit(event.currentTarget.value)}
+        onKeyDown={handleKeyDown}
+        className="h-7 text-sm bg-white"
+      />
+    </>
+  );
+};
 
 const PlaceholderPanel = ({ label }: { label: string }) => (
   <div className="flex flex-col gap-2">

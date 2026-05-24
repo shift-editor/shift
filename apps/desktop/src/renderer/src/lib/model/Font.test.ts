@@ -28,7 +28,7 @@ function locationOverride(font: Font, override: Record<string, number>): AxisLoc
   return location;
 }
 
-describe("Font", () => {
+describe("font domain model", () => {
   it("exposes bridge default metrics before a font is loaded", () => {
     const font = new Font(createBridge());
 
@@ -68,6 +68,26 @@ describe("Font", () => {
     expect(font.sources).toHaveLength(1);
     expect(font.defaultSource.name).toBe("Regular");
     expect(font.sourceAt(emptyAxisLocation())?.id).toBe(font.defaultSource.id);
+  });
+
+  it("updates metadata through the bridge and refreshes the local snapshot", () => {
+    const font = loadFont();
+    const initialRevision = font.revision;
+
+    const result = font.updateMetadata({
+      familyName: "  Shift Metadata Test  ",
+      styleName: "Regular",
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.revision).toBeGreaterThan(initialRevision);
+    expect(font.metadata.familyName).toBe("Shift Metadata Test");
+    expect(font.metadata.styleName).toBe("Regular");
+
+    const noChange = font.updateMetadata({ familyName: "Shift Metadata Test" });
+
+    expect(noChange.changed).toBe(false);
+    expect(noChange.revision).toBe(result.revision);
   });
 
   it("exposes component dependency information from glyph records", () => {

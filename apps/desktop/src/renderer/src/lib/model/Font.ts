@@ -245,6 +245,7 @@ export class Font {
   readonly #defaultMetrics: FontMetrics;
 
   readonly #$loaded: WritableSignal<boolean>;
+  readonly #$metadata: WritableSignal<FontMetadata>;
   readonly #$metrics: WritableSignal<FontMetrics>;
   readonly #$sources: WritableSignal<Source[]>;
   readonly #$unicodes: Signal<Unicode[]>;
@@ -258,6 +259,7 @@ export class Font {
     this.#bridge = bridge;
     this.#defaultMetrics = bridge.getMetrics();
     this.#$loaded = signal(false);
+    this.#$metadata = signal(bridge.getMetadata());
     this.#$metrics = signal<FontMetrics>(this.#defaultMetrics);
     this.#$sources = signal<Source[]>([]);
     this.#$unicodes = computed(() => [...this.#directory.value.unicodes]);
@@ -302,7 +304,11 @@ export class Font {
 
   /** @knipclassignore */
   get metadata(): FontMetadata {
-    return this.#bridge.getMetadata();
+    return this.#$metadata.peek();
+  }
+
+  get $metadata(): Signal<FontMetadata> {
+    return this.#$metadata as Signal<FontMetadata>;
   }
 
   get revision(): number {
@@ -438,8 +444,10 @@ export class Font {
     this.#hydrateFromBridge();
   }
 
-  updateMetadata(metadata: FontMetadata): DocumentMutationResult {
-    return this.#bridge.updateMetadata(metadata);
+  updateMetadata(metadata: Partial<FontMetadata>): DocumentMutationResult {
+    const result = this.#bridge.updateMetadata({ ...this.#$metadata.peek(), ...metadata });
+    this.#$metadata.set(this.#bridge.getMetadata());
+    return result;
   }
 
   /**
@@ -748,6 +756,7 @@ export class Font {
     this.#glyphSources.clear();
     this.#directory.set(GlyphDirectory.empty());
 
+    this.#$metadata.set(this.#bridge.getMetadata());
     this.#$metrics.set(this.#defaultMetrics);
     this.#$sources.set([]);
   }
@@ -758,6 +767,7 @@ export class Font {
 
   #hydrateFromBridge(): void {
     this.#directory.set(GlyphDirectory.fromRecords(this.#bridge.getGlyphs()));
+    this.#$metadata.set(this.#bridge.getMetadata());
     this.#$metrics.set(this.#bridge.getMetrics());
     this.#$sources.set(this.#bridge.getSources());
     this.#$loaded.set(true);
