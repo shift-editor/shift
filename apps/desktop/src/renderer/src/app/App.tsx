@@ -8,7 +8,7 @@ import { DebugProvider } from "@/context/DebugContext";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 import { isDev } from "@/lib/utils/utils";
 import { dumpSelectionPatternsToConsole } from "@/lib/debug/dumpSelectionPatterns";
-import { getDocument } from "@/store/store";
+import { getWorkingCopy } from "@/store/store";
 import { documentPersistence } from "@/persistence";
 
 import { RouteDispatcher } from "./RouteDispatcher";
@@ -39,8 +39,8 @@ function parseEditorUnicodeFromHash(hash: string): number | null {
 
 export const App = () => {
   useEffect(() => {
-    const fontDocument = getDocument();
-    const editor = fontDocument.editor;
+    const workingCopy = getWorkingCopy();
+    const editor = workingCopy.editor;
     documentPersistence.init(editor);
     let didOpenFont = false;
 
@@ -55,7 +55,7 @@ export const App = () => {
       }
 
       try {
-        fontDocument.openFont(filePath);
+        workingCopy.openFont(filePath);
         didOpenFont = true;
 
         if (source === "restore") {
@@ -83,33 +83,33 @@ export const App = () => {
         const mostRecentDocId = state.registry.lruDocIds[0];
         const mostRecentPath = mostRecentDocId ? state.registry.docIdToPath[mostRecentDocId] : null;
         if (!mostRecentPath) {
-          fontDocument.createFont();
+          workingCopy.createFont();
           return;
         }
 
         const exists = await window.electronAPI?.pathsExist([mostRecentPath]);
         if (!exists?.[0]) {
-          fontDocument.createFont();
+          workingCopy.createFont();
           return;
         }
 
         handleOpenFont(mostRecentPath, "restore");
       })();
-    } else if (needsLoadedDocument(window.location.hash) && !fontDocument.loaded) {
-      fontDocument.createFont();
+    } else if (needsLoadedDocument(window.location.hash) && !workingCopy.loaded) {
+      workingCopy.createFont();
     }
 
     const unsubscribeOpen = window.electronAPI?.onMenuOpenFont(handleOpenFont);
     const unsubscribeExternalOpen = window.electronAPI?.onExternalOpenFont(handleOpenFont);
     const unsubscribeNew = window.electronAPI?.onDocumentNew(() => {
-      fontDocument.createFont();
+      workingCopy.createFont();
       didOpenFont = true;
       navigateToHome();
     });
 
     const unsubscribeSave = window.electronAPI?.onMenuSaveFont(async (savePath) => {
       try {
-        await fontDocument.saveFont(savePath);
+        await workingCopy.saveFont(savePath);
       } catch (error) {
         console.error("Failed to save font:", error);
       }
@@ -117,7 +117,7 @@ export const App = () => {
 
     const unsubscribeExport = window.electronAPI?.onMenuExportFont(async (exportPath) => {
       try {
-        await fontDocument.exportFont(exportPath);
+        await workingCopy.exportFont(exportPath);
       } catch (error) {
         console.error("Failed to export font:", error);
       }

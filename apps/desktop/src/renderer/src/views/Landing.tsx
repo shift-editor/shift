@@ -1,15 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { getDocument } from "@/store/store";
+import { getWorkingCopy } from "@/store/store";
 import logo from "@/assets/logo@1024.png";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 
 export const Landing = () => {
   const navigate = useNavigate();
-  const fontDocument = getDocument();
+  const workingCopy = getWorkingCopy();
 
   const openFont = (filePath: string) => {
-    fontDocument.openFont(filePath);
+    workingCopy.openFont(filePath);
     navigate("/home");
   };
 
@@ -21,7 +21,7 @@ export const Landing = () => {
   };
 
   const handleNewFont = () => {
-    fontDocument.createFont();
+    workingCopy.createFont();
     navigate("/home");
   };
 
