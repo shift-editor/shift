@@ -4,7 +4,8 @@ use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_ir::{
     Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, Point, PointType,
 };
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub struct UfoWriter;
 
@@ -207,11 +208,28 @@ impl Default for UfoWriter {
 impl UfoWriter {
     pub fn save_view(&self, font: &impl FontView, path: &str) -> Result<(), String> {
         let path_obj = Path::new(path);
-        if path_obj.exists() {
-            std::fs::remove_dir_all(path_obj)
-                .map_err(|e| format!("Failed to remove existing UFO: {e}"))?;
-        }
+        let parent = path_obj
+            .parent()
+            .ok_or_else(|| format!("UFO path has no parent: {}", path_obj.display()))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create UFO parent: {e}"))?;
 
+        let temp_dir = tempfile::Builder::new()
+            .prefix(".shift-ufo-write-")
+            .tempdir_in(parent)
+            .map_err(|e| format!("Failed to create temporary UFO directory: {e}"))?;
+        let temp_ufo_path = temp_dir.path().join(
+            path_obj
+                .file_name()
+                .ok_or_else(|| format!("UFO path has no file name: {}", path_obj.display()))?,
+        );
+
+        self.write_view_to_path(font, &temp_ufo_path)?;
+        replace_path(&temp_ufo_path, path_obj)?;
+
+        Ok(())
+    }
+
+    fn write_view_to_path(&self, font: &impl FontView, path: &Path) -> Result<(), String> {
         let mut norad_font = NoradFont::new();
 
         norad_font.font_info.family_name = font.metadata().family_name.clone();
@@ -308,11 +326,69 @@ impl UfoWriter {
 
         if let Some(fea_source) = font.features().fea_source() {
             std::fs::create_dir_all(path).map_err(|e| e.to_string())?;
-            let fea_path = Path::new(path).join("features.fea");
+            let fea_path = path.join("features.fea");
             std::fs::write(fea_path, fea_source).map_err(|e| e.to_string())?;
         }
 
         norad_font.save(path).map_err(|e| e.to_string())
+    }
+}
+
+fn replace_path(temp_path: &Path, target_path: &Path) -> Result<(), String> {
+    if !target_path.exists() {
+        fs::rename(temp_path, target_path)
+            .map_err(|e| format!("Failed to move UFO into place: {e}"))?;
+        return Ok(());
+    }
+
+    let backup_path = unique_backup_path(target_path)?;
+    fs::rename(target_path, &backup_path)
+        .map_err(|e| format!("Failed to move existing UFO aside: {e}"))?;
+
+    if let Err(error) = fs::rename(temp_path, target_path) {
+        let restore_result = fs::rename(&backup_path, target_path);
+        return Err(match restore_result {
+            Ok(()) => format!("Failed to move UFO into place: {error}"),
+            Err(restore_error) => format!(
+                "Failed to move UFO into place: {error}; failed to restore previous UFO: {restore_error}"
+            ),
+        });
+    }
+
+    remove_existing_path(&backup_path)
+        .map_err(|e| format!("Failed to remove replaced UFO backup: {e}"))
+}
+
+fn unique_backup_path(target_path: &Path) -> Result<PathBuf, String> {
+    let parent = target_path
+        .parent()
+        .ok_or_else(|| format!("UFO path has no parent: {}", target_path.display()))?;
+    let file_name = target_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("UFO path has no valid file name: {}", target_path.display()))?;
+
+    for index in 0..1000 {
+        let candidate = parent.join(format!(
+            ".{file_name}.shift-backup-{}-{index}",
+            std::process::id()
+        ));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "Failed to allocate backup path for UFO: {}",
+        target_path.display()
+    ))
+}
+
+fn remove_existing_path(path: &Path) -> std::io::Result<()> {
+    if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
     }
 }
 

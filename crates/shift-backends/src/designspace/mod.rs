@@ -10,7 +10,7 @@ pub use writer::DesignspaceWriter;
 mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
-    use shift_ir::{Contour, Font, Glyph, GlyphLayer, PointType};
+    use shift_ir::{Contour, Font, Glyph, GlyphLayer, Layer, Location, PointType, Source};
     use std::fs;
 
     fn test_font() -> Font {
@@ -51,7 +51,7 @@ mod tests {
         assert!(ufo_path.exists());
         let designspace_xml = fs::read_to_string(&designspace_path).unwrap();
         assert!(!designspace_xml.contains("<axis "));
-        assert!(!designspace_xml.contains("<location"));
+        assert!(designspace_xml.contains("<location"));
         assert!(designspace_xml.contains("PlaceholderSans.ufo"));
 
         let loaded = DesignspaceReader::new()
@@ -65,6 +65,42 @@ mod tests {
         );
         assert_eq!(loaded.glyph_count(), 1);
         assert!(loaded.glyph("o").is_some());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn writes_axisless_designspace_with_named_source_layers() {
+        let temp_dir = std::env::temp_dir().join("shift_test_designspace_axisless_sources");
+        let designspace_path = temp_dir.join("PlaceholderSans.designspace");
+        let ufo_path = temp_dir.join("PlaceholderSans.ufo");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut font = test_font();
+        let layer_id = font.add_layer(Layer::new("Source".to_string()));
+        font.add_source(Source::new("Source".to_string(), Location::new(), layer_id));
+
+        DesignspaceWriter::new()
+            .save(&font, designspace_path.to_str().unwrap())
+            .unwrap();
+
+        assert!(designspace_path.exists());
+        assert!(ufo_path.exists());
+        let designspace_xml = fs::read_to_string(&designspace_path).unwrap();
+        assert_eq!(designspace_xml.matches("<source ").count(), 2);
+        assert_eq!(designspace_xml.matches("<location").count(), 2);
+
+        let loaded = DesignspaceReader::new()
+            .load(designspace_path.to_str().unwrap())
+            .unwrap();
+
+        assert!(loaded.axes().is_empty());
+        assert_eq!(loaded.sources().len(), 2);
+        assert!(loaded
+            .sources()
+            .iter()
+            .any(|source| source.name() == "Source"));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

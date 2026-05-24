@@ -25,7 +25,7 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_ir::{Contour, Glyph, GlyphLayer, PointType};
+    use shift_ir::{Contour, Glyph, GlyphLayer, Layer, PointType};
     use std::fs;
 
     fn create_test_font() -> Font {
@@ -168,6 +168,33 @@ mod tests {
         assert!(glif.contains("y=\"453\""));
         assert!(!glif.contains("115.29469168717605"));
         assert_eq!(glif.matches("<contour>").count(), 1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn failed_overwrite_keeps_existing_ufo_package() {
+        let original = create_test_font();
+        let temp_dir = std::env::temp_dir().join("shift_test_ufo_failed_overwrite");
+        let ufo_path = temp_dir.join("survives.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let writer = UfoWriter::new();
+        writer.save(&original, ufo_path_str).unwrap();
+
+        let mut invalid = original.clone();
+        invalid.add_layer(Layer::new("duplicate".to_string()));
+        invalid.add_layer(Layer::new("duplicate".to_string()));
+
+        assert!(writer.save(&invalid, ufo_path_str).is_err());
+        assert!(ufo_path.exists());
+
+        let loaded = UfoReader::new().load(ufo_path_str).unwrap();
+        assert_eq!(loaded.glyph_count(), original.glyph_count());
+        assert!(loaded.glyph("A").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

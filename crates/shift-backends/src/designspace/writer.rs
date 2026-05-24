@@ -104,11 +104,21 @@ impl DesignspaceWriter {
             event.push_attribute(("layer", layer));
         }
 
-        writer.write_event(Event::Empty(event)).map_err(|error| {
+        writer.write_event(Event::Start(event)).map_err(|error| {
             DesignspaceError::ParseAxislessXml {
                 details: error.to_string(),
             }
-        })
+        })?;
+        writer
+            .write_event(Event::Empty(BytesStart::new("location")))
+            .map_err(|error| DesignspaceError::ParseAxislessXml {
+                details: error.to_string(),
+            })?;
+        writer
+            .write_event(Event::End(BytesEnd::new("source")))
+            .map_err(|error| DesignspaceError::ParseAxislessXml {
+                details: error.to_string(),
+            })
     }
 
     fn save_axisless_designspace(

@@ -10,7 +10,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Backends are stateless unit structs (no fields). WHY: They are pure converters with no caching or mutable state, making them trivially thread-safe and cheap to construct.
 
-**CRITICAL:** `UfoWriter::save` calls `remove_dir_all` on the target path before writing. This is a destructive overwrite -- if the save fails partway through, the previous file is already gone. Callers must handle save errors with this in mind (e.g. write to a temp path first, then rename).
+**Architecture Invariant:** `UfoWriter::save` writes replacement UFO packages to a sibling temporary path before moving them into place. WHY: save failures must not delete the previously persisted UFO package.
 
 **Architecture Invariant:** The `UfoWriter` rounds all coordinates and widths to integers via the `UfoRound` trait (calls `f64::round()`). WHY: UFO files conventionally store integer coordinates; sub-unit precision is discarded on save. Empty contours are also skipped on write.
 
@@ -54,7 +54,7 @@ src/
 
 **Glyphs-format specifics:** `GlyphsReader` also extracts axes, sources, and per-master locations -- data that UFO does not natively represent. Kerning group membership is derived from per-glyph `right_kern`/`left_kern` fields and normalized to `public.kern1.*`/`public.kern2.*` conventions.
 
-**Saving:** Only UFO write is supported. `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, then converts each glyph per layer. `features.fea` is written as a standalone file before calling `norad::Font::save`.
+**Saving:** UFO and designspace writes are supported. `UfoWriter` builds a `norad::Font`, populates metadata/metrics/kerning/groups/guidelines/lib, then converts each glyph per layer. `features.fea` is written into the temporary UFO package before calling `norad::Font::save`; the package is moved into place only after the write succeeds. `DesignspaceWriter` writes a companion UFO package plus the designspace source list.
 
 ## Workflow recipes
 
@@ -78,11 +78,11 @@ src/
 
 ## Gotchas
 
-- **Destructive save:** `UfoWriter::save` deletes the entire target directory before writing. A crash mid-save means data loss. No atomic-rename strategy is in place yet.
+- **Replace is package-level:** `UfoWriter::save` stages into a temporary sibling package, then moves the old package aside while placing the replacement. If final replacement fails, it attempts to restore the previous package and returns an error.
 - **Coordinate rounding:** All coordinates are rounded to nearest integer on UFO write. If you need sub-unit precision preserved, this will silently discard it.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
 - **Glyphs kerning is default-master only:** Multi-master kerning is silently dropped to a single master's values.
-- **features.fea written before norad save:** The writer creates the output directory and writes `features.fea` before calling `norad_font.save()`. If the path already existed, it was already deleted by `remove_dir_all`, so the directory is recreated for the .fea file.
+- **features.fea is staged:** The writer creates the temporary output directory and writes `features.fea` there before calling `norad_font.save()`. Existing packages are not touched until staging succeeds.
 
 ## Verification
 
