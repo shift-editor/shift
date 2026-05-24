@@ -8,7 +8,8 @@ use crate::{
     AnchorData, Axis, AxisTent, ComponentData, ContourData, DocumentMutationResult,
     DocumentPersistResult, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphMaster,
     GlyphRecord, GlyphState, GlyphStructure, GlyphStructureChange, GlyphValueChange,
-    GlyphVariationData, Location, PointData, PointType, Source,
+    GlyphVariationData, Location, PointData, PointType, Source, SourceChangeResult, SourceCreate,
+    SourceUpdate,
 };
 
 #[napi(string_enum = "camelCase")]
@@ -204,6 +205,56 @@ impl From<Source> for NapiSource {
             location: source.location.into(),
             layer_id: source.layer_id.to_string(),
             filename: source.filename,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiSourceCreate {
+    pub name: String,
+    pub location: NapiLocation,
+}
+
+impl From<NapiSourceCreate> for SourceCreate {
+    fn from(source: NapiSourceCreate) -> Self {
+        Self {
+            name: source.name,
+            location: source.location.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiSourceUpdate {
+    #[napi(ts_type = "SourceId")]
+    pub id: String,
+    pub name: String,
+    pub location: NapiLocation,
+}
+
+impl NapiSourceUpdate {
+    pub fn into_wire(self, id: shift_ir::SourceId) -> SourceUpdate {
+        SourceUpdate {
+            id,
+            name: self.name,
+            location: self.location.into(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiSourceChangeResult {
+    pub changed: bool,
+    pub revision: u32,
+    pub source: NapiSource,
+}
+
+impl From<SourceChangeResult> for NapiSourceChangeResult {
+    fn from(result: SourceChangeResult) -> Self {
+        Self {
+            changed: result.changed,
+            revision: result.revision,
+            source: result.source.into(),
         }
     }
 }
@@ -469,6 +520,14 @@ pub struct NapiLocation {
 
 impl From<Location> for NapiLocation {
     fn from(location: Location) -> Self {
+        Self {
+            values: location.values,
+        }
+    }
+}
+
+impl From<NapiLocation> for Location {
+    fn from(location: NapiLocation) -> Self {
         Self {
             values: location.values,
         }

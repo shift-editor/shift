@@ -26,5 +26,8 @@ export type {
   PointData,
   PointType,
   Source,
+  SourceChangeResult,
+  SourceCreate,
+  SourceUpdate,
   Unicode,
 } from "./generated";

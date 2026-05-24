@@ -185,7 +185,7 @@ impl From<&IrAxis> for Axis {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     pub id: SourceId,
@@ -205,6 +205,43 @@ impl From<&IrSource> for Source {
             filename: source.filename().map(str::to_string),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceUpdate {
+    pub id: SourceId,
+    pub name: String,
+    pub location: Location,
+}
+
+impl SourceUpdate {
+    pub fn normalized(mut self) -> Self {
+        self.name = self.name.trim().to_string();
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceCreate {
+    pub name: String,
+    pub location: Location,
+}
+
+impl SourceCreate {
+    pub fn normalized(mut self) -> Self {
+        self.name = self.name.trim().to_string();
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceChangeResult {
+    pub changed: bool,
+    pub revision: u32,
+    pub source: Source,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -462,7 +499,7 @@ impl GlyphStructureChange {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
     pub values: HashMap<String, f64>,
@@ -476,6 +513,12 @@ impl From<&IrLocation> for Location {
                 .map(|(tag, value)| (tag.clone(), *value))
                 .collect(),
         }
+    }
+}
+
+impl From<Location> for IrLocation {
+    fn from(location: Location) -> Self {
+        IrLocation::from_map(location.values)
     }
 }
 

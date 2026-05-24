@@ -28,6 +28,8 @@ export declare class Bridge {
   isVariable(): boolean
   getAxes(): Array<NapiAxis>
   getSources(): Array<NapiSource>
+  createSource(sourceCreate: NapiSourceCreate): NapiSourceChangeResult
+  updateSource(sourceUpdate: NapiSourceUpdate): NapiSourceChangeResult
   startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
   getPersistedVersion(): number
   isDirty(): boolean
@@ -239,4 +241,21 @@ export interface NapiSource {
   location: NapiLocation
   layerId: LayerId
   filename?: string
+}
+
+export interface NapiSourceChangeResult {
+  changed: boolean
+  revision: number
+  source: NapiSource
+}
+
+export interface NapiSourceCreate {
+  name: string
+  location: NapiLocation
+}
+
+export interface NapiSourceUpdate {
+  id: SourceId
+  name: string
+  location: NapiLocation
 }

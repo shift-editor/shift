@@ -12,6 +12,9 @@ import type {
   Unicode,
   DocumentMutationResult,
   DocumentPersistResult,
+  SourceChangeResult,
+  SourceCreate,
+  SourceUpdate,
 } from "@shift/types";
 import { computed, signal, type WritableSignal, type Signal } from "@/lib/signals/signal";
 import { Glyph, type GlyphSource } from "./Glyph";
@@ -311,6 +314,10 @@ export class Font {
     return this.#$metadata as Signal<FontMetadata>;
   }
 
+  get sourcesCell(): Signal<readonly Source[]> {
+    return this.#$sources as Signal<readonly Source[]>;
+  }
+
   get revision(): number {
     return this.#bridge.getDocumentRevision();
   }
@@ -445,8 +452,37 @@ export class Font {
   }
 
   updateMetadata(metadata: Partial<FontMetadata>): DocumentMutationResult {
-    const result = this.#bridge.updateMetadata({ ...this.#$metadata.peek(), ...metadata });
+    const result = this.#bridge.updateMetadata({
+      ...this.#$metadata.peek(),
+      ...metadata,
+    });
     this.#$metadata.set(this.#bridge.getMetadata());
+    return result;
+  }
+
+  /**
+   * Creates a source and refreshes source-backed glyph model state.
+   *
+   * @param source - Name and designspace location for the new source.
+   * @returns A mutation result containing the created source snapshot.
+   * @throws {Error} when the bridge rejects the source name or location.
+   */
+  createSource(source: SourceCreate): SourceChangeResult {
+    const result = this.#bridge.createSource(source);
+    this.#refreshSourcesFromBridge();
+    return result;
+  }
+
+  /**
+   * Updates an existing source and refreshes source-backed glyph model state.
+   *
+   * @param source - Complete source identity, name, and designspace location update.
+   * @returns A mutation result containing the current source snapshot.
+   * @throws {Error} when the source is missing or the bridge rejects the update.
+   */
+  updateSource(source: SourceUpdate): SourceChangeResult {
+    const result = this.#bridge.updateSource(source);
+    this.#refreshSourcesFromBridge();
     return result;
   }
 
@@ -771,6 +807,11 @@ export class Font {
     this.#$metrics.set(this.#bridge.getMetrics());
     this.#$sources.set(this.#bridge.getSources());
     this.#$loaded.set(true);
+  }
+
+  #refreshSourcesFromBridge(): void {
+    this.#glyphSources.clear();
+    this.#$sources.set(this.#bridge.getSources());
   }
 }
 

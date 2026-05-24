@@ -13,15 +13,17 @@ use shift_edit::{
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   BooleanOp, ContourId, Font, Glyph, GlyphLayer, GlyphName, LayerId, PointId, SourceId,
 };
+use shift_ir::Layer;
 use shift_wire::{
   bridges::napi::{
     NapiAxis, NapiDocumentMutationResult, NapiDocumentPersistResult, NapiFontMetadata,
     NapiFontMetrics, NapiGlyphRecord, NapiGlyphState, NapiGlyphStructure, NapiGlyphStructureChange,
-    NapiGlyphValueChange, NapiPointType, NapiSource,
+    NapiGlyphValueChange, NapiPointType, NapiSource, NapiSourceChangeResult, NapiSourceCreate,
+    NapiSourceUpdate,
   },
   Axis, DocumentMutationResult, DocumentPersistResult, FontMetadata, FontMetrics,
   GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure, GlyphStructureChange,
-  GlyphValueChange, Source,
+  GlyphValueChange, Location, Source, SourceChangeResult, SourceCreate,
 };
 use std::sync::{
   atomic::{AtomicU64, Ordering},
@@ -634,6 +636,121 @@ impl Bridge {
       .collect()
   }
 
+  #[napi]
+  pub fn create_source(
+    &mut self,
+    source_create: NapiSourceCreate,
+  ) -> errors::Result<NapiSourceChangeResult> {
+    let next = SourceCreate::from(source_create).normalized();
+
+    if next.name.is_empty() {
+      return Err(BridgeError::InvalidInput {
+        kind: "source name",
+        value: next.name,
+      });
+    }
+
+    let layer_id = self.font.add_layer(Layer::new(next.name.clone()));
+    let source_id = self.font.add_source(shift_ir::Source::new(
+      next.name,
+      next.location.into(),
+      layer_id,
+    ));
+    self.mark_committed_changed();
+
+    let Some(current) = self
+      .font
+      .sources()
+      .iter()
+      .find(|source| source.id() == source_id)
+    else {
+      return Err(BridgeError::InvalidInput {
+        kind: "source ID",
+        value: source_id.to_string(),
+      });
+    };
+
+    Ok(
+      SourceChangeResult {
+        changed: true,
+        revision: self.live_version().as_u32(),
+        source: Source::from(current),
+      }
+      .into(),
+    )
+  }
+
+  #[napi]
+  pub fn update_source(
+    &mut self,
+    source_update: NapiSourceUpdate,
+  ) -> errors::Result<NapiSourceChangeResult> {
+    let source_id = parse::<SourceId>(&source_update.id)?;
+    let next = source_update.into_wire(source_id).normalized();
+
+    if next.name.is_empty() {
+      return Err(BridgeError::InvalidInput {
+        kind: "source name",
+        value: next.name,
+      });
+    }
+
+    let Some(current) = self
+      .font
+      .sources()
+      .iter()
+      .find(|source| source.id() == next.id)
+    else {
+      return Err(BridgeError::InvalidInput {
+        kind: "source ID",
+        value: next.id.to_string(),
+      });
+    };
+
+    if current.name() == next.name && Location::from(current.location()) == next.location {
+      return Ok(
+        SourceChangeResult {
+          changed: false,
+          revision: self.live_version().as_u32(),
+          source: Source::from(current),
+        }
+        .into(),
+      );
+    }
+
+    let Some(source) = self.font.source_mut(next.id) else {
+      return Err(BridgeError::InvalidInput {
+        kind: "source ID",
+        value: next.id.to_string(),
+      });
+    };
+
+    source.set_name(next.name);
+    source.set_location(next.location.into());
+    self.mark_committed_changed();
+
+    let Some(current) = self
+      .font
+      .sources()
+      .iter()
+      .find(|source| source.id() == next.id)
+    else {
+      return Err(BridgeError::InvalidInput {
+        kind: "source ID",
+        value: next.id.to_string(),
+      });
+    };
+
+    Ok(
+      SourceChangeResult {
+        changed: true,
+        revision: self.live_version().as_u32(),
+        source: Source::from(current),
+      }
+      .into(),
+    )
+  }
+
   fn source_layer_id(&self, source_id: SourceId) -> BridgeResult<LayerId> {
     if let Some(source) = self
       .font
@@ -1175,6 +1292,8 @@ impl Bridge {
 mod tests {
   use super::*;
   use shift_edit::{Contour, PointType};
+  use shift_wire::bridges::napi::NapiLocation;
+  use std::collections::HashMap;
   use std::time::{Duration, Instant};
 
   fn glyph_handle(name: &str, unicode: Option<u32>) -> GlyphHandle {
@@ -1267,6 +1386,15 @@ mod tests {
     }
   }
 
+  fn napi_location(values: impl IntoIterator<Item = (&'static str, f64)>) -> NapiLocation {
+    NapiLocation {
+      values: values
+        .into_iter()
+        .map(|(tag, value)| (tag.to_string(), value))
+        .collect::<HashMap<_, _>>(),
+    }
+  }
+
   fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
     eprintln!(
       "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
@@ -1341,6 +1469,48 @@ mod tests {
     let metadata = bridge.get_metadata();
     assert_eq!(metadata.family_name, None);
     assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
+  }
+
+  #[test]
+  fn create_and_update_source_return_revision_and_source_snapshot() {
+    let mut bridge = Bridge::new();
+
+    let created = bridge
+      .create_source(NapiSourceCreate {
+        name: " Bold ".to_string(),
+        location: napi_location([("wght", 700.0)]),
+      })
+      .unwrap();
+
+    assert!(created.changed);
+    assert_eq!(created.revision, 1);
+    assert_eq!(created.source.name, "Bold");
+    assert_eq!(created.source.location.values.get("wght"), Some(&700.0));
+    assert_eq!(bridge.get_sources().len(), 2);
+
+    let no_op = bridge
+      .update_source(NapiSourceUpdate {
+        id: created.source.id.clone(),
+        name: "Bold".to_string(),
+        location: napi_location([("wght", 700.0)]),
+      })
+      .unwrap();
+
+    assert!(!no_op.changed);
+    assert_eq!(no_op.revision, 1);
+
+    let changed = bridge
+      .update_source(NapiSourceUpdate {
+        id: created.source.id,
+        name: "Black".to_string(),
+        location: napi_location([("wght", 900.0)]),
+      })
+      .unwrap();
+
+    assert!(changed.changed);
+    assert_eq!(changed.revision, 2);
+    assert_eq!(changed.source.name, "Black");
+    assert_eq!(changed.source.location.values.get("wght"), Some(&900.0));
   }
 
   #[test]

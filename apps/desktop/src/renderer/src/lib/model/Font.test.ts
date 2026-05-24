@@ -143,7 +143,10 @@ describe("font domain model", () => {
 
     font.updateGlyphIdentity("A", "agrave", [0x00e0]);
 
-    expect(font.glyphHandleForName("agrave")).toEqual({ name: "agrave", unicode: 0x00e0 });
+    expect(font.glyphHandleForName("agrave")).toEqual({
+      name: "agrave",
+      unicode: 0x00e0,
+    });
     expect(font.nameForUnicode(0x00e0)).toBe("agrave");
     expect(font.nameForUnicode(65)).toBe("A");
   });
@@ -175,6 +178,34 @@ describe("font domain model", () => {
     expect(source).toBeDefined();
     expect(font.source(source.id)).toEqual(source);
     expect(font.sourceAt(axisLocationFromLocation(source.location))?.id).toBe(source.id);
+  });
+
+  it("creates and updates source metadata through the bridge", () => {
+    const font = loadFont();
+    const initialRevision = font.revision;
+
+    const created = font.createSource({
+      name: "  Bold  ",
+      location: { values: { wght: 700 } },
+    });
+
+    expect(created.changed).toBe(true);
+    expect(created.revision).toBeGreaterThan(initialRevision);
+    expect(created.source.name).toBe("Bold");
+    expect(created.source.location.values.wght).toBe(700);
+    expect(font.source(created.source.id)).toEqual(created.source);
+
+    const updated = font.updateSource({
+      id: created.source.id,
+      name: "Black",
+      location: { values: { wght: 900 } },
+    });
+
+    expect(updated.changed).toBe(true);
+    expect(updated.revision).toBeGreaterThan(created.revision);
+    expect(updated.source.name).toBe("Black");
+    expect(updated.source.location.values.wght).toBe(900);
+    expect(font.source(created.source.id)).toEqual(updated.source);
   });
 
   it("matches omitted location axes against axis defaults", () => {

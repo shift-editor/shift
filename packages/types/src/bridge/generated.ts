@@ -33,6 +33,8 @@ export interface BridgeApi {
   isVariable(): boolean
   getAxes(): Array<Axis>
   getSources(): Array<Source>
+  createSource(sourceCreate: SourceCreate): SourceChangeResult
+  updateSource(sourceUpdate: SourceUpdate): SourceChangeResult
   startEditSession(glyphHandle: GlyphHandle, sourceId: SourceId): void
   getPersistedVersion(): number
   isDirty(): boolean
@@ -241,4 +243,21 @@ export interface Source {
   location: Location
   layerId: LayerId
   filename?: string
+}
+
+export interface SourceChangeResult {
+  changed: boolean
+  revision: number
+  source: Source
+}
+
+export interface SourceCreate {
+  name: string
+  location: Location
+}
+
+export interface SourceUpdate {
+  id: SourceId
+  name: string
+  location: Location
 }
