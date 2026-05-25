@@ -58,7 +58,7 @@ src/
 ### Add a new bridge field
 
 1. Add the canonical DTO field in `shift-wire`.
-2. Add the NAPI adapter field in `shift-wire/src/bridges/napi`.
+2. Add the NAPI adapter field in `shift-bridge/src/wire_napi.rs`.
 3. Rebuild `shift-bridge` declarations.
 4. Run `pnpm generate:bridge-types` to update `@shift/types/bridge`.
 
@@ -78,5 +78,5 @@ cargo clippy -p shift-edit
 ## Related
 
 - `shift-ir` -- canonical Rust data model.
-- `shift-wire` -- bridge DTOs and NAPI adapter wrappers.
-- `shift-bridge` -- NAPI bridge exposing edit/session/persistence operations.
+- `shift-wire` -- bridge DTOs.
+- `shift-bridge` -- NAPI adapter wrappers and the Electron-facing bridge.

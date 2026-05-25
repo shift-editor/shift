@@ -6,7 +6,7 @@ NAPI bindings that expose the Rust font/editing engine to Node.js and Electron a
 
 **Architecture Invariant:** Only one `ActiveEdit` may be active at a time. Starting a second edit session returns a typed bridge error. **WHY:** The bridge owns one mutable edit surface and saves use an overlay snapshot of that active glyph.
 
-**Architecture Invariant:** Public bridge DTOs live in `shift-wire`; NAPI-specific wrappers live under `shift-wire::bridges::napi`. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient types such as `Float64Array`.
+**Architecture Invariant:** Public bridge DTOs live in `shift-wire`; NAPI-specific wrappers live in `shift-bridge/src/wire_napi.rs`. **WHY:** Wire shapes remain independent of the native module implementation, and plain Rust crates can test against `shift-wire` without linking Node/N-API symbols. The NAPI boundary can still return efficient types such as `Float64Array`.
 
 **Architecture Invariant:** Bridge methods return native NAPI values, not JSON strings. Domain failures flow through `BridgeError` and are converted at the NAPI boundary. **WHY:** Rust keeps typed errors internally, and TypeScript receives normal exceptions plus generated declaration types.
 
@@ -23,6 +23,7 @@ crates/shift-bridge/
     bridge.rs    -- `Bridge` NAPI class, session lifecycle, font reads, save task
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
+    wire_napi.rs -- NAPI adapters for canonical `shift-wire` DTOs
   Cargo.toml     -- cdylib crate; depends on shift-edit, shift-wire, shift-backends, napi
 ```
 
@@ -56,7 +57,7 @@ crates/shift-bridge/
 
 1. Add the domain operation to `EditSession` in `shift-edit`.
 2. Add or reuse a canonical DTO in `shift-wire`.
-3. Add a NAPI adapter in `shift-wire::bridges::napi` only if NAPI needs a different representation.
+3. Add a NAPI adapter in `wire_napi.rs` only if NAPI needs a different representation.
 4. Add the `#[napi]` method on `Bridge`.
 5. Parse string IDs through `input.rs`, call the session, then return the appropriate wire change.
 6. Run `cargo check -p shift-bridge` and rebuild the native module before regenerating bridge types.
@@ -81,6 +82,6 @@ pnpm generate:bridge-types
 
 - `shift-edit` -- edit session and glyph mutation logic.
 - `shift-ir` -- font/glyph/layer data model.
-- `shift-wire` -- canonical bridge DTOs and NAPI adapters.
+- `shift-wire` -- canonical bridge DTOs, with no NAPI dependency.
 - `shift-backends` -- font loading/saving.
 - `packages/types/src/bridge` -- generated TypeScript bridge facade.

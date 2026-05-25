@@ -1699,8 +1699,6 @@ dependencies = [
 name = "shift-wire"
 version = "0.0.0"
 dependencies = [
- "napi",
- "napi-derive",
  "serde",
  "shift-ir",
 ]

@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 shift-edit = { workspace = true }
-shift-wire = { workspace = true, features = ["napi"] }
+shift-wire = { workspace = true }
 shift-ir = { workspace = true }
 shift-backends = { workspace = true }
 

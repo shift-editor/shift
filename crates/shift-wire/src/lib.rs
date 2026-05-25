@@ -14,8 +14,6 @@ use shift_ir::{
     PointType as IrPointType, Source as IrSource, SourceId,
 };
 
-pub mod bridges;
-
 /// Flat numeric glyph values ordered to match `GlyphStructure`.
 ///
 /// This layout is structure-dependent:

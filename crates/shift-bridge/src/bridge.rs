@@ -1,5 +1,9 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::parse;
+use crate::wire_napi::{
+  NapiAxis, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphState, NapiGlyphStructure,
+  NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
+};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -14,10 +18,6 @@ use shift_edit::{
   BooleanOp, ContourId, Font, Glyph, GlyphLayer, GlyphName, LayerId, PointId, SourceId,
 };
 use shift_wire::{
-  bridges::napi::{
-    NapiAxis, NapiFontMetadata, NapiFontMetrics, NapiGlyphRecord, NapiGlyphState,
-    NapiGlyphStructure, NapiGlyphStructureChange, NapiGlyphValueChange, NapiPointType, NapiSource,
-  },
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   GlyphStructureChange, GlyphValueChange, Source,
 };

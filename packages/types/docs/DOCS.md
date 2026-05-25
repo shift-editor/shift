@@ -70,7 +70,7 @@ pnpm generate:bridge-types
 
 ### Regenerate bridge types after Rust bridge changes
 
-1. Update `shift-wire` and/or `shift-wire::bridges::napi`.
+1. Update canonical DTOs in `shift-wire` and NAPI adapters in `shift-bridge/src/wire_napi.rs`.
 2. Rebuild `shift-bridge` declarations.
 3. Run `pnpm generate:bridge-types`.
 4. Import the result from `@shift/types`.
