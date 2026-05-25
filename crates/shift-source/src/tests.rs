@@ -7,11 +7,12 @@ use crate::{
     ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource, ShiftCreateSource,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
+    ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -7463,6 +7464,166 @@ fn working_source_reports_source_interpolation_issues() {
         coverage[1].interpolation_issues[0].issue.layer_id,
         "source_Regular"
     );
+}
+
+#[test]
+fn working_source_creates_glyph_source_layer_and_rebuilds_coverage() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([(
+                "source_Regular".to_string(),
+                layer_with_line_contour(600.0),
+            )]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .create_glyph_source_layer(
+            "glyph_A",
+            "source_Bold",
+            ShiftCreateGlyphSourceLayer {
+                layer: layer_with_line_contour(700.0),
+            },
+        )
+        .expect("glyph source layer creation should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.glyph_id, "glyph_A");
+    assert_eq!(report.glyph_name, "A");
+    assert_eq!(report.source_id, "source_Bold");
+    assert_eq!(report.source_name, "Bold");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateGlyph {
+                glyph_id: "glyph_A".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+
+    let coverage = working_source.source_layer_coverage();
+    assert_eq!(coverage[1].source_id, "source_Bold");
+    assert_eq!(coverage[1].missing_layer_count, 0);
+    assert!(coverage[1].complete);
+    assert!(coverage[1].interpolation_compatible);
+}
+
+#[test]
+fn working_source_rejects_duplicate_glyph_source_layer_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let error = working_source
+        .create_glyph_source_layer(
+            "glyph_missing",
+            "source_Regular",
+            ShiftCreateGlyphSourceLayer {
+                layer: empty_layer(600.0),
+            },
+        )
+        .expect_err("missing glyph should fail before layer insertion");
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingGlyph { glyph_id } if glyph_id == "glyph_missing"
+    ));
+
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }],
+    ))
+    .expect("package is valid");
+
+    let error = working_source
+        .create_glyph_source_layer(
+            "glyph_A",
+            "source_Regular",
+            ShiftCreateGlyphSourceLayer {
+                layer: empty_layer(700.0),
+            },
+        )
+        .expect_err("existing layer should not be overwritten");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::GlyphLayerAlreadyExists { glyph_id, layer_id }
+            if glyph_id == "glyph_A" && layer_id == "source_Regular"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let coverage = working_source.source_layer_coverage();
+    assert_eq!(coverage[0].layer_count, 1);
+    assert!(coverage[0].complete);
+}
+
+#[test]
+fn working_source_rejects_invalid_glyph_source_layer_without_mutating() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .create_glyph_source_layer(
+            "glyph_A",
+            "source_Bold",
+            ShiftCreateGlyphSourceLayer {
+                layer: layer_with_component("glyph_Missing", "Missing"),
+            },
+        )
+        .expect_err("candidate validation should reject invalid new layer");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingComponentBase {
+            glyph_name,
+            base_glyph_id,
+        } if glyph_name == "A" && base_glyph_id == "glyph_Missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let coverage = working_source.source_layer_coverage();
+    assert_eq!(coverage[1].source_id, "source_Bold");
+    assert_eq!(coverage[1].missing_layer_count, 1);
+    assert!(!coverage[1].complete);
 }
 
 #[test]

@@ -96,6 +96,7 @@ deleteAxisMapping(mappingId)
 createSource(create)
 updateSource(sourceId, update)
 deleteSource(sourceId)
+createGlyphSourceLayer(glyphId, sourceId, create)
 createGlyphVariationSource(glyphId, create)
 updateGlyphVariationSource(glyphId, sourceId, update)
 deleteGlyphVariationSource(glyphId, sourceId)
@@ -397,6 +398,11 @@ format exploration:
   interpolation compatibility issues involve that source. This makes "new
   master added but not populated yet" a first-class state instead of a
   validation failure or a TypeScript-side scan.
+- **Glyph source layer creation:** source panels can add a missing glyph layer
+  for a declared source through a semantic command. The command refuses to
+  overwrite an existing layer, validates the candidate package before swapping
+  live state, and reports a narrow `UpdateGlyph` diff so incremental saves touch
+  only the owner glyph plus derived indexes.
 - **Axis mapping resolution:** source-level user-axis to construction-axis
   mappings can be queried in Rust. One-dimensional mappings interpolate between
   samples; multi-axis mappings use the same `fontdrasil` variation model as

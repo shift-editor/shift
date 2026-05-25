@@ -5,9 +5,9 @@ use crate::package::{
     stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
     ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
     ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
-    ShiftGlyphInterpolationCompatibility, ShiftGlyphSource, ShiftInterpolationCompatibilityIndex,
-    ShiftInterpolationCompatibilityIssue, ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint,
-    ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
+    ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
+    ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
+    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -218,6 +218,23 @@ pub struct ShiftDeleteSourcePreview {
     pub layer_uses: Vec<ShiftSourceLayerUse>,
     pub glyph_variation_source_uses: Vec<ShiftGlyphVariationSourceUse>,
     pub can_delete_without_cascade: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyphSourceLayer {
+    pub layer: ShiftGlyphLayer,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyphSourceLayerReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1723,6 +1740,55 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteSourceReport {
             source_id: source.id,
             source_name: source.name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn create_glyph_source_layer(
+        &mut self,
+        glyph_id: &str,
+        source_id: &str,
+        create: ShiftCreateGlyphSourceLayer,
+    ) -> ShiftSourceResult<ShiftCreateGlyphSourceLayerReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let source_name = next
+            .sources
+            .iter()
+            .find(|source| source.id == source_id)
+            .map(|source| source.name.clone())
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })?;
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        if glyph.layers.contains_key(source_id) {
+            return Err(ShiftSourceError::GlyphLayerAlreadyExists {
+                glyph_id: glyph_id.to_string(),
+                layer_id: source_id.to_string(),
+            });
+        }
+        glyph.layers.insert(source_id.to_string(), create.layer);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftCreateGlyphSourceLayerReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            source_id: source_id.to_string(),
+            source_name,
             diff,
             revision: self.revision,
         })

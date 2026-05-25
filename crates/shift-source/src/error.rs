@@ -104,6 +104,9 @@ pub enum ShiftSourceError {
     #[error("missing Shift glyph layer '{layer_id}' in glyph id '{glyph_id}'")]
     MissingGlyphLayer { glyph_id: String, layer_id: String },
 
+    #[error("glyph id '{glyph_id}' already has layer '{layer_id}'")]
+    GlyphLayerAlreadyExists { glyph_id: String, layer_id: String },
+
     #[error("missing component id '{component_id}' in glyph id '{glyph_id}' layer '{layer_id}'")]
     MissingComponent {
         glyph_id: String,
