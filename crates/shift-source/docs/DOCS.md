@@ -90,6 +90,7 @@ prepareCommit()
 renameGlyph(glyphId, newName)
 createGlyphVariationSource(glyphId, create)
 updateGlyphVariationSource(glyphId, sourceId, update)
+createComponentVariationSource(glyphId, layerId, componentId, create)
 updateComponentVariationSource(glyphId, layerId, componentId, sourceId, update)
 ```
 
@@ -307,13 +308,14 @@ format exploration:
   write/remove/invalidate operations.
 - **Working-source operations:** a document-level service can rename a glyph by
   stable ID, preview delete dependents, refuse unsafe deletes, edit component
-  and glyph variation sources by stable IDs, create glyph variation sources with
-  collision-safe generated IDs, keep query indexes warm, and report the exact
-  package diff caused by the semantic edit. Variation source edits validate the
-  whole candidate package before replacing the live working graph. Semantic
-  edits rebuild dependency, compatibility, axis-mapping, and component variation
-  query views from the candidate before swapping state, so invalid edits or
-  future index errors do not leave partially mutated source state behind.
+  and glyph variation sources by stable IDs, create glyph and component
+  variation sources with collision-safe generated IDs, keep query indexes warm,
+  and report the exact package diff caused by the semantic edit. Variation
+  source edits validate the whole candidate package before replacing the live
+  working graph. Semantic edits rebuild dependency, compatibility, axis-mapping,
+  and component variation query views from the candidate before swapping state,
+  so invalid edits or future index errors do not leave partially mutated source
+  state behind.
 - **Component activity queries:** inspectors and preview renderers can ask which
   conditional components are active at the current design location without
   reimplementing condition-tree semantics in the renderer. Conditional
