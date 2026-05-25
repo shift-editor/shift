@@ -1962,18 +1962,25 @@ pub fn apply_staged_commit(
             issue_count: recovery.issues.len(),
         });
     }
+    let diverged_count = recovery
+        .paths
+        .iter()
+        .filter(|path| path.live_state == ShiftStagedCommitLiveState::Diverged)
+        .count();
+    if diverged_count > 0 {
+        return Err(ShiftSourceError::StagedCommitLiveConflicts {
+            transaction_id: transaction_id.to_string(),
+            conflict_count: diverged_count,
+        });
+    }
+    let live_states_by_path = recovery
+        .paths
+        .iter()
+        .map(|path| (path.path.clone(), path.live_state))
+        .collect::<HashMap<_, _>>();
     let prepared = recovery
         .prepared
         .expect("missing marker should have produced a recovery issue");
-
-    let current_fingerprint = fingerprint_relative_paths(root, &prepared.impacted_paths)?;
-    let live_conflicts = compare_fingerprints(&prepared.expected_fingerprint, &current_fingerprint);
-    if !live_conflicts.is_empty() {
-        return Err(ShiftSourceError::StagedCommitLiveConflicts {
-            transaction_id: transaction_id.to_string(),
-            conflict_count: live_conflicts.len(),
-        });
-    }
 
     let backup_path = root
         .join(".shift-backups")
@@ -1985,6 +1992,11 @@ pub fn apply_staged_commit(
     for operation in &prepared.operations {
         match operation {
             ShiftCommitOperation::WriteFile { path, purpose, .. } => {
+                if live_states_by_path.get(path) == Some(&ShiftStagedCommitLiveState::Applied) {
+                    applied_paths.push(path.clone());
+                    continue;
+                }
+
                 if *purpose == ShiftCommitOperationPurpose::Canonical {
                     if let Some(backup) = backup_live_file(root, &backup_path, path)? {
                         backup_paths.push(backup);
@@ -2006,6 +2018,11 @@ pub fn apply_staged_commit(
                 applied_paths.push(path.clone());
             }
             ShiftCommitOperation::RemoveFile { path, purpose } => {
+                if live_states_by_path.get(path) == Some(&ShiftStagedCommitLiveState::Applied) {
+                    applied_paths.push(path.clone());
+                    continue;
+                }
+
                 if *purpose == ShiftCommitOperationPurpose::Canonical {
                     if let Some(backup) = backup_live_file(root, &backup_path, path)? {
                         backup_paths.push(backup);
@@ -2015,6 +2032,11 @@ pub fn apply_staged_commit(
                 applied_paths.push(path.clone());
             }
             ShiftCommitOperation::InvalidateDerived { path } => {
+                if live_states_by_path.get(path) == Some(&ShiftStagedCommitLiveState::Applied) {
+                    applied_paths.push(path.clone());
+                    continue;
+                }
+
                 remove_live_file_if_exists(root, path)?;
                 applied_paths.push(path.clone());
             }

@@ -1530,6 +1530,65 @@ fn apply_staged_commit_promotes_payloads_and_backs_up_canonical_files() {
 }
 
 #[test]
+fn apply_staged_commit_resumes_partially_promoted_transaction() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("one staged payload should be copied to live file");
+
+    let recovery_before =
+        inspect_staged_commits(&package_path).expect("partial transaction should inspect");
+    assert_eq!(
+        recovery_before[0]
+            .paths
+            .iter()
+            .map(|path| (path.path.as_str(), path.live_state))
+            .collect::<Vec<_>>(),
+        vec![
+            (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Pending),
+            ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Applied),
+        ]
+    );
+
+    let applied = apply_staged_commit(&package_path, &staged.transaction_id)
+        .expect("partial staged commit should resume");
+
+    let live_glyph =
+        fs::read_to_string(package_path.join("glyphs/glyph_A.json")).expect("glyph is readable");
+    assert!(live_glyph.contains("\"name\": \"RenamedBase\""));
+    assert!(package_path.join(DEPENDENCY_INDEX_PATH).exists());
+    assert_eq!(
+        applied.applied_paths,
+        vec![
+            "glyphs/glyph_A.json".to_string(),
+            DEPENDENCY_INDEX_PATH.to_string(),
+        ]
+    );
+    assert!(!staged.transaction_path.exists());
+}
+
+#[test]
 fn apply_staged_commit_refuses_live_changes_since_staging() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

@@ -701,12 +701,13 @@ already match the staged result, which covers the crash window after promotion
 but before transaction cleanup.
 
 `apply_staged_commit()` is the current live-promotion primitive. It reinspects
-the staged transaction, rechecks live files against the prepared fingerprint,
-backs up canonical files under `.shift-backups/<id>/originals/`, promotes staged
-payloads, removes canonical files marked for deletion, removes invalidated
-derived files, and clears the staged transaction after success. This is still
-not the final durability story: production recovery still needs to detect a
-crash midway through promotion and either finish or roll back from backups.
+the staged transaction, refuses true live divergence, backs up canonical files
+under `.shift-backups/<id>/originals/`, promotes staged payloads, removes
+canonical files marked for deletion, removes invalidated derived files, and
+clears the staged transaction after success. It is retryable after a crash
+midway through promotion: paths already matching the staged result are treated
+as applied, pending paths are finished, and genuinely divergent paths still stop
+the commit before more live files are touched.
 
 `ShiftWorkingSource` is the app-facing entry point for this save preflight. The
 intended flow is:
