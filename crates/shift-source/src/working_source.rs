@@ -1,11 +1,12 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
-    build_dependency_index, build_interpolation_compatibility_index, diff_packages,
-    fingerprint_package, fingerprint_relative_paths, prepare_package_commit, ShiftAxis,
-    ShiftAxisMapping, ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse, ShiftCondition,
-    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
-    ShiftGlyphInterpolationCompatibility, ShiftInterpolationCompatibilityIndex, ShiftPackage,
-    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit,
+    apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
+    diff_packages, fingerprint_package, fingerprint_relative_paths, prepare_package_commit,
+    stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
+    ShiftComponent, ShiftComponentUse, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
+    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility,
+    ShiftInterpolationCompatibilityIndex, ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint,
+    ShiftPreparedCommit, ShiftStagedCommit,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -54,6 +55,25 @@ pub struct ShiftDeleteGlyphReport {
     pub glyph_name: String,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftWorkingSourceSaveReport {
+    pub status: ShiftWorkingSourceSaveStatus,
+    pub prepared: ShiftPreparedCommit,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staged: Option<ShiftStagedCommit>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied: Option<ShiftAppliedCommit>,
+    pub revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftWorkingSourceSaveStatus {
+    Unchanged,
+    Saved,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -866,10 +886,41 @@ impl ShiftWorkingSource {
 
     pub fn mark_saved(&mut self, root: impl AsRef<Path>) -> ShiftSourceResult<()> {
         self.package.validate()?;
+        let saved_fingerprint = fingerprint_package(root)?;
         self.saved_package = self.package.clone();
-        self.saved_fingerprint = Some(fingerprint_package(root)?);
+        self.saved_fingerprint = Some(saved_fingerprint);
         self.revision = 0;
         Ok(())
+    }
+
+    pub fn save(
+        &mut self,
+        root: impl AsRef<Path>,
+    ) -> ShiftSourceResult<ShiftWorkingSourceSaveReport> {
+        let root = root.as_ref();
+        let prepared = self.prepare_commit(root)?;
+        if prepared.diff.changes.is_empty() {
+            self.mark_saved(root)?;
+            return Ok(ShiftWorkingSourceSaveReport {
+                status: ShiftWorkingSourceSaveStatus::Unchanged,
+                prepared,
+                staged: None,
+                applied: None,
+                revision: self.revision,
+            });
+        }
+
+        let staged = stage_prepared_commit(root, &self.package, &prepared)?;
+        let applied = apply_staged_commit(root, &staged.transaction_id)?;
+        self.mark_saved(root)?;
+
+        Ok(ShiftWorkingSourceSaveReport {
+            status: ShiftWorkingSourceSaveStatus::Saved,
+            prepared,
+            staged: Some(staged),
+            applied: Some(applied),
+            revision: self.revision,
+        })
     }
 
     pub fn delete_glyph(&mut self, glyph_id: &str) -> ShiftSourceResult<ShiftDeleteGlyphReport> {

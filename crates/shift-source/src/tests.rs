@@ -6,7 +6,7 @@ use crate::{
     ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -3173,6 +3173,153 @@ fn working_source_mark_saved_resets_baseline_and_revision() {
             .diff
             .changes,
         Vec::<ShiftPackageChange>::new()
+    );
+}
+
+#[test]
+fn working_source_mark_saved_failure_does_not_replace_saved_baseline() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    fs::remove_dir_all(package_path.join("glyphs")).expect("glyph dir should be removable");
+    fs::write(package_path.join("glyphs"), "not a directory\n")
+        .expect("glyph path should be replaced by a file");
+
+    let err = working_source
+        .mark_saved(&package_path)
+        .expect_err("broken package root should not mark saved");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ReadFile { path, .. } if path == package_path.join("glyphs")
+    ));
+    assert_eq!(working_source.revision(), 1);
+    assert_eq!(
+        working_source
+            .saved_package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("A")
+    );
+}
+
+#[test]
+fn working_source_save_stages_applies_and_marks_saved() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    let report = working_source
+        .save(&package_path)
+        .expect("working source should save");
+    let loaded = load_package(&package_path).expect("saved package should load");
+
+    assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Saved);
+    assert!(report.staged.is_some());
+    assert!(report.applied.is_some());
+    assert_eq!(report.revision, 0);
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .prepare_commit(&package_path)
+            .expect("clean commit should prepare")
+            .diff
+            .changes,
+        Vec::<ShiftPackageChange>::new()
+    );
+    assert_eq!(
+        loaded
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("RenamedBase")
+    );
+    assert!(
+        inspect_staged_commits(&package_path)
+            .expect("staged commits should inspect")
+            .is_empty(),
+        "successful save should not leave an unresolved transaction"
+    );
+}
+
+#[test]
+fn working_source_save_without_changes_refreshes_baseline_without_staging() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    let report = working_source
+        .save(&package_path)
+        .expect("unchanged working source should save as a no-op");
+
+    assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Unchanged);
+    assert!(report.staged.is_none());
+    assert!(report.applied.is_none());
+    assert_eq!(
+        report.prepared.diff.changes,
+        Vec::<ShiftPackageChange>::new()
+    );
+    assert_eq!(working_source.revision(), 0);
+    assert!(
+        !package_path.join(".shift-txn").exists(),
+        "unchanged save should not create a transaction"
+    );
+}
+
+#[test]
+fn working_source_save_refuses_external_conflicts_before_staging() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    fs::write(
+        package_path.join("glyphs/glyph_A.json"),
+        "{\"externally\":\"modified\"}\n",
+    )
+    .expect("glyph file should be modified externally");
+
+    let err = working_source
+        .save(&package_path)
+        .expect_err("external conflict should block save before staging");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::PreparedCommitHasConflicts { conflict_count: 1 }
+    ));
+    assert_eq!(
+        fs::read_to_string(package_path.join("glyphs/glyph_A.json"))
+            .expect("live glyph should be readable"),
+        "{\"externally\":\"modified\"}\n"
+    );
+    assert_eq!(working_source.revision(), 1);
+    assert!(
+        !package_path.join(".shift-txn").exists(),
+        "conflicting save should not stage a transaction"
     );
 }
 

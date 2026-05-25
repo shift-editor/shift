@@ -173,8 +173,13 @@ Current writer behavior:
   observed at open time. `prepare_commit()` then compares that saved baseline
   with the current package and current files, so the app can surface external
   file changes before the writer touches live package files.
+- `ShiftWorkingSource::save()` is the app-facing happy path for a document save:
+  it prepares, stages, applies, and marks the working source saved only after
+  the staged commit has succeeded.
 - `ShiftWorkingSource::mark_saved()` refreshes the saved baseline after a
-  successful writer commit.
+  successful writer commit. It fingerprints the saved files before updating the
+  in-memory saved baseline, so a failed refresh does not corrupt dirty-state
+  bookkeeping.
 
 Design rules for the spike:
 
@@ -770,11 +775,16 @@ open package
   -> ShiftWorkingSource::open_saved(root, package)
 edit through working-source semantic operations
   -> prepareCommit(root)
-  -> show conflicts or stagePreparedCommit(root, package, prepared)
-  -> applyStagedCommit(root, transactionId)
-writer succeeds
-  -> markSaved(root)
+  -> show conflicts
+save
+  -> ShiftWorkingSource::save(root)
+       prepares, stages, applies, then markSaved(root)
 ```
+
+The lower-level `stage_prepared_commit()` and `apply_staged_commit()` remain
+available for tests, recovery tooling, and explicit writer orchestration, but
+the desktop app should prefer `ShiftWorkingSource::save()` for ordinary saves so
+it cannot forget to refresh the saved baseline after a successful commit.
 
 ## File Fingerprints
 

@@ -42,5 +42,6 @@ pub use working_source::{
     ShiftGlyphVariationSourceLocation, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftMappedLocation, ShiftRenameGlyphReport, ShiftResolvedAxisValue,
     ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceLocation, ShiftWorkingSource,
+    ShiftSourceLocation, ShiftWorkingSource, ShiftWorkingSourceSaveReport,
+    ShiftWorkingSourceSaveStatus,
 };
