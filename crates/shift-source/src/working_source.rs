@@ -4,7 +4,7 @@ use crate::package::{
     diff_packages, fingerprint_package, fingerprint_relative_paths, prepare_package_commit,
     stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
     ShiftComponent, ShiftComponentUse, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
-    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility,
+    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint,
     ShiftPreparedCommit, ShiftStagedCommit,
 };
@@ -64,6 +64,27 @@ pub struct ShiftDeleteGlyphPreview {
 pub struct ShiftDeleteGlyphReport {
     pub glyph_id: String,
     pub glyph_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyphVariationSource {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+    pub name: String,
+    pub layer_id: String,
+    pub location: BTreeMap<String, f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateGlyphVariationSourceReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source: ShiftGlyphVariationSourceLocation,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -1179,6 +1200,64 @@ impl ShiftWorkingSource {
             prepared,
             staged: Some(staged),
             applied: Some(applied),
+            revision: self.revision,
+        })
+    }
+
+    pub fn create_glyph_variation_source(
+        &mut self,
+        glyph_id: &str,
+        create: ShiftCreateGlyphVariationSource,
+    ) -> ShiftSourceResult<ShiftCreateGlyphVariationSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        let source_id = create.source_id.unwrap_or_else(|| {
+            unique_member_id(
+                "glyphSource",
+                &create.name,
+                glyph
+                    .variation_sources
+                    .iter()
+                    .map(|source| source.id.as_str()),
+            )
+        });
+        glyph.variation_sources.push(ShiftGlyphSource {
+            id: source_id.clone(),
+            name: create.name,
+            layer_id: create.layer_id,
+            location: create.location,
+        });
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        let source = self
+            .glyph_variation_source_locations(glyph_id)?
+            .into_iter()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
+                glyph_id: glyph_id.to_string(),
+                source_id: source_id.clone(),
+            })?;
+
+        Ok(ShiftCreateGlyphVariationSourceReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            source_id,
+            source,
+            diff,
             revision: self.revision,
         })
     }
@@ -2355,6 +2434,47 @@ fn build_working_source_views(
         axis_mapping_resolvers,
         component_variation_resolvers,
     })
+}
+
+fn unique_member_id<'a>(
+    prefix: &str,
+    label: &str,
+    existing_ids: impl IntoIterator<Item = &'a str>,
+) -> String {
+    let existing_ids = existing_ids.into_iter().collect::<BTreeSet<_>>();
+    let base_id = readable_member_id(prefix, label);
+    if !existing_ids.contains(base_id.as_str()) {
+        return base_id;
+    }
+
+    for suffix in 2.. {
+        let candidate = format!("{base_id}_{suffix}");
+        if !existing_ids.contains(candidate.as_str()) {
+            return candidate;
+        }
+    }
+
+    unreachable!("unbounded suffix search should always find an unused stable id")
+}
+
+fn readable_member_id(prefix: &str, label: &str) -> String {
+    let mut id = String::with_capacity(prefix.len() + label.len() + 1);
+    id.push_str(prefix);
+
+    let mut has_label = false;
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() {
+            if !has_label {
+                id.push('_');
+                has_label = true;
+            }
+            id.push(ch);
+        } else if has_label && !id.ends_with('_') {
+            id.push('_');
+        }
+    }
+
+    id.trim_end_matches('_').to_string()
 }
 
 fn compile_axis_mapping_resolvers(package: &ShiftPackage) -> Vec<CompiledAxisMapping> {
