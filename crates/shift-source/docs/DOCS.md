@@ -41,16 +41,18 @@ and persistence behavior:
 
 Some source concepts can project cleanly into IR today. Others are intentionally
 stored in `shift-source` until the editor needs first-class manipulation for
-them. For example, IR glyphs now carry stable glyph IDs, and IR components carry
-stable component IDs, sparse locations, and axis inheritance because those
-concepts directly help rename safety, selection, undo, and inspector flows.
+them. For example, IR glyphs and sources now carry stable IDs, and IR components
+carry stable component IDs, sparse locations, and axis inheritance because those
+concepts directly help rename safety, source lookup, selection, undo, and
+inspector flows.
 `ShiftPackage` still owns durable base glyph reference IDs, conditions, and
 component variation sources until the editor needs first-class controls for
 those recipes.
 
 Promote concepts into IR when doing so makes editor code more direct:
 
-- stable glyph/source/axis IDs for selection, rename, and component references
+- stable glyph/source/axis IDs for selection, rename, source lookup, and
+  component references
 - sparse component locations and reset/inherit behavior for variable-component
   inspection
 - component conditions when rendering/selection depends on active components

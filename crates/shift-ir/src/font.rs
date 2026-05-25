@@ -193,7 +193,7 @@ impl Font {
         let source_id = source.id();
         let data = self.data_mut();
         if data.default_source_id.is_none() {
-            data.default_source_id = Some(source_id);
+            data.default_source_id = Some(source_id.clone());
         }
         data.sources.push(source);
         source_id
@@ -206,7 +206,7 @@ impl Font {
     }
 
     pub fn default_source_id(&self) -> Option<SourceId> {
-        self.data().default_source_id
+        self.data().default_source_id.clone()
     }
 
     pub fn set_default_source_id(&mut self, source_id: SourceId) {
@@ -214,11 +214,25 @@ impl Font {
     }
 
     pub fn default_source(&self) -> Option<&Source> {
-        let default_source_id = self.data().default_source_id?;
+        let default_source_id = self.data().default_source_id.as_ref()?;
         self.data()
             .sources
             .iter()
-            .find(|source| source.id() == default_source_id)
+            .find(|source| source.id_ref() == default_source_id)
+    }
+
+    pub fn source_by_id(&self, id: &SourceId) -> Option<&Source> {
+        self.data()
+            .sources
+            .iter()
+            .find(|source| source.id_ref() == id)
+    }
+
+    pub fn source_by_id_mut(&mut self, id: &SourceId) -> Option<&mut Source> {
+        self.data_mut()
+            .sources
+            .iter_mut()
+            .find(|source| source.id_ref() == id)
     }
 
     pub fn is_variable(&self) -> bool {

@@ -337,7 +337,7 @@ impl ActiveEdit {
   }
 
   fn source_id(&self) -> SourceId {
-    self.source_id
+    self.source_id.clone()
   }
 
   fn glyph_with_session_layer(&self) -> Glyph {
@@ -603,7 +603,7 @@ impl Bridge {
       .font
       .sources()
       .iter()
-      .find(|source| source.id() == source_id)
+      .find(|source| source.id_ref() == &source_id)
     {
       return Ok(source.layer_id());
     }
@@ -624,7 +624,7 @@ impl Bridge {
       return Err(BridgeError::ActiveEditAlreadyExists);
     }
 
-    let layer_id = self.source_layer_id(source_id)?;
+    let layer_id = self.source_layer_id(source_id.clone())?;
     let glyph = self
       .font
       .glyph(glyph_name)

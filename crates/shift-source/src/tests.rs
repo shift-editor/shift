@@ -8,7 +8,7 @@ use crate::{
 };
 use shift_ir::{
     Axis, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Layer,
-    Location, Source,
+    Location, Source, SourceId,
 };
 use shift_ir::{Glyph, GlyphLayer, PointType};
 use std::collections::BTreeMap;
@@ -94,6 +94,14 @@ fn save_and_load_package_roundtrips_font_basics() {
 
     assert_eq!(loaded.metadata().family_name.as_deref(), Some("Spike Sans"));
     assert_eq!(loaded.metrics().units_per_em, 2048.0);
+    assert_eq!(
+        loaded
+            .default_source()
+            .expect("default source should roundtrip")
+            .id_ref()
+            .as_str(),
+        "source_Regular"
+    );
     assert_eq!(loaded_glyph.id_ref().as_str(), "glyph_A");
     assert_eq!(loaded_glyph.unicodes(), &[0x0041]);
     assert_eq!(
@@ -111,7 +119,9 @@ fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
     let bold_layer_id = font.add_layer(Layer::new("Bold".to_string()));
     let mut bold_location = Location::new();
     bold_location.set("wght".to_string(), 900.0);
-    font.add_source(Source::new(
+    let bold_source_id = SourceId::from_stable("source_weight_max").unwrap();
+    font.add_source(Source::with_id(
+        bold_source_id.clone(),
         "Bold".to_string(),
         bold_location,
         bold_layer_id,
@@ -124,6 +134,7 @@ fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
         .find(|source| source.name == "Bold")
         .expect("bold source should be serialized");
 
+    assert_eq!(bold_source.id, "source_weight_max");
     assert_eq!(bold_source.location.get("axis_wght"), Some(&900.0));
     package
         .validate()
@@ -136,6 +147,7 @@ fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
         .find(|source| source.name() == "Bold")
         .expect("bold source should roundtrip");
 
+    assert_eq!(loaded_bold.id_ref(), &bold_source_id);
     assert_eq!(loaded_bold.location().get("wght"), Some(900.0));
 }
 

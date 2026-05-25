@@ -70,7 +70,7 @@ src/
 
 **Ownership hierarchy:** `Font` uses copy-on-write storage around its document data and glyph map. Glyphs use copy-on-write layer storage. Each `GlyphLayer` owns contours (by `ContourId`), components (by `ComponentId`), and anchors (ordered `Vec`). This keeps save snapshots cheap while preserving normal value-style mutation APIs.
 
-**Identity model:** `Font` still exposes name-keyed glyph APIs for compatibility with the current app and bridge, but `GlyphId` is the durable identity. Use `glyph_by_id()` when selection, undo, source-package projection, or rename/delete safety depends on identity rather than the editable glyph name.
+**Identity model:** `Font` still exposes name-keyed glyph APIs for compatibility with the current app and bridge, but `GlyphId` and `SourceId` are durable identities. Use `glyph_by_id()` and `source_by_id()` when selection, undo, source-package projection, or rename/delete safety depends on identity rather than editable names.
 
 **Edit pattern:** The upstream `shift-edit` crate edits a `GlyphLayer` through `EditSession`. The bridge owns active edit lifecycle and commits the edited layer back to the glyph/font when the session ends.
 

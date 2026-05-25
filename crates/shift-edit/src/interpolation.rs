@@ -176,9 +176,9 @@ pub fn build_masters(font: &Font, glyph: &Glyph) -> Option<Vec<GlyphMaster>> {
         let values = values_from_layer(layer);
 
         masters.push(GlyphMaster {
-            source_id: source.id().to_string(),
+            source_id: source.id_ref().to_string(),
             source_name: source.name().to_string(),
-            is_default_source: default_source_id == Some(source.id()),
+            is_default_source: default_source_id.as_ref() == Some(source.id_ref()),
             location: source.location().into(),
             structure,
             values,

@@ -1,5 +1,5 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
-use crate::ids::{axis_id_for_tag, glyph_id_for_name, source_id_for_name};
+use crate::ids::{axis_id_for_tag, glyph_id_for_name};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
     Anchor, Axis, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph,
@@ -538,7 +538,7 @@ impl ShiftPackage {
         let glyph_ids_by_name = glyph_ids_by_name(font);
         let default_source_id = font
             .default_source()
-            .map(|source| source_id_for_name(source.name()));
+            .map(|source| source.id_ref().as_str().to_string());
 
         let mut glyphs: Vec<_> = font
             .glyphs()
@@ -596,7 +596,7 @@ impl ShiftPackage {
                 font.add_layer(layer)
             };
             let source_id = source.id.clone();
-            let source = source.into_ir(layer_id, &axis_tags_by_id);
+            let source = source.into_ir(layer_id, &axis_tags_by_id)?;
             let ir_source_id = font.add_source(source);
             if self.manifest.default_source_id.as_deref() == Some(source_id.as_str()) {
                 font.set_default_source_id(ir_source_id);
@@ -1464,13 +1464,19 @@ impl ShiftSource {
         self,
         layer_id: shift_ir::LayerId,
         axis_tags_by_id: &HashMap<String, String>,
-    ) -> Source {
+    ) -> ShiftSourceResult<Source> {
         let mut location = Location::new();
         for (axis_id, value) in self.location {
             let tag = axis_tags_by_id.get(&axis_id).cloned().unwrap_or(axis_id);
             location.set(tag, value);
         }
-        Source::new(self.name, location, layer_id)
+        let source_id = shift_ir::SourceId::from_stable(self.id.clone()).map_err(|_| {
+            ShiftSourceError::InvalidIdentifier {
+                context: format!("source '{}'", self.name),
+                identifier: self.id,
+            }
+        })?;
+        Ok(Source::with_id(source_id, self.name, location, layer_id))
     }
 }
 
@@ -3107,7 +3113,7 @@ fn stable_family_id(family_name: &str) -> String {
 fn source_ids_by_layer(font: &Font) -> HashMap<shift_ir::LayerId, String> {
     font.sources()
         .iter()
-        .map(|source| (source.layer_id(), source_id_for_name(source.name())))
+        .map(|source| (source.layer_id(), source.id_ref().as_str().to_string()))
         .collect()
 }
 
@@ -3142,7 +3148,7 @@ fn sources_from_ir(sources: &[Source]) -> Vec<ShiftSource> {
     let mut sources: Vec<_> = sources
         .iter()
         .map(|source| ShiftSource {
-            id: source_id_for_name(source.name()),
+            id: source.id_ref().as_str().to_string(),
             name: source.name().to_string(),
             location: source
                 .location()

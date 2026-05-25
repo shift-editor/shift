@@ -15,7 +15,17 @@ pub struct Source {
 impl Source {
     pub fn new(name: String, location: Location, layer_id: LayerId) -> Self {
         Self {
-            id: SourceId::new(),
+            id: SourceId::for_name(&name),
+            name,
+            location,
+            layer_id,
+            filename: None,
+        }
+    }
+
+    pub fn with_id(id: SourceId, name: String, location: Location, layer_id: LayerId) -> Self {
+        Self {
+            id,
             name,
             location,
             layer_id,
@@ -30,7 +40,7 @@ impl Source {
         filename: String,
     ) -> Self {
         Self {
-            id: SourceId::new(),
+            id: SourceId::for_name(&name),
             name,
             location,
             layer_id,
@@ -39,7 +49,11 @@ impl Source {
     }
 
     pub fn id(&self) -> SourceId {
-        self.id
+        self.id.clone()
+    }
+
+    pub fn id_ref(&self) -> &SourceId {
+        &self.id
     }
 
     pub fn name(&self) -> &str {
@@ -79,6 +93,24 @@ mod tests {
 
         let source = Source::new("Regular".to_string(), location, layer_id);
         assert_eq!(source.name(), "Regular");
+        assert_eq!(source.id_ref().as_str(), "source_Regular");
         assert_eq!(source.location().get("wght"), Some(400.0));
+    }
+
+    #[test]
+    fn source_with_id_preserves_stable_identity_across_name_changes() {
+        let layer_id = LayerId::new();
+        let source_id = SourceId::from_stable("source_custom_primary").unwrap();
+        let mut source = Source::with_id(
+            source_id.clone(),
+            "Regular".to_string(),
+            Location::new(),
+            layer_id,
+        );
+
+        source.set_name("Text Regular".to_string());
+
+        assert_eq!(source.id_ref(), &source_id);
+        assert_eq!(source.name(), "Text Regular");
     }
 }

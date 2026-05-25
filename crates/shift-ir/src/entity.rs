@@ -96,6 +96,13 @@ pub struct GlyphId(String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GlyphIdParseError;
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourceId(String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceIdParseError;
+
 impl ComponentId {
     pub fn new() -> Self {
         Self(format!("component_{:020}", EntityId::new().raw()))
@@ -158,7 +165,7 @@ impl GlyphId {
     }
 
     pub fn for_name(name: &str) -> Self {
-        stable_label_id("glyph", name).unwrap_or_default()
+        stable_label_id("glyph", name).map(Self).unwrap_or_default()
     }
 
     pub fn from_raw(raw: u128) -> Self {
@@ -178,7 +185,35 @@ impl GlyphId {
     }
 }
 
-fn stable_label_id(prefix: &str, label: &str) -> Option<GlyphId> {
+impl SourceId {
+    pub fn new() -> Self {
+        Self(format!("source_{:020}", EntityId::new().raw()))
+    }
+
+    pub fn for_name(name: &str) -> Self {
+        stable_label_id("source", name)
+            .map(Self)
+            .unwrap_or_default()
+    }
+
+    pub fn from_raw(raw: u128) -> Self {
+        Self(raw.to_string())
+    }
+
+    pub fn from_stable(id: impl Into<String>) -> Result<Self, SourceIdParseError> {
+        let id = id.into();
+        if id.is_empty() {
+            return Err(SourceIdParseError);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn stable_label_id(prefix: &str, label: &str) -> Option<String> {
     let mut id = String::with_capacity(prefix.len() + label.len() + 1);
     id.push_str(prefix);
     id.push('_');
@@ -200,7 +235,7 @@ fn stable_label_id(prefix: &str, label: &str) -> Option<GlyphId> {
         return None;
     }
 
-    Some(GlyphId(id.to_string()))
+    Some(id.to_string())
 }
 
 impl Default for GlyphId {
@@ -237,12 +272,45 @@ impl std::str::FromStr for GlyphId {
     }
 }
 
+impl Default for SourceId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Borrow<str> for SourceId {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for SourceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for SourceIdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "source ID must not be empty")
+    }
+}
+
+impl std::error::Error for SourceIdParseError {}
+
+impl std::str::FromStr for SourceId {
+    type Err = SourceIdParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_stable(s)
+    }
+}
+
 typed_id!(PointId);
 typed_id!(ContourId);
 typed_id!(AnchorId);
 typed_id!(GuidelineId);
 typed_id!(LayerId);
-typed_id!(SourceId);
 
 #[cfg(test)]
 mod tests {
@@ -295,5 +363,24 @@ mod tests {
     fn glyph_id_for_name_keeps_readable_ascii_names() {
         assert_eq!(GlyphId::for_name("Aacute").as_str(), "glyph_Aacute");
         assert_eq!(GlyphId::for_name("A.alt").as_str(), "glyph_A_alt");
+    }
+
+    #[test]
+    fn source_id_accepts_stable_string_ids() {
+        let id = SourceId::from_stable("source_Regular").unwrap();
+        let parsed: SourceId = "source_Regular".parse().unwrap();
+
+        assert_eq!(id, parsed);
+        assert_eq!(id.as_str(), "source_Regular");
+        assert!("".parse::<SourceId>().is_err());
+    }
+
+    #[test]
+    fn source_id_for_name_keeps_readable_ascii_names() {
+        assert_eq!(SourceId::for_name("Regular").as_str(), "source_Regular");
+        assert_eq!(
+            SourceId::for_name("Bold Italic").as_str(),
+            "source_Bold_Italic"
+        );
     }
 }
