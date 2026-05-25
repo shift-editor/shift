@@ -29,7 +29,8 @@ pub use package::{
 };
 pub use working_source::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringDiagnostic, ShiftComponentLoweringHint,
+    ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
+    ShiftComponentLoweringDiagnostic, ShiftComponentLoweringHint, ShiftComponentLoweringPreflight,
     ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
     ShiftComponentResolvedLocation, ShiftComponentResolvedState,
     ShiftComponentResolvedVariationSource, ShiftComponentVariationResolution,

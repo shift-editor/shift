@@ -170,6 +170,25 @@ pub struct ShiftComponentLoweringDiagnostic {
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentLoweringPreflight {
+    pub total_component_count: usize,
+    pub supported_component_count: usize,
+    pub unsupported_component_count: usize,
+    pub affected_glyph_count: usize,
+    pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
+    pub missing_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
+    pub diagnostics: Vec<ShiftComponentLoweringDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentLoweringCapabilityCount {
+    pub capability: ShiftComponentLoweringCapability,
+    pub component_count: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentResolvedLocation {
@@ -565,16 +584,28 @@ impl ShiftWorkingSource {
         &self,
         target: &ShiftComponentLoweringTarget,
     ) -> Vec<ShiftComponentLoweringDiagnostic> {
+        self.component_lowering_preflight(target).diagnostics
+    }
+
+    pub fn component_lowering_preflight(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+    ) -> ShiftComponentLoweringPreflight {
         let supported_capabilities = target
             .supported_capabilities
             .iter()
             .copied()
             .collect::<BTreeSet<_>>();
         let mut diagnostics = Vec::new();
+        let mut total_component_count = 0;
+        let mut affected_glyph_ids = BTreeSet::new();
+        let mut missing_capability_counts =
+            BTreeMap::<ShiftComponentLoweringCapability, usize>::new();
 
         for glyph in &self.package.glyphs {
             for (layer_id, layer) in &glyph.layers {
                 for component in &layer.components {
+                    total_component_count += 1;
                     let summary = component_recipe_summary(glyph, layer_id, component);
                     let missing_capabilities = summary
                         .required_capabilities
@@ -585,6 +616,11 @@ impl ShiftWorkingSource {
 
                     if missing_capabilities.is_empty() {
                         continue;
+                    }
+
+                    affected_glyph_ids.insert(summary.glyph_id.clone());
+                    for capability in &missing_capabilities {
+                        *missing_capability_counts.entry(*capability).or_default() += 1;
                     }
 
                     diagnostics.push(ShiftComponentLoweringDiagnostic {
@@ -602,7 +638,30 @@ impl ShiftWorkingSource {
             }
         }
 
-        diagnostics
+        let missing_capabilities = missing_capability_counts
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let missing_capability_counts = missing_capability_counts
+            .into_iter()
+            .map(
+                |(capability, component_count)| ShiftComponentLoweringCapabilityCount {
+                    capability,
+                    component_count,
+                },
+            )
+            .collect::<Vec<_>>();
+        let unsupported_component_count = diagnostics.len();
+
+        ShiftComponentLoweringPreflight {
+            total_component_count,
+            supported_component_count: total_component_count - unsupported_component_count,
+            unsupported_component_count,
+            affected_glyph_count: affected_glyph_ids.len(),
+            missing_capabilities,
+            missing_capability_counts,
+            diagnostics,
+        }
     }
 
     pub fn component_resolved_locations(

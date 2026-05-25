@@ -1,8 +1,9 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringHint, ShiftComponentLoweringTarget,
-    ShiftComponentRecipeKind, ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
+    ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
+    ShiftComponentLoweringHint, ShiftComponentLoweringTarget, ShiftComponentRecipeKind,
+    ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
@@ -2726,8 +2727,43 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     ))
     .expect("working source should initialize");
 
-    let plain_diagnostics = working_source
-        .component_lowering_diagnostics(&ShiftComponentLoweringTarget::plain_components());
+    let plain_preflight = working_source
+        .component_lowering_preflight(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(plain_preflight.total_component_count, 4);
+    assert_eq!(plain_preflight.supported_component_count, 1);
+    assert_eq!(plain_preflight.unsupported_component_count, 3);
+    assert_eq!(plain_preflight.affected_glyph_count, 1);
+    assert_eq!(
+        plain_preflight.missing_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::Condition,
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+    assert_eq!(
+        plain_preflight.missing_capability_counts,
+        vec![
+            ShiftComponentLoweringCapabilityCount {
+                capability: ShiftComponentLoweringCapability::Condition,
+                component_count: 2,
+            },
+            ShiftComponentLoweringCapabilityCount {
+                capability: ShiftComponentLoweringCapability::VariableLocation,
+                component_count: 2,
+            },
+            ShiftComponentLoweringCapabilityCount {
+                capability: ShiftComponentLoweringCapability::VariableTransform,
+                component_count: 1,
+            },
+            ShiftComponentLoweringCapabilityCount {
+                capability: ShiftComponentLoweringCapability::AxisReset,
+                component_count: 1,
+            },
+        ]
+    );
+    let plain_diagnostics = plain_preflight.diagnostics;
     assert_eq!(plain_diagnostics.len(), 3);
     assert_eq!(
         plain_diagnostics
@@ -2754,7 +2790,18 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         ShiftComponentLoweringCapability::Condition,
         ShiftComponentLoweringCapability::VariableLocation,
     ]);
-    let partial_diagnostics = working_source.component_lowering_diagnostics(&partial_target);
+    let partial_preflight = working_source.component_lowering_preflight(&partial_target);
+    assert_eq!(partial_preflight.total_component_count, 4);
+    assert_eq!(partial_preflight.supported_component_count, 3);
+    assert_eq!(partial_preflight.unsupported_component_count, 1);
+    assert_eq!(
+        partial_preflight.missing_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+    let partial_diagnostics = partial_preflight.diagnostics;
     assert_eq!(partial_diagnostics.len(), 1);
     assert_eq!(
         partial_diagnostics[0].component_id,
@@ -2774,10 +2821,13 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         ShiftComponentLoweringCapability::VariableTransform,
         ShiftComponentLoweringCapability::AxisReset,
     ]);
-    assert_eq!(
-        working_source.component_lowering_diagnostics(&full_target),
-        Vec::new()
-    );
+    let full_preflight = working_source.component_lowering_preflight(&full_target);
+    assert_eq!(full_preflight.total_component_count, 4);
+    assert_eq!(full_preflight.supported_component_count, 4);
+    assert_eq!(full_preflight.unsupported_component_count, 0);
+    assert_eq!(full_preflight.affected_glyph_count, 0);
+    assert_eq!(full_preflight.missing_capabilities, Vec::new());
+    assert_eq!(full_preflight.diagnostics, Vec::new());
 }
 
 #[test]
