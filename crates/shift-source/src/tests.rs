@@ -4,11 +4,11 @@ use crate::{
     ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
     ShiftComponentLoweringHint, ShiftComponentLoweringTarget, ShiftComponentRecipeKind,
     ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
-    ShiftComponentVariationResolution, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftMappedAxisValue, ShiftMappedAxisValueSource, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
+    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -4112,6 +4112,195 @@ fn working_source_reports_authored_component_variation_source_locations() {
     assert_eq!(
         sources[1].transform_source,
         ShiftComponentVariationTransformSource::ComponentVariationSource
+    );
+}
+
+#[test]
+fn working_source_updates_component_variation_source_with_narrow_impact() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_update".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let report = working_source
+        .update_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_update",
+            "componentSource_black",
+            ShiftComponentVariationSourceUpdate {
+                name: "Bold component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 68.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 10.0,
+                    scale_x: 1.15,
+                    scale_y: 1.15,
+                    ..DecomposedTransform::identity()
+                }),
+            },
+        )
+        .expect("component variation source update should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source.source_name, "Bold component");
+    assert_eq!(
+        report.source.parent_values.get("axis_wght"),
+        Some(&ShiftComponentVariationParentAxisValue {
+            value: 800.0,
+            source: ShiftComponentVariationParentAxisValueSource::VariationSourceParentLocation,
+        })
+    );
+    assert_eq!(
+        report.source.values.get("axis_stemWidth"),
+        Some(&ShiftResolvedAxisValue {
+            value: 68.0,
+            source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+        })
+    );
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateGlyph {
+                glyph_id: "glyph_A".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+
+    let exact_state = working_source
+        .component_resolved_states(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+        )
+        .expect("updated component variation source should resolve");
+    assert!(matches!(
+        &exact_state[0].variation_resolution,
+        ShiftComponentVariationResolution::ExactSource { source }
+            if source.id == "componentSource_black" && source.name == "Bold component"
+    ));
+}
+
+#[test]
+fn working_source_rejects_invalid_component_variation_source_update_without_mutating() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_invalid_update".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![
+                ShiftComponentVariationSource {
+                    id: "componentSource_light".to_string(),
+                    name: "Light component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    location: BTreeMap::new(),
+                    transform: None,
+                },
+                ShiftComponentVariationSource {
+                    id: "componentSource_black".to_string(),
+                    name: "Black component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                    transform: None,
+                },
+            ],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let error = working_source
+        .update_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_invalid_update",
+            "componentSource_light",
+            ShiftComponentVariationSourceUpdate {
+                name: "Duplicate location".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::new(),
+                transform: None,
+            },
+        )
+        .expect_err("duplicate parent location should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateComponentVariationParentLocation {
+            glyph_name,
+            base_glyph_id,
+            source_id,
+            existing_source_id,
+        } if glyph_name == "A"
+            && base_glyph_id == "glyph_stem"
+            && source_id == "componentSource_black"
+            && existing_source_id == "componentSource_light"
+    ));
+    assert_eq!(working_source.revision(), 0);
+
+    let sources = working_source
+        .component_variation_source_locations(
+            "glyph_A",
+            "source_Regular",
+            "component_7_invalid_update",
+        )
+        .expect("component variation source locations should still resolve");
+    assert_eq!(sources[0].source_name, "Light component");
+    assert_eq!(
+        sources[0].parent_values.get("axis_wght"),
+        Some(&ShiftComponentVariationParentAxisValue {
+            value: 100.0,
+            source: ShiftComponentVariationParentAxisValueSource::VariationSourceParentLocation,
+        })
     );
 }
 

@@ -59,6 +59,29 @@ pub struct ShiftDeleteGlyphReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationSourceUpdate {
+    pub name: String,
+    pub parent_location: BTreeMap<String, f64>,
+    pub location: BTreeMap<String, f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transform: Option<DecomposedTransform>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateComponentVariationSourceReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub source_id: String,
+    pub source: ShiftComponentVariationSourceLocation,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftWorkingSourceSaveReport {
@@ -1135,6 +1158,88 @@ impl ShiftWorkingSource {
             prepared,
             staged: Some(staged),
             applied: Some(applied),
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_component_variation_source(
+        &mut self,
+        glyph_id: &str,
+        layer_id: &str,
+        component_id: &str,
+        source_id: &str,
+        update: ShiftComponentVariationSourceUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateComponentVariationSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        let layer =
+            glyph
+                .layers
+                .get_mut(layer_id)
+                .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: glyph_id.to_string(),
+                    layer_id: layer_id.to_string(),
+                })?;
+        let component = layer
+            .components
+            .iter_mut()
+            .find(|component| component.id == component_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponent {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+            })?;
+        let source = component
+            .variation_sources
+            .iter_mut()
+            .find(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponentVariationSource {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+        source.name = update.name;
+        source.parent_location = update.parent_location;
+        source.location = update.location;
+        source.transform = update.transform;
+
+        next.validate()?;
+        self.package = next;
+        self.refresh_indexes()?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        let source = self
+            .component_variation_source_locations(glyph_id, layer_id, component_id)?
+            .into_iter()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponentVariationSource {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+
+        Ok(ShiftUpdateComponentVariationSourceReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            layer_id: layer_id.to_string(),
+            component_id: component_id.to_string(),
+            source_id: source_id.to_string(),
+            source,
+            diff,
             revision: self.revision,
         })
     }

@@ -111,6 +111,14 @@ pub enum ShiftSourceError {
         component_id: String,
     },
 
+    #[error("missing component variation source id '{source_id}' in component id '{component_id}' on glyph id '{glyph_id}' layer '{layer_id}'")]
+    MissingComponentVariationSource {
+        glyph_id: String,
+        layer_id: String,
+        component_id: String,
+        source_id: String,
+    },
+
     #[error("glyph file '{path}' contains glyph id '{actual_glyph_id}', expected '{expected_glyph_id}' from the file name")]
     GlyphFileIdMismatch {
         path: PathBuf,
