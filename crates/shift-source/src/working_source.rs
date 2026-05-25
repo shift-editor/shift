@@ -258,6 +258,8 @@ pub struct ShiftComponentResolvedLocation {
     pub base_glyph_name: String,
     pub active: bool,
     pub axis_inheritance: crate::package::ShiftAxisInheritance,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ShiftConditionEvaluation>,
     pub values: BTreeMap<String, ShiftResolvedAxisValue>,
 }
 
@@ -317,6 +319,8 @@ pub struct ShiftComponentResolvedState {
     pub base_glyph_name: String,
     pub active: bool,
     pub axis_inheritance: crate::package::ShiftAxisInheritance,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ShiftConditionEvaluation>,
     pub values: BTreeMap<String, ShiftResolvedAxisValue>,
     pub transform: DecomposedTransform,
     pub variation_resolution: ShiftComponentVariationResolution,
@@ -785,11 +789,14 @@ impl ShiftWorkingSource {
             .components
             .iter()
             .map(|component| {
-                let active = component
+                let condition = component
                     .condition
                     .as_ref()
-                    .map(|condition| self.condition_matches(&glyph.name, condition, location))
-                    .transpose()?
+                    .map(|condition| self.evaluate_condition(&glyph.name, condition, location))
+                    .transpose()?;
+                let active = condition
+                    .as_ref()
+                    .map(ShiftConditionEvaluation::active)
                     .unwrap_or(true);
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                 let values = self.resolve_component_axis_values(component, base_glyph, location);
@@ -803,6 +810,7 @@ impl ShiftWorkingSource {
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,
                     axis_inheritance: component.axis_inheritance,
+                    condition,
                     values,
                 })
             })
@@ -830,11 +838,14 @@ impl ShiftWorkingSource {
             .components
             .iter()
             .map(|component| {
-                let active = component
+                let condition = component
                     .condition
                     .as_ref()
-                    .map(|condition| self.condition_matches(&glyph.name, condition, location))
-                    .transpose()?
+                    .map(|condition| self.evaluate_condition(&glyph.name, condition, location))
+                    .transpose()?;
+                let active = condition
+                    .as_ref()
+                    .map(ShiftConditionEvaluation::active)
                     .unwrap_or(true);
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                 let base_values =
@@ -864,6 +875,7 @@ impl ShiftWorkingSource {
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,
                     axis_inheritance: component.axis_inheritance,
+                    condition,
                     values: resolved.values,
                     transform: resolved.transform,
                     variation_resolution: resolved.resolution,

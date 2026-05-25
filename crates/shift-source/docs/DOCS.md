@@ -331,13 +331,16 @@ format exploration:
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
-  axis defaults into a concrete component location.
+  axis defaults into a concrete component location. Conditional components carry
+  the same evaluated condition tree as activity queries, so this query can drive
+  an inspector panel on its own.
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent
   location, without parsing component JSON in the renderer. Conditional
   components that are inactive at the queried location report an explicit
-  `inactive` resolution and skip variation-source interpolation.
+  `inactive` resolution, include the evaluated condition tree, and skip
+  variation-source interpolation.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a

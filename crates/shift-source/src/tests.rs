@@ -4157,6 +4157,25 @@ fn working_source_skips_variation_resolution_for_inactive_conditional_components
     ))
     .expect("working source should initialize");
 
+    let inactive_location = working_source
+        .component_resolved_locations(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 400.0)]),
+        )
+        .expect("inactive component location should resolve");
+    assert!(!inactive_location[0].active);
+    assert_eq!(
+        inactive_location[0].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 400.0,
+            min: Some(700.0),
+            max: None,
+            active: false,
+        })
+    );
+
     let inactive_state = working_source
         .component_resolved_states(
             "glyph_A",
@@ -4166,6 +4185,16 @@ fn working_source_skips_variation_resolution_for_inactive_conditional_components
         .expect("inactive component state should resolve");
 
     assert!(!inactive_state[0].active);
+    assert_eq!(
+        inactive_state[0].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 400.0,
+            min: Some(700.0),
+            max: None,
+            active: false,
+        })
+    );
     assert_eq!(
         inactive_state[0].variation_resolution,
         ShiftComponentVariationResolution::Inactive
