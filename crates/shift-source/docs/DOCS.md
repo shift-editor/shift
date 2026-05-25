@@ -88,6 +88,7 @@ getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
 prepareCommit()
 renameGlyph(glyphId, newName)
+updateGlyphVariationSource(glyphId, sourceId, update)
 updateComponentVariationSource(glyphId, layerId, componentId, sourceId, update)
 ```
 
@@ -305,8 +306,8 @@ format exploration:
   write/remove/invalidate operations.
 - **Working-source operations:** a document-level service can rename a glyph by
   stable ID, preview delete dependents, refuse unsafe deletes, edit component
-  variation sources by stable IDs, keep query indexes warm, and report the exact
-  package diff caused by the semantic edit. Component variation source edits
+  and glyph variation sources by stable IDs, keep query indexes warm, and report
+  the exact package diff caused by the semantic edit. Variation source edits
   validate the whole candidate package before replacing the live working graph.
   Semantic edits rebuild dependency, compatibility, axis-mapping, and component
   variation query views from the candidate before swapping state, so invalid

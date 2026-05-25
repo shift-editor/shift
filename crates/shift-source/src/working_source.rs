@@ -70,6 +70,25 @@ pub struct ShiftDeleteGlyphReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphVariationSourceUpdate {
+    pub name: String,
+    pub layer_id: String,
+    pub location: BTreeMap<String, f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateGlyphVariationSourceReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source: ShiftGlyphVariationSourceLocation,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftComponentVariationSourceUpdate {
     pub name: String,
     pub parent_location: BTreeMap<String, f64>,
@@ -1160,6 +1179,60 @@ impl ShiftWorkingSource {
             prepared,
             staged: Some(staged),
             applied: Some(applied),
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_glyph_variation_source(
+        &mut self,
+        glyph_id: &str,
+        source_id: &str,
+        update: ShiftGlyphVariationSourceUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateGlyphVariationSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        let source = glyph
+            .variation_sources
+            .iter_mut()
+            .find(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
+                glyph_id: glyph_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+        source.name = update.name;
+        source.layer_id = update.layer_id;
+        source.location = update.location;
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        let source = self
+            .glyph_variation_source_locations(glyph_id)?
+            .into_iter()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
+                glyph_id: glyph_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+
+        Ok(ShiftUpdateGlyphVariationSourceReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            source_id: source_id.to_string(),
+            source,
+            diff,
             revision: self.revision,
         })
     }

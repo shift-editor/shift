@@ -119,6 +119,9 @@ pub enum ShiftSourceError {
         source_id: String,
     },
 
+    #[error("missing glyph variation source id '{source_id}' in glyph id '{glyph_id}'")]
+    MissingGlyphVariationSource { glyph_id: String, source_id: String },
+
     #[error("glyph file '{path}' contains glyph id '{actual_glyph_id}', expected '{expected_glyph_id}' from the file name")]
     GlyphFileIdMismatch {
         path: PathBuf,
