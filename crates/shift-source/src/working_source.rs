@@ -107,6 +107,8 @@ pub struct ShiftComponentRecipeSummary {
     pub variation_parent_axis_ids: Vec<String>,
     pub variation_location_axis_ids: Vec<String>,
     pub varies_transform: bool,
+    pub lowering_hint: ShiftComponentLoweringHint,
+    pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,6 +118,24 @@ pub enum ShiftComponentRecipeKind {
     Conditional,
     Variable,
     ConditionalVariable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentLoweringCapability {
+    Condition,
+    VariableLocation,
+    VariableTransform,
+    AxisReset,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentLoweringHint {
+    StaticComponent,
+    ConditionalComponent,
+    VariableComponent,
+    ConditionalVariableComponent,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -531,16 +551,37 @@ impl ShiftWorkingSource {
                     .iter()
                     .any(|source| source.transform.is_some());
                 let has_condition = component.condition.is_some();
+                let has_variable_location =
+                    !component.location.is_empty() || !component.variation_sources.is_empty();
+                let resets_axes = component.axis_inheritance
+                    != crate::package::ShiftAxisInheritance::InheritParent;
                 let has_variable_recipe = !component.location.is_empty()
                     || !component.variation_sources.is_empty()
-                    || component.axis_inheritance
-                        != crate::package::ShiftAxisInheritance::InheritParent;
+                    || resets_axes;
                 let kind = match (has_condition, has_variable_recipe) {
                     (false, false) => ShiftComponentRecipeKind::Static,
                     (true, false) => ShiftComponentRecipeKind::Conditional,
                     (false, true) => ShiftComponentRecipeKind::Variable,
                     (true, true) => ShiftComponentRecipeKind::ConditionalVariable,
                 };
+                let lowering_hint = match kind {
+                    ShiftComponentRecipeKind::Static => ShiftComponentLoweringHint::StaticComponent,
+                    ShiftComponentRecipeKind::Conditional => {
+                        ShiftComponentLoweringHint::ConditionalComponent
+                    }
+                    ShiftComponentRecipeKind::Variable => {
+                        ShiftComponentLoweringHint::VariableComponent
+                    }
+                    ShiftComponentRecipeKind::ConditionalVariable => {
+                        ShiftComponentLoweringHint::ConditionalVariableComponent
+                    }
+                };
+                let required_capabilities = component_lowering_capabilities(
+                    has_condition,
+                    has_variable_location,
+                    varies_transform,
+                    resets_axes,
+                );
 
                 ShiftComponentRecipeSummary {
                     glyph_id: glyph.id.clone(),
@@ -557,6 +598,8 @@ impl ShiftWorkingSource {
                     variation_parent_axis_ids,
                     variation_location_axis_ids,
                     varies_transform,
+                    lowering_hint,
+                    required_capabilities,
                 }
             })
             .collect())
@@ -1240,6 +1283,28 @@ fn collect_condition_axis_ids(condition: &ShiftCondition, axis_ids: &mut BTreeSe
         }
         ShiftCondition::Not { condition } => collect_condition_axis_ids(condition, axis_ids),
     }
+}
+
+fn component_lowering_capabilities(
+    has_condition: bool,
+    has_variable_location: bool,
+    varies_transform: bool,
+    resets_axes: bool,
+) -> Vec<ShiftComponentLoweringCapability> {
+    let mut capabilities = BTreeSet::new();
+    if has_condition {
+        capabilities.insert(ShiftComponentLoweringCapability::Condition);
+    }
+    if has_variable_location {
+        capabilities.insert(ShiftComponentLoweringCapability::VariableLocation);
+    }
+    if varies_transform {
+        capabilities.insert(ShiftComponentLoweringCapability::VariableTransform);
+    }
+    if resets_axes {
+        capabilities.insert(ShiftComponentLoweringCapability::AxisReset);
+    }
+    capabilities.into_iter().collect()
 }
 
 fn normalize_axis_value(value: f64, minimum: f64, default: f64, maximum: f64) -> f64 {

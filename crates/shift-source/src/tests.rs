@@ -1,7 +1,8 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentRecipeKind, ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
+    ShiftComponentLoweringCapability, ShiftComponentLoweringHint, ShiftComponentRecipeKind,
+    ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
@@ -2517,6 +2518,16 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
                 }),
             },
             ShiftComponent {
+                id: "component_variable".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 44.0)]),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: None,
+            },
+            ShiftComponent {
                 id: "component_variable_conditional".to_string(),
                 base_glyph_id: "glyph_stem".to_string(),
                 base_glyph_name: "stem".to_string(),
@@ -2553,12 +2564,20 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
         .component_recipes("glyph_A", "source_Regular")
         .expect("component recipes should summarize");
 
-    assert_eq!(recipes.len(), 3);
+    assert_eq!(recipes.len(), 4);
     assert_eq!(recipes[0].component_id, "component_plain");
     assert_eq!(recipes[0].kind, ShiftComponentRecipeKind::Static);
     assert_eq!(recipes[0].condition_axis_ids, Vec::<String>::new());
     assert_eq!(recipes[0].variation_source_count, 0);
     assert!(!recipes[0].varies_transform);
+    assert_eq!(
+        recipes[0].lowering_hint,
+        ShiftComponentLoweringHint::StaticComponent
+    );
+    assert_eq!(
+        recipes[0].required_capabilities,
+        Vec::<ShiftComponentLoweringCapability>::new()
+    );
 
     assert_eq!(recipes[1].component_id, "component_conditional");
     assert_eq!(recipes[1].kind, ShiftComponentRecipeKind::Conditional);
@@ -2567,31 +2586,70 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
         vec!["axis_wdth".to_string(), "axis_wght".to_string()]
     );
     assert_eq!(recipes[1].location_axis_ids, Vec::<String>::new());
+    assert_eq!(
+        recipes[1].lowering_hint,
+        ShiftComponentLoweringHint::ConditionalComponent
+    );
+    assert_eq!(
+        recipes[1].required_capabilities,
+        vec![ShiftComponentLoweringCapability::Condition]
+    );
 
-    assert_eq!(recipes[2].component_id, "component_variable_conditional");
-    assert_eq!(
-        recipes[2].kind,
-        ShiftComponentRecipeKind::ConditionalVariable
-    );
-    assert_eq!(
-        recipes[2].axis_inheritance,
-        ShiftAxisInheritance::ResetUnspecifiedToFont
-    );
-    assert_eq!(recipes[2].condition_axis_ids, vec!["axis_wdth".to_string()]);
+    assert_eq!(recipes[2].component_id, "component_variable");
+    assert_eq!(recipes[2].kind, ShiftComponentRecipeKind::Variable);
+    assert_eq!(recipes[2].condition_axis_ids, Vec::<String>::new());
     assert_eq!(
         recipes[2].location_axis_ids,
         vec!["axis_stemWidth".to_string()]
     );
-    assert_eq!(recipes[2].variation_source_count, 1);
+    assert_eq!(recipes[2].variation_source_count, 0);
+    assert!(!recipes[2].varies_transform);
     assert_eq!(
-        recipes[2].variation_parent_axis_ids,
+        recipes[2].lowering_hint,
+        ShiftComponentLoweringHint::VariableComponent
+    );
+    assert_eq!(
+        recipes[2].required_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableLocation]
+    );
+
+    assert_eq!(recipes[3].component_id, "component_variable_conditional");
+    assert_eq!(
+        recipes[3].kind,
+        ShiftComponentRecipeKind::ConditionalVariable
+    );
+    assert_eq!(
+        recipes[3].axis_inheritance,
+        ShiftAxisInheritance::ResetUnspecifiedToFont
+    );
+    assert_eq!(recipes[3].condition_axis_ids, vec!["axis_wdth".to_string()]);
+    assert_eq!(
+        recipes[3].location_axis_ids,
+        vec!["axis_stemWidth".to_string()]
+    );
+    assert_eq!(recipes[3].variation_source_count, 1);
+    assert_eq!(
+        recipes[3].variation_parent_axis_ids,
         vec!["axis_wght".to_string()]
     );
     assert_eq!(
-        recipes[2].variation_location_axis_ids,
+        recipes[3].variation_location_axis_ids,
         vec!["axis_stemWidth".to_string()]
     );
-    assert!(recipes[2].varies_transform);
+    assert!(recipes[3].varies_transform);
+    assert_eq!(
+        recipes[3].lowering_hint,
+        ShiftComponentLoweringHint::ConditionalVariableComponent
+    );
+    assert_eq!(
+        recipes[3].required_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::Condition,
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
 }
 
 #[test]
