@@ -4,6 +4,7 @@ import type {
   AnchorId,
   AxisId,
   ComponentId,
+  GlyphId,
   GuidelineId,
   LayerId,
   SourceId,
@@ -121,6 +122,7 @@ export interface AxisTent {
 
 export interface ComponentData {
   id: ComponentId
+  baseGlyphId?: GlyphId
   baseGlyphName: GlyphName
 }
 

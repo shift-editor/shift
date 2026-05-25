@@ -1,5 +1,4 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
-use crate::ids::glyph_id_for_name;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
     Anchor, Axis, AxisId, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics,
@@ -536,6 +535,7 @@ impl ShiftPackage {
     pub fn from_font(font: &Font) -> Self {
         let source_ids_by_layer = source_ids_by_layer(font);
         let glyph_ids_by_name = glyph_ids_by_name(font);
+        let glyph_names_by_id = glyph_names_by_id(font);
         let default_source_id = font
             .default_source()
             .map(|source| source.id_ref().as_str().to_string());
@@ -543,7 +543,14 @@ impl ShiftPackage {
         let mut glyphs: Vec<_> = font
             .glyphs()
             .values()
-            .map(|glyph| glyph_from_ir(glyph, &source_ids_by_layer, &glyph_ids_by_name))
+            .map(|glyph| {
+                glyph_from_ir(
+                    glyph,
+                    &source_ids_by_layer,
+                    &glyph_ids_by_name,
+                    &glyph_names_by_id,
+                )
+            })
             .collect();
         glyphs.sort_by(|left, right| left.id.cmp(&right.id));
 
@@ -2315,13 +2322,29 @@ impl ShiftGlyphLayer {
         }
 
         for component in self.components {
-            let Some(base_name) = glyph_names_by_id.get(&component.base_glyph_id) else {
+            let base_glyph_id = component.base_glyph_id.clone();
+            let Some(base_name) = glyph_names_by_id.get(&base_glyph_id) else {
                 return Err(ShiftSourceError::MissingComponentBase {
                     glyph_name: glyph_name.to_string(),
-                    base_glyph_id: component.base_glyph_id,
+                    base_glyph_id,
                 });
             };
-            layer.add_component(Component::with_transform(
+            let component_id =
+                shift_ir::ComponentId::from_stable(component.id.clone()).map_err(|_| {
+                    ShiftSourceError::InvalidIdentifier {
+                        context: format!("component in glyph '{glyph_name}'"),
+                        identifier: component.id,
+                    }
+                })?;
+            let base_glyph_id = GlyphId::from_stable(base_glyph_id.clone()).map_err(|_| {
+                ShiftSourceError::InvalidIdentifier {
+                    context: format!("component in glyph '{glyph_name}'"),
+                    identifier: base_glyph_id,
+                }
+            })?;
+            layer.add_component(Component::with_base_glyph_id(
+                component_id,
+                base_glyph_id,
                 base_name.as_str(),
                 component.transform,
             ));
@@ -3136,6 +3159,18 @@ fn glyph_ids_by_name(font: &Font) -> HashMap<String, String> {
         .collect()
 }
 
+fn glyph_names_by_id(font: &Font) -> HashMap<String, String> {
+    font.glyphs()
+        .values()
+        .map(|glyph| {
+            (
+                glyph.id_ref().as_str().to_string(),
+                glyph.name().to_string(),
+            )
+        })
+        .collect()
+}
+
 fn axes_from_ir(axes: &[Axis]) -> Vec<ShiftAxis> {
     axes.iter()
         .map(|axis| ShiftAxis {
@@ -3179,6 +3214,7 @@ fn glyph_from_ir(
     glyph: &Glyph,
     source_ids_by_layer: &HashMap<shift_ir::LayerId, String>,
     glyph_ids_by_name: &HashMap<String, String>,
+    glyph_names_by_id: &HashMap<String, String>,
 ) -> ShiftGlyph {
     let layers = glyph
         .layers()
@@ -3187,7 +3223,7 @@ fn glyph_from_ir(
             let source_id = source_ids_by_layer.get(layer_id)?;
             Some((
                 source_id.clone(),
-                glyph_layer_from_ir(layer, glyph_ids_by_name),
+                glyph_layer_from_ir(layer, glyph_ids_by_name, glyph_names_by_id),
             ))
         })
         .collect();
@@ -3209,6 +3245,7 @@ fn glyph_from_ir(
 fn glyph_layer_from_ir(
     layer: &GlyphLayer,
     glyph_ids_by_name: &HashMap<String, String>,
+    glyph_names_by_id: &HashMap<String, String>,
 ) -> ShiftGlyphLayer {
     ShiftGlyphLayer {
         advance_width: layer.width(),
@@ -3216,7 +3253,7 @@ fn glyph_layer_from_ir(
         contours: layer.contours_iter().map(contour_from_ir).collect(),
         components: layer
             .components_iter()
-            .map(|component| component_from_ir(component, glyph_ids_by_name))
+            .map(|component| component_from_ir(component, glyph_ids_by_name, glyph_names_by_id))
             .collect(),
         anchors: layer.anchors_iter().cloned().collect(),
         guidelines: layer.guidelines().to_vec(),
@@ -3250,12 +3287,19 @@ fn point_type_from_ir(point_type: PointType) -> ShiftPointType {
 fn component_from_ir(
     component: &Component,
     glyph_ids_by_name: &HashMap<String, String>,
+    glyph_names_by_id: &HashMap<String, String>,
 ) -> ShiftComponent {
-    let base_glyph_name = component.base_glyph().to_string();
-    let base_glyph_id = glyph_ids_by_name
-        .get(base_glyph_name.as_str())
+    let base_glyph_id = component.base_glyph_id_ref().as_str().to_string();
+    let base_glyph_name = glyph_names_by_id
+        .get(base_glyph_id.as_str())
         .cloned()
-        .unwrap_or_else(|| glyph_id_for_name(&base_glyph_name));
+        .or_else(|| {
+            glyph_ids_by_name
+                .get(component.base_glyph().as_str())
+                .filter(|id| id.as_str() == base_glyph_id)
+                .map(|_| component.base_glyph().to_string())
+        })
+        .unwrap_or_else(|| component.base_glyph().to_string());
 
     ShiftComponent {
         id: component.id_ref().as_str().to_string(),

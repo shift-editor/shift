@@ -7,8 +7,8 @@ use crate::{
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
 };
 use shift_ir::{
-    Axis, AxisId, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Layer,
-    Location, Source, SourceId,
+    Axis, AxisId, Component, ComponentId, Contour, DecomposedTransform, Font, FontMetadata,
+    FontMetrics, GlyphId, Layer, Location, Source, SourceId,
 };
 use shift_ir::{Glyph, GlyphLayer, PointType};
 use std::collections::BTreeMap;
@@ -61,6 +61,55 @@ fn package_from_font_sorts_glyphs_by_stable_id() {
         .collect();
 
     assert_eq!(glyph_ids, vec!["glyph_A", "glyph_B"]);
+}
+
+#[test]
+fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
+    let base_glyph_id = GlyphId::from_stable("glyph_base_A").unwrap();
+    let component_id = ComponentId::from_stable("component_Aacute_base").unwrap();
+
+    let mut font = Font::new();
+    font.insert_glyph(Glyph::with_id(base_glyph_id.clone(), "A.renamed"));
+
+    let mut composite_layer = GlyphLayer::with_width(610.0);
+    composite_layer.add_component(Component::with_base_glyph_id(
+        component_id.clone(),
+        base_glyph_id.clone(),
+        "A.old",
+        DecomposedTransform::identity(),
+    ));
+    let mut composite = Glyph::new("Aacute");
+    composite.set_layer(font.default_layer_id(), composite_layer);
+    font.insert_glyph(composite);
+
+    let package = ShiftPackage::from_font(&font);
+    let component = &package
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.name == "Aacute")
+        .expect("composite glyph should be serialized")
+        .layers
+        .get("source_Regular")
+        .expect("default layer should be serialized")
+        .components[0];
+
+    assert_eq!(component.id, "component_Aacute_base");
+    assert_eq!(component.base_glyph_id, "glyph_base_A");
+    assert_eq!(component.base_glyph_name, "A.renamed");
+
+    let loaded = package.into_font().expect("package should load");
+    let loaded_component = loaded
+        .glyph("Aacute")
+        .expect("composite glyph should load")
+        .layer(loaded.default_layer_id())
+        .expect("default layer should load")
+        .components_iter()
+        .next()
+        .expect("component should load");
+
+    assert_eq!(loaded_component.id_ref(), &component_id);
+    assert_eq!(loaded_component.base_glyph_id_ref(), &base_glyph_id);
+    assert_eq!(loaded_component.base_glyph().as_str(), "A.renamed");
 }
 
 #[test]

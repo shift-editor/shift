@@ -5,7 +5,8 @@ use std::str::FromStr;
 use crate::error::{CoreError, CoreResult};
 use shift_ir::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
-    ContourId, DecomposedTransform as IrTransform, GlyphLayer, PointId, PointType as IrPointType,
+    ContourId, DecomposedTransform as IrTransform, GlyphId, GlyphLayer, PointId,
+    PointType as IrPointType,
 };
 use shift_wire::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
 
@@ -162,11 +163,21 @@ fn restore_components(
         let component_id: ComponentId =
             parse_id(&component_data.id, CoreError::InvalidComponentId)?;
         let transform = cursor.read_component_transform()?;
-        let component = IrComponent::with_id(
-            component_id,
-            component_data.base_glyph_name.clone(),
-            transform,
-        );
+        let component = if let Some(base_glyph_id) = &component_data.base_glyph_id {
+            let base_glyph_id: GlyphId = parse_id(base_glyph_id, CoreError::InvalidGlyphId)?;
+            IrComponent::with_base_glyph_id(
+                component_id,
+                base_glyph_id,
+                component_data.base_glyph_name.clone(),
+                transform,
+            )
+        } else {
+            IrComponent::with_id(
+                component_id,
+                component_data.base_glyph_name.clone(),
+                transform,
+            )
+        };
 
         layer.add_component(component);
     }
@@ -255,6 +266,7 @@ mod tests {
         assert_eq!(anchor.position(), (5.0, 6.0));
 
         let component = restored.component(ComponentId::from_raw(40)).unwrap();
+        assert_eq!(component.base_glyph_id_ref().as_str(), "glyph_base");
         assert_eq!(component.base_glyph().as_str(), "base");
         assert_eq!(component.transform().translate_x, 7.0);
         assert_eq!(component.transform().t_center_y, 15.0);

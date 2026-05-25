@@ -17,6 +17,9 @@ pub enum CoreError {
     #[error("invalid component id {0}")]
     InvalidComponentId(String),
 
+    #[error("invalid glyph id {0}")]
+    InvalidGlyphId(String),
+
     #[error("contour {0} not found")]
     ContourNotFound(ContourId),
 

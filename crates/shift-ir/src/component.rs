@@ -1,10 +1,11 @@
-use crate::entity::ComponentId;
+use crate::entity::{ComponentId, GlyphId};
 use crate::{GlyphName, Location};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Component {
     id: ComponentId,
+    base_glyph_id: GlyphId,
     base_glyph: GlyphName,
     transform: DecomposedTransform,
     #[serde(default)]
@@ -213,9 +214,11 @@ impl Transform {
 
 impl Component {
     pub fn new(base_glyph: impl Into<GlyphName>) -> Self {
+        let base_glyph = base_glyph.into();
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
+            base_glyph,
             transform: DecomposedTransform::identity(),
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
@@ -226,9 +229,11 @@ impl Component {
         base_glyph: impl Into<GlyphName>,
         transform: DecomposedTransform,
     ) -> Self {
+        let base_glyph = base_glyph.into();
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
+            base_glyph,
             transform,
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
@@ -240,8 +245,26 @@ impl Component {
         base_glyph: impl Into<GlyphName>,
         transform: DecomposedTransform,
     ) -> Self {
+        let base_glyph = base_glyph.into();
         Self {
             id,
+            base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
+            base_glyph,
+            transform,
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::InheritParent,
+        }
+    }
+
+    pub fn with_base_glyph_id(
+        id: ComponentId,
+        base_glyph_id: GlyphId,
+        base_glyph: impl Into<GlyphName>,
+        transform: DecomposedTransform,
+    ) -> Self {
+        Self {
+            id,
+            base_glyph_id,
             base_glyph: base_glyph.into(),
             transform,
             location: Location::new(),
@@ -250,9 +273,11 @@ impl Component {
     }
 
     pub fn with_matrix(base_glyph: impl Into<GlyphName>, matrix: &Transform) -> Self {
+        let base_glyph = base_glyph.into();
         Self {
             id: ComponentId::new(),
-            base_glyph: base_glyph.into(),
+            base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
+            base_glyph,
             transform: DecomposedTransform::from_matrix(matrix),
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
@@ -269,6 +294,14 @@ impl Component {
 
     pub fn base_glyph(&self) -> &GlyphName {
         &self.base_glyph
+    }
+
+    pub fn base_glyph_id(&self) -> GlyphId {
+        self.base_glyph_id.clone()
+    }
+
+    pub fn base_glyph_id_ref(&self) -> &GlyphId {
+        &self.base_glyph_id
     }
 
     pub fn transform(&self) -> &DecomposedTransform {
@@ -316,6 +349,7 @@ mod tests {
     #[test]
     fn component_creation() {
         let c = Component::new("a".to_string());
+        assert_eq!(c.base_glyph_id_ref().as_str(), "glyph_a");
         assert_eq!(c.base_glyph().as_str(), "a");
         assert!(c.transform().is_identity());
         assert!(c.location().is_empty());
@@ -334,6 +368,22 @@ mod tests {
             c.axis_inheritance(),
             AxisInheritance::ResetUnspecifiedToDefault
         );
+    }
+
+    #[test]
+    fn component_preserves_stable_base_glyph_identity_separately_from_label() {
+        let component_id = ComponentId::from_stable("component_Aacute_base").unwrap();
+        let base_glyph_id = GlyphId::from_stable("glyph_base_A").unwrap();
+        let component = Component::with_base_glyph_id(
+            component_id.clone(),
+            base_glyph_id.clone(),
+            "A",
+            DecomposedTransform::identity(),
+        );
+
+        assert_eq!(component.id_ref(), &component_id);
+        assert_eq!(component.base_glyph_id_ref(), &base_glyph_id);
+        assert_eq!(component.base_glyph().as_str(), "A");
     }
 
     #[test]

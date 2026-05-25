@@ -100,7 +100,8 @@ Current `Component` carries the editor-facing part of variable component state:
 ```rust
 Component {
     id: ComponentId,
-    base_glyph: GlyphName,
+    base_glyph_id: GlyphId,
+    base_glyph: GlyphName, // readable label/cache, not the durable target
     transform: DecomposedTransform,
     location: Location,
     axis_inheritance: AxisInheritance,
@@ -108,9 +109,9 @@ Component {
 ```
 
 That is enough for simple composites and sparse variable component placement.
-It still leaves durable base-glyph targeting and component-specific variation
-source records in source/package services. If component recipes become a
-first-class editor feature, IR should grow toward this shape:
+It still leaves component-specific conditions and variation source records in
+source/package services. If component recipes become a first-class editor
+feature, IR should grow toward this shape:
 
 ```rust
 Component {

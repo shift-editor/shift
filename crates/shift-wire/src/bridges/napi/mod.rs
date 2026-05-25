@@ -314,6 +314,8 @@ impl From<NapiAnchorData> for AnchorData {
 pub struct NapiComponentData {
     #[napi(ts_type = "ComponentId")]
     pub id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: Option<String>,
     #[napi(ts_type = "GlyphName")]
     pub base_glyph_name: String,
 }
@@ -322,6 +324,7 @@ impl From<ComponentData> for NapiComponentData {
     fn from(component: ComponentData) -> Self {
         Self {
             id: component.id,
+            base_glyph_id: component.base_glyph_id.map(|id| id.to_string()),
             base_glyph_name: component.base_glyph_name.to_string(),
         }
     }
@@ -331,6 +334,7 @@ impl From<NapiComponentData> for ComponentData {
     fn from(component: NapiComponentData) -> Self {
         Self {
             id: component.id,
+            base_glyph_id: component.base_glyph_id,
             base_glyph_name: component.base_glyph_name.into(),
         }
     }

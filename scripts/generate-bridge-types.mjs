@@ -21,6 +21,7 @@ const idTypeNames = new Set([
   "AnchorId",
   "AxisId",
   "ComponentId",
+  "GlyphId",
   "GuidelineId",
   "LayerId",
   "SourceId",

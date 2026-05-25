@@ -4,6 +4,7 @@ import type {
   AnchorId,
   AxisId,
   ComponentId,
+  GlyphId,
   GuidelineId,
   GlyphName,
   LayerId,
@@ -116,6 +117,7 @@ export interface NapiAxisTent {
 
 export interface NapiComponentData {
   id: ComponentId
+  baseGlyphId?: GlyphId
   baseGlyphName: GlyphName
 }
 
