@@ -29,12 +29,12 @@ pub use package::{
 };
 pub use working_source::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentResolvedLocation, ShiftComponentResolvedState,
-    ShiftComponentResolvedVariationSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationUnsupportedReason, ShiftDeleteGlyphPreview, ShiftDeleteGlyphReport,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceLocation, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocation, ShiftRenameGlyphReport, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceLocation, ShiftWorkingSource,
+    ShiftComponentRecipeKind, ShiftComponentRecipeSummary, ShiftComponentResolvedLocation,
+    ShiftComponentResolvedState, ShiftComponentResolvedVariationSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationUnsupportedReason,
+    ShiftDeleteGlyphPreview, ShiftDeleteGlyphReport, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocation, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftMappedLocation, ShiftRenameGlyphReport,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceLocation, ShiftWorkingSource,
 };

@@ -302,6 +302,9 @@ format exploration:
 - **Component activity queries:** inspectors and preview renderers can ask which
   conditional components are active at the current design location without
   reimplementing condition-tree semantics in the renderer.
+- **Component recipe summaries:** inspectors, sidebars, and export preflight can
+  list static, conditional, variable, and conditional-variable components plus
+  the axes involved without resolving every component at a concrete location.
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
@@ -508,6 +511,9 @@ The format should make these app behaviors straightforward:
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
   local axes, and active/inactive conditions.
+- Component recipe lists that can quickly identify static, conditional,
+  variable, and conditional-variable components before asking for current
+  location state.
 - Current-location previews that use the same condition evaluation rules as
   save/export preflight.
 - Component recipe UI that can label each resolved axis value as coming from the

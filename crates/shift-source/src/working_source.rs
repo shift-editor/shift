@@ -13,7 +13,7 @@ use shift_ir::variation::{
     RoundingBehaviour,
 };
 use shift_ir::DecomposedTransform;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
 #[derive(Clone, Debug)]
@@ -88,6 +88,34 @@ pub struct ShiftComponentActivity {
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentRecipeSummary {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub base_glyph_id: String,
+    pub base_glyph_name: String,
+    pub kind: ShiftComponentRecipeKind,
+    pub axis_inheritance: crate::package::ShiftAxisInheritance,
+    pub condition_axis_ids: Vec<String>,
+    pub location_axis_ids: Vec<String>,
+    pub variation_source_count: usize,
+    pub variation_parent_axis_ids: Vec<String>,
+    pub variation_location_axis_ids: Vec<String>,
+    pub varies_transform: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentRecipeKind {
+    Static,
+    Conditional,
+    Variable,
+    ConditionalVariable,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -457,6 +485,81 @@ impl ShiftWorkingSource {
                 })
             })
             .collect()
+    }
+
+    pub fn component_recipes(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+    ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
+        let glyph = self.glyph(glyph_id)?;
+        let layer =
+            glyph
+                .layers
+                .get(layer_id)
+                .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: glyph_id.to_string(),
+                    layer_id: layer_id.to_string(),
+                })?;
+
+        Ok(layer
+            .components
+            .iter()
+            .map(|component| {
+                let condition_axis_ids = component
+                    .condition
+                    .as_ref()
+                    .map(condition_axis_ids)
+                    .unwrap_or_default();
+                let location_axis_ids = component.location.keys().cloned().collect::<Vec<_>>();
+                let variation_parent_axis_ids = component
+                    .variation_sources
+                    .iter()
+                    .flat_map(|source| source.parent_location.keys().cloned())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                let variation_location_axis_ids = component
+                    .variation_sources
+                    .iter()
+                    .flat_map(|source| source.location.keys().cloned())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                let varies_transform = component
+                    .variation_sources
+                    .iter()
+                    .any(|source| source.transform.is_some());
+                let has_condition = component.condition.is_some();
+                let has_variable_recipe = !component.location.is_empty()
+                    || !component.variation_sources.is_empty()
+                    || component.axis_inheritance
+                        != crate::package::ShiftAxisInheritance::InheritParent;
+                let kind = match (has_condition, has_variable_recipe) {
+                    (false, false) => ShiftComponentRecipeKind::Static,
+                    (true, false) => ShiftComponentRecipeKind::Conditional,
+                    (false, true) => ShiftComponentRecipeKind::Variable,
+                    (true, true) => ShiftComponentRecipeKind::ConditionalVariable,
+                };
+
+                ShiftComponentRecipeSummary {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    layer_id: layer_id.to_string(),
+                    component_id: component.id.clone(),
+                    base_glyph_id: component.base_glyph_id.clone(),
+                    base_glyph_name: component.base_glyph_name.clone(),
+                    kind,
+                    axis_inheritance: component.axis_inheritance,
+                    condition_axis_ids,
+                    location_axis_ids,
+                    variation_source_count: component.variation_sources.len(),
+                    variation_parent_axis_ids,
+                    variation_location_axis_ids,
+                    varies_transform,
+                }
+            })
+            .collect())
     }
 
     pub fn component_resolved_locations(
@@ -1116,6 +1219,26 @@ fn fingerprint_subset(
                 )
             })
             .collect(),
+    }
+}
+
+fn condition_axis_ids(condition: &ShiftCondition) -> Vec<String> {
+    let mut axis_ids = BTreeSet::new();
+    collect_condition_axis_ids(condition, &mut axis_ids);
+    axis_ids.into_iter().collect()
+}
+
+fn collect_condition_axis_ids(condition: &ShiftCondition, axis_ids: &mut BTreeSet<String>) {
+    match condition {
+        ShiftCondition::AxisRange { axis_id, .. } => {
+            axis_ids.insert(axis_id.clone());
+        }
+        ShiftCondition::And { conditions } | ShiftCondition::Or { conditions } => {
+            for condition in conditions {
+                collect_condition_axis_ids(condition, axis_ids);
+            }
+        }
+        ShiftCondition::Not { condition } => collect_condition_axis_ids(condition, axis_ids),
     }
 }
 

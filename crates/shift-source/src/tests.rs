@@ -1,7 +1,7 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
+    ShiftComponentRecipeKind, ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
@@ -2472,6 +2472,126 @@ fn working_source_resolves_component_location_with_reset_defaults() {
             source: ShiftResolvedAxisValueSource::BaseLocalDefault,
         })
     );
+}
+
+#[test]
+fn working_source_summarizes_component_recipes_without_resolving_locations() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![
+            ShiftComponent {
+                id: "component_plain".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: None,
+            },
+            ShiftComponent {
+                id: "component_conditional".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: Some(ShiftCondition::And {
+                    conditions: vec![
+                        ShiftCondition::AxisRange {
+                            axis_id: "axis_wdth".to_string(),
+                            min: Some(90.0),
+                            max: None,
+                        },
+                        ShiftCondition::Not {
+                            condition: Box::new(ShiftCondition::AxisRange {
+                                axis_id: "axis_wght".to_string(),
+                                min: Some(900.0),
+                                max: None,
+                            }),
+                        },
+                    ],
+                }),
+            },
+            ShiftComponent {
+                id: "component_variable_conditional".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 42.0)]),
+                axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+                variation_sources: vec![ShiftComponentVariationSource {
+                    id: "componentSource_black".to_string(),
+                    name: "Black component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                    transform: Some(DecomposedTransform {
+                        translate_x: 12.0,
+                        ..DecomposedTransform::identity()
+                    }),
+                }],
+                condition: Some(ShiftCondition::AxisRange {
+                    axis_id: "axis_wdth".to_string(),
+                    min: Some(90.0),
+                    max: None,
+                }),
+            },
+        ],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), width_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let recipes = working_source
+        .component_recipes("glyph_A", "source_Regular")
+        .expect("component recipes should summarize");
+
+    assert_eq!(recipes.len(), 3);
+    assert_eq!(recipes[0].component_id, "component_plain");
+    assert_eq!(recipes[0].kind, ShiftComponentRecipeKind::Static);
+    assert_eq!(recipes[0].condition_axis_ids, Vec::<String>::new());
+    assert_eq!(recipes[0].variation_source_count, 0);
+    assert!(!recipes[0].varies_transform);
+
+    assert_eq!(recipes[1].component_id, "component_conditional");
+    assert_eq!(recipes[1].kind, ShiftComponentRecipeKind::Conditional);
+    assert_eq!(
+        recipes[1].condition_axis_ids,
+        vec!["axis_wdth".to_string(), "axis_wght".to_string()]
+    );
+    assert_eq!(recipes[1].location_axis_ids, Vec::<String>::new());
+
+    assert_eq!(recipes[2].component_id, "component_variable_conditional");
+    assert_eq!(
+        recipes[2].kind,
+        ShiftComponentRecipeKind::ConditionalVariable
+    );
+    assert_eq!(
+        recipes[2].axis_inheritance,
+        ShiftAxisInheritance::ResetUnspecifiedToFont
+    );
+    assert_eq!(recipes[2].condition_axis_ids, vec!["axis_wdth".to_string()]);
+    assert_eq!(
+        recipes[2].location_axis_ids,
+        vec!["axis_stemWidth".to_string()]
+    );
+    assert_eq!(recipes[2].variation_source_count, 1);
+    assert_eq!(
+        recipes[2].variation_parent_axis_ids,
+        vec!["axis_wght".to_string()]
+    );
+    assert_eq!(
+        recipes[2].variation_location_axis_ids,
+        vec!["axis_stemWidth".to_string()]
+    );
+    assert!(recipes[2].varies_transform);
 }
 
 #[test]
