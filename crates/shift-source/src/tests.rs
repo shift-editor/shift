@@ -2207,7 +2207,7 @@ fn working_source_mapping_uses_defaults_and_reports_outside_sample_range() {
 }
 
 #[test]
-fn working_source_multi_axis_mapping_requires_exact_sample() {
+fn working_source_multi_axis_mapping_interpolates_between_samples() {
     let mut package = package_with_axes(
         vec![weight_axis(), width_axis(), internal_stem_axis()],
         Vec::new(),
@@ -2217,41 +2217,62 @@ fn working_source_multi_axis_mapping_requires_exact_sample() {
         name: "Weight and width drive stem".to_string(),
         input_axes: vec!["axis_wght".to_string(), "axis_wdth".to_string()],
         output_axes: vec!["axis_stem".to_string()],
-        samples: vec![ShiftAxisMappingSample {
-            input_location: BTreeMap::from([
-                ("axis_wght".to_string(), 700.0),
-                ("axis_wdth".to_string(), 100.0),
-            ]),
-            output_location: BTreeMap::from([("axis_stem".to_string(), 0.75)]),
-        }],
+        samples: vec![
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 400.0),
+                    ("axis_wdth".to_string(), 100.0),
+                ]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 900.0),
+                    ("axis_wdth".to_string(), 100.0),
+                ]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.6)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 400.0),
+                    ("axis_wdth".to_string(), 200.0),
+                ]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.2)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 900.0),
+                    ("axis_wdth".to_string(), 200.0),
+                ]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.8)]),
+            },
+        ],
     }];
     let working_source = ShiftWorkingSource::new(package).expect("package is valid");
 
     let exact = working_source
         .mapped_location(&BTreeMap::from([
-            ("axis_wght".to_string(), 700.0),
-            ("axis_wdth".to_string(), 100.0),
+            ("axis_wght".to_string(), 900.0),
+            ("axis_wdth".to_string(), 200.0),
         ]))
         .expect("exact mapping should build");
-    let missing = working_source
+    let interpolated = working_source
         .mapped_location(&BTreeMap::from([
-            ("axis_wght".to_string(), 700.0),
-            ("axis_wdth".to_string(), 90.0),
+            ("axis_wght".to_string(), 650.0),
+            ("axis_wdth".to_string(), 150.0),
         ]))
-        .expect("non-exact mapping should report diagnostics");
+        .expect("interpolated mapping should build");
 
     assert!(exact.diagnostics.is_empty());
-    assert_eq!(exact.values["axis_stem"].value, 0.75);
+    assert_eq!(exact.values["axis_stem"].value, 0.8);
+    assert!(interpolated.diagnostics.is_empty());
     assert_eq!(
-        missing.diagnostics,
-        vec![ShiftAxisMappingDiagnostic {
-            mapping_id: "mapping_weight_width_to_stem".to_string(),
-            kind: ShiftAxisMappingDiagnosticKind::NoExactSample,
-        }]
-    );
-    assert_eq!(
-        missing.values["axis_stem"].source,
-        ShiftMappedAxisValueSource::AxisDefault
+        interpolated.values["axis_stem"],
+        ShiftMappedAxisValue {
+            value: 0.4,
+            source: ShiftMappedAxisValueSource::AxisMapping,
+            mapping_id: Some("mapping_weight_width_to_stem".to_string()),
+        }
     );
 }
 

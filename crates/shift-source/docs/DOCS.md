@@ -318,8 +318,10 @@ format exploration:
   explicit or inherited from an axis default.
 - **Axis mapping resolution:** source-level user-axis to construction-axis
   mappings can be queried in Rust. One-dimensional mappings interpolate between
-  samples; multi-axis mappings currently require exact samples and return
-  diagnostics rather than inventing an interpolation model.
+  samples; multi-axis mappings use the same `fontdrasil` variation model as
+  glyph/component interpolation. This lets source panels preview avar2-style
+  many-input-to-many-output mapping behavior without TypeScript rebuilding a
+  separate interpolation stack.
 
 ## Variable-First Direction
 
@@ -361,6 +363,9 @@ Lessons being folded into the package model:
   can drive internal construction-axis coordinates without making those axes the
   same thing. Mapping samples are explicit, not sparse: each sample must provide
   all declared input and output axes, and sample input locations must be unique.
+  One-dimensional mappings interpolate by ordered sample position. Multi-axis
+  mappings build a normalized variation model over the declared input axes and
+  interpolate declared output axes at the queried location.
   A mapping output axis may not be used as another mapping's input axis until
   Shift has an explicit mapping graph; current mappings are independent rules,
   not list-ordered programs.
@@ -459,8 +464,10 @@ Current axis mapping sketch:
 
 Axis mappings are intended to be inspectable authoring rules, not hidden
 compiler behavior. One-dimensional mappings may interpolate between unique
-sample inputs. Multi-axis mappings currently require an exact sample match.
-Mappings cannot implicitly chain through list order.
+sample inputs. Multi-axis mappings use normalized variation interpolation over
+their input axes, so an in-between public location can resolve to in-between
+internal construction coordinates. Mappings cannot implicitly chain through list
+order.
 
 ```json
 [
