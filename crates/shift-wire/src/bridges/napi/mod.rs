@@ -113,6 +113,8 @@ impl From<FontMetrics> for NapiFontMetrics {
 
 #[napi(object)]
 pub struct NapiAxis {
+    #[napi(ts_type = "AxisId")]
+    pub id: String,
     pub tag: String,
     pub name: String,
     pub minimum: f64,
@@ -124,6 +126,7 @@ pub struct NapiAxis {
 impl From<Axis> for NapiAxis {
     fn from(axis: Axis) -> Self {
         Self {
+            id: axis.id.to_string(),
             tag: axis.tag,
             name: axis.name,
             minimum: axis.minimum,

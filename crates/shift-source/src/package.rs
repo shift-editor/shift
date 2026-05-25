@@ -1,9 +1,9 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
-use crate::ids::{axis_id_for_tag, glyph_id_for_name};
+use crate::ids::glyph_id_for_name;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
-    Anchor, Axis, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph,
-    GlyphId, GlyphLayer, Guideline, Location, Point, PointType, Source,
+    Anchor, Axis, AxisId, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics,
+    Glyph, GlyphId, GlyphLayer, Guideline, Location, Point, PointType, Source,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -559,7 +559,7 @@ impl ShiftPackage {
                 metrics: *font.metrics(),
             },
             axes: axes_from_ir(font.axes()),
-            sources: sources_from_ir(font.sources()),
+            sources: sources_from_ir(font.sources(), font.axes()),
             axis_mappings: Vec::new(),
             glyphs,
         }
@@ -573,13 +573,13 @@ impl ShiftPackage {
         *font.metrics_mut() = self.font.metrics;
 
         for axis in self.axes {
-            font.add_axis(axis.into_ir());
+            font.add_axis(axis.into_ir()?);
         }
 
         let axis_tags_by_id: HashMap<_, _> = font
             .axes()
             .iter()
-            .map(|axis| (axis_id_for_tag(axis.tag()), axis.tag().to_string()))
+            .map(|axis| (axis.id_ref().as_str().to_string(), axis.tag().to_string()))
             .collect();
         let mut layer_ids_by_source_id = HashMap::new();
         let mut is_first_source = true;
@@ -1171,8 +1171,15 @@ impl ShiftPackage {
 }
 
 impl ShiftAxis {
-    fn into_ir(self) -> Axis {
-        let mut axis = Axis::new(
+    fn into_ir(self) -> ShiftSourceResult<Axis> {
+        let axis_id = AxisId::from_stable(self.id.clone()).map_err(|_| {
+            ShiftSourceError::InvalidIdentifier {
+                context: format!("axis '{}'", self.name),
+                identifier: self.id,
+            }
+        })?;
+        let mut axis = Axis::with_id(
+            axis_id,
             self.tag,
             self.name,
             self.minimum,
@@ -1180,7 +1187,7 @@ impl ShiftAxis {
             self.maximum,
         );
         axis.set_hidden(self.hidden);
-        axis
+        Ok(axis)
     }
 }
 
@@ -3132,7 +3139,7 @@ fn glyph_ids_by_name(font: &Font) -> HashMap<String, String> {
 fn axes_from_ir(axes: &[Axis]) -> Vec<ShiftAxis> {
     axes.iter()
         .map(|axis| ShiftAxis {
-            id: axis_id_for_tag(axis.tag()),
+            id: axis.id_ref().as_str().to_string(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             minimum: axis.minimum(),
@@ -3144,7 +3151,7 @@ fn axes_from_ir(axes: &[Axis]) -> Vec<ShiftAxis> {
         .collect()
 }
 
-fn sources_from_ir(sources: &[Source]) -> Vec<ShiftSource> {
+fn sources_from_ir(sources: &[Source], axes: &[Axis]) -> Vec<ShiftSource> {
     let mut sources: Vec<_> = sources
         .iter()
         .map(|source| ShiftSource {
@@ -3153,7 +3160,14 @@ fn sources_from_ir(sources: &[Source]) -> Vec<ShiftSource> {
             location: source
                 .location()
                 .iter()
-                .map(|(tag, value)| (axis_id_for_tag(tag), *value))
+                .map(|(tag, value)| {
+                    let axis_id = axes
+                        .iter()
+                        .find(|axis| axis.tag() == tag)
+                        .map(|axis| axis.id_ref().as_str().to_string())
+                        .unwrap_or_else(|| tag.to_string());
+                    (axis_id, *value)
+                })
                 .collect(),
         })
         .collect();

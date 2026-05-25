@@ -103,6 +103,13 @@ pub struct SourceId(String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceIdParseError;
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AxisId(String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AxisIdParseError;
+
 impl ComponentId {
     pub fn new() -> Self {
         Self(format!("component_{:020}", EntityId::new().raw()))
@@ -213,6 +220,32 @@ impl SourceId {
     }
 }
 
+impl AxisId {
+    pub fn new() -> Self {
+        Self(format!("axis_{:020}", EntityId::new().raw()))
+    }
+
+    pub fn for_tag(tag: &str) -> Self {
+        stable_label_id("axis", tag).map(Self).unwrap_or_default()
+    }
+
+    pub fn from_raw(raw: u128) -> Self {
+        Self(raw.to_string())
+    }
+
+    pub fn from_stable(id: impl Into<String>) -> Result<Self, AxisIdParseError> {
+        let id = id.into();
+        if id.is_empty() {
+            return Err(AxisIdParseError);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 fn stable_label_id(prefix: &str, label: &str) -> Option<String> {
     let mut id = String::with_capacity(prefix.len() + label.len() + 1);
     id.push_str(prefix);
@@ -306,6 +339,40 @@ impl std::str::FromStr for SourceId {
     }
 }
 
+impl Default for AxisId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Borrow<str> for AxisId {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for AxisId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for AxisIdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "axis ID must not be empty")
+    }
+}
+
+impl std::error::Error for AxisIdParseError {}
+
+impl std::str::FromStr for AxisId {
+    type Err = AxisIdParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_stable(s)
+    }
+}
+
 typed_id!(PointId);
 typed_id!(ContourId);
 typed_id!(AnchorId);
@@ -382,5 +449,21 @@ mod tests {
             SourceId::for_name("Bold Italic").as_str(),
             "source_Bold_Italic"
         );
+    }
+
+    #[test]
+    fn axis_id_accepts_stable_string_ids() {
+        let id = AxisId::from_stable("axis_wght").unwrap();
+        let parsed: AxisId = "axis_wght".parse().unwrap();
+
+        assert_eq!(id, parsed);
+        assert_eq!(id.as_str(), "axis_wght");
+        assert!("".parse::<AxisId>().is_err());
+    }
+
+    #[test]
+    fn axis_id_for_tag_keeps_readable_ascii_tags() {
+        assert_eq!(AxisId::for_tag("wght").as_str(), "axis_wght");
+        assert_eq!(AxisId::for_tag("YTLC").as_str(), "axis_YTLC");
     }
 }

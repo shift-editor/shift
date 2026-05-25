@@ -2,6 +2,7 @@ import type {
   ContourId,
   PointId,
   AnchorId,
+  AxisId,
   ComponentId,
   GuidelineId,
   LayerId,
@@ -102,6 +103,7 @@ export interface AnchorData {
 }
 
 export interface Axis {
+  id: AxisId
   tag: string
   name: string
   minimum: number

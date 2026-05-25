@@ -7,7 +7,7 @@ use crate::{
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
 };
 use shift_ir::{
-    Axis, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Layer,
+    Axis, AxisId, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Layer,
     Location, Source, SourceId,
 };
 use shift_ir::{Glyph, GlyphLayer, PointType};
@@ -115,7 +115,15 @@ fn save_and_load_package_roundtrips_font_basics() {
 #[test]
 fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
     let mut font = Font::new();
-    font.add_axis(Axis::weight());
+    let weight_axis_id = AxisId::from_stable("axis_public_weight").unwrap();
+    font.add_axis(Axis::with_id(
+        weight_axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ));
     let bold_layer_id = font.add_layer(Layer::new("Bold".to_string()));
     let mut bold_location = Location::new();
     bold_location.set("wght".to_string(), 900.0);
@@ -128,14 +136,20 @@ fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
     ));
 
     let package = ShiftPackage::from_font(&font);
+    let weight_axis = package
+        .axes
+        .iter()
+        .find(|axis| axis.tag == "wght")
+        .expect("weight axis should be serialized");
     let bold_source = package
         .sources
         .iter()
         .find(|source| source.name == "Bold")
         .expect("bold source should be serialized");
 
+    assert_eq!(weight_axis.id, "axis_public_weight");
     assert_eq!(bold_source.id, "source_weight_max");
-    assert_eq!(bold_source.location.get("axis_wght"), Some(&900.0));
+    assert_eq!(bold_source.location.get("axis_public_weight"), Some(&900.0));
     package
         .validate()
         .expect("package source axes should validate");
@@ -147,6 +161,13 @@ fn source_locations_use_axis_ids_in_package_and_axis_tags_in_ir() {
         .find(|source| source.name() == "Bold")
         .expect("bold source should roundtrip");
 
+    assert_eq!(
+        loaded
+            .axis_by_id(&weight_axis_id)
+            .expect("weight axis id should roundtrip")
+            .tag(),
+        "wght"
+    );
     assert_eq!(loaded_bold.id_ref(), &bold_source_id);
     assert_eq!(loaded_bold.location().get("wght"), Some(900.0));
 }

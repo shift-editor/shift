@@ -1,9 +1,11 @@
+use crate::entity::AxisId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
+    id: AxisId,
     tag: String,
     name: String,
     minimum: f64,
@@ -15,6 +17,7 @@ pub struct Axis {
 impl Axis {
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
         Self {
+            id: AxisId::for_tag(&tag),
             tag,
             name,
             minimum,
@@ -36,6 +39,33 @@ impl Axis {
 
     pub fn width() -> Self {
         Self::new("wdth".to_string(), "Width".to_string(), 75.0, 100.0, 125.0)
+    }
+
+    pub fn with_id(
+        id: AxisId,
+        tag: String,
+        name: String,
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    ) -> Self {
+        Self {
+            id,
+            tag,
+            name,
+            minimum,
+            default,
+            maximum,
+            hidden: false,
+        }
+    }
+
+    pub fn id(&self) -> AxisId {
+        self.id.clone()
+    }
+
+    pub fn id_ref(&self) -> &AxisId {
+        &self.id
     }
 
     pub fn tag(&self) -> &str {
@@ -151,6 +181,7 @@ mod tests {
     fn axis_normalize() {
         let axis = Axis::weight();
 
+        assert_eq!(axis.id_ref().as_str(), "axis_wght");
         assert_eq!(axis.normalize(400.0), 0.0);
         assert!((axis.normalize(100.0) - (-1.0)).abs() < 0.001);
         assert!((axis.normalize(900.0) - 1.0).abs() < 0.001);
@@ -164,6 +195,22 @@ mod tests {
         assert_eq!(axis.denormalize(0.0), 400.0);
         assert_eq!(axis.denormalize(-1.0), 100.0);
         assert_eq!(axis.denormalize(1.0), 900.0);
+    }
+
+    #[test]
+    fn axis_with_id_preserves_stable_identity() {
+        let axis_id = AxisId::from_stable("axis_weight_public").unwrap();
+        let axis = Axis::with_id(
+            axis_id.clone(),
+            "wght".to_string(),
+            "Weight".to_string(),
+            100.0,
+            400.0,
+            900.0,
+        );
+
+        assert_eq!(axis.id_ref(), &axis_id);
+        assert_eq!(axis.tag(), "wght");
     }
 
     #[test]

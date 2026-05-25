@@ -2,6 +2,7 @@ import type {
   ContourId,
   PointId,
   AnchorId,
+  AxisId,
   ComponentId,
   GuidelineId,
   GlyphName,
@@ -97,6 +98,7 @@ export interface NapiAnchorData {
 }
 
 export interface NapiAxis {
+  id: AxisId
   tag: string
   name: string
   minimum: number

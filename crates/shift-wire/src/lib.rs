@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use shift_ir::{
-    Anchor as IrAnchor, AnchorId, Axis as IrAxis, Component as IrComponent, ComponentId,
+    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, Component as IrComponent, ComponentId,
     Contour as IrContour, ContourId, DecomposedTransform as IrTransform,
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphLayer,
     GlyphName, GuidelineId, LayerId, Location as IrLocation, Point as IrPoint, PointId,
@@ -105,6 +105,7 @@ impl From<&IrFontMetrics> for FontMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
+    pub id: AxisId,
     pub tag: String,
     pub name: String,
     pub minimum: f64,
@@ -116,6 +117,7 @@ pub struct Axis {
 impl From<&IrAxis> for Axis {
     fn from(axis: &IrAxis) -> Self {
         Self {
+            id: axis.id(),
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             minimum: axis.minimum(),

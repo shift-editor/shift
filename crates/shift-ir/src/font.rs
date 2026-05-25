@@ -1,5 +1,5 @@
 use crate::axis::{Axis, Location};
-use crate::entity::{GlyphId, LayerId, SourceId};
+use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
 use crate::features::FeatureData;
 use crate::glyph::Glyph;
 use crate::guideline::Guideline;
@@ -183,6 +183,17 @@ impl Font {
 
     pub fn add_axis(&mut self, axis: Axis) {
         self.data_mut().axes.push(axis);
+    }
+
+    pub fn axis_by_id(&self, id: &AxisId) -> Option<&Axis> {
+        self.data().axes.iter().find(|axis| axis.id_ref() == id)
+    }
+
+    pub fn axis_by_id_mut(&mut self, id: &AxisId) -> Option<&mut Axis> {
+        self.data_mut()
+            .axes
+            .iter_mut()
+            .find(|axis| axis.id_ref() == id)
     }
 
     pub fn sources(&self) -> &[Source] {
