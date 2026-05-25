@@ -1964,21 +1964,12 @@ pub fn stage_prepared_commit(
         }
 
         let payload_path = resolve_package_relative_path(&payload_root, path)?;
-        if let Some(parent) = payload_path.parent() {
-            create_dir(parent)?;
-        }
-        fs::write(&payload_path, bytes).map_err(|source| ShiftSourceError::WriteFile {
-            path: payload_path,
-            source,
-        })?;
+        write_bytes_atomically_synced(&payload_path, &bytes)?;
         payload_paths.push(path.clone());
     }
 
     let marker_path = transaction_path.join("commit.json");
-    fs::write(&marker_path, marker_bytes).map_err(|source| ShiftSourceError::WriteFile {
-        path: marker_path.clone(),
-        source,
-    })?;
+    write_bytes_atomically_synced(&marker_path, &marker_bytes)?;
 
     Ok(ShiftStagedCommit {
         transaction_id,
@@ -2351,17 +2342,33 @@ pub(crate) fn promote_payload_to_live_file(
     payload_path: &Path,
     live_path: &Path,
 ) -> ShiftSourceResult<()> {
+    let mut payload = match fs::File::open(payload_path) {
+        Ok(payload) => payload,
+        Err(source) => {
+            let _ = fs::remove_file(staged_payload_temp_path(live_path));
+            return Err(ShiftSourceError::ReadFile {
+                path: payload_path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    promote_reader_to_live_file(&mut payload, live_path)
+}
+
+fn write_bytes_atomically_synced(path: &Path, bytes: &[u8]) -> ShiftSourceResult<()> {
+    promote_reader_to_live_file(&mut io::Cursor::new(bytes), path)
+}
+
+fn promote_reader_to_live_file(
+    reader: &mut impl io::Read,
+    live_path: &Path,
+) -> ShiftSourceResult<()> {
     if let Some(parent) = live_path.parent() {
         create_dir(parent)?;
     }
 
     let temp_path = staged_payload_temp_path(live_path);
     let result = (|| -> ShiftSourceResult<()> {
-        let mut payload =
-            fs::File::open(payload_path).map_err(|source| ShiftSourceError::ReadFile {
-                path: payload_path.to_path_buf(),
-                source,
-            })?;
         let mut temp_file = fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -2371,7 +2378,7 @@ pub(crate) fn promote_payload_to_live_file(
                 path: temp_path.clone(),
                 source,
             })?;
-        io::copy(&mut payload, &mut temp_file).map_err(|source| ShiftSourceError::WriteFile {
+        io::copy(reader, &mut temp_file).map_err(|source| ShiftSourceError::WriteFile {
             path: temp_path.clone(),
             source,
         })?;

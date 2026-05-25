@@ -1228,6 +1228,53 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
     assert_eq!(live_after, live_before);
 }
 
+#[test]
+fn staged_commit_rewrites_payloads_and_marker_through_temp_siblings() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+    let glyph_payload_path = staged.transaction_path.join("payloads/glyphs/glyph_A.json");
+    let glyph_temp_path = staged_payload_temp_path(&glyph_payload_path);
+    let marker_temp_path = staged_payload_temp_path(&staged.marker_path);
+    fs::write(&glyph_temp_path, "stale payload temp\n").expect("payload temp should be writable");
+    fs::write(&marker_temp_path, "stale marker temp\n").expect("marker temp should be writable");
+
+    let restaged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should restage");
+
+    assert_eq!(restaged.transaction_id, staged.transaction_id);
+    assert!(
+        !glyph_temp_path.exists(),
+        "payload staging should replace through the temp sibling"
+    );
+    assert!(
+        !marker_temp_path.exists(),
+        "marker staging should replace through the temp sibling"
+    );
+    assert!(fs::read_to_string(glyph_payload_path)
+        .expect("payload should be readable")
+        .contains("\"name\": \"RenamedBase\""));
+    assert!(fs::read_to_string(restaged.marker_path)
+        .expect("marker should be readable")
+        .contains("\"impactedPaths\""));
+}
+
 fn stage_base_glyph_rename(
     package_path: &Path,
     new_name: &str,

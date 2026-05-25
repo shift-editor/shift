@@ -637,9 +637,10 @@ This matters for app behavior. A rename can show a cheap dependency-label
 refresh; a component or outline edit can mark interpolation compatibility and
 dependency views stale. The save path does not need to guess from raw files.
 
-The production writer still needs to turn this impact plan into staged writes,
-backups, validation, and recovery markers. The package model now gives that
-writer the narrow write set and a prepared commit object.
+The staged writer turns this impact plan into verified payloads, backups,
+validation, and recovery markers. The package model gives that writer the
+narrow write set and a prepared commit object, so save can be incremental
+without inferring intent from raw files.
 
 ## Prepared Commits
 
@@ -685,15 +686,18 @@ replaced. If the process crashes, recovery has enough information to know:
 - which staged payloads existed by size/hash
 - which derived files can be discarded and rebuilt
 
-This is still not the final writer. It is the durable shape the writer should
-consume.
+This is the durable save handoff. Higher-level document services can wrap it,
+but they should preserve the same prepare -> stage -> apply -> mark-saved
+boundary.
 
 `stage_prepared_commit()` is the next handoff step. It refuses prepared commits
-with unresolved conflicts, writes `commit.json` into `.shift-txn/<id>/`, writes
-all canonical and derived payloads under `.shift-txn/<id>/payloads/`, and checks
-every payload against the size/hash recorded in the prepared operation. It does
-not replace live files. Staging gives recovery a concrete marker and verified
-bytes before any live mutation starts.
+with unresolved conflicts, writes all canonical and derived payloads under
+`.shift-txn/<id>/payloads/`, then writes `commit.json` into
+`.shift-txn/<id>/`. Every staged payload is checked against the size/hash
+recorded in the prepared operation. Payloads and the marker are written through
+same-directory temp siblings, synced, renamed into place, and followed by a
+best-effort parent-directory sync. It does not replace live files. Staging gives
+recovery a concrete marker and verified bytes before any live mutation starts.
 
 Only one distinct staged transaction may be active at a time. Re-staging the
 same prepared commit is allowed so missing payloads can be recreated
