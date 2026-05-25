@@ -1137,7 +1137,7 @@ impl ShiftPackage {
                         }
                     }
                     if let Some(condition) = &component.condition {
-                        condition.validate(&axis_ids, &glyph.name)?;
+                        condition.validate(&axis_ranges, &glyph.name)?;
                     }
                 }
             }
@@ -1454,15 +1454,19 @@ impl ShiftSource {
 }
 
 impl ShiftCondition {
-    fn validate(&self, axis_ids: &HashSet<&str>, glyph_name: &str) -> ShiftSourceResult<()> {
+    fn validate(
+        &self,
+        axis_ranges: &HashMap<&str, (f64, f64)>,
+        glyph_name: &str,
+    ) -> ShiftSourceResult<()> {
         match self {
             Self::AxisRange { axis_id, min, max } => {
-                if !axis_ids.contains(axis_id.as_str()) {
+                let Some((axis_minimum, axis_maximum)) = axis_ranges.get(axis_id.as_str()) else {
                     return Err(ShiftSourceError::MissingConditionAxis {
                         glyph_name: glyph_name.to_string(),
                         axis_id: axis_id.clone(),
                     });
-                }
+                };
                 let context = format!("component condition in glyph '{glyph_name}'");
                 validate_optional_finite_number(&context, "min", *min)?;
                 validate_optional_finite_number(&context, "max", *max)?;
@@ -1476,6 +1480,16 @@ impl ShiftCondition {
                         });
                     }
                 }
+                let effective_min = min.unwrap_or(*axis_minimum);
+                let effective_max = max.unwrap_or(*axis_maximum);
+                if effective_max < *axis_minimum || effective_min > *axis_maximum {
+                    return Err(ShiftSourceError::InvalidConditionRange {
+                        glyph_name: glyph_name.to_string(),
+                        axis_id: axis_id.clone(),
+                        min: *min,
+                        max: *max,
+                    });
+                }
                 Ok(())
             }
             Self::And { conditions } => {
@@ -1486,7 +1500,7 @@ impl ShiftCondition {
                     });
                 }
                 for condition in conditions {
-                    condition.validate(axis_ids, glyph_name)?;
+                    condition.validate(axis_ranges, glyph_name)?;
                 }
                 Ok(())
             }
@@ -1498,11 +1512,11 @@ impl ShiftCondition {
                     });
                 }
                 for condition in conditions {
-                    condition.validate(axis_ids, glyph_name)?;
+                    condition.validate(axis_ranges, glyph_name)?;
                 }
                 Ok(())
             }
-            Self::Not { condition } => condition.validate(axis_ids, glyph_name),
+            Self::Not { condition } => condition.validate(axis_ranges, glyph_name),
         }
     }
 }

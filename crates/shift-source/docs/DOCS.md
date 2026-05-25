@@ -188,8 +188,9 @@ Design rules for the spike:
   behavior, and optional conditions.
 - Component graphs must be acyclic. Cycles are rejected before a renderer or
   compiler can recurse through a component recipe forever.
-- Component conditions use structured boolean trees. Empty `and`/`or` nodes and
-  inverted axis ranges are invalid source data.
+- Component conditions use structured boolean trees. Empty `and`/`or` nodes,
+  inverted axis ranges, and ranges that cannot intersect the axis domain are
+  invalid source data.
 - Glyphs may define local axes and local variation sources. This lets Shift
   model variable components and component recipes before current UFO/designspace
   can express them cleanly.
@@ -268,8 +269,9 @@ format exploration:
   and the base glyph's local axes. Unknown axes fail validation.
 - **Conditional participation:** component conditions are structured data, not
   UI-only state. Conditions currently validate against global axes, reject empty
-  boolean nodes or inverted ranges, and can be evaluated by `ShiftWorkingSource`
-  at a partial design location using axis defaults for omitted coordinates.
+  boolean nodes, inverted ranges, or unreachable ranges outside the axis domain,
+  and can be evaluated by `ShiftWorkingSource` at a partial design location
+  using axis defaults for omitted coordinates.
 - **Mutation planning:** a rename, glyph edit, axis edit, or delete can be
   turned into a narrow list of canonical files and derived indexes that need to
   be written, removed, or invalidated.

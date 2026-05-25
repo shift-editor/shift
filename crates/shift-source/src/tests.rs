@@ -3572,6 +3572,26 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
         anchors: Vec::new(),
         guidelines: Vec::new(),
     };
+    let unreachable_range_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: Vec::new(),
+            condition: Some(ShiftCondition::AxisRange {
+                axis_id: "axis_wght".to_string(),
+                min: Some(950.0),
+                max: None,
+            }),
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
 
     let empty_error = package_with_axes(
         vec![weight_axis()],
@@ -3585,6 +3605,12 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
     )
     .validate()
     .expect_err("invalid condition range should fail");
+    let unreachable_error = package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer(unreachable_range_layer),
+    )
+    .validate()
+    .expect_err("condition range outside axis domain should fail");
 
     assert!(matches!(
         empty_error,
@@ -3598,6 +3624,15 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
             axis_id,
             min: Some(900.0),
             max: Some(100.0)
+        } if glyph_name == "A" && axis_id == "axis_wght"
+    ));
+    assert!(matches!(
+        unreachable_error,
+        ShiftSourceError::InvalidConditionRange {
+            glyph_name,
+            axis_id,
+            min: Some(950.0),
+            max: None,
         } if glyph_name == "A" && axis_id == "axis_wght"
     ));
 }
