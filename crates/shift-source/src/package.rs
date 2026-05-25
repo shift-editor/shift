@@ -481,6 +481,21 @@ pub struct ShiftStagedCommitRecoveryPlan {
     pub issue_count: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoveryRun {
+    pub outcomes: Vec<ShiftStagedCommitRecoveryOutcome>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoveryOutcome {
+    pub transaction_id: String,
+    pub action: ShiftStagedCommitRecoveryAction,
+    pub applied_paths: Vec<String>,
+    pub backup_paths: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftStagedCommitRecoveryAction {
@@ -2069,6 +2084,63 @@ pub fn plan_staged_commit_recovery(
             .map(ShiftStagedCommitRecoveryPlan::from_recovery)
             .collect()
     })
+}
+
+pub fn recover_staged_commits(
+    root: impl AsRef<Path>,
+) -> ShiftSourceResult<ShiftStagedCommitRecoveryRun> {
+    let root = root.as_ref();
+    let plans = plan_staged_commit_recovery(root)?;
+    let resume_count = plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::Resume)
+        .count();
+    let blocked_count = plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::BlockedByLiveConflict)
+        .count();
+    let invalid_count = plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::CannotRecover)
+        .count();
+
+    if blocked_count > 0 || invalid_count > 0 {
+        return Err(ShiftSourceError::UnresolvedStagedCommits {
+            resume_count,
+            blocked_count,
+            invalid_count,
+        });
+    }
+
+    let mut outcomes = Vec::new();
+    for plan in plans {
+        match plan.action {
+            ShiftStagedCommitRecoveryAction::Resume => {
+                let applied = apply_staged_commit(root, &plan.transaction_id)?;
+                outcomes.push(ShiftStagedCommitRecoveryOutcome {
+                    transaction_id: applied.transaction_id,
+                    action: ShiftStagedCommitRecoveryAction::Resume,
+                    applied_paths: applied.applied_paths,
+                    backup_paths: applied.backup_paths,
+                });
+            }
+            ShiftStagedCommitRecoveryAction::Cleanup => {
+                let recovery = cleanup_applied_staged_commit(root, &plan.transaction_id)?;
+                outcomes.push(ShiftStagedCommitRecoveryOutcome {
+                    transaction_id: recovery.transaction_id,
+                    action: ShiftStagedCommitRecoveryAction::Cleanup,
+                    applied_paths: Vec::new(),
+                    backup_paths: Vec::new(),
+                });
+            }
+            ShiftStagedCommitRecoveryAction::BlockedByLiveConflict
+            | ShiftStagedCommitRecoveryAction::CannotRecover => {
+                unreachable!("blocked and invalid actions are handled before mutation")
+            }
+        }
+    }
+
+    Ok(ShiftStagedCommitRecoveryRun { outcomes })
 }
 
 pub fn apply_staged_commit(

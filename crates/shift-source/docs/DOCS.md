@@ -725,6 +725,12 @@ It returns one action per transaction:
 The app can therefore recover on open without inferring policy from raw file
 fingerprints.
 
+`recover_staged_commits()` is the non-interactive startup helper for the safe
+cases. It resumes transactions whose plan is `resume`, cleans transactions whose
+plan is `cleanup`, and refuses to mutate when any transaction is
+`blockedByLiveConflict` or `cannotRecover`. After it succeeds, `load_package()`
+can trust the live package files.
+
 `load_package()` enforces that recovery boundary before trusting package files.
 It refuses to load when any staged transaction needs `resume`, is
 `blockedByLiveConflict`, or `cannotRecover`, because the package may be
@@ -753,7 +759,9 @@ intended flow is:
 ```text
 startup
   -> planStagedCommitRecovery(root)
-  -> resume, cleanup, or prompt before loadPackage(root)
+  -> recoverStagedCommits(root) when every plan is resume/cleanup
+  -> prompt when any plan is blockedByLiveConflict/cannotRecover
+  -> loadPackage(root)
 open package
   -> ShiftWorkingSource::open_saved(root, package)
 edit through working-source semantic operations

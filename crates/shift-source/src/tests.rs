@@ -1271,6 +1271,39 @@ fn load_package_refuses_pending_staged_commit_before_trusting_files() {
 }
 
 #[test]
+fn recover_staged_commits_resumes_pending_transaction_then_package_loads() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+
+    let recovery =
+        recover_staged_commits(&package_path).expect("pending transaction should recover");
+    let package = load_package(&package_path).expect("package should load after recovery");
+
+    assert_eq!(
+        recovery.outcomes,
+        vec![ShiftStagedCommitRecoveryOutcome {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::Resume,
+            applied_paths: vec![
+                "glyphs/glyph_A.json".to_string(),
+                DEPENDENCY_INDEX_PATH.to_string(),
+            ],
+            backup_paths: vec!["glyphs/glyph_A.json".to_string()],
+        }]
+    );
+    assert_eq!(
+        package
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("RenamedBase")
+    );
+    assert!(!staged.transaction_path.exists());
+}
+
+#[test]
 fn load_package_refuses_partially_applied_staged_commit_before_trusting_files() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
@@ -1291,6 +1324,48 @@ fn load_package_refuses_partially_applied_staged_commit_before_trusting_files() 
             invalid_count: 0,
         }
     ));
+}
+
+#[test]
+fn recover_staged_commits_resumes_partially_applied_transaction_then_package_loads() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("one staged payload should be copied to live file");
+
+    let recovery =
+        recover_staged_commits(&package_path).expect("partial transaction should recover");
+    let package = load_package(&package_path).expect("package should load after recovery");
+
+    assert_eq!(recovery.outcomes.len(), 1);
+    assert_eq!(
+        recovery.outcomes[0].action,
+        ShiftStagedCommitRecoveryAction::Resume
+    );
+    assert_eq!(
+        recovery.outcomes[0].applied_paths,
+        vec![
+            "glyphs/glyph_A.json".to_string(),
+            DEPENDENCY_INDEX_PATH.to_string(),
+        ]
+    );
+    assert!(
+        recovery.outcomes[0].backup_paths.is_empty(),
+        "already-promoted canonical files should not be backed up again"
+    );
+    assert_eq!(
+        package
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("RenamedBase")
+    );
+    assert!(!staged.transaction_path.exists());
 }
 
 #[test]
@@ -1317,6 +1392,36 @@ fn load_package_refuses_diverged_staged_commit_before_trusting_files() {
 }
 
 #[test]
+fn recover_staged_commits_refuses_diverged_transaction_without_mutation() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::write(
+        package_path.join("glyphs/glyph_A.json"),
+        "{\"externally\":\"different\"}\n",
+    )
+    .expect("live file should be modified");
+
+    let err = recover_staged_commits(&package_path)
+        .expect_err("diverged transaction should not auto-recover");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 0,
+            blocked_count: 1,
+            invalid_count: 0,
+        }
+    ));
+    assert!(staged.transaction_path.exists());
+    assert_eq!(
+        fs::read_to_string(package_path.join("glyphs/glyph_A.json"))
+            .expect("live glyph should be readable"),
+        "{\"externally\":\"different\"}\n"
+    );
+}
+
+#[test]
 fn load_package_refuses_invalid_staged_commit_before_trusting_files() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
@@ -1333,6 +1438,27 @@ fn load_package_refuses_invalid_staged_commit_before_trusting_files() {
             invalid_count: 1,
         }
     ));
+}
+
+#[test]
+fn recover_staged_commits_refuses_invalid_transaction_without_mutation() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::remove_file(&staged.marker_path).expect("marker should be removable");
+
+    let err = recover_staged_commits(&package_path)
+        .expect_err("invalid transaction should not auto-recover");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 0,
+            blocked_count: 0,
+            invalid_count: 1,
+        }
+    ));
+    assert!(staged.transaction_path.exists());
 }
 
 #[test]
@@ -1363,6 +1489,48 @@ fn load_package_allows_cleanup_only_staged_commit() {
             .map(|glyph| glyph.name.as_str()),
         Some("RenamedBase")
     );
+}
+
+#[test]
+fn recover_staged_commits_cleans_applied_transaction() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("staged payload should be copied to live file");
+    fs::copy(
+        staged
+            .transaction_path
+            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
+        package_path.join(DEPENDENCY_INDEX_PATH),
+    )
+    .expect("staged derived payload should be copied to live file");
+
+    let recovery =
+        recover_staged_commits(&package_path).expect("applied transaction should clean up");
+    let package = load_package(&package_path).expect("package should load after cleanup");
+
+    assert_eq!(
+        recovery.outcomes,
+        vec![ShiftStagedCommitRecoveryOutcome {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::Cleanup,
+            applied_paths: Vec::new(),
+            backup_paths: Vec::new(),
+        }]
+    );
+    assert_eq!(
+        package
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("RenamedBase")
+    );
+    assert!(!staged.transaction_path.exists());
 }
 
 #[test]
