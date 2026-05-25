@@ -308,6 +308,10 @@ format exploration:
   They also carry lowering hints and required capabilities, so backends can
   explain whether a component is a plain component, needs condition support,
   needs variable-component support, or will need fallback handling for a target.
+- **Component lowering diagnostics:** export preflight can compare component
+  recipes with a target capability profile before invoking a backend. This keeps
+  source format semantics separate from backend policy while still letting the
+  app show exact unsupported capabilities per glyph, layer, and component.
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
@@ -517,6 +521,9 @@ The format should make these app behaviors straightforward:
 - Component recipe lists that can quickly identify static, conditional,
   variable, and conditional-variable components before asking for current
   location state, including which export capabilities each recipe requires.
+- Target capability diagnostics that tell export UI whether the chosen backend
+  can preserve conditions, variable component locations, variable transforms,
+  and reset-vs-inherit axis semantics before any compiler runs.
 - Current-location previews that use the same condition evaluation rules as
   save/export preflight.
 - Component recipe UI that can label each resolved axis value as coming from the

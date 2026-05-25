@@ -29,8 +29,9 @@ pub use package::{
 };
 pub use working_source::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringHint, ShiftComponentRecipeKind,
-    ShiftComponentRecipeSummary, ShiftComponentResolvedLocation, ShiftComponentResolvedState,
+    ShiftComponentLoweringCapability, ShiftComponentLoweringDiagnostic, ShiftComponentLoweringHint,
+    ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
+    ShiftComponentResolvedLocation, ShiftComponentResolvedState,
     ShiftComponentResolvedVariationSource, ShiftComponentVariationResolution,
     ShiftComponentVariationUnsupportedReason, ShiftDeleteGlyphPreview, ShiftDeleteGlyphReport,
     ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,

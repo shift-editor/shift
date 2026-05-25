@@ -1,8 +1,8 @@
 use crate::package::*;
 use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringHint, ShiftComponentRecipeKind,
-    ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
+    ShiftComponentLoweringCapability, ShiftComponentLoweringHint, ShiftComponentLoweringTarget,
+    ShiftComponentRecipeKind, ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
@@ -2649,6 +2649,134 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
             ShiftComponentLoweringCapability::VariableTransform,
             ShiftComponentLoweringCapability::AxisReset,
         ]
+    );
+}
+
+#[test]
+fn working_source_reports_component_lowering_diagnostics_for_target_capabilities() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![
+            ShiftComponent {
+                id: "component_plain".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: None,
+            },
+            ShiftComponent {
+                id: "component_conditional".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::new(),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: Some(ShiftCondition::AxisRange {
+                    axis_id: "axis_wght".to_string(),
+                    min: Some(700.0),
+                    max: None,
+                }),
+            },
+            ShiftComponent {
+                id: "component_variable".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 44.0)]),
+                axis_inheritance: ShiftAxisInheritance::InheritParent,
+                variation_sources: Vec::new(),
+                condition: None,
+            },
+            ShiftComponent {
+                id: "component_variable_conditional".to_string(),
+                base_glyph_id: "glyph_stem".to_string(),
+                base_glyph_name: "stem".to_string(),
+                transform: DecomposedTransform::identity(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 42.0)]),
+                axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+                variation_sources: vec![ShiftComponentVariationSource {
+                    id: "componentSource_black".to_string(),
+                    name: "Black component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                    transform: Some(DecomposedTransform {
+                        translate_x: 12.0,
+                        ..DecomposedTransform::identity()
+                    }),
+                }],
+                condition: Some(ShiftCondition::AxisRange {
+                    axis_id: "axis_wdth".to_string(),
+                    min: Some(90.0),
+                    max: None,
+                }),
+            },
+        ],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), width_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let plain_diagnostics = working_source
+        .component_lowering_diagnostics(&ShiftComponentLoweringTarget::plain_components());
+    assert_eq!(plain_diagnostics.len(), 3);
+    assert_eq!(
+        plain_diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.component_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "component_conditional",
+            "component_variable",
+            "component_variable_conditional"
+        ]
+    );
+    assert_eq!(
+        plain_diagnostics[2].missing_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::Condition,
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+
+    let partial_target = ShiftComponentLoweringTarget::new(vec![
+        ShiftComponentLoweringCapability::Condition,
+        ShiftComponentLoweringCapability::VariableLocation,
+    ]);
+    let partial_diagnostics = working_source.component_lowering_diagnostics(&partial_target);
+    assert_eq!(partial_diagnostics.len(), 1);
+    assert_eq!(
+        partial_diagnostics[0].component_id,
+        "component_variable_conditional"
+    );
+    assert_eq!(
+        partial_diagnostics[0].missing_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+
+    let full_target = ShiftComponentLoweringTarget::new(vec![
+        ShiftComponentLoweringCapability::Condition,
+        ShiftComponentLoweringCapability::VariableLocation,
+        ShiftComponentLoweringCapability::VariableTransform,
+        ShiftComponentLoweringCapability::AxisReset,
+    ]);
+    assert_eq!(
+        working_source.component_lowering_diagnostics(&full_target),
+        Vec::new()
     );
 }
 

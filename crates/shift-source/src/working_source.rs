@@ -2,8 +2,8 @@ use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     build_dependency_index, build_interpolation_compatibility_index, diff_packages,
     fingerprint_package, fingerprint_relative_paths, prepare_package_commit, ShiftAxis,
-    ShiftAxisMapping, ShiftAxisMappingSample, ShiftComponentUse, ShiftCondition,
-    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyphDependencies,
+    ShiftAxisMapping, ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse, ShiftCondition,
+    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftInterpolationCompatibilityIndex, ShiftPackage,
     ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit,
 };
@@ -136,6 +136,38 @@ pub enum ShiftComponentLoweringHint {
     ConditionalComponent,
     VariableComponent,
     ConditionalVariableComponent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentLoweringTarget {
+    pub supported_capabilities: Vec<ShiftComponentLoweringCapability>,
+}
+
+impl ShiftComponentLoweringTarget {
+    pub fn new(supported_capabilities: Vec<ShiftComponentLoweringCapability>) -> Self {
+        Self {
+            supported_capabilities,
+        }
+    }
+
+    pub fn plain_components() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentLoweringDiagnostic {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub base_glyph_id: String,
+    pub base_glyph_name: String,
+    pub lowering_hint: ShiftComponentLoweringHint,
+    pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
+    pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -525,84 +557,52 @@ impl ShiftWorkingSource {
         Ok(layer
             .components
             .iter()
-            .map(|component| {
-                let condition_axis_ids = component
-                    .condition
-                    .as_ref()
-                    .map(condition_axis_ids)
-                    .unwrap_or_default();
-                let location_axis_ids = component.location.keys().cloned().collect::<Vec<_>>();
-                let variation_parent_axis_ids = component
-                    .variation_sources
-                    .iter()
-                    .flat_map(|source| source.parent_location.keys().cloned())
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
-                let variation_location_axis_ids = component
-                    .variation_sources
-                    .iter()
-                    .flat_map(|source| source.location.keys().cloned())
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
-                let varies_transform = component
-                    .variation_sources
-                    .iter()
-                    .any(|source| source.transform.is_some());
-                let has_condition = component.condition.is_some();
-                let has_variable_location =
-                    !component.location.is_empty() || !component.variation_sources.is_empty();
-                let resets_axes = component.axis_inheritance
-                    != crate::package::ShiftAxisInheritance::InheritParent;
-                let has_variable_recipe = !component.location.is_empty()
-                    || !component.variation_sources.is_empty()
-                    || resets_axes;
-                let kind = match (has_condition, has_variable_recipe) {
-                    (false, false) => ShiftComponentRecipeKind::Static,
-                    (true, false) => ShiftComponentRecipeKind::Conditional,
-                    (false, true) => ShiftComponentRecipeKind::Variable,
-                    (true, true) => ShiftComponentRecipeKind::ConditionalVariable,
-                };
-                let lowering_hint = match kind {
-                    ShiftComponentRecipeKind::Static => ShiftComponentLoweringHint::StaticComponent,
-                    ShiftComponentRecipeKind::Conditional => {
-                        ShiftComponentLoweringHint::ConditionalComponent
-                    }
-                    ShiftComponentRecipeKind::Variable => {
-                        ShiftComponentLoweringHint::VariableComponent
-                    }
-                    ShiftComponentRecipeKind::ConditionalVariable => {
-                        ShiftComponentLoweringHint::ConditionalVariableComponent
-                    }
-                };
-                let required_capabilities = component_lowering_capabilities(
-                    has_condition,
-                    has_variable_location,
-                    varies_transform,
-                    resets_axes,
-                );
-
-                ShiftComponentRecipeSummary {
-                    glyph_id: glyph.id.clone(),
-                    glyph_name: glyph.name.clone(),
-                    layer_id: layer_id.to_string(),
-                    component_id: component.id.clone(),
-                    base_glyph_id: component.base_glyph_id.clone(),
-                    base_glyph_name: component.base_glyph_name.clone(),
-                    kind,
-                    axis_inheritance: component.axis_inheritance,
-                    condition_axis_ids,
-                    location_axis_ids,
-                    variation_source_count: component.variation_sources.len(),
-                    variation_parent_axis_ids,
-                    variation_location_axis_ids,
-                    varies_transform,
-                    lowering_hint,
-                    required_capabilities,
-                }
-            })
+            .map(|component| component_recipe_summary(glyph, layer_id, component))
             .collect())
+    }
+
+    pub fn component_lowering_diagnostics(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+    ) -> Vec<ShiftComponentLoweringDiagnostic> {
+        let supported_capabilities = target
+            .supported_capabilities
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let mut diagnostics = Vec::new();
+
+        for glyph in &self.package.glyphs {
+            for (layer_id, layer) in &glyph.layers {
+                for component in &layer.components {
+                    let summary = component_recipe_summary(glyph, layer_id, component);
+                    let missing_capabilities = summary
+                        .required_capabilities
+                        .iter()
+                        .copied()
+                        .filter(|capability| !supported_capabilities.contains(capability))
+                        .collect::<Vec<_>>();
+
+                    if missing_capabilities.is_empty() {
+                        continue;
+                    }
+
+                    diagnostics.push(ShiftComponentLoweringDiagnostic {
+                        glyph_id: summary.glyph_id,
+                        glyph_name: summary.glyph_name,
+                        layer_id: summary.layer_id,
+                        component_id: summary.component_id,
+                        base_glyph_id: summary.base_glyph_id,
+                        base_glyph_name: summary.base_glyph_name,
+                        lowering_hint: summary.lowering_hint,
+                        required_capabilities: summary.required_capabilities,
+                        missing_capabilities,
+                    });
+                }
+            }
+        }
+
+        diagnostics
     }
 
     pub fn component_resolved_locations(
@@ -1305,6 +1305,83 @@ fn component_lowering_capabilities(
         capabilities.insert(ShiftComponentLoweringCapability::AxisReset);
     }
     capabilities.into_iter().collect()
+}
+
+fn component_recipe_summary(
+    glyph: &ShiftGlyph,
+    layer_id: &str,
+    component: &ShiftComponent,
+) -> ShiftComponentRecipeSummary {
+    let condition_axis_ids = component
+        .condition
+        .as_ref()
+        .map(condition_axis_ids)
+        .unwrap_or_default();
+    let location_axis_ids = component.location.keys().cloned().collect::<Vec<_>>();
+    let variation_parent_axis_ids = component
+        .variation_sources
+        .iter()
+        .flat_map(|source| source.parent_location.keys().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let variation_location_axis_ids = component
+        .variation_sources
+        .iter()
+        .flat_map(|source| source.location.keys().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let varies_transform = component
+        .variation_sources
+        .iter()
+        .any(|source| source.transform.is_some());
+    let has_condition = component.condition.is_some();
+    let has_variable_location =
+        !component.location.is_empty() || !component.variation_sources.is_empty();
+    let resets_axes =
+        component.axis_inheritance != crate::package::ShiftAxisInheritance::InheritParent;
+    let has_variable_recipe =
+        !component.location.is_empty() || !component.variation_sources.is_empty() || resets_axes;
+    let kind = match (has_condition, has_variable_recipe) {
+        (false, false) => ShiftComponentRecipeKind::Static,
+        (true, false) => ShiftComponentRecipeKind::Conditional,
+        (false, true) => ShiftComponentRecipeKind::Variable,
+        (true, true) => ShiftComponentRecipeKind::ConditionalVariable,
+    };
+    let lowering_hint = match kind {
+        ShiftComponentRecipeKind::Static => ShiftComponentLoweringHint::StaticComponent,
+        ShiftComponentRecipeKind::Conditional => ShiftComponentLoweringHint::ConditionalComponent,
+        ShiftComponentRecipeKind::Variable => ShiftComponentLoweringHint::VariableComponent,
+        ShiftComponentRecipeKind::ConditionalVariable => {
+            ShiftComponentLoweringHint::ConditionalVariableComponent
+        }
+    };
+    let required_capabilities = component_lowering_capabilities(
+        has_condition,
+        has_variable_location,
+        varies_transform,
+        resets_axes,
+    );
+
+    ShiftComponentRecipeSummary {
+        glyph_id: glyph.id.clone(),
+        glyph_name: glyph.name.clone(),
+        layer_id: layer_id.to_string(),
+        component_id: component.id.clone(),
+        base_glyph_id: component.base_glyph_id.clone(),
+        base_glyph_name: component.base_glyph_name.clone(),
+        kind,
+        axis_inheritance: component.axis_inheritance,
+        condition_axis_ids,
+        location_axis_ids,
+        variation_source_count: component.variation_sources.len(),
+        variation_parent_axis_ids,
+        variation_location_axis_ids,
+        varies_transform,
+        lowering_hint,
+        required_capabilities,
+    }
 }
 
 fn normalize_axis_value(value: f64, minimum: f64, default: f64, maximum: f64) -> f64 {
