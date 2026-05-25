@@ -111,6 +111,17 @@ pub struct ShiftUpdateGlyphVariationSourceReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphVariationSourceReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftCreateComponentVariationSource {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
@@ -153,6 +164,19 @@ pub struct ShiftUpdateComponentVariationSourceReport {
     pub component_id: String,
     pub source_id: String,
     pub source: ShiftComponentVariationSourceLocation,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteComponentVariationSourceReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub source_id: String,
+    pub source_name: String,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -1342,6 +1366,48 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn delete_glyph_variation_source(
+        &mut self,
+        glyph_id: &str,
+        source_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphVariationSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        let source_index = glyph
+            .variation_sources
+            .iter()
+            .position(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyphVariationSource {
+                glyph_id: glyph_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+        let source = glyph.variation_sources.remove(source_index);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteGlyphVariationSourceReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            source_id: source.id,
+            source_name: source.name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn create_component_variation_source(
         &mut self,
         glyph_id: &str,
@@ -1501,6 +1567,71 @@ impl ShiftWorkingSource {
             component_id: component_id.to_string(),
             source_id: source_id.to_string(),
             source,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn delete_component_variation_source(
+        &mut self,
+        glyph_id: &str,
+        layer_id: &str,
+        component_id: &str,
+        source_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteComponentVariationSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let glyph = next
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        let glyph_name = glyph.name.clone();
+        let layer =
+            glyph
+                .layers
+                .get_mut(layer_id)
+                .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: glyph_id.to_string(),
+                    layer_id: layer_id.to_string(),
+                })?;
+        let component = layer
+            .components
+            .iter_mut()
+            .find(|component| component.id == component_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponent {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+            })?;
+        let source_index = component
+            .variation_sources
+            .iter()
+            .position(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponentVariationSource {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+                source_id: source_id.to_string(),
+            })?;
+        let source = component.variation_sources.remove(source_index);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteComponentVariationSourceReport {
+            glyph_id: glyph_id.to_string(),
+            glyph_name,
+            layer_id: layer_id.to_string(),
+            component_id: component_id.to_string(),
+            source_id: source.id,
+            source_name: source.name,
             diff,
             revision: self.revision,
         })

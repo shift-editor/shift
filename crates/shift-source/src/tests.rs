@@ -4271,6 +4271,135 @@ fn working_source_rejects_invalid_component_variation_source_create_without_muta
 }
 
 #[test]
+fn working_source_deletes_component_variation_source_with_narrow_impact() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_delete".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let report = working_source
+        .delete_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_delete",
+            "componentSource_black",
+        )
+        .expect("component variation source deletion should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "componentSource_black");
+    assert_eq!(report.source_name, "Black component");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateGlyph {
+                glyph_id: "glyph_A".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert!(working_source
+        .component_variation_source_locations("glyph_A", "source_Regular", "component_7_delete",)
+        .expect("component variation source locations should still resolve")
+        .is_empty());
+}
+
+#[test]
+fn working_source_missing_component_variation_source_delete_does_not_mutate() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_missing_delete".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::new(),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let error = working_source
+        .delete_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_missing_delete",
+            "componentSource_missing",
+        )
+        .expect_err("missing component variation source delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingComponentVariationSource {
+            glyph_id,
+            layer_id,
+            component_id,
+            source_id,
+        } if glyph_id == "glyph_A"
+            && layer_id == "source_Regular"
+            && component_id == "component_7_missing_delete"
+            && source_id == "componentSource_missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let sources = working_source
+        .component_variation_source_locations(
+            "glyph_A",
+            "source_Regular",
+            "component_7_missing_delete",
+        )
+        .expect("component variation source locations should still resolve");
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].source_id, "componentSource_black");
+}
+
+#[test]
 fn working_source_updates_component_variation_source_with_narrow_impact() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
@@ -6060,6 +6189,116 @@ fn working_source_rejects_invalid_glyph_variation_source_create_without_mutating
         .expect("glyph variation source locations should still resolve");
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].source_id, "glyphSource_default");
+}
+
+#[test]
+fn working_source_deletes_glyph_variation_source_with_narrow_impact() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: vec![ShiftGlyphAxis {
+                id: "axis_stemWidth".to_string(),
+                name: "Stem Width".to_string(),
+                minimum: 20.0,
+                default: 40.0,
+                maximum: 80.0,
+            }],
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_bold".to_string(),
+                name: "Bold".to_string(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                layer_id: "source_Bold".to_string(),
+            }],
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .delete_glyph_variation_source("glyph_stem", "glyphSource_bold")
+        .expect("glyph variation source deletion should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "glyphSource_bold");
+    assert_eq!(report.source_name, "Bold");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateGlyph {
+                glyph_id: "glyph_stem".to_string(),
+            }],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_stem.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert!(working_source
+        .glyph_variation_source_locations("glyph_stem")
+        .expect("glyph variation source locations should still resolve")
+        .is_empty());
+}
+
+#[test]
+fn working_source_missing_glyph_variation_source_delete_does_not_mutate() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_bold".to_string(),
+                name: "Bold".to_string(),
+                location: BTreeMap::new(),
+                layer_id: "source_Bold".to_string(),
+            }],
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .delete_glyph_variation_source("glyph_stem", "glyphSource_missing")
+        .expect_err("missing glyph variation source delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingGlyphVariationSource {
+            glyph_id,
+            source_id,
+        } if glyph_id == "glyph_stem" && source_id == "glyphSource_missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let sources = working_source
+        .glyph_variation_source_locations("glyph_stem")
+        .expect("glyph variation source locations should still resolve");
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].source_id, "glyphSource_bold");
 }
 
 #[test]
