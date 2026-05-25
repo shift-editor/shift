@@ -122,7 +122,7 @@ export interface AxisTent {
 
 export interface ComponentData {
   id: ComponentId
-  baseGlyphId?: GlyphId
+  baseGlyphId: GlyphId
   baseGlyphName: GlyphName
 }
 

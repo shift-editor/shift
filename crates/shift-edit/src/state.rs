@@ -163,21 +163,14 @@ fn restore_components(
         let component_id: ComponentId =
             parse_id(&component_data.id, CoreError::InvalidComponentId)?;
         let transform = cursor.read_component_transform()?;
-        let component = if let Some(base_glyph_id) = &component_data.base_glyph_id {
-            let base_glyph_id: GlyphId = parse_id(base_glyph_id, CoreError::InvalidGlyphId)?;
-            IrComponent::with_base_glyph_id(
-                component_id,
-                base_glyph_id,
-                component_data.base_glyph_name.clone(),
-                transform,
-            )
-        } else {
-            IrComponent::with_id(
-                component_id,
-                component_data.base_glyph_name.clone(),
-                transform,
-            )
-        };
+        let base_glyph_id: GlyphId =
+            parse_id(&component_data.base_glyph_id, CoreError::InvalidGlyphId)?;
+        let component = IrComponent::with_base_glyph_id(
+            component_id,
+            base_glyph_id,
+            component_data.base_glyph_name.clone(),
+            transform,
+        );
 
         layer.add_component(component);
     }

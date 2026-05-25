@@ -53,8 +53,8 @@ Promote concepts into IR when doing so makes editor code more direct:
 
 - stable glyph/source/axis IDs for selection, rename, source lookup, and
   component references
-- sparse component locations and reset/inherit behavior for variable-component
-  inspection
+- sparse component locations keyed by stable axis ID, plus reset/inherit
+  behavior for variable-component inspection
 - component conditions when rendering/selection depends on active components
 - component variation sources when the editor exposes first-class controls for
   varying component location or transform
@@ -190,8 +190,8 @@ Design rules for the spike:
   stored only as a label to make files inspectable.
 - Components have stable component IDs. Public dependency and working-source
   queries name components by ID, not by array index.
-- Components may carry sparse designspace locations, explicit axis inheritance
-  behavior, and optional conditions.
+- Components may carry sparse designspace locations keyed by stable axis ID,
+  explicit axis inheritance behavior, and optional conditions.
 - Component graphs must be acyclic. Cycles are rejected before a renderer or
   compiler can recurse through a component recipe forever.
 - Component conditions use structured boolean trees. Empty `and`/`or` nodes,
@@ -891,7 +891,9 @@ derived indexes must be safe to delete
   `baseGlyphName` is a label/cache for UI and compatibility, not the canonical
   target.
 - Variable component locations, axis inheritance, and conditions now project
-  into `shift-ir`; glyph-local axes and component/glyph variation sources still
-  need deeper IR modeling before they can drive ordinary editor behavior.
+  into `shift-ir`. Component locations stay ID-keyed because they can reference
+  glyph-local axes as well as global axes. Glyph-local axis definitions and
+  component/glyph variation sources still need deeper IR modeling before they
+  can drive ordinary editor behavior.
 - Export/build diagnostics are not wired to `shift-backends` yet, but the source
   model now rejects out-of-range authored coordinates before backend lowering.

@@ -105,7 +105,7 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
         }
     }
 
-    // Components contribute transform values, keyed structurally by base glyph.
+    // Components contribute transform values, keyed structurally by base glyph ID.
     if a.components.len() != b.components.len() {
         return Err(format!(
             "component count mismatch: {} vs {}",
@@ -115,10 +115,10 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
     }
 
     for (i, (ca, cb)) in a.components.iter().zip(b.components.iter()).enumerate() {
-        if ca.base_glyph_name != cb.base_glyph_name {
+        if ca.base_glyph_id != cb.base_glyph_id {
             return Err(format!(
                 "component {i} base glyph mismatch: {} vs {}",
-                ca.base_glyph_name, cb.base_glyph_name
+                ca.base_glyph_id, cb.base_glyph_id
             ));
         }
     }
@@ -259,9 +259,11 @@ pub fn get_glyph_variation_data(
 mod tests {
     use std::collections::HashMap;
 
-    use shift_wire::{ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType};
+    use shift_wire::{
+        ComponentData, ContourData, GlyphMaster, GlyphStructure, Location, PointData, PointType,
+    };
 
-    use super::build_glyph_variation_data;
+    use super::{build_glyph_variation_data, check_compatibility};
     use shift_ir::Axis;
 
     fn structure_with_smooth(smooth: bool) -> GlyphStructure {
@@ -328,5 +330,41 @@ mod tests {
             build.source_errors
         );
         assert!(build.variation_data.is_some());
+    }
+
+    #[test]
+    fn component_compatibility_uses_base_glyph_id_not_label() {
+        let regular = GlyphStructure {
+            contours: Vec::new(),
+            anchors: Vec::new(),
+            components: vec![ComponentData {
+                id: "component_1".to_string(),
+                base_glyph_id: "glyph_A".to_string(),
+                base_glyph_name: "A.old".into(),
+            }],
+        };
+        let renamed = GlyphStructure {
+            contours: Vec::new(),
+            anchors: Vec::new(),
+            components: vec![ComponentData {
+                id: "component_1".to_string(),
+                base_glyph_id: "glyph_A".to_string(),
+                base_glyph_name: "A.renamed".into(),
+            }],
+        };
+        let relinked = GlyphStructure {
+            contours: Vec::new(),
+            anchors: Vec::new(),
+            components: vec![ComponentData {
+                id: "component_1".to_string(),
+                base_glyph_id: "glyph_B".to_string(),
+                base_glyph_name: "A.old".into(),
+            }],
+        };
+
+        assert!(check_compatibility(&renamed, &regular).is_ok());
+        assert!(check_compatibility(&relinked, &regular)
+            .expect_err("different base glyph IDs should be incompatible")
+            .contains("glyph_B vs glyph_A"));
     }
 }

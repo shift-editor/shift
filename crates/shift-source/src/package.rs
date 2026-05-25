@@ -1,9 +1,9 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
-    Anchor, Axis, AxisId, AxisInheritance, Component, ComponentCondition, Contour,
-    DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph, GlyphId, GlyphLayer, Guideline,
-    Location, Point, PointType, Source,
+    Anchor, Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentLocation,
+    Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph, GlyphId, GlyphLayer,
+    Guideline, Location, Point, PointType, Source,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -559,9 +559,7 @@ impl ShiftPackage {
         let mut glyphs: Vec<_> = font
             .glyphs()
             .values()
-            .map(|glyph| {
-                glyph_from_ir(glyph, &source_ids_by_layer, &glyph_names_by_id, font.axes())
-            })
+            .map(|glyph| glyph_from_ir(glyph, &source_ids_by_layer, &glyph_names_by_id))
             .collect();
         glyphs.sort_by(|left, right| left.id.cmp(&right.id));
 
@@ -629,11 +627,7 @@ impl ShiftPackage {
             .collect();
 
         for glyph in self.glyphs {
-            let glyph = glyph.into_ir(
-                &layer_ids_by_source_id,
-                &glyph_names_by_id,
-                &axis_tags_by_id,
-            )?;
+            let glyph = glyph.into_ir(&layer_ids_by_source_id, &glyph_names_by_id)?;
             font.insert_glyph(glyph);
         }
 
@@ -2318,7 +2312,6 @@ impl ShiftGlyph {
         self,
         layer_ids_by_source_id: &HashMap<String, shift_ir::LayerId>,
         glyph_names_by_id: &HashMap<String, String>,
-        axis_tags_by_id: &HashMap<String, String>,
     ) -> ShiftSourceResult<Glyph> {
         let glyph_id = GlyphId::from_stable(self.id.clone()).map_err(|_| {
             ShiftSourceError::InvalidIdentifier {
@@ -2346,10 +2339,7 @@ impl ShiftGlyph {
                     source_id,
                 });
             };
-            glyph.set_layer(
-                layer_id,
-                layer.into_ir(&self.name, glyph_names_by_id, axis_tags_by_id)?,
-            );
+            glyph.set_layer(layer_id, layer.into_ir(&self.name, glyph_names_by_id)?);
         }
 
         Ok(glyph)
@@ -2361,7 +2351,6 @@ impl ShiftGlyphLayer {
         self,
         glyph_name: &str,
         glyph_names_by_id: &HashMap<String, String>,
-        axis_tags_by_id: &HashMap<String, String>,
     ) -> ShiftSourceResult<GlyphLayer> {
         let mut layer = GlyphLayer::with_width(self.advance_width);
         layer.set_height(self.advance_height);
@@ -2397,10 +2386,15 @@ impl ShiftGlyphLayer {
                 base_name.as_str(),
                 component.transform,
             );
-            let mut location = Location::new();
+            let mut location = ComponentLocation::new();
             for (axis_id, value) in component.location {
-                let tag = axis_tags_by_id.get(&axis_id).cloned().unwrap_or(axis_id);
-                location.set(tag, value);
+                let axis_id = AxisId::from_stable(axis_id.clone()).map_err(|_| {
+                    ShiftSourceError::InvalidIdentifier {
+                        context: format!("component location in glyph '{glyph_name}'"),
+                        identifier: axis_id,
+                    }
+                })?;
+                location.set(axis_id, value);
             }
             ir_component.set_location(location);
             ir_component.set_axis_inheritance(component.axis_inheritance.into_ir());
@@ -3265,7 +3259,6 @@ fn glyph_from_ir(
     glyph: &Glyph,
     source_ids_by_layer: &HashMap<shift_ir::LayerId, String>,
     glyph_names_by_id: &HashMap<String, String>,
-    axes: &[Axis],
 ) -> ShiftGlyph {
     let layers = glyph
         .layers()
@@ -3274,7 +3267,7 @@ fn glyph_from_ir(
             let source_id = source_ids_by_layer.get(layer_id)?;
             Some((
                 source_id.clone(),
-                glyph_layer_from_ir(layer, glyph_names_by_id, axes),
+                glyph_layer_from_ir(layer, glyph_names_by_id),
             ))
         })
         .collect();
@@ -3296,7 +3289,6 @@ fn glyph_from_ir(
 fn glyph_layer_from_ir(
     layer: &GlyphLayer,
     glyph_names_by_id: &HashMap<String, String>,
-    axes: &[Axis],
 ) -> ShiftGlyphLayer {
     ShiftGlyphLayer {
         advance_width: layer.width(),
@@ -3304,7 +3296,7 @@ fn glyph_layer_from_ir(
         contours: layer.contours_iter().map(contour_from_ir).collect(),
         components: layer
             .components_iter()
-            .map(|component| component_from_ir(component, glyph_names_by_id, axes))
+            .map(|component| component_from_ir(component, glyph_names_by_id))
             .collect(),
         anchors: layer.anchors_iter().cloned().collect(),
         guidelines: layer.guidelines().to_vec(),
@@ -3338,7 +3330,6 @@ fn point_type_from_ir(point_type: PointType) -> ShiftPointType {
 fn component_from_ir(
     component: &Component,
     glyph_names_by_id: &HashMap<String, String>,
-    axes: &[Axis],
 ) -> ShiftComponent {
     let base_glyph_id = component.base_glyph_id_ref().as_str().to_string();
     let base_glyph_name = glyph_names_by_id
@@ -3351,24 +3342,17 @@ fn component_from_ir(
         base_glyph_id,
         base_glyph_name,
         transform: *component.transform(),
-        location: location_from_ir(component.location(), axes),
+        location: location_from_ir(component.location()),
         axis_inheritance: ShiftAxisInheritance::from_ir(component.axis_inheritance()),
         variation_sources: Vec::new(),
         condition: component.condition().map(condition_from_ir),
     }
 }
 
-fn location_from_ir(location: &Location, axes: &[Axis]) -> BTreeMap<String, f64> {
+fn location_from_ir(location: &ComponentLocation) -> BTreeMap<String, f64> {
     location
         .iter()
-        .map(|(tag, value)| {
-            let axis_id = axes
-                .iter()
-                .find(|axis| axis.tag() == tag)
-                .map(|axis| axis.id_ref().as_str().to_string())
-                .unwrap_or_else(|| tag.clone());
-            (axis_id, *value)
-        })
+        .map(|(axis_id, value)| (axis_id.as_str().to_string(), *value))
         .collect()
 }
 

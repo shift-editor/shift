@@ -1,6 +1,7 @@
 use crate::entity::{AxisId, ComponentId, GlyphId};
 use crate::{Axis, GlyphName, Location};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -10,7 +11,7 @@ pub struct Component {
     base_glyph: GlyphName,
     transform: DecomposedTransform,
     #[serde(default)]
-    location: Location,
+    location: ComponentLocation,
     #[serde(default)]
     axis_inheritance: AxisInheritance,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -23,6 +24,11 @@ pub enum AxisInheritance {
     #[default]
     InheritParent,
     ResetUnspecifiedToDefault,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ComponentLocation {
+    values: BTreeMap<AxisId, f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -60,6 +66,32 @@ impl fmt::Display for ComponentConditionError {
 }
 
 impl std::error::Error for ComponentConditionError {}
+
+impl ComponentLocation {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_map(values: BTreeMap<AxisId, f64>) -> Self {
+        Self { values }
+    }
+
+    pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
+        self.values.get(axis_id).copied()
+    }
+
+    pub fn set(&mut self, axis_id: AxisId, value: f64) {
+        self.values.insert(axis_id, value);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&AxisId, &f64)> {
+        self.values.iter()
+    }
+}
 
 /// Raw 2D affine transformation matrix (6 values).
 ///
@@ -259,7 +291,7 @@ impl Component {
             base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
             base_glyph,
             transform: DecomposedTransform::identity(),
-            location: Location::new(),
+            location: ComponentLocation::new(),
             axis_inheritance: AxisInheritance::InheritParent,
             condition: None,
         }
@@ -275,7 +307,7 @@ impl Component {
             base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
             base_glyph,
             transform,
-            location: Location::new(),
+            location: ComponentLocation::new(),
             axis_inheritance: AxisInheritance::InheritParent,
             condition: None,
         }
@@ -292,7 +324,7 @@ impl Component {
             base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
             base_glyph,
             transform,
-            location: Location::new(),
+            location: ComponentLocation::new(),
             axis_inheritance: AxisInheritance::InheritParent,
             condition: None,
         }
@@ -309,7 +341,7 @@ impl Component {
             base_glyph_id,
             base_glyph: base_glyph.into(),
             transform,
-            location: Location::new(),
+            location: ComponentLocation::new(),
             axis_inheritance: AxisInheritance::InheritParent,
             condition: None,
         }
@@ -322,7 +354,7 @@ impl Component {
             base_glyph_id: GlyphId::for_name(base_glyph.as_str()),
             base_glyph,
             transform: DecomposedTransform::from_matrix(matrix),
-            location: Location::new(),
+            location: ComponentLocation::new(),
             axis_inheritance: AxisInheritance::InheritParent,
             condition: None,
         }
@@ -352,7 +384,7 @@ impl Component {
         &self.transform
     }
 
-    pub fn location(&self) -> &Location {
+    pub fn location(&self) -> &ComponentLocation {
         &self.location
     }
 
@@ -372,12 +404,12 @@ impl Component {
         self.transform = transform;
     }
 
-    pub fn set_location(&mut self, location: Location) {
+    pub fn set_location(&mut self, location: ComponentLocation) {
         self.location = location;
     }
 
-    pub fn set_location_axis(&mut self, axis_tag: impl Into<String>, value: f64) {
-        self.location.set(axis_tag.into(), value);
+    pub fn set_location_axis(&mut self, axis_id: AxisId, value: f64) {
+        self.location.set(axis_id, value);
     }
 
     pub fn set_axis_inheritance(&mut self, axis_inheritance: AxisInheritance) {
@@ -449,11 +481,12 @@ mod tests {
     #[test]
     fn component_location_and_axis_inheritance_are_editable() {
         let mut c = Component::new("stem".to_string());
+        let axis_id = AxisId::from_stable("axis_weight").unwrap();
 
-        c.set_location_axis("wght", 700.0);
+        c.set_location_axis(axis_id.clone(), 700.0);
         c.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
 
-        assert_eq!(c.location().get("wght"), Some(700.0));
+        assert_eq!(c.location().get(&axis_id), Some(700.0));
         assert_eq!(
             c.axis_inheritance(),
             AxisInheritance::ResetUnspecifiedToDefault

@@ -103,15 +103,15 @@ Component {
     base_glyph_id: GlyphId,
     base_glyph: GlyphName, // readable label/cache, not the durable target
     transform: DecomposedTransform,
-    location: Location,
+    location: ComponentLocation,
     axis_inheritance: AxisInheritance,
     condition: Option<ComponentCondition>,
 }
 ```
 
-That is enough for simple composites, stable component relationships, sparse
-variable component placement, and active/inactive condition evaluation in the
-editor loop. Component-specific variation source records still live in
+That is enough for simple composites, stable component relationships,
+ID-keyed sparse variable component placement, and active/inactive condition
+evaluation in the editor loop. Component-specific variation source records still live in
 source/package services until the editor exposes first-class controls for those
 recipes. If component recipes become a first-class editor feature, IR should
 grow toward this shape:

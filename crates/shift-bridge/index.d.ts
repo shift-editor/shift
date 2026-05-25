@@ -117,7 +117,7 @@ export interface NapiAxisTent {
 
 export interface NapiComponentData {
   id: ComponentId
-  baseGlyphId?: GlyphId
+  baseGlyphId: GlyphId
   baseGlyphName: GlyphName
 }
 

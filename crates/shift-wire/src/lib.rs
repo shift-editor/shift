@@ -298,7 +298,7 @@ impl From<&IrAnchor> for AnchorData {
 #[serde(rename_all = "camelCase")]
 pub struct ComponentData {
     pub id: String,
-    pub base_glyph_id: Option<String>,
+    pub base_glyph_id: String,
     pub base_glyph_name: GlyphName,
 }
 
@@ -306,7 +306,7 @@ impl From<&IrComponent> for ComponentData {
     fn from(component: &IrComponent) -> Self {
         Self {
             id: component.id().to_string(),
-            base_glyph_id: Some(component.base_glyph_id_ref().as_str().to_string()),
+            base_glyph_id: component.base_glyph_id_ref().as_str().to_string(),
             base_glyph_name: component.base_glyph().clone(),
         }
     }

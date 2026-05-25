@@ -88,7 +88,7 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
         "A.old",
         DecomposedTransform::identity(),
     );
-    component.set_location_axis("wght", 700.0);
+    component.set_location_axis(axis_id.clone(), 700.0);
     component.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
     component.set_condition(Some(ComponentCondition::AxisRange {
         axis_id: axis_id.clone(),
@@ -144,7 +144,7 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
     assert_eq!(loaded_component.id_ref(), &component_id);
     assert_eq!(loaded_component.base_glyph_id_ref(), &base_glyph_id);
     assert_eq!(loaded_component.base_glyph().as_str(), "A.renamed");
-    assert_eq!(loaded_component.location().get("wght"), Some(700.0));
+    assert_eq!(loaded_component.location().get(&axis_id), Some(700.0));
     assert_eq!(
         loaded_component.axis_inheritance(),
         AxisInheritance::ResetUnspecifiedToDefault
@@ -2597,7 +2597,9 @@ fn source_package_keeps_component_variation_sources_separate_from_ir_projection(
         AxisInheritance::ResetUnspecifiedToDefault
     );
     assert_eq!(
-        projected_component.location().get("axis_stemWidth"),
+        projected_component
+            .location()
+            .get(&AxisId::from_stable("axis_stemWidth").unwrap()),
         Some(40.0)
     );
     assert!(matches!(

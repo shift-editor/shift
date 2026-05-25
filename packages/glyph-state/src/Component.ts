@@ -1,4 +1,4 @@
-import type { ComponentData, ComponentId, GlyphName, GlyphStructure } from "@shift/types";
+import type { ComponentData, ComponentId, GlyphId, GlyphName, GlyphStructure } from "@shift/types";
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
 
 export type ComponentTransform = DecomposedTransform;
@@ -31,6 +31,10 @@ export class Component {
 
   get baseGlyphName(): GlyphName {
     return this.#data.baseGlyphName;
+  }
+
+  get baseGlyphId(): GlyphId {
+    return this.#data.baseGlyphId;
   }
 
   get transform(): ComponentTransform {
