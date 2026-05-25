@@ -309,7 +309,9 @@ format exploration:
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent
-  location, without parsing component JSON in the renderer.
+  location, without parsing component JSON in the renderer. Conditional
+  components that are inactive at the queried location report an explicit
+  `inactive` resolution and skip variation-source interpolation.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a

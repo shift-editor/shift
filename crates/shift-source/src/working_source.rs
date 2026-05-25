@@ -177,6 +177,7 @@ pub struct ShiftComponentResolvedVariationSource {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ShiftComponentVariationResolution {
+    Inactive,
     Base,
     ExactSource {
         source: ShiftComponentResolvedVariationSource,
@@ -531,12 +532,21 @@ impl ShiftWorkingSource {
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                 let base_values =
                     self.resolve_component_axis_values(component, base_glyph, location);
-                let resolved = self.resolve_component_variation_state(
-                    component,
-                    base_values,
-                    component.transform,
-                    location,
-                );
+                let resolved = if active {
+                    self.resolve_component_variation_state(
+                        component,
+                        base_values,
+                        component.transform,
+                        location,
+                    )
+                } else {
+                    ResolvedComponentVariationState {
+                        values: base_values,
+                        transform: component.transform,
+                        resolution: ShiftComponentVariationResolution::Inactive,
+                        source: None,
+                    }
+                };
 
                 Ok(ShiftComponentResolvedState {
                     glyph_id: glyph.id.clone(),

@@ -2664,6 +2664,70 @@ fn source_package_keeps_component_variation_sources_separate_from_ir_projection(
 }
 
 #[test]
+fn working_source_skips_variation_resolution_for_inactive_conditional_components() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_8_inactive".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            }],
+            condition: Some(ShiftCondition::AxisRange {
+                axis_id: "axis_wght".to_string(),
+                min: Some(700.0),
+                max: None,
+            }),
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let inactive_state = working_source
+        .component_resolved_states(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 400.0)]),
+        )
+        .expect("inactive component state should resolve");
+
+    assert!(!inactive_state[0].active);
+    assert_eq!(
+        inactive_state[0].variation_resolution,
+        ShiftComponentVariationResolution::Inactive
+    );
+    assert_eq!(inactive_state[0].variation_source, None);
+    assert_eq!(inactive_state[0].transform, DecomposedTransform::identity());
+    assert_eq!(
+        inactive_state[0].values.get("axis_stemWidth"),
+        Some(&ShiftResolvedAxisValue {
+            value: 40.0,
+            source: ShiftResolvedAxisValueSource::ComponentOverride,
+        })
+    );
+}
+
+#[test]
 fn working_source_interpolates_component_variation_state_with_variation_model() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
