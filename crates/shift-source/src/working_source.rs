@@ -534,6 +534,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph_id.to_string(),
                     layer_id: layer_id.to_string(),
                 })?;
+        self.validate_query_location("component activity", location)?;
 
         layer
             .components
@@ -717,6 +718,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph_id.to_string(),
                     layer_id: layer_id.to_string(),
                 })?;
+        self.validate_query_location("component resolved locations", location)?;
 
         layer
             .components
@@ -761,6 +763,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph_id.to_string(),
                     layer_id: layer_id.to_string(),
                 })?;
+        self.validate_query_location("component resolved states", location)?;
 
         layer
             .components
@@ -813,6 +816,7 @@ impl ShiftWorkingSource {
         &self,
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<ShiftMappedLocation> {
+        self.validate_query_location("mapped location", location)?;
         let mut values = self.default_mapped_values(location);
         let mut diagnostics = Vec::new();
 

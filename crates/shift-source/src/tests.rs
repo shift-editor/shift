@@ -2193,6 +2193,26 @@ fn working_source_component_activity_reports_missing_layer() {
 }
 
 #[test]
+fn working_source_component_activity_rejects_invalid_query_location() {
+    let working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let err = working_source
+        .component_activity(
+            "glyph_Aacute",
+            "source_Regular",
+            &BTreeMap::from([("axis_missing".to_string(), 1.0)]),
+        )
+        .expect_err("component activity should reject missing location axes");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::MissingQueryLocationAxis { context, axis_id }
+            if context == "component activity" && axis_id == "axis_missing"
+    ));
+}
+
+#[test]
 fn working_source_maps_user_location_to_internal_axes() {
     let working_source =
         ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
@@ -2218,6 +2238,35 @@ fn working_source_maps_user_location_to_internal_axes() {
             mapping_id: Some("mapping_weight_to_stem".to_string()),
         })
     );
+}
+
+#[test]
+fn working_source_mapped_location_rejects_invalid_query_location() {
+    let working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let missing_axis_err = working_source
+        .mapped_location(&BTreeMap::from([("axis_missing".to_string(), 1.0)]))
+        .expect_err("mapped location should reject missing query axes");
+    assert!(matches!(
+        missing_axis_err,
+        ShiftSourceError::MissingQueryLocationAxis { context, axis_id }
+            if context == "mapped location" && axis_id == "axis_missing"
+    ));
+
+    let out_of_range_err = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 1000.0)]))
+        .expect_err("mapped location should reject out-of-range query axes");
+    assert!(matches!(
+        out_of_range_err,
+        ShiftSourceError::AxisCoordinateOutOfRange {
+            context,
+            axis_id,
+            value,
+            minimum: 100.0,
+            maximum: 900.0,
+        } if context == "mapped location" && axis_id == "axis_wght" && value == 1000.0
+    ));
 }
 
 #[test]
@@ -2484,6 +2533,24 @@ fn working_source_resolves_component_location_with_parent_and_local_axes() {
             source: ShiftResolvedAxisValueSource::ComponentOverride,
         })
     );
+
+    let err = working_source
+        .component_resolved_locations(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), f64::INFINITY)]),
+        )
+        .expect_err("component location resolution should reject non-finite locations");
+    assert!(matches!(
+        err,
+        ShiftSourceError::NonFiniteNumber {
+            context,
+            field,
+            value,
+        } if context == "component resolved locations"
+            && field == "axis_wght"
+            && value.is_infinite()
+    ));
 }
 
 #[test]

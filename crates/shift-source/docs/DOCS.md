@@ -318,9 +318,9 @@ format exploration:
   Static-instance preflight can pass a concrete location; inactive conditional
   components are skipped and counted separately, while variable-font preflight
   can keep using the location-independent query that checks every recipe.
-  Concrete preflight locations are validated at the query boundary: unknown
-  axes, non-finite values, or coordinates outside axis ranges return typed
-  errors instead of producing misleading export diagnostics.
+  Concrete preflight and preview locations are validated at the query boundary:
+  unknown axes, non-finite values, or coordinates outside axis ranges return
+  typed errors instead of producing misleading export diagnostics.
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
@@ -539,7 +539,8 @@ The format should make these app behaviors straightforward:
   preview, so unsupported inactive recipes do not block a concrete instance but
   are still counted as skipped for explainability.
 - Current-location previews that use the same condition evaluation rules as
-  save/export preflight.
+  save/export preflight, with the same query-location validation as export
+  preflight and axis-mapping previews.
 - Component recipe UI that can label each resolved axis value as coming from the
   parent location, font default, base local default, or component override.
 - Component recipe UI that can show exact authored component variation sources:
