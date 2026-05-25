@@ -25,6 +25,8 @@ pub struct ShiftWorkingSource {
     dependency_index: ShiftDependencyIndex,
     interpolation_compatibility_index: ShiftInterpolationCompatibilityIndex,
     axis_mapping_resolvers: Vec<CompiledAxisMapping>,
+    component_variation_resolvers:
+        HashMap<ComponentVariationResolverKey, CompiledComponentVariationResolver>,
     revision: u64,
 }
 
@@ -435,12 +437,44 @@ struct CompiledAxisMappingInputAxis {
     maximum: f64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ComponentVariationResolverKey {
+    glyph_id: String,
+    layer_id: String,
+    component_id: String,
+}
+
+#[derive(Clone, Debug)]
+struct CompiledComponentVariationResolver {
+    source_count: usize,
+    default_location: shift_ir::variation::NormalizedLocation,
+    sources: Vec<CompiledComponentVariationSource>,
+    kind: CompiledComponentVariationResolverKind,
+}
+
+#[derive(Clone, Debug)]
+struct CompiledComponentVariationSource {
+    id: String,
+    name: String,
+    parent_location: shift_ir::variation::NormalizedLocation,
+}
+
+#[derive(Clone, Debug)]
+enum CompiledComponentVariationResolverKind {
+    Fixed {
+        axis_ids: Vec<String>,
+        model: Box<Result<NormalizedF64VariationModel, String>>,
+    },
+    DynamicQueryValues,
+}
+
 impl ShiftWorkingSource {
     pub fn new(package: ShiftPackage) -> ShiftSourceResult<Self> {
         package.validate()?;
         let dependency_index = build_dependency_index(&package)?;
         let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
         let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
+        let component_variation_resolvers = compile_component_variation_resolvers(&package);
 
         Ok(Self {
             saved_package: package.clone(),
@@ -449,6 +483,7 @@ impl ShiftWorkingSource {
             dependency_index,
             interpolation_compatibility_index,
             axis_mapping_resolvers,
+            component_variation_resolvers,
             revision: 0,
         })
     }
@@ -459,6 +494,7 @@ impl ShiftWorkingSource {
         let dependency_index = build_dependency_index(&package)?;
         let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
         let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
+        let component_variation_resolvers = compile_component_variation_resolvers(&package);
 
         Ok(Self {
             saved_package: package.clone(),
@@ -467,6 +503,7 @@ impl ShiftWorkingSource {
             dependency_index,
             interpolation_compatibility_index,
             axis_mapping_resolvers,
+            component_variation_resolvers,
             revision: 0,
         })
     }
@@ -493,6 +530,11 @@ impl ShiftWorkingSource {
 
     pub fn interpolation_compatibility_index(&self) -> &ShiftInterpolationCompatibilityIndex {
         &self.interpolation_compatibility_index
+    }
+
+    #[cfg(test)]
+    pub(crate) fn compiled_component_variation_resolver_count(&self) -> usize {
+        self.component_variation_resolvers.len()
     }
 
     pub fn source_locations(&self) -> Vec<ShiftSourceLocation> {
@@ -852,6 +894,8 @@ impl ShiftWorkingSource {
                     self.resolve_component_axis_values(component, base_glyph, location);
                 let resolved = if active {
                     self.resolve_component_variation_state(
+                        &glyph.id,
+                        layer_id,
                         component,
                         base_values,
                         component.transform,
@@ -1067,6 +1111,7 @@ impl ShiftWorkingSource {
         self.interpolation_compatibility_index =
             build_interpolation_compatibility_index(&self.package)?;
         self.axis_mapping_resolvers = compile_axis_mapping_resolvers(&self.package);
+        self.component_variation_resolvers = compile_component_variation_resolvers(&self.package);
         Ok(())
     }
 
@@ -1211,6 +1256,8 @@ impl ShiftWorkingSource {
 
     fn resolve_component_variation_state(
         &self,
+        glyph_id: &str,
+        layer_id: &str,
         component: &crate::package::ShiftComponent,
         base_values: BTreeMap<String, ShiftResolvedAxisValue>,
         base_transform: DecomposedTransform,
@@ -1225,6 +1272,38 @@ impl ShiftWorkingSource {
             };
         }
 
+        let key = ComponentVariationResolverKey::new(glyph_id, layer_id, &component.id);
+        if let Some(resolver) = self.component_variation_resolvers.get(&key) {
+            if matches!(
+                resolver.kind,
+                CompiledComponentVariationResolverKind::DynamicQueryValues
+            ) {
+                return self.resolve_component_variation_state_uncached(
+                    component,
+                    base_values,
+                    base_transform,
+                    location,
+                );
+            }
+            let query_location = self.normalized_component_parent_location(location);
+            return resolver.resolve(base_values, base_transform, &query_location);
+        }
+
+        self.resolve_component_variation_state_uncached(
+            component,
+            base_values,
+            base_transform,
+            location,
+        )
+    }
+
+    fn resolve_component_variation_state_uncached(
+        &self,
+        component: &crate::package::ShiftComponent,
+        base_values: BTreeMap<String, ShiftResolvedAxisValue>,
+        base_transform: DecomposedTransform,
+        location: &BTreeMap<String, f64>,
+    ) -> ResolvedComponentVariationState {
         let axis_tags = self
             .package
             .axes
@@ -1341,40 +1420,14 @@ impl ShiftWorkingSource {
     }
 
     fn normalized_default_location(&self) -> shift_ir::variation::NormalizedLocation {
-        normalized_location_from_values(
-            self.package.axes.iter().map(|axis| axis.tag.as_str()),
-            |_| 0.0,
-        )
+        normalized_default_location_for_axes(&self.package.axes)
     }
 
     fn normalized_component_parent_location(
         &self,
         parent_location: &BTreeMap<String, f64>,
     ) -> shift_ir::variation::NormalizedLocation {
-        let axis_values = self
-            .package
-            .axes
-            .iter()
-            .map(|axis| {
-                (
-                    axis.tag.as_str(),
-                    normalize_axis_value(
-                        parent_location
-                            .get(&axis.id)
-                            .copied()
-                            .unwrap_or(axis.default),
-                        axis.minimum,
-                        axis.default,
-                        axis.maximum,
-                    ),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        normalized_location_from_values(
-            self.package.axes.iter().map(|axis| axis.tag.as_str()),
-            |tag| *axis_values.get(tag).unwrap_or(&0.0),
-        )
+        normalized_component_parent_location_for_axes(&self.package.axes, parent_location)
     }
 
     fn condition_matches(
@@ -1690,6 +1743,39 @@ fn normalize_axis_value(value: f64, minimum: f64, default: f64, maximum: f64) ->
     }
 }
 
+fn normalized_default_location_for_axes(
+    axes: &[ShiftAxis],
+) -> shift_ir::variation::NormalizedLocation {
+    normalized_location_from_values(axes.iter().map(|axis| axis.tag.as_str()), |_| 0.0)
+}
+
+fn normalized_component_parent_location_for_axes(
+    axes: &[ShiftAxis],
+    parent_location: &BTreeMap<String, f64>,
+) -> shift_ir::variation::NormalizedLocation {
+    let axis_values = axes
+        .iter()
+        .map(|axis| {
+            (
+                axis.tag.as_str(),
+                normalize_axis_value(
+                    parent_location
+                        .get(&axis.id)
+                        .copied()
+                        .unwrap_or(axis.default),
+                    axis.minimum,
+                    axis.default,
+                    axis.maximum,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    normalized_location_from_values(axes.iter().map(|axis| axis.tag.as_str()), |tag| {
+        *axis_values.get(tag).unwrap_or(&0.0)
+    })
+}
+
 fn component_state_values(
     axis_ids: &[String],
     values: &BTreeMap<String, ShiftResolvedAxisValue>,
@@ -1756,6 +1842,99 @@ fn component_state_from_values(
         }
     }
     (resolved_values, transform)
+}
+
+impl ComponentVariationResolverKey {
+    fn new(glyph_id: &str, layer_id: &str, component_id: &str) -> Self {
+        Self {
+            glyph_id: glyph_id.to_string(),
+            layer_id: layer_id.to_string(),
+            component_id: component_id.to_string(),
+        }
+    }
+}
+
+impl CompiledComponentVariationResolver {
+    fn resolve(
+        &self,
+        base_values: BTreeMap<String, ShiftResolvedAxisValue>,
+        base_transform: DecomposedTransform,
+        query_location: &shift_ir::variation::NormalizedLocation,
+    ) -> ResolvedComponentVariationState {
+        let CompiledComponentVariationResolverKind::Fixed { axis_ids, model } = &self.kind else {
+            return ResolvedComponentVariationState {
+                values: base_values,
+                transform: base_transform,
+                resolution: ShiftComponentVariationResolution::Unsupported {
+                    reason: ShiftComponentVariationUnsupportedReason::ModelError {
+                        message: "dynamic component variation values require per-query resolution"
+                            .to_string(),
+                    },
+                },
+                source: None,
+            };
+        };
+
+        let exact_source = self
+            .sources
+            .iter()
+            .find(|source| source.parent_location == *query_location)
+            .map(|source| ShiftComponentResolvedVariationSource {
+                id: source.id.clone(),
+                name: source.name.clone(),
+            });
+        let model = match model.as_ref().as_ref().map_err(|message| {
+            ShiftComponentVariationUnsupportedReason::ModelError {
+                message: message.clone(),
+            }
+        }) {
+            Ok(model) => model,
+            Err(reason) => {
+                return ResolvedComponentVariationState {
+                    values: base_values,
+                    transform: base_transform,
+                    resolution: ShiftComponentVariationResolution::Unsupported { reason },
+                    source: None,
+                };
+            }
+        };
+        let values = model.interpolate(query_location);
+        let expected_value_count = axis_ids.len() + 9;
+        if values.len() != expected_value_count {
+            return ResolvedComponentVariationState {
+                values: base_values,
+                transform: base_transform,
+                resolution: ShiftComponentVariationResolution::Unsupported {
+                    reason: ShiftComponentVariationUnsupportedReason::ModelError {
+                        message: format!(
+                            "component variation model produced {} values for {} expected values",
+                            values.len(),
+                            expected_value_count
+                        ),
+                    },
+                },
+                source: None,
+            };
+        }
+
+        let (values, transform) = component_state_from_values(axis_ids, &base_values, &values);
+        let resolution = if let Some(source) = exact_source.clone() {
+            ShiftComponentVariationResolution::ExactSource { source }
+        } else if query_location == &self.default_location {
+            ShiftComponentVariationResolution::Base
+        } else {
+            ShiftComponentVariationResolution::Interpolated {
+                source_count: self.source_count,
+            }
+        };
+
+        ResolvedComponentVariationState {
+            values,
+            transform,
+            resolution,
+            source: exact_source,
+        }
+    }
 }
 
 impl CompiledAxisMapping {
@@ -2003,4 +2182,189 @@ fn mapping_output_values(mapping: &ShiftAxisMapping, sample: &ShiftAxisMappingSa
                 .expect("package validation rejects missing mapping sample outputs")
         })
         .collect()
+}
+
+fn compile_component_variation_resolvers(
+    package: &ShiftPackage,
+) -> HashMap<ComponentVariationResolverKey, CompiledComponentVariationResolver> {
+    let mut resolvers = HashMap::new();
+    for glyph in &package.glyphs {
+        for (layer_id, layer) in &glyph.layers {
+            for component in &layer.components {
+                if component.variation_sources.is_empty() {
+                    continue;
+                }
+                let base_glyph = package
+                    .glyphs
+                    .iter()
+                    .find(|base_glyph| base_glyph.id == component.base_glyph_id)
+                    .expect("package validation rejects missing component base glyphs");
+                resolvers.insert(
+                    ComponentVariationResolverKey::new(&glyph.id, layer_id, &component.id),
+                    compile_component_variation_resolver(package, component, base_glyph),
+                );
+            }
+        }
+    }
+    resolvers
+}
+
+fn compile_component_variation_resolver(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+) -> CompiledComponentVariationResolver {
+    let default_location = normalized_default_location_for_axes(&package.axes);
+    let sources = component
+        .variation_sources
+        .iter()
+        .map(|source| CompiledComponentVariationSource {
+            id: source.id.clone(),
+            name: source.name.clone(),
+            parent_location: normalized_component_parent_location_for_axes(
+                &package.axes,
+                &source.parent_location,
+            ),
+        })
+        .collect::<Vec<_>>();
+    let source_count = sources.len() + 1;
+    let kind = if component_requires_dynamic_variation_values(package, component) {
+        CompiledComponentVariationResolverKind::DynamicQueryValues
+    } else {
+        compile_fixed_component_variation_kind(package, component, base_glyph, &default_location)
+    };
+
+    CompiledComponentVariationResolver {
+        source_count,
+        default_location,
+        sources,
+        kind,
+    }
+}
+
+fn component_requires_dynamic_variation_values(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+) -> bool {
+    if component.axis_inheritance != crate::package::ShiftAxisInheritance::InheritParent {
+        return false;
+    }
+
+    component.variation_sources.iter().any(|source| {
+        source.location.keys().any(|axis_id| {
+            !component.location.contains_key(axis_id)
+                && package.axes.iter().any(|axis| axis.id == *axis_id)
+        })
+    })
+}
+
+fn compile_fixed_component_variation_kind(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    default_location: &shift_ir::variation::NormalizedLocation,
+) -> CompiledComponentVariationResolverKind {
+    let axis_ids = component
+        .variation_sources
+        .iter()
+        .flat_map(|source| source.location.keys().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let base_values = fixed_component_axis_values(package, component, base_glyph, &axis_ids);
+    let mut points = HashMap::new();
+    points.insert(
+        default_location.clone(),
+        component_state_values(&axis_ids, &base_values, component.transform),
+    );
+
+    for source in &component.variation_sources {
+        let mut source_values =
+            fixed_component_axis_values(package, component, base_glyph, &axis_ids);
+        for (axis_id, value) in &source.location {
+            source_values.insert(
+                axis_id.clone(),
+                ShiftResolvedAxisValue {
+                    value: *value,
+                    source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+                },
+            );
+        }
+        let source_location =
+            normalized_component_parent_location_for_axes(&package.axes, &source.parent_location);
+        points.insert(
+            source_location,
+            component_state_values(
+                &axis_ids,
+                &source_values,
+                source.transform.unwrap_or(component.transform),
+            ),
+        );
+    }
+
+    let axis_order = variation_axis_order(package.axes.iter().map(|axis| axis.tag.as_str()));
+    let model = NormalizedF64VariationModel::new(&points, axis_order, RoundingBehaviour::None);
+    CompiledComponentVariationResolverKind::Fixed {
+        axis_ids,
+        model: Box::new(model),
+    }
+}
+
+fn fixed_component_axis_values(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    axis_ids: &[String],
+) -> BTreeMap<String, ShiftResolvedAxisValue> {
+    axis_ids
+        .iter()
+        .map(|axis_id| {
+            let value = fixed_component_axis_value(package, component, base_glyph, axis_id);
+            (
+                axis_id.clone(),
+                ShiftResolvedAxisValue {
+                    value,
+                    source: fixed_component_axis_source(package, component, base_glyph, axis_id),
+                },
+            )
+        })
+        .collect()
+}
+
+fn fixed_component_axis_value(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    axis_id: &str,
+) -> f64 {
+    if let Some(value) = component.location.get(axis_id) {
+        return *value;
+    }
+    if let Some(axis) = package.axes.iter().find(|axis| axis.id == axis_id) {
+        return axis.default;
+    }
+    base_glyph
+        .local_axes
+        .iter()
+        .find(|axis| axis.id == axis_id)
+        .map(|axis| axis.default)
+        .expect("package validation rejects missing component variation axes")
+}
+
+fn fixed_component_axis_source(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    axis_id: &str,
+) -> ShiftResolvedAxisValueSource {
+    if component.location.contains_key(axis_id) {
+        return ShiftResolvedAxisValueSource::ComponentOverride;
+    }
+    if package.axes.iter().any(|axis| axis.id == axis_id) {
+        return ShiftResolvedAxisValueSource::FontDefault;
+    }
+    if base_glyph.local_axes.iter().any(|axis| axis.id == axis_id) {
+        return ShiftResolvedAxisValueSource::BaseLocalDefault;
+    }
+    ShiftResolvedAxisValueSource::ComponentVariationSource
 }

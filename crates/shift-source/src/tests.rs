@@ -4245,6 +4245,10 @@ fn working_source_interpolates_component_variation_state_with_variation_model() 
         glyphs_for_component_layer_with_local_base(component_layer),
     ))
     .expect("working source should initialize");
+    assert_eq!(
+        working_source.compiled_component_variation_resolver_count(),
+        1
+    );
 
     let mid_state = working_source
         .component_resolved_states(
@@ -4265,6 +4269,124 @@ fn working_source_interpolates_component_variation_state_with_variation_model() 
         mid_state[0].values.get("axis_stemWidth"),
         Some(&ShiftResolvedAxisValue {
             value: 56.0,
+            source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+        })
+    );
+}
+
+#[test]
+fn working_source_rebuilds_component_variation_resolvers_after_refresh() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_9_refresh".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+    assert_eq!(
+        working_source.compiled_component_variation_resolver_count(),
+        1
+    );
+
+    working_source
+        .rename_glyph("glyph_A", "A.alt".to_string())
+        .expect("rename should refresh working-source indexes");
+
+    assert_eq!(
+        working_source.compiled_component_variation_resolver_count(),
+        1
+    );
+    let resolved = working_source
+        .component_resolved_states(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+        )
+        .expect("component state should still resolve after refresh");
+    assert!(matches!(
+        &resolved[0].variation_resolution,
+        ShiftComponentVariationResolution::ExactSource { source }
+            if source.id == "componentSource_black"
+    ));
+}
+
+#[test]
+fn working_source_preserves_dynamic_inherited_global_component_variation_values() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_9_dynamic".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer(component_layer),
+    ))
+    .expect("working source should initialize");
+    assert_eq!(
+        working_source.compiled_component_variation_resolver_count(),
+        1
+    );
+
+    let resolved = working_source
+        .component_resolved_states(
+            "glyph_A",
+            "source_Regular",
+            &BTreeMap::from([("axis_wght".to_string(), 650.0)]),
+        )
+        .expect("dynamic inherited global component state should resolve");
+
+    assert!(matches!(
+        resolved[0].variation_resolution,
+        ShiftComponentVariationResolution::Interpolated { source_count: 2 }
+    ));
+    assert_eq!(
+        resolved[0].values.get("axis_wght"),
+        Some(&ShiftResolvedAxisValue {
+            value: 775.0,
             source: ShiftResolvedAxisValueSource::ComponentVariationSource,
         })
     );

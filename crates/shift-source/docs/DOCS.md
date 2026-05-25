@@ -71,9 +71,9 @@ WorkingSource
 
 The first implementation of this boundary is `ShiftWorkingSource`. It owns a
 validated `ShiftPackage`, keeps dependency and interpolation-compatibility
-indexes warm, compiles axis-mapping resolvers for repeated location queries,
-and exposes semantic operations that the app can call without parsing package
-files or mutating IR directly.
+indexes warm, compiles axis-mapping and component-variation resolvers for
+repeated location queries, and exposes semantic operations that the app can
+call without parsing package files or mutating IR directly.
 
 Good renderer-facing queries:
 
@@ -340,7 +340,11 @@ format exploration:
   location, without parsing component JSON in the renderer. Conditional
   components that are inactive at the queried location report an explicit
   `inactive` resolution, include the evaluated condition tree, and skip
-  variation-source interpolation.
+  variation-source interpolation. `ShiftWorkingSource` compiles fixed
+  component-variation models when opened or refreshed, so common local-axis and
+  transform scrubbing reuses the same `fontdrasil` model. Sources that override
+  inherited global-axis values keep the query-sensitive path so the app does
+  not trade correctness for caching.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a
