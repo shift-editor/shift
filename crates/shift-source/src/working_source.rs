@@ -176,6 +176,7 @@ pub struct ShiftComponentLoweringPreflight {
     pub total_component_count: usize,
     pub supported_component_count: usize,
     pub unsupported_component_count: usize,
+    pub skipped_inactive_component_count: usize,
     pub affected_glyph_count: usize,
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub missing_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
@@ -591,6 +592,23 @@ impl ShiftWorkingSource {
         &self,
         target: &ShiftComponentLoweringTarget,
     ) -> ShiftComponentLoweringPreflight {
+        self.component_lowering_preflight_for_location(target, None)
+            .expect("location-independent preflight cannot fail condition evaluation")
+    }
+
+    pub fn component_lowering_preflight_at_location(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
+        self.component_lowering_preflight_for_location(target, Some(location))
+    }
+
+    fn component_lowering_preflight_for_location(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+        location: Option<&BTreeMap<String, f64>>,
+    ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
         let supported_capabilities = target
             .supported_capabilities
             .iter()
@@ -598,6 +616,7 @@ impl ShiftWorkingSource {
             .collect::<BTreeSet<_>>();
         let mut diagnostics = Vec::new();
         let mut total_component_count = 0;
+        let mut skipped_inactive_component_count = 0;
         let mut affected_glyph_ids = BTreeSet::new();
         let mut missing_capability_counts =
             BTreeMap::<ShiftComponentLoweringCapability, usize>::new();
@@ -606,6 +625,21 @@ impl ShiftWorkingSource {
             for (layer_id, layer) in &glyph.layers {
                 for component in &layer.components {
                     total_component_count += 1;
+                    if let Some(location) = location {
+                        let active = component
+                            .condition
+                            .as_ref()
+                            .map(|condition| {
+                                self.condition_matches(&glyph.name, condition, location)
+                            })
+                            .transpose()?
+                            .unwrap_or(true);
+                        if !active {
+                            skipped_inactive_component_count += 1;
+                            continue;
+                        }
+                    }
+
                     let summary = component_recipe_summary(glyph, layer_id, component);
                     let missing_capabilities = summary
                         .required_capabilities
@@ -653,15 +687,18 @@ impl ShiftWorkingSource {
             .collect::<Vec<_>>();
         let unsupported_component_count = diagnostics.len();
 
-        ShiftComponentLoweringPreflight {
+        Ok(ShiftComponentLoweringPreflight {
             total_component_count,
-            supported_component_count: total_component_count - unsupported_component_count,
+            supported_component_count: total_component_count
+                - unsupported_component_count
+                - skipped_inactive_component_count,
             unsupported_component_count,
+            skipped_inactive_component_count,
             affected_glyph_count: affected_glyph_ids.len(),
             missing_capabilities,
             missing_capability_counts,
             diagnostics,
-        }
+        })
     }
 
     pub fn component_resolved_locations(

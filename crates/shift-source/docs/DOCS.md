@@ -315,6 +315,9 @@ format exploration:
   summary query also returns total/supported/unsupported component counts,
   affected glyph count, and counts per missing capability so export UI can make
   a fast proceed/fallback/fail decision without re-walking every diagnostic.
+  Static-instance preflight can pass a concrete location; inactive conditional
+  components are skipped and counted separately, while variable-font preflight
+  can keep using the location-independent query that checks every recipe.
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local
@@ -529,6 +532,9 @@ The format should make these app behaviors straightforward:
   and reset-vs-inherit axis semantics before any compiler runs. The app can
   render a compact summary first and expand into per-component diagnostics only
   when the user needs details.
+- Static-instance export preflight that uses the same condition evaluation as
+  preview, so unsupported inactive recipes do not block a concrete instance but
+  are still counted as skipped for explainability.
 - Current-location previews that use the same condition evaluation rules as
   save/export preflight.
 - Component recipe UI that can label each resolved axis value as coming from the

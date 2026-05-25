@@ -2791,6 +2791,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(plain_preflight.total_component_count, 4);
     assert_eq!(plain_preflight.supported_component_count, 1);
     assert_eq!(plain_preflight.unsupported_component_count, 3);
+    assert_eq!(plain_preflight.skipped_inactive_component_count, 0);
     assert_eq!(plain_preflight.affected_glyph_count, 1);
     assert_eq!(
         plain_preflight.missing_capabilities,
@@ -2853,6 +2854,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(partial_preflight.total_component_count, 4);
     assert_eq!(partial_preflight.supported_component_count, 3);
     assert_eq!(partial_preflight.unsupported_component_count, 1);
+    assert_eq!(partial_preflight.skipped_inactive_component_count, 0);
     assert_eq!(
         partial_preflight.missing_capabilities,
         vec![
@@ -2884,9 +2886,57 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(full_preflight.total_component_count, 4);
     assert_eq!(full_preflight.supported_component_count, 4);
     assert_eq!(full_preflight.unsupported_component_count, 0);
+    assert_eq!(full_preflight.skipped_inactive_component_count, 0);
     assert_eq!(full_preflight.affected_glyph_count, 0);
     assert_eq!(full_preflight.missing_capabilities, Vec::new());
     assert_eq!(full_preflight.diagnostics, Vec::new());
+
+    let static_location_preflight = working_source
+        .component_lowering_preflight_at_location(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &BTreeMap::new(),
+        )
+        .expect("location preflight should evaluate default conditions");
+    assert_eq!(static_location_preflight.total_component_count, 4);
+    assert_eq!(static_location_preflight.supported_component_count, 1);
+    assert_eq!(static_location_preflight.unsupported_component_count, 2);
+    assert_eq!(
+        static_location_preflight.skipped_inactive_component_count,
+        1
+    );
+    assert_eq!(
+        static_location_preflight
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.component_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["component_variable", "component_variable_conditional"]
+    );
+
+    let narrow_location_preflight = working_source
+        .component_lowering_preflight_at_location(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &BTreeMap::from([
+                ("axis_wght".to_string(), 800.0),
+                ("axis_wdth".to_string(), 50.0),
+            ]),
+        )
+        .expect("location preflight should evaluate explicit conditions");
+    assert_eq!(narrow_location_preflight.total_component_count, 4);
+    assert_eq!(narrow_location_preflight.supported_component_count, 1);
+    assert_eq!(narrow_location_preflight.unsupported_component_count, 2);
+    assert_eq!(
+        narrow_location_preflight.skipped_inactive_component_count,
+        1
+    );
+    assert_eq!(
+        narrow_location_preflight
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.component_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["component_conditional", "component_variable"]
+    );
 }
 
 #[test]
