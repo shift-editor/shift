@@ -818,7 +818,8 @@ topology. The current index checks:
 - contour point types
 - open/closed contour state
 - component count
-- component base glyph IDs
+- component stable IDs
+- component base glyph IDs paired with each stable component ID
 
 Current shape:
 
@@ -834,12 +835,12 @@ Current shape:
         "source_Regular": {
           "contourPointTypes": [["onCurve", "onCurve"]],
           "contourClosed": [true],
-          "componentBaseGlyphIds": []
+          "components": []
         },
         "source_Bold": {
           "contourPointTypes": [["onCurve", "onCurve", "offCurve"]],
           "contourClosed": [true],
-          "componentBaseGlyphIds": []
+          "components": []
         }
       },
       "issues": [

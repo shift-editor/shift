@@ -418,8 +418,61 @@ fn interpolation_compatibility_index_reports_component_mismatch() {
             kind: ShiftInterpolationCompatibilityIssueKind::ComponentBaseMismatch,
             reference_layer_id: "source_Bold".to_string(),
             layer_id: "source_Regular".to_string(),
-            expected: "glyph_bar".to_string(),
-            actual: "glyph_stem".to_string(),
+            expected: "component_26:glyph_bar".to_string(),
+            actual: "component_26:glyph_stem".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn interpolation_compatibility_index_reports_component_identity_mismatch() {
+    let mut regular = layer_with_component("glyph_stem", "stem");
+    regular.components[0].id = "component_regular".to_string();
+    let mut bold = layer_with_component("glyph_stem", "stem");
+    bold.components[0].id = "component_bold".to_string();
+    let mut package = package_with_single_source(vec![
+        ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), regular),
+                ("source_Bold".to_string(), bold),
+            ]),
+        },
+        ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::new(),
+        },
+    ]);
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::new(),
+    });
+
+    let index =
+        build_interpolation_compatibility_index(&package).expect("compatibility should build");
+    let glyph = index
+        .glyphs
+        .get("glyph_A")
+        .expect("glyph should be indexed");
+
+    assert!(!glyph.compatible);
+    assert_eq!(
+        glyph.issues,
+        vec![ShiftInterpolationCompatibilityIssue {
+            kind: ShiftInterpolationCompatibilityIssueKind::ComponentIdMismatch,
+            reference_layer_id: "source_Bold".to_string(),
+            layer_id: "source_Regular".to_string(),
+            expected: "component_bold".to_string(),
+            actual: "component_regular".to_string(),
         }]
     );
 }

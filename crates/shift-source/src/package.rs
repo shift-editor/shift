@@ -255,7 +255,14 @@ pub struct ShiftGlyphInterpolationCompatibility {
 pub struct ShiftLayerCompatibilitySignature {
     pub contour_point_types: Vec<Vec<ShiftPointType>>,
     pub contour_closed: Vec<bool>,
-    pub component_base_glyph_ids: Vec<String>,
+    pub components: Vec<ShiftComponentCompatibilitySignature>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentCompatibilitySignature {
+    pub component_id: String,
+    pub base_glyph_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -274,6 +281,7 @@ pub enum ShiftInterpolationCompatibilityIssueKind {
     ContourCountMismatch,
     ContourTopologyMismatch,
     ComponentCountMismatch,
+    ComponentIdMismatch,
     ComponentBaseMismatch,
 }
 
@@ -2934,10 +2942,13 @@ fn layer_compatibility_signature(layer: &ShiftGlyphLayer) -> ShiftLayerCompatibi
             .iter()
             .map(|contour| contour.closed)
             .collect(),
-        component_base_glyph_ids: layer
+        components: layer
             .components
             .iter()
-            .map(|component| component.base_glyph_id.clone())
+            .map(|component| ShiftComponentCompatibilitySignature {
+                component_id: component.id.clone(),
+                base_glyph_id: component.base_glyph_id.clone(),
+            })
             .collect(),
     }
 }
@@ -2970,25 +2981,49 @@ fn compare_layer_signatures(
         });
     }
 
-    if reference.component_base_glyph_ids.len() != signature.component_base_glyph_ids.len() {
+    if reference.components.len() != signature.components.len() {
         issues.push(ShiftInterpolationCompatibilityIssue {
             kind: ShiftInterpolationCompatibilityIssueKind::ComponentCountMismatch,
             reference_layer_id: reference_layer_id.to_string(),
             layer_id: layer_id.to_string(),
-            expected: reference.component_base_glyph_ids.len().to_string(),
-            actual: signature.component_base_glyph_ids.len().to_string(),
+            expected: reference.components.len().to_string(),
+            actual: signature.components.len().to_string(),
         });
-    } else if reference.component_base_glyph_ids != signature.component_base_glyph_ids {
+    } else if component_ids(reference) != component_ids(signature) {
+        issues.push(ShiftInterpolationCompatibilityIssue {
+            kind: ShiftInterpolationCompatibilityIssueKind::ComponentIdMismatch,
+            reference_layer_id: reference_layer_id.to_string(),
+            layer_id: layer_id.to_string(),
+            expected: component_ids(reference).join(","),
+            actual: component_ids(signature).join(","),
+        });
+    } else if component_base_labels(reference) != component_base_labels(signature) {
         issues.push(ShiftInterpolationCompatibilityIssue {
             kind: ShiftInterpolationCompatibilityIssueKind::ComponentBaseMismatch,
             reference_layer_id: reference_layer_id.to_string(),
             layer_id: layer_id.to_string(),
-            expected: reference.component_base_glyph_ids.join(","),
-            actual: signature.component_base_glyph_ids.join(","),
+            expected: component_base_labels(reference).join(","),
+            actual: component_base_labels(signature).join(","),
         });
     }
 
     issues
+}
+
+fn component_ids(signature: &ShiftLayerCompatibilitySignature) -> Vec<String> {
+    signature
+        .components
+        .iter()
+        .map(|component| component.component_id.clone())
+        .collect()
+}
+
+fn component_base_labels(signature: &ShiftLayerCompatibilitySignature) -> Vec<String> {
+    signature
+        .components
+        .iter()
+        .map(|component| format!("{}:{}", component.component_id, component.base_glyph_id))
+        .collect()
 }
 
 fn contour_topology_label(signature: &ShiftLayerCompatibilitySignature) -> String {
