@@ -340,11 +340,11 @@ format exploration:
   location, without parsing component JSON in the renderer. Conditional
   components that are inactive at the queried location report an explicit
   `inactive` resolution, include the evaluated condition tree, and skip
-  variation-source interpolation. `ShiftWorkingSource` compiles fixed
-  component-variation models when opened or refreshed, so common local-axis and
-  transform scrubbing reuses the same `fontdrasil` model. Sources that override
-  inherited global-axis values keep the query-sensitive path so the app does
-  not trade correctness for caching.
+  variation-source interpolation. `ShiftWorkingSource` compiles
+  component-variation resolvers when opened or refreshed. Fixed local-axis and
+  transform recipes reuse a full `fontdrasil` model; query-dependent recipes
+  such as inherited global-axis overrides reuse a `NormalizedF64VariationSpace`
+  so they can rebuild per-query deltas without rebuilding variation regions.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a

@@ -11,7 +11,7 @@ use crate::package::{
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
     normalized_location_from_values, variation_axis_order, NormalizedF64VariationModel,
-    RoundingBehaviour,
+    NormalizedF64VariationSpace, RoundingBehaviour,
 };
 use shift_ir::DecomposedTransform;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -457,6 +457,8 @@ struct CompiledComponentVariationSource {
     id: String,
     name: String,
     parent_location: shift_ir::variation::NormalizedLocation,
+    location: BTreeMap<String, f64>,
+    transform: Option<DecomposedTransform>,
 }
 
 #[derive(Clone, Debug)]
@@ -465,7 +467,10 @@ enum CompiledComponentVariationResolverKind {
         axis_ids: Vec<String>,
         model: Box<Result<NormalizedF64VariationModel, String>>,
     },
-    DynamicQueryValues,
+    DynamicQueryValues {
+        axis_ids: Vec<String>,
+        space: Box<NormalizedF64VariationSpace>,
+    },
 }
 
 impl ShiftWorkingSource {
@@ -1274,153 +1279,23 @@ impl ShiftWorkingSource {
 
         let key = ComponentVariationResolverKey::new(glyph_id, layer_id, &component.id);
         if let Some(resolver) = self.component_variation_resolvers.get(&key) {
-            if matches!(
-                resolver.kind,
-                CompiledComponentVariationResolverKind::DynamicQueryValues
-            ) {
-                return self.resolve_component_variation_state_uncached(
-                    component,
-                    base_values,
-                    base_transform,
-                    location,
-                );
-            }
             let query_location = self.normalized_component_parent_location(location);
             return resolver.resolve(base_values, base_transform, &query_location);
         }
 
-        self.resolve_component_variation_state_uncached(
-            component,
-            base_values,
-            base_transform,
-            location,
-        )
-    }
-
-    fn resolve_component_variation_state_uncached(
-        &self,
-        component: &crate::package::ShiftComponent,
-        base_values: BTreeMap<String, ShiftResolvedAxisValue>,
-        base_transform: DecomposedTransform,
-        location: &BTreeMap<String, f64>,
-    ) -> ResolvedComponentVariationState {
-        let axis_tags = self
-            .package
-            .axes
-            .iter()
-            .map(|axis| axis.tag.as_str())
-            .collect::<Vec<_>>();
-        let axis_order = variation_axis_order(axis_tags.iter().copied());
-        let axis_values = self
-            .package
-            .axes
-            .iter()
-            .map(|axis| {
-                (
-                    axis.tag.as_str(),
-                    normalize_axis_value(
-                        location.get(&axis.id).copied().unwrap_or(axis.default),
-                        axis.minimum,
-                        axis.default,
-                        axis.maximum,
-                    ),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let query_location = normalized_location_from_values(axis_tags.iter().copied(), |tag| {
-            *axis_values.get(tag).unwrap_or(&0.0)
-        });
-
-        let axis_ids = base_values.keys().cloned().collect::<Vec<_>>();
-        let mut points = HashMap::new();
-        points.insert(
-            self.normalized_default_location(),
-            component_state_values(&axis_ids, &base_values, base_transform),
-        );
-
-        let mut exact_source = None;
-        for source in &component.variation_sources {
-            let source_location =
-                self.normalized_component_parent_location(&source.parent_location);
-            if source_location == query_location {
-                exact_source = Some(ShiftComponentResolvedVariationSource {
-                    id: source.id.clone(),
-                    name: source.name.clone(),
-                });
-            }
-
-            let mut source_values = base_values.clone();
-            for (axis_id, value) in &source.location {
-                source_values.insert(
-                    axis_id.clone(),
-                    ShiftResolvedAxisValue {
-                        value: *value,
-                        source: ShiftResolvedAxisValueSource::ComponentVariationSource,
-                    },
-                );
-            }
-            points.insert(
-                source_location,
-                component_state_values(
-                    &axis_ids,
-                    &source_values,
-                    source.transform.unwrap_or(base_transform),
-                ),
-            );
-        }
-
-        let variation_model =
-            match NormalizedF64VariationModel::new(&points, axis_order, RoundingBehaviour::None) {
-                Ok(model) => model,
-                Err(message) => {
-                    return ResolvedComponentVariationState {
-                        values: base_values,
-                        transform: base_transform,
-                        resolution: ShiftComponentVariationResolution::Unsupported {
-                            reason: ShiftComponentVariationUnsupportedReason::ModelError {
-                                message,
-                            },
-                        },
-                        source: None,
-                    };
-                }
-            };
-
-        let values = variation_model.interpolate(&query_location);
-        if values.is_empty() {
-            return ResolvedComponentVariationState {
-                values: base_values,
-                transform: base_transform,
-                resolution: ShiftComponentVariationResolution::Unsupported {
-                    reason: ShiftComponentVariationUnsupportedReason::ModelError {
-                        message: "variation model produced no component values".to_string(),
-                    },
-                },
-                source: None,
-            };
-        }
-
-        let (values, transform) = component_state_from_values(&axis_ids, &base_values, &values);
-        let resolution = if let Some(source) = exact_source.clone() {
-            ShiftComponentVariationResolution::ExactSource { source }
-        } else if query_location == self.normalized_default_location() {
-            ShiftComponentVariationResolution::Base
-        } else {
-            ShiftComponentVariationResolution::Interpolated {
-                source_count: component.variation_sources.len() + 1,
-            }
-        };
-
         ResolvedComponentVariationState {
-            values,
-            transform,
-            resolution,
-            source: exact_source,
+            values: base_values,
+            transform: base_transform,
+            resolution: ShiftComponentVariationResolution::Unsupported {
+                reason: ShiftComponentVariationUnsupportedReason::ModelError {
+                    message: format!(
+                        "missing compiled component variation resolver for component '{}'",
+                        component.id
+                    ),
+                },
+            },
+            source: None,
         }
-    }
-
-    fn normalized_default_location(&self) -> shift_ir::variation::NormalizedLocation {
-        normalized_default_location_for_axes(&self.package.axes)
     }
 
     fn normalized_component_parent_location(
@@ -1861,60 +1736,90 @@ impl CompiledComponentVariationResolver {
         base_transform: DecomposedTransform,
         query_location: &shift_ir::variation::NormalizedLocation,
     ) -> ResolvedComponentVariationState {
-        let CompiledComponentVariationResolverKind::Fixed { axis_ids, model } = &self.kind else {
-            return ResolvedComponentVariationState {
-                values: base_values,
-                transform: base_transform,
-                resolution: ShiftComponentVariationResolution::Unsupported {
-                    reason: ShiftComponentVariationUnsupportedReason::ModelError {
-                        message: "dynamic component variation values require per-query resolution"
-                            .to_string(),
-                    },
-                },
-                source: None,
-            };
-        };
+        let exact_source = self.exact_source(query_location);
 
-        let exact_source = self
-            .sources
+        match &self.kind {
+            CompiledComponentVariationResolverKind::Fixed { axis_ids, model } => {
+                let model = match model.as_ref().as_ref().map_err(|message| {
+                    ShiftComponentVariationUnsupportedReason::ModelError {
+                        message: message.clone(),
+                    }
+                }) {
+                    Ok(model) => model,
+                    Err(reason) => {
+                        return self.unsupported(base_values, base_transform, reason);
+                    }
+                };
+                let values = model.interpolate(query_location);
+                self.finish_interpolation(
+                    axis_ids,
+                    base_values,
+                    base_transform,
+                    values,
+                    exact_source,
+                    query_location,
+                )
+            }
+            CompiledComponentVariationResolverKind::DynamicQueryValues { axis_ids, space } => {
+                let points = self.dynamic_points(axis_ids, &base_values, base_transform);
+                let values =
+                    match space.interpolate(&points, RoundingBehaviour::None, query_location) {
+                        Ok(values) => values,
+                        Err(message) => {
+                            return self.unsupported(
+                                base_values,
+                                base_transform,
+                                ShiftComponentVariationUnsupportedReason::ModelError { message },
+                            );
+                        }
+                    };
+                self.finish_interpolation(
+                    axis_ids,
+                    base_values,
+                    base_transform,
+                    values,
+                    exact_source,
+                    query_location,
+                )
+            }
+        }
+    }
+
+    fn exact_source(
+        &self,
+        query_location: &shift_ir::variation::NormalizedLocation,
+    ) -> Option<ShiftComponentResolvedVariationSource> {
+        self.sources
             .iter()
             .find(|source| source.parent_location == *query_location)
             .map(|source| ShiftComponentResolvedVariationSource {
                 id: source.id.clone(),
                 name: source.name.clone(),
-            });
-        let model = match model.as_ref().as_ref().map_err(|message| {
-            ShiftComponentVariationUnsupportedReason::ModelError {
-                message: message.clone(),
-            }
-        }) {
-            Ok(model) => model,
-            Err(reason) => {
-                return ResolvedComponentVariationState {
-                    values: base_values,
-                    transform: base_transform,
-                    resolution: ShiftComponentVariationResolution::Unsupported { reason },
-                    source: None,
-                };
-            }
-        };
-        let values = model.interpolate(query_location);
+            })
+    }
+
+    fn finish_interpolation(
+        &self,
+        axis_ids: &[String],
+        base_values: BTreeMap<String, ShiftResolvedAxisValue>,
+        base_transform: DecomposedTransform,
+        values: Vec<f64>,
+        exact_source: Option<ShiftComponentResolvedVariationSource>,
+        query_location: &shift_ir::variation::NormalizedLocation,
+    ) -> ResolvedComponentVariationState {
         let expected_value_count = axis_ids.len() + 9;
         if values.len() != expected_value_count {
-            return ResolvedComponentVariationState {
-                values: base_values,
-                transform: base_transform,
-                resolution: ShiftComponentVariationResolution::Unsupported {
-                    reason: ShiftComponentVariationUnsupportedReason::ModelError {
-                        message: format!(
-                            "component variation model produced {} values for {} expected values",
-                            values.len(),
-                            expected_value_count
-                        ),
-                    },
+            return self.unsupported(
+                base_values,
+                base_transform,
+                ShiftComponentVariationUnsupportedReason::ModelError {
+                    message: format!(
+                        "component variation model produced {} values for {} expected values",
+                        values.len(),
+                        expected_value_count
+                    ),
                 },
-                source: None,
-            };
+            );
         }
 
         let (values, transform) = component_state_from_values(axis_ids, &base_values, &values);
@@ -1933,6 +1838,56 @@ impl CompiledComponentVariationResolver {
             transform,
             resolution,
             source: exact_source,
+        }
+    }
+
+    fn dynamic_points(
+        &self,
+        axis_ids: &[String],
+        base_values: &BTreeMap<String, ShiftResolvedAxisValue>,
+        base_transform: DecomposedTransform,
+    ) -> HashMap<shift_ir::variation::NormalizedLocation, Vec<f64>> {
+        let mut points = HashMap::new();
+        points.insert(
+            self.default_location.clone(),
+            component_state_values(axis_ids, base_values, base_transform),
+        );
+
+        for source in &self.sources {
+            let mut source_values = base_values.clone();
+            for (axis_id, value) in &source.location {
+                source_values.insert(
+                    axis_id.clone(),
+                    ShiftResolvedAxisValue {
+                        value: *value,
+                        source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+                    },
+                );
+            }
+            points.insert(
+                source.parent_location.clone(),
+                component_state_values(
+                    axis_ids,
+                    &source_values,
+                    source.transform.unwrap_or(base_transform),
+                ),
+            );
+        }
+
+        points
+    }
+
+    fn unsupported(
+        &self,
+        values: BTreeMap<String, ShiftResolvedAxisValue>,
+        transform: DecomposedTransform,
+        reason: ShiftComponentVariationUnsupportedReason,
+    ) -> ResolvedComponentVariationState {
+        ResolvedComponentVariationState {
+            values,
+            transform,
+            resolution: ShiftComponentVariationResolution::Unsupported { reason },
+            source: None,
         }
     }
 }
@@ -2225,11 +2180,13 @@ fn compile_component_variation_resolver(
                 &package.axes,
                 &source.parent_location,
             ),
+            location: source.location.clone(),
+            transform: source.transform,
         })
         .collect::<Vec<_>>();
     let source_count = sources.len() + 1;
     let kind = if component_requires_dynamic_variation_values(package, component) {
-        CompiledComponentVariationResolverKind::DynamicQueryValues
+        compile_dynamic_component_variation_kind(package, component, base_glyph, &default_location)
     } else {
         compile_fixed_component_variation_kind(package, component, base_glyph, &default_location)
     };
@@ -2256,6 +2213,47 @@ fn component_requires_dynamic_variation_values(
                 && package.axes.iter().any(|axis| axis.id == *axis_id)
         })
     })
+}
+
+fn compile_dynamic_component_variation_kind(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    default_location: &shift_ir::variation::NormalizedLocation,
+) -> CompiledComponentVariationResolverKind {
+    let axis_ids = dynamic_component_axis_ids(package, component, base_glyph);
+    let axis_order = variation_axis_order(package.axes.iter().map(|axis| axis.tag.as_str()));
+    let mut locations = Vec::with_capacity(component.variation_sources.len() + 1);
+    locations.push(default_location.clone());
+    locations.extend(component.variation_sources.iter().map(|source| {
+        normalized_component_parent_location_for_axes(&package.axes, &source.parent_location)
+    }));
+    let space = NormalizedF64VariationSpace::new(locations, axis_order);
+    CompiledComponentVariationResolverKind::DynamicQueryValues {
+        axis_ids,
+        space: Box::new(space),
+    }
+}
+
+fn dynamic_component_axis_ids(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+) -> Vec<String> {
+    let mut axis_ids = package
+        .axes
+        .iter()
+        .map(|axis| axis.id.clone())
+        .collect::<BTreeSet<_>>();
+    axis_ids.extend(base_glyph.local_axes.iter().map(|axis| axis.id.clone()));
+    axis_ids.extend(component.location.keys().cloned());
+    axis_ids.extend(
+        component
+            .variation_sources
+            .iter()
+            .flat_map(|source| source.location.keys().cloned()),
+    );
+    axis_ids.into_iter().collect()
 }
 
 fn compile_fixed_component_variation_kind(
