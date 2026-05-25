@@ -7,11 +7,11 @@ use crate::{
     ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyphVariationSource, ShiftGlyphVariationAxisValue,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
-    ShiftWorkingSourceSaveStatus,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
+    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -7351,6 +7351,227 @@ fn working_source_completes_sparse_source_locations() {
             source: ShiftSourceAxisValueSource::SourceLocation,
         })
     );
+}
+
+#[test]
+fn working_source_creates_source_with_generated_id_and_completed_location() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let report = working_source
+        .create_source(ShiftCreateSource {
+            source_id: None,
+            name: "Bold".to_string(),
+            location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+        })
+        .expect("source creation should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "source_Bold");
+    assert_eq!(report.source.source_name, "Bold");
+    assert_eq!(
+        report.source.values.get("axis_wght"),
+        Some(&ShiftSourceAxisValue {
+            value: 900.0,
+            source: ShiftSourceAxisValueSource::SourceLocation,
+        })
+    );
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateSources],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["sources.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+
+    assert!(working_source
+        .source_locations()
+        .iter()
+        .any(|source| source.source_id == "source_Bold"));
+}
+
+#[test]
+fn working_source_updates_source_with_narrow_impact() {
+    let mut package = package_with_axes(vec![weight_axis()], Vec::new());
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .update_source(
+            "source_Bold",
+            ShiftSourceUpdate {
+                name: "Black".to_string(),
+                location: BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+            },
+        )
+        .expect("source update should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "source_Bold");
+    assert_eq!(report.source.source_name, "Black");
+    assert_eq!(
+        report.source.values.get("axis_wght"),
+        Some(&ShiftSourceAxisValue {
+            value: 800.0,
+            source: ShiftSourceAxisValueSource::SourceLocation,
+        })
+    );
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateSources],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["sources.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+}
+
+#[test]
+fn working_source_rejects_invalid_source_update_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let error = working_source
+        .update_source(
+            "source_Regular",
+            ShiftSourceUpdate {
+                name: "Regular".to_string(),
+                location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+            },
+        )
+        .expect_err("moving the default source should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::DefaultSourceLocationNotAtAxisDefault {
+            source_id,
+            axis_id,
+            value,
+            default,
+        } if source_id == "source_Regular"
+            && axis_id == "axis_wght"
+            && value == 900.0
+            && default == 400.0
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let regular = working_source
+        .source_locations()
+        .into_iter()
+        .find(|source| source.source_id == "source_Regular")
+        .expect("default source should remain");
+    assert_eq!(
+        regular.values.get("axis_wght"),
+        Some(&ShiftSourceAxisValue {
+            value: 400.0,
+            source: ShiftSourceAxisValueSource::AxisDefault,
+        })
+    );
+}
+
+#[test]
+fn working_source_deletes_source_with_narrow_impact() {
+    let mut package = package_with_axes(vec![weight_axis()], Vec::new());
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .delete_source("source_Bold")
+        .expect("unreferenced source delete should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "source_Bold");
+    assert_eq!(report.source_name, "Bold");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateSources],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["sources.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+    assert!(!working_source
+        .source_locations()
+        .iter()
+        .any(|source| source.source_id == "source_Bold"));
+}
+
+#[test]
+fn working_source_rejects_referenced_source_delete_without_mutating() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .delete_source("source_Bold")
+        .expect_err("referenced source delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingSourceLayer {
+            glyph_name,
+            source_id,
+        } if glyph_name == "A" && source_id == "source_Bold"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .source_locations()
+        .iter()
+        .any(|source| source.source_id == "source_Bold"));
+}
+
+#[test]
+fn working_source_missing_source_delete_does_not_mutate() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let error = working_source
+        .delete_source("source_Missing")
+        .expect_err("missing source delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingSource { source_id } if source_id == "source_Missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(working_source.source_locations().len(), 1);
 }
 
 fn package_with_single_source(glyphs: Vec<ShiftGlyph>) -> ShiftPackage {

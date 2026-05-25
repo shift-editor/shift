@@ -156,6 +156,9 @@ pub enum ShiftSourceError {
         source_id: String,
     },
 
+    #[error("missing Shift source id '{source_id}'")]
+    MissingSource { source_id: String },
+
     #[error("Shift package must define at least one source")]
     EmptySources,
 

@@ -91,6 +91,9 @@ renameGlyph(glyphId, newName)
 createAxisMapping(create)
 updateAxisMapping(mappingId, update)
 deleteAxisMapping(mappingId)
+createSource(create)
+updateSource(sourceId, update)
+deleteSource(sourceId)
 createGlyphVariationSource(glyphId, create)
 updateGlyphVariationSource(glyphId, sourceId, update)
 deleteGlyphVariationSource(glyphId, sourceId)
@@ -312,11 +315,15 @@ format exploration:
   with semantic changes, impacted paths, fingerprints, conflicts, and planned
   write/remove/invalidate operations.
 - **Working-source operations:** a document-level service can rename a glyph by
-  stable ID, preview delete dependents, refuse unsafe deletes, edit component
-  and glyph variation sources by stable IDs, create glyph and component
-  variation sources with collision-safe generated IDs, delete variation sources
-  by stable IDs, keep query indexes warm, and report the exact package diff
-  caused by the semantic edit. Variation source edits validate the whole
+  stable ID, preview delete dependents, refuse unsafe deletes, create/update/delete
+  family sources by stable IDs, edit component and glyph variation sources by
+  stable IDs, create glyph and component variation sources with collision-safe
+  generated IDs, delete variation sources by stable IDs, keep query indexes
+  warm, and report the exact package diff caused by the semantic edit. Source
+  edits validate the default-source invariant, source-location uniqueness, and
+  all glyph layer references before replacing the live working graph, so adding
+  a master is cheap while unsafe deletes or accidental default-source moves are
+  rejected without partial mutation. Variation source edits validate the whole
   candidate package before replacing the live working graph. Semantic edits
   rebuild dependency, compatibility, axis-mapping, and component variation query
   views from the candidate before swapping state, so invalid edits or future
@@ -373,7 +380,10 @@ format exploration:
   glyph-local default, or an explicit variation-source override.
 - **Source location completion:** source panels and export preflight can ask for
   every source's completed global location and see whether each coordinate was
-  explicit or inherited from an axis default.
+  explicit or inherited from an axis default. The same surface backs source
+  create/update/delete reports, so UI can immediately refresh source lists,
+  source badges, and interpolation compatibility summaries from validated Rust
+  state rather than patching local JSON-shaped records.
 - **Axis mapping resolution:** source-level user-axis to construction-axis
   mappings can be queried in Rust. One-dimensional mappings interpolate between
   samples; multi-axis mappings use the same `fontdrasil` variation model as

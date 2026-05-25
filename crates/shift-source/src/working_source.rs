@@ -6,7 +6,7 @@ use crate::package::{
     ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
     ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphSource, ShiftInterpolationCompatibilityIndex,
-    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit,
+    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
     ShiftStagedCommit,
 };
 use serde::{Deserialize, Serialize};
@@ -112,6 +112,49 @@ pub struct ShiftUpdateAxisMappingReport {
 pub struct ShiftDeleteAxisMappingReport {
     pub mapping_id: String,
     pub mapping_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateSource {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+    pub name: String,
+    pub location: BTreeMap<String, f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceUpdate {
+    pub name: String,
+    pub location: BTreeMap<String, f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateSourceReport {
+    pub source_id: String,
+    pub source: ShiftSourceLocation,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateSourceReport {
+    pub source_id: String,
+    pub source: ShiftSourceLocation,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteSourceReport {
+    pub source_id: String,
+    pub source_name: String,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -752,6 +795,15 @@ impl ShiftWorkingSource {
                 values: self.complete_source_location(&source.location),
             })
             .collect()
+    }
+
+    fn source_location(&self, source_id: &str) -> ShiftSourceResult<ShiftSourceLocation> {
+        self.source_locations()
+            .into_iter()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })
     }
 
     pub fn glyph_dependencies(&self, glyph_id: &str) -> ShiftSourceResult<&ShiftGlyphDependencies> {
@@ -1398,6 +1450,101 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteAxisMappingReport {
             mapping_id: mapping.id,
             mapping_name: mapping.name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn create_source(
+        &mut self,
+        create: ShiftCreateSource,
+    ) -> ShiftSourceResult<ShiftCreateSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let source_id = create.source_id.unwrap_or_else(|| {
+            unique_member_id(
+                "source",
+                &create.name,
+                next.sources.iter().map(|source| source.id.as_str()),
+            )
+        });
+        next.sources.push(ShiftSource {
+            id: source_id.clone(),
+            name: create.name,
+            location: create.location,
+        });
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let source = self.source_location(&source_id)?;
+
+        Ok(ShiftCreateSourceReport {
+            source_id,
+            source,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_source(
+        &mut self,
+        source_id: &str,
+        update: ShiftSourceUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let source = next
+            .sources
+            .iter_mut()
+            .find(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })?;
+        source.name = update.name;
+        source.location = update.location;
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let source = self.source_location(source_id)?;
+
+        Ok(ShiftUpdateSourceReport {
+            source_id: source_id.to_string(),
+            source,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn delete_source(&mut self, source_id: &str) -> ShiftSourceResult<ShiftDeleteSourceReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let source_index = next
+            .sources
+            .iter()
+            .position(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })?;
+        let source = next.sources.remove(source_index);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteSourceReport {
+            source_id: source.id,
+            source_name: source.name,
             diff,
             revision: self.revision,
         })
