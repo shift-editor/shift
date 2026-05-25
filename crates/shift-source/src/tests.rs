@@ -3,10 +3,12 @@ use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
     ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
     ShiftComponentLoweringHint, ShiftComponentLoweringTarget, ShiftComponentRecipeKind,
-    ShiftComponentVariationResolution, ShiftConditionEvaluation, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftMappedAxisValue, ShiftMappedAxisValueSource, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -4008,6 +4010,109 @@ fn working_source_resolves_exact_component_variation_source_state() {
         ShiftComponentVariationResolution::ExactSource { source }
             if source.id == "componentSource_black"
     ));
+}
+
+#[test]
+fn working_source_reports_authored_component_variation_source_locations() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_sources".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform {
+                translate_x: 3.0,
+                ..DecomposedTransform::identity()
+            },
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![
+                ShiftComponentVariationSource {
+                    id: "componentSource_light".to_string(),
+                    name: "Light component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    location: BTreeMap::new(),
+                    transform: None,
+                },
+                ShiftComponentVariationSource {
+                    id: "componentSource_black".to_string(),
+                    name: "Black component".to_string(),
+                    parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                    transform: Some(DecomposedTransform {
+                        translate_x: 12.0,
+                        scale_x: 1.2,
+                        scale_y: 1.2,
+                        ..DecomposedTransform::identity()
+                    }),
+                },
+            ],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), width_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let sources = working_source
+        .component_variation_source_locations("glyph_A", "source_Regular", "component_7_sources")
+        .expect("component variation source locations should resolve");
+
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0].source_id, "componentSource_light");
+    assert_eq!(
+        sources[0].parent_values.get("axis_wght"),
+        Some(&ShiftComponentVariationParentAxisValue {
+            value: 100.0,
+            source: ShiftComponentVariationParentAxisValueSource::VariationSourceParentLocation,
+        })
+    );
+    assert_eq!(
+        sources[0].parent_values.get("axis_wdth"),
+        Some(&ShiftComponentVariationParentAxisValue {
+            value: 100.0,
+            source: ShiftComponentVariationParentAxisValueSource::AxisDefault,
+        })
+    );
+    assert_eq!(
+        sources[0].values.get("axis_wght"),
+        Some(&ShiftResolvedAxisValue {
+            value: 100.0,
+            source: ShiftResolvedAxisValueSource::ParentLocation,
+        })
+    );
+    assert_eq!(
+        sources[0].values.get("axis_stemWidth"),
+        Some(&ShiftResolvedAxisValue {
+            value: 40.0,
+            source: ShiftResolvedAxisValueSource::ComponentOverride,
+        })
+    );
+    assert_eq!(sources[0].transform.translate_x, 3.0);
+    assert_eq!(
+        sources[0].transform_source,
+        ShiftComponentVariationTransformSource::BaseComponent
+    );
+
+    assert_eq!(sources[1].source_id, "componentSource_black");
+    assert_eq!(
+        sources[1].values.get("axis_stemWidth"),
+        Some(&ShiftResolvedAxisValue {
+            value: 72.0,
+            source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+        })
+    );
+    assert_eq!(sources[1].transform.translate_x, 12.0);
+    assert_eq!(
+        sources[1].transform_source,
+        ShiftComponentVariationTransformSource::ComponentVariationSource
+    );
 }
 
 #[test]

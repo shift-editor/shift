@@ -83,6 +83,7 @@ getInterpolationCompatibility(glyphId)
 getSourceLocations()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
+getComponentVariationSourceLocations(glyphId, layerId, componentId)
 getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
 prepareCommit()
@@ -345,6 +346,11 @@ format exploration:
   transform recipes reuse a full `fontdrasil` model; query-dependent recipes
   such as inherited global-axis overrides reuse a `NormalizedF64VariationSpace`
   so they can rebuild per-query deltas without rebuilding variation regions.
+- **Authored component variation source completion:** inspectors can ask for the
+  component variation source rows on a selected component and receive completed
+  parent locations, resolved component-axis values, transform provenance, and
+  stable source IDs. This keeps source editing UI out of package JSON while
+  still showing exactly what will be saved in the owner glyph file.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a
@@ -559,8 +565,8 @@ The format should make these app behaviors straightforward:
 - Component recipe UI that can label each resolved axis value as coming from the
   parent location, font default, base local default, or component override.
 - Component recipe UI that can show exact authored component variation sources:
-  at a given parent location, which source changed the component location and
-  transform.
+  completed parent locations, which source changed the component location and
+  transform, and stable source IDs for future edit/delete commands.
 - Component variation sources reject default-location redefinitions and duplicate
   parent locations, so the app never shows or saves an ambiguous recipe where
   one authored source silently overwrites another interpolation point.

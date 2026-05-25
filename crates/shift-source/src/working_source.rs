@@ -312,6 +312,44 @@ pub enum ShiftGlyphVariationAxisValueSource {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationSourceLocation {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub base_glyph_id: String,
+    pub base_glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub parent_values: BTreeMap<String, ShiftComponentVariationParentAxisValue>,
+    pub values: BTreeMap<String, ShiftResolvedAxisValue>,
+    pub transform: DecomposedTransform,
+    pub transform_source: ShiftComponentVariationTransformSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationParentAxisValue {
+    pub value: f64,
+    pub source: ShiftComponentVariationParentAxisValueSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentVariationParentAxisValueSource {
+    AxisDefault,
+    VariationSourceParentLocation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentVariationTransformSource {
+    BaseComponent,
+    ComponentVariationSource,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftComponentResolvedState {
     pub glyph_id: String,
     pub glyph_name: String,
@@ -692,6 +730,82 @@ impl ShiftWorkingSource {
             .iter()
             .map(|component| component_recipe_summary(glyph, layer_id, component))
             .collect())
+    }
+
+    pub fn component_variation_source_locations(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        component_id: &str,
+    ) -> ShiftSourceResult<Vec<ShiftComponentVariationSourceLocation>> {
+        let glyph = self.glyph(glyph_id)?;
+        let layer =
+            glyph
+                .layers
+                .get(layer_id)
+                .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: glyph_id.to_string(),
+                    layer_id: layer_id.to_string(),
+                })?;
+        let component = layer
+            .components
+            .iter()
+            .find(|component| component.id == component_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponent {
+                glyph_id: glyph_id.to_string(),
+                layer_id: layer_id.to_string(),
+                component_id: component_id.to_string(),
+            })?;
+        let base_glyph = self.glyph(&component.base_glyph_id)?;
+
+        component
+            .variation_sources
+            .iter()
+            .map(|source| {
+                let parent_values =
+                    self.complete_component_variation_parent_location(&source.parent_location);
+                let mut values = self.resolve_component_axis_values(
+                    component,
+                    base_glyph,
+                    &source.parent_location,
+                );
+                for (axis_id, value) in &source.location {
+                    values.insert(
+                        axis_id.clone(),
+                        ShiftResolvedAxisValue {
+                            value: *value,
+                            source: ShiftResolvedAxisValueSource::ComponentVariationSource,
+                        },
+                    );
+                }
+                let (transform, transform_source) = if let Some(transform) = source.transform {
+                    (
+                        transform,
+                        ShiftComponentVariationTransformSource::ComponentVariationSource,
+                    )
+                } else {
+                    (
+                        component.transform,
+                        ShiftComponentVariationTransformSource::BaseComponent,
+                    )
+                };
+
+                Ok(ShiftComponentVariationSourceLocation {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    layer_id: layer_id.to_string(),
+                    component_id: component.id.clone(),
+                    base_glyph_id: component.base_glyph_id.clone(),
+                    base_glyph_name: component.base_glyph_name.clone(),
+                    source_id: source.id.clone(),
+                    source_name: source.name.clone(),
+                    parent_values,
+                    values,
+                    transform,
+                    transform_source,
+                })
+            })
+            .collect()
     }
 
     pub fn component_lowering_diagnostics(
@@ -1206,6 +1320,33 @@ impl ShiftWorkingSource {
             values.insert(
                 axis.id.clone(),
                 ShiftGlyphVariationAxisValue { value, source },
+            );
+        }
+
+        values
+    }
+
+    fn complete_component_variation_parent_location(
+        &self,
+        parent_location: &BTreeMap<String, f64>,
+    ) -> BTreeMap<String, ShiftComponentVariationParentAxisValue> {
+        let mut values = BTreeMap::new();
+
+        for axis in &self.package.axes {
+            let (value, source) = if let Some(value) = parent_location.get(&axis.id) {
+                (
+                    *value,
+                    ShiftComponentVariationParentAxisValueSource::VariationSourceParentLocation,
+                )
+            } else {
+                (
+                    axis.default,
+                    ShiftComponentVariationParentAxisValueSource::AxisDefault,
+                )
+            };
+            values.insert(
+                axis.id.clone(),
+                ShiftComponentVariationParentAxisValue { value, source },
             );
         }
 
