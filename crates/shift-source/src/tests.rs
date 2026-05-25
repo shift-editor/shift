@@ -3,7 +3,7 @@ use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
     ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
     ShiftComponentLoweringHint, ShiftComponentLoweringTarget, ShiftComponentRecipeKind,
-    ShiftComponentVariationResolution, ShiftGlyphVariationAxisValue,
+    ShiftComponentVariationResolution, ShiftConditionEvaluation, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
@@ -2799,6 +2799,13 @@ fn working_source_evaluates_component_activity_from_conditions() {
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             active: false,
+            condition: Some(ShiftConditionEvaluation::AxisRange {
+                axis_id: "axis_wght".to_string(),
+                value: 400.0,
+                min: Some(700.0),
+                max: None,
+                active: false,
+            }),
         }]
     );
 
@@ -2869,6 +2876,31 @@ fn working_source_component_activity_supports_boolean_condition_trees() {
 
     assert!(medium[0].active);
     assert!(!black[0].active);
+    assert_eq!(
+        black[0].condition,
+        Some(ShiftConditionEvaluation::And {
+            active: false,
+            conditions: vec![
+                ShiftConditionEvaluation::AxisRange {
+                    axis_id: "axis_wght".to_string(),
+                    value: 900.0,
+                    min: Some(500.0),
+                    max: None,
+                    active: true,
+                },
+                ShiftConditionEvaluation::Not {
+                    active: false,
+                    condition: Box::new(ShiftConditionEvaluation::AxisRange {
+                        axis_id: "axis_wght".to_string(),
+                        value: 900.0,
+                        min: Some(800.0),
+                        max: None,
+                        active: true,
+                    }),
+                },
+            ],
+        })
+    );
 }
 
 #[test]

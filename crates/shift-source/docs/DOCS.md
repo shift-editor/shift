@@ -306,7 +306,9 @@ format exploration:
   indexes warm, and report the exact package diff caused by the semantic edit.
 - **Component activity queries:** inspectors and preview renderers can ask which
   conditional components are active at the current design location without
-  reimplementing condition-tree semantics in the renderer.
+  reimplementing condition-tree semantics in the renderer. Conditional
+  components include a structured evaluation tree with resolved axis values and
+  per-node active states, so the app can explain why a component is hidden.
 - **Component recipe summaries:** inspectors, sidebars, and export preflight can
   list static, conditional, variable, and conditional-variable components plus
   the axes involved without resolving every component at a concrete location.
@@ -531,7 +533,8 @@ The format should make these app behaviors straightforward:
   dependents still exist.
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
-  local axes, and active/inactive conditions.
+  local axes, and active/inactive conditions with the condition subtree that
+  caused the current active state.
 - Component recipe lists that can quickly identify static, conditional,
   variable, and conditional-variable components before asking for current
   location state, including which export capabilities each recipe requires.

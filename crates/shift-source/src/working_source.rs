@@ -98,7 +98,7 @@ pub enum ShiftSourceAxisValueSource {
     AxisDefault,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentActivity {
     pub glyph_id: String,
@@ -108,6 +108,43 @@ pub struct ShiftComponentActivity {
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<ShiftConditionEvaluation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ShiftConditionEvaluation {
+    AxisRange {
+        axis_id: String,
+        value: f64,
+        min: Option<f64>,
+        max: Option<f64>,
+        active: bool,
+    },
+    And {
+        active: bool,
+        conditions: Vec<ShiftConditionEvaluation>,
+    },
+    Or {
+        active: bool,
+        conditions: Vec<ShiftConditionEvaluation>,
+    },
+    Not {
+        active: bool,
+        condition: Box<ShiftConditionEvaluation>,
+    },
+}
+
+impl ShiftConditionEvaluation {
+    fn active(&self) -> bool {
+        match self {
+            Self::AxisRange { active, .. }
+            | Self::And { active, .. }
+            | Self::Or { active, .. }
+            | Self::Not { active, .. } => *active,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -560,11 +597,14 @@ impl ShiftWorkingSource {
             .components
             .iter()
             .map(|component| {
-                let active = component
+                let condition = component
                     .condition
                     .as_ref()
-                    .map(|condition| self.condition_matches(&glyph.name, condition, location))
-                    .transpose()?
+                    .map(|condition| self.evaluate_condition(&glyph.name, condition, location))
+                    .transpose()?;
+                let active = condition
+                    .as_ref()
+                    .map(ShiftConditionEvaluation::active)
                     .unwrap_or(true);
 
                 Ok(ShiftComponentActivity {
@@ -575,6 +615,7 @@ impl ShiftWorkingSource {
                     base_glyph_id: component.base_glyph_id.clone(),
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,
+                    condition,
                 })
             })
             .collect()
@@ -1330,6 +1371,16 @@ impl ShiftWorkingSource {
         condition: &ShiftCondition,
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<bool> {
+        self.evaluate_condition(glyph_name, condition, location)
+            .map(|evaluation| evaluation.active())
+    }
+
+    fn evaluate_condition(
+        &self,
+        glyph_name: &str,
+        condition: &ShiftCondition,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<ShiftConditionEvaluation> {
         match condition {
             ShiftCondition::AxisRange { axis_id, min, max } => {
                 let value = location
@@ -1347,20 +1398,41 @@ impl ShiftWorkingSource {
                         axis_id: axis_id.clone(),
                     })?;
 
-                Ok(min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max))
+                Ok(ShiftConditionEvaluation::AxisRange {
+                    axis_id: axis_id.clone(),
+                    value,
+                    min: *min,
+                    max: *max,
+                    active: min.is_none_or(|min| value >= min)
+                        && max.is_none_or(|max| value <= max),
+                })
             }
             ShiftCondition::And { conditions } => {
-                conditions.iter().try_fold(true, |active, condition| {
-                    Ok(active && self.condition_matches(glyph_name, condition, location)?)
+                let conditions = conditions
+                    .iter()
+                    .map(|condition| self.evaluate_condition(glyph_name, condition, location))
+                    .collect::<ShiftSourceResult<Vec<_>>>()?;
+                Ok(ShiftConditionEvaluation::And {
+                    active: conditions.iter().all(ShiftConditionEvaluation::active),
+                    conditions,
                 })
             }
             ShiftCondition::Or { conditions } => {
-                conditions.iter().try_fold(false, |active, condition| {
-                    Ok(active || self.condition_matches(glyph_name, condition, location)?)
+                let conditions = conditions
+                    .iter()
+                    .map(|condition| self.evaluate_condition(glyph_name, condition, location))
+                    .collect::<ShiftSourceResult<Vec<_>>>()?;
+                Ok(ShiftConditionEvaluation::Or {
+                    active: conditions.iter().any(ShiftConditionEvaluation::active),
+                    conditions,
                 })
             }
             ShiftCondition::Not { condition } => {
-                Ok(!self.condition_matches(glyph_name, condition, location)?)
+                let condition = self.evaluate_condition(glyph_name, condition, location)?;
+                Ok(ShiftConditionEvaluation::Not {
+                    active: !condition.active(),
+                    condition: Box::new(condition),
+                })
             }
         }
     }
