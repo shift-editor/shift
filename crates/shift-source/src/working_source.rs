@@ -23,6 +23,7 @@ pub struct ShiftWorkingSource {
     saved_fingerprint: Option<ShiftPackageFingerprint>,
     dependency_index: ShiftDependencyIndex,
     interpolation_compatibility_index: ShiftInterpolationCompatibilityIndex,
+    axis_mapping_resolvers: Vec<CompiledAxisMapping>,
     revision: u64,
 }
 
@@ -241,11 +242,43 @@ struct ResolvedComponentVariationState {
     source: Option<ShiftComponentResolvedVariationSource>,
 }
 
+#[derive(Clone, Debug)]
+struct CompiledAxisMapping {
+    id: String,
+    output_axes: Vec<String>,
+    kind: CompiledAxisMappingKind,
+}
+
+#[derive(Clone, Debug)]
+enum CompiledAxisMappingKind {
+    Static {
+        output: BTreeMap<String, f64>,
+    },
+    OneDimensional {
+        input_axis_id: String,
+        samples: Vec<(f64, BTreeMap<String, f64>)>,
+    },
+    MultiDimensional {
+        input_axes: Vec<CompiledAxisMappingInputAxis>,
+        model: Result<NormalizedF64VariationModel, String>,
+    },
+}
+
+#[derive(Clone, Debug)]
+struct CompiledAxisMappingInputAxis {
+    id: String,
+    tag: String,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
+}
+
 impl ShiftWorkingSource {
     pub fn new(package: ShiftPackage) -> ShiftSourceResult<Self> {
         package.validate()?;
         let dependency_index = build_dependency_index(&package)?;
         let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
+        let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
 
         Ok(Self {
             saved_package: package.clone(),
@@ -253,6 +286,7 @@ impl ShiftWorkingSource {
             saved_fingerprint: None,
             dependency_index,
             interpolation_compatibility_index,
+            axis_mapping_resolvers,
             revision: 0,
         })
     }
@@ -262,6 +296,7 @@ impl ShiftWorkingSource {
         let saved_fingerprint = fingerprint_package(root)?;
         let dependency_index = build_dependency_index(&package)?;
         let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
+        let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
 
         Ok(Self {
             saved_package: package.clone(),
@@ -269,6 +304,7 @@ impl ShiftWorkingSource {
             saved_fingerprint: Some(saved_fingerprint),
             dependency_index,
             interpolation_compatibility_index,
+            axis_mapping_resolvers,
             revision: 0,
         })
     }
@@ -527,8 +563,8 @@ impl ShiftWorkingSource {
         let mut values = self.default_mapped_values(location);
         let mut diagnostics = Vec::new();
 
-        for mapping in &self.package.axis_mappings {
-            match resolve_axis_mapping(mapping, &self.package.axes, &values) {
+        for mapping in &self.axis_mapping_resolvers {
+            match mapping.resolve(&values) {
                 Ok(output) => {
                     for (axis_id, value) in output {
                         values.insert(
@@ -669,6 +705,7 @@ impl ShiftWorkingSource {
         self.dependency_index = build_dependency_index(&self.package)?;
         self.interpolation_compatibility_index =
             build_interpolation_compatibility_index(&self.package)?;
+        self.axis_mapping_resolvers = compile_axis_mapping_resolvers(&self.package);
         Ok(())
     }
 
@@ -1158,87 +1195,208 @@ fn component_state_from_values(
     (resolved_values, transform)
 }
 
-fn resolve_axis_mapping(
-    mapping: &ShiftAxisMapping,
-    axes: &[ShiftAxis],
-    location: &BTreeMap<String, ShiftMappedAxisValue>,
-) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
-    if mapping.input_axes.is_empty() {
-        return Ok(mapping
-            .samples
-            .first()
-            .expect("package validation rejects empty mappings")
-            .output_location
-            .clone());
+impl CompiledAxisMapping {
+    fn resolve(
+        &self,
+        location: &BTreeMap<String, ShiftMappedAxisValue>,
+    ) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
+        match &self.kind {
+            CompiledAxisMappingKind::Static { output } => Ok(output.clone()),
+            CompiledAxisMappingKind::OneDimensional {
+                input_axis_id,
+                samples,
+            } => self.resolve_one_dimensional(input_axis_id, samples, location),
+            CompiledAxisMappingKind::MultiDimensional { input_axes, model } => {
+                self.resolve_multi_dimensional(input_axes, model, location)
+            }
+        }
     }
 
-    if mapping.input_axes.len() == 1 {
-        return resolve_one_dimensional_axis_mapping(mapping, location);
+    fn resolve_one_dimensional(
+        &self,
+        input_axis_id: &str,
+        samples: &[(f64, BTreeMap<String, f64>)],
+        location: &BTreeMap<String, ShiftMappedAxisValue>,
+    ) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
+        let value = location
+            .get(input_axis_id)
+            .expect("package validation rejects missing mapping input axes")
+            .value;
+
+        if let Some((_, output)) = samples.iter().find(|(input, _)| *input == value) {
+            return Ok(output.clone());
+        }
+
+        let lower = samples.iter().rev().find(|(input, _)| *input <= value);
+        let upper = samples.iter().find(|(input, _)| *input >= value);
+        let (Some((lower_input, lower_output)), Some((upper_input, upper_output))) = (lower, upper)
+        else {
+            return Err(ShiftAxisMappingDiagnosticKind::OutsideSampleRange {
+                axis_id: input_axis_id.to_string(),
+                value,
+            });
+        };
+
+        let span = upper_input - lower_input;
+        if span == 0.0 {
+            return Ok(lower_output.clone());
+        }
+        let t = (value - lower_input) / span;
+        self.interpolate_outputs(lower_output, upper_output, t)
     }
 
-    resolve_multi_axis_mapping(mapping, axes, location)
+    fn resolve_multi_dimensional(
+        &self,
+        input_axes: &[CompiledAxisMappingInputAxis],
+        model: &Result<NormalizedF64VariationModel, String>,
+        location: &BTreeMap<String, ShiftMappedAxisValue>,
+    ) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
+        let model =
+            model
+                .as_ref()
+                .map_err(|message| ShiftAxisMappingDiagnosticKind::ModelError {
+                    message: message.clone(),
+                })?;
+        let axis_tags = input_axes
+            .iter()
+            .map(|axis| axis.tag.as_str())
+            .collect::<Vec<_>>();
+        let query_location = normalized_location_from_values(axis_tags.iter().copied(), |tag| {
+            let axis = input_axes
+                .iter()
+                .find(|axis| axis.tag == tag)
+                .expect("axis tag comes from input axes");
+            normalize_axis_value(
+                location
+                    .get(&axis.id)
+                    .expect("package validation rejects missing mapping input axes")
+                    .value,
+                axis.minimum,
+                axis.default,
+                axis.maximum,
+            )
+        });
+        let values = model.interpolate(&query_location);
+        if values.len() != self.output_axes.len() {
+            return Err(ShiftAxisMappingDiagnosticKind::ModelError {
+                message: format!(
+                    "axis mapping model produced {} output values for {} output axes",
+                    values.len(),
+                    self.output_axes.len()
+                ),
+            });
+        }
+
+        Ok(self
+            .output_axes
+            .iter()
+            .zip(values)
+            .map(|(axis_id, value)| (axis_id.clone(), value))
+            .collect())
+    }
+
+    fn interpolate_outputs(
+        &self,
+        lower_output: &BTreeMap<String, f64>,
+        upper_output: &BTreeMap<String, f64>,
+        t: f64,
+    ) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
+        let mut output = BTreeMap::new();
+
+        for axis_id in &self.output_axes {
+            let Some(lower_value) = lower_output.get(axis_id) else {
+                return Err(ShiftAxisMappingDiagnosticKind::MissingSampleOutput {
+                    axis_id: axis_id.clone(),
+                });
+            };
+            let Some(upper_value) = upper_output.get(axis_id) else {
+                return Err(ShiftAxisMappingDiagnosticKind::MissingSampleOutput {
+                    axis_id: axis_id.clone(),
+                });
+            };
+            output.insert(
+                axis_id.clone(),
+                lower_value + ((upper_value - lower_value) * t),
+            );
+        }
+
+        Ok(output)
+    }
 }
 
-fn resolve_one_dimensional_axis_mapping(
-    mapping: &ShiftAxisMapping,
-    location: &BTreeMap<String, ShiftMappedAxisValue>,
-) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
-    let axis_id = &mapping.input_axes[0];
-    let value = location
-        .get(axis_id)
-        .expect("package validation rejects missing mapping input axes")
-        .value;
-
-    let mut samples = mapping
-        .samples
+fn compile_axis_mapping_resolvers(package: &ShiftPackage) -> Vec<CompiledAxisMapping> {
+    package
+        .axis_mappings
         .iter()
-        .map(|sample| {
-            sample
-                .input_location
-                .get(axis_id)
-                .copied()
-                .map(|input| (input, sample))
-                .ok_or_else(|| ShiftAxisMappingDiagnosticKind::MissingSampleInput {
-                    axis_id: axis_id.clone(),
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    samples.sort_by(|left, right| left.0.total_cmp(&right.0));
+        .map(|mapping| compile_axis_mapping_resolver(mapping, &package.axes))
+        .collect()
+}
 
-    if let Some((_, sample)) = samples.iter().find(|(input, _)| *input == value) {
-        return Ok(sample.output_location.clone());
-    }
+fn compile_axis_mapping_resolver(
+    mapping: &ShiftAxisMapping,
+    axes: &[ShiftAxis],
+) -> CompiledAxisMapping {
+    let output_axes = mapping.output_axes.clone();
+    let kind = if mapping.input_axes.is_empty() {
+        CompiledAxisMappingKind::Static {
+            output: mapping
+                .samples
+                .first()
+                .expect("package validation rejects empty mappings")
+                .output_location
+                .clone(),
+        }
+    } else if mapping.input_axes.len() == 1 {
+        let input_axis_id = mapping.input_axes[0].clone();
+        let mut samples = mapping
+            .samples
+            .iter()
+            .map(|sample| {
+                (
+                    *sample
+                        .input_location
+                        .get(&input_axis_id)
+                        .expect("package validation rejects missing mapping sample inputs"),
+                    sample.output_location.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        samples.sort_by(|left, right| left.0.total_cmp(&right.0));
 
-    let lower = samples.iter().rev().find(|(input, _)| *input <= value);
-    let upper = samples.iter().find(|(input, _)| *input >= value);
-    let (Some((lower_input, lower_sample)), Some((upper_input, upper_sample))) = (lower, upper)
-    else {
-        return Err(ShiftAxisMappingDiagnosticKind::OutsideSampleRange {
-            axis_id: axis_id.clone(),
-            value,
-        });
+        CompiledAxisMappingKind::OneDimensional {
+            input_axis_id,
+            samples,
+        }
+    } else {
+        compile_multi_axis_mapping_kind(mapping, axes)
     };
 
-    let span = upper_input - lower_input;
-    if span == 0.0 {
-        return Ok(lower_sample.output_location.clone());
+    CompiledAxisMapping {
+        id: mapping.id.clone(),
+        output_axes,
+        kind,
     }
-    let t = (value - lower_input) / span;
-    interpolate_mapping_outputs(mapping, lower_sample, upper_sample, t)
 }
 
-fn resolve_multi_axis_mapping(
+fn compile_multi_axis_mapping_kind(
     mapping: &ShiftAxisMapping,
     axes: &[ShiftAxis],
-    location: &BTreeMap<String, ShiftMappedAxisValue>,
-) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
+) -> CompiledAxisMappingKind {
     let input_axes = mapping
         .input_axes
         .iter()
         .map(|axis_id| {
-            axes.iter()
+            let axis = axes
+                .iter()
                 .find(|axis| axis.id == *axis_id)
-                .expect("package validation rejects missing mapping input axes")
+                .expect("package validation rejects missing mapping input axes");
+            CompiledAxisMappingInputAxis {
+                id: axis.id.clone(),
+                tag: axis.tag.clone(),
+                minimum: axis.minimum,
+                default: axis.default,
+                maximum: axis.maximum,
+            }
         })
         .collect::<Vec<_>>();
     let axis_tags = input_axes
@@ -1246,31 +1404,15 @@ fn resolve_multi_axis_mapping(
         .map(|axis| axis.tag.as_str())
         .collect::<Vec<_>>();
     let axis_order = variation_axis_order(axis_tags.iter().copied());
-    let query_location = normalized_location_from_values(axis_tags.iter().copied(), |tag| {
-        let axis = input_axes
-            .iter()
-            .find(|axis| axis.tag == tag)
-            .expect("axis tag comes from input axes");
-        normalize_axis_value(
-            location
-                .get(&axis.id)
-                .expect("package validation rejects missing mapping input axes")
-                .value,
-            axis.minimum,
-            axis.default,
-            axis.maximum,
-        )
-    });
-
     let mut points = HashMap::new();
+
     for sample in &mapping.samples {
         let mut normalized_sample_values = BTreeMap::new();
         for axis in &input_axes {
-            let Some(value) = sample.input_location.get(&axis.id) else {
-                return Err(ShiftAxisMappingDiagnosticKind::MissingSampleInput {
-                    axis_id: axis.id.clone(),
-                });
-            };
+            let value = sample
+                .input_location
+                .get(&axis.id)
+                .expect("package validation rejects missing mapping sample inputs");
             normalized_sample_values.insert(
                 axis.tag.as_str(),
                 normalize_axis_value(*value, axis.minimum, axis.default, axis.maximum),
@@ -1279,71 +1421,23 @@ fn resolve_multi_axis_mapping(
         let sample_location = normalized_location_from_values(axis_tags.iter().copied(), |tag| {
             *normalized_sample_values.get(tag).unwrap_or(&0.0)
         });
-        points.insert(sample_location, mapping_output_values(mapping, sample)?);
+        points.insert(sample_location, mapping_output_values(mapping, sample));
     }
 
     let model = NormalizedF64VariationModel::new(&points, axis_order, RoundingBehaviour::None)
-        .map_err(|message| ShiftAxisMappingDiagnosticKind::ModelError { message })?;
-    let values = model.interpolate(&query_location);
-    if values.len() != mapping.output_axes.len() {
-        return Err(ShiftAxisMappingDiagnosticKind::ModelError {
-            message: format!(
-                "axis mapping model produced {} output values for {} output axes",
-                values.len(),
-                mapping.output_axes.len()
-            ),
-        });
-    }
-
-    Ok(mapping
-        .output_axes
-        .iter()
-        .zip(values)
-        .map(|(axis_id, value)| (axis_id.clone(), value))
-        .collect())
+        .map_err(|message| message.to_string());
+    CompiledAxisMappingKind::MultiDimensional { input_axes, model }
 }
 
-fn interpolate_mapping_outputs(
-    mapping: &ShiftAxisMapping,
-    lower_sample: &ShiftAxisMappingSample,
-    upper_sample: &ShiftAxisMappingSample,
-    t: f64,
-) -> Result<BTreeMap<String, f64>, ShiftAxisMappingDiagnosticKind> {
-    let mut output = BTreeMap::new();
-
-    for axis_id in &mapping.output_axes {
-        let Some(lower_value) = lower_sample.output_location.get(axis_id) else {
-            return Err(ShiftAxisMappingDiagnosticKind::MissingSampleOutput {
-                axis_id: axis_id.clone(),
-            });
-        };
-        let Some(upper_value) = upper_sample.output_location.get(axis_id) else {
-            return Err(ShiftAxisMappingDiagnosticKind::MissingSampleOutput {
-                axis_id: axis_id.clone(),
-            });
-        };
-        output.insert(
-            axis_id.clone(),
-            lower_value + ((upper_value - lower_value) * t),
-        );
-    }
-
-    Ok(output)
-}
-
-fn mapping_output_values(
-    mapping: &ShiftAxisMapping,
-    sample: &ShiftAxisMappingSample,
-) -> Result<Vec<f64>, ShiftAxisMappingDiagnosticKind> {
+fn mapping_output_values(mapping: &ShiftAxisMapping, sample: &ShiftAxisMappingSample) -> Vec<f64> {
     mapping
         .output_axes
         .iter()
         .map(|axis_id| {
-            sample.output_location.get(axis_id).copied().ok_or_else(|| {
-                ShiftAxisMappingDiagnosticKind::MissingSampleOutput {
-                    axis_id: axis_id.clone(),
-                }
-            })
+            *sample
+                .output_location
+                .get(axis_id)
+                .expect("package validation rejects missing mapping sample outputs")
         })
         .collect()
 }

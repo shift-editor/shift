@@ -71,8 +71,9 @@ WorkingSource
 
 The first implementation of this boundary is `ShiftWorkingSource`. It owns a
 validated `ShiftPackage`, keeps dependency and interpolation-compatibility
-indexes warm, and exposes semantic operations that the app can call without
-parsing package files or mutating IR directly.
+indexes warm, compiles axis-mapping resolvers for repeated location queries,
+and exposes semantic operations that the app can call without parsing package
+files or mutating IR directly.
 
 Good renderer-facing queries:
 
@@ -321,7 +322,9 @@ format exploration:
   samples; multi-axis mappings use the same `fontdrasil` variation model as
   glyph/component interpolation. This lets source panels preview avar2-style
   many-input-to-many-output mapping behavior without TypeScript rebuilding a
-  separate interpolation stack.
+  separate interpolation stack. `ShiftWorkingSource` compiles those mapping
+  resolvers when opened or refreshed, so scrubbing a variable location reuses
+  the same model instead of rebuilding it per frame.
 
 ## Variable-First Direction
 
