@@ -71,6 +71,53 @@ pub struct ShiftDeleteGlyphReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftCreateAxisMapping {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mapping_id: Option<String>,
+    pub name: String,
+    pub input_axes: Vec<String>,
+    pub output_axes: Vec<String>,
+    pub samples: Vec<ShiftAxisMappingSample>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftAxisMappingUpdate {
+    pub name: String,
+    pub input_axes: Vec<String>,
+    pub output_axes: Vec<String>,
+    pub samples: Vec<ShiftAxisMappingSample>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftCreateAxisMappingReport {
+    pub mapping_id: String,
+    pub mapping: ShiftAxisMapping,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateAxisMappingReport {
+    pub mapping_id: String,
+    pub mapping: ShiftAxisMapping,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteAxisMappingReport {
+    pub mapping_id: String,
+    pub mapping_name: String,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftCreateGlyphVariationSource {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
@@ -1254,6 +1301,108 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn create_axis_mapping(
+        &mut self,
+        create: ShiftCreateAxisMapping,
+    ) -> ShiftSourceResult<ShiftCreateAxisMappingReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let mapping_id = create.mapping_id.unwrap_or_else(|| {
+            unique_member_id(
+                "mapping",
+                &create.name,
+                next.axis_mappings.iter().map(|mapping| mapping.id.as_str()),
+            )
+        });
+        next.axis_mappings.push(ShiftAxisMapping {
+            id: mapping_id.clone(),
+            name: create.name,
+            input_axes: create.input_axes,
+            output_axes: create.output_axes,
+            samples: create.samples,
+        });
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let mapping = self.axis_mapping(&mapping_id)?.clone();
+
+        Ok(ShiftCreateAxisMappingReport {
+            mapping_id,
+            mapping,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_axis_mapping(
+        &mut self,
+        mapping_id: &str,
+        update: ShiftAxisMappingUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateAxisMappingReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let mapping = next
+            .axis_mappings
+            .iter_mut()
+            .find(|mapping| mapping.id == mapping_id)
+            .ok_or_else(|| ShiftSourceError::MissingAxisMapping {
+                mapping_id: mapping_id.to_string(),
+            })?;
+        mapping.name = update.name;
+        mapping.input_axes = update.input_axes;
+        mapping.output_axes = update.output_axes;
+        mapping.samples = update.samples;
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+        let mapping = self.axis_mapping(mapping_id)?.clone();
+
+        Ok(ShiftUpdateAxisMappingReport {
+            mapping_id: mapping_id.to_string(),
+            mapping,
+            diff,
+            revision: self.revision,
+        })
+    }
+
+    pub fn delete_axis_mapping(
+        &mut self,
+        mapping_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteAxisMappingReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        let mapping_index = next
+            .axis_mappings
+            .iter()
+            .position(|mapping| mapping.id == mapping_id)
+            .ok_or_else(|| ShiftSourceError::MissingAxisMapping {
+                mapping_id: mapping_id.to_string(),
+            })?;
+        let mapping = next.axis_mappings.remove(mapping_index);
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteAxisMappingReport {
+            mapping_id: mapping.id,
+            mapping_name: mapping.name,
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn create_glyph_variation_source(
         &mut self,
         glyph_id: &str,
@@ -1730,6 +1879,16 @@ impl ShiftWorkingSource {
         self.axis_mapping_resolvers = views.axis_mapping_resolvers;
         self.component_variation_resolvers = views.component_variation_resolvers;
         Ok(())
+    }
+
+    fn axis_mapping(&self, mapping_id: &str) -> ShiftSourceResult<&ShiftAxisMapping> {
+        self.package
+            .axis_mappings
+            .iter()
+            .find(|mapping| mapping.id == mapping_id)
+            .ok_or_else(|| ShiftSourceError::MissingAxisMapping {
+                mapping_id: mapping_id.to_string(),
+            })
     }
 
     fn glyph(&self, glyph_id: &str) -> ShiftSourceResult<&crate::package::ShiftGlyph> {

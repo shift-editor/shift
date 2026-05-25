@@ -88,6 +88,9 @@ getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
 prepareCommit()
 renameGlyph(glyphId, newName)
+createAxisMapping(create)
+updateAxisMapping(mappingId, update)
+deleteAxisMapping(mappingId)
 createGlyphVariationSource(glyphId, create)
 updateGlyphVariationSource(glyphId, sourceId, update)
 deleteGlyphVariationSource(glyphId, sourceId)
@@ -378,7 +381,10 @@ format exploration:
   many-input-to-many-output mapping behavior without TypeScript rebuilding a
   separate interpolation stack. `ShiftWorkingSource` compiles those mapping
   resolvers when opened or refreshed, so scrubbing a variable location reuses
-  the same model instead of rebuilding it per frame.
+  the same model instead of rebuilding it per frame. Axis mappings can be
+  created, updated, and deleted through semantic working-source commands; each
+  command validates the candidate package, swaps query views atomically, and
+  reports the `axis-mappings.json` write impact plus derived-cache invalidation.
 
 ## Variable-First Direction
 

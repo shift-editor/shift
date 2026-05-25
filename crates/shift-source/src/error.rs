@@ -325,6 +325,9 @@ pub enum ShiftSourceError {
     #[error("duplicate Shift axis mapping id '{mapping_id}'")]
     DuplicateAxisMappingId { mapping_id: String },
 
+    #[error("missing Shift axis mapping id '{mapping_id}'")]
+    MissingAxisMapping { mapping_id: String },
+
     #[error("axis mapping '{mapping_id}' declares duplicate input axis id '{axis_id}'")]
     DuplicateAxisMappingInputAxis { mapping_id: String, axis_id: String },
 

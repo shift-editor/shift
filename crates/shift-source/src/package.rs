@@ -65,7 +65,7 @@ pub struct ShiftSource {
     pub location: BTreeMap<String, f64>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftAxisMapping {
     pub id: String,
@@ -75,7 +75,7 @@ pub struct ShiftAxisMapping {
     pub samples: Vec<ShiftAxisMappingSample>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftAxisMappingSample {
     pub input_location: BTreeMap<String, f64>,

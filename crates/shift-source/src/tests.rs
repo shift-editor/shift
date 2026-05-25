@@ -1,16 +1,17 @@
 use crate::package::*;
 use crate::{
-    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
-    ShiftComponentLoweringCapability, ShiftComponentLoweringCapabilityCount,
-    ShiftComponentLoweringHint, ShiftComponentLoweringTarget, ShiftComponentRecipeKind,
-    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
-    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
-    ShiftComponentVariationTransformSource, ShiftConditionEvaluation,
-    ShiftCreateComponentVariationSource, ShiftCreateGlyphVariationSource,
-    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
+    ShiftComponentActivity, ShiftComponentLoweringCapability,
+    ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
+    ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentVariationParentAxisValue,
+    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
+    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
+    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
+    ShiftCreateGlyphVariationSource, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
+    ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -3654,6 +3655,200 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
             ShiftComponentLoweringCapability::VariableTransform,
             ShiftComponentLoweringCapability::AxisReset,
         ]
+    );
+}
+
+#[test]
+fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_query() {
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), internal_stem_axis()],
+        Vec::new(),
+    ))
+    .expect("package is valid");
+
+    let report = working_source
+        .create_axis_mapping(ShiftCreateAxisMapping {
+            mapping_id: None,
+            name: "Weight drives stem".to_string(),
+            input_axes: vec!["axis_wght".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 1.0)]),
+                },
+            ],
+        })
+        .expect("axis mapping creation should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.mapping_id, "mapping_Weight_drives_stem");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateAxisMappings],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["axis-mappings.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+
+    let mapped = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("created mapping should be compiled into query views");
+    assert_eq!(
+        mapped.values.get("axis_stem"),
+        Some(&ShiftMappedAxisValue {
+            value: 0.75,
+            source: ShiftMappedAxisValueSource::AxisMapping,
+            mapping_id: Some("mapping_Weight_drives_stem".to_string()),
+        })
+    );
+}
+
+#[test]
+fn working_source_rejects_invalid_axis_mapping_create_without_mutating() {
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis(), internal_stem_axis()],
+        Vec::new(),
+    ))
+    .expect("package is valid");
+
+    let error = working_source
+        .create_axis_mapping(ShiftCreateAxisMapping {
+            mapping_id: Some("mapping_bad".to_string()),
+            name: "Bad mapping".to_string(),
+            input_axes: vec!["axis_wght".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: Vec::new(),
+        })
+        .expect_err("empty axis mapping should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::EmptyAxisMapping { mapping_id } if mapping_id == "mapping_bad"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let mapped = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("empty working source should still map defaults");
+    assert_eq!(
+        mapped.values.get("axis_stem"),
+        Some(&ShiftMappedAxisValue {
+            value: 0.0,
+            source: ShiftMappedAxisValueSource::AxisDefault,
+            mapping_id: None,
+        })
+    );
+}
+
+#[test]
+fn working_source_updates_axis_mapping_and_rebuilds_mapping_query() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let report = working_source
+        .update_axis_mapping(
+            "mapping_weight_to_stem",
+            ShiftAxisMappingUpdate {
+                name: "Weight drives narrow stem".to_string(),
+                input_axes: vec!["axis_wght".to_string()],
+                output_axes: vec!["axis_stem".to_string()],
+                samples: vec![
+                    ShiftAxisMappingSample {
+                        input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                        output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                    },
+                    ShiftAxisMappingSample {
+                        input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                        output_location: BTreeMap::from([("axis_stem".to_string(), 0.5)]),
+                    },
+                ],
+            },
+        )
+        .expect("axis mapping update should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.mapping.name, "Weight drives narrow stem");
+    let mapped = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("updated mapping should be compiled into query views");
+    assert_eq!(
+        mapped.values.get("axis_stem"),
+        Some(&ShiftMappedAxisValue {
+            value: 0.375,
+            source: ShiftMappedAxisValueSource::AxisMapping,
+            mapping_id: Some("mapping_weight_to_stem".to_string()),
+        })
+    );
+}
+
+#[test]
+fn working_source_deletes_axis_mapping_and_removes_mapping_from_query() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let report = working_source
+        .delete_axis_mapping("mapping_weight_to_stem")
+        .expect("axis mapping deletion should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.mapping_name, "Weight drives stem");
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateAxisMappings],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["axis-mappings.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+
+    let mapped = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("mapping query should still resolve without deleted mapping");
+    assert_eq!(
+        mapped.values.get("axis_stem"),
+        Some(&ShiftMappedAxisValue {
+            value: 0.0,
+            source: ShiftMappedAxisValueSource::AxisDefault,
+            mapping_id: None,
+        })
+    );
+}
+
+#[test]
+fn working_source_missing_axis_mapping_delete_does_not_mutate() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let error = working_source
+        .delete_axis_mapping("mapping_missing")
+        .expect_err("missing axis mapping delete should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::MissingAxisMapping { mapping_id } if mapping_id == "mapping_missing"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let mapped = working_source
+        .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
+        .expect("existing mapping should still be active");
+    assert_eq!(
+        mapped.values.get("axis_stem"),
+        Some(&ShiftMappedAxisValue {
+            value: 0.75,
+            source: ShiftMappedAxisValueSource::AxisMapping,
+            mapping_id: Some("mapping_weight_to_stem".to_string()),
+        })
     );
 }
 
