@@ -108,6 +108,7 @@ pub struct ShiftContour {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponent {
+    pub id: String,
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub transform: DecomposedTransform,
@@ -282,7 +283,7 @@ pub struct ShiftComponentUse {
     pub glyph_id: String,
     pub glyph_name: String,
     pub layer_id: String,
-    pub component_index: usize,
+    pub component_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1013,7 +1014,19 @@ impl ShiftPackage {
                 }
                 validate_glyph_layer_numbers(&glyph.name, source_id, layer)?;
 
+                let mut component_ids = HashSet::new();
                 for component in &layer.components {
+                    validate_identifier(
+                        format!("component on glyph '{}' layer '{}'", glyph.name, source_id),
+                        &component.id,
+                    )?;
+                    if !component_ids.insert(component.id.as_str()) {
+                        return Err(ShiftSourceError::DuplicateComponentId {
+                            glyph_name: glyph.name.clone(),
+                            layer_id: source_id.clone(),
+                            component_id: component.id.clone(),
+                        });
+                    }
                     if !declared_glyph_ids.contains(component.base_glyph_id.as_str()) {
                         return Err(ShiftSourceError::MissingComponentBase {
                             glyph_name: glyph.name.clone(),
@@ -2406,7 +2419,7 @@ pub fn build_dependency_index(package: &ShiftPackage) -> ShiftSourceResult<Shift
 
     for glyph in &package.glyphs {
         for (layer_id, layer) in &glyph.layers {
-            for (component_index, component) in layer.components.iter().enumerate() {
+            for component in &layer.components {
                 let base_name = glyph_names_by_id
                     .get(component.base_glyph_id.as_str())
                     .expect("package.validate should reject missing component bases");
@@ -2414,7 +2427,7 @@ pub fn build_dependency_index(package: &ShiftPackage) -> ShiftSourceResult<Shift
                     glyph_id: glyph.id.clone(),
                     glyph_name: glyph.name.clone(),
                     layer_id: layer_id.clone(),
-                    component_index,
+                    component_id: component.id.clone(),
                 };
 
                 glyphs
@@ -2425,7 +2438,7 @@ pub fn build_dependency_index(package: &ShiftPackage) -> ShiftSourceResult<Shift
                         glyph_id: component.base_glyph_id.clone(),
                         glyph_name: (*base_name).to_string(),
                         layer_id: layer_id.clone(),
-                        component_index,
+                        component_id: component.id.clone(),
                     });
                 glyphs
                     .get_mut(&component.base_glyph_id)
@@ -2872,7 +2885,7 @@ fn component_use_sort_key(
     left.glyph_id
         .cmp(&right.glyph_id)
         .then_with(|| left.layer_id.cmp(&right.layer_id))
-        .then_with(|| left.component_index.cmp(&right.component_index))
+        .then_with(|| left.component_id.cmp(&right.component_id))
 }
 
 fn glyph_interpolation_compatibility(glyph: &ShiftGlyph) -> ShiftGlyphInterpolationCompatibility {
@@ -3179,6 +3192,7 @@ fn component_from_ir(
         .unwrap_or_else(|| glyph_id_for_name(&base_glyph_name));
 
     ShiftComponent {
+        id: component.id_ref().as_str().to_string(),
         base_glyph_id,
         base_glyph_name,
         transform: *component.transform(),

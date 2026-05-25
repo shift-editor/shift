@@ -91,7 +91,7 @@ pub struct ComponentIdParseError;
 
 impl ComponentId {
     pub fn new() -> Self {
-        Self(format!("component_{}", EntityId::new().raw()))
+        Self(format!("component_{:020}", EntityId::new().raw()))
     }
 
     pub fn from_raw(raw: u128) -> Self {

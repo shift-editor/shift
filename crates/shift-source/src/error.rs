@@ -112,6 +112,13 @@ pub enum ShiftSourceError {
         base_glyph_id: String,
     },
 
+    #[error("duplicate component id '{component_id}' in glyph '{glyph_name}' layer '{layer_id}'")]
+    DuplicateComponentId {
+        glyph_name: String,
+        layer_id: String,
+        component_id: String,
+    },
+
     #[error("glyph '{glyph_name}' has a layer for missing source id '{source_id}'")]
     MissingSourceLayer {
         glyph_name: String,

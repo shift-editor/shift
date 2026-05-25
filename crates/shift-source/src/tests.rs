@@ -591,6 +591,7 @@ fn package_diff_marks_component_variation_source_edits_as_glyph_updates() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_1".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -1601,7 +1602,7 @@ fn dependency_index_supports_delete_and_rename_previews_by_stable_id() {
             glyph_id: "glyph_Aacute".to_string(),
             glyph_name: "Aacute".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_25".to_string(),
         }]
     );
 
@@ -1629,6 +1630,7 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_2".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -1670,7 +1672,7 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
             glyph_id: "glyph_stem".to_string(),
             glyph_name: "stem".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_2".to_string(),
         }]
     );
     assert_eq!(
@@ -1683,7 +1685,7 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
             glyph_id: "glyph_A".to_string(),
             glyph_name: "A".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_2".to_string(),
         }]
     );
 
@@ -1699,7 +1701,7 @@ fn dependency_index_tracks_variable_component_bases_by_stable_id() {
             glyph_id: "glyph_A".to_string(),
             glyph_name: "A".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_2".to_string(),
         }]
     );
 }
@@ -1735,7 +1737,7 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
             glyph_id: "glyph_Aacute".to_string(),
             glyph_name: "Aacute".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_25".to_string(),
         }]
     );
 
@@ -1805,7 +1807,7 @@ fn working_source_previews_delete_dependents() {
             glyph_id: "glyph_Aacute".to_string(),
             glyph_name: "Aacute".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_25".to_string(),
         }]
     );
 
@@ -1823,6 +1825,7 @@ fn working_source_evaluates_component_activity_from_conditions() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_3".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -1853,7 +1856,7 @@ fn working_source_evaluates_component_activity_from_conditions() {
             glyph_id: "glyph_A".to_string(),
             glyph_name: "A".to_string(),
             layer_id: "source_Regular".to_string(),
-            component_index: 0,
+            component_id: "component_3".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             active: false,
@@ -1877,6 +1880,7 @@ fn working_source_component_activity_supports_boolean_condition_trees() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_4".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2170,6 +2174,7 @@ fn working_source_resolves_component_location_with_parent_and_local_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_5".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2223,6 +2228,7 @@ fn working_source_resolves_component_location_with_reset_defaults() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_6".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2271,6 +2277,7 @@ fn working_source_resolves_exact_component_variation_source_state() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_7".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2352,6 +2359,7 @@ fn source_package_keeps_variable_component_intent_separate_from_ir_projection() 
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_8".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2440,6 +2448,7 @@ fn working_source_interpolates_component_variation_state_with_variation_model() 
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_9".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2591,6 +2600,7 @@ fn glyph_name_can_change_without_changing_component_target_id() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_10".to_string(),
             base_glyph_id: "glyph_A".to_string(),
             base_glyph_name: "A".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2661,6 +2671,7 @@ fn package_rejects_missing_component_base_id() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_11".to_string(),
             base_glyph_id: "glyph_Missing".to_string(),
             base_glyph_name: "Missing".to_string(),
             transform: DecomposedTransform::identity(),
@@ -2689,6 +2700,32 @@ fn package_rejects_missing_component_base_id() {
             glyph_name,
             base_glyph_id
         } if glyph_name == "Aacute" && base_glyph_id == "glyph_Missing"
+    ));
+}
+
+#[test]
+fn package_rejects_duplicate_component_ids_in_a_layer() {
+    let mut package = package_with_component_dependency();
+    let layer = package.glyphs[1]
+        .layers
+        .get_mut("source_Regular")
+        .expect("fixture should contain component layer");
+    let duplicate = layer.components[0].clone();
+    layer.components.push(duplicate);
+
+    let error = package
+        .validate()
+        .expect_err("duplicate component id should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateComponentId {
+            glyph_name,
+            layer_id,
+            component_id
+        } if glyph_name == "Aacute"
+            && layer_id == "source_Regular"
+            && component_id == "component_25"
     ));
 }
 
@@ -2970,6 +3007,7 @@ fn variable_component_location_can_reference_global_and_base_local_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_12".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3038,6 +3076,7 @@ fn variable_component_location_rejects_unknown_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_13".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3090,6 +3129,7 @@ fn component_variation_sources_validate_parent_and_component_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_14".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3126,6 +3166,7 @@ fn component_variation_sources_reject_missing_parent_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_15".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3172,6 +3213,7 @@ fn component_variation_sources_reject_default_parent_location() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_16".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3216,6 +3258,7 @@ fn component_variation_sources_reject_duplicate_parent_locations() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_17".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3485,6 +3528,7 @@ fn component_conditions_must_reference_global_axes() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_18".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3539,6 +3583,7 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_19".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3557,6 +3602,7 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_20".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3577,6 +3623,7 @@ fn component_conditions_reject_empty_boolean_nodes_and_invalid_ranges() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_21".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3644,6 +3691,7 @@ fn component_graph_rejects_cycles_before_rendering_can_recurse_forever() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_22".to_string(),
             base_glyph_id: "glyph_B".to_string(),
             base_glyph_name: "B".to_string(),
             transform: DecomposedTransform::identity(),
@@ -3660,6 +3708,7 @@ fn component_graph_rejects_cycles_before_rendering_can_recurse_forever() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_23".to_string(),
             base_glyph_id: "glyph_A".to_string(),
             base_glyph_name: "A".to_string(),
             transform: DecomposedTransform::identity(),
@@ -4087,6 +4136,7 @@ fn location_coordinates_must_stay_within_axis_ranges() {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_24".to_string(),
             base_glyph_id: "glyph_stem".to_string(),
             base_glyph_name: "stem".to_string(),
             transform: DecomposedTransform::identity(),
@@ -4183,6 +4233,7 @@ fn package_with_component_dependency() -> ShiftPackage {
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_25".to_string(),
             base_glyph_id: "glyph_A".to_string(),
             base_glyph_name: "A".to_string(),
             transform: DecomposedTransform::identity(),
@@ -4279,6 +4330,7 @@ fn layer_with_component(base_glyph_id: &str, base_glyph_name: &str) -> ShiftGlyp
         advance_height: None,
         contours: Vec::new(),
         components: vec![ShiftComponent {
+            id: "component_26".to_string(),
             base_glyph_id: base_glyph_id.to_string(),
             base_glyph_name: base_glyph_name.to_string(),
             transform: DecomposedTransform::identity(),

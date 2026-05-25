@@ -83,7 +83,7 @@ pub struct ShiftComponentActivity {
     pub glyph_id: String,
     pub glyph_name: String,
     pub layer_id: String,
-    pub component_index: usize,
+    pub component_id: String,
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub active: bool,
@@ -95,7 +95,7 @@ pub struct ShiftComponentResolvedLocation {
     pub glyph_id: String,
     pub glyph_name: String,
     pub layer_id: String,
-    pub component_index: usize,
+    pub component_id: String,
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub active: bool,
@@ -154,7 +154,7 @@ pub struct ShiftComponentResolvedState {
     pub glyph_id: String,
     pub glyph_name: String,
     pub layer_id: String,
-    pub component_index: usize,
+    pub component_id: String,
     pub base_glyph_id: String,
     pub base_glyph_name: String,
     pub active: bool,
@@ -401,8 +401,7 @@ impl ShiftWorkingSource {
         layer
             .components
             .iter()
-            .enumerate()
-            .map(|(component_index, component)| {
+            .map(|component| {
                 let active = component
                     .condition
                     .as_ref()
@@ -414,7 +413,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph.id.clone(),
                     glyph_name: glyph.name.clone(),
                     layer_id: layer_id.to_string(),
-                    component_index,
+                    component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,
@@ -442,8 +441,7 @@ impl ShiftWorkingSource {
         layer
             .components
             .iter()
-            .enumerate()
-            .map(|(component_index, component)| {
+            .map(|component| {
                 let active = component
                     .condition
                     .as_ref()
@@ -457,7 +455,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph.id.clone(),
                     glyph_name: glyph.name.clone(),
                     layer_id: layer_id.to_string(),
-                    component_index,
+                    component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,
@@ -487,8 +485,7 @@ impl ShiftWorkingSource {
         layer
             .components
             .iter()
-            .enumerate()
-            .map(|(component_index, component)| {
+            .map(|component| {
                 let active = component
                     .condition
                     .as_ref()
@@ -509,7 +506,7 @@ impl ShiftWorkingSource {
                     glyph_id: glyph.id.clone(),
                     glyph_name: glyph.name.clone(),
                     layer_id: layer_id.to_string(),
-                    component_index,
+                    component_id: component.id.clone(),
                     base_glyph_id: component.base_glyph_id.clone(),
                     base_glyph_name: component.base_glyph_name.clone(),
                     active,

@@ -41,10 +41,11 @@ and persistence behavior:
 
 Some source concepts can project cleanly into IR today. Others are intentionally
 stored in `shift-source` until the editor needs first-class manipulation for
-them. For example, current IR components are name-based, while `ShiftPackage`
-components are stable-ID based and can also carry sparse locations, axis
-inheritance, conditions, and component variation sources. That separation is a
-temporary implementation boundary, not a product principle.
+them. For example, IR components now carry stable component IDs, sparse
+locations, and axis inheritance because those concepts directly help selection,
+undo, and inspector flows. `ShiftPackage` still owns durable base glyph IDs,
+conditions, and component variation sources until the editor needs first-class
+controls for those recipes.
 
 Promote concepts into IR when doing so makes editor code more direct:
 
@@ -184,6 +185,8 @@ Design rules for the spike:
 - Glyph files are addressed by stable glyph ID, not glyph name.
 - Components reference base glyphs by glyph ID. A readable base glyph name is
   stored only as a label to make files inspectable.
+- Components have stable component IDs. Public dependency and working-source
+  queries name components by ID, not by array index.
 - Components may carry sparse designspace locations, explicit axis inheritance
   behavior, and optional conditions.
 - Component graphs must be acyclic. Cycles are rejected before a renderer or
@@ -237,6 +240,8 @@ format exploration:
   compatibility badges without recomputing every glyph on each render.
 - **Fail loudly on broken references:** missing component bases and missing
   source layers are validation errors, not silently dropped data.
+- **Reject ambiguous component identity:** component IDs must be valid stable
+  identifiers and unique within their glyph layer.
 - **Require a valid default source:** packages cannot load with no sources, a
   missing manifest default source ID, a default source ID that no longer
   references a declared source, or a default source whose completed location is
@@ -363,6 +368,7 @@ Current component sketch:
 
 ```json
 {
+  "id": "component_A_stem",
   "baseGlyphId": "glyph_stem",
   "baseGlyphName": "stem",
   "axisInheritance": "inheritParent",
@@ -766,10 +772,11 @@ they are absent or stale, Shift can rebuild them from canonical package files.
 `derived/dependencies.json` is generated from `glyphs/*.json`.
 
 The index records structural component ownership only: which glyph uses which
-base glyph on which layer and component index. It deliberately does not copy the
-component's transform, conditions, sparse location, or variation sources. Those
-details remain canonical in the owner glyph file, while the index is enough for
-delete/rename preflight and dependency UI to avoid scanning every glyph.
+base glyph through which stable component ID on which layer. It deliberately
+does not copy the component's transform, conditions, sparse location, or
+variation sources. Those details remain canonical in the owner glyph file,
+while the index is enough for delete/rename preflight and dependency UI to
+avoid scanning every glyph.
 
 Current shape:
 
@@ -786,7 +793,7 @@ Current shape:
           "glyphId": "glyph_Aacute",
           "glyphName": "Aacute",
           "layerId": "source_Regular",
-          "componentIndex": 0
+          "componentId": "component_Aacute_base"
         }
       ]
     }
