@@ -601,6 +601,7 @@ impl ShiftWorkingSource {
         target: &ShiftComponentLoweringTarget,
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
+        self.validate_query_location("component lowering preflight", location)?;
         self.component_lowering_preflight_for_location(target, Some(location))
     }
 
@@ -1309,6 +1310,31 @@ impl ShiftWorkingSource {
         }
     }
 
+    fn validate_query_location(
+        &self,
+        context: &str,
+        location: &BTreeMap<String, f64>,
+    ) -> ShiftSourceResult<()> {
+        let axes_by_id = self
+            .package
+            .axes
+            .iter()
+            .map(|axis| (axis.id.as_str(), axis))
+            .collect::<HashMap<_, _>>();
+
+        for (axis_id, value) in location {
+            let Some(axis) = axes_by_id.get(axis_id.as_str()) else {
+                return Err(ShiftSourceError::MissingQueryLocationAxis {
+                    context: context.to_string(),
+                    axis_id: axis_id.clone(),
+                });
+            };
+            validate_query_axis_coordinate(context, axis_id, *value, axis.minimum, axis.maximum)?;
+        }
+
+        Ok(())
+    }
+
     fn default_mapped_values(
         &self,
         location: &BTreeMap<String, f64>,
@@ -1334,6 +1360,33 @@ impl ShiftWorkingSource {
             })
             .collect()
     }
+}
+
+fn validate_query_axis_coordinate(
+    context: &str,
+    axis_id: &str,
+    value: f64,
+    minimum: f64,
+    maximum: f64,
+) -> ShiftSourceResult<()> {
+    if !value.is_finite() {
+        return Err(ShiftSourceError::NonFiniteNumber {
+            context: context.to_string(),
+            field: axis_id.to_string(),
+            value,
+        });
+    }
+    if minimum <= value && value <= maximum {
+        return Ok(());
+    }
+
+    Err(ShiftSourceError::AxisCoordinateOutOfRange {
+        context: context.to_string(),
+        axis_id: axis_id.to_string(),
+        value,
+        minimum,
+        maximum,
+    })
 }
 
 fn fingerprint_subset(

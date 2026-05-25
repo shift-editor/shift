@@ -318,6 +318,9 @@ format exploration:
   Static-instance preflight can pass a concrete location; inactive conditional
   components are skipped and counted separately, while variable-font preflight
   can keep using the location-independent query that checks every recipe.
+  Concrete preflight locations are validated at the query boundary: unknown
+  axes, non-finite values, or coordinates outside axis ranges return typed
+  errors instead of producing misleading export diagnostics.
 - **Component location resolution:** inspectors, preview renderers, and export
   preflight can ask how a variable component resolves sparse parent coordinates,
   explicit component overrides, reset-vs-inherit behavior, and base glyph local

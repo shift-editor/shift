@@ -2937,6 +2937,54 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .collect::<Vec<_>>(),
         vec!["component_conditional", "component_variable"]
     );
+
+    let missing_axis_err = working_source
+        .component_lowering_preflight_at_location(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &BTreeMap::from([("axis_missing".to_string(), 1.0)]),
+        )
+        .expect_err("preflight location should reject missing axes");
+    assert!(matches!(
+        missing_axis_err,
+        ShiftSourceError::MissingQueryLocationAxis { context, axis_id }
+            if context == "component lowering preflight" && axis_id == "axis_missing"
+    ));
+
+    let out_of_range_err = working_source
+        .component_lowering_preflight_at_location(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &BTreeMap::from([("axis_wght".to_string(), 1000.0)]),
+        )
+        .expect_err("preflight location should reject out-of-range axes");
+    assert!(matches!(
+        out_of_range_err,
+        ShiftSourceError::AxisCoordinateOutOfRange {
+            context,
+            axis_id,
+            value,
+            minimum: 100.0,
+            maximum: 900.0,
+        } if context == "component lowering preflight"
+            && axis_id == "axis_wght"
+            && value == 1000.0
+    ));
+
+    let non_finite_err = working_source
+        .component_lowering_preflight_at_location(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &BTreeMap::from([("axis_wght".to_string(), f64::NAN)]),
+        )
+        .expect_err("preflight location should reject non-finite axes");
+    assert!(matches!(
+        non_finite_err,
+        ShiftSourceError::NonFiniteNumber {
+            context,
+            field,
+            value,
+        } if context == "component lowering preflight"
+            && field == "axis_wght"
+            && value.is_nan()
+    ));
 }
 
 #[test]

@@ -201,6 +201,9 @@ pub enum ShiftSourceError {
     #[error("source '{source_id}' location references missing axis id '{axis_id}'")]
     MissingSourceLocationAxis { source_id: String, axis_id: String },
 
+    #[error("{context} location references missing axis id '{axis_id}'")]
+    MissingQueryLocationAxis { context: String, axis_id: String },
+
     #[error("glyph '{glyph_name}' defines duplicate local axis id '{axis_id}'")]
     DuplicateGlyphLocalAxis { glyph_name: String, axis_id: String },
 
