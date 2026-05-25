@@ -477,7 +477,7 @@ pub fn values_from_layer(layer: &GlyphLayer) -> GlyphValues {
 /// ordering. Sort by component ID everywhere structure and values are exported.
 fn sorted_components(layer: &GlyphLayer) -> Vec<&IrComponent> {
     let mut components: Vec<_> = layer.components_iter().collect();
-    components.sort_by_key(|component| component.id().raw());
+    components.sort_by(|left, right| left.id_ref().as_str().cmp(right.id_ref().as_str()));
     components
 }
 

@@ -105,8 +105,8 @@ impl GlyphLayer {
     }
 
     pub fn add_component(&mut self, component: Component) -> ComponentId {
-        let id = component.id();
-        self.components.insert(id, component);
+        let id = component.id_ref().clone();
+        self.components.insert(id.clone(), component);
         id
     }
 

@@ -4,9 +4,11 @@ Format-agnostic intermediate representation for font data, serving as the canoni
 
 ## Architecture Invariants
 
-**Architecture Invariant:** All entity IDs are generated from a single global `ENTITY_COUNTER` (atomic u64 in `entity.rs`). This guarantees uniqueness across the entire application without coordination. Never construct IDs manually via `from_raw` in production code -- that bypass is for deserialization and tests only.
+**Architecture Invariant:** Point, contour, anchor, guideline, layer, glyph, and source IDs are generated from a single global `ENTITY_COUNTER` (atomic u64 in `entity.rs`). This guarantees uniqueness across the running application without coordination. Never construct those numeric IDs manually via `from_raw` in production code -- that bypass is for deserialization and tests only.
 
-**Architecture Invariant:** Typed ID newtypes (`PointId`, `ContourId`, `LayerId`, etc.) wrap `EntityId` to prevent accidental cross-type usage. A `PointId` cannot be passed where a `ContourId` is expected. WHY: font editing operations pass many IDs around; mixing them up would silently corrupt data.
+**Architecture Invariant:** `ComponentId` is string-backed and document-stable. New components get generated IDs, but deserialized components may keep package IDs such as `"A.component.base"`. WHY: components need to survive save/load, selection, undo, dependency analysis, and eventual source-package round trips without relying on a process-local counter.
+
+**Architecture Invariant:** Typed ID newtypes (`PointId`, `ContourId`, `ComponentId`, `LayerId`, etc.) prevent accidental cross-type usage. A `PointId` cannot be passed where a `ContourId` is expected. WHY: font editing operations pass many IDs around; mixing them up would silently corrupt data.
 
 **Architecture Invariant:** `Font` always has exactly one default layer, created at construction time and stored as `default_layer_id`. The default layer uses the name `"public.default"`. WHY: every glyph operation assumes a default layer exists; removing or replacing it breaks the editing pipeline.
 
@@ -25,7 +27,7 @@ Format-agnostic intermediate representation for font data, serving as the canoni
 ```
 src/
   lib.rs           -- public re-exports and GlyphName type alias
-  entity.rs        -- ENTITY_COUNTER, EntityId, typed_id! macro
+  entity.rs        -- ENTITY_COUNTER, EntityId, typed_id! macro, stable ComponentId
   font.rs          -- Font (root container), FontMetadata
   metrics.rs       -- FontMetrics (upm, ascender, descender, etc.)
   glyph.rs         -- Glyph, GlyphLayer (per-layer contours/components/anchors)
@@ -53,7 +55,7 @@ src/
 - `Point` -- position (f64, f64) with `PointType` and smooth flag
 - `PointType` -- `OnCurve` (anchor on curve), `OffCurve` (cubic Bezier handle), `QCurve` (quadratic TrueType)
 - `CurveSegment` / `CurveSegmentIter` -- typed iteration over point sequences as Line, Quad, or Cubic segments
-- `Component` -- reference to another glyph by name with `DecomposedTransform`
+- `Component` -- reference to another glyph by name with `DecomposedTransform`, sparse `Location`, and axis inheritance behavior
 - `DecomposedTransform` -- translate, rotate, scale, skew, center; composes to raw `Transform` matrix
 - `Transform` -- raw 2x3 affine matrix
 - `Layer` -- named layer with ID (default is `"public.default"`)
@@ -91,19 +93,22 @@ discovers concepts that make the editor model better. IR should not blindly mirr
 any file format, but it should model the semantic objects the editor needs to
 edit, render, select, inspect, undo, preview, and reason about efficiently.
 
-Current `Component` is intentionally small:
+Current `Component` carries the editor-facing part of variable component state:
 
 ```rust
 Component {
     id: ComponentId,
     base_glyph: GlyphName,
     transform: DecomposedTransform,
+    location: Location,
+    axis_inheritance: AxisInheritance,
 }
 ```
 
-That is enough for simple composites, but it pushes too much variable-component
-behavior into source/package services. If component recipes become a first-class
-editor feature, IR should grow toward this shape:
+That is enough for simple composites and sparse variable component placement.
+It still leaves durable base-glyph targeting and component-specific variation
+source records in source/package services. If component recipes become a
+first-class editor feature, IR should grow toward this shape:
 
 ```rust
 Component {
@@ -185,6 +190,10 @@ conflict detection, or artifact writing, keep it out of IR.
 3. Create the entity struct with an `id: NewEntityId` field
 4. Use `NewEntityId::new()` in constructors (auto-increments from global counter)
 
+Use a custom string-backed ID instead of `typed_id!` when the entity identity
+must be stable across save/load and map directly to source-package data.
+`ComponentId` is the current example.
+
 ### Add boolean operations on contours
 
 1. Convert contours to `BezPath` using the `From` impl
@@ -202,8 +211,8 @@ conflict detection, or artifact writing, keep it out of IR.
 - **Stale glyph keys:** `Glyph::set_name()` does not update the `Font` HashMap key. After renaming, you must `remove_glyph(old_name)` and `insert_glyph(renamed_glyph)`.
 - **Anchor lookup is O(n):** Anchors are stored in a `Vec`, so `GlyphLayer::anchor(id)` is a linear scan. This is fine for typical glyph anchor counts (2-5) but would be a problem if anchor counts grew large.
 - **DecomposedTransform roundtrip with skew:** `DecomposedTransform::from_matrix()` assumes no transformation center and may not perfectly roundtrip when skew is involved.
-- **HashMap iteration order:** Contours and components are in `HashMap` -- iteration order is nondeterministic. If order matters (e.g., for file output), the backend must sort.
-- **Global atomic counter:** `ENTITY_COUNTER` is a process-global `AtomicU64`. IDs are unique within a process but not across processes. Deserialized fonts get new IDs at load time.
+- **HashMap iteration order:** Contours and components are in `HashMap` -- iteration order is nondeterministic. If order matters (e.g., for file output), the backend must sort. Components should be sorted by stable component ID text.
+- **Global atomic counter:** `ENTITY_COUNTER` is a process-global `AtomicU64`. Numeric IDs are unique within a process but not across processes. `ComponentId` is the exception: it is string-backed so it can map to durable source/package IDs.
 - **`from_raw` accepts u128 but truncates to u64:** The `typed_id!` macro's `from_raw` takes `u128` and casts to `u64`. This is intentional for compatibility but can silently lose high bits.
 
 ## Verification

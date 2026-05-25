@@ -1,5 +1,5 @@
 use crate::entity::ComponentId;
-use crate::GlyphName;
+use crate::{GlyphName, Location};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -7,6 +7,18 @@ pub struct Component {
     id: ComponentId,
     base_glyph: GlyphName,
     transform: DecomposedTransform,
+    #[serde(default)]
+    location: Location,
+    #[serde(default)]
+    axis_inheritance: AxisInheritance,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisInheritance {
+    #[default]
+    InheritParent,
+    ResetUnspecifiedToDefault,
 }
 
 /// Raw 2D affine transformation matrix (6 values).
@@ -205,6 +217,8 @@ impl Component {
             id: ComponentId::new(),
             base_glyph: base_glyph.into(),
             transform: DecomposedTransform::identity(),
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::InheritParent,
         }
     }
 
@@ -216,6 +230,8 @@ impl Component {
             id: ComponentId::new(),
             base_glyph: base_glyph.into(),
             transform,
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::InheritParent,
         }
     }
 
@@ -228,6 +244,8 @@ impl Component {
             id,
             base_glyph: base_glyph.into(),
             transform,
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::InheritParent,
         }
     }
 
@@ -236,11 +254,17 @@ impl Component {
             id: ComponentId::new(),
             base_glyph: base_glyph.into(),
             transform: DecomposedTransform::from_matrix(matrix),
+            location: Location::new(),
+            axis_inheritance: AxisInheritance::InheritParent,
         }
     }
 
     pub fn id(&self) -> ComponentId {
-        self.id
+        self.id.clone()
+    }
+
+    pub fn id_ref(&self) -> &ComponentId {
+        &self.id
     }
 
     pub fn base_glyph(&self) -> &GlyphName {
@@ -251,12 +275,32 @@ impl Component {
         &self.transform
     }
 
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn axis_inheritance(&self) -> AxisInheritance {
+        self.axis_inheritance
+    }
+
     pub fn matrix(&self) -> Transform {
         self.transform.to_matrix()
     }
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
         self.transform = transform;
+    }
+
+    pub fn set_location(&mut self, location: Location) {
+        self.location = location;
+    }
+
+    pub fn set_location_axis(&mut self, axis_tag: impl Into<String>, value: f64) {
+        self.location.set(axis_tag.into(), value);
+    }
+
+    pub fn set_axis_inheritance(&mut self, axis_inheritance: AxisInheritance) {
+        self.axis_inheritance = axis_inheritance;
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
@@ -274,6 +318,22 @@ mod tests {
         let c = Component::new("a".to_string());
         assert_eq!(c.base_glyph().as_str(), "a");
         assert!(c.transform().is_identity());
+        assert!(c.location().is_empty());
+        assert_eq!(c.axis_inheritance(), AxisInheritance::InheritParent);
+    }
+
+    #[test]
+    fn component_location_and_axis_inheritance_are_editable() {
+        let mut c = Component::new("stem".to_string());
+
+        c.set_location_axis("wght", 700.0);
+        c.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
+
+        assert_eq!(c.location().get("wght"), Some(700.0));
+        assert_eq!(
+            c.axis_inheritance(),
+            AxisInheritance::ResetUnspecifiedToDefault
+        );
     }
 
     #[test]

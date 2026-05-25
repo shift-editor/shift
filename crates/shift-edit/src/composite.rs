@@ -11,7 +11,7 @@
 //!   composed on top of those transforms.
 //!
 //! Traversal and determinism rules:
-//! - Components are processed in stable ID order (`ComponentId::raw`).
+//! - Components are processed in stable ID order.
 //! - Cycles are handled branch-locally: cyclic branches are skipped so
 //!   non-cyclic branches still contribute geometry.
 
@@ -228,7 +228,7 @@ fn flatten_component_named(
 
         let mut placed_anchors = Vec::new();
         let mut components: Vec<_> = layer.components().iter().collect();
-        components.sort_by_key(|(id, _)| id.raw());
+        components.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
 
         for (_, component) in components {
             let explicit_transform = component.matrix();
@@ -292,7 +292,7 @@ pub fn resolve_component_instances_for_layer(
 
     let mut placed_anchors = Vec::new();
     let mut components: Vec<_> = layer.components().iter().collect();
-    components.sort_by_key(|(id, _)| id.raw());
+    components.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
 
     for (_, component) in components {
         let explicit_transform = component.matrix();

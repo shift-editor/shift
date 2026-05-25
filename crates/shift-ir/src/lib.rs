@@ -21,7 +21,7 @@ pub mod variation;
 pub use anchor::Anchor;
 pub use axis::{Axis, Location};
 pub use boolean::{boolean, BooleanOp};
-pub use component::{Component, DecomposedTransform, Transform};
+pub use component::{AxisInheritance, Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, ComponentId, ContourId, EntityId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
