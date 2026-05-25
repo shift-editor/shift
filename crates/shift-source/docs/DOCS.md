@@ -725,6 +725,13 @@ It returns one action per transaction:
 The app can therefore recover on open without inferring policy from raw file
 fingerprints.
 
+`load_package()` enforces that recovery boundary before trusting package files.
+It refuses to load when any staged transaction needs `resume`, is
+`blockedByLiveConflict`, or `cannotRecover`, because the package may be
+partially promoted or externally modified. It allows cleanup-only transactions:
+those live files already match the staged result, so the loaded package is
+coherent even if `.shift-txn/<id>/` has not been removed yet.
+
 `cleanup_applied_staged_commit()` removes only transactions whose live files
 already match the staged result, which covers the crash window after promotion
 but before transaction cleanup.
@@ -745,7 +752,8 @@ intended flow is:
 
 ```text
 startup
-  -> inspectStagedCommits(root)
+  -> planStagedCommitRecovery(root)
+  -> resume, cleanup, or prompt before loadPackage(root)
 open package
   -> ShiftWorkingSource::open_saved(root, package)
 edit through working-source semantic operations

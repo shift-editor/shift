@@ -2804,6 +2804,7 @@ pub fn build_interpolation_compatibility_index(
 
 pub fn load_package(path: impl AsRef<Path>) -> ShiftSourceResult<ShiftPackage> {
     let path = path.as_ref();
+    ensure_no_unresolved_staged_commits(path)?;
     let manifest: ShiftManifest = read_json(path.join("manifest.json"))?;
     let font: ShiftFontInfo = read_json(path.join("font.json"))?;
     let axes: Vec<ShiftAxis> = read_json(path.join("axes.json"))?;
@@ -2841,6 +2842,32 @@ pub fn load_package(path: impl AsRef<Path>) -> ShiftSourceResult<ShiftPackage> {
     package.validate()?;
 
     Ok(package)
+}
+
+fn ensure_no_unresolved_staged_commits(root: &Path) -> ShiftSourceResult<()> {
+    let recovery_plans = plan_staged_commit_recovery(root)?;
+    let resume_count = recovery_plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::Resume)
+        .count();
+    let blocked_count = recovery_plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::BlockedByLiveConflict)
+        .count();
+    let invalid_count = recovery_plans
+        .iter()
+        .filter(|plan| plan.action == ShiftStagedCommitRecoveryAction::CannotRecover)
+        .count();
+
+    if resume_count > 0 || blocked_count > 0 || invalid_count > 0 {
+        return Err(ShiftSourceError::UnresolvedStagedCommits {
+            resume_count,
+            blocked_count,
+            invalid_count,
+        });
+    }
+
+    Ok(())
 }
 
 fn read_glyph_json(path: PathBuf) -> ShiftSourceResult<ShiftGlyph> {

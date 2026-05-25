@@ -16,6 +16,7 @@ use shift_ir::{
 use shift_ir::{Glyph, GlyphLayer, PointType};
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn package_uses_stable_glyph_ids_for_files_and_component_refs() {
@@ -1225,6 +1226,143 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
 
     assert!(staged_glyph.contains("\"name\": \"RenamedBase\""));
     assert_eq!(live_after, live_before);
+}
+
+fn stage_base_glyph_rename(
+    package_path: &Path,
+    new_name: &str,
+) -> (ShiftPackage, ShiftStagedCommit) {
+    let before = package_with_component_dependency();
+    save_package(&before, package_path).expect("package should save");
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = new_name.to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(package_path, &after, &prepared).expect("commit should stage");
+
+    (after, staged)
+}
+
+#[test]
+fn load_package_refuses_pending_staged_commit_before_trusting_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, _staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+
+    let err = load_package(&package_path).expect_err("pending staged commit should block load");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 1,
+            blocked_count: 0,
+            invalid_count: 0,
+        }
+    ));
+}
+
+#[test]
+fn load_package_refuses_partially_applied_staged_commit_before_trusting_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("one staged payload should be copied to live file");
+
+    let err = load_package(&package_path).expect_err("partial staged commit should block load");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 1,
+            blocked_count: 0,
+            invalid_count: 0,
+        }
+    ));
+}
+
+#[test]
+fn load_package_refuses_diverged_staged_commit_before_trusting_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, _staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::write(
+        package_path.join("glyphs/glyph_A.json"),
+        "{\"externally\":\"different\"}\n",
+    )
+    .expect("live file should be modified");
+
+    let err = load_package(&package_path).expect_err("diverged staged commit should block load");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 0,
+            blocked_count: 1,
+            invalid_count: 0,
+        }
+    ));
+}
+
+#[test]
+fn load_package_refuses_invalid_staged_commit_before_trusting_files() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::remove_file(&staged.marker_path).expect("marker should be removable");
+
+    let err = load_package(&package_path).expect_err("invalid staged commit should block load");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::UnresolvedStagedCommits {
+            resume_count: 0,
+            blocked_count: 0,
+            invalid_count: 1,
+        }
+    ));
+}
+
+#[test]
+fn load_package_allows_cleanup_only_staged_commit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let (_after, staged) = stage_base_glyph_rename(&package_path, "RenamedBase");
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("staged payload should be copied to live file");
+    fs::copy(
+        staged
+            .transaction_path
+            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
+        package_path.join(DEPENDENCY_INDEX_PATH),
+    )
+    .expect("staged derived payload should be copied to live file");
+
+    let package = load_package(&package_path).expect("applied staged commit should not block load");
+
+    assert_eq!(
+        package
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("RenamedBase")
+    );
 }
 
 #[test]

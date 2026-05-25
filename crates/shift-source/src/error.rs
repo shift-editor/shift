@@ -71,6 +71,13 @@ pub enum ShiftSourceError {
         new_transaction_id: String,
     },
 
+    #[error("cannot load Shift source package with unresolved staged commits: {resume_count} resumable, {blocked_count} blocked, {invalid_count} invalid")]
+    UnresolvedStagedCommits {
+        resume_count: usize,
+        blocked_count: usize,
+        invalid_count: usize,
+    },
+
     #[error("cannot apply Shift staged commit '{transaction_id}' because it has {issue_count} recovery issues")]
     StagedCommitHasIssues {
         transaction_id: String,
