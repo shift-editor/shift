@@ -105,13 +105,16 @@ Component {
     transform: DecomposedTransform,
     location: Location,
     axis_inheritance: AxisInheritance,
+    condition: Option<ComponentCondition>,
 }
 ```
 
-That is enough for simple composites and sparse variable component placement.
-It still leaves component-specific conditions and variation source records in
-source/package services. If component recipes become a first-class editor
-feature, IR should grow toward this shape:
+That is enough for simple composites, stable component relationships, sparse
+variable component placement, and active/inactive condition evaluation in the
+editor loop. Component-specific variation source records still live in
+source/package services until the editor exposes first-class controls for those
+recipes. If component recipes become a first-class editor feature, IR should
+grow toward this shape:
 
 ```rust
 Component {

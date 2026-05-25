@@ -1,6 +1,7 @@
-use crate::entity::{ComponentId, GlyphId};
-use crate::{GlyphName, Location};
+use crate::entity::{AxisId, ComponentId, GlyphId};
+use crate::{Axis, GlyphName, Location};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Component {
@@ -12,6 +13,8 @@ pub struct Component {
     location: Location,
     #[serde(default)]
     axis_inheritance: AxisInheritance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    condition: Option<ComponentCondition>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,6 +24,42 @@ pub enum AxisInheritance {
     InheritParent,
     ResetUnspecifiedToDefault,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ComponentCondition {
+    AxisRange {
+        axis_id: AxisId,
+        min: Option<f64>,
+        max: Option<f64>,
+    },
+    And {
+        conditions: Vec<ComponentCondition>,
+    },
+    Or {
+        conditions: Vec<ComponentCondition>,
+    },
+    Not {
+        condition: Box<ComponentCondition>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ComponentConditionError {
+    MissingAxis { axis_id: AxisId },
+}
+
+impl fmt::Display for ComponentConditionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingAxis { axis_id } => {
+                write!(f, "component condition references missing axis '{axis_id}'")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ComponentConditionError {}
 
 /// Raw 2D affine transformation matrix (6 values).
 ///
@@ -222,6 +261,7 @@ impl Component {
             transform: DecomposedTransform::identity(),
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
+            condition: None,
         }
     }
 
@@ -237,6 +277,7 @@ impl Component {
             transform,
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
+            condition: None,
         }
     }
 
@@ -253,6 +294,7 @@ impl Component {
             transform,
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
+            condition: None,
         }
     }
 
@@ -269,6 +311,7 @@ impl Component {
             transform,
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
+            condition: None,
         }
     }
 
@@ -281,6 +324,7 @@ impl Component {
             transform: DecomposedTransform::from_matrix(matrix),
             location: Location::new(),
             axis_inheritance: AxisInheritance::InheritParent,
+            condition: None,
         }
     }
 
@@ -316,6 +360,10 @@ impl Component {
         self.axis_inheritance
     }
 
+    pub fn condition(&self) -> Option<&ComponentCondition> {
+        self.condition.as_ref()
+    }
+
     pub fn matrix(&self) -> Transform {
         self.transform.to_matrix()
     }
@@ -336,9 +384,50 @@ impl Component {
         self.axis_inheritance = axis_inheritance;
     }
 
+    pub fn set_condition(&mut self, condition: Option<ComponentCondition>) {
+        self.condition = condition;
+    }
+
     pub fn translate(&mut self, dx: f64, dy: f64) {
         self.transform.translate_x += dx;
         self.transform.translate_y += dy;
+    }
+}
+
+impl ComponentCondition {
+    pub fn matches(
+        &self,
+        location: &Location,
+        axes: &[Axis],
+    ) -> Result<bool, ComponentConditionError> {
+        match self {
+            Self::AxisRange { axis_id, min, max } => {
+                let Some(axis) = axes.iter().find(|axis| axis.id_ref() == axis_id) else {
+                    return Err(ComponentConditionError::MissingAxis {
+                        axis_id: axis_id.clone(),
+                    });
+                };
+                let value = location.get(axis.tag()).unwrap_or(axis.default());
+                Ok(min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max))
+            }
+            Self::And { conditions } => {
+                for condition in conditions {
+                    if !condition.matches(location, axes)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Self::Or { conditions } => {
+                for condition in conditions {
+                    if condition.matches(location, axes)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            Self::Not { condition } => Ok(!condition.matches(location, axes)?),
+        }
     }
 }
 
@@ -354,6 +443,7 @@ mod tests {
         assert!(c.transform().is_identity());
         assert!(c.location().is_empty());
         assert_eq!(c.axis_inheritance(), AxisInheritance::InheritParent);
+        assert!(c.condition().is_none());
     }
 
     #[test]
@@ -384,6 +474,108 @@ mod tests {
         assert_eq!(component.id_ref(), &component_id);
         assert_eq!(component.base_glyph_id_ref(), &base_glyph_id);
         assert_eq!(component.base_glyph().as_str(), "A");
+    }
+
+    #[test]
+    fn component_condition_matches_location_by_axis_identity() {
+        let axis_id = AxisId::from_stable("axis_weight").unwrap();
+        let axis = Axis::with_id(
+            axis_id.clone(),
+            "wght".to_string(),
+            "Weight".to_string(),
+            100.0,
+            400.0,
+            900.0,
+        );
+        let condition = ComponentCondition::AxisRange {
+            axis_id,
+            min: Some(700.0),
+            max: None,
+        };
+        let mut location = Location::new();
+        location.set("wght".to_string(), 750.0);
+
+        assert!(condition.matches(&location, &[axis]).unwrap());
+    }
+
+    #[test]
+    fn component_condition_uses_axis_default_when_location_is_unspecified() {
+        let axis_id = AxisId::from_stable("axis_weight").unwrap();
+        let axis = Axis::with_id(
+            axis_id.clone(),
+            "wght".to_string(),
+            "Weight".to_string(),
+            100.0,
+            400.0,
+            900.0,
+        );
+        let condition = ComponentCondition::AxisRange {
+            axis_id,
+            min: None,
+            max: Some(500.0),
+        };
+
+        assert!(condition.matches(&Location::new(), &[axis]).unwrap());
+    }
+
+    #[test]
+    fn component_condition_reports_missing_axis() {
+        let axis_id = AxisId::from_stable("axis_width").unwrap();
+        let condition = ComponentCondition::AxisRange {
+            axis_id: axis_id.clone(),
+            min: None,
+            max: Some(100.0),
+        };
+
+        assert_eq!(
+            condition.matches(&Location::new(), &[]),
+            Err(ComponentConditionError::MissingAxis { axis_id })
+        );
+    }
+
+    #[test]
+    fn component_condition_supports_boolean_trees() {
+        let weight_id = AxisId::from_stable("axis_weight").unwrap();
+        let width_id = AxisId::from_stable("axis_width").unwrap();
+        let axes = vec![
+            Axis::with_id(
+                weight_id.clone(),
+                "wght".to_string(),
+                "Weight".to_string(),
+                100.0,
+                400.0,
+                900.0,
+            ),
+            Axis::with_id(
+                width_id.clone(),
+                "wdth".to_string(),
+                "Width".to_string(),
+                75.0,
+                100.0,
+                125.0,
+            ),
+        ];
+        let condition = ComponentCondition::And {
+            conditions: vec![
+                ComponentCondition::AxisRange {
+                    axis_id: weight_id,
+                    min: Some(700.0),
+                    max: None,
+                },
+                ComponentCondition::Not {
+                    condition: Box::new(ComponentCondition::AxisRange {
+                        axis_id: width_id,
+                        min: None,
+                        max: Some(90.0),
+                    }),
+                },
+            ],
+        };
+        let mut location = Location::new();
+        location.set("wght".to_string(), 800.0);
+        location.set("wdth".to_string(), 100.0);
+
+        assert!(condition.matches(&location, &axes).unwrap());
     }
 
     #[test]

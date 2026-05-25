@@ -43,10 +43,11 @@ Some source concepts can project cleanly into IR today. Others are intentionally
 stored in `shift-source` until the editor needs first-class manipulation for
 them. For example, IR glyphs, sources, and axes now carry stable IDs, and IR
 components carry stable component IDs, durable base glyph IDs, sparse locations,
-and axis inheritance because those concepts directly help rename safety, source
-lookup, variable font operations, selection, undo, and inspector flows.
-`ShiftPackage` still owns conditions and component variation sources until the
-editor needs first-class controls for those recipes.
+axis inheritance, and conditions because those concepts directly help rename
+safety, source lookup, variable font operations, selection, undo, inspector
+flows, and active/inactive component previews. `ShiftPackage` still owns
+component variation sources until the editor needs first-class controls for
+those recipes.
 
 Promote concepts into IR when doing so makes editor code more direct:
 
@@ -889,8 +890,8 @@ derived indexes must be safe to delete
 - Component references are ID-based in the package and IR. The readable
   `baseGlyphName` is a label/cache for UI and compatibility, not the canonical
   target.
-- Variable component locations, axis inheritance, conditions, glyph-local axes,
-  and variation sources are stored and validated in the package model, but not
-  yet converted into current `shift-ir` behavior.
+- Variable component locations, axis inheritance, and conditions now project
+  into `shift-ir`; glyph-local axes and component/glyph variation sources still
+  need deeper IR modeling before they can drive ordinary editor behavior.
 - Export/build diagnostics are not wired to `shift-backends` yet, but the source
   model now rejects out-of-range authored coordinates before backend lowering.

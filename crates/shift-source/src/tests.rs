@@ -7,8 +7,9 @@ use crate::{
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftWorkingSource,
 };
 use shift_ir::{
-    Axis, AxisId, Component, ComponentId, Contour, DecomposedTransform, Font, FontMetadata,
-    FontMetrics, GlyphId, Layer, Location, Source, SourceId,
+    Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
+    DecomposedTransform, Font, FontMetadata, FontMetrics, GlyphId, Layer, Location, Source,
+    SourceId,
 };
 use shift_ir::{Glyph, GlyphLayer, PointType};
 use std::collections::BTreeMap;
@@ -67,17 +68,34 @@ fn package_from_font_sorts_glyphs_by_stable_id() {
 fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
     let base_glyph_id = GlyphId::from_stable("glyph_base_A").unwrap();
     let component_id = ComponentId::from_stable("component_Aacute_base").unwrap();
+    let axis_id = AxisId::from_stable("axis_weight_public").unwrap();
 
     let mut font = Font::new();
+    font.add_axis(Axis::with_id(
+        axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ));
     font.insert_glyph(Glyph::with_id(base_glyph_id.clone(), "A.renamed"));
 
     let mut composite_layer = GlyphLayer::with_width(610.0);
-    composite_layer.add_component(Component::with_base_glyph_id(
+    let mut component = Component::with_base_glyph_id(
         component_id.clone(),
         base_glyph_id.clone(),
         "A.old",
         DecomposedTransform::identity(),
-    ));
+    );
+    component.set_location_axis("wght", 700.0);
+    component.set_axis_inheritance(AxisInheritance::ResetUnspecifiedToDefault);
+    component.set_condition(Some(ComponentCondition::AxisRange {
+        axis_id: axis_id.clone(),
+        min: Some(600.0),
+        max: None,
+    }));
+    composite_layer.add_component(component);
     let mut composite = Glyph::new("Aacute");
     composite.set_layer(font.default_layer_id(), composite_layer);
     font.insert_glyph(composite);
@@ -96,6 +114,22 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
     assert_eq!(component.id, "component_Aacute_base");
     assert_eq!(component.base_glyph_id, "glyph_base_A");
     assert_eq!(component.base_glyph_name, "A.renamed");
+    assert_eq!(
+        component.location,
+        BTreeMap::from([("axis_weight_public".to_string(), 700.0)])
+    );
+    assert_eq!(
+        component.axis_inheritance,
+        ShiftAxisInheritance::ResetUnspecifiedToFont
+    );
+    assert!(matches!(
+        component.condition,
+        Some(ShiftCondition::AxisRange {
+            ref axis_id,
+            min: Some(600.0),
+            max: None,
+        }) if axis_id == "axis_weight_public"
+    ));
 
     let loaded = package.into_font().expect("package should load");
     let loaded_component = loaded
@@ -110,6 +144,19 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
     assert_eq!(loaded_component.id_ref(), &component_id);
     assert_eq!(loaded_component.base_glyph_id_ref(), &base_glyph_id);
     assert_eq!(loaded_component.base_glyph().as_str(), "A.renamed");
+    assert_eq!(loaded_component.location().get("wght"), Some(700.0));
+    assert_eq!(
+        loaded_component.axis_inheritance(),
+        AxisInheritance::ResetUnspecifiedToDefault
+    );
+    assert!(matches!(
+        loaded_component.condition(),
+        Some(ComponentCondition::AxisRange {
+            axis_id: loaded_axis_id,
+            min: Some(600.0),
+            max: None,
+        }) if loaded_axis_id == &axis_id
+    ));
 }
 
 #[test]
@@ -2489,7 +2536,7 @@ fn working_source_resolves_exact_component_variation_source_state() {
 }
 
 #[test]
-fn source_package_keeps_variable_component_intent_separate_from_ir_projection() {
+fn source_package_keeps_component_variation_sources_separate_from_ir_projection() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
         advance_height: None,
@@ -2545,6 +2592,22 @@ fn source_package_keeps_variable_component_intent_separate_from_ir_projection() 
         projected_component.transform(),
         &DecomposedTransform::identity()
     );
+    assert_eq!(
+        projected_component.axis_inheritance(),
+        AxisInheritance::ResetUnspecifiedToDefault
+    );
+    assert_eq!(
+        projected_component.location().get("axis_stemWidth"),
+        Some(40.0)
+    );
+    assert!(matches!(
+        projected_component.condition(),
+        Some(ComponentCondition::AxisRange {
+            axis_id,
+            min: Some(700.0),
+            max: None,
+        }) if axis_id.as_str() == "axis_wght"
+    ));
 
     let working_source =
         ShiftWorkingSource::new(package).expect("working source should initialize");
