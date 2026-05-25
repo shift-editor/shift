@@ -76,6 +76,98 @@ src/
 
 **Variable fonts:** `Axis` defines a design space dimension. `Source` links a `Location` (axis coordinates) to a `LayerId`. `Axis::normalize()` / `denormalize()` map between user-space and normalized (-1..0..1) coordinates.
 
+**Variation math:** Shared wrappers around `fontdrasil::VariationModel` live in
+`variation.rs`. Use these helpers for glyph interpolation, component variation
+state, and other source/package projections that need OpenType-style variation
+math. Do not grow parallel interpolation implementations in `shift-edit`,
+`shift-source`, or the bridge. Use `NormalizedF64VariationModel` when a caller
+needs to build the model once and evaluate several locations, such as live
+component previews or export preflight.
+
+## Variable-First IR Direction
+
+The `.shift` source-format spike is allowed to reshape `shift-ir` when it
+discovers concepts that make the editor model better. IR should not blindly mirror
+any file format, but it should model the semantic objects the editor needs to
+edit, render, select, inspect, undo, preview, and reason about efficiently.
+
+Current `Component` is intentionally small:
+
+```rust
+Component {
+    id: ComponentId,
+    base_glyph: GlyphName,
+    transform: DecomposedTransform,
+}
+```
+
+That is enough for simple composites, but it pushes too much variable-component
+behavior into source/package services. If component recipes become a first-class
+editor feature, IR should grow toward this shape:
+
+```rust
+Component {
+    id: ComponentId,
+    base: GlyphRef,
+    transform: DecomposedTransform,
+    location: ComponentLocation,
+    axis_inheritance: AxisInheritance,
+    condition: Option<ComponentCondition>,
+    variation_sources: Vec<ComponentVariationSource>,
+}
+
+GlyphRef {
+    id: GlyphId,
+    name: GlyphName, // display label/cache, not the durable target
+}
+
+ComponentLocation {
+    values: BTreeMap<AxisId, f64>, // sparse overrides
+}
+
+AxisInheritance {
+    InheritParent,
+    ResetUnspecifiedToDefault,
+}
+```
+
+Candidate editor/domain commands:
+
+```rust
+set_component_base(component_id, glyph_id)
+set_component_transform(component_id, transform)
+set_component_location(component_id, axis_id, value)
+clear_component_location_axis(component_id, axis_id)
+set_component_axis_inheritance(component_id, AxisInheritance::ResetUnspecifiedToDefault)
+set_component_condition(component_id, condition)
+add_component_variation_source(component_id, parent_location)
+set_component_variation_source_location(component_source_id, axis_id, value)
+set_component_variation_source_transform(component_source_id, transform)
+resolve_component_at_location(component_id, location)
+```
+
+Interactions this enables:
+
+- component inspector edits base glyph, transform, sparse axis overrides, and
+  reset/inherit behavior directly
+- axis scrubber previews active/inactive conditional components and interpolated
+  component transforms through the same variation math used for glyph
+  interpolation
+- glyph rename updates labels while component targets remain stable
+- glyph delete preview asks the document model for stable-ID dependents
+- undo stores semantic component operations instead of JSON/file patches
+- export preflight can explain whether a component lowers to `VARC`, avar/avar2
+  mappings, designspace/UFO data, or fallback decomposition
+
+Promotion rule:
+
+```text
+If the renderer, inspector, selection model, undo model, or bridge API is simpler
+when a source-package concept is live in the editor model, promote it into IR.
+If the concept is only about package layout, fingerprints, crash recovery,
+conflict detection, or artifact writing, keep it out of IR.
+```
+
 ## Workflow recipes
 
 ### Add a new field to a core type

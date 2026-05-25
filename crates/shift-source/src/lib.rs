@@ -1,0 +1,40 @@
+mod error;
+mod ids;
+mod package;
+mod working_source;
+
+#[cfg(test)]
+mod tests;
+
+pub use error::{ShiftSourceError, ShiftSourceResult};
+pub use ids::{axis_id_for_tag, glyph_id_for_name, source_id_for_name};
+pub use package::{
+    apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
+    cleanup_applied_staged_commit, compare_fingerprints, diff_packages, fingerprint_package,
+    fingerprint_relative_paths, inspect_staged_commits, load_font, load_package, plan_write_impact,
+    prepare_package_commit, save_font, save_package, stage_prepared_commit, ShiftAppliedCommit,
+    ShiftAxis, ShiftAxisInheritance, ShiftAxisMapping, ShiftAxisMappingSample, ShiftAxisRole,
+    ShiftCommitOperation, ShiftCommitOperationPurpose, ShiftComponent, ShiftComponentUse,
+    ShiftComponentVariationSource, ShiftCondition, ShiftContour, ShiftDependencyIndex,
+    ShiftFileFingerprint, ShiftFingerprintConflict, ShiftFingerprintConflictKind, ShiftFontInfo,
+    ShiftGlyph, ShiftGlyphAxis, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility,
+    ShiftGlyphLayer, ShiftGlyphSource, ShiftInterpolationCompatibilityIndex,
+    ShiftInterpolationCompatibilityIssue, ShiftInterpolationCompatibilityIssueKind,
+    ShiftLayerCompatibilitySignature, ShiftManifest, ShiftPackage, ShiftPackageChange,
+    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPoint, ShiftPointType, ShiftPreparedCommit,
+    ShiftSource, ShiftStagedCommit, ShiftStagedCommitIssue, ShiftStagedCommitIssueKind,
+    ShiftStagedCommitLiveState, ShiftStagedCommitRecovery, ShiftStagedPathRecovery,
+    ShiftWriteImpact, DEPENDENCY_INDEX_PATH, INTERPOLATION_COMPATIBILITY_INDEX_PATH,
+    SHIFT_INTERPOLATION_COMPATIBILITY_INDEX_VERSION,
+};
+pub use working_source::{
+    ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftComponentActivity,
+    ShiftComponentResolvedLocation, ShiftComponentResolvedState,
+    ShiftComponentResolvedVariationSource, ShiftComponentVariationResolution,
+    ShiftComponentVariationUnsupportedReason, ShiftDeleteGlyphPreview, ShiftDeleteGlyphReport,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceLocation, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMappedLocation, ShiftRenameGlyphReport, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceLocation, ShiftWorkingSource,
+};

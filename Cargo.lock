@@ -1663,7 +1663,6 @@ version = "0.0.0"
 dependencies = [
  "bitflags",
  "fontc",
- "fontdrasil 0.4.0",
  "norad 0.16.0",
  "serde",
  "serde_json",
@@ -1683,6 +1682,17 @@ dependencies = [
  "kurbo 0.13.0",
  "linesweeper",
  "serde",
+]
+
+[[package]]
+name = "shift-source"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "shift-ir",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

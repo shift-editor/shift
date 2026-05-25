@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
+use std::collections::HashMap;
 
-use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
-use fontdrasil::types::Tag;
-use fontdrasil::variations::VariationModel;
+use shift_ir::variation::{
+    normalized_location_from_values, variation_axis_order, NormalizedF64VariationModel,
+    NormalizedLocation, RoundingBehaviour,
+};
 use shift_ir::Axis;
 use shift_wire::{
     values_from_layer, AxisTent, GlyphMaster, GlyphStructure, GlyphVariationData, Location,
@@ -127,23 +127,21 @@ fn check_compatibility(a: &GlyphStructure, b: &GlyphStructure) -> Result<(), Str
 }
 
 fn to_fd_wire_location(location: &Location, axes: &[Axis]) -> NormalizedLocation {
-    let mut result = NormalizedLocation::new();
+    let normalized_by_tag = axes
+        .iter()
+        .map(|axis| {
+            let value = location
+                .values
+                .get(axis.tag())
+                .copied()
+                .unwrap_or(axis.default());
+            (axis.tag(), axis.normalize(value))
+        })
+        .collect::<HashMap<_, _>>();
 
-    for axis in axes {
-        let value = location
-            .values
-            .get(axis.tag())
-            .copied()
-            .unwrap_or(axis.default());
-        let normalized = axis.normalize(value);
-        let Ok(tag) = Tag::from_str(axis.tag()) else {
-            continue;
-        };
-
-        result.insert(tag, NormalizedCoord::new(normalized));
-    }
-
-    result
+    normalized_location_from_values(axes.iter().map(|axis| axis.tag()), |tag| {
+        *normalized_by_tag.get(tag).unwrap_or(&0.0)
+    })
 }
 
 /// Build per-source masters for a single glyph.
@@ -195,10 +193,7 @@ pub fn build_masters(font: &Font, glyph: &Glyph) -> Option<Vec<GlyphMaster>> {
 }
 
 pub fn build_glyph_variation_data(masters: &[GlyphMaster], axes: &[Axis]) -> GlyphVariationBuild {
-    let ordered_axes: Vec<Tag> = axes
-        .iter()
-        .filter_map(|a| Tag::from_str(a.tag()).ok())
-        .collect();
+    let ordered_axes = variation_axis_order(axes.iter().map(|axis| axis.tag()));
 
     let Some(default_master) = masters.iter().find(|master| master.is_default_source) else {
         return GlyphVariationBuild::missing_default();
@@ -223,12 +218,15 @@ pub fn build_glyph_variation_data(masters: &[GlyphMaster], axes: &[Axis]) -> Gly
         }
     }
 
-    let locations_set: HashSet<NormalizedLocation> = points.keys().cloned().collect();
-    let model = VariationModel::new(locations_set, ordered_axes);
-    let model_deltas = match model.deltas::<f64, f64>(&points) {
-        Ok(model_deltas) => model_deltas,
-        Err(err) => return GlyphVariationBuild::model_failed(errors, err.to_string()),
+    let variation_model = match NormalizedF64VariationModel::new(
+        &points,
+        ordered_axes,
+        RoundingBehaviour::RoundTiesEven,
+    ) {
+        Ok(variation_model) => variation_model,
+        Err(message) => return GlyphVariationBuild::model_failed(errors, message),
     };
+    let model_deltas = variation_model.into_deltas();
 
     let regions: Vec<Vec<AxisTent>> = model_deltas
         .iter()

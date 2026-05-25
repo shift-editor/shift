@@ -29,7 +29,7 @@ pub struct Transform {
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
 /// Composition order: translate to center → rotate → scale → skew → translate back
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposedTransform {
     pub translate_x: f64,
