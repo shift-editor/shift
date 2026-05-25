@@ -764,7 +764,7 @@ The hash is a deterministic 64-bit FNV-1a content hash. It is not a security
 primitive; it is a cheap, stable change detector for local source-file conflict
 checks and diagnostics.
 
-This supports the future writer sequence:
+This supports the staged writer sequence:
 
 ```text
 1. diff before/after packages
@@ -930,8 +930,10 @@ derived indexes must be safe to delete
   existing `.shift` package preserves source glyph IDs across renames. External
   name-keyed formats still need import policy for generated IDs and collision
   handling.
-- The writer is still a direct package writer, not the crash-safe incremental
-  writer we need before using this as a production save path.
+- `save_package()` remains a direct whole-package fixture helper, but the
+  production direction is the staged incremental writer: prepare a narrow
+  semantic commit, write verified payloads under `.shift-txn`, promote payloads
+  through temp-file rename, and recover or resume from the transaction marker.
 - Component references are ID-based in the package and IR. The readable
   `baseGlyphName` is a label/cache for UI and compatibility, not the canonical
   target.
