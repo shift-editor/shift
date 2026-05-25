@@ -6,8 +6,8 @@ use crate::package::{
     ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
     ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphSource, ShiftInterpolationCompatibilityIndex,
-    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
-    ShiftStagedCommit,
+    ShiftInterpolationCompatibilityIssue, ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint,
+    ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -165,6 +165,38 @@ pub struct ShiftSourceLayerUse {
     pub glyph_id: String,
     pub glyph_name: String,
     pub layer_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftMissingSourceLayer {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub expected_layer_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceInterpolationIssue {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub issue: ShiftInterpolationCompatibilityIssue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverage {
+    pub source_id: String,
+    pub source_name: String,
+    pub glyph_count: usize,
+    pub layer_count: usize,
+    pub missing_layer_count: usize,
+    pub interpolation_issue_count: usize,
+    pub complete: bool,
+    pub interpolation_compatible: bool,
+    pub present_layers: Vec<ShiftSourceLayerUse>,
+    pub missing_layers: Vec<ShiftMissingSourceLayer>,
+    pub interpolation_issues: Vec<ShiftSourceInterpolationIssue>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -822,6 +854,68 @@ impl ShiftWorkingSource {
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
                 values: self.complete_source_location(&source.location),
+            })
+            .collect()
+    }
+
+    pub fn source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
+        self.package
+            .sources
+            .iter()
+            .map(|source| {
+                let mut present_layers = Vec::new();
+                let mut missing_layers = Vec::new();
+                let mut interpolation_issues = Vec::new();
+
+                for glyph in &self.package.glyphs {
+                    if glyph.layers.contains_key(&source.id) {
+                        present_layers.push(ShiftSourceLayerUse {
+                            glyph_id: glyph.id.clone(),
+                            glyph_name: glyph.name.clone(),
+                            layer_id: source.id.clone(),
+                        });
+                    } else {
+                        missing_layers.push(ShiftMissingSourceLayer {
+                            glyph_id: glyph.id.clone(),
+                            glyph_name: glyph.name.clone(),
+                            expected_layer_id: source.id.clone(),
+                        });
+                    }
+
+                    if let Some(compatibility) =
+                        self.interpolation_compatibility_index.glyphs.get(&glyph.id)
+                    {
+                        interpolation_issues.extend(
+                            compatibility
+                                .issues
+                                .iter()
+                                .filter(|issue| {
+                                    issue.reference_layer_id == source.id
+                                        || issue.layer_id == source.id
+                                })
+                                .cloned()
+                                .map(|issue| ShiftSourceInterpolationIssue {
+                                    glyph_id: glyph.id.clone(),
+                                    glyph_name: glyph.name.clone(),
+                                    issue,
+                                }),
+                        );
+                    }
+                }
+
+                ShiftSourceLayerCoverage {
+                    source_id: source.id.clone(),
+                    source_name: source.name.clone(),
+                    glyph_count: self.package.glyphs.len(),
+                    layer_count: present_layers.len(),
+                    missing_layer_count: missing_layers.len(),
+                    interpolation_issue_count: interpolation_issues.len(),
+                    complete: missing_layers.is_empty(),
+                    interpolation_compatible: interpolation_issues.is_empty(),
+                    present_layers,
+                    missing_layers,
+                    interpolation_issues,
+                }
             })
             .collect()
     }

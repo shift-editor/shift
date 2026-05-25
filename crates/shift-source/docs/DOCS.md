@@ -81,6 +81,7 @@ Good renderer-facing queries:
 getGlyphDependents(glyphId)
 getInterpolationCompatibility(glyphId)
 getSourceLocations()
+getSourceLayerCoverage()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
 getComponentVariationSourceLocations(glyphId, layerId, componentId)
@@ -391,6 +392,11 @@ format exploration:
   create/update/delete reports, so UI can immediately refresh source lists,
   source badges, and interpolation compatibility summaries from validated Rust
   state rather than patching local JSON-shaped records.
+- **Source layer coverage:** source panels can ask which glyphs have a layer for
+  each family source, which glyphs are missing that layer, and which
+  interpolation compatibility issues involve that source. This makes "new
+  master added but not populated yet" a first-class state instead of a
+  validation failure or a TypeScript-side scan.
 - **Axis mapping resolution:** source-level user-axis to construction-axis
   mappings can be queried in Rust. One-dimensional mappings interpolate between
   samples; multi-axis mappings use the same `fontdrasil` variation model as

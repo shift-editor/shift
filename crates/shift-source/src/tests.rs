@@ -7354,6 +7354,118 @@ fn working_source_completes_sparse_source_locations() {
 }
 
 #[test]
+fn working_source_reports_source_layer_coverage() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![
+            ShiftGlyph {
+                id: "glyph_A".to_string(),
+                name: "A".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+            },
+            ShiftGlyph {
+                id: "glyph_B".to_string(),
+                name: "B".to_string(),
+                unicodes: Vec::new(),
+                local_axes: Vec::new(),
+                variation_sources: Vec::new(),
+                layers: BTreeMap::from([
+                    ("source_Regular".to_string(), empty_layer(600.0)),
+                    ("source_Bold".to_string(), empty_layer(700.0)),
+                ]),
+            },
+        ],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let coverage = working_source.source_layer_coverage();
+
+    assert_eq!(coverage.len(), 2);
+    assert_eq!(coverage[0].source_id, "source_Regular");
+    assert_eq!(coverage[0].glyph_count, 2);
+    assert_eq!(coverage[0].layer_count, 2);
+    assert_eq!(coverage[0].missing_layer_count, 0);
+    assert!(coverage[0].complete);
+    assert!(coverage[0].interpolation_compatible);
+    assert_eq!(coverage[1].source_id, "source_Bold");
+    assert_eq!(coverage[1].source_name, "Bold");
+    assert_eq!(coverage[1].glyph_count, 2);
+    assert_eq!(coverage[1].layer_count, 1);
+    assert_eq!(coverage[1].missing_layer_count, 1);
+    assert!(!coverage[1].complete);
+    assert!(coverage[1].interpolation_compatible);
+    assert_eq!(coverage[1].present_layers[0].glyph_id, "glyph_B");
+    assert_eq!(coverage[1].missing_layers[0].glyph_id, "glyph_A");
+    assert_eq!(
+        coverage[1].missing_layers[0].expected_layer_id,
+        "source_Bold"
+    );
+}
+
+#[test]
+fn working_source_reports_source_interpolation_issues() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), layer_with_line_contour(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let coverage = working_source.source_layer_coverage();
+
+    assert_eq!(coverage[0].source_id, "source_Regular");
+    assert!(!coverage[0].interpolation_compatible);
+    assert_eq!(coverage[0].interpolation_issue_count, 1);
+    assert_eq!(coverage[0].interpolation_issues[0].glyph_id, "glyph_A");
+    assert_eq!(
+        coverage[0].interpolation_issues[0].issue.kind,
+        ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch
+    );
+    assert_eq!(
+        coverage[0].interpolation_issues[0].issue.reference_layer_id,
+        "source_Bold"
+    );
+    assert_eq!(
+        coverage[0].interpolation_issues[0].issue.layer_id,
+        "source_Regular"
+    );
+    assert_eq!(coverage[1].source_id, "source_Bold");
+    assert!(!coverage[1].interpolation_compatible);
+    assert_eq!(coverage[1].interpolation_issue_count, 1);
+    assert_eq!(coverage[1].interpolation_issues[0].glyph_name, "A");
+    assert_eq!(
+        coverage[1].interpolation_issues[0].issue.reference_layer_id,
+        "source_Bold"
+    );
+    assert_eq!(
+        coverage[1].interpolation_issues[0].issue.layer_id,
+        "source_Regular"
+    );
+}
+
+#[test]
 fn working_source_creates_source_with_generated_id_and_completed_location() {
     let mut working_source =
         ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
