@@ -159,6 +159,35 @@ pub struct ShiftDeleteSourceReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerUse {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphVariationSourceUse {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub layer_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteSourcePreview {
+    pub source_id: String,
+    pub source_name: String,
+    pub is_default_source: bool,
+    pub layer_uses: Vec<ShiftSourceLayerUse>,
+    pub glyph_variation_source_uses: Vec<ShiftGlyphVariationSourceUse>,
+    pub can_delete_without_cascade: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCreateGlyphVariationSource {
@@ -869,6 +898,61 @@ impl ShiftWorkingSource {
             glyph_name: dependencies.glyph_name.clone(),
             component_dependents: dependencies.component_dependents.clone(),
             can_remove_without_decomposing: dependencies.component_dependents.is_empty(),
+        })
+    }
+
+    pub fn preview_delete_source(
+        &self,
+        source_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteSourcePreview> {
+        let source = self
+            .package
+            .sources
+            .iter()
+            .find(|source| source.id == source_id)
+            .ok_or_else(|| ShiftSourceError::MissingSource {
+                source_id: source_id.to_string(),
+            })?;
+        let is_default_source = self
+            .package
+            .manifest
+            .default_source_id
+            .as_deref()
+            .is_some_and(|default_source_id| default_source_id == source_id);
+        let mut layer_uses = Vec::new();
+        let mut glyph_variation_source_uses = Vec::new();
+
+        for glyph in &self.package.glyphs {
+            if glyph.layers.contains_key(source_id) {
+                layer_uses.push(ShiftSourceLayerUse {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    layer_id: source_id.to_string(),
+                });
+            }
+
+            for variation_source in &glyph.variation_sources {
+                if variation_source.layer_id == source_id {
+                    glyph_variation_source_uses.push(ShiftGlyphVariationSourceUse {
+                        glyph_id: glyph.id.clone(),
+                        glyph_name: glyph.name.clone(),
+                        source_id: variation_source.id.clone(),
+                        source_name: variation_source.name.clone(),
+                        layer_id: variation_source.layer_id.clone(),
+                    });
+                }
+            }
+        }
+
+        Ok(ShiftDeleteSourcePreview {
+            source_id: source.id.clone(),
+            source_name: source.name.clone(),
+            is_default_source,
+            can_delete_without_cascade: !is_default_source
+                && layer_uses.is_empty()
+                && glyph_variation_source_uses.is_empty(),
+            layer_uses,
+            glyph_variation_source_uses,
         })
     }
 

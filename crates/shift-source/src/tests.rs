@@ -7516,6 +7516,101 @@ fn working_source_deletes_source_with_narrow_impact() {
 }
 
 #[test]
+fn working_source_previews_delete_source_default_blocker() {
+    let working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], Vec::new()))
+            .expect("package is valid");
+
+    let preview = working_source
+        .preview_delete_source("source_Regular")
+        .expect("default source should preview");
+
+    assert_eq!(preview.source_id, "source_Regular");
+    assert_eq!(preview.source_name, "Regular");
+    assert!(preview.is_default_source);
+    assert!(preview.layer_uses.is_empty());
+    assert!(preview.glyph_variation_source_uses.is_empty());
+    assert!(!preview.can_delete_without_cascade);
+}
+
+#[test]
+fn working_source_previews_delete_source_references() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_Bold".to_string(),
+                name: "Bold correction".to_string(),
+                layer_id: "source_Bold".to_string(),
+                location: BTreeMap::new(),
+            }],
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let preview = working_source
+        .preview_delete_source("source_Bold")
+        .expect("referenced source should preview");
+
+    assert_eq!(preview.source_id, "source_Bold");
+    assert_eq!(preview.source_name, "Bold");
+    assert!(!preview.is_default_source);
+    assert!(!preview.can_delete_without_cascade);
+    assert_eq!(preview.layer_uses.len(), 1);
+    assert_eq!(preview.layer_uses[0].glyph_id, "glyph_A");
+    assert_eq!(preview.layer_uses[0].glyph_name, "A");
+    assert_eq!(preview.layer_uses[0].layer_id, "source_Bold");
+    assert_eq!(preview.glyph_variation_source_uses.len(), 1);
+    assert_eq!(
+        preview.glyph_variation_source_uses[0].source_id,
+        "glyphSource_Bold"
+    );
+    assert_eq!(
+        preview.glyph_variation_source_uses[0].source_name,
+        "Bold correction"
+    );
+    assert_eq!(
+        preview.glyph_variation_source_uses[0].layer_id,
+        "source_Bold"
+    );
+}
+
+#[test]
+fn working_source_previews_delete_source_unreferenced() {
+    let mut package = package_with_axes(vec![weight_axis()], Vec::new());
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let preview = working_source
+        .preview_delete_source("source_Bold")
+        .expect("unreferenced source should preview");
+
+    assert_eq!(preview.source_id, "source_Bold");
+    assert_eq!(preview.source_name, "Bold");
+    assert!(!preview.is_default_source);
+    assert!(preview.layer_uses.is_empty());
+    assert!(preview.glyph_variation_source_uses.is_empty());
+    assert!(preview.can_delete_without_cascade);
+}
+
+#[test]
 fn working_source_rejects_referenced_source_delete_without_mutating() {
     let mut package = package_with_axes(
         vec![weight_axis()],

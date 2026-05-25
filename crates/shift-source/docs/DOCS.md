@@ -88,6 +88,7 @@ getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
 prepareCommit()
 renameGlyph(glyphId, newName)
+previewDeleteSource(sourceId)
 createAxisMapping(create)
 updateAxisMapping(mappingId, update)
 deleteAxisMapping(mappingId)
@@ -328,6 +329,12 @@ format exploration:
   rebuild dependency, compatibility, axis-mapping, and component variation query
   views from the candidate before swapping state, so invalid edits or future
   index errors do not leave partially mutated source state behind.
+- **Source delete previews:** source panels can ask why a source cannot be
+  deleted before attempting mutation. The preview reports whether the source is
+  the manifest default, which glyph layers use it, which glyph-local variation
+  sources reference it as their backing layer, and whether deletion is possible
+  without a future cascade operation. This gives the app enough data to show a
+  precise warning instead of surfacing a late validation error.
 - **Component activity queries:** inspectors and preview renderers can ask which
   conditional components are active at the current design location without
   reimplementing condition-tree semantics in the renderer. Conditional
