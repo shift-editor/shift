@@ -692,9 +692,8 @@ consume.
 with unresolved conflicts, writes `commit.json` into `.shift-txn/<id>/`, writes
 all canonical and derived payloads under `.shift-txn/<id>/payloads/`, and checks
 every payload against the size/hash recorded in the prepared operation. It does
-not replace live files. The final writer still needs to promote staged payloads
-atomically and implement recovery/cleanup, but staging gives recovery a concrete
-marker and verified bytes before any live mutation starts.
+not replace live files. Staging gives recovery a concrete marker and verified
+bytes before any live mutation starts.
 
 `inspect_staged_commits()` is the startup/recovery counterpart. It scans
 `.shift-txn/`, reads each `commit.json`, verifies expected payloads by size/hash,
@@ -712,12 +711,14 @@ but before transaction cleanup.
 
 `apply_staged_commit()` is the current live-promotion primitive. It reinspects
 the staged transaction, refuses true live divergence, backs up canonical files
-under `.shift-backups/<id>/originals/`, promotes staged payloads, removes
-canonical files marked for deletion, removes invalidated derived files, and
-clears the staged transaction after success. It is retryable after a crash
-midway through promotion: paths already matching the staged result are treated
-as applied, pending paths are finished, and genuinely divergent paths still stop
-the commit before more live files are touched.
+under `.shift-backups/<id>/originals/`, promotes staged payloads through a
+same-directory hidden temp file and rename, removes canonical files marked for
+deletion, removes invalidated derived files, and clears the staged transaction
+after success. Payload promotion syncs the temp file before rename and attempts
+to sync the parent directory after rename where the filesystem supports it. It
+is retryable after a crash midway through promotion: paths already matching the
+staged result are treated as applied, pending paths are finished, and genuinely
+divergent paths still stop the commit before more live files are touched.
 
 `ShiftWorkingSource` is the app-facing entry point for this save preflight. The
 intended flow is:

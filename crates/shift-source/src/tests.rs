@@ -1530,6 +1530,60 @@ fn apply_staged_commit_promotes_payloads_and_backs_up_canonical_files() {
 }
 
 #[test]
+fn promote_payload_to_live_file_replaces_existing_file_through_temp_sibling() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let payload_path = temp_dir.path().join("txn/payloads/glyphs/glyph_A.json");
+    let live_path = temp_dir.path().join("SpikeSans.shift/glyphs/glyph_A.json");
+    fs::create_dir_all(payload_path.parent().expect("payload should have a parent"))
+        .expect("payload parent should be created");
+    fs::create_dir_all(live_path.parent().expect("live file should have a parent"))
+        .expect("live parent should be created");
+    fs::write(&payload_path, "updated glyph\n").expect("payload should be written");
+    fs::write(&live_path, "original glyph\n").expect("live file should be written");
+    let temp_path = staged_payload_temp_path(&live_path);
+    fs::write(&temp_path, "stale temp\n").expect("stale temp should be written");
+
+    promote_payload_to_live_file(&payload_path, &live_path).expect("payload should promote");
+
+    assert_eq!(
+        fs::read_to_string(&live_path).expect("live file should be readable"),
+        "updated glyph\n"
+    );
+    assert!(
+        !temp_path.exists(),
+        "temporary sibling should be removed by the final rename"
+    );
+}
+
+#[test]
+fn promote_payload_to_live_file_preserves_live_file_when_payload_is_missing() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let payload_path = temp_dir.path().join("txn/payloads/missing.json");
+    let live_path = temp_dir.path().join("SpikeSans.shift/glyphs/glyph_A.json");
+    fs::create_dir_all(live_path.parent().expect("live file should have a parent"))
+        .expect("live parent should be created");
+    fs::write(&live_path, "original glyph\n").expect("live file should be written");
+    let temp_path = staged_payload_temp_path(&live_path);
+    fs::write(&temp_path, "stale temp\n").expect("stale temp should be written");
+
+    let err = promote_payload_to_live_file(&payload_path, &live_path)
+        .expect_err("missing payload should not promote");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ReadFile { path, .. } if path == payload_path
+    ));
+    assert_eq!(
+        fs::read_to_string(&live_path).expect("live file should be readable"),
+        "original glyph\n"
+    );
+    assert!(
+        !temp_path.exists(),
+        "failed promotion should clean stale temp without touching live data"
+    );
+}
+
+#[test]
 fn apply_staged_commit_resumes_partially_promoted_transaction() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

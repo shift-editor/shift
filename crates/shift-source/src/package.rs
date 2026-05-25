@@ -7,6 +7,7 @@ use shift_ir::{
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 pub const SHIFT_SOURCE_FORMAT: &str = "shift-source";
@@ -2006,15 +2007,7 @@ pub fn apply_staged_commit(
                 let payload_path =
                     resolve_package_relative_path(&transaction_path.join("payloads"), path)?;
                 let live_path = resolve_package_relative_path(root, path)?;
-                if let Some(parent) = live_path.parent() {
-                    create_dir(parent)?;
-                }
-                fs::copy(&payload_path, &live_path).map_err(|source| {
-                    ShiftSourceError::WriteFile {
-                        path: live_path,
-                        source,
-                    }
-                })?;
+                promote_payload_to_live_file(&payload_path, &live_path)?;
                 applied_paths.push(path.clone());
             }
             ShiftCommitOperation::RemoveFile { path, purpose } => {
@@ -2158,6 +2151,75 @@ fn backup_live_file(
     })?;
 
     Ok(Some(relative_path.to_string()))
+}
+
+pub(crate) fn promote_payload_to_live_file(
+    payload_path: &Path,
+    live_path: &Path,
+) -> ShiftSourceResult<()> {
+    if let Some(parent) = live_path.parent() {
+        create_dir(parent)?;
+    }
+
+    let temp_path = staged_payload_temp_path(live_path);
+    let result = (|| -> ShiftSourceResult<()> {
+        let mut payload =
+            fs::File::open(payload_path).map_err(|source| ShiftSourceError::ReadFile {
+                path: payload_path.to_path_buf(),
+                source,
+            })?;
+        let mut temp_file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&temp_path)
+            .map_err(|source| ShiftSourceError::WriteFile {
+                path: temp_path.clone(),
+                source,
+            })?;
+        io::copy(&mut payload, &mut temp_file).map_err(|source| ShiftSourceError::WriteFile {
+            path: temp_path.clone(),
+            source,
+        })?;
+        temp_file
+            .sync_all()
+            .map_err(|source| ShiftSourceError::WriteFile {
+                path: temp_path.clone(),
+                source,
+            })?;
+        drop(temp_file);
+        fs::rename(&temp_path, live_path).map_err(|source| ShiftSourceError::WriteFile {
+            path: live_path.to_path_buf(),
+            source,
+        })?;
+        sync_parent_directory_best_effort(live_path);
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    result
+}
+
+pub(crate) fn staged_payload_temp_path(live_path: &Path) -> PathBuf {
+    let file_name = live_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("payload");
+    let live_hash = fnv64_hex(live_path.to_string_lossy().as_bytes());
+    live_path.with_file_name(format!(".{file_name}.shift-tmp-{live_hash}"))
+}
+
+fn sync_parent_directory_best_effort(path: &Path) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Ok(directory) = fs::File::open(parent) else {
+        return;
+    };
+    let _ = directory.sync_all();
 }
 
 fn staged_commit_live_recovery(
