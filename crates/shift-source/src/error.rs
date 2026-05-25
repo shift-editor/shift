@@ -65,6 +65,12 @@ pub enum ShiftSourceError {
     #[error("prepared commit payload for '{path}' did not match planned size/hash")]
     PreparedCommitPayloadMismatch { path: String },
 
+    #[error("cannot stage Shift commit '{new_transaction_id}' because staged commit '{existing_transaction_id}' is already active")]
+    ActiveStagedCommitExists {
+        existing_transaction_id: String,
+        new_transaction_id: String,
+    },
+
     #[error("cannot apply Shift staged commit '{transaction_id}' because it has {issue_count} recovery issues")]
     StagedCommitHasIssues {
         transaction_id: String,

@@ -695,6 +695,13 @@ every payload against the size/hash recorded in the prepared operation. It does
 not replace live files. Staging gives recovery a concrete marker and verified
 bytes before any live mutation starts.
 
+Only one distinct staged transaction may be active at a time. Re-staging the
+same prepared commit is allowed so missing payloads can be recreated
+idempotently, but staging a different transaction while another transaction
+directory exists fails before writing new payload bytes. This keeps startup
+recovery deterministic: the app never has to infer ordering across multiple
+uncommitted source transactions.
+
 `inspect_staged_commits()` is the startup/recovery counterpart. It scans
 `.shift-txn/`, reads each `commit.json`, verifies expected payloads by size/hash,
 and reports incomplete transactions as structured issues such as missing

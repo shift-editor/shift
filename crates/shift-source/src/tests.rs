@@ -1228,6 +1228,98 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
 }
 
 #[test]
+fn staged_commit_can_be_recreated_for_the_same_transaction_id() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+
+    let first =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+    fs::remove_file(first.transaction_path.join("payloads/glyphs/glyph_A.json"))
+        .expect("payload should be removable");
+    let second = stage_prepared_commit(&package_path, &after, &prepared)
+        .expect("same commit should restage");
+    let recoveries = inspect_staged_commits(&package_path).expect("staged commits should inspect");
+
+    assert_eq!(second.transaction_id, first.transaction_id);
+    assert!(second
+        .transaction_path
+        .join("payloads/glyphs/glyph_A.json")
+        .exists());
+    assert_eq!(recoveries.len(), 1);
+    assert_eq!(recoveries[0].issues, Vec::new());
+}
+
+#[test]
+fn staged_commit_refuses_distinct_active_transaction() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+
+    let mut first_after = before.clone();
+    first_after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let first_diff = diff_packages(&before, &first_after).expect("package diff should build");
+    let first_expected =
+        fingerprint_relative_paths(&package_path, &first_diff.impact.package_relative_paths())
+            .expect("baseline fingerprint should build");
+    let first_prepared =
+        prepare_package_commit(&package_path, &before, &first_after, first_expected)
+            .expect("first commit should prepare");
+    let first_staged = stage_prepared_commit(&package_path, &first_after, &first_prepared)
+        .expect("first commit should stage");
+
+    let mut second_after = before.clone();
+    second_after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "AnotherName".to_string();
+    let second_diff = diff_packages(&before, &second_after).expect("package diff should build");
+    let second_expected =
+        fingerprint_relative_paths(&package_path, &second_diff.impact.package_relative_paths())
+            .expect("baseline fingerprint should build");
+    let second_prepared =
+        prepare_package_commit(&package_path, &before, &second_after, second_expected)
+            .expect("second commit should prepare");
+
+    let err = stage_prepared_commit(&package_path, &second_after, &second_prepared)
+        .expect_err("distinct active transaction should be refused");
+    let recoveries = inspect_staged_commits(&package_path).expect("staged commits should inspect");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ActiveStagedCommitExists {
+            existing_transaction_id,
+            new_transaction_id,
+        } if existing_transaction_id == first_staged.transaction_id
+            && new_transaction_id != existing_transaction_id
+    ));
+    assert_eq!(recoveries.len(), 1);
+    assert_eq!(recoveries[0].transaction_id, first_staged.transaction_id);
+}
+
+#[test]
 fn staged_commit_refuses_unresolved_conflicts() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

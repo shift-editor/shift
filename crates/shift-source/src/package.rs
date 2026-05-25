@@ -1923,6 +1923,7 @@ pub fn stage_prepared_commit(
     let root = root.as_ref();
     let marker_bytes = json_bytes("commit.json", prepared)?;
     let transaction_id = fnv64_hex(&marker_bytes);
+    refuse_distinct_active_staged_commit(root, &transaction_id)?;
     let transaction_path = root.join(".shift-txn").join(&transaction_id);
     let payload_root = transaction_path.join("payloads");
     create_dir(&payload_root)?;
@@ -1970,6 +1971,49 @@ pub fn stage_prepared_commit(
         marker_path,
         payload_paths,
     })
+}
+
+fn refuse_distinct_active_staged_commit(
+    root: &Path,
+    new_transaction_id: &str,
+) -> ShiftSourceResult<()> {
+    let transaction_root = root.join(".shift-txn");
+    let entries = match fs::read_dir(&transaction_root) {
+        Ok(entries) => entries,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(ShiftSourceError::ReadFile {
+                path: transaction_root,
+                source,
+            });
+        }
+    };
+
+    for entry in entries {
+        let entry = entry.map_err(|source| ShiftSourceError::ReadFile {
+            path: transaction_root.clone(),
+            source,
+        })?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(existing_transaction_id) = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+        if existing_transaction_id != new_transaction_id {
+            return Err(ShiftSourceError::ActiveStagedCommitExists {
+                existing_transaction_id,
+                new_transaction_id: new_transaction_id.to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 pub fn inspect_staged_commits(
