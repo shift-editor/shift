@@ -94,6 +94,7 @@ fn save_and_load_package_roundtrips_font_basics() {
 
     assert_eq!(loaded.metadata().family_name.as_deref(), Some("Spike Sans"));
     assert_eq!(loaded.metrics().units_per_em, 2048.0);
+    assert_eq!(loaded_glyph.id_ref().as_str(), "glyph_A");
     assert_eq!(loaded_glyph.unicodes(), &[0x0041]);
     assert_eq!(
         loaded_glyph

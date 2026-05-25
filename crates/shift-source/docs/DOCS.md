@@ -41,11 +41,12 @@ and persistence behavior:
 
 Some source concepts can project cleanly into IR today. Others are intentionally
 stored in `shift-source` until the editor needs first-class manipulation for
-them. For example, IR components now carry stable component IDs, sparse
-locations, and axis inheritance because those concepts directly help selection,
-undo, and inspector flows. `ShiftPackage` still owns durable base glyph IDs,
-conditions, and component variation sources until the editor needs first-class
-controls for those recipes.
+them. For example, IR glyphs now carry stable glyph IDs, and IR components carry
+stable component IDs, sparse locations, and axis inheritance because those
+concepts directly help rename safety, selection, undo, and inspector flows.
+`ShiftPackage` still owns durable base glyph reference IDs, conditions, and
+component variation sources until the editor needs first-class controls for
+those recipes.
 
 Promote concepts into IR when doing so makes editor code more direct:
 
@@ -878,9 +879,10 @@ derived indexes must be safe to delete
 
 ## Current Limits
 
-- Source-format IDs are currently derived from names when converting from
-  `shift-ir::Font`. Loading an existing `.shift` package can preserve IDs across
-  renames, but importing from name-keyed IR cannot yet know historical IDs.
+- New IR glyphs derive readable IDs from their creation names, and loading an
+  existing `.shift` package preserves source glyph IDs across renames. External
+  name-keyed formats still need import policy for generated IDs and collision
+  handling.
 - The writer is still a direct package writer, not the crash-safe incremental
   writer we need before using this as a production save path.
 - Component references are ID-based in the package, but conversion back into

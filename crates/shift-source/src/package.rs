@@ -3,7 +3,7 @@ use crate::ids::{axis_id_for_tag, glyph_id_for_name, source_id_for_name};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
     Anchor, Axis, Component, Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph,
-    GlyphLayer, Guideline, Location, Point, PointType, Source,
+    GlyphId, GlyphLayer, Guideline, Location, Point, PointType, Source,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -2255,7 +2255,13 @@ impl ShiftGlyph {
         layer_ids_by_source_id: &HashMap<String, shift_ir::LayerId>,
         glyph_names_by_id: &HashMap<String, String>,
     ) -> ShiftSourceResult<Glyph> {
-        let mut glyph = Glyph::new(self.name.clone());
+        let glyph_id = GlyphId::from_stable(self.id.clone()).map_err(|_| {
+            ShiftSourceError::InvalidIdentifier {
+                context: format!("glyph '{}'", self.name),
+                identifier: self.id.clone(),
+            }
+        })?;
+        let mut glyph = Glyph::with_id(glyph_id, self.name.clone());
         let mut unicodes = Vec::with_capacity(self.unicodes.len());
         for unicode in self.unicodes {
             let parsed = u32::from_str_radix(&unicode, 16).map_err(|_| {
@@ -3108,7 +3114,12 @@ fn source_ids_by_layer(font: &Font) -> HashMap<shift_ir::LayerId, String> {
 fn glyph_ids_by_name(font: &Font) -> HashMap<String, String> {
     font.glyphs()
         .values()
-        .map(|glyph| (glyph.name().to_string(), glyph_id_for_name(glyph.name())))
+        .map(|glyph| {
+            (
+                glyph.name().to_string(),
+                glyph.id_ref().as_str().to_string(),
+            )
+        })
         .collect()
 }
 
@@ -3162,7 +3173,7 @@ fn glyph_from_ir(
         .collect();
 
     ShiftGlyph {
-        id: glyph_id_for_name(glyph.name()),
+        id: glyph.id_ref().as_str().to_string(),
         name: glyph.name().to_string(),
         unicodes: glyph
             .unicodes()

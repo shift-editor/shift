@@ -195,8 +195,14 @@ impl GlyphLayer {
 
 impl Glyph {
     pub fn new(name: impl Into<GlyphName>) -> Self {
+        let name = name.into();
+        let id = GlyphId::for_name(name.as_str());
+        Self::with_id(id, name)
+    }
+
+    pub fn with_id(id: GlyphId, name: impl Into<GlyphName>) -> Self {
         Self {
-            id: GlyphId::new(),
+            id,
             name: name.into(),
             unicodes: Vec::new(),
             layers: HashMap::new(),
@@ -205,17 +211,23 @@ impl Glyph {
     }
 
     pub fn with_unicode(name: impl Into<GlyphName>, unicode: u32) -> Self {
-        Self {
-            id: GlyphId::new(),
-            name: name.into(),
-            unicodes: vec![unicode],
-            layers: HashMap::new(),
-            lib: LibData::new(),
-        }
+        let mut glyph = Self::new(name);
+        glyph.unicodes.push(unicode);
+        glyph
+    }
+
+    pub fn with_id_and_unicode(id: GlyphId, name: impl Into<GlyphName>, unicode: u32) -> Self {
+        let mut glyph = Self::with_id(id, name);
+        glyph.unicodes.push(unicode);
+        glyph
     }
 
     pub fn id(&self) -> GlyphId {
-        self.id
+        self.id.clone()
+    }
+
+    pub fn id_ref(&self) -> &GlyphId {
+        &self.id
     }
 
     pub fn name(&self) -> &str {
@@ -294,6 +306,7 @@ mod tests {
     #[test]
     fn glyph_creation() {
         let g = Glyph::with_unicode("A".to_string(), 65);
+        assert_eq!(g.id_ref().as_str(), "glyph_A");
         assert_eq!(g.name(), "A");
         assert_eq!(g.primary_unicode(), Some(65));
     }

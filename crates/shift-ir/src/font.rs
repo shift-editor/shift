@@ -1,5 +1,5 @@
 use crate::axis::{Axis, Location};
-use crate::entity::{LayerId, SourceId};
+use crate::entity::{GlyphId, LayerId, SourceId};
 use crate::features::FeatureData;
 use crate::glyph::Glyph;
 use crate::guideline::Guideline;
@@ -259,8 +259,24 @@ impl Font {
         self.data().glyphs.get(name).map(Arc::as_ref)
     }
 
+    pub fn glyph_by_id(&self, id: &GlyphId) -> Option<&Glyph> {
+        self.data()
+            .glyphs
+            .values()
+            .find(|glyph| glyph.id_ref() == id)
+            .map(Arc::as_ref)
+    }
+
     pub fn glyph_mut(&mut self, name: &str) -> Option<&mut Glyph> {
         self.data_mut().glyphs.get_mut(name).map(Arc::make_mut)
+    }
+
+    pub fn glyph_by_id_mut(&mut self, id: &GlyphId) -> Option<&mut Glyph> {
+        self.data_mut()
+            .glyphs
+            .values_mut()
+            .find(|glyph| glyph.id_ref() == id)
+            .map(Arc::make_mut)
     }
 
     pub fn glyph_by_unicode(&self, unicode: u32) -> Option<&Glyph> {
@@ -414,6 +430,7 @@ mod tests {
     fn font_glyph_operations() {
         let mut font = Font::new();
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
+        let glyph_id = glyph.id();
         let layer = GlyphLayer::with_width(600.0);
         glyph.set_layer(font.default_layer_id(), layer);
 
@@ -421,6 +438,7 @@ mod tests {
 
         assert_eq!(font.glyph_count(), 1);
         assert!(font.glyph("A").is_some());
+        assert!(font.glyph_by_id(&glyph_id).is_some());
         assert!(font.glyph_by_unicode(65).is_some());
     }
 

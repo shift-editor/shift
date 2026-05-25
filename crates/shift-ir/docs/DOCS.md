@@ -4,9 +4,9 @@ Format-agnostic intermediate representation for font data, serving as the canoni
 
 ## Architecture Invariants
 
-**Architecture Invariant:** Point, contour, anchor, guideline, layer, glyph, and source IDs are generated from a single global `ENTITY_COUNTER` (atomic u64 in `entity.rs`). This guarantees uniqueness across the running application without coordination. Never construct those numeric IDs manually via `from_raw` in production code -- that bypass is for deserialization and tests only.
+**Architecture Invariant:** Point, contour, anchor, guideline, layer, and source IDs are generated from a single global `ENTITY_COUNTER` (atomic u64 in `entity.rs`). This guarantees uniqueness across the running application without coordination. Never construct those numeric IDs manually via `from_raw` in production code -- that bypass is for deserialization and tests only.
 
-**Architecture Invariant:** `ComponentId` is string-backed and document-stable. New components get generated IDs, but deserialized components may keep package IDs such as `"A.component.base"`. WHY: components need to survive save/load, selection, undo, dependency analysis, and eventual source-package round trips without relying on a process-local counter.
+**Architecture Invariant:** `GlyphId` and `ComponentId` are string-backed and document-stable. Newly created glyphs get readable IDs derived from their creation name, newly created components get generated stable IDs, and deserialized data can preserve package IDs such as `"glyph_A"` or `"component_Aacute_base"`. WHY: glyphs and components need to survive save/load, rename, selection, undo, dependency analysis, and source-package round trips without relying on mutable names or process-local counters.
 
 **Architecture Invariant:** Typed ID newtypes (`PointId`, `ContourId`, `ComponentId`, `LayerId`, etc.) prevent accidental cross-type usage. A `PointId` cannot be passed where a `ContourId` is expected. WHY: font editing operations pass many IDs around; mixing them up would silently corrupt data.
 
@@ -27,7 +27,7 @@ Format-agnostic intermediate representation for font data, serving as the canoni
 ```
 src/
   lib.rs           -- public re-exports and GlyphName type alias
-  entity.rs        -- ENTITY_COUNTER, EntityId, typed_id! macro, stable ComponentId
+  entity.rs        -- ENTITY_COUNTER, EntityId, typed_id! macro, stable GlyphId/ComponentId
   font.rs          -- Font (root container), FontMetadata
   metrics.rs       -- FontMetrics (upm, ascender, descender, etc.)
   glyph.rs         -- Glyph, GlyphLayer (per-layer contours/components/anchors)
@@ -49,7 +49,7 @@ src/
 ## Key Types
 
 - `Font` -- root container holding metadata, metrics, layers, glyphs, kerning, features, guidelines, and lib data
-- `Glyph` -- named glyph with unicode mappings and per-layer data (`HashMap<LayerId, GlyphLayer>`)
+- `Glyph` -- stable-ID glyph with editable name, unicode mappings, and per-layer data (`HashMap<LayerId, GlyphLayer>`)
 - `GlyphLayer` -- layer-specific data: contours (`HashMap<ContourId, Contour>`), components (`HashMap<ComponentId, Component>`), anchors (`Vec<Anchor>`), guidelines
 - `Contour` -- ordered `Vec<Point>` with open/closed flag; converts to/from `kurbo::BezPath`
 - `Point` -- position (f64, f64) with `PointType` and smooth flag
@@ -69,6 +69,8 @@ src/
 ## How it works
 
 **Ownership hierarchy:** `Font` uses copy-on-write storage around its document data and glyph map. Glyphs use copy-on-write layer storage. Each `GlyphLayer` owns contours (by `ContourId`), components (by `ComponentId`), and anchors (ordered `Vec`). This keeps save snapshots cheap while preserving normal value-style mutation APIs.
+
+**Identity model:** `Font` still exposes name-keyed glyph APIs for compatibility with the current app and bridge, but `GlyphId` is the durable identity. Use `glyph_by_id()` when selection, undo, source-package projection, or rename/delete safety depends on identity rather than the editable glyph name.
 
 **Edit pattern:** The upstream `shift-edit` crate edits a `GlyphLayer` through `EditSession`. The bridge owns active edit lifecycle and commits the edited layer back to the glyph/font when the session ends.
 
@@ -192,7 +194,7 @@ conflict detection, or artifact writing, keep it out of IR.
 
 Use a custom string-backed ID instead of `typed_id!` when the entity identity
 must be stable across save/load and map directly to source-package data.
-`ComponentId` is the current example.
+`GlyphId` and `ComponentId` are the current examples.
 
 ### Add boolean operations on contours
 
@@ -212,7 +214,7 @@ must be stable across save/load and map directly to source-package data.
 - **Anchor lookup is O(n):** Anchors are stored in a `Vec`, so `GlyphLayer::anchor(id)` is a linear scan. This is fine for typical glyph anchor counts (2-5) but would be a problem if anchor counts grew large.
 - **DecomposedTransform roundtrip with skew:** `DecomposedTransform::from_matrix()` assumes no transformation center and may not perfectly roundtrip when skew is involved.
 - **HashMap iteration order:** Contours and components are in `HashMap` -- iteration order is nondeterministic. If order matters (e.g., for file output), the backend must sort. Components should be sorted by stable component ID text.
-- **Global atomic counter:** `ENTITY_COUNTER` is a process-global `AtomicU64`. Numeric IDs are unique within a process but not across processes. `ComponentId` is the exception: it is string-backed so it can map to durable source/package IDs.
+- **Global atomic counter:** `ENTITY_COUNTER` is a process-global `AtomicU64`. Numeric IDs are unique within a process but not across processes. `GlyphId` and `ComponentId` are exceptions: they are string-backed so they can map to durable source/package IDs.
 - **`from_raw` accepts u128 but truncates to u64:** The `typed_id!` macro's `from_raw` takes `u128` and casts to `u64`. This is intentional for compatibility but can silently lose high bits.
 
 ## Verification

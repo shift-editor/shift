@@ -89,6 +89,13 @@ pub struct ComponentId(String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComponentIdParseError;
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GlyphId(String);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GlyphIdParseError;
+
 impl ComponentId {
     pub fn new() -> Self {
         Self(format!("component_{:020}", EntityId::new().raw()))
@@ -145,12 +152,96 @@ impl std::str::FromStr for ComponentId {
     }
 }
 
+impl GlyphId {
+    pub fn new() -> Self {
+        Self(format!("glyph_{:020}", EntityId::new().raw()))
+    }
+
+    pub fn for_name(name: &str) -> Self {
+        stable_label_id("glyph", name).unwrap_or_default()
+    }
+
+    pub fn from_raw(raw: u128) -> Self {
+        Self(raw.to_string())
+    }
+
+    pub fn from_stable(id: impl Into<String>) -> Result<Self, GlyphIdParseError> {
+        let id = id.into();
+        if id.is_empty() {
+            return Err(GlyphIdParseError);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn stable_label_id(prefix: &str, label: &str) -> Option<GlyphId> {
+    let mut id = String::with_capacity(prefix.len() + label.len() + 1);
+    id.push_str(prefix);
+    id.push('_');
+
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() {
+            id.push(ch);
+        } else {
+            id.push('_');
+        }
+    }
+
+    while id.contains("__") {
+        id = id.replace("__", "_");
+    }
+
+    let id = id.trim_end_matches('_');
+    if id == prefix {
+        return None;
+    }
+
+    Some(GlyphId(id.to_string()))
+}
+
+impl Default for GlyphId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Borrow<str> for GlyphId {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for GlyphId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for GlyphIdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "glyph ID must not be empty")
+    }
+}
+
+impl std::error::Error for GlyphIdParseError {}
+
+impl std::str::FromStr for GlyphId {
+    type Err = GlyphIdParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_stable(s)
+    }
+}
+
 typed_id!(PointId);
 typed_id!(ContourId);
 typed_id!(AnchorId);
 typed_id!(GuidelineId);
 typed_id!(LayerId);
-typed_id!(GlyphId);
 typed_id!(SourceId);
 
 #[cfg(test)]
@@ -188,5 +279,21 @@ mod tests {
         assert_eq!(id, parsed);
         assert_eq!(id.as_str(), "A.component.base");
         assert!("".parse::<ComponentId>().is_err());
+    }
+
+    #[test]
+    fn glyph_id_accepts_stable_string_ids() {
+        let id = GlyphId::from_stable("glyph_A").unwrap();
+        let parsed: GlyphId = "glyph_A".parse().unwrap();
+
+        assert_eq!(id, parsed);
+        assert_eq!(id.as_str(), "glyph_A");
+        assert!("".parse::<GlyphId>().is_err());
+    }
+
+    #[test]
+    fn glyph_id_for_name_keeps_readable_ascii_names() {
+        assert_eq!(GlyphId::for_name("Aacute").as_str(), "glyph_Aacute");
+        assert_eq!(GlyphId::for_name("A.alt").as_str(), "glyph_A_alt");
     }
 }
