@@ -699,12 +699,25 @@ bytes before any live mutation starts.
 `.shift-txn/`, reads each `commit.json`, verifies expected payloads by size/hash,
 and reports incomplete transactions as structured issues such as missing
 markers, invalid markers, missing payloads, or payload mismatches. Recovery can
-also classifies live files as `pending` when they still match the pre-commit
+also classify live files as `pending` when they still match the pre-commit
 fingerprint, `applied` when they already match staged payloads/removals, or
-`diverged` when neither is true. Recovery can therefore decide whether to
-resume, clean up, discard, or ask the user before touching live source files.
-Each recovery report also carries per-path state, so a recovery dialog can say
-which exact files are still old, already promoted, or externally modified.
+`diverged` when neither is true. A transaction whose paths are a mix of pending
+and applied is `partiallyApplied`, which is resumable rather than a conflict.
+Each recovery report carries per-path state, so a recovery dialog can say which
+exact files are still old, already promoted, or externally modified.
+
+`plan_staged_commit_recovery()` is the app-facing policy layer over inspection.
+It returns one action per transaction:
+
+- `resume` for pending or partially applied transactions
+- `cleanup` for transactions whose live files already match the staged result
+- `blockedByLiveConflict` when any touched file diverged from both expected and
+  staged bytes
+- `cannotRecover` when the transaction marker or payloads are missing or invalid
+
+The app can therefore recover on open without inferring policy from raw file
+fingerprints.
+
 `cleanup_applied_staged_commit()` removes only transactions whose live files
 already match the staged result, which covers the crash window after promotion
 but before transaction cleanup.

@@ -469,11 +469,33 @@ pub struct ShiftStagedCommitRecovery {
     pub issues: Vec<ShiftStagedCommitIssue>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftStagedCommitRecoveryPlan {
+    pub transaction_id: String,
+    pub action: ShiftStagedCommitRecoveryAction,
+    pub live_state: ShiftStagedCommitLiveState,
+    pub pending_path_count: usize,
+    pub applied_path_count: usize,
+    pub diverged_path_count: usize,
+    pub issue_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftStagedCommitRecoveryAction {
+    Resume,
+    Cleanup,
+    BlockedByLiveConflict,
+    CannotRecover,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftStagedCommitLiveState {
     Unknown,
     Pending,
+    PartiallyApplied,
     Applied,
     Diverged,
 }
@@ -483,8 +505,53 @@ impl ShiftStagedCommitLiveState {
         match self {
             Self::Unknown => "unknown",
             Self::Pending => "pending",
+            Self::PartiallyApplied => "partiallyApplied",
             Self::Applied => "applied",
             Self::Diverged => "diverged",
+        }
+    }
+}
+
+impl ShiftStagedCommitRecoveryPlan {
+    fn from_recovery(recovery: &ShiftStagedCommitRecovery) -> Self {
+        let pending_path_count = recovery
+            .paths
+            .iter()
+            .filter(|path| path.live_state == ShiftStagedCommitLiveState::Pending)
+            .count();
+        let applied_path_count = recovery
+            .paths
+            .iter()
+            .filter(|path| path.live_state == ShiftStagedCommitLiveState::Applied)
+            .count();
+        let diverged_path_count = recovery
+            .paths
+            .iter()
+            .filter(|path| path.live_state == ShiftStagedCommitLiveState::Diverged)
+            .count();
+        let issue_count = recovery.issues.len();
+        let action = if issue_count > 0 || recovery.prepared.is_none() {
+            ShiftStagedCommitRecoveryAction::CannotRecover
+        } else if diverged_path_count > 0
+            || recovery.live_state == ShiftStagedCommitLiveState::Diverged
+        {
+            ShiftStagedCommitRecoveryAction::BlockedByLiveConflict
+        } else if pending_path_count > 0 {
+            ShiftStagedCommitRecoveryAction::Resume
+        } else if recovery.live_state == ShiftStagedCommitLiveState::Applied {
+            ShiftStagedCommitRecoveryAction::Cleanup
+        } else {
+            ShiftStagedCommitRecoveryAction::CannotRecover
+        };
+
+        Self {
+            transaction_id: recovery.transaction_id.clone(),
+            action,
+            live_state: recovery.live_state,
+            pending_path_count,
+            applied_path_count,
+            diverged_path_count,
+            issue_count,
         }
     }
 }
@@ -1949,6 +2016,17 @@ pub fn inspect_staged_commits(
     Ok(recoveries)
 }
 
+pub fn plan_staged_commit_recovery(
+    root: impl AsRef<Path>,
+) -> ShiftSourceResult<Vec<ShiftStagedCommitRecoveryPlan>> {
+    inspect_staged_commits(root).map(|recoveries| {
+        recoveries
+            .iter()
+            .map(ShiftStagedCommitRecoveryPlan::from_recovery)
+            .collect()
+    })
+}
+
 pub fn apply_staged_commit(
     root: impl AsRef<Path>,
     transaction_id: &str,
@@ -2290,8 +2368,13 @@ fn staged_commit_live_recovery(
         .all(|path| path.live_state == ShiftStagedCommitLiveState::Applied)
     {
         ShiftStagedCommitLiveState::Applied
-    } else {
+    } else if path_recoveries
+        .iter()
+        .any(|path| path.live_state == ShiftStagedCommitLiveState::Diverged)
+    {
         ShiftStagedCommitLiveState::Diverged
+    } else {
+        ShiftStagedCommitLiveState::PartiallyApplied
     };
 
     Ok((live_state, path_recoveries))

@@ -1300,6 +1300,43 @@ fn inspect_staged_commits_reports_complete_transaction() {
 }
 
 #[test]
+fn staged_recovery_plan_marks_pending_transaction_as_resumable() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    let plans = plan_staged_commit_recovery(&package_path).expect("staged recovery should plan");
+
+    assert_eq!(
+        plans,
+        vec![ShiftStagedCommitRecoveryPlan {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::Resume,
+            live_state: ShiftStagedCommitLiveState::Pending,
+            pending_path_count: 2,
+            applied_path_count: 0,
+            diverged_path_count: 0,
+            issue_count: 0,
+        }]
+    );
+}
+
+#[test]
 fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
@@ -1358,6 +1395,147 @@ fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Applied),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Diverged),
         ]
+    );
+}
+
+#[test]
+fn staged_recovery_plan_marks_partially_applied_transaction_as_resumable() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("one staged payload should be copied to live file");
+
+    let recoveries =
+        inspect_staged_commits(&package_path).expect("partial transaction should inspect");
+    let plans = plan_staged_commit_recovery(&package_path).expect("partial recovery should plan");
+
+    assert_eq!(
+        recoveries[0].live_state,
+        ShiftStagedCommitLiveState::PartiallyApplied
+    );
+    assert_eq!(
+        plans,
+        vec![ShiftStagedCommitRecoveryPlan {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::Resume,
+            live_state: ShiftStagedCommitLiveState::PartiallyApplied,
+            pending_path_count: 1,
+            applied_path_count: 1,
+            diverged_path_count: 0,
+            issue_count: 0,
+        }]
+    );
+}
+
+#[test]
+fn staged_recovery_plan_marks_applied_transaction_for_cleanup() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    fs::copy(
+        staged.transaction_path.join("payloads/glyphs/glyph_A.json"),
+        package_path.join("glyphs/glyph_A.json"),
+    )
+    .expect("staged payload should be copied to live file");
+    fs::copy(
+        staged
+            .transaction_path
+            .join(format!("payloads/{DEPENDENCY_INDEX_PATH}")),
+        package_path.join(DEPENDENCY_INDEX_PATH),
+    )
+    .expect("staged derived payload should be copied to live file");
+
+    let plans = plan_staged_commit_recovery(&package_path).expect("applied recovery should plan");
+
+    assert_eq!(
+        plans,
+        vec![ShiftStagedCommitRecoveryPlan {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::Cleanup,
+            live_state: ShiftStagedCommitLiveState::Applied,
+            pending_path_count: 0,
+            applied_path_count: 2,
+            diverged_path_count: 0,
+            issue_count: 0,
+        }]
+    );
+}
+
+#[test]
+fn staged_recovery_plan_marks_diverged_transaction_as_blocked() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_component_dependency();
+    save_package(&before, &package_path).expect("package should save");
+    let mut after = before.clone();
+    after
+        .glyphs
+        .iter_mut()
+        .find(|glyph| glyph.id == "glyph_A")
+        .expect("base glyph should exist")
+        .name = "RenamedBase".to_string();
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+    fs::write(
+        package_path.join("glyphs/glyph_A.json"),
+        "{\"externally\":\"different\"}\n",
+    )
+    .expect("live file should be modified");
+
+    let plans = plan_staged_commit_recovery(&package_path).expect("diverged recovery should plan");
+
+    assert_eq!(
+        plans,
+        vec![ShiftStagedCommitRecoveryPlan {
+            transaction_id: staged.transaction_id,
+            action: ShiftStagedCommitRecoveryAction::BlockedByLiveConflict,
+            live_state: ShiftStagedCommitLiveState::Diverged,
+            pending_path_count: 1,
+            applied_path_count: 0,
+            diverged_path_count: 1,
+            issue_count: 0,
+        }]
     );
 }
 
@@ -1462,6 +1640,8 @@ fn inspect_staged_commits_reports_missing_marker_and_payload() {
         .expect("payload should be removable");
     let missing_payload =
         inspect_staged_commits(&package_path).expect("staged commits should inspect");
+    let missing_payload_plans =
+        plan_staged_commit_recovery(&package_path).expect("missing payload should plan");
 
     assert_eq!(
         missing_payload[0].issues,
@@ -1471,10 +1651,17 @@ fn inspect_staged_commits_reports_missing_marker_and_payload() {
             },
         }]
     );
+    assert_eq!(
+        missing_payload_plans[0].action,
+        ShiftStagedCommitRecoveryAction::CannotRecover
+    );
+    assert_eq!(missing_payload_plans[0].issue_count, 1);
 
     fs::remove_file(&staged.marker_path).expect("marker should be removable");
     let missing_marker =
         inspect_staged_commits(&package_path).expect("staged commits should inspect");
+    let missing_marker_plans =
+        plan_staged_commit_recovery(&package_path).expect("missing marker should plan");
 
     assert_eq!(
         missing_marker[0].issues,
@@ -1483,6 +1670,11 @@ fn inspect_staged_commits_reports_missing_marker_and_payload() {
         }]
     );
     assert!(missing_marker[0].prepared.is_none());
+    assert_eq!(
+        missing_marker_plans[0].action,
+        ShiftStagedCommitRecoveryAction::CannotRecover
+    );
+    assert_eq!(missing_marker_plans[0].issue_count, 1);
 }
 
 #[test]
@@ -1623,6 +1815,10 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Pending),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Applied),
         ]
+    );
+    assert_eq!(
+        recovery_before[0].live_state,
+        ShiftStagedCommitLiveState::PartiallyApplied
     );
 
     let applied = apply_staged_commit(&package_path, &staged.transaction_id)
