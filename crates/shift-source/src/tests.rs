@@ -4219,6 +4219,68 @@ fn working_source_updates_component_variation_source_with_narrow_impact() {
 }
 
 #[test]
+fn working_source_component_variation_source_no_op_does_not_advance_revision() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_no_op".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let report = working_source
+        .update_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_no_op",
+            "componentSource_black",
+            ShiftComponentVariationSourceUpdate {
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            },
+        )
+        .expect("unchanged component variation source update should succeed");
+
+    assert_eq!(report.revision, 0);
+    assert!(report.diff.changes.is_empty());
+    assert!(report.diff.impact.package_relative_paths().is_empty());
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
 fn working_source_rejects_invalid_component_variation_source_update_without_mutating() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,

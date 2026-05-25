@@ -30,6 +30,15 @@ pub struct ShiftWorkingSource {
     revision: u64,
 }
 
+#[derive(Clone, Debug)]
+struct ShiftWorkingSourceViews {
+    dependency_index: ShiftDependencyIndex,
+    interpolation_compatibility_index: ShiftInterpolationCompatibilityIndex,
+    axis_mapping_resolvers: Vec<CompiledAxisMapping>,
+    component_variation_resolvers:
+        HashMap<ComponentVariationResolverKey, CompiledComponentVariationResolver>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftRenameGlyphReport {
@@ -536,20 +545,16 @@ enum CompiledComponentVariationResolverKind {
 
 impl ShiftWorkingSource {
     pub fn new(package: ShiftPackage) -> ShiftSourceResult<Self> {
-        package.validate()?;
-        let dependency_index = build_dependency_index(&package)?;
-        let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
-        let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
-        let component_variation_resolvers = compile_component_variation_resolvers(&package);
+        let views = build_working_source_views(&package)?;
 
         Ok(Self {
             saved_package: package.clone(),
             package,
             saved_fingerprint: None,
-            dependency_index,
-            interpolation_compatibility_index,
-            axis_mapping_resolvers,
-            component_variation_resolvers,
+            dependency_index: views.dependency_index,
+            interpolation_compatibility_index: views.interpolation_compatibility_index,
+            axis_mapping_resolvers: views.axis_mapping_resolvers,
+            component_variation_resolvers: views.component_variation_resolvers,
             revision: 0,
         })
     }
@@ -557,19 +562,16 @@ impl ShiftWorkingSource {
     pub fn open_saved(root: impl AsRef<Path>, package: ShiftPackage) -> ShiftSourceResult<Self> {
         package.validate()?;
         let saved_fingerprint = fingerprint_package(root)?;
-        let dependency_index = build_dependency_index(&package)?;
-        let interpolation_compatibility_index = build_interpolation_compatibility_index(&package)?;
-        let axis_mapping_resolvers = compile_axis_mapping_resolvers(&package);
-        let component_variation_resolvers = compile_component_variation_resolvers(&package);
+        let views = build_working_source_views(&package)?;
 
         Ok(Self {
             saved_package: package.clone(),
             package,
             saved_fingerprint: Some(saved_fingerprint),
-            dependency_index,
-            interpolation_compatibility_index,
-            axis_mapping_resolvers,
-            component_variation_resolvers,
+            dependency_index: views.dependency_index,
+            interpolation_compatibility_index: views.interpolation_compatibility_index,
+            axis_mapping_resolvers: views.axis_mapping_resolvers,
+            component_variation_resolvers: views.component_variation_resolvers,
             revision: 0,
         })
     }
@@ -1212,9 +1214,7 @@ impl ShiftWorkingSource {
         source.location = update.location;
         source.transform = update.transform;
 
-        next.validate()?;
-        self.package = next;
-        self.refresh_indexes()?;
+        self.replace_package(next)?;
 
         let diff = diff_packages(&before, &self.package)?;
         if !diff.changes.is_empty() {
@@ -1254,16 +1254,16 @@ impl ShiftWorkingSource {
         }
 
         let before = self.package.clone();
-        let index = self
-            .package
+        let mut next = before.clone();
+        let index = next
             .glyphs
             .iter()
             .position(|glyph| glyph.id == glyph_id)
             .ok_or_else(|| ShiftSourceError::MissingGlyph {
                 glyph_id: glyph_id.to_string(),
             })?;
-        self.package.glyphs.remove(index);
-        self.refresh_indexes()?;
+        next.glyphs.remove(index);
+        self.replace_package(next)?;
 
         let diff = diff_packages(&before, &self.package)?;
         if !diff.changes.is_empty() {
@@ -1296,8 +1296,8 @@ impl ShiftWorkingSource {
         }
 
         let before = self.package.clone();
-        let glyph = self
-            .package
+        let mut next = before.clone();
+        let glyph = next
             .glyphs
             .iter_mut()
             .find(|glyph| glyph.id == glyph_id)
@@ -1307,7 +1307,7 @@ impl ShiftWorkingSource {
 
         let old_name = glyph.name.clone();
         glyph.name = new_name.clone();
-        self.refresh_indexes()?;
+        self.replace_package(next)?;
 
         let diff = diff_packages(&before, &self.package)?;
         if !diff.changes.is_empty() {
@@ -1329,13 +1329,13 @@ impl ShiftWorkingSource {
         })
     }
 
-    fn refresh_indexes(&mut self) -> ShiftSourceResult<()> {
-        self.package.validate()?;
-        self.dependency_index = build_dependency_index(&self.package)?;
-        self.interpolation_compatibility_index =
-            build_interpolation_compatibility_index(&self.package)?;
-        self.axis_mapping_resolvers = compile_axis_mapping_resolvers(&self.package);
-        self.component_variation_resolvers = compile_component_variation_resolvers(&self.package);
+    fn replace_package(&mut self, package: ShiftPackage) -> ShiftSourceResult<()> {
+        let views = build_working_source_views(&package)?;
+        self.package = package;
+        self.dependency_index = views.dependency_index;
+        self.interpolation_compatibility_index = views.interpolation_compatibility_index;
+        self.axis_mapping_resolvers = views.axis_mapping_resolvers;
+        self.component_variation_resolvers = views.component_variation_resolvers;
         Ok(())
     }
 
@@ -2265,6 +2265,23 @@ impl CompiledAxisMapping {
 
         Ok(output)
     }
+}
+
+fn build_working_source_views(
+    package: &ShiftPackage,
+) -> ShiftSourceResult<ShiftWorkingSourceViews> {
+    package.validate()?;
+    let dependency_index = build_dependency_index(package)?;
+    let interpolation_compatibility_index = build_interpolation_compatibility_index(package)?;
+    let axis_mapping_resolvers = compile_axis_mapping_resolvers(package);
+    let component_variation_resolvers = compile_component_variation_resolvers(package);
+
+    Ok(ShiftWorkingSourceViews {
+        dependency_index,
+        interpolation_compatibility_index,
+        axis_mapping_resolvers,
+        component_variation_resolvers,
+    })
 }
 
 fn compile_axis_mapping_resolvers(package: &ShiftPackage) -> Vec<CompiledAxisMapping> {

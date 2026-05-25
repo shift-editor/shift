@@ -307,8 +307,11 @@ format exploration:
   stable ID, preview delete dependents, refuse unsafe deletes, edit component
   variation sources by stable IDs, keep query indexes warm, and report the exact
   package diff caused by the semantic edit. Component variation source edits
-  validate the whole candidate package before replacing the live working graph,
-  so invalid edits do not leave partially mutated source state behind.
+  validate the whole candidate package before replacing the live working graph.
+  Semantic edits rebuild dependency, compatibility, axis-mapping, and component
+  variation query views from the candidate before swapping state, so invalid
+  edits or future index errors do not leave partially mutated source state
+  behind.
 - **Component activity queries:** inspectors and preview renderers can ask which
   conditional components are active at the current design location without
   reimplementing condition-tree semantics in the renderer. Conditional
