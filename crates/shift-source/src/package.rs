@@ -1389,7 +1389,7 @@ fn validate_identifier(context: impl Into<String>, identifier: &str) -> ShiftSou
     })
 }
 
-fn parse_unicode_scalar(glyph_name: &str, value: &str) -> ShiftSourceResult<u32> {
+pub(crate) fn parse_unicode_scalar(glyph_name: &str, value: &str) -> ShiftSourceResult<u32> {
     let parsed = u32::from_str_radix(value, 16).map_err(|_| ShiftSourceError::InvalidUnicode {
         glyph_name: glyph_name.to_string(),
         value: value.to_string(),

@@ -260,7 +260,9 @@ format exploration:
   that later panics during IR projection.
 - **Glyph Unicode values are scalar values:** package validation rejects
   malformed hex, surrogate codepoints, and values above `U+10FFFF` before they
-  can reach IR projection or export.
+  can reach IR projection or export. Semantic glyph creation stores them in
+  canonical uppercase hex form, so `41`, `0041`, and `000041` all become
+  `0041`.
 - **Unicode ownership is unambiguous:** a codepoint may belong to only one glyph
   in the source graph, so literal-character lookup, coverage accounting, cmap
   export, and `glyphByUnicode`-style app queries do not depend on iteration

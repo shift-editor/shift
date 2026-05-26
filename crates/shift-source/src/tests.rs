@@ -7736,7 +7736,7 @@ fn working_source_creates_glyph_with_generated_name_id_and_default_layer() {
         .create_glyph(ShiftCreateGlyph {
             glyph_id: None,
             name: "newGlyph".to_string(),
-            unicodes: vec!["0041".to_string()],
+            unicodes: vec!["41".to_string()],
             default_layer: Some(empty_layer(500.0)),
         })
         .expect("glyph creation should succeed");

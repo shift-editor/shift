@@ -1,10 +1,10 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
-    diff_packages, fingerprint_package, fingerprint_relative_paths, prepare_package_commit,
-    stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
-    ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
-    ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
+    diff_packages, fingerprint_package, fingerprint_relative_paths, parse_unicode_scalar,
+    prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping,
+    ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource,
+    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
     ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
@@ -1917,6 +1917,7 @@ impl ShiftWorkingSource {
             create.name.trim(),
             next.glyphs.iter().map(|glyph| glyph.name.as_str()),
         );
+        let unicodes = canonical_unicode_values(&glyph_name, create.unicodes)?;
         let glyph_id = create.glyph_id.unwrap_or_else(|| {
             unique_member_id(
                 "glyph",
@@ -1937,7 +1938,7 @@ impl ShiftWorkingSource {
         next.glyphs.push(ShiftGlyph {
             id: glyph_id.clone(),
             name: glyph_name.clone(),
-            unicodes: create.unicodes,
+            unicodes,
             local_axes: Vec::new(),
             variation_sources: Vec::new(),
             layers,
@@ -3527,6 +3528,18 @@ fn readable_member_id(prefix: &str, label: &str) -> String {
     }
 
     id.trim_end_matches('_').to_string()
+}
+
+fn canonical_unicode_values(
+    glyph_name: &str,
+    unicodes: Vec<String>,
+) -> ShiftSourceResult<Vec<String>> {
+    unicodes
+        .into_iter()
+        .map(|unicode| {
+            parse_unicode_scalar(glyph_name, &unicode).map(|parsed| format!("{parsed:04X}"))
+        })
+        .collect()
 }
 
 fn compile_axis_mapping_resolvers(package: &ShiftPackage) -> Vec<CompiledAxisMapping> {
