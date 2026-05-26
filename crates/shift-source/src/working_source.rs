@@ -303,6 +303,8 @@ pub struct ShiftSourceUpdate {
 pub struct ShiftCreateSourceReport {
     pub source_id: String,
     pub source: ShiftSourceLocation,
+    pub source_locations: ShiftSourceLocationReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -313,6 +315,8 @@ pub struct ShiftCreateSourceReport {
 pub struct ShiftUpdateSourceReport {
     pub source_id: String,
     pub source: ShiftSourceLocation,
+    pub source_locations: ShiftSourceLocationReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -323,6 +327,8 @@ pub struct ShiftUpdateSourceReport {
 pub struct ShiftDeleteSourceReport {
     pub source_id: String,
     pub source_name: String,
+    pub source_locations: ShiftSourceLocationReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
@@ -4027,10 +4033,14 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
         let source = self.source_location(&source_id)?;
+        let source_locations = self.source_locations_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftCreateSourceReport {
             source_id,
             source,
+            source_locations,
+            source_mapped_locations,
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4061,10 +4071,14 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
         let source = self.source_location(source_id)?;
+        let source_locations = self.source_locations_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftUpdateSourceReport {
             source_id: source_id.to_string(),
             source,
+            source_locations,
+            source_mapped_locations,
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
@@ -4103,10 +4117,14 @@ impl ShiftWorkingSource {
         if !diff.changes.is_empty() {
             self.revision += 1;
         }
+        let source_locations = self.source_locations_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftDeleteSourceReport {
             source_id: preview.source_id,
             source_name: source.name,
+            source_locations,
+            source_mapped_locations,
             source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,

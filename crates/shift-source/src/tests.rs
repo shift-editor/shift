@@ -12352,6 +12352,17 @@ fn working_source_creates_source_with_generated_id_and_completed_location() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Bold");
+    assert_eq!(report.source_locations.revision, 1);
+    assert_eq!(report.source_locations.summary.source_count, 2);
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 2);
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .input_location_value_count,
+        1
+    );
     assert_eq!(report.source_coverage.summary.source_count, 2);
     assert!(report.source_coverage.summary.ready);
     assert_eq!(
@@ -12427,6 +12438,14 @@ fn working_source_updates_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Black");
+    assert_eq!(report.source_locations.revision, 1);
+    assert_eq!(report.source_locations.summary.source_count, 2);
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 2);
+    assert_eq!(
+        report.source_mapped_locations.sources[1].source_name,
+        "Black"
+    );
     assert_eq!(report.source_coverage.summary.source_count, 2);
     assert!(report.source_coverage.summary.ready);
     assert_eq!(
@@ -12525,6 +12544,10 @@ fn working_source_deletes_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source_name, "Bold");
+    assert_eq!(report.source_locations.revision, 1);
+    assert_eq!(report.source_locations.summary.source_count, 1);
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 1);
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);
     assert_eq!(
