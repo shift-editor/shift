@@ -8,12 +8,12 @@ use crate::{
     ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
     ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
     ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
-    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
-    ShiftWorkingSourceSaveStatus,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
+    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -6028,6 +6028,152 @@ fn working_source_previews_relink_delete_without_mutating() {
             .base_glyph_id,
         "glyph_A"
     );
+}
+
+#[test]
+fn working_source_lists_relink_replacement_candidates_with_cycle_blockers() {
+    let mut package = package_with_component_dependency();
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_B".to_string(),
+        name: "B".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let working_source =
+        ShiftWorkingSource::new(package).expect("working source should initialize");
+
+    let candidates = working_source
+        .glyph_relink_replacement_candidates("glyph_A")
+        .expect("relink candidates should be listed");
+
+    assert_eq!(candidates.len(), 2);
+    let dependent_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_Aacute")
+        .expect("dependent glyph should be listed as blocked");
+    assert!(!dependent_candidate.can_relink);
+    assert_eq!(
+        dependent_candidate.blockers,
+        vec![
+            ShiftGlyphRelinkReplacementBlocker::WouldCreateComponentCycle {
+                dependent_glyph_ids: vec!["glyph_Aacute".to_string()],
+            }
+        ]
+    );
+    let replacement_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_B")
+        .expect("independent replacement should be listed");
+    assert!(replacement_candidate.can_relink);
+    assert!(replacement_candidate.blockers.is_empty());
+}
+
+#[test]
+fn working_source_lists_relink_replacement_candidates_with_local_axis_blockers() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_local_axis_relink".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 42.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_wide".to_string(),
+                name: "Wide".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut glyphs = glyphs_for_component_layer_with_local_base(component_layer);
+    glyphs.push(ShiftGlyph {
+        id: "glyph_bar".to_string(),
+        name: "bar".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    glyphs.push(ShiftGlyph {
+        id: "glyph_narrowStem".to_string(),
+        name: "narrowStem".to_string(),
+        unicodes: Vec::new(),
+        local_axes: vec![ShiftGlyphAxis {
+            id: "axis_stemWidth".to_string(),
+            name: "Stem Width".to_string(),
+            minimum: 20.0,
+            default: 30.0,
+            maximum: 50.0,
+        }],
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    glyphs.push(ShiftGlyph {
+        id: "glyph_compatibleStem".to_string(),
+        name: "compatibleStem".to_string(),
+        unicodes: Vec::new(),
+        local_axes: vec![ShiftGlyphAxis {
+            id: "axis_stemWidth".to_string(),
+            name: "Stem Width".to_string(),
+            minimum: 20.0,
+            default: 40.0,
+            maximum: 80.0,
+        }],
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let working_source = ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], glyphs))
+        .expect("working source should initialize");
+
+    let candidates = working_source
+        .glyph_relink_replacement_candidates("glyph_stem")
+        .expect("relink candidates should be listed");
+
+    let missing_axis_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_bar")
+        .expect("axisless replacement should be listed");
+    assert!(!missing_axis_candidate.can_relink);
+    assert_eq!(
+        missing_axis_candidate.blockers,
+        vec![ShiftGlyphRelinkReplacementBlocker::MissingBaseLocalAxes {
+            axis_ids: vec!["axis_stemWidth".to_string()],
+        }]
+    );
+
+    let narrow_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_narrowStem")
+        .expect("narrow replacement should be listed");
+    assert!(!narrow_candidate.can_relink);
+    assert_eq!(
+        narrow_candidate.blockers,
+        vec![
+            ShiftGlyphRelinkReplacementBlocker::BaseLocalAxisOutOfRange {
+                axis_id: "axis_stemWidth".to_string(),
+                value: 72.0,
+                minimum: 20.0,
+                maximum: 50.0,
+            }
+        ]
+    );
+
+    let compatible_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_compatibleStem")
+        .expect("compatible replacement should be listed");
+    assert!(compatible_candidate.can_relink);
+    assert!(compatible_candidate.blockers.is_empty());
 }
 
 #[test]

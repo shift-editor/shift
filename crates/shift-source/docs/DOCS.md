@@ -94,6 +94,7 @@ previewDeleteGlyph(glyphId)
 deleteGlyph(glyphId)
 previewDeleteGlyphRemoveComponentReferences(glyphId)
 deleteGlyphAndRemoveComponentReferences(glyphId)
+getGlyphRelinkReplacementCandidates(glyphId)
 previewDeleteGlyphRelinkComponentReferences(glyphId, replacementGlyphId)
 deleteGlyphAndRelinkComponentReferences(glyphId, replacementGlyphId)
 previewDeleteSource(sourceId)
@@ -656,6 +657,9 @@ The format should make these app behaviors straightforward:
   than every component in the package. Relink options can also be previewed
   against a candidate replacement before commit, returning the prospective diff
   and relinked recipe summaries without mutating the working source.
+  Replacement candidate queries can pre-filter the picker with cycle and
+  base-local-axis blockers, so the app does not have to trial-run every glyph
+  through a full relink preview.
   Component-removal delete also has a dedicated preview, so the app can show the
   exact destructive write impact before removing dependent component recipes.
 - Conservative delete commands that fail before mutation when component

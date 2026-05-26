@@ -126,6 +126,32 @@ pub struct ShiftDeleteGlyphAndRelinkComponentsReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphRelinkReplacementCandidate {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub can_relink: bool,
+    pub blockers: Vec<ShiftGlyphRelinkReplacementBlocker>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ShiftGlyphRelinkReplacementBlocker {
+    WouldCreateComponentCycle {
+        dependent_glyph_ids: Vec<String>,
+    },
+    MissingBaseLocalAxes {
+        axis_ids: Vec<String>,
+    },
+    BaseLocalAxisOutOfRange {
+        axis_id: String,
+        value: f64,
+        minimum: f64,
+        maximum: f64,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftCreateAxisMapping {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mapping_id: Option<String>,
@@ -1130,6 +1156,50 @@ impl ShiftWorkingSource {
         Ok(preview)
     }
 
+    pub fn glyph_relink_replacement_candidates(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<Vec<ShiftGlyphRelinkReplacementCandidate>> {
+        let delete_preview = self.preview_delete_glyph(glyph_id)?;
+        let owner_glyph_ids = delete_preview
+            .component_dependents
+            .iter()
+            .map(|component_use| component_use.glyph_id.clone())
+            .collect::<BTreeSet<_>>();
+        let base_local_axis_requirements = self.base_local_axis_requirements_for_component_uses(
+            &delete_preview.component_dependents,
+        )?;
+
+        self.package
+            .glyphs
+            .iter()
+            .filter(|glyph| glyph.id != glyph_id)
+            .map(|glyph| {
+                let mut blockers = Vec::new();
+                let cycle_dependent_glyph_ids =
+                    self.cycle_dependent_glyph_ids(&glyph.id, &owner_glyph_ids);
+                if !cycle_dependent_glyph_ids.is_empty() {
+                    blockers.push(
+                        ShiftGlyphRelinkReplacementBlocker::WouldCreateComponentCycle {
+                            dependent_glyph_ids: cycle_dependent_glyph_ids,
+                        },
+                    );
+                }
+                blockers.extend(base_local_axis_relink_blockers(
+                    glyph,
+                    &base_local_axis_requirements,
+                ));
+
+                Ok(ShiftGlyphRelinkReplacementCandidate {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    can_relink: blockers.is_empty(),
+                    blockers,
+                })
+            })
+            .collect()
+    }
+
     pub fn preview_rename_glyph(
         &self,
         glyph_id: &str,
@@ -1435,6 +1505,100 @@ impl ShiftWorkingSource {
         component_uses: &[ShiftComponentUse],
     ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
         component_recipes_for_package_uses(&self.package, base_glyph_id, component_uses)
+    }
+
+    fn cycle_dependent_glyph_ids(
+        &self,
+        candidate_glyph_id: &str,
+        owner_glyph_ids: &BTreeSet<String>,
+    ) -> Vec<String> {
+        let mut cycle_glyph_ids = BTreeSet::new();
+        if owner_glyph_ids.contains(candidate_glyph_id) {
+            cycle_glyph_ids.insert(candidate_glyph_id.to_string());
+        }
+
+        let mut visited = BTreeSet::new();
+        self.collect_transitive_component_dependencies(
+            candidate_glyph_id,
+            owner_glyph_ids,
+            &mut visited,
+            &mut cycle_glyph_ids,
+        );
+
+        cycle_glyph_ids.into_iter().collect()
+    }
+
+    fn collect_transitive_component_dependencies(
+        &self,
+        glyph_id: &str,
+        owner_glyph_ids: &BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+        cycle_glyph_ids: &mut BTreeSet<String>,
+    ) {
+        if !visited.insert(glyph_id.to_string()) {
+            return;
+        }
+
+        let Some(dependencies) = self.dependency_index.glyphs.get(glyph_id) else {
+            return;
+        };
+        for dependency in &dependencies.component_dependencies {
+            if owner_glyph_ids.contains(&dependency.glyph_id) {
+                cycle_glyph_ids.insert(dependency.glyph_id.clone());
+            }
+            self.collect_transitive_component_dependencies(
+                &dependency.glyph_id,
+                owner_glyph_ids,
+                visited,
+                cycle_glyph_ids,
+            );
+        }
+    }
+
+    fn base_local_axis_requirements_for_component_uses(
+        &self,
+        component_uses: &[ShiftComponentUse],
+    ) -> ShiftSourceResult<BTreeMap<String, Vec<f64>>> {
+        let global_axis_ids = self
+            .package
+            .axes
+            .iter()
+            .map(|axis| axis.id.as_str())
+            .collect::<BTreeSet<_>>();
+        let mut requirements = BTreeMap::new();
+
+        for component_use in component_uses {
+            let glyph = self.glyph(&component_use.glyph_id)?;
+            let layer = glyph.layers.get(&component_use.layer_id).ok_or_else(|| {
+                ShiftSourceError::MissingGlyphLayer {
+                    glyph_id: component_use.glyph_id.clone(),
+                    layer_id: component_use.layer_id.clone(),
+                }
+            })?;
+            let component = layer
+                .components
+                .iter()
+                .find(|component| component.id == component_use.component_id)
+                .ok_or_else(|| ShiftSourceError::MissingComponent {
+                    glyph_id: component_use.glyph_id.clone(),
+                    layer_id: component_use.layer_id.clone(),
+                    component_id: component_use.component_id.clone(),
+                })?;
+            collect_base_local_axis_requirements(
+                &global_axis_ids,
+                &component.location,
+                &mut requirements,
+            );
+            for source in &component.variation_sources {
+                collect_base_local_axis_requirements(
+                    &global_axis_ids,
+                    &source.location,
+                    &mut requirements,
+                );
+            }
+        }
+
+        Ok(requirements)
     }
 
     fn delete_glyph_remove_components_candidate(
@@ -3234,6 +3398,72 @@ fn component_recipes_for_package_uses(
             ))
         })
         .collect()
+}
+
+fn collect_base_local_axis_requirements(
+    global_axis_ids: &BTreeSet<&str>,
+    location: &BTreeMap<String, f64>,
+    requirements: &mut BTreeMap<String, Vec<f64>>,
+) {
+    for (axis_id, value) in location {
+        if global_axis_ids.contains(axis_id.as_str()) {
+            continue;
+        }
+
+        let values = requirements.entry(axis_id.clone()).or_default();
+        if !values
+            .iter()
+            .any(|existing_value| existing_value.to_bits() == value.to_bits())
+        {
+            values.push(*value);
+        }
+    }
+}
+
+fn base_local_axis_relink_blockers(
+    candidate_glyph: &ShiftGlyph,
+    requirements: &BTreeMap<String, Vec<f64>>,
+) -> Vec<ShiftGlyphRelinkReplacementBlocker> {
+    let local_axis_ranges = candidate_glyph
+        .local_axes
+        .iter()
+        .map(|axis| (axis.id.as_str(), (axis.minimum, axis.maximum)))
+        .collect::<BTreeMap<_, _>>();
+    let mut missing_axis_ids = Vec::new();
+    let mut blockers = Vec::new();
+
+    for (axis_id, values) in requirements {
+        let Some((minimum, maximum)) = local_axis_ranges.get(axis_id.as_str()) else {
+            missing_axis_ids.push(axis_id.clone());
+            continue;
+        };
+
+        for value in values {
+            if *minimum <= *value && *value <= *maximum {
+                continue;
+            }
+
+            blockers.push(
+                ShiftGlyphRelinkReplacementBlocker::BaseLocalAxisOutOfRange {
+                    axis_id: axis_id.clone(),
+                    value: *value,
+                    minimum: *minimum,
+                    maximum: *maximum,
+                },
+            );
+        }
+    }
+
+    if !missing_axis_ids.is_empty() {
+        blockers.insert(
+            0,
+            ShiftGlyphRelinkReplacementBlocker::MissingBaseLocalAxes {
+                axis_ids: missing_axis_ids,
+            },
+        );
+    }
+
+    blockers
 }
 
 fn component_recipe_summary(
