@@ -215,6 +215,7 @@ pub struct ShiftCreateAxisMappingReport {
     pub mapping_id: String,
     pub mapping: ShiftAxisMapping,
     pub axis_mappings: ShiftAxisMappingReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -225,6 +226,7 @@ pub struct ShiftUpdateAxisMappingReport {
     pub mapping_id: String,
     pub mapping: ShiftAxisMapping,
     pub axis_mappings: ShiftAxisMappingReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -235,6 +237,7 @@ pub struct ShiftDeleteAxisMappingReport {
     pub mapping_id: String,
     pub mapping_name: String,
     pub axis_mappings: ShiftAxisMappingReport,
+    pub source_mapped_locations: ShiftSourceMappedLocationReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -3923,11 +3926,13 @@ impl ShiftWorkingSource {
         }
         let mapping = self.axis_mapping(&mapping_id)?.clone();
         let axis_mappings = self.axis_mappings_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftCreateAxisMappingReport {
             mapping_id,
             mapping,
             axis_mappings,
+            source_mapped_locations,
             diff,
             revision: self.revision,
         })
@@ -3960,11 +3965,13 @@ impl ShiftWorkingSource {
         }
         let mapping = self.axis_mapping(mapping_id)?.clone();
         let axis_mappings = self.axis_mappings_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftUpdateAxisMappingReport {
             mapping_id: mapping_id.to_string(),
             mapping,
             axis_mappings,
+            source_mapped_locations,
             diff,
             revision: self.revision,
         })
@@ -3992,11 +3999,13 @@ impl ShiftWorkingSource {
             self.revision += 1;
         }
         let axis_mappings = self.axis_mappings_report();
+        let source_mapped_locations = self.source_mapped_locations_report()?;
 
         Ok(ShiftDeleteAxisMappingReport {
             mapping_id: mapping.id,
             mapping_name: mapping.name,
             axis_mappings,
+            source_mapped_locations,
             diff,
             revision: self.revision,
         })

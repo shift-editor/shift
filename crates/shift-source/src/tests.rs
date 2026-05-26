@@ -5235,6 +5235,15 @@ fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_que
         report.axis_mappings.mappings[0].mapping_id,
         report.mapping_id
     );
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 1);
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .axis_mapping_value_count,
+        1
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -5510,6 +5519,15 @@ fn working_source_updates_axis_mapping_and_rebuilds_mapping_query() {
         report.axis_mappings.mappings[0].mapping_name,
         "Weight drives narrow stem"
     );
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 1);
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .axis_mapping_value_count,
+        1
+    );
     let mapped = working_source
         .mapped_location(&BTreeMap::from([("axis_wght".to_string(), 700.0)]))
         .expect("updated mapping should be compiled into query views");
@@ -5580,6 +5598,15 @@ fn working_source_deletes_axis_mapping_and_removes_mapping_from_query() {
     assert_eq!(report.axis_mappings.revision, 1);
     assert_eq!(report.axis_mappings.summary.mapping_count, 0);
     assert!(report.axis_mappings.mappings.is_empty());
+    assert_eq!(report.source_mapped_locations.revision, 1);
+    assert_eq!(report.source_mapped_locations.summary.source_count, 1);
+    assert_eq!(
+        report
+            .source_mapped_locations
+            .summary
+            .axis_mapping_value_count,
+        0
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {

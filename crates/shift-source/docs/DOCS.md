@@ -698,8 +698,10 @@ format exploration:
   references. Mapping panels and export preflights can render avar2 authoring
   status from a revision-stamped Rust-owned response instead of inspecting
   `axis-mappings.json` or rebuilding mapping metadata in TypeScript. Axis
-  mapping create/update/delete reports include this refreshed mapping report, so
-  app panels can update from the command response that changed the mapping graph.
+  mapping create/update/delete reports include this refreshed mapping report and
+  refreshed source mapped-location report, so app panels can update mapping
+  rows, mapped master coordinates, and mapping diagnostics from the command
+  response that changed the mapping graph.
   Source mapped-location reports apply the same mapping resolvers to each
   declared source location and return both authored source coordinates and
   mapped construction coordinates with aggregate diagnostic counts. Source
