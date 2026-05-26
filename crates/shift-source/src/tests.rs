@@ -6004,6 +6004,107 @@ fn working_source_relink_delete_rejects_deleted_glyph_as_replacement() {
 }
 
 #[test]
+fn working_source_relink_delete_rejects_component_cycles_without_mutating() {
+    let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let err = working_source
+        .delete_glyph_and_relink_component_references("glyph_A", "glyph_Aacute")
+        .expect_err("relinking a dependent component to its owner should fail");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ComponentCycle { path }
+            if path == vec!["glyph_Aacute".to_string(), "glyph_Aacute".to_string()]
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_Aacute")
+            .expect("dependent glyph should remain")
+            .layers
+            .get("source_Regular")
+            .expect("dependent layer should remain")
+            .components[0]
+            .base_glyph_id,
+        "glyph_A"
+    );
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_A"));
+}
+
+#[test]
+fn working_source_relink_delete_rejects_missing_replacement_local_axes_without_mutating() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_local_axis_relink".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 42.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: Vec::new(),
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut glyphs = glyphs_for_component_layer_with_local_base(component_layer);
+    glyphs.push(ShiftGlyph {
+        id: "glyph_bar".to_string(),
+        name: "bar".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let mut working_source = ShiftWorkingSource::new(package_with_single_source(glyphs))
+        .expect("working source should initialize");
+
+    let err = working_source
+        .delete_glyph_and_relink_component_references("glyph_stem", "glyph_bar")
+        .expect_err("relinking to a base without required local axes should fail");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::MissingComponentLocationAxis {
+            glyph_name,
+            base_glyph_id,
+            axis_id
+        } if glyph_name == "A" && base_glyph_id == "glyph_bar" && axis_id == "axis_stemWidth"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .expect("dependent glyph should remain")
+            .layers
+            .get("source_Regular")
+            .expect("dependent layer should remain")
+            .components[0]
+            .base_glyph_id,
+        "glyph_stem"
+    );
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_stem"));
+}
+
+#[test]
 fn stable_glyph_id_keeps_file_path_across_rename() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

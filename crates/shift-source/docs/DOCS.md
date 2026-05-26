@@ -657,7 +657,10 @@ The format should make these app behaviors straightforward:
   explicit component-removal delete command for the destructive "remove those
   uses too" path and an explicit relink delete command that retargets dependent
   components to another base glyph while preserving their conditional and
-  variable component recipes.
+  variable component recipes. Relink delete is still validation-gated and
+  transactional: if the replacement would introduce a component cycle or cannot
+  satisfy retained base-local component axes, the command returns a typed error
+  without advancing the working-source revision.
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
   local axes, and active/inactive conditions with the condition subtree that
