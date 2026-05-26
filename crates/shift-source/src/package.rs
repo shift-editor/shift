@@ -967,6 +967,7 @@ impl ShiftPackage {
 
         let mut glyph_ids = HashSet::new();
         let mut glyph_names = HashSet::new();
+        let mut unicode_owners = HashMap::new();
         let declared_glyph_ids: HashSet<_> =
             self.glyphs.iter().map(|glyph| glyph.id.as_str()).collect();
         let local_axes_by_glyph_id: HashMap<_, _> = self
@@ -1111,7 +1112,15 @@ impl ShiftPackage {
             }
 
             for unicode in &glyph.unicodes {
-                parse_unicode_scalar(&glyph.name, unicode)?;
+                let parsed = parse_unicode_scalar(&glyph.name, unicode)?;
+                if let Some(existing_glyph_name) = unicode_owners.insert(parsed, glyph.name.clone())
+                {
+                    return Err(ShiftSourceError::DuplicateUnicode {
+                        value: format!("{parsed:04X}"),
+                        glyph_name: glyph.name.clone(),
+                        existing_glyph_name,
+                    });
+                }
             }
 
             for (source_id, layer) in &glyph.layers {

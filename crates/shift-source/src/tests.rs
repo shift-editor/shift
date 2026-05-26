@@ -5760,6 +5760,41 @@ fn package_rejects_invalid_unicode_values() {
 }
 
 #[test]
+fn package_rejects_duplicate_unicode_ownership() {
+    let package = package_with_single_source(vec![
+        ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: vec!["0041".to_string()],
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::new(),
+        },
+        ShiftGlyph {
+            id: "glyph_A_alt".to_string(),
+            name: "A.alt".to_string(),
+            unicodes: vec!["41".to_string()],
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::new(),
+        },
+    ]);
+
+    let error = package
+        .validate()
+        .expect_err("duplicate unicode ownership should fail validation");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateUnicode {
+            value,
+            glyph_name,
+            existing_glyph_name,
+        } if value == "0041" && glyph_name == "A.alt" && existing_glyph_name == "A"
+    ));
+}
+
+#[test]
 fn package_rejects_blank_glyph_names_before_ir_projection() {
     let package = package_with_single_source(vec![ShiftGlyph {
         id: "glyph_blank".to_string(),
@@ -7774,7 +7809,7 @@ fn working_source_rejects_invalid_glyph_create_without_mutating() {
         ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {
             id: "glyph_A".to_string(),
             name: "A".to_string(),
-            unicodes: Vec::new(),
+            unicodes: vec!["0041".to_string()],
             local_axes: Vec::new(),
             variation_sources: Vec::new(),
             layers: BTreeMap::new(),
@@ -7832,6 +7867,29 @@ fn working_source_rejects_invalid_glyph_create_without_mutating() {
         error,
         ShiftSourceError::InvalidUnicode { glyph_name, value }
             if glyph_name == "B" && value == "110000"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .all(|glyph| glyph.name != "B"));
+
+    let error = working_source
+        .create_glyph(ShiftCreateGlyph {
+            glyph_id: None,
+            name: "B".to_string(),
+            unicodes: vec!["0041".to_string()],
+            default_layer: None,
+        })
+        .expect_err("duplicate unicode ownership should fail");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateUnicode {
+            value,
+            glyph_name,
+            existing_glyph_name,
+        } if value == "0041" && glyph_name == "B" && existing_glyph_name == "A"
     ));
     assert_eq!(working_source.revision(), 0);
     assert!(working_source

@@ -261,6 +261,10 @@ format exploration:
 - **Glyph Unicode values are scalar values:** package validation rejects
   malformed hex, surrogate codepoints, and values above `U+10FFFF` before they
   can reach IR projection or export.
+- **Unicode ownership is unambiguous:** a codepoint may belong to only one glyph
+  in the source graph, so literal-character lookup, coverage accounting, cmap
+  export, and `glyphByUnicode`-style app queries do not depend on iteration
+  order.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any
