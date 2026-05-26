@@ -571,9 +571,10 @@ format exploration:
   list. This makes "new master added but not populated yet" a first-class state
   instead of a validation failure or a TypeScript-side scan. A compact worklist
   query returns only the sources that need work, their readiness state, missing
-  layer counts, interpolation mismatch counts, affected glyph counts, and
-  mismatch issue-kind counts, so source sidebars and export checklists can show
-  the prioritized fix list without walking full glyph/source detail rows.
+  layer counts and sample glyphs, interpolation mismatch counts, affected glyph
+  counts and sample glyphs, and mismatch issue-kind counts, so source sidebars
+  and export checklists can show the prioritized fix list without walking full
+  glyph/source detail rows.
 - **Variable-font readiness:** app chrome and export panels can ask for one
   package-level variable-font readiness state: `singleSource`, `ready`,
   `missingSourceLayers`, `interpolationIncompatible`, or

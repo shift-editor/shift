@@ -23,6 +23,8 @@ use shift_ir::DecomposedTransform;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
+const SOURCE_COVERAGE_WORK_ITEM_SAMPLE_LIMIT: usize = 5;
+
 #[derive(Clone, Debug)]
 pub struct ShiftWorkingSource {
     package: ShiftPackage,
@@ -371,8 +373,10 @@ pub struct ShiftSourceLayerCoverageWorkItem {
     pub source_name: String,
     pub readiness: ShiftSourceLayerCoverageReadiness,
     pub missing_layer_count: usize,
+    pub missing_layer_samples: Vec<ShiftMissingSourceLayer>,
     pub interpolation_mismatch_issue_count: usize,
     pub interpolation_incompatible_glyph_count: usize,
+    pub interpolation_incompatible_glyph_samples: Vec<ShiftSourceLayerUse>,
     pub interpolation_mismatch_issue_kind_counts:
         Vec<ShiftInterpolationCompatibilityIssueKindCount>,
 }
@@ -1586,9 +1590,35 @@ impl ShiftWorkingSource {
                 source_name: source.source_name.clone(),
                 readiness: source.readiness,
                 missing_layer_count: source.missing_layer_count,
+                missing_layer_samples: source
+                    .missing_layers
+                    .iter()
+                    .take(SOURCE_COVERAGE_WORK_ITEM_SAMPLE_LIMIT)
+                    .cloned()
+                    .collect(),
                 interpolation_mismatch_issue_count: source.interpolation_mismatch_issue_count,
                 interpolation_incompatible_glyph_count: source
                     .interpolation_incompatible_glyph_count,
+                interpolation_incompatible_glyph_samples: {
+                    let mut seen_glyph_ids = BTreeSet::new();
+                    source
+                        .interpolation_issues
+                        .iter()
+                        .filter(|issue| issue.issue.layer_id == source.source_id)
+                        .filter_map(|issue| {
+                            if seen_glyph_ids.insert(issue.glyph_id.clone()) {
+                                Some(ShiftSourceLayerUse {
+                                    glyph_id: issue.glyph_id.clone(),
+                                    glyph_name: issue.glyph_name.clone(),
+                                    layer_id: source.source_id.clone(),
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                        .take(SOURCE_COVERAGE_WORK_ITEM_SAMPLE_LIMIT)
+                        .collect()
+                },
                 interpolation_mismatch_issue_kind_counts: source
                     .interpolation_mismatch_issue_kind_counts
                     .clone(),

@@ -13,9 +13,10 @@ use crate::{
     ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
     ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
-    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceUpdate,
+    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
+    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
@@ -10592,8 +10593,14 @@ fn working_source_reports_source_layer_coverage() {
             source_name: "Bold".to_string(),
             readiness: ShiftSourceLayerCoverageReadiness::MissingLayers,
             missing_layer_count: 1,
+            missing_layer_samples: vec![ShiftMissingSourceLayer {
+                glyph_id: "glyph_A".to_string(),
+                glyph_name: "A".to_string(),
+                expected_layer_id: "source_Bold".to_string(),
+            }],
             interpolation_mismatch_issue_count: 0,
             interpolation_incompatible_glyph_count: 0,
+            interpolation_incompatible_glyph_samples: Vec::new(),
             interpolation_mismatch_issue_kind_counts: Vec::new(),
         }]
     );
@@ -10809,8 +10816,17 @@ fn working_source_reports_source_interpolation_issues() {
         ShiftSourceLayerCoverageReadiness::HasInterpolationMismatches
     );
     assert_eq!(worklist.items[0].missing_layer_count, 0);
+    assert!(worklist.items[0].missing_layer_samples.is_empty());
     assert_eq!(worklist.items[0].interpolation_mismatch_issue_count, 2);
     assert_eq!(worklist.items[0].interpolation_incompatible_glyph_count, 1);
+    assert_eq!(
+        worklist.items[0].interpolation_incompatible_glyph_samples,
+        vec![ShiftSourceLayerUse {
+            glyph_id: "glyph_A".to_string(),
+            glyph_name: "A".to_string(),
+            layer_id: "source_Bold".to_string(),
+        }]
+    );
     assert_eq!(
         worklist.items[0].interpolation_mismatch_issue_kind_counts,
         summary.interpolation_mismatch_issue_kind_counts
