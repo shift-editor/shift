@@ -599,9 +599,10 @@ format exploration:
   value came from the referenced source location, a global axis default, a
   glyph-local default, or an explicit variation-source override. Glyph variation
   source create/update/delete reports include the post-mutation completed source
-  list, so a glyph-source inspector can update from the command response instead
-  of issuing a follow-up query or rebuilding sparse/default provenance in
-  TypeScript. The glyph variation source location report adds the
+  list and refreshed source coverage report, so a glyph-source inspector and
+  export-readiness badge can update from the command response instead of issuing
+  follow-up queries or rebuilding sparse/default provenance in TypeScript. The
+  glyph variation source location report adds the
   working-source revision and compact provenance counts for source-location,
   global-default, local-default, and explicit override values, so glyph source
   inspectors and export panels can render status badges and ignore stale async
@@ -663,14 +664,15 @@ format exploration:
   source blockers, mapping blockers, and component blockers from one Rust-owned
   response.
 - **Coverage-affecting mutation reports:** source create/update/delete, glyph
-  create/delete, and glyph source layer create/delete reports include the same
-  source coverage report after the mutation. A source sidebar or export-readiness
-  badge can therefore update from the command response that changed the graph,
-  instead of issuing a follow-up query or predicting coverage changes in
-  TypeScript. Source create/update/delete reports also include refreshed source
-  location and source mapped-location reports, so source panels can update
-  authored coordinates, mapped construction coordinates, and mapping diagnostics
-  from the same response that changed the source list.
+  create/delete, glyph source layer create/delete, and glyph variation source
+  create/update/delete reports include the same source coverage report after the
+  mutation. A source sidebar or export-readiness badge can therefore update from
+  the command response that changed the graph, instead of issuing a follow-up
+  query or predicting coverage changes in TypeScript. Source create/update/delete
+  reports also include refreshed source location and source mapped-location
+  reports, so source panels can update authored coordinates, mapped construction
+  coordinates, and mapping diagnostics from the same response that changed the
+  source list.
 - **Source deletion preflight:** source deletes use the same preview data as the
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a

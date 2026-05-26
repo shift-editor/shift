@@ -9798,6 +9798,14 @@ fn working_source_creates_glyph_variation_source_with_generated_id_and_narrow_im
         .expect("glyph variation source creation should succeed");
 
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.revision, 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
     assert_eq!(report.source_id, "glyphSource_Black_1");
     assert_eq!(report.source.source_name, "Black.1");
     assert_eq!(report.glyph_variation_sources.len(), 2);
@@ -9876,6 +9884,9 @@ fn working_source_create_glyph_variation_source_uses_fallback_for_blank_names() 
         .expect("blank glyph variation source name should use fallback");
 
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.revision, 1);
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
     assert_eq!(report.source_id, "glyphSource_New_Variation_Source");
     assert_eq!(report.source.source_name, "New Variation Source");
     assert_eq!(report.glyph_variation_sources.len(), 1);
@@ -9989,6 +10000,14 @@ fn working_source_deletes_glyph_variation_source_with_narrow_impact() {
         .expect("glyph variation source deletion should succeed");
 
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.revision, 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
     assert_eq!(report.source_id, "glyphSource_bold");
     assert_eq!(report.source_name, "Bold");
     assert!(report.glyph_variation_sources.is_empty());
@@ -10108,6 +10127,14 @@ fn working_source_updates_glyph_variation_source_with_narrow_impact() {
         .expect("glyph variation source update should succeed");
 
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.revision, 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 1);
+    assert_eq!(report.source_coverage.summary.source_count, 2);
+    assert!(report.source_coverage.summary.ready);
+    assert_eq!(
+        report.source_coverage.variable_readiness,
+        ShiftVariableFontReadiness::Ready
+    );
     assert_eq!(report.source.source_name, "Black");
     assert_eq!(report.source.layer_id, "source_Bold");
     assert_eq!(report.glyph_variation_sources.len(), 1);

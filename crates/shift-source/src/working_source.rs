@@ -691,6 +691,7 @@ pub struct ShiftCreateGlyphVariationSourceReport {
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -711,6 +712,7 @@ pub struct ShiftUpdateGlyphVariationSourceReport {
     pub source_id: String,
     pub source: ShiftGlyphVariationSourceLocation,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -723,6 +725,7 @@ pub struct ShiftDeleteGlyphVariationSourceReport {
     pub source_id: String,
     pub source_name: String,
     pub glyph_variation_sources: Vec<ShiftGlyphVariationSourceLocation>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -4359,6 +4362,7 @@ impl ShiftWorkingSource {
             source_id,
             source,
             glyph_variation_sources,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -4415,6 +4419,7 @@ impl ShiftWorkingSource {
             source_id: source_id.to_string(),
             source,
             glyph_variation_sources,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
@@ -4459,6 +4464,7 @@ impl ShiftWorkingSource {
             source_id: source.id,
             source_name: source.name,
             glyph_variation_sources,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })
