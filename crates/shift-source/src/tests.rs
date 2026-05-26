@@ -1461,6 +1461,7 @@ fn preview_package_load_reports_ready_without_recovery() {
     let preview = preview_package_load(&package_path).expect("load preview should succeed");
 
     assert_eq!(preview.status, ShiftPackageLoadPreviewStatus::Ready);
+    assert_eq!(preview.primary_action, ShiftPackageLoadPrimaryAction::Load);
     assert_eq!(preview.summary, ShiftStagedCommitRecoverySummary::default());
     assert_eq!(preview.staged_recovery_plans, Vec::new());
 }
@@ -1475,6 +1476,10 @@ fn load_package_refuses_pending_staged_commit_before_trusting_files() {
     assert_eq!(
         preview.status,
         ShiftPackageLoadPreviewStatus::RecoveryRequired
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftPackageLoadPrimaryAction::RecoverThenLoad
     );
     assert_eq!(preview.summary.staged_recovery_count, 1);
     assert_eq!(preview.summary.resume_recovery_count, 1);
@@ -1626,6 +1631,7 @@ fn load_package_refuses_diverged_staged_commit_before_trusting_files() {
         preview.status,
         ShiftPackageLoadPreviewStatus::BlockedByRecovery
     );
+    assert_eq!(preview.primary_action, ShiftPackageLoadPrimaryAction::Block);
     assert_eq!(preview.summary.blocked_recovery_count, 1);
     assert_eq!(preview.summary.diverged_path_count, 1);
 
@@ -1683,6 +1689,7 @@ fn load_package_refuses_invalid_staged_commit_before_trusting_files() {
         preview.status,
         ShiftPackageLoadPreviewStatus::BlockedByRecovery
     );
+    assert_eq!(preview.primary_action, ShiftPackageLoadPrimaryAction::Block);
     assert_eq!(preview.summary.unrecoverable_recovery_count, 1);
     assert_eq!(preview.summary.issue_count, 1);
 
@@ -1730,6 +1737,10 @@ fn load_package_allows_cleanup_only_staged_commit() {
     assert_eq!(
         preview.status,
         ShiftPackageLoadPreviewStatus::ReadyWithCleanup
+    );
+    assert_eq!(
+        preview.primary_action,
+        ShiftPackageLoadPrimaryAction::CleanupThenLoad
     );
     assert_eq!(preview.summary.cleanup_recovery_count, 1);
     assert_eq!(preview.summary.applied_path_count, 3);

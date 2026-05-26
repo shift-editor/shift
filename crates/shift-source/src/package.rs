@@ -502,6 +502,7 @@ pub struct ShiftStagedCommitRecoveryPlan {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftPackageLoadPreview {
     pub status: ShiftPackageLoadPreviewStatus,
+    pub primary_action: ShiftPackageLoadPrimaryAction,
     pub summary: ShiftStagedCommitRecoverySummary,
     pub staged_recovery_plans: Vec<ShiftStagedCommitRecoveryPlan>,
 }
@@ -513,6 +514,15 @@ pub enum ShiftPackageLoadPreviewStatus {
     ReadyWithCleanup,
     RecoveryRequired,
     BlockedByRecovery,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftPackageLoadPrimaryAction {
+    Load,
+    CleanupThenLoad,
+    RecoverThenLoad,
+    Block,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2327,9 +2337,20 @@ pub fn preview_package_load(root: impl AsRef<Path>) -> ShiftSourceResult<ShiftPa
     } else {
         ShiftPackageLoadPreviewStatus::Ready
     };
+    let primary_action = match status {
+        ShiftPackageLoadPreviewStatus::Ready => ShiftPackageLoadPrimaryAction::Load,
+        ShiftPackageLoadPreviewStatus::ReadyWithCleanup => {
+            ShiftPackageLoadPrimaryAction::CleanupThenLoad
+        }
+        ShiftPackageLoadPreviewStatus::RecoveryRequired => {
+            ShiftPackageLoadPrimaryAction::RecoverThenLoad
+        }
+        ShiftPackageLoadPreviewStatus::BlockedByRecovery => ShiftPackageLoadPrimaryAction::Block,
+    };
 
     Ok(ShiftPackageLoadPreview {
         status,
+        primary_action,
         summary,
         staged_recovery_plans,
     })

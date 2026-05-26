@@ -230,8 +230,11 @@ Current writer behavior:
 - `preview_package_load()` is the non-mutating app query for startup/open
   readiness. It returns `ready`, `readyWithCleanup`, `recoveryRequired`, or
   `blockedByRecovery` with staged-transaction summaries and per-transaction
-  plans, so open UI can choose load, cleanup, resume, or warning states without
-  interpreting `.shift-txn` internals.
+  plans, plus a `primaryAction` of `load`, `cleanupThenLoad`,
+  `recoverThenLoad`, or `block`. The status remains the durable machine state;
+  the primary action is the app-facing button/flow decision. Open UI can choose
+  load, cleanup, resume, or warning states without interpreting `.shift-txn`
+  internals.
 - `ShiftWorkingSource::preview_save()` is the non-mutating app query for save
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
   along with a compact summary and the prepared commit evidence, so save
