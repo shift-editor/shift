@@ -89,6 +89,7 @@ getSourceLocations()
 getSourceLayerCoverageReport()
 getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
+getSourceLayerCoverageWorklist()
 getVariableFontReadinessReport()
 getVariableFontExportPreflight(target)
 getComponentActivity(glyphId, layerId, location)
@@ -567,7 +568,11 @@ format exploration:
   several fixes" from "several glyphs are broken," and separate contour topology
   work from component relinking or component-count fixes directly in the source
   list. This makes "new master added but not populated yet" a first-class state
-  instead of a validation failure or a TypeScript-side scan.
+  instead of a validation failure or a TypeScript-side scan. A compact worklist
+  query returns only the sources that need work, their readiness state, missing
+  layer counts, interpolation mismatch counts, affected glyph counts, and
+  mismatch issue-kind counts, so source sidebars and export checklists can show
+  the prioritized fix list without walking full glyph/source detail rows.
 - **Variable-font readiness:** app chrome and export panels can ask for one
   package-level variable-font readiness state: `singleSource`, `ready`,
   `missingSourceLayers`, `interpolationIncompatible`, or

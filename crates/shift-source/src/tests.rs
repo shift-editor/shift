@@ -15,7 +15,7 @@ use crate::{
     ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
-    ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
+    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
     ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
@@ -10579,6 +10579,25 @@ fn working_source_reports_source_layer_coverage() {
         ShiftVariableFontReadiness::MissingSourceLayers
     );
 
+    let worklist = working_source.source_layer_coverage_worklist();
+    assert_eq!(worklist.summary, summary);
+    assert_eq!(
+        worklist.variable_readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(
+        worklist.items,
+        vec![ShiftSourceLayerCoverageWorkItem {
+            source_id: "source_Bold".to_string(),
+            source_name: "Bold".to_string(),
+            readiness: ShiftSourceLayerCoverageReadiness::MissingLayers,
+            missing_layer_count: 1,
+            interpolation_mismatch_issue_count: 0,
+            interpolation_incompatible_glyph_count: 0,
+            interpolation_mismatch_issue_kind_counts: Vec::new(),
+        }]
+    );
+
     let variable_readiness = working_source.variable_font_readiness_report();
     assert_eq!(
         variable_readiness.readiness,
@@ -10776,6 +10795,25 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(
         report.variable_readiness,
         ShiftVariableFontReadiness::InterpolationIncompatible
+    );
+
+    let worklist = working_source.source_layer_coverage_worklist();
+    assert_eq!(
+        worklist.variable_readiness,
+        ShiftVariableFontReadiness::InterpolationIncompatible
+    );
+    assert_eq!(worklist.items.len(), 1);
+    assert_eq!(worklist.items[0].source_id, "source_Bold");
+    assert_eq!(
+        worklist.items[0].readiness,
+        ShiftSourceLayerCoverageReadiness::HasInterpolationMismatches
+    );
+    assert_eq!(worklist.items[0].missing_layer_count, 0);
+    assert_eq!(worklist.items[0].interpolation_mismatch_issue_count, 2);
+    assert_eq!(worklist.items[0].interpolation_incompatible_glyph_count, 1);
+    assert_eq!(
+        worklist.items[0].interpolation_mismatch_issue_kind_counts,
+        summary.interpolation_mismatch_issue_kind_counts
     );
 
     let variable_readiness = working_source.variable_font_readiness_report();

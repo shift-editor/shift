@@ -358,6 +358,27 @@ pub struct ShiftSourceLayerCoverageReport {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverageWorklist {
+    pub summary: ShiftSourceLayerCoverageSummary,
+    pub variable_readiness: ShiftVariableFontReadiness,
+    pub items: Vec<ShiftSourceLayerCoverageWorkItem>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverageWorkItem {
+    pub source_id: String,
+    pub source_name: String,
+    pub readiness: ShiftSourceLayerCoverageReadiness,
+    pub missing_layer_count: usize,
+    pub interpolation_mismatch_issue_count: usize,
+    pub interpolation_incompatible_glyph_count: usize,
+    pub interpolation_mismatch_issue_kind_counts:
+        Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftVariableFontReadinessReport {
     pub readiness: ShiftVariableFontReadiness,
     pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
@@ -1551,6 +1572,32 @@ impl ShiftWorkingSource {
             summary: self.source_layer_coverage_summary.clone(),
             variable_readiness: self.variable_font_readiness,
             sources: self.source_layer_coverage.clone(),
+        }
+    }
+
+    pub fn source_layer_coverage_worklist(&self) -> ShiftSourceLayerCoverageWorklist {
+        let items = self
+            .source_layer_coverage
+            .iter()
+            .filter(|source| source.readiness != ShiftSourceLayerCoverageReadiness::Ready)
+            .map(|source| ShiftSourceLayerCoverageWorkItem {
+                source_id: source.source_id.clone(),
+                source_name: source.source_name.clone(),
+                readiness: source.readiness,
+                missing_layer_count: source.missing_layer_count,
+                interpolation_mismatch_issue_count: source.interpolation_mismatch_issue_count,
+                interpolation_incompatible_glyph_count: source
+                    .interpolation_incompatible_glyph_count,
+                interpolation_mismatch_issue_kind_counts: source
+                    .interpolation_mismatch_issue_kind_counts
+                    .clone(),
+            })
+            .collect();
+
+        ShiftSourceLayerCoverageWorklist {
+            summary: self.source_layer_coverage_summary.clone(),
+            variable_readiness: self.variable_font_readiness,
+            items,
         }
     }
 
