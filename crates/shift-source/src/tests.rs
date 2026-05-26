@@ -5932,6 +5932,21 @@ fn working_source_creates_component_variation_source_with_generated_id_and_narro
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "componentSource_Black_component_1");
     assert_eq!(report.source.source_name, "Black component.1");
+    assert_eq!(report.component_recipe.glyph_id, "glyph_A");
+    assert_eq!(report.component_recipe.component_id, "component_7_create");
+    assert_eq!(report.component_recipe.variation_source_count, 2);
+    assert_eq!(
+        report.component_recipe.variation_parent_axis_ids,
+        vec!["axis_wght".to_string()]
+    );
+    assert!(report.component_recipe.varies_transform);
+    assert_eq!(
+        report.component_recipe.required_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+        ]
+    );
     assert_eq!(
         report.source.parent_values.get("axis_wght"),
         Some(&ShiftComponentVariationParentAxisValue {
@@ -6114,6 +6129,18 @@ fn working_source_deletes_component_variation_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "componentSource_black");
     assert_eq!(report.source_name, "Black component");
+    assert_eq!(report.component_recipe.glyph_id, "glyph_A");
+    assert_eq!(report.component_recipe.component_id, "component_7_delete");
+    assert_eq!(report.component_recipe.variation_source_count, 0);
+    assert_eq!(
+        report.component_recipe.location_axis_ids,
+        vec!["axis_stemWidth".to_string()]
+    );
+    assert!(!report.component_recipe.varies_transform);
+    assert_eq!(
+        report.component_recipe.required_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableLocation]
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -6258,6 +6285,21 @@ fn working_source_updates_component_variation_source_with_narrow_impact() {
 
     assert_eq!(report.revision, 1);
     assert_eq!(report.source.source_name, "Bold component");
+    assert_eq!(report.component_recipe.glyph_id, "glyph_A");
+    assert_eq!(report.component_recipe.component_id, "component_7_update");
+    assert_eq!(report.component_recipe.variation_source_count, 1);
+    assert_eq!(
+        report.component_recipe.variation_parent_axis_ids,
+        vec!["axis_wght".to_string()]
+    );
+    assert!(report.component_recipe.varies_transform);
+    assert_eq!(
+        report.component_recipe.required_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+        ]
+    );
     assert_eq!(
         report.source.parent_values.get("axis_wght"),
         Some(&ShiftComponentVariationParentAxisValue {

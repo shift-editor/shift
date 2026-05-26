@@ -88,6 +88,7 @@ getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
 getComponentActivity(glyphId, layerId, location)
 getComponentResolvedLocations(glyphId, layerId, location)
+getComponentRecipe(glyphId, layerId, componentId)
 getComponentVariationSourceLocations(glyphId, layerId, componentId)
 getGlyphVariationSourceLocations(glyphId)
 getMappedLocation(location)
@@ -509,7 +510,11 @@ format exploration:
   component variation source rows on a selected component and receive completed
   parent locations, resolved component-axis values, transform provenance, and
   stable source IDs. This keeps source editing UI out of package JSON while
-  still showing exactly what will be saved in the owner glyph file.
+  still showing exactly what will be saved in the owner glyph file. Component
+  variation source create/update/delete reports return the updated component
+  recipe summary as well, so component inspectors and export-capability badges
+  can update from the command response without re-parsing the glyph or making a
+  second recipe query.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a
@@ -826,6 +831,9 @@ The format should make these app behaviors straightforward:
 - Component recipe UI that can show exact authored component variation sources:
   completed parent locations, which source changed the component location and
   transform fields, and stable source IDs for future edit/delete commands.
+  Mutation reports for those authored sources include the post-mutation recipe
+  summary, including required lowering capabilities, so the app can refresh
+  variable-component warnings immediately after an edit.
 - Component variation sources reject default-location redefinitions and duplicate
   parent locations, so the app never shows or saves an ambiguous recipe where
   one authored source silently overwrites another interpolation point.
