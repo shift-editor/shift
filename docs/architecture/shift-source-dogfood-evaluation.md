@@ -212,6 +212,155 @@ For each flow, record:
 | Better than current path? | Yes/no with reason |
 | Verdict | Keep, simplify, park, or cut |
 
+## Initial Evidence Snapshot
+
+This snapshot records what the spike currently proves in Rust and what remains unproven until the editor dogfoods the flow. Rust unit coverage is necessary, but it is not enough to graduate the spike: each required flow still needs one app-level pass through `shift_ir`, bridge DTOs, N-API, renderer state, save, and reopen.
+
+### 1. Metadata Edit, Save, Reopen
+
+Current evidence:
+
+- `ShiftWorkingSource::update_font_info` edits the font payload through one semantic command and returns `ShiftUpdateFontInfoReport` with `font`, `diff`, and `revision`.
+- Save APIs expose `preview_save`, `save`, and `mark_saved`.
+- Save preview is typed as `Unchanged`, `Ready`, `BlockedByExternalChanges`, or `BlockedByStagedCommit`, with a primary action for app control flow.
+- Existing Rust tests cover narrow font info impact, invalid font info rejection, no-op revision behavior, save persistence, external conflict blocking, staged commit blocking, and mark-saved mismatch handling.
+
+Still unproven:
+
+- Whether the current Electron/TS font info dialog can be driven by one bridge mutation plus one revisioned response.
+- Whether the UI can avoid rebuilding package-shaped state after a metadata edit.
+- Whether reopen is tested through the same path the app will use for dogfooding, not only package-level Rust load/save tests.
+
+Next dogfood step:
+
+- Wire one metadata field group to the Rust document service and measure the response payload, bridge call count, dirty-state transition, save summary, and reopen result.
+
+### 2. Quick-Add Glyph And Rename Component Base
+
+Current evidence:
+
+- `ShiftWorkingSource::create_glyph` allocates a stable glyph ID, collision-safe display name, optional default layer, dependency report, interpolation compatibility update, source coverage report, diff, and revision.
+- `ShiftWorkingSource::preview_rename_glyph` and `rename_glyph` operate by glyph ID.
+- `rename_glyph` changes the readable glyph name and refreshes cached component base glyph names while component targets remain stable by glyph ID.
+- Destructive paths include `preview_delete_glyph`, `delete_glyph`, `delete_glyph_and_remove_component_references`, and `delete_glyph_and_relink_component_references`.
+- Existing Rust tests cover ID-stable rename, component target stability after glyph name change, dependency label refresh, duplicate/missing rename preview rejection, delete previews, component removal, relink, cycle guards, and missing local-axis relink safety.
+
+Still unproven:
+
+- Whether the glyph grid, selection model, inspector, and component badges can update from command reports without TS scanning the whole font.
+- Whether stale destructive dialogs are rejected at the bridge/app boundary using the response revision.
+- Whether existing TS component editing can be moved away from editable base glyph names without leaving a parallel truth.
+
+Next dogfood step:
+
+- Build a dogfood flow for add glyph -> add component -> rename base -> preview delete. Treat any TS-side dependency reconstruction as a failure signal.
+
+### 3. Add Source/Master And Fill Missing Layer
+
+Current evidence:
+
+- Source operations are split into `create_source`, `update_source`, and `delete_source`.
+- Create/update source reports include source locations, mapped source locations, interpolation compatibility, source coverage, diff, and revision.
+- Glyph layer operations include `create_glyph_source_layer`, `delete_glyph_source_layer`, and delete previews for source-layer references.
+- Existing Rust tests cover generated source IDs, blank-name fallback, source updates, default-source deletion blockers, referenced/unreferenced deletion previews, source layer coverage, variable font readiness, source mapped location diagnostics, glyph source layer create/delete, and overwrite/refuse behavior.
+
+Still unproven:
+
+- Whether the sources/masters UI can render missing layers and readiness from one report instead of per-glyph bridge queries.
+- Whether sparse source locations and completed/defaulted coordinates are expressed clearly enough for inspector UI.
+- Whether compatibility invalidation is granular enough for interactive editing, especially on large families.
+
+Next dogfood step:
+
+- Dogfood add source -> inspect coverage -> add missing glyph layer -> save. Record whether UI badges, source table rows, and compatibility warnings are all driven from Rust reports.
+
+### 4. Variable Component Inspect And Resolve
+
+Current evidence:
+
+- Component queries include `component_activity`, `component_activity_report`, `component_recipes`, `component_recipe`, and their report forms.
+- Component variation source mutations return updated component source locations, component recipe, interpolation compatibility, diff, and revision.
+- Existing Rust tests cover parent versus root font locations, reset font location, local axes, exact variation source state, condition trees, inactive component skipping, transform variation summaries, and variation-model interpolation.
+
+Still unproven:
+
+- Whether these reports are app-shaped enough for the inspector, scrubber, canvas preview, and export preflight without package-sized DTOs.
+- Whether `shift_ir` contains the same variable component concepts the editor needs for selection, rendering, undo, and preview.
+- Whether scrubbing can reuse cached Rust-side state and return screen-sized deltas instead of full component/package payloads.
+
+Next dogfood step:
+
+- Build a variable component inspector/scrub flow against one dogfood glyph. Measure bridge calls per scrub frame, payload size, and whether TS evaluates any condition or reset/inherit semantics.
+
+### 5. Save Conflict And Recovery
+
+Current evidence:
+
+- Save is staged through prepared commits, staged commits, apply, cleanup, fingerprint comparison, and recovery plans.
+- `preview_save` blocks active staged commits before reporting external-change readiness.
+- `mark_saved` refuses active staged commits, validates the working package, reloads disk, checks semantic equality, then replaces the saved baseline/fingerprint.
+- Existing Rust tests cover pending/partially applied/applied/diverged/invalid staged transactions, recovery, load refusal before trusting uncertain staged state, external conflict blocking, active staged commit blocking, and save-without-changes baseline refresh.
+
+Still unproven:
+
+- Whether the desktop app can present every save/recovery state without inventing additional state in TS.
+- Whether save failures leave renderer dirty state and command history coherent.
+- Whether crash recovery has been exercised through the actual dogfood package path, including reopening from the app shell.
+
+Next dogfood step:
+
+- Add a manual or scripted dogfood scenario that mutates files outside the app, simulates staged transaction states, then opens/previews/saves from the app and records the exact user-presentable recovery state.
+
+### 6. Axis Mapping Preview
+
+Current evidence:
+
+- Axis mapping operations are split into `axis_mappings_report`, `create_axis_mapping`, `update_axis_mapping`, and `delete_axis_mapping`.
+- Mapping reports feed mapped source locations and diagnostics.
+- Existing Rust tests cover first-class package roundtrip, mapping summary shapes, generated mapping IDs, update/delete, multi-axis interpolation, defaults, outside-sample diagnostics, mapped source locations, and export preflight interactions.
+
+Still unproven:
+
+- Whether the public/internal coordinate model makes sense in the app UI.
+- Whether mapping edits can be previewed interactively without recomputing package-sized state in TS.
+- Whether mapping diagnostics should block export directly or appear as advisory readiness issues.
+
+Next dogfood step:
+
+- Use a dogfood family with one public axis and one construction axis. Edit mapping samples, inspect mapped source rows, and check if source readiness/export preflight react without TS-side interpolation.
+
+### 7. Export Preflight
+
+Current evidence:
+
+- `variable_font_readiness_report` and `variable_font_export_preflight` report source, mapping, and component blockers from Rust.
+- Component lowering diagnostics can target explicit capability profiles instead of inferring policy from a string format.
+- Existing Rust tests cover variable font readiness, export preflight, and component lowering diagnostics.
+
+Still unproven:
+
+- Whether this is the right boundary with `fontc`/`fontir`: Shift source should report intent and blockers, while fontc owns artifact lowering and binary font policy.
+- Whether the app needs export-oriented reports now or only readiness summaries until a `shift2ir`/fontc handoff exists.
+
+Next dogfood step:
+
+- Treat export as a preflight-only app surface for now. Do not build Shift-to-UFO export as a success criterion; binary export through fontc is the relevant product direction.
+
+## Dogfood Instrumentation
+
+Every required flow should capture these measurements before the spike graduates:
+
+- bridge call count per user action
+- serialized DTO byte size for command response and follow-up queries
+- Rust command/query duration
+- renderer state objects touched
+- dirty-state transition and expected revision
+- save summary path counts and conflict counts
+- whether TS evaluated domain semantics that Rust should own
+- whether reopening from disk reproduces the same app-visible state
+
+The app should fail the flow if it needs raw package traversal, per-glyph bridge loops for panel state, name-based component repair, TypeScript save/recovery logic, or package-sized responses during interactive scrubbing.
+
 ## Pass Criteria
 
 A flow passes only if:
