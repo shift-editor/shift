@@ -5166,7 +5166,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     );
 
     let static_export_preview = working_source
-        .component_static_export_preview("glyph_A", "source_Regular", &BTreeMap::new())
+        .component_static_export_preview_for_layer("glyph_A", "source_Regular", &BTreeMap::new())
         .expect("static export preview should evaluate default component state");
     assert_eq!(static_export_preview.total_component_count, 4);
     assert_eq!(static_export_preview.preserve_reference_count, 1);
@@ -5227,8 +5227,33 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         0.0
     );
 
+    let package_static_export_preview = working_source
+        .component_static_export_preview(&BTreeMap::new())
+        .expect("package static export preview should evaluate every component");
+    assert_eq!(package_static_export_preview.total_component_count, 4);
+    assert_eq!(package_static_export_preview.preserve_reference_count, 1);
+    assert_eq!(package_static_export_preview.fallback_component_count, 2);
+    assert_eq!(
+        package_static_export_preview.skipped_inactive_component_count,
+        1
+    );
+    assert_eq!(package_static_export_preview.unsupported_component_count, 0);
+    assert_eq!(
+        package_static_export_preview
+            .components
+            .iter()
+            .map(|component| component.component_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "component_plain",
+            "component_conditional",
+            "component_variable",
+            "component_variable_conditional",
+        ]
+    );
+
     let black_export_preview = working_source
-        .component_static_export_preview(
+        .component_static_export_preview_for_layer(
             "glyph_A",
             "source_Regular",
             &BTreeMap::from([
@@ -5305,7 +5330,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(narrow_location_preflight.diagnostics[0].condition, None);
 
     let narrow_export_preview = working_source
-        .component_static_export_preview(
+        .component_static_export_preview_for_layer(
             "glyph_A",
             "source_Regular",
             &BTreeMap::from([
@@ -5371,7 +5396,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             if context == "component lowering preflight" && axis_id == "axis_missing"
     ));
     let preview_missing_axis_err = working_source
-        .component_static_export_preview(
+        .component_static_export_preview_for_layer(
             "glyph_A",
             "source_Regular",
             &BTreeMap::from([("axis_missing".to_string(), 1.0)]),
