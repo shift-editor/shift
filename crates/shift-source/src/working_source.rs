@@ -82,6 +82,16 @@ pub struct ShiftDeleteGlyphReport {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphAndRemoveComponentsPreview {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub component_dependents: Vec<ShiftComponentUse>,
+    pub removed_component_recipes: Vec<ShiftComponentRecipeSummary>,
+    pub diff: ShiftPackageDiff,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
     pub glyph_id: String,
     pub glyph_name: String,
@@ -1103,6 +1113,14 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn preview_delete_glyph_remove_component_references(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphAndRemoveComponentsPreview> {
+        let (preview, _) = self.delete_glyph_remove_components_candidate(glyph_id)?;
+        Ok(preview)
+    }
+
     pub fn preview_delete_glyph_relink_component_references(
         &self,
         glyph_id: &str,
@@ -1417,6 +1435,41 @@ impl ShiftWorkingSource {
         component_uses: &[ShiftComponentUse],
     ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
         component_recipes_for_package_uses(&self.package, base_glyph_id, component_uses)
+    }
+
+    fn delete_glyph_remove_components_candidate(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<(ShiftDeleteGlyphAndRemoveComponentsPreview, ShiftPackage)> {
+        let delete_preview = self.preview_delete_glyph(glyph_id)?;
+
+        let mut next = self.package.clone();
+        let removed_component_references = remove_component_references_to_base(&mut next, glyph_id);
+        debug_assert_eq!(
+            removed_component_references,
+            delete_preview.component_dependents
+        );
+        let index = next
+            .glyphs
+            .iter()
+            .position(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        next.glyphs.remove(index);
+        build_working_source_views(&next)?;
+        let diff = diff_packages(&self.package, &next)?;
+
+        Ok((
+            ShiftDeleteGlyphAndRemoveComponentsPreview {
+                glyph_id: delete_preview.glyph_id,
+                glyph_name: delete_preview.glyph_name,
+                component_dependents: delete_preview.component_dependents,
+                removed_component_recipes: delete_preview.component_dependent_recipes,
+                diff,
+            },
+            next,
+        ))
     }
 
     fn delete_glyph_relink_candidate(
@@ -2608,23 +2661,9 @@ impl ShiftWorkingSource {
         &mut self,
         glyph_id: &str,
     ) -> ShiftSourceResult<ShiftDeleteGlyphAndRemoveComponentsReport> {
-        let preview = self.preview_delete_glyph(glyph_id)?;
-
-        let before = self.package.clone();
-        let mut next = before.clone();
-        let removed_component_references = remove_component_references_to_base(&mut next, glyph_id);
-        debug_assert_eq!(removed_component_references, preview.component_dependents);
-        let index = next
-            .glyphs
-            .iter()
-            .position(|glyph| glyph.id == glyph_id)
-            .ok_or_else(|| ShiftSourceError::MissingGlyph {
-                glyph_id: glyph_id.to_string(),
-            })?;
-        next.glyphs.remove(index);
+        let (preview, next) = self.delete_glyph_remove_components_candidate(glyph_id)?;
         self.replace_package(next)?;
-
-        let diff = diff_packages(&before, &self.package)?;
+        let diff = preview.diff.clone();
         if !diff.changes.is_empty() {
             self.revision += 1;
         }
@@ -2632,7 +2671,7 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteGlyphAndRemoveComponentsReport {
             glyph_id: preview.glyph_id,
             glyph_name: preview.glyph_name,
-            removed_component_recipes: preview.component_dependent_recipes,
+            removed_component_recipes: preview.removed_component_recipes,
             diff,
             revision: self.revision,
         })

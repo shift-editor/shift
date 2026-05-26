@@ -5782,6 +5782,74 @@ fn working_source_deletes_glyph_and_removes_component_references() {
 }
 
 #[test]
+fn working_source_previews_component_removal_delete_without_mutating() {
+    let working_source = ShiftWorkingSource::new(package_with_component_dependency())
+        .expect("working source should initialize");
+
+    let preview = working_source
+        .preview_delete_glyph_remove_component_references("glyph_A")
+        .expect("component-removal delete preview should succeed");
+
+    assert_eq!(preview.glyph_id, "glyph_A");
+    assert_eq!(preview.glyph_name, "A");
+    assert_eq!(
+        preview.component_dependents,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
+    assert_eq!(preview.removed_component_recipes.len(), 1);
+    assert_eq!(
+        preview.removed_component_recipes[0].base_glyph_id,
+        "glyph_A"
+    );
+    assert_eq!(
+        preview.diff,
+        ShiftPackageDiff {
+            changes: vec![
+                ShiftPackageChange::DeleteGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyph {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_Aacute.json".to_string()],
+                removed_canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_Aacute")
+            .expect("dependent glyph should remain")
+            .layers
+            .get("source_Regular")
+            .expect("dependent layer should remain")
+            .components
+            .len(),
+        1
+    );
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_A"));
+}
+
+#[test]
 fn working_source_delete_with_component_removal_allows_leaf_glyphs() {
     let mut working_source = ShiftWorkingSource::new(package_with_component_dependency())
         .expect("working source should initialize");
