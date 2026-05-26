@@ -12,7 +12,7 @@ import type {
   Unicode,
 } from "@shift/types";
 
-export type SourceReadiness =
+export type SourceCoverageState =
   | "singleSource"
   | "ready"
   | "missingSourceLayers"

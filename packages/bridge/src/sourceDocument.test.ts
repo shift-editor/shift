@@ -10,13 +10,13 @@ import {
   type SaveAction,
   type SavePreviewStatus,
   type SaveStatus,
-  type SourceReadiness,
+  type SourceCoverageState,
 } from "@shift/types";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPackageFixture, type PackageFixture } from "./testing/sourcePackage";
 
-const singleSource = "singleSource" satisfies SourceReadiness;
-const missingSourceLayers = "missingSourceLayers" satisfies SourceReadiness;
+const singleSource = "singleSource" satisfies SourceCoverageState;
+const missingSourceLayers = "missingSourceLayers" satisfies SourceCoverageState;
 const removeComponentUses = "removeComponentUses" satisfies GlyphRemovalStrategy;
 const missingLayers = "missingLayers" satisfies MasterLayerWorkStatus;
 const readyToOpen = "ready" satisfies OpenPreviewStatus;
@@ -84,7 +84,7 @@ describe("source document persistence", () => {
     expect(report).toMatchObject({
       glyphId: asGlyphId("glyph_A"),
       glyphName: "A.base",
-      variableReadiness: singleSource,
+      sourceCoverageState: singleSource,
     });
     expect(pkg.glyph("glyph_Aacute")).toMatchObject({
       componentBaseGlyphNames: ["A.base"],
@@ -95,11 +95,11 @@ describe("source document persistence", () => {
     const source = pkg.document.createSource("Bold", 900);
     expect(source).toMatchObject({
       sourceId: asSourceId("source_Bold"),
-      variableReadiness: missingSourceLayers,
+      sourceCoverageState: missingSourceLayers,
     });
 
     expect(pkg.document.masterLayerWorklist()).toMatchObject({
-      variableReadiness: missingSourceLayers,
+      sourceCoverageState: missingSourceLayers,
       sourceCount: 2,
       glyphCount: 2,
       sourceNeedingWorkCount: 1,
@@ -129,7 +129,7 @@ describe("source document persistence", () => {
     const layer = pkg.document.createGlyphSourceLayer(pkg.glyphId("glyph_A"), source.sourceId, 700);
     expect(layer).toMatchObject({
       glyphId: asGlyphId("glyph_A"),
-      variableReadiness: missingSourceLayers,
+      sourceCoverageState: missingSourceLayers,
     });
     expect(layer.missingLayerCount).toBeGreaterThan(0);
     expect(pkg.document.masterLayerWorklist()).toMatchObject({
@@ -175,7 +175,7 @@ describe("source document persistence", () => {
       glyphId: asGlyphId("glyph_A"),
       glyphName: "A",
       removedComponentUseCount: 1,
-      variableReadiness: singleSource,
+      sourceCoverageState: singleSource,
       componentUsers: [
         {
           glyphId: asGlyphId("glyph_Aacute"),

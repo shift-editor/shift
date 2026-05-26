@@ -161,8 +161,8 @@ pub struct GlyphEdit {
   pub glyph_id: String,
   #[napi(ts_type = "GlyphName")]
   pub glyph_name: String,
-  #[napi(ts_type = "SourceReadiness")]
-  pub variable_readiness: String,
+  #[napi(ts_type = "SourceCoverageState")]
+  pub source_coverage_state: String,
   pub missing_layer_count: u32,
 }
 
@@ -172,8 +172,8 @@ pub struct FontSourceEdit {
   #[napi(ts_type = "SourceId")]
   pub source_id: String,
   pub source_name: String,
-  #[napi(ts_type = "SourceReadiness")]
-  pub variable_readiness: String,
+  #[napi(ts_type = "SourceCoverageState")]
+  pub source_coverage_state: String,
   pub missing_layer_count: u32,
 }
 
@@ -204,8 +204,8 @@ pub struct MasterLayerWorkItem {
 #[napi(object)]
 pub struct MasterLayerWorklist {
   pub revision: u32,
-  #[napi(ts_type = "SourceReadiness")]
-  pub variable_readiness: String,
+  #[napi(ts_type = "SourceCoverageState")]
+  pub source_coverage_state: String,
   pub source_count: u32,
   pub glyph_count: u32,
   pub source_needing_work_count: u32,
@@ -248,8 +248,8 @@ pub struct GlyphRemovalEdit {
   pub glyph_name: String,
   pub removed_component_use_count: u32,
   pub component_users: Vec<GlyphComponentUser>,
-  #[napi(ts_type = "SourceReadiness")]
-  pub variable_readiness: String,
+  #[napi(ts_type = "SourceCoverageState")]
+  pub source_coverage_state: String,
   pub missing_layer_count: u32,
 }
 
@@ -586,7 +586,7 @@ fn edit_impact(diff: PackageDiff, revision: u64) -> EditImpact {
   }
 }
 
-fn source_variable_readiness(readiness: VariableFontReadiness) -> String {
+fn source_coverage_state(readiness: VariableFontReadiness) -> String {
   match readiness {
     VariableFontReadiness::SingleSource => "singleSource",
     VariableFontReadiness::Ready => "ready",
@@ -639,7 +639,7 @@ fn master_layer_work_item(item: ShiftSourceLayerCoverageWorkItem) -> MasterLayer
 fn master_layer_worklist(worklist: ShiftSourceLayerCoverageWorklist) -> MasterLayerWorklist {
   MasterLayerWorklist {
     revision: worklist.revision.min(u32::MAX as u64) as u32,
-    variable_readiness: source_variable_readiness(worklist.variable_readiness),
+    source_coverage_state: source_coverage_state(worklist.variable_readiness),
     source_count: worklist.summary.source_count as u32,
     glyph_count: worklist.summary.glyph_count as u32,
     source_needing_work_count: worklist.summary.source_needing_work_count as u32,
@@ -963,7 +963,7 @@ impl ShiftSourceDocument {
       impact: edit_impact(report.diff, report.revision),
       glyph_id: report.glyph_id,
       glyph_name: report.glyph_name,
-      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      source_coverage_state: source_coverage_state(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })
   }
@@ -982,7 +982,7 @@ impl ShiftSourceDocument {
       impact: edit_impact(report.diff, report.revision),
       glyph_id: report.glyph_id,
       glyph_name: report.new_name,
-      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      source_coverage_state: source_coverage_state(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })
   }
@@ -1034,7 +1034,7 @@ impl ShiftSourceDocument {
       glyph_name: report.glyph_name,
       removed_component_use_count: preview.component_dependents.len() as u32,
       component_users,
-      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      source_coverage_state: source_coverage_state(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })
   }
@@ -1053,7 +1053,7 @@ impl ShiftSourceDocument {
       impact: edit_impact(report.diff, report.revision),
       source_id: report.source_id,
       source_name: report.source.source_name,
-      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      source_coverage_state: source_coverage_state(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })
   }
@@ -1079,7 +1079,7 @@ impl ShiftSourceDocument {
       impact: edit_impact(report.diff, report.revision),
       glyph_id: report.glyph_id,
       glyph_name: report.glyph_name,
-      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      source_coverage_state: source_coverage_state(report.source_coverage.variable_readiness),
       missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
     })
   }

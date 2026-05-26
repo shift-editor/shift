@@ -83,6 +83,6 @@ export type {
   SaveResult,
   SaveStatus,
   Source,
-  SourceReadiness,
+  SourceCoverageState,
   Unicode,
 } from "./bridge";

@@ -17,7 +17,7 @@ import type {
 export type GlyphName = string;
 export type Unicode = number;
 
-export type SourceReadiness =
+export type SourceCoverageState =
   | "singleSource"
   | "ready"
   | "missingSourceLayers"
@@ -140,7 +140,7 @@ export interface FontSourceEdit {
   impact: EditImpact
   sourceId: SourceId
   sourceName: string
-  variableReadiness: SourceReadiness
+  sourceCoverageState: SourceCoverageState
   missingLayerCount: number
 }
 
@@ -154,7 +154,7 @@ export interface GlyphEdit {
   impact: EditImpact
   glyphId: GlyphId
   glyphName: GlyphName
-  variableReadiness: SourceReadiness
+  sourceCoverageState: SourceCoverageState
   missingLayerCount: number
 }
 
@@ -175,7 +175,7 @@ export interface GlyphRemovalEdit {
   glyphName: GlyphName
   removedComponentUseCount: number
   componentUsers: Array<GlyphComponentUser>
-  variableReadiness: SourceReadiness
+  sourceCoverageState: SourceCoverageState
   missingLayerCount: number
 }
 
@@ -204,7 +204,7 @@ export interface MasterLayerWorkItem {
 
 export interface MasterLayerWorklist {
   revision: number
-  variableReadiness: SourceReadiness
+  sourceCoverageState: SourceCoverageState
   sourceCount: number
   glyphCount: number
   sourceNeedingWorkCount: number

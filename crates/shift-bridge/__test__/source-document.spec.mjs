@@ -81,7 +81,7 @@ describe("source document persistence", () => {
     expect(report).toMatchObject({
       glyphId: "glyph_newGlyph",
       glyphName: "newGlyph",
-      variableReadiness: "singleSource",
+      sourceCoverageState: "singleSource",
       missingLayerCount: 0,
     });
     expect(glyph("glyph_newGlyph")).toMatchObject({
@@ -104,11 +104,11 @@ describe("source document persistence", () => {
     expect(source).toMatchObject({
       sourceId: "source_Bold",
       sourceName: "Bold",
-      variableReadiness: "missingSourceLayers",
+      sourceCoverageState: "missingSourceLayers",
     });
 
     expect(document.masterLayerWorklist()).toMatchObject({
-      variableReadiness: "missingSourceLayers",
+      sourceCoverageState: "missingSourceLayers",
       sourceCount: 2,
       glyphCount: 2,
       sourceNeedingWorkCount: 1,
@@ -138,7 +138,7 @@ describe("source document persistence", () => {
     const layer = document.createGlyphSourceLayer("glyph_A", source.sourceId, 700);
     expect(layer).toMatchObject({
       glyphId: "glyph_A",
-      variableReadiness: "missingSourceLayers",
+      sourceCoverageState: "missingSourceLayers",
     });
     expect(layer.missingLayerCount).toBeGreaterThan(0);
     expect(document.masterLayerWorklist()).toMatchObject({
@@ -182,7 +182,7 @@ describe("source document persistence", () => {
       glyphId: "glyph_A",
       glyphName: "A",
       removedComponentUseCount: 1,
-      variableReadiness: "singleSource",
+      sourceCoverageState: "singleSource",
       componentUsers: [
         {
           glyphId: "glyph_Aacute",
