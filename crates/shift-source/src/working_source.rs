@@ -1702,16 +1702,23 @@ impl ShiftWorkingSource {
     ) -> ShiftSourceResult<ShiftCreateAxisMappingReport> {
         let before = self.package.clone();
         let mut next = before.clone();
+        let mapping_name = unique_member_name_with_fallback(
+            create.name.trim(),
+            "New Mapping",
+            next.axis_mappings
+                .iter()
+                .map(|mapping| mapping.name.as_str()),
+        );
         let mapping_id = create.mapping_id.unwrap_or_else(|| {
             unique_member_id(
                 "mapping",
-                &create.name,
+                &mapping_name,
                 next.axis_mappings.iter().map(|mapping| mapping.id.as_str()),
             )
         });
         next.axis_mappings.push(ShiftAxisMapping {
             id: mapping_id.clone(),
-            name: create.name,
+            name: mapping_name,
             input_axes: create.input_axes,
             output_axes: create.output_axes,
             samples: create.samples,
@@ -1747,7 +1754,7 @@ impl ShiftWorkingSource {
             .ok_or_else(|| ShiftSourceError::MissingAxisMapping {
                 mapping_id: mapping_id.to_string(),
             })?;
-        mapping.name = update.name;
+        mapping.name = update.name.trim().to_string();
         mapping.input_axes = update.input_axes;
         mapping.output_axes = update.output_axes;
         mapping.samples = update.samples;

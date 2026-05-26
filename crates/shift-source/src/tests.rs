@@ -3909,6 +3909,35 @@ fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_que
 }
 
 #[test]
+fn working_source_create_axis_mapping_uses_new_mapping_for_blank_names() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let report = working_source
+        .create_axis_mapping(ShiftCreateAxisMapping {
+            mapping_id: None,
+            name: "   ".to_string(),
+            input_axes: vec!["axis_wght".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.5)]),
+                },
+            ],
+        })
+        .expect("blank mapping name should use fallback");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.mapping_id, "mapping_New_Mapping");
+    assert_eq!(report.mapping.name, "New Mapping");
+}
+
+#[test]
 fn working_source_rejects_invalid_axis_mapping_create_without_mutating() {
     let mut working_source = ShiftWorkingSource::new(package_with_axes(
         vec![weight_axis(), internal_stem_axis()],
@@ -3942,6 +3971,36 @@ fn working_source_rejects_invalid_axis_mapping_create_without_mutating() {
             mapping_id: None,
         })
     );
+}
+
+#[test]
+fn working_source_create_axis_mapping_disambiguates_duplicate_names() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let report = working_source
+        .create_axis_mapping(ShiftCreateAxisMapping {
+            mapping_id: Some("mapping_duplicate_name".to_string()),
+            name: "Weight drives stem".to_string(),
+            input_axes: vec!["axis_wght".to_string()],
+            output_axes: vec!["axis_stem".to_string()],
+            samples: vec![
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                },
+                ShiftAxisMappingSample {
+                    input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                    output_location: BTreeMap::from([("axis_stem".to_string(), 0.5)]),
+                },
+            ],
+        })
+        .expect("duplicate mapping names should be disambiguated");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.mapping_id, "mapping_duplicate_name");
+    assert_eq!(report.mapping.name, "Weight drives stem.1");
+    assert_eq!(working_source.package().axis_mappings.len(), 2);
 }
 
 #[test]
@@ -3982,6 +4041,49 @@ fn working_source_updates_axis_mapping_and_rebuilds_mapping_query() {
             source: ShiftMappedAxisValueSource::AxisMapping,
             mapping_id: Some("mapping_weight_to_stem".to_string()),
         })
+    );
+}
+
+#[test]
+fn working_source_rejects_blank_axis_mapping_update_without_mutating() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_weight_to_stem_mapping()).expect("package is valid");
+
+    let error = working_source
+        .update_axis_mapping(
+            "mapping_weight_to_stem",
+            ShiftAxisMappingUpdate {
+                name: "   ".to_string(),
+                input_axes: vec!["axis_wght".to_string()],
+                output_axes: vec!["axis_stem".to_string()],
+                samples: vec![
+                    ShiftAxisMappingSample {
+                        input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                        output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+                    },
+                    ShiftAxisMappingSample {
+                        input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                        output_location: BTreeMap::from([("axis_stem".to_string(), 0.5)]),
+                    },
+                ],
+            },
+        )
+        .expect_err("blank mapping update should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidAxisMappingName { mapping_name } if mapping_name.is_empty()
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert_eq!(
+        working_source
+            .package()
+            .axis_mappings
+            .iter()
+            .find(|mapping| mapping.id == "mapping_weight_to_stem")
+            .expect("mapping should still exist")
+            .name,
+        "Weight drives stem"
     );
 }
 
@@ -6008,6 +6110,29 @@ fn package_rejects_invalid_axis_tags_before_variation_queries() {
 }
 
 #[test]
+fn package_rejects_blank_and_duplicate_axis_names() {
+    let mut blank_name = package_with_axes(vec![weight_axis()], Vec::new());
+    blank_name.axes[0].name = "   ".to_string();
+    let error = blank_name
+        .validate()
+        .expect_err("blank axis names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidAxisName { axis_name } if axis_name == "   "
+    ));
+
+    let mut duplicate_name = package_with_axes(vec![weight_axis(), width_axis()], Vec::new());
+    duplicate_name.axes[1].name = "Weight".to_string();
+    let error = duplicate_name
+        .validate()
+        .expect_err("duplicate axis names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateAxisName { axis_name } if axis_name == "Weight"
+    ));
+}
+
+#[test]
 fn variable_component_location_can_reference_global_and_base_local_axes() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,
@@ -7209,6 +7334,45 @@ fn axis_mappings_roundtrip_as_a_first_class_package_file() {
     assert_eq!(loaded.axis_mappings.len(), 1);
     assert_eq!(loaded.axis_mappings[0].id, "mapping_weight_to_stem");
     assert_eq!(loaded.axis_mappings[0].output_axes, vec!["axis_stem"]);
+}
+
+#[test]
+fn package_rejects_blank_and_duplicate_axis_mapping_names() {
+    let mut blank_name = package_with_weight_to_stem_mapping();
+    blank_name.axis_mappings[0].name = "   ".to_string();
+    let error = blank_name
+        .validate()
+        .expect_err("blank axis mapping names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidAxisMappingName { mapping_name } if mapping_name == "   "
+    ));
+
+    let mut duplicate_name = package_with_weight_to_stem_mapping();
+    duplicate_name.axis_mappings.push(ShiftAxisMapping {
+        id: "mapping_second".to_string(),
+        name: "Weight drives stem".to_string(),
+        input_axes: vec!["axis_wght".to_string()],
+        output_axes: vec!["axis_stem".to_string()],
+        samples: vec![
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.0)]),
+            },
+            ShiftAxisMappingSample {
+                input_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                output_location: BTreeMap::from([("axis_stem".to_string(), 0.5)]),
+            },
+        ],
+    });
+    let error = duplicate_name
+        .validate()
+        .expect_err("duplicate axis mapping names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateAxisMappingName { mapping_name }
+            if mapping_name == "Weight drives stem"
+    ));
 }
 
 #[test]

@@ -271,6 +271,11 @@ format exploration:
   and layers, but they must be nonblank and unique. Semantic source creation can
   fall back to `New Source`/`New Source.1` for plus-button flows, while blank
   source updates fail without mutating the working graph.
+- **Axis and mapping labels are app-safe:** axis names and axis-mapping names
+  must be nonblank and unique, keeping sliders, mapping panels, and diagnostics
+  readable. Semantic mapping creation can fall back to `New Mapping` and
+  disambiguates duplicate names, while blank mapping updates fail without
+  mutating the working graph.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any

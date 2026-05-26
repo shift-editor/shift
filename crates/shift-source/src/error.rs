@@ -238,6 +238,12 @@ pub enum ShiftSourceError {
     #[error("duplicate Shift axis tag '{axis_tag}'")]
     DuplicateAxisTag { axis_tag: String },
 
+    #[error("invalid Shift axis name '{axis_name}'")]
+    InvalidAxisName { axis_name: String },
+
+    #[error("duplicate Shift axis name '{axis_name}'")]
+    DuplicateAxisName { axis_name: String },
+
     #[error("invalid Shift axis tag '{axis_tag}'")]
     InvalidAxisTag { axis_tag: String },
 
@@ -363,6 +369,12 @@ pub enum ShiftSourceError {
 
     #[error("duplicate Shift axis mapping id '{mapping_id}'")]
     DuplicateAxisMappingId { mapping_id: String },
+
+    #[error("invalid Shift axis mapping name '{mapping_name}'")]
+    InvalidAxisMappingName { mapping_name: String },
+
+    #[error("duplicate Shift axis mapping name '{mapping_name}'")]
+    DuplicateAxisMappingName { mapping_name: String },
 
     #[error("missing Shift axis mapping id '{mapping_id}'")]
     MissingAxisMapping { mapping_id: String },

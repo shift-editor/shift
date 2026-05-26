@@ -731,8 +731,14 @@ impl ShiftPackage {
 
         let mut axis_ids = HashSet::new();
         let mut axis_tags = HashSet::new();
+        let mut axis_names = HashSet::new();
         for axis in &self.axes {
             validate_identifier(format!("axis '{}'", axis.name), &axis.id)?;
+            if axis.name.trim().is_empty() {
+                return Err(ShiftSourceError::InvalidAxisName {
+                    axis_name: axis.name.clone(),
+                });
+            }
             validate_axis_tag(&axis.tag)?;
             if !axis_ids.insert(axis.id.as_str()) {
                 return Err(ShiftSourceError::DuplicateAxisId {
@@ -742,6 +748,11 @@ impl ShiftPackage {
             if !axis_tags.insert(axis.tag.as_str()) {
                 return Err(ShiftSourceError::DuplicateAxisTag {
                     axis_tag: axis.tag.clone(),
+                });
+            }
+            if !axis_names.insert(axis.name.as_str()) {
+                return Err(ShiftSourceError::DuplicateAxisName {
+                    axis_name: axis.name.clone(),
                 });
             }
             validate_axis_range(&axis.id, axis.minimum, axis.default, axis.maximum)?;
@@ -836,12 +847,23 @@ impl ShiftPackage {
         }
 
         let mut axis_mapping_ids = HashSet::new();
+        let mut axis_mapping_names = HashSet::new();
         let mut axis_mapping_axis_sets = Vec::new();
         for mapping in &self.axis_mappings {
             validate_identifier(format!("axis mapping '{}'", mapping.name), &mapping.id)?;
+            if mapping.name.trim().is_empty() {
+                return Err(ShiftSourceError::InvalidAxisMappingName {
+                    mapping_name: mapping.name.clone(),
+                });
+            }
             if !axis_mapping_ids.insert(mapping.id.as_str()) {
                 return Err(ShiftSourceError::DuplicateAxisMappingId {
                     mapping_id: mapping.id.clone(),
+                });
+            }
+            if !axis_mapping_names.insert(mapping.name.as_str()) {
+                return Err(ShiftSourceError::DuplicateAxisMappingName {
+                    mapping_name: mapping.name.clone(),
                 });
             }
             if mapping.samples.is_empty() {
