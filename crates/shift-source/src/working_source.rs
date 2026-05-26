@@ -1865,8 +1865,9 @@ impl ShiftWorkingSource {
                     let base_glyph = self.glyph(&component.base_glyph_id)?;
                     let summary =
                         component_recipe_summary(glyph, layer_id, component, &base_glyph.name);
-                    let missing_capabilities = summary
-                        .required_capabilities
+                    let required_capabilities =
+                        lowered_component_required_capabilities(&summary, condition.as_ref());
+                    let missing_capabilities = required_capabilities
                         .iter()
                         .copied()
                         .filter(|capability| !supported_capabilities.contains(capability))
@@ -1889,7 +1890,7 @@ impl ShiftWorkingSource {
                         base_glyph_id: summary.base_glyph_id,
                         base_glyph_name: summary.base_glyph_name,
                         lowering_hint: summary.lowering_hint,
-                        required_capabilities: summary.required_capabilities,
+                        required_capabilities,
                         missing_capabilities,
                         condition,
                     });
@@ -3604,6 +3605,20 @@ fn component_lowering_capabilities(
         capabilities.insert(ShiftComponentLoweringCapability::AxisReset);
     }
     capabilities.into_iter().collect()
+}
+
+fn lowered_component_required_capabilities(
+    summary: &ShiftComponentRecipeSummary,
+    condition: Option<&ShiftConditionEvaluation>,
+) -> Vec<ShiftComponentLoweringCapability> {
+    summary
+        .required_capabilities
+        .iter()
+        .copied()
+        .filter(|capability| {
+            condition.is_none() || *capability != ShiftComponentLoweringCapability::Condition
+        })
+        .collect()
 }
 
 fn component_recipes_for_package_uses(

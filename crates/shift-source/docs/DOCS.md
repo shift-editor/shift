@@ -420,7 +420,8 @@ format exploration:
   returns total/supported/unsupported component counts, affected glyph count,
   and counts per missing capability so export UI can make a fast
   proceed/fallback/fail decision without re-walking every diagnostic.
-  Static-instance preflight can pass a concrete location; inactive conditional
+  Static-instance preflight can pass a concrete location; active conditions are
+  resolved away before capability comparison, while inactive conditional
   components are skipped and counted separately with stable IDs, required
   capabilities, and the evaluated condition tree that made them inactive.
   Context-aware preflight can pass separate root font and current parent

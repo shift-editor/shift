@@ -4856,6 +4856,24 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .collect::<Vec<_>>(),
         vec!["component_variable", "component_variable_conditional"]
     );
+    assert_eq!(
+        static_location_preflight.diagnostics[1].missing_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+    assert_eq!(
+        static_location_preflight.diagnostics[1].condition,
+        Some(ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wdth".to_string(),
+            value: 100.0,
+            min: Some(90.0),
+            max: None,
+            active: true,
+        })
+    );
 
     let narrow_location_preflight = working_source
         .component_lowering_preflight_at_location(
@@ -4867,8 +4885,8 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         )
         .expect("location preflight should evaluate explicit conditions");
     assert_eq!(narrow_location_preflight.total_component_count, 4);
-    assert_eq!(narrow_location_preflight.supported_component_count, 1);
-    assert_eq!(narrow_location_preflight.unsupported_component_count, 2);
+    assert_eq!(narrow_location_preflight.supported_component_count, 2);
+    assert_eq!(narrow_location_preflight.unsupported_component_count, 1);
     assert_eq!(
         narrow_location_preflight.skipped_inactive_component_count,
         1
@@ -4892,19 +4910,23 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .iter()
             .map(|diagnostic| diagnostic.component_id.as_str())
             .collect::<Vec<_>>(),
-        vec!["component_conditional", "component_variable"]
+        vec!["component_variable"]
     );
     assert_eq!(
-        narrow_location_preflight.diagnostics[0].condition,
-        Some(ShiftConditionEvaluation::AxisRange {
-            axis_id: "axis_wght".to_string(),
-            value: 800.0,
-            min: Some(700.0),
-            max: None,
-            active: true,
-        })
+        narrow_location_preflight.diagnostics[0].missing_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableLocation]
     );
-    assert_eq!(narrow_location_preflight.diagnostics[1].condition, None);
+    assert_eq!(
+        narrow_location_preflight.skipped_inactive_components[0].condition,
+        ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wdth".to_string(),
+            value: 50.0,
+            min: Some(90.0),
+            max: None,
+            active: false,
+        }
+    );
+    assert_eq!(narrow_location_preflight.diagnostics[0].condition, None);
 
     let contextual_preflight = working_source
         .component_lowering_preflight_with_context(
@@ -4922,8 +4944,8 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         )
         .expect("contextual preflight should evaluate font-location conditions");
     assert_eq!(contextual_preflight.total_component_count, 4);
-    assert_eq!(contextual_preflight.supported_component_count, 1);
-    assert_eq!(contextual_preflight.unsupported_component_count, 2);
+    assert_eq!(contextual_preflight.supported_component_count, 2);
+    assert_eq!(contextual_preflight.unsupported_component_count, 1);
     assert_eq!(contextual_preflight.skipped_inactive_component_count, 1);
     assert_eq!(
         contextual_preflight.skipped_inactive_components[0].component_id,
@@ -4935,17 +4957,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
             .iter()
             .map(|diagnostic| diagnostic.component_id.as_str())
             .collect::<Vec<_>>(),
-        vec!["component_conditional", "component_variable"]
-    );
-    assert_eq!(
-        contextual_preflight.diagnostics[0].condition,
-        Some(ShiftConditionEvaluation::AxisRange {
-            axis_id: "axis_wght".to_string(),
-            value: 800.0,
-            min: Some(700.0),
-            max: None,
-            active: true,
-        })
+        vec!["component_variable"]
     );
 
     let missing_axis_err = working_source
