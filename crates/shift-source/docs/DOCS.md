@@ -193,6 +193,49 @@ shift_ir owns live editing/rendering data that benefits the editor loop.
 TypeScript owns UI projection and interaction state.
 ```
 
+Performance rule:
+
+```text
+Source files are opened, validated, and saved by Rust.
+Rust keeps the live ShiftWorkingSource in memory.
+N-API exposes coarse commands and explicit bulk queries.
+Mutations return revision-stamped deltas, not full source snapshots.
+TypeScript stores lightweight UI projections keyed by revision.
+```
+
+The renderer should not treat `.shift` files as its data interface. On open,
+Rust loads the package, validates it, builds the editor projection, warms
+derived indexes, and records the saved fingerprint. During editing, TypeScript
+talks to that in-memory working source through semantic commands. Crossing the
+N-API boundary per glyph, per component, or per source row is the wrong shape;
+the app should prefer one command/query that returns the rows, summaries, and
+revision needed by a screen.
+
+Mutation responses should be patch-shaped. A rename, delete, source-layer edit,
+or variation-source edit returns the semantic result plus compact updates for
+the affected projections: dependency rows, compatibility rows, coverage
+summary/worklist evidence, source-location rows, or save impact depending on
+what changed. The response must include a working-source `revision`; renderer
+stores should drop responses older than the current document revision.
+
+Large payloads are still allowed, but only as explicit bulk queries for screens
+that need them:
+
+```text
+glyphGridSnapshot()
+sourceLayerCoverageReport()
+interpolationCompatibilityIndexReport()
+variableFontExportPreflight(target)
+componentRecipesReport(glyphId, layerId)
+```
+
+This keeps app state responsive without moving source truth into TypeScript.
+Zustand/signals can cache badge maps, selected rows, visible panels, and export
+summaries, but those caches are projections. If profiling shows derived-view
+rebuilds are too expensive, the fix is to update Rust indexes incrementally from
+`ShiftPackageChange`, not to make the renderer scan package JSON or issue many
+small N-API calls.
+
 The JSON files in `derived/` are persistence, reload, diagnostics, and recovery
 artifacts. In memory, Rust can rebuild and serve the same query views directly
 from `ShiftPackage`.
