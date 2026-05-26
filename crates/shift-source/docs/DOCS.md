@@ -420,8 +420,12 @@ format exploration:
   affected glyph count, and counts per missing capability so export UI can make
   a fast proceed/fallback/fail decision without re-walking every diagnostic.
   Static-instance preflight can pass a concrete location; inactive conditional
-  components are skipped and counted separately, while variable-font preflight
-  can keep using the location-independent query that checks every recipe.
+  components are skipped and counted separately. Context-aware preflight can
+  pass separate root font and current parent locations for recursive component
+  checks. Conditions use the font location, matching component preview and
+  keeping export capability diagnostics from disagreeing with the renderer.
+  Variable-font preflight can keep using the location-independent query that
+  checks every recipe.
   Concrete preflight and preview locations are validated at the query boundary:
   unknown axes, non-finite values, or coordinates outside axis ranges return
   typed errors instead of producing misleading export diagnostics.

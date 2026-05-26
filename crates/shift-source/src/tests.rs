@@ -4868,6 +4868,34 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         vec!["component_conditional", "component_variable"]
     );
 
+    let contextual_preflight = working_source
+        .component_lowering_preflight_with_context(
+            &ShiftComponentLoweringTarget::plain_components(),
+            &ShiftComponentResolveContext {
+                font_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 800.0),
+                    ("axis_wdth".to_string(), 50.0),
+                ]),
+                parent_location: BTreeMap::from([
+                    ("axis_wght".to_string(), 100.0),
+                    ("axis_wdth".to_string(), 100.0),
+                ]),
+            },
+        )
+        .expect("contextual preflight should evaluate font-location conditions");
+    assert_eq!(contextual_preflight.total_component_count, 4);
+    assert_eq!(contextual_preflight.supported_component_count, 1);
+    assert_eq!(contextual_preflight.unsupported_component_count, 2);
+    assert_eq!(contextual_preflight.skipped_inactive_component_count, 1);
+    assert_eq!(
+        contextual_preflight
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.component_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["component_conditional", "component_variable"]
+    );
+
     let missing_axis_err = working_source
         .component_lowering_preflight_at_location(
             &ShiftComponentLoweringTarget::plain_components(),

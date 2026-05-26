@@ -1759,7 +1759,7 @@ impl ShiftWorkingSource {
         &self,
         target: &ShiftComponentLoweringTarget,
     ) -> ShiftComponentLoweringPreflight {
-        self.component_lowering_preflight_for_location(target, None)
+        self.component_lowering_preflight_for_context(target, None)
             .expect("location-independent preflight cannot fail condition evaluation")
     }
 
@@ -1769,13 +1769,23 @@ impl ShiftWorkingSource {
         location: &BTreeMap<String, f64>,
     ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
         self.validate_query_location("component lowering preflight", location)?;
-        self.component_lowering_preflight_for_location(target, Some(location))
+        let context = ShiftComponentResolveContext::from_font_location(location.clone());
+        self.component_lowering_preflight_for_context(target, Some(&context))
     }
 
-    fn component_lowering_preflight_for_location(
+    pub fn component_lowering_preflight_with_context(
         &self,
         target: &ShiftComponentLoweringTarget,
-        location: Option<&BTreeMap<String, f64>>,
+        context: &ShiftComponentResolveContext,
+    ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
+        self.validate_component_resolve_context("component lowering preflight", context)?;
+        self.component_lowering_preflight_for_context(target, Some(context))
+    }
+
+    fn component_lowering_preflight_for_context(
+        &self,
+        target: &ShiftComponentLoweringTarget,
+        context: Option<&ShiftComponentResolveContext>,
     ) -> ShiftSourceResult<ShiftComponentLoweringPreflight> {
         let supported_capabilities = target
             .supported_capabilities
@@ -1793,12 +1803,16 @@ impl ShiftWorkingSource {
             for (layer_id, layer) in &glyph.layers {
                 for component in &layer.components {
                     total_component_count += 1;
-                    if let Some(location) = location {
+                    if let Some(context) = context {
                         let active = component
                             .condition
                             .as_ref()
                             .map(|condition| {
-                                self.condition_matches(&glyph.name, condition, location)
+                                self.condition_matches(
+                                    &glyph.name,
+                                    condition,
+                                    &context.font_location,
+                                )
                             })
                             .transpose()?
                             .unwrap_or(true);
