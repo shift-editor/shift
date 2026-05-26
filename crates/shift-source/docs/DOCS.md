@@ -664,16 +664,16 @@ format exploration:
   a blocked export panel can choose the next step, render counts, and explain
   source blockers, mapping blockers, and component blockers from one Rust-owned
   response.
-- **Coverage-affecting mutation reports:** source create/update/delete, glyph
-  create/delete, glyph source layer create/delete, and glyph variation source
-  create/update/delete reports include the same source coverage report after the
-  mutation. A source sidebar or export-readiness badge can therefore update from
-  the command response that changed the graph, instead of issuing a follow-up
-  query or predicting coverage changes in TypeScript. Source create/update/delete
-  reports also include refreshed source location and source mapped-location
-  reports, so source panels can update authored coordinates, mapped construction
-  coordinates, and mapping diagnostics from the same response that changed the
-  source list.
+- **Coverage and label mutation reports:** source create/update/delete, glyph
+  rename/create/delete, glyph source layer create/delete, and glyph variation
+  source create/update/delete reports include the same source coverage report
+  after the mutation. A source sidebar or export-readiness badge can therefore
+  update from the command response that changed the graph or glyph labels,
+  instead of issuing a follow-up query or predicting coverage changes in
+  TypeScript. Source create/update/delete reports also include refreshed source
+  location and source mapped-location reports, so source panels can update
+  authored coordinates, mapped construction coordinates, and mapping diagnostics
+  from the same response that changed the source list.
 - **Source deletion preflight:** source deletes use the same preview data as the
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a

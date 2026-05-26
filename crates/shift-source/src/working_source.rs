@@ -71,6 +71,7 @@ pub struct ShiftRenameGlyphReport {
     pub old_name: String,
     pub new_name: String,
     pub component_dependents: Vec<ShiftComponentUse>,
+    pub source_coverage: ShiftSourceLayerCoverageReport,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -4837,6 +4838,7 @@ impl ShiftWorkingSource {
             old_name,
             new_name: preview.new_name,
             component_dependents: preview.component_dependents,
+            source_coverage: self.source_layer_coverage_report(),
             diff,
             revision: self.revision,
         })

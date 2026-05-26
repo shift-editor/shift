@@ -2820,6 +2820,18 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
     assert_eq!(report.old_name, "A");
     assert_eq!(report.new_name, "RenamedBase");
     assert_eq!(report.revision, 1);
+    assert_eq!(report.source_coverage.revision, 1);
+    assert_eq!(report.source_coverage.summary.glyph_count, 2);
+    assert_eq!(
+        report
+            .source_coverage
+            .sources
+            .iter()
+            .flat_map(|source| source.present_layers.iter())
+            .map(|glyph| glyph.glyph_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Aacute"]
+    );
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -2876,6 +2888,21 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
         .glyph_dependencies("glyph_A")
         .expect("dependency query should use updated index");
     assert_eq!(dependencies.glyph_name, "RenamedBase");
+
+    let layered_rename_report = working_source
+        .rename_glyph("glyph_Aacute", "RenamedComposite")
+        .expect("layered glyph rename should succeed");
+    assert_eq!(layered_rename_report.source_coverage.revision, 2);
+    assert_eq!(
+        layered_rename_report
+            .source_coverage
+            .sources
+            .iter()
+            .flat_map(|source| source.present_layers.iter())
+            .map(|glyph| glyph.glyph_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["RenamedComposite"]
+    );
 }
 
 #[test]
