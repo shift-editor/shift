@@ -90,6 +90,18 @@ pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
     pub revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftDeleteGlyphAndRelinkComponentsReport {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub replacement_glyph_id: String,
+    pub replacement_glyph_name: String,
+    pub relinked_component_recipes: Vec<ShiftComponentRecipeSummary>,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCreateAxisMapping {
@@ -1068,7 +1080,7 @@ impl ShiftWorkingSource {
     ) -> ShiftSourceResult<ShiftDeleteGlyphPreview> {
         let dependencies = self.glyph_dependencies(glyph_id)?;
         let component_dependent_recipes =
-            self.component_dependent_recipes(glyph_id, &dependencies.component_dependents)?;
+            self.component_recipes_for_uses(glyph_id, &dependencies.component_dependents)?;
 
         Ok(ShiftDeleteGlyphPreview {
             glyph_id: dependencies.glyph_id.clone(),
@@ -1378,13 +1390,13 @@ impl ShiftWorkingSource {
             .collect()
     }
 
-    fn component_dependent_recipes(
+    fn component_recipes_for_uses(
         &self,
         base_glyph_id: &str,
-        component_dependents: &[ShiftComponentUse],
+        component_uses: &[ShiftComponentUse],
     ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
         let base_glyph = self.glyph(base_glyph_id)?;
-        component_dependents
+        component_uses
             .iter()
             .map(|component_use| {
                 let glyph = self.glyph(&component_use.glyph_id)?;
@@ -2580,6 +2592,57 @@ impl ShiftWorkingSource {
         })
     }
 
+    pub fn delete_glyph_and_relink_component_references(
+        &mut self,
+        glyph_id: &str,
+        replacement_glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftDeleteGlyphAndRelinkComponentsReport> {
+        if glyph_id == replacement_glyph_id {
+            return Err(ShiftSourceError::CannotRelinkDeletedGlyphToItself {
+                glyph_id: glyph_id.to_string(),
+            });
+        }
+
+        let preview = self.preview_delete_glyph(glyph_id)?;
+        let replacement_glyph = self.glyph(replacement_glyph_id)?;
+        let replacement_glyph_name = replacement_glyph.name.clone();
+
+        let before = self.package.clone();
+        let mut next = before.clone();
+        relink_component_references_to_base(
+            &mut next,
+            &preview.component_dependents,
+            replacement_glyph_id,
+            &replacement_glyph_name,
+        )?;
+        let index = next
+            .glyphs
+            .iter()
+            .position(|glyph| glyph.id == glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: glyph_id.to_string(),
+            })?;
+        next.glyphs.remove(index);
+        self.replace_package(next)?;
+
+        let relinked_component_recipes =
+            self.component_recipes_for_uses(replacement_glyph_id, &preview.component_dependents)?;
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftDeleteGlyphAndRelinkComponentsReport {
+            glyph_id: preview.glyph_id,
+            glyph_name: preview.glyph_name,
+            replacement_glyph_id: replacement_glyph_id.to_string(),
+            replacement_glyph_name,
+            relinked_component_recipes,
+            diff,
+            revision: self.revision,
+        })
+    }
+
     pub fn rename_glyph(
         &mut self,
         glyph_id: &str,
@@ -3630,6 +3693,43 @@ fn remove_component_references_to_base(
             .then_with(|| left.component_id.cmp(&right.component_id))
     });
     removed
+}
+
+fn relink_component_references_to_base(
+    package: &mut ShiftPackage,
+    component_uses: &[ShiftComponentUse],
+    replacement_glyph_id: &str,
+    replacement_glyph_name: &str,
+) -> ShiftSourceResult<()> {
+    for component_use in component_uses {
+        let glyph = package
+            .glyphs
+            .iter_mut()
+            .find(|glyph| glyph.id == component_use.glyph_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyph {
+                glyph_id: component_use.glyph_id.clone(),
+            })?;
+        let layer = glyph
+            .layers
+            .get_mut(&component_use.layer_id)
+            .ok_or_else(|| ShiftSourceError::MissingGlyphLayer {
+                glyph_id: component_use.glyph_id.clone(),
+                layer_id: component_use.layer_id.clone(),
+            })?;
+        let component = layer
+            .components
+            .iter_mut()
+            .find(|component| component.id == component_use.component_id)
+            .ok_or_else(|| ShiftSourceError::MissingComponent {
+                glyph_id: component_use.glyph_id.clone(),
+                layer_id: component_use.layer_id.clone(),
+                component_id: component_use.component_id.clone(),
+            })?;
+        component.base_glyph_id = replacement_glyph_id.to_string();
+        component.base_glyph_name = replacement_glyph_name.to_string();
+    }
+
+    Ok(())
 }
 
 fn unique_member_id<'a>(

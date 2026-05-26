@@ -145,6 +145,9 @@ pub enum ShiftSourceError {
         dependent_count: usize,
     },
 
+    #[error("cannot relink component dependents from glyph id '{glyph_id}' back to the glyph being deleted")]
+    CannotRelinkDeletedGlyphToItself { glyph_id: String },
+
     #[error(
         "glyph component in '{glyph_name}' references missing base glyph id '{base_glyph_id}'"
     )]

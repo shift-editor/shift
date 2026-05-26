@@ -93,6 +93,7 @@ renameGlyph(glyphId, newName)
 previewDeleteGlyph(glyphId)
 deleteGlyph(glyphId)
 deleteGlyphAndRemoveComponentReferences(glyphId)
+deleteGlyphAndRelinkComponentReferences(glyphId, replacementGlyphId)
 previewDeleteSource(sourceId)
 createAxisMapping(create)
 updateAxisMapping(mappingId, update)
@@ -654,7 +655,9 @@ The format should make these app behaviors straightforward:
 - Conservative delete commands that fail before mutation when component
   dependents, source layers, or source-owned variation rows still exist, plus an
   explicit component-removal delete command for the destructive "remove those
-  uses too" path.
+  uses too" path and an explicit relink delete command that retargets dependent
+  components to another base glyph while preserving their conditional and
+  variable component recipes.
 - Sidebars and badges backed by derived indexes instead of repeated full scans.
 - Variable component inspectors that show inherited values, explicit overrides,
   local axes, and active/inactive conditions with the condition subtree that

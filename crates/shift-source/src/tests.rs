@@ -5807,6 +5807,203 @@ fn working_source_delete_with_component_removal_allows_leaf_glyphs() {
 }
 
 #[test]
+fn working_source_deletes_glyph_and_relinks_component_references() {
+    let mut package = package_with_component_dependency();
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_B".to_string(),
+        name: "B".to_string(),
+        unicodes: vec!["0042".to_string()],
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let mut working_source =
+        ShiftWorkingSource::new(package).expect("working source should initialize");
+
+    let report = working_source
+        .delete_glyph_and_relink_component_references("glyph_A", "glyph_B")
+        .expect("delete with component relink should succeed");
+
+    assert_eq!(report.glyph_id, "glyph_A");
+    assert_eq!(report.glyph_name, "A");
+    assert_eq!(report.replacement_glyph_id, "glyph_B");
+    assert_eq!(report.replacement_glyph_name, "B");
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.relinked_component_recipes.len(), 1);
+    let relinked_recipe = &report.relinked_component_recipes[0];
+    assert_eq!(relinked_recipe.glyph_id, "glyph_Aacute");
+    assert_eq!(relinked_recipe.component_id, "component_25");
+    assert_eq!(relinked_recipe.base_glyph_id, "glyph_B");
+    assert_eq!(relinked_recipe.base_glyph_name, "B");
+    assert_eq!(relinked_recipe.kind, ShiftComponentRecipeKind::Static);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![
+                ShiftPackageChange::DeleteGlyph {
+                    glyph_id: "glyph_A".to_string(),
+                },
+                ShiftPackageChange::UpdateGlyph {
+                    glyph_id: "glyph_Aacute".to_string(),
+                },
+            ],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["glyphs/glyph_Aacute.json".to_string()],
+                removed_canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
+            },
+        }
+    );
+    assert!(!working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_A"));
+    let relinked_component = &working_source
+        .package()
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.id == "glyph_Aacute")
+        .expect("dependent glyph should remain")
+        .layers
+        .get("source_Regular")
+        .expect("dependent layer should remain")
+        .components[0];
+    assert_eq!(relinked_component.base_glyph_id, "glyph_B");
+    assert_eq!(relinked_component.base_glyph_name, "B");
+    assert_eq!(
+        working_source
+            .glyph_dependencies("glyph_B")
+            .expect("replacement glyph dependency index should rebuild")
+            .component_dependents,
+        vec![ShiftComponentUse {
+            glyph_id: "glyph_Aacute".to_string(),
+            glyph_name: "Aacute".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_25".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn working_source_relink_delete_preserves_variable_component_recipe() {
+    let layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_variable_relink".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_wght".to_string(), 650.0)]),
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_heavy".to_string(),
+                name: "Heavy".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    translate_y: 0.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    skew_x: 0.0,
+                    skew_y: 0.0,
+                    t_center_x: 0.0,
+                    t_center_y: 0.0,
+                }),
+            }],
+            condition: Some(ShiftCondition::AxisRange {
+                axis_id: "axis_wght".to_string(),
+                min: Some(500.0),
+                max: None,
+            }),
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut glyphs = glyphs_for_component_layer(layer);
+    glyphs.push(ShiftGlyph {
+        id: "glyph_bar".to_string(),
+        name: "bar".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_axes(vec![weight_axis()], glyphs))
+            .expect("working source should initialize");
+
+    let report = working_source
+        .delete_glyph_and_relink_component_references("glyph_stem", "glyph_bar")
+        .expect("delete with variable component relink should succeed");
+
+    assert_eq!(report.relinked_component_recipes.len(), 1);
+    assert_eq!(
+        report.relinked_component_recipes[0],
+        ShiftComponentRecipeSummary {
+            glyph_id: "glyph_A".to_string(),
+            glyph_name: "A".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_variable_relink".to_string(),
+            base_glyph_id: "glyph_bar".to_string(),
+            base_glyph_name: "bar".to_string(),
+            kind: ShiftComponentRecipeKind::ConditionalVariable,
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            condition_axis_ids: vec!["axis_wght".to_string()],
+            location_axis_ids: vec!["axis_wght".to_string()],
+            variation_source_count: 1,
+            variation_parent_axis_ids: vec!["axis_wght".to_string()],
+            variation_location_axis_ids: vec!["axis_wght".to_string()],
+            varies_transform: true,
+            lowering_hint: ShiftComponentLoweringHint::ConditionalVariableComponent,
+            required_capabilities: vec![
+                ShiftComponentLoweringCapability::Condition,
+                ShiftComponentLoweringCapability::VariableLocation,
+                ShiftComponentLoweringCapability::VariableTransform,
+                ShiftComponentLoweringCapability::AxisReset,
+            ],
+        }
+    );
+}
+
+#[test]
+fn working_source_relink_delete_rejects_deleted_glyph_as_replacement() {
+    let mut package = package_with_component_dependency();
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_B".to_string(),
+        name: "B".to_string(),
+        unicodes: vec!["0042".to_string()],
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let mut working_source =
+        ShiftWorkingSource::new(package).expect("working source should initialize");
+
+    let err = working_source
+        .delete_glyph_and_relink_component_references("glyph_A", "glyph_A")
+        .expect_err("relinking to the deleted glyph should fail");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::CannotRelinkDeletedGlyphToItself { glyph_id } if glyph_id == "glyph_A"
+    ));
+    assert_eq!(working_source.revision(), 0);
+    assert!(working_source
+        .package()
+        .glyphs
+        .iter()
+        .any(|glyph| glyph.id == "glyph_A"));
+}
+
+#[test]
 fn stable_glyph_id_keeps_file_path_across_rename() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");
