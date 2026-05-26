@@ -351,6 +351,23 @@ pub struct ShiftSourceLayerCoverageReport {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftVariableFontReadinessReport {
+    pub readiness: ShiftVariableFontReadiness,
+    pub source_coverage_summary: ShiftSourceLayerCoverageSummary,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftVariableFontReadiness {
+    SingleSource,
+    Ready,
+    MissingSourceLayers,
+    InterpolationIncompatible,
+    MissingSourceLayersAndInterpolationIncompatible,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphVariationSourceUse {
     pub glyph_id: String,
     pub glyph_name: String,
@@ -1501,6 +1518,30 @@ impl ShiftWorkingSource {
         let sources = self.build_source_layer_coverage();
         let summary = Self::summarize_source_layer_coverage(&sources);
         ShiftSourceLayerCoverageReport { summary, sources }
+    }
+
+    pub fn variable_font_readiness_report(&self) -> ShiftVariableFontReadinessReport {
+        let source_coverage_summary = self.source_layer_coverage_summary();
+        let readiness = if source_coverage_summary.source_count < 2 {
+            ShiftVariableFontReadiness::SingleSource
+        } else {
+            match (
+                source_coverage_summary.missing_layer_count > 0,
+                source_coverage_summary.interpolation_mismatch_issue_count > 0,
+            ) {
+                (false, false) => ShiftVariableFontReadiness::Ready,
+                (true, false) => ShiftVariableFontReadiness::MissingSourceLayers,
+                (false, true) => ShiftVariableFontReadiness::InterpolationIncompatible,
+                (true, true) => {
+                    ShiftVariableFontReadiness::MissingSourceLayersAndInterpolationIncompatible
+                }
+            }
+        };
+
+        ShiftVariableFontReadinessReport {
+            readiness,
+            source_coverage_summary,
+        }
     }
 
     fn build_source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {

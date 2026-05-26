@@ -16,10 +16,10 @@ use crate::{
     ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
     ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
     ShiftSourceLayerCoverageReadinessCount, ShiftSourceUpdate,
-    ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
+    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -10561,6 +10561,13 @@ fn working_source_reports_source_layer_coverage() {
     let report = working_source.source_layer_coverage_report();
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
+
+    let variable_readiness = working_source.variable_font_readiness_report();
+    assert_eq!(
+        variable_readiness.readiness,
+        ShiftVariableFontReadiness::MissingSourceLayers
+    );
+    assert_eq!(variable_readiness.source_coverage_summary, summary);
 }
 
 #[test]
@@ -10749,6 +10756,55 @@ fn working_source_reports_source_interpolation_issues() {
     let report = working_source.source_layer_coverage_report();
     assert_eq!(report.sources, coverage);
     assert_eq!(report.summary, summary);
+
+    let variable_readiness = working_source.variable_font_readiness_report();
+    assert_eq!(
+        variable_readiness.readiness,
+        ShiftVariableFontReadiness::InterpolationIncompatible
+    );
+    assert_eq!(variable_readiness.source_coverage_summary, summary);
+}
+
+#[test]
+fn working_source_reports_variable_font_readiness() {
+    let single_source = ShiftWorkingSource::new(package_with_single_source(vec![ShiftGlyph {
+        id: "glyph_A".to_string(),
+        name: "A".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+    }]))
+    .expect("single-source package should be valid");
+    assert_eq!(
+        single_source.variable_font_readiness_report().readiness,
+        ShiftVariableFontReadiness::SingleSource
+    );
+
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), layer_with_line_contour(600.0)),
+                ("source_Bold".to_string(), layer_with_line_contour(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let variable_source = ShiftWorkingSource::new(package).expect("variable package is valid");
+    let report = variable_source.variable_font_readiness_report();
+
+    assert_eq!(report.readiness, ShiftVariableFontReadiness::Ready);
+    assert!(report.source_coverage_summary.ready);
 }
 
 #[test]
