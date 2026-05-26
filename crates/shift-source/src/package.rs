@@ -2,8 +2,8 @@ use crate::error::{ShiftSourceError, ShiftSourceResult};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shift_ir::{
     Anchor, Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentLocation,
-    Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph, GlyphId, GlyphLayer,
-    Guideline, Location, Point, PointType, Source,
+    Contour, DecomposedTransform, Font, FontMetadata, FontMetrics, Glyph, GlyphAxis, GlyphId,
+    GlyphLayer, Guideline, Location, Point, PointType, Source,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -2739,6 +2739,7 @@ impl ShiftGlyph {
             unicodes.push(parsed);
         }
         glyph.set_unicodes(unicodes);
+        glyph.set_local_axes(glyph_axes_into_ir(&self.name, self.local_axes)?);
 
         for (source_id, layer) in self.layers {
             let Some(layer_id) = layer_ids_by_source_id.get(&source_id).copied() else {
@@ -3743,10 +3744,45 @@ fn glyph_from_ir(
             .iter()
             .map(|unicode| format!("{unicode:04X}"))
             .collect(),
-        local_axes: Vec::new(),
+        local_axes: glyph_axes_from_ir(glyph.local_axes()),
         variation_sources: Vec::new(),
         layers,
     }
+}
+
+fn glyph_axes_into_ir(
+    glyph_name: &str,
+    axes: Vec<ShiftGlyphAxis>,
+) -> ShiftSourceResult<Vec<GlyphAxis>> {
+    axes.into_iter()
+        .map(|axis| {
+            let axis_id = AxisId::from_stable(axis.id.clone()).map_err(|_| {
+                ShiftSourceError::InvalidIdentifier {
+                    context: format!("glyph-local axis '{}' on glyph '{glyph_name}'", axis.name),
+                    identifier: axis.id.clone(),
+                }
+            })?;
+            Ok(GlyphAxis::new(
+                axis_id,
+                axis.name,
+                axis.minimum,
+                axis.default,
+                axis.maximum,
+            ))
+        })
+        .collect()
+}
+
+fn glyph_axes_from_ir(axes: &[GlyphAxis]) -> Vec<ShiftGlyphAxis> {
+    axes.iter()
+        .map(|axis| ShiftGlyphAxis {
+            id: axis.id().as_str().to_string(),
+            name: axis.name().to_string(),
+            minimum: axis.minimum(),
+            default: axis.default(),
+            maximum: axis.maximum(),
+        })
+        .collect()
 }
 
 fn glyph_layer_from_ir(

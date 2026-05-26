@@ -18,8 +18,8 @@ use crate::{
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
-    DecomposedTransform, Font, FontMetadata, FontMetrics, GlyphId, Layer, Location, Source,
-    SourceId,
+    DecomposedTransform, Font, FontMetadata, FontMetrics, GlyphAxis, GlyphId, Layer, Location,
+    Source, SourceId,
 };
 use shift_ir::{Glyph, GlyphLayer, PointType};
 use std::collections::BTreeMap;
@@ -90,7 +90,15 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
         400.0,
         900.0,
     ));
-    font.insert_glyph(Glyph::with_id(base_glyph_id.clone(), "A.renamed"));
+    let mut base_glyph = Glyph::with_id(base_glyph_id.clone(), "A.renamed");
+    base_glyph.add_local_axis(GlyphAxis::new(
+        AxisId::from_stable("axis_stemWidth").unwrap(),
+        "Stem Width".to_string(),
+        20.0,
+        40.0,
+        80.0,
+    ));
+    font.insert_glyph(base_glyph);
 
     let mut composite_layer = GlyphLayer::with_width(610.0);
     let mut component = Component::with_base_glyph_id(
@@ -141,8 +149,26 @@ fn package_roundtrip_preserves_component_identity_and_base_glyph_id() {
             max: None,
         }) if axis_id == "axis_weight_public"
     ));
+    assert_eq!(
+        package
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_base_A")
+            .expect("base glyph should be serialized")
+            .local_axes[0]
+            .id,
+        "axis_stemWidth"
+    );
 
     let loaded = package.into_font().expect("package should load");
+    assert_eq!(
+        loaded
+            .glyph("A.renamed")
+            .expect("base glyph should load")
+            .local_axes()[0]
+            .name(),
+        "Stem Width"
+    );
     let loaded_component = loaded
         .glyph("Aacute")
         .expect("composite glyph should load")
@@ -5875,6 +5901,17 @@ fn source_package_keeps_component_variation_sources_separate_from_ir_projection(
         .clone()
         .into_font()
         .expect("package should project to IR");
+    let projected_base = font.glyph("stem").expect("base glyph should project");
+    assert_eq!(
+        projected_base.local_axes(),
+        &[GlyphAxis::new(
+            AxisId::from_stable("axis_stemWidth").unwrap(),
+            "Stem Width".to_string(),
+            20.0,
+            40.0,
+            80.0,
+        )]
+    );
     let projected_component = font
         .glyph("A")
         .expect("owner glyph should project")

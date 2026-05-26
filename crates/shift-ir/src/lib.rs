@@ -32,7 +32,7 @@ pub use entity::{
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata};
-pub use glyph::{Glyph, GlyphLayer};
+pub use glyph::{Glyph, GlyphAxis, GlyphLayer};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{KerningData, KerningPair, KerningSide};

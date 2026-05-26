@@ -95,9 +95,24 @@ discovers concepts that make the editor model better. IR should not blindly mirr
 any file format, but it should model the semantic objects the editor needs to
 edit, render, select, inspect, undo, preview, and reason about efficiently.
 
-Current `Component` carries the editor-facing part of variable component state:
+Current `Glyph` and `Component` carry the editor-facing part of variable
+component state:
 
 ```rust
+Glyph {
+    id: GlyphId,
+    name: GlyphName,
+    local_axes: Vec<GlyphAxis>,
+}
+
+GlyphAxis {
+    id: AxisId,
+    name: String,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
+}
+
 Component {
     id: ComponentId,
     base_glyph_id: GlyphId,
@@ -110,11 +125,11 @@ Component {
 ```
 
 That is enough for simple composites, stable component relationships,
-ID-keyed sparse variable component placement, and active/inactive condition
-evaluation in the editor loop. Component-specific variation source records still live in
-source/package services until the editor exposes first-class controls for those
-recipes. If component recipes become a first-class editor feature, IR should
-grow toward this shape:
+ID-keyed sparse variable component placement across global and glyph-local
+axes, and active/inactive condition evaluation in the editor loop. Component
+and glyph variation source records still live in source/package services until
+the editor exposes first-class controls for those recipes. If component recipes
+become a first-class editor feature, IR should grow toward this shape:
 
 ```rust
 Component {

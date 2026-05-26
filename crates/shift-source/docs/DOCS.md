@@ -41,18 +41,20 @@ and persistence behavior:
 
 Some source concepts can project cleanly into IR today. Others are intentionally
 stored in `shift-source` until the editor needs first-class manipulation for
-them. For example, IR glyphs, sources, and axes now carry stable IDs, and IR
-components carry stable component IDs, durable base glyph IDs, sparse locations,
-axis inheritance, and conditions because those concepts directly help rename
-safety, source lookup, variable font operations, selection, undo, inspector
-flows, and active/inactive component previews. `ShiftPackage` still owns
-component variation sources until the editor needs first-class controls for
-those recipes.
+them. For example, IR glyphs, sources, and axes now carry stable IDs, IR glyphs
+carry glyph-local axes, and IR components carry stable component IDs, durable
+base glyph IDs, sparse locations, axis inheritance, and conditions because
+those concepts directly help rename safety, source lookup, variable font
+operations, selection, undo, inspector flows, and active/inactive component
+previews. `ShiftPackage` still owns component and glyph variation source
+recipes until the editor needs first-class controls for those recipes.
 
 Promote concepts into IR when doing so makes editor code more direct:
 
 - stable glyph/source/axis IDs for selection, rename, source lookup, and
   component references
+- glyph-local axes when component locations or inspectors need to reason about
+  base-glyph construction axes
 - sparse component locations keyed by stable axis ID, plus reset/inherit
   behavior for variable-component inspection
 - component conditions when rendering/selection depends on active components
@@ -1175,10 +1177,10 @@ derived indexes must be safe to delete
   Working-source rename commands refresh dependent component labels through
   narrow `UpdateGlyphLabels` writes, so app surfaces and package files stay
   readable after a rename without relinking component identity.
-- Variable component locations, axis inheritance, and conditions now project
-  into `shift-ir`. Component locations stay ID-keyed because they can reference
-  glyph-local axes as well as global axes. Glyph-local axis definitions and
-  component/glyph variation sources still need deeper IR modeling before they
+- Glyph-local axes, variable component locations, axis inheritance, and
+  conditions now project into `shift-ir`. Component locations stay ID-keyed
+  because they can reference glyph-local axes as well as global axes. Component
+  and glyph variation source recipes still need deeper IR modeling before they
   can drive ordinary editor behavior.
 - Export/build diagnostics are not wired through the `shift-backends`/`fontc`
   path yet, but the source model now rejects out-of-range authored coordinates

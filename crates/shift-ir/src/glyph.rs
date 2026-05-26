@@ -1,7 +1,7 @@
 use crate::anchor::Anchor;
 use crate::component::Component;
 use crate::contour::Contour;
-use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, LayerId};
+use crate::entity::{AnchorId, AxisId, ComponentId, ContourId, GlyphId, LayerId};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::GlyphName;
@@ -15,8 +15,20 @@ pub struct Glyph {
     id: GlyphId,
     name: GlyphName,
     unicodes: Vec<u32>,
+    #[serde(default)]
+    local_axes: Vec<GlyphAxis>,
     layers: HashMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphAxis {
+    id: AxisId,
+    name: String,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -205,6 +217,7 @@ impl Glyph {
             id,
             name: name.into(),
             unicodes: Vec::new(),
+            local_axes: Vec::new(),
             layers: HashMap::new(),
             lib: LibData::new(),
         }
@@ -264,6 +277,18 @@ impl Glyph {
         self.unicodes = unicodes;
     }
 
+    pub fn local_axes(&self) -> &[GlyphAxis] {
+        &self.local_axes
+    }
+
+    pub fn set_local_axes(&mut self, local_axes: Vec<GlyphAxis>) {
+        self.local_axes = local_axes;
+    }
+
+    pub fn add_local_axis(&mut self, axis: GlyphAxis) {
+        self.local_axes.push(axis);
+    }
+
     pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
     }
@@ -297,6 +322,38 @@ impl Glyph {
     }
 }
 
+impl GlyphAxis {
+    pub fn new(id: AxisId, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
+        Self {
+            id,
+            name,
+            minimum,
+            default,
+            maximum,
+        }
+    }
+
+    pub fn id(&self) -> &AxisId {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn minimum(&self) -> f64 {
+        self.minimum
+    }
+
+    pub fn default(&self) -> f64 {
+        self.default
+    }
+
+    pub fn maximum(&self) -> f64 {
+        self.maximum
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,6 +366,23 @@ mod tests {
         assert_eq!(g.id_ref().as_str(), "glyph_A");
         assert_eq!(g.name(), "A");
         assert_eq!(g.primary_unicode(), Some(65));
+        assert!(g.local_axes().is_empty());
+    }
+
+    #[test]
+    fn glyph_local_axes_are_editable() {
+        let mut g = Glyph::new("stem");
+        let axis = GlyphAxis::new(
+            AxisId::from_stable("axis_stemWidth").unwrap(),
+            "Stem Width".to_string(),
+            20.0,
+            40.0,
+            80.0,
+        );
+
+        g.add_local_axis(axis.clone());
+
+        assert_eq!(g.local_axes(), &[axis]);
     }
 
     #[test]
