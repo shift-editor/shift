@@ -3727,6 +3727,76 @@ fn working_source_mark_saved_failure_does_not_replace_saved_baseline() {
 }
 
 #[test]
+fn working_source_mark_saved_refuses_active_staged_commit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    let _ = stage_base_glyph_rename(&package_path, "StagedBase");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    let err = working_source
+        .mark_saved(&package_path)
+        .expect_err("active staged commit should block mark saved");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::ActiveStagedCommits {
+            transaction_count: 1
+        }
+    ));
+    assert_eq!(working_source.revision(), 1);
+    assert_eq!(
+        working_source
+            .saved_package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("A")
+    );
+}
+
+#[test]
+fn working_source_mark_saved_refuses_disk_package_mismatch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let package = package_with_component_dependency();
+    save_package(&package, &package_path).expect("package should save");
+    let mut working_source =
+        ShiftWorkingSource::open_saved(&package_path, package).expect("working source should open");
+
+    working_source
+        .rename_glyph("glyph_A", "RenamedBase")
+        .expect("rename should succeed");
+    let mut external_package = working_source.package().clone();
+    rename_base_glyph_and_component_label_cache(&mut external_package, "ExternalBase");
+    save_package(&external_package, &package_path).expect("external package should save");
+
+    let err = working_source
+        .mark_saved(&package_path)
+        .expect_err("disk package mismatch should block mark saved");
+
+    assert!(matches!(
+        err,
+        ShiftSourceError::SavedPackageMismatch { change_count } if change_count > 0
+    ));
+    assert_eq!(working_source.revision(), 1);
+    assert_eq!(
+        working_source
+            .saved_package()
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.id == "glyph_A")
+            .map(|glyph| glyph.name.as_str()),
+        Some("A")
+    );
+}
+
+#[test]
 fn working_source_save_stages_applies_and_marks_saved() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let package_path = temp_dir.path().join("SpikeSans.shift");

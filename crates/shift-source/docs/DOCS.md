@@ -214,8 +214,10 @@ Current writer behavior:
   it prepares, stages, applies, and marks the working source saved only after
   the staged commit has succeeded.
 - `ShiftWorkingSource::mark_saved()` refreshes the saved baseline after a
-  successful writer commit. It fingerprints the saved files before updating the
-  in-memory saved baseline, so a failed refresh does not corrupt dirty-state
+  successful writer commit. It refuses active `.shift-txn` metadata, reloads
+  the package from disk, checks that the loaded package matches the in-memory
+  package semantically, then fingerprints the saved files before updating the
+  in-memory saved baseline. A failed refresh does not corrupt dirty-state
   bookkeeping.
 
 Design rules for the spike:

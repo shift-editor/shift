@@ -2,7 +2,7 @@ use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
     compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
-    parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
+    load_package, parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
     stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
     ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition,
     ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
@@ -2062,7 +2062,23 @@ impl ShiftWorkingSource {
     }
 
     pub fn mark_saved(&mut self, root: impl AsRef<Path>) -> ShiftSourceResult<()> {
+        let root = root.as_ref();
+        let staged_recovery_plans = plan_staged_commit_recovery(root)?;
+        if !staged_recovery_plans.is_empty() {
+            return Err(ShiftSourceError::ActiveStagedCommits {
+                transaction_count: staged_recovery_plans.len(),
+            });
+        }
+
         self.package.validate()?;
+        let disk_package = load_package(root)?;
+        let disk_diff = diff_packages(&disk_package, &self.package)?;
+        if !disk_diff.changes.is_empty() {
+            return Err(ShiftSourceError::SavedPackageMismatch {
+                change_count: disk_diff.changes.len(),
+            });
+        }
+
         let saved_fingerprint = fingerprint_package(root)?;
         self.saved_package = self.package.clone();
         self.saved_fingerprint = Some(saved_fingerprint);

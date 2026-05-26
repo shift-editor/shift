@@ -83,6 +83,9 @@ pub enum ShiftSourceError {
     )]
     ActiveStagedCommits { transaction_count: usize },
 
+    #[error("cannot mark Shift working source saved because disk package differs by {change_count} semantic changes")]
+    SavedPackageMismatch { change_count: usize },
+
     #[error("cannot apply Shift staged commit '{transaction_id}' because it has {issue_count} recovery issues")]
     StagedCommitHasIssues {
         transaction_id: String,
