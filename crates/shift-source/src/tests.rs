@@ -799,7 +799,10 @@ fn write_impact_for_rename_updates_dependency_labels() {
         ShiftWriteImpact {
             canonical_paths: vec!["glyphs/glyph_A.json".to_string()],
             removed_canonical_paths: Vec::new(),
-            derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+            derived_paths: vec![
+                DEPENDENCY_INDEX_PATH.to_string(),
+                INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+            ],
         }
     );
 }
@@ -878,7 +881,10 @@ fn package_diff_classifies_rename_as_label_only_change() {
                     "glyphs/glyph_Aacute.json".to_string(),
                 ],
                 removed_canonical_paths: Vec::new(),
-                derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
             },
         }
     );
@@ -1322,6 +1328,7 @@ fn prepared_commit_records_write_set_fingerprints_and_operations() {
         prepared.impacted_paths,
         vec![
             DEPENDENCY_INDEX_PATH.to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
             "glyphs/glyph_A.json".to_string(),
             "glyphs/glyph_Aacute.json".to_string(),
         ]
@@ -1359,6 +1366,11 @@ fn prepared_commit_records_write_set_fingerprints_and_operations() {
             ),
             (
                 DEPENDENCY_INDEX_PATH,
+                "write",
+                ShiftCommitOperationPurpose::Derived,
+            ),
+            (
+                INTERPOLATION_COMPATIBILITY_INDEX_PATH,
                 "write",
                 ShiftCommitOperationPurpose::Derived,
             ),
@@ -1401,6 +1413,7 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
             "glyphs/glyph_A.json".to_string(),
             "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
         ]
     );
     assert!(staged
@@ -1415,14 +1428,25 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
         .transaction_path
         .join(format!("payloads/{DEPENDENCY_INDEX_PATH}"))
         .exists());
+    assert!(staged
+        .transaction_path
+        .join(format!("payloads/{INTERPOLATION_COMPATIBILITY_INDEX_PATH}"))
+        .exists());
 
     let staged_glyph =
         fs::read_to_string(staged.transaction_path.join("payloads/glyphs/glyph_A.json"))
             .expect("staged glyph should be readable");
+    let staged_compatibility = fs::read_to_string(
+        staged
+            .transaction_path
+            .join(format!("payloads/{INTERPOLATION_COMPATIBILITY_INDEX_PATH}")),
+    )
+    .expect("staged compatibility index should be readable");
     let live_after =
         fs::read_to_string(package_path.join("glyphs/glyph_A.json")).expect("glyph is readable");
 
     assert!(staged_glyph.contains("\"name\": \"RenamedBase\""));
+    assert!(staged_compatibility.contains("\"glyphName\": \"RenamedBase\""));
     assert_eq!(live_after, live_before);
 }
 
@@ -1509,6 +1533,7 @@ fn copy_staged_base_rename_payloads_to_live(package_path: &Path, staged: &ShiftS
     copy_staged_payload_to_live(package_path, staged, "glyphs/glyph_A.json");
     copy_staged_payload_to_live(package_path, staged, "glyphs/glyph_Aacute.json");
     copy_staged_payload_to_live(package_path, staged, DEPENDENCY_INDEX_PATH);
+    copy_staged_payload_to_live(package_path, staged, INTERPOLATION_COMPATIBILITY_INDEX_PATH);
 }
 
 #[test]
@@ -1542,7 +1567,7 @@ fn load_package_refuses_pending_staged_commit_before_trusting_files() {
     );
     assert_eq!(preview.summary.staged_recovery_count, 1);
     assert_eq!(preview.summary.resume_recovery_count, 1);
-    assert_eq!(preview.summary.pending_path_count, 3);
+    assert_eq!(preview.summary.pending_path_count, 4);
     assert_eq!(
         preview.summary.action_counts,
         vec![ShiftStagedCommitRecoveryActionCount {
@@ -1589,6 +1614,7 @@ fn recover_staged_commits_resumes_pending_transaction_then_package_loads() {
                 "glyphs/glyph_A.json".to_string(),
                 "glyphs/glyph_Aacute.json".to_string(),
                 DEPENDENCY_INDEX_PATH.to_string(),
+                INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
             ],
             backup_paths: vec![
                 "glyphs/glyph_A.json".to_string(),
@@ -1656,6 +1682,7 @@ fn recover_staged_commits_resumes_partially_applied_transaction_then_package_loa
             "glyphs/glyph_A.json".to_string(),
             "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
         ]
     );
     assert_eq!(
@@ -1802,7 +1829,7 @@ fn load_package_allows_cleanup_only_staged_commit() {
         ShiftPackageLoadPrimaryAction::CleanupThenLoad
     );
     assert_eq!(preview.summary.cleanup_recovery_count, 1);
-    assert_eq!(preview.summary.applied_path_count, 3);
+    assert_eq!(preview.summary.applied_path_count, 4);
 
     let package = load_package(&package_path).expect("applied staged commit should not block load");
 
@@ -2010,7 +2037,7 @@ fn staged_recovery_plan_marks_pending_transaction_as_resumable() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::Resume,
             live_state: ShiftStagedCommitLiveState::Pending,
-            pending_path_count: 3,
+            pending_path_count: 4,
             applied_path_count: 0,
             diverged_path_count: 0,
             issue_count: 0,
@@ -2059,6 +2086,10 @@ fn inspect_staged_commits_reports_applied_and_diverged_live_state() {
             .collect::<Vec<_>>(),
         vec![
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Applied),
+            (
+                INTERPOLATION_COMPATIBILITY_INDEX_PATH,
+                ShiftStagedCommitLiveState::Applied,
+            ),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Diverged),
             (
                 "glyphs/glyph_Aacute.json",
@@ -2104,7 +2135,7 @@ fn staged_recovery_plan_marks_partially_applied_transaction_as_resumable() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::Resume,
             live_state: ShiftStagedCommitLiveState::PartiallyApplied,
-            pending_path_count: 2,
+            pending_path_count: 3,
             applied_path_count: 1,
             diverged_path_count: 0,
             issue_count: 0,
@@ -2139,7 +2170,7 @@ fn staged_recovery_plan_marks_applied_transaction_for_cleanup() {
             action: ShiftStagedCommitRecoveryAction::Cleanup,
             live_state: ShiftStagedCommitLiveState::Applied,
             pending_path_count: 0,
-            applied_path_count: 3,
+            applied_path_count: 4,
             diverged_path_count: 0,
             issue_count: 0,
         }]
@@ -2175,7 +2206,7 @@ fn staged_recovery_plan_marks_diverged_transaction_as_blocked() {
             transaction_id: staged.transaction_id,
             action: ShiftStagedCommitRecoveryAction::BlockedByLiveConflict,
             live_state: ShiftStagedCommitLiveState::Diverged,
-            pending_path_count: 2,
+            pending_path_count: 3,
             applied_path_count: 0,
             diverged_path_count: 1,
             issue_count: 0,
@@ -2424,6 +2455,10 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
             .collect::<Vec<_>>(),
         vec![
             (DEPENDENCY_INDEX_PATH, ShiftStagedCommitLiveState::Pending),
+            (
+                INTERPOLATION_COMPATIBILITY_INDEX_PATH,
+                ShiftStagedCommitLiveState::Pending,
+            ),
             ("glyphs/glyph_A.json", ShiftStagedCommitLiveState::Applied),
             (
                 "glyphs/glyph_Aacute.json",
@@ -2443,12 +2478,16 @@ fn apply_staged_commit_resumes_partially_promoted_transaction() {
         fs::read_to_string(package_path.join("glyphs/glyph_A.json")).expect("glyph is readable");
     assert!(live_glyph.contains("\"name\": \"RenamedBase\""));
     assert!(package_path.join(DEPENDENCY_INDEX_PATH).exists());
+    assert!(package_path
+        .join(INTERPOLATION_COMPATIBILITY_INDEX_PATH)
+        .exists());
     assert_eq!(
         applied.applied_paths,
         vec![
             "glyphs/glyph_A.json".to_string(),
             "glyphs/glyph_Aacute.json".to_string(),
             DEPENDENCY_INDEX_PATH.to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
         ]
     );
     assert!(!staged.transaction_path.exists());
@@ -2893,7 +2932,10 @@ fn working_source_renames_glyph_by_id_without_rewriting_component_refs() {
                     "glyphs/glyph_Aacute.json".to_string(),
                 ],
                 removed_canonical_paths: Vec::new(),
-                derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
             },
         }
     );
@@ -2999,7 +3041,10 @@ fn working_source_previews_glyph_rename_without_mutating() {
                     "glyphs/glyph_Aacute.json".to_string(),
                 ],
                 removed_canonical_paths: Vec::new(),
-                derived_paths: vec![DEPENDENCY_INDEX_PATH.to_string()],
+                derived_paths: vec![
+                    DEPENDENCY_INDEX_PATH.to_string(),
+                    INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+                ],
             },
         }
     );
@@ -3801,6 +3846,7 @@ fn working_source_prepares_commit_from_saved_baseline() {
         prepared.impacted_paths,
         vec![
             DEPENDENCY_INDEX_PATH.to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
             "glyphs/glyph_A.json".to_string(),
             "glyphs/glyph_Aacute.json".to_string(),
         ]
@@ -3865,13 +3911,13 @@ fn working_source_previews_save_ready_without_staging() {
     );
     assert_eq!(preview.revision, 1);
     assert_eq!(preview.summary.change_count, 2);
-    assert_eq!(preview.summary.impacted_path_count, 3);
+    assert_eq!(preview.summary.impacted_path_count, 4);
     assert_eq!(preview.summary.canonical_path_count, 2);
     assert_eq!(preview.summary.removed_canonical_path_count, 0);
-    assert_eq!(preview.summary.derived_path_count, 1);
+    assert_eq!(preview.summary.derived_path_count, 2);
     assert_eq!(preview.summary.conflict_count, 0);
     assert_eq!(preview.summary.staged_recovery_count, 0);
-    assert_eq!(preview.summary.write_file_count, 3);
+    assert_eq!(preview.summary.write_file_count, 4);
     assert!(preview.prepared.conflicts.is_empty());
     assert_eq!(
         preview.prepared.diff.changes,
@@ -4415,13 +4461,13 @@ fn working_source_save_stages_applies_and_marks_saved() {
 
     assert_eq!(report.status, ShiftWorkingSourceSaveStatus::Saved);
     assert_eq!(report.summary.change_count, 2);
-    assert_eq!(report.summary.impacted_path_count, 3);
+    assert_eq!(report.summary.impacted_path_count, 4);
     assert_eq!(report.summary.canonical_path_count, 2);
     assert_eq!(report.summary.removed_canonical_path_count, 0);
-    assert_eq!(report.summary.derived_path_count, 1);
+    assert_eq!(report.summary.derived_path_count, 2);
     assert_eq!(report.summary.conflict_count, 0);
     assert_eq!(report.summary.staged_recovery_count, 0);
-    assert_eq!(report.summary.write_file_count, 3);
+    assert_eq!(report.summary.write_file_count, 4);
     assert!(report.staged.is_some());
     assert!(report.applied.is_some());
     assert_eq!(report.revision, 0);

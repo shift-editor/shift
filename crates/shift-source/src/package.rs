@@ -1909,6 +1909,7 @@ pub fn plan_write_impact(changes: &[ShiftPackageChange]) -> ShiftWriteImpact {
             ShiftPackageChange::RenameGlyph { glyph_id } => {
                 canonical_paths.insert(glyph_file_path(glyph_id));
                 derived_paths.insert(DEPENDENCY_INDEX_PATH.to_string());
+                derived_paths.insert(INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string());
             }
             ShiftPackageChange::DeleteGlyph { glyph_id } => {
                 removed_canonical_paths.insert(glyph_file_path(glyph_id));

@@ -1055,6 +1055,7 @@ Examples:
 RenameGlyph(glyph_A)
   canonical: glyphs/glyph_A.json
   derived:   derived/dependencies.json
+             derived/interpolation-compatibility.json
 
 UpdateGlyph(glyph_A)
   canonical: glyphs/glyph_A.json
@@ -1083,8 +1084,11 @@ UpdateAxisMappings
 
 The important behavior is that a glyph rename does not relink dependents.
 Components target `baseGlyphId`, so the rename changes the renamed glyph file
-and refreshes dependent component `baseGlyphName` label caches. A component edit
-is different: it changes the owner glyph's semantic component recipe and
+and refreshes dependent component `baseGlyphName` label caches. Rename also
+refreshes interpolation compatibility because that derived index carries
+app-facing glyph labels. A component label-cache update remains dependency-only:
+compatibility signatures use stable IDs, not cached display names. A component
+edit is different: it changes the owner glyph's semantic component recipe and
 invalidates interpolation compatibility because the graph may have changed.
 
 The diff API preserves that distinction:
@@ -1140,6 +1144,7 @@ Examples:
 RenameGlyph(glyph_A)
   -> WriteFile(glyphs/glyph_A.json, canonical)
   -> WriteFile(derived/dependencies.json, derived)
+  -> WriteFile(derived/interpolation-compatibility.json, derived)
 
 UpdateAxisMappings to empty list
   -> RemoveFile(axis-mappings.json, canonical)
