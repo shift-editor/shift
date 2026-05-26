@@ -723,15 +723,16 @@ format exploration:
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include
-  reference issue counts, mismatch issue counts, affected-glyph counts, and
-  issue-kind counts split by all/reference/mismatch roles. A report query
-  returns the compact summary and detailed source rows together for screens that
-  need both, avoiding duplicate renderer calls and duplicate Rust scans. The
-  compact summary reports total expected/present/missing layers, ready sources,
-  sources needing work, sources with missing layers, sources with interpolation
-  mismatches, readiness buckets, and package-wide interpolation issue-kind
-  counts so the app can render source-sidebar or export-readiness badges without
-  rebuilding the aggregation in TypeScript. The app can use the explicit
+  default-source status, reference issue counts, mismatch issue counts,
+  affected-glyph counts, and issue-kind counts split by all/reference/mismatch
+  roles. A report query returns the compact summary and detailed source rows
+  together for screens that need both, avoiding duplicate renderer calls and
+  duplicate Rust scans. The compact summary reports total
+  expected/present/missing layers, ready sources, sources needing work, sources
+  with missing layers, sources with interpolation mismatches, readiness buckets,
+  and package-wide interpolation issue-kind counts so the app can render
+  source-sidebar or export-readiness badges without rebuilding the aggregation
+  in TypeScript. The app can use the explicit
   readiness state for source-row badges while still showing reference-only
   context when a canonical source is involved in other layers' failures. It can
   distinguish "this source is the canonical reference for other broken layers"
@@ -740,11 +741,11 @@ format exploration:
   work from component relinking or component-count fixes directly in the source
   list. This makes "new master added but not populated yet" a first-class state
   instead of a validation failure or a TypeScript-side scan. A compact worklist
-  query returns only the sources that need work, their readiness state, missing
-  layer counts and sample glyphs, interpolation mismatch counts, affected glyph
-  counts and sample glyphs, and mismatch issue-kind counts, so source sidebars
-  and export checklists can show the prioritized fix list without walking full
-  glyph/source detail rows.
+  query returns only the sources that need work, their default-source status,
+  readiness state, missing layer counts and sample glyphs, interpolation
+  mismatch counts, affected glyph counts and sample glyphs, and mismatch
+  issue-kind counts, so source sidebars and export checklists can show the
+  prioritized fix list without walking full glyph/source detail rows.
 - **Variable-font readiness:** app chrome and export panels can ask for one
   package-level variable-font readiness state: `singleSource`, `ready`,
   `missingSourceLayers`, `interpolationIncompatible`, or

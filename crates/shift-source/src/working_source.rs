@@ -458,6 +458,7 @@ pub struct ShiftInterpolationCompatibilityUpdateReport {
 pub struct ShiftSourceLayerCoverage {
     pub source_id: String,
     pub source_name: String,
+    pub is_default_source: bool,
     pub readiness: ShiftSourceLayerCoverageReadiness,
     pub glyph_count: usize,
     pub layer_count: usize,
@@ -543,6 +544,7 @@ pub struct ShiftSourceLayerCoverageWorklist {
 pub struct ShiftSourceLayerCoverageWorkItem {
     pub source_id: String,
     pub source_name: String,
+    pub is_default_source: bool,
     pub readiness: ShiftSourceLayerCoverageReadiness,
     pub missing_layer_count: usize,
     pub missing_layer_samples: Vec<ShiftMissingSourceLayer>,
@@ -2154,6 +2156,7 @@ impl ShiftWorkingSource {
             .map(|source| ShiftSourceLayerCoverageWorkItem {
                 source_id: source.source_id.clone(),
                 source_name: source.source_name.clone(),
+                is_default_source: source.is_default_source,
                 readiness: source.readiness,
                 missing_layer_count: source.missing_layer_count,
                 missing_layer_samples: source
@@ -2386,6 +2389,8 @@ impl ShiftWorkingSource {
         ShiftSourceLayerCoverage {
             source_id: source.id.clone(),
             source_name: source.name.clone(),
+            is_default_source: package.manifest.default_source_id.as_deref()
+                == Some(source.id.as_str()),
             readiness,
             glyph_count: package.glyphs.len(),
             layer_count: present_layers.len(),
