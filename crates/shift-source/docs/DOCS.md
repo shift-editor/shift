@@ -119,9 +119,10 @@ deleteComponentVariationSource(glyphId, layerId, componentId, sourceId)
 Build/export stays outside this crate. `shift-source` may store authoring
 intent that a build needs, such as public axes, internal axes, mappings, glyph
 variation sources, variable component recipes, export labels, and declared
-output intent. `shift-backends` should decide how that intent lowers into
-designspace, UFO, static or variable binaries, `avar`/`avar2`, `VARC`,
-fallback decomposition, and artifact-specific diagnostics.
+output intent. The backend/export path, including `fontc` where it is the
+compiler, should decide how that intent lowers into designspace, UFO, static or
+variable binaries, `avar`/`avar2`, `VARC`, fallback decomposition, and
+artifact-specific diagnostics.
 
 The intended flow is:
 
@@ -129,7 +130,7 @@ The intended flow is:
 ShiftPackage source graph
   -> ShiftWorkingSource semantic edits and queries
   -> shift_ir::Font editor/rendering projection
-  -> shift-backends export/build lowering
+  -> shift-backends/fontc export and build
   -> diagnostics back to the app
 ```
 
@@ -412,14 +413,17 @@ format exploration:
   They also carry lowering hints and required capabilities, so backends can
   explain whether a component is a plain component, needs condition support,
   needs variable-component support, or will need fallback handling for a target.
-- **Component lowering diagnostics:** export preflight can compare component
-  recipes with a target capability profile before invoking a backend. This keeps
-  source format semantics separate from backend policy while still letting the
-  app show exact unsupported capabilities per glyph, layer, component, and
-  evaluated condition when a concrete context is provided. A summary query also
-  returns total/supported/unsupported component counts, affected glyph count,
-  and counts per missing capability so export UI can make a fast
-  proceed/fallback/fail decision without re-walking every diagnostic.
+- **Component capability diagnostics:** export preflight can compare component
+  recipes with a target capability profile before invoking a backend. This is
+  evidence for backend or `fontc` policy, not a local compiler plan: it tells
+  the app which authored Shift semantics are present, while the backend decides
+  whether to preserve them, lower them, decompose, materialize generated
+  sources, or reject the export. The query still lets the app show exact
+  unsupported capabilities per glyph, layer, component, and evaluated condition
+  when a concrete context is provided. A summary query also returns
+  total/supported/unsupported component counts, affected glyph count, and counts
+  per missing capability so export UI can make a fast proceed/fallback/fail
+  decision without re-walking every diagnostic.
   Static-instance preflight can pass a concrete location; active conditions are
   resolved away before capability comparison, while inactive conditional
   components are skipped and counted separately with stable IDs, required
@@ -1176,5 +1180,6 @@ derived indexes must be safe to delete
   glyph-local axes as well as global axes. Glyph-local axis definitions and
   component/glyph variation sources still need deeper IR modeling before they
   can drive ordinary editor behavior.
-- Export/build diagnostics are not wired to `shift-backends` yet, but the source
-  model now rejects out-of-range authored coordinates before backend lowering.
+- Export/build diagnostics are not wired through the `shift-backends`/`fontc`
+  path yet, but the source model now rejects out-of-range authored coordinates
+  before backend export.

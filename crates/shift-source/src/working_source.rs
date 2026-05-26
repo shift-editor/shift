@@ -652,14 +652,31 @@ pub struct ShiftComponentLoweringTarget {
 }
 
 impl ShiftComponentLoweringTarget {
+    /// Describes the component semantics an export/backend path can preserve.
+    ///
+    /// This is evidence for backend preflight and UI messaging, not a compiler
+    /// lowering policy. The backend, such as `fontc`, decides how supported or
+    /// unsupported source semantics become output artifacts.
     pub fn new(supported_capabilities: Vec<ShiftComponentLoweringCapability>) -> Self {
         Self {
             supported_capabilities,
         }
     }
 
+    /// A backend target that accepts only ordinary static component references.
     pub fn plain_components() -> Self {
         Self::new(Vec::new())
+    }
+
+    /// A backend target that can preserve every Shift component authoring
+    /// semantic represented by `ShiftComponentLoweringCapability`.
+    pub fn all_shift_component_semantics() -> Self {
+        Self::new(vec![
+            ShiftComponentLoweringCapability::Condition,
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ])
     }
 }
 

@@ -4806,12 +4806,7 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         ]
     );
 
-    let full_target = ShiftComponentLoweringTarget::new(vec![
-        ShiftComponentLoweringCapability::Condition,
-        ShiftComponentLoweringCapability::VariableLocation,
-        ShiftComponentLoweringCapability::VariableTransform,
-        ShiftComponentLoweringCapability::AxisReset,
-    ]);
+    let full_target = ShiftComponentLoweringTarget::all_shift_component_semantics();
     let full_preflight = working_source.component_lowering_preflight(&full_target);
     assert_eq!(full_preflight.total_component_count, 4);
     assert_eq!(full_preflight.supported_component_count, 4);
