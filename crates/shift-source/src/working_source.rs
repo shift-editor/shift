@@ -7,7 +7,7 @@ use crate::package::{
     summarize_staged_commit_recovery, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping,
     ShiftAxisMappingSample, ShiftCommitOperation, ShiftComponent, ShiftComponentUse,
     ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
-    ShiftFingerprintConflictKind, ShiftGlyph, ShiftGlyphDependencies,
+    ShiftFingerprintConflictKind, ShiftFontInfo, ShiftGlyph, ShiftGlyphDependencies,
     ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
     ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
     ShiftInterpolationCompatibilityIssueKindCount, ShiftPackage, ShiftPackageChange,
@@ -308,6 +308,20 @@ pub struct ShiftCreateSource {
 pub struct ShiftSourceUpdate {
     pub name: String,
     pub location: BTreeMap<String, f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftFontInfoUpdate {
+    pub font: ShiftFontInfo,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftUpdateFontInfoReport {
+    pub font: ShiftFontInfo,
+    pub diff: ShiftPackageDiff,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -4010,6 +4024,28 @@ impl ShiftWorkingSource {
             prepared,
             staged: Some(staged),
             applied: Some(applied),
+            revision: self.revision,
+        })
+    }
+
+    pub fn update_font_info(
+        &mut self,
+        update: ShiftFontInfoUpdate,
+    ) -> ShiftSourceResult<ShiftUpdateFontInfoReport> {
+        let before = self.package.clone();
+        let mut next = before.clone();
+        next.font = update.font;
+
+        self.replace_package(next)?;
+
+        let diff = diff_packages(&before, &self.package)?;
+        if !diff.changes.is_empty() {
+            self.revision += 1;
+        }
+
+        Ok(ShiftUpdateFontInfoReport {
+            font: self.package.font.clone(),
+            diff,
             revision: self.revision,
         })
     }

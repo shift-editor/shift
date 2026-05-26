@@ -13,16 +13,16 @@ use crate::{
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftDependencyIndexSummary, ShiftGlyphDependenciesSummary,
-    ShiftGlyphInterpolationCompatibilitySummary, ShiftGlyphRelinkReplacementBlocker,
-    ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse,
-    ShiftInterpolationCompatibilityIndexReport, ShiftInterpolationCompatibilityIndexSummary,
-    ShiftMappedAxisValue, ShiftMappedAxisValueSource, ShiftMappedLocationSummary,
-    ShiftMissingSourceLayer, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError,
-    ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftCreateSource, ShiftDependencyIndexSummary, ShiftFontInfoUpdate,
+    ShiftGlyphDependenciesSummary, ShiftGlyphInterpolationCompatibilitySummary,
+    ShiftGlyphRelinkReplacementBlocker, ShiftGlyphRelinkReplacementCandidateSummary,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftInterpolationCompatibilityIndexReport,
+    ShiftInterpolationCompatibilityIndexSummary, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
     ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
     ShiftSourceMappedLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
     ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
@@ -803,6 +803,20 @@ fn write_impact_for_rename_updates_dependency_labels() {
                 DEPENDENCY_INDEX_PATH.to_string(),
                 INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
             ],
+        }
+    );
+}
+
+#[test]
+fn write_impact_for_font_info_touches_only_font_json() {
+    let impact = plan_write_impact(&[ShiftPackageChange::UpdateFontInfo]);
+
+    assert_eq!(
+        impact,
+        ShiftWriteImpact {
+            canonical_paths: vec!["font.json".to_string()],
+            removed_canonical_paths: Vec::new(),
+            derived_paths: Vec::new(),
         }
     );
 }
@@ -12783,6 +12797,100 @@ fn working_source_missing_glyph_source_layer_delete_does_not_mutate() {
         ShiftSourceError::MissingGlyphLayer { glyph_id, layer_id }
             if glyph_id == "glyph_A" && layer_id == "source_Bold"
     ));
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
+fn working_source_updates_font_info_with_narrow_impact() {
+    let mut working_source =
+        ShiftWorkingSource::new(package_with_component_dependency()).expect("package is valid");
+    let update = ShiftFontInfo {
+        metadata: FontMetadata::with_names("Edited Sans".to_string(), "Text".to_string()),
+        metrics: FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1536.0,
+            descender: -512.0,
+            cap_height: Some(1450.0),
+            x_height: Some(1024.0),
+            line_gap: Some(0.0),
+            italic_angle: Some(-8.0),
+            underline_position: Some(-160.0),
+            underline_thickness: Some(96.0),
+        },
+    };
+
+    let report = working_source
+        .update_font_info(ShiftFontInfoUpdate {
+            font: update.clone(),
+        })
+        .expect("font info update should succeed");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.font, update);
+    assert_eq!(working_source.package().font, update);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateFontInfo],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["font.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: Vec::new(),
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 1);
+}
+
+#[test]
+fn working_source_font_info_no_op_does_not_advance_revision() {
+    let package = package_with_component_dependency();
+    let original_font = package.font.clone();
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .update_font_info(ShiftFontInfoUpdate {
+            font: original_font.clone(),
+        })
+        .expect("font info no-op should succeed");
+
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.font, original_font);
+    assert_eq!(
+        report.diff,
+        ShiftPackageDiff {
+            changes: Vec::new(),
+            impact: ShiftWriteImpact {
+                canonical_paths: Vec::new(),
+                removed_canonical_paths: Vec::new(),
+                derived_paths: Vec::new(),
+            },
+        }
+    );
+    assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
+fn working_source_rejects_invalid_font_info_without_mutating() {
+    let package = package_with_component_dependency();
+    let original_font = package.font.clone();
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+    let mut invalid_font = original_font.clone();
+    invalid_font.metrics.units_per_em = f64::NAN;
+
+    let error = working_source
+        .update_font_info(ShiftFontInfoUpdate { font: invalid_font })
+        .expect_err("invalid metrics should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::NonFiniteNumber {
+            context,
+            field,
+            value,
+        } if context == "font metrics" && field == "unitsPerEm" && value.is_nan()
+    ));
+    assert_eq!(working_source.package().font, original_font);
     assert_eq!(working_source.revision(), 0);
 }
 

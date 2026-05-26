@@ -211,12 +211,13 @@ N-API boundary per glyph, per component, or per source row is the wrong shape;
 the app should prefer one command/query that returns the rows, summaries, and
 revision needed by a screen.
 
-Mutation responses should be patch-shaped. A rename, delete, source-layer edit,
-or variation-source edit returns the semantic result plus compact updates for
-the affected projections: dependency rows, compatibility rows, coverage
-summary/worklist evidence, source-location rows, or save impact depending on
-what changed. The response must include a working-source `revision`; renderer
-stores should drop responses older than the current document revision.
+Mutation responses should be patch-shaped. A font-info edit, rename, delete,
+source-layer edit, or variation-source edit returns the semantic result plus
+compact updates for the affected projections: dependency rows, compatibility
+rows, coverage summary/worklist evidence, source-location rows, or save impact
+depending on what changed. The response must include a working-source
+`revision`; renderer stores should drop responses older than the current
+document revision.
 
 Large payloads are still allowed, but only as explicit bulk queries for screens
 that need them:
@@ -416,6 +417,11 @@ format exploration:
   stable IDs, can attach an initial default-source layer, validate the candidate
   package before swapping live state, and report a narrow `CreateGlyph` write
   impact.
+- **Font info editing:** font metadata and global metrics are edited through a
+  semantic `update_font_info` command. The command validates the candidate
+  package before swapping live state, rejects invalid metrics without partial
+  mutation, returns a revision-stamped report, and reports the narrow
+  `UpdateFontInfo` write impact so saves touch only `font.json`.
 - **Glyph labels are app-safe:** glyph names are editable labels, but they must
   not be blank after trimming. Semantic create/rename commands normalize UI
   whitespace before validation so a direct grid edit cannot save source data
@@ -536,17 +542,19 @@ format exploration:
 - **Prepared commits:** the package can produce a serializable commit description
   with semantic changes, impacted paths, fingerprints, conflicts, and planned
   write/remove/invalidate operations.
-- **Working-source operations:** a document-level service can rename a glyph by
-  stable ID, preview delete dependents, refuse unsafe deletes, create/update/delete
-  family sources by stable IDs, edit component and glyph variation sources by
-  stable IDs, create glyph and component variation sources with collision-safe
-  generated IDs, delete variation sources by stable IDs, remove component
-  references before deleting a base glyph through an explicit command, keep query
-  indexes warm, and report the exact package diff caused by the semantic edit. Source
-  edits validate the default-source invariant, source-location uniqueness, and
-  all glyph layer references before replacing the live working graph, so adding
-  a master is cheap while unsafe deletes or accidental default-source moves are
-  rejected without partial mutation. Variation source edits validate the whole
+- **Working-source operations:** a document-level service can edit font metadata
+  and metrics, rename a glyph by stable ID, preview delete dependents, refuse
+  unsafe deletes, create/update/delete family sources by stable IDs, edit
+  component and glyph variation sources by stable IDs, create glyph and
+  component variation sources with collision-safe generated IDs, delete
+  variation sources by stable IDs, remove component references before deleting a
+  base glyph through an explicit command, keep query indexes warm, and report
+  the exact package diff caused by the semantic edit. Source edits validate the
+  default-source invariant, source-location uniqueness, and all glyph layer
+  references before replacing the live working graph, so adding a master is
+  cheap while unsafe deletes or accidental default-source moves are rejected
+  without partial mutation. Font-info edits validate global metrics before
+  replacing the live working graph. Variation source edits validate the whole
   candidate package before replacing the live working graph. Semantic edits
   rebuild dependency, compatibility, axis-mapping, and component variation query
   views from the candidate before swapping state, so invalid edits or future

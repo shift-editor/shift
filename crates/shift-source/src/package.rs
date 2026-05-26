@@ -28,7 +28,7 @@ pub struct ShiftManifest {
     pub default_source_id: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftFontInfo {
     pub metadata: FontMetadata,
