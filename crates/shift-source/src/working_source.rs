@@ -1507,10 +1507,11 @@ impl ShiftWorkingSource {
             .map(|component| {
                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                 Ok(component_recipe_summary(
+                    &self.package,
                     glyph,
                     layer_id,
                     component,
-                    &base_glyph.name,
+                    base_glyph,
                 ))
             })
             .collect()
@@ -1855,10 +1856,11 @@ impl ShiftWorkingSource {
                             if !condition.active() {
                                 let base_glyph = self.glyph(&component.base_glyph_id)?;
                                 let summary = component_recipe_summary(
+                                    &self.package,
                                     glyph,
                                     layer_id,
                                     component,
-                                    &base_glyph.name,
+                                    base_glyph,
                                 );
                                 skipped_inactive_component_count += 1;
                                 skipped_inactive_components.push(
@@ -1880,8 +1882,13 @@ impl ShiftWorkingSource {
                     }
 
                     let base_glyph = self.glyph(&component.base_glyph_id)?;
-                    let summary =
-                        component_recipe_summary(glyph, layer_id, component, &base_glyph.name);
+                    let summary = component_recipe_summary(
+                        &self.package,
+                        glyph,
+                        layer_id,
+                        component,
+                        base_glyph,
+                    );
                     let required_capabilities =
                         lowered_component_required_capabilities(&summary, condition.as_ref());
                     let missing_capabilities = required_capabilities
@@ -3678,10 +3685,11 @@ fn component_recipes_for_package_uses(
                 })?;
             debug_assert_eq!(component.base_glyph_id, base_glyph_id);
             Ok(component_recipe_summary(
+                package,
                 glyph,
                 &component_use.layer_id,
                 component,
-                &base_glyph.name,
+                base_glyph,
             ))
         })
         .collect()
@@ -3754,10 +3762,11 @@ fn base_local_axis_relink_blockers(
 }
 
 fn component_recipe_summary(
+    package: &ShiftPackage,
     glyph: &ShiftGlyph,
     layer_id: &str,
     component: &ShiftComponent,
-    base_glyph_name: &str,
+    base_glyph: &ShiftGlyph,
 ) -> ShiftComponentRecipeSummary {
     let condition_axis_ids = component
         .condition
@@ -3786,10 +3795,9 @@ fn component_recipe_summary(
     });
     let has_condition = component.condition.is_some();
     let has_variable_location = !component.location.is_empty()
-        || component
-            .variation_sources
-            .iter()
-            .any(|source| !source.location.is_empty());
+        || component.variation_sources.iter().any(|source| {
+            component_variation_source_varies_location(package, component, base_glyph, source)
+        });
     let resets_axes =
         component.axis_inheritance != crate::package::ShiftAxisInheritance::InheritParent;
     let has_variable_recipe =
@@ -3821,7 +3829,7 @@ fn component_recipe_summary(
         layer_id: layer_id.to_string(),
         component_id: component.id.clone(),
         base_glyph_id: component.base_glyph_id.clone(),
-        base_glyph_name: base_glyph_name.to_string(),
+        base_glyph_name: base_glyph.name.clone(),
         kind,
         axis_inheritance: component.axis_inheritance,
         condition_axis_ids,
@@ -3833,6 +3841,51 @@ fn component_recipe_summary(
         lowering_hint,
         required_capabilities,
     }
+}
+
+fn component_variation_source_varies_location(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    source: &ShiftComponentVariationSource,
+) -> bool {
+    source.location.iter().any(|(axis_id, value)| {
+        let base_value = component_axis_value_at_parent_location(
+            package, component, base_glyph, source, axis_id,
+        );
+        !base_value.is_some_and(|base_value| (base_value - *value).abs() < f64::EPSILON)
+    })
+}
+
+fn component_axis_value_at_parent_location(
+    package: &ShiftPackage,
+    component: &ShiftComponent,
+    base_glyph: &ShiftGlyph,
+    source: &ShiftComponentVariationSource,
+    axis_id: &str,
+) -> Option<f64> {
+    if let Some(value) = component.location.get(axis_id) {
+        return Some(*value);
+    }
+
+    if let Some(axis) = package.axes.iter().find(|axis| axis.id == axis_id) {
+        return match component.axis_inheritance {
+            crate::package::ShiftAxisInheritance::InheritParent
+            | crate::package::ShiftAxisInheritance::ResetUnspecifiedToFont => Some(
+                source
+                    .parent_location
+                    .get(axis_id)
+                    .copied()
+                    .unwrap_or(axis.default),
+            ),
+        };
+    }
+
+    base_glyph
+        .local_axes
+        .iter()
+        .find(|axis| axis.id == axis_id)
+        .map(|axis| axis.default)
 }
 
 fn normalize_axis_value(value: f64, minimum: f64, default: f64, maximum: f64) -> f64 {
