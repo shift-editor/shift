@@ -204,6 +204,9 @@ Current writer behavior:
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
   along with the prepared commit evidence, so save buttons, conflict banners,
   and dirty-state projections do not infer status from raw diff/conflict lists.
+  Even an unchanged working source compares the full saved package fingerprint
+  against disk before reporting `unchanged`, so external edits cannot be
+  accidentally accepted as the new clean baseline.
 - `ShiftWorkingSource::save()` is the app-facing happy path for a document save:
   it prepares, stages, applies, and marks the working source saved only after
   the staged commit has succeeded.

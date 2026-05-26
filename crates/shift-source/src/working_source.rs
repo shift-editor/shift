@@ -1,13 +1,14 @@
 use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
-    diff_packages, fingerprint_package, fingerprint_relative_paths, parse_unicode_scalar,
-    prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping,
-    ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource,
-    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftGlyph, ShiftGlyphDependencies,
-    ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
-    ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue, ShiftPackage,
-    ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
+    compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
+    parse_unicode_scalar, prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit,
+    ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample, ShiftComponent, ShiftComponentUse,
+    ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint,
+    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer,
+    ShiftGlyphSource, ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
+    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
+    ShiftStagedCommit,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -1993,6 +1994,31 @@ impl ShiftWorkingSource {
     pub fn prepare_commit(&self, root: impl AsRef<Path>) -> ShiftSourceResult<ShiftPreparedCommit> {
         let diff = diff_packages(&self.saved_package, &self.package)?;
         let impacted_paths = diff.impact.package_relative_paths();
+
+        if diff.changes.is_empty() {
+            let (expected_fingerprint, current_fingerprint, conflicts) =
+                if let Some(saved_fingerprint) = &self.saved_fingerprint {
+                    let current_fingerprint = fingerprint_package(root.as_ref())?;
+                    let conflicts = compare_fingerprints(saved_fingerprint, &current_fingerprint);
+                    (saved_fingerprint.clone(), current_fingerprint, conflicts)
+                } else {
+                    (
+                        ShiftPackageFingerprint::default(),
+                        ShiftPackageFingerprint::default(),
+                        Vec::new(),
+                    )
+                };
+
+            return Ok(ShiftPreparedCommit {
+                diff,
+                impacted_paths,
+                expected_fingerprint,
+                current_fingerprint,
+                conflicts,
+                operations: Vec::new(),
+            });
+        }
+
         let expected_fingerprint = if let Some(saved_fingerprint) = &self.saved_fingerprint {
             fingerprint_subset(saved_fingerprint, &impacted_paths)
         } else {
@@ -2012,12 +2038,12 @@ impl ShiftWorkingSource {
         root: impl AsRef<Path>,
     ) -> ShiftSourceResult<ShiftWorkingSourceSavePreview> {
         let prepared = self.prepare_commit(root)?;
-        let status = if prepared.diff.changes.is_empty() {
-            ShiftWorkingSourceSavePreviewStatus::Unchanged
-        } else if prepared.conflicts.is_empty() {
-            ShiftWorkingSourceSavePreviewStatus::Ready
-        } else {
+        let status = if !prepared.conflicts.is_empty() {
             ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges
+        } else if prepared.diff.changes.is_empty() {
+            ShiftWorkingSourceSavePreviewStatus::Unchanged
+        } else {
+            ShiftWorkingSourceSavePreviewStatus::Ready
         };
 
         Ok(ShiftWorkingSourceSavePreview {
