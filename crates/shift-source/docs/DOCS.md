@@ -346,7 +346,10 @@ format exploration:
   components that carry local-axis overrides, variation sources, or conditions.
 - **Interpolation diagnostics are derived:** saving writes
   `derived/interpolation-compatibility.json` so the app can show variable-font
-  compatibility badges without recomputing every glyph on each render.
+  compatibility badges without recomputing every glyph on each render. The
+  index carries package-wide, per-glyph, and per-issue-kind counts so source
+  panels, export preflights, and warning badges can summarize health without
+  scanning every detailed issue row.
 - **Fail loudly on broken references:** missing component bases and missing
   source layers are validation errors, not silently dropped data.
 - **Reject ambiguous component identity:** component IDs must be valid stable
@@ -517,9 +520,11 @@ format exploration:
   state rather than patching local JSON-shaped records.
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
-  interpolation compatibility issues involve that source. This makes "new
-  master added but not populated yet" a first-class state instead of a
-  validation failure or a TypeScript-side scan.
+  interpolation compatibility issues involve that source. Coverage rows include
+  issue-kind counts, so the app can distinguish contour topology work from
+  component relinking or component-count fixes directly in the source list. This
+  makes "new master added but not populated yet" a first-class state instead of
+  a validation failure or a TypeScript-side scan.
 - **Source deletion preflight:** source deletes use the same preview data as the
   UI before constructing a candidate package. Default sources and referenced
   sources return semantic errors with reference counts, so the app can show a
@@ -1189,11 +1194,28 @@ Current shape:
 ```json
 {
   "version": 1,
+  "glyphCount": 1,
+  "compatibleGlyphCount": 0,
+  "incompatibleGlyphCount": 1,
+  "issueCount": 1,
+  "issueKindCounts": [
+    {
+      "kind": "contourTopologyMismatch",
+      "issueCount": 1
+    }
+  ],
   "glyphs": {
     "glyph_A": {
       "glyphId": "glyph_A",
       "glyphName": "A",
       "compatible": false,
+      "issueCount": 1,
+      "issueKindCounts": [
+        {
+          "kind": "contourTopologyMismatch",
+          "issueCount": 1
+        }
+      ],
       "layerSignatures": {
         "source_Regular": {
           "contourPointTypes": [["onCurve", "onCurve"]],

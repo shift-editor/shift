@@ -2,15 +2,16 @@ use crate::error::{ShiftSourceError, ShiftSourceResult};
 use crate::package::{
     apply_staged_commit, build_dependency_index, build_interpolation_compatibility_index,
     compare_fingerprints, diff_packages, fingerprint_package, fingerprint_relative_paths,
-    load_package, parse_unicode_scalar, plan_staged_commit_recovery, prepare_package_commit,
-    stage_prepared_commit, ShiftAppliedCommit, ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample,
-    ShiftCommitOperation, ShiftComponent, ShiftComponentUse, ShiftComponentVariationSource,
-    ShiftCondition, ShiftDependencyIndex, ShiftFileFingerprint, ShiftFingerprintConflictKind,
-    ShiftGlyph, ShiftGlyphDependencies, ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer,
-    ShiftGlyphSource, ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
-    ShiftPackage, ShiftPackageDiff, ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource,
-    ShiftStagedCommit, ShiftStagedCommitLiveState, ShiftStagedCommitRecoveryAction,
-    ShiftStagedCommitRecoveryPlan,
+    interpolation_issue_kind_counts, load_package, parse_unicode_scalar,
+    plan_staged_commit_recovery, prepare_package_commit, stage_prepared_commit, ShiftAppliedCommit,
+    ShiftAxis, ShiftAxisMapping, ShiftAxisMappingSample, ShiftCommitOperation, ShiftComponent,
+    ShiftComponentUse, ShiftComponentVariationSource, ShiftCondition, ShiftDependencyIndex,
+    ShiftFileFingerprint, ShiftFingerprintConflictKind, ShiftGlyph, ShiftGlyphDependencies,
+    ShiftGlyphInterpolationCompatibility, ShiftGlyphLayer, ShiftGlyphSource,
+    ShiftInterpolationCompatibilityIndex, ShiftInterpolationCompatibilityIssue,
+    ShiftInterpolationCompatibilityIssueKindCount, ShiftPackage, ShiftPackageDiff,
+    ShiftPackageFingerprint, ShiftPreparedCommit, ShiftSource, ShiftStagedCommit,
+    ShiftStagedCommitLiveState, ShiftStagedCommitRecoveryAction, ShiftStagedCommitRecoveryPlan,
 };
 use serde::{Deserialize, Serialize};
 use shift_ir::variation::{
@@ -276,6 +277,7 @@ pub struct ShiftSourceLayerCoverage {
     pub layer_count: usize,
     pub missing_layer_count: usize,
     pub interpolation_issue_count: usize,
+    pub interpolation_issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub complete: bool,
     pub interpolation_compatible: bool,
     pub present_layers: Vec<ShiftSourceLayerUse>,
@@ -1422,6 +1424,10 @@ impl ShiftWorkingSource {
                     }
                 }
 
+                let interpolation_issue_kind_counts = interpolation_issue_kind_counts(
+                    interpolation_issues.iter().map(|issue| issue.issue.kind),
+                );
+
                 ShiftSourceLayerCoverage {
                     source_id: source.id.clone(),
                     source_name: source.name.clone(),
@@ -1429,6 +1435,7 @@ impl ShiftWorkingSource {
                     layer_count: present_layers.len(),
                     missing_layer_count: missing_layers.len(),
                     interpolation_issue_count: interpolation_issues.len(),
+                    interpolation_issue_kind_counts,
                     complete: missing_layers.is_empty(),
                     interpolation_compatible: interpolation_issues.is_empty(),
                     present_layers,

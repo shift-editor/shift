@@ -487,7 +487,14 @@ fn interpolation_compatibility_index_accepts_matching_layer_topology() {
         .get("glyph_A")
         .expect("glyph should be indexed");
 
+    assert_eq!(index.glyph_count, 1);
+    assert_eq!(index.compatible_glyph_count, 1);
+    assert_eq!(index.incompatible_glyph_count, 0);
+    assert_eq!(index.issue_count, 0);
+    assert!(index.issue_kind_counts.is_empty());
     assert!(glyph.compatible);
+    assert_eq!(glyph.issue_count, 0);
+    assert!(glyph.issue_kind_counts.is_empty());
     assert!(glyph.issues.is_empty());
     assert_eq!(glyph.layer_signatures.len(), 2);
 }
@@ -519,7 +526,26 @@ fn interpolation_compatibility_index_reports_contour_topology_mismatch() {
         .get("glyph_A")
         .expect("glyph should be indexed");
 
+    assert_eq!(index.glyph_count, 1);
+    assert_eq!(index.compatible_glyph_count, 0);
+    assert_eq!(index.incompatible_glyph_count, 1);
+    assert_eq!(index.issue_count, 1);
+    assert_eq!(
+        index.issue_kind_counts,
+        vec![ShiftInterpolationCompatibilityIssueKindCount {
+            kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
+            issue_count: 1,
+        }]
+    );
     assert!(!glyph.compatible);
+    assert_eq!(glyph.issue_count, 1);
+    assert_eq!(
+        glyph.issue_kind_counts,
+        vec![ShiftInterpolationCompatibilityIssueKindCount {
+            kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
+            issue_count: 1,
+        }]
+    );
     assert_eq!(
         glyph.issues,
         vec![ShiftInterpolationCompatibilityIssue {
@@ -10267,6 +10293,13 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(coverage[0].source_id, "source_Regular");
     assert!(!coverage[0].interpolation_compatible);
     assert_eq!(coverage[0].interpolation_issue_count, 1);
+    assert_eq!(
+        coverage[0].interpolation_issue_kind_counts,
+        vec![ShiftInterpolationCompatibilityIssueKindCount {
+            kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
+            issue_count: 1,
+        }]
+    );
     assert_eq!(coverage[0].interpolation_issues[0].glyph_id, "glyph_A");
     assert_eq!(
         coverage[0].interpolation_issues[0].issue.kind,
@@ -10283,6 +10316,13 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert!(!coverage[1].interpolation_compatible);
     assert_eq!(coverage[1].interpolation_issue_count, 1);
+    assert_eq!(
+        coverage[1].interpolation_issue_kind_counts,
+        vec![ShiftInterpolationCompatibilityIssueKindCount {
+            kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
+            issue_count: 1,
+        }]
+    );
     assert_eq!(coverage[1].interpolation_issues[0].glyph_name, "A");
     assert_eq!(
         coverage[1].interpolation_issues[0].issue.reference_layer_id,

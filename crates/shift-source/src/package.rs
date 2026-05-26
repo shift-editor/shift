@@ -254,6 +254,11 @@ pub struct ShiftGlyphDependencies {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftInterpolationCompatibilityIndex {
     pub version: u32,
+    pub glyph_count: usize,
+    pub compatible_glyph_count: usize,
+    pub incompatible_glyph_count: usize,
+    pub issue_count: usize,
+    pub issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub glyphs: BTreeMap<String, ShiftGlyphInterpolationCompatibility>,
 }
 
@@ -263,6 +268,8 @@ pub struct ShiftGlyphInterpolationCompatibility {
     pub glyph_id: String,
     pub glyph_name: String,
     pub compatible: bool,
+    pub issue_count: usize,
+    pub issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub layer_signatures: BTreeMap<String, ShiftLayerCompatibilitySignature>,
     pub issues: Vec<ShiftInterpolationCompatibilityIssue>,
 }
@@ -292,7 +299,7 @@ pub struct ShiftInterpolationCompatibilityIssue {
     pub actual: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShiftInterpolationCompatibilityIssueKind {
     ContourCountMismatch,
@@ -300,6 +307,13 @@ pub enum ShiftInterpolationCompatibilityIssueKind {
     ComponentCountMismatch,
     ComponentIdMismatch,
     ComponentBaseMismatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftInterpolationCompatibilityIssueKindCount {
+    pub kind: ShiftInterpolationCompatibilityIssueKind,
+    pub issue_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2985,7 +2999,7 @@ pub fn build_interpolation_compatibility_index(
 ) -> ShiftSourceResult<ShiftInterpolationCompatibilityIndex> {
     package.validate()?;
 
-    let glyphs = package
+    let glyphs: BTreeMap<_, _> = package
         .glyphs
         .iter()
         .map(|glyph| {
@@ -2993,9 +3007,28 @@ pub fn build_interpolation_compatibility_index(
             (glyph.id.clone(), compatibility)
         })
         .collect();
+    let glyph_count = glyphs.len();
+    let incompatible_glyph_count = glyphs
+        .values()
+        .filter(|compatibility| !compatibility.compatible)
+        .count();
+    let issue_count = glyphs
+        .values()
+        .map(|compatibility| compatibility.issue_count)
+        .sum();
+    let issue_kind_counts = interpolation_issue_kind_counts(
+        glyphs
+            .values()
+            .flat_map(|compatibility| compatibility.issues.iter().map(|issue| issue.kind)),
+    );
 
     Ok(ShiftInterpolationCompatibilityIndex {
         version: SHIFT_INTERPOLATION_COMPATIBILITY_INDEX_VERSION,
+        glyph_count,
+        compatible_glyph_count: glyph_count - incompatible_glyph_count,
+        incompatible_glyph_count,
+        issue_count,
+        issue_kind_counts,
         glyphs,
     })
 }
@@ -3478,13 +3511,37 @@ fn glyph_interpolation_compatibility(glyph: &ShiftGlyph) -> ShiftGlyphInterpolat
         }
     }
 
+    let issue_count = issues.len();
+    let issue_kind_counts = interpolation_issue_kind_counts(issues.iter().map(|issue| issue.kind));
+
     ShiftGlyphInterpolationCompatibility {
         glyph_id: glyph.id.clone(),
         glyph_name: glyph.name.clone(),
-        compatible: issues.is_empty(),
+        compatible: issue_count == 0,
+        issue_count,
+        issue_kind_counts,
         layer_signatures,
         issues,
     }
+}
+
+pub fn interpolation_issue_kind_counts(
+    kinds: impl IntoIterator<Item = ShiftInterpolationCompatibilityIssueKind>,
+) -> Vec<ShiftInterpolationCompatibilityIssueKindCount> {
+    let mut counts = BTreeMap::<ShiftInterpolationCompatibilityIssueKind, usize>::new();
+    for kind in kinds {
+        *counts.entry(kind).or_default() += 1;
+    }
+
+    counts
+        .into_iter()
+        .map(
+            |(kind, issue_count)| ShiftInterpolationCompatibilityIssueKindCount {
+                kind,
+                issue_count,
+            },
+        )
+        .collect()
 }
 
 fn layer_compatibility_signature(layer: &ShiftGlyphLayer) -> ShiftLayerCompatibilitySignature {
