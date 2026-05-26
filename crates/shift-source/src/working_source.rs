@@ -764,6 +764,8 @@ pub struct ShiftStaticComponentExportPreview {
     pub fallback_component_count: usize,
     pub skipped_inactive_component_count: usize,
     pub unsupported_component_count: usize,
+    pub fallback_capabilities: Vec<ShiftComponentLoweringCapability>,
+    pub fallback_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
     pub components: Vec<ShiftStaticComponentExportComponent>,
 }
 
@@ -806,6 +808,7 @@ struct ShiftStaticComponentExportPreviewBuilder {
     fallback_component_count: usize,
     skipped_inactive_component_count: usize,
     unsupported_component_count: usize,
+    fallback_capability_counts: BTreeMap<ShiftComponentLoweringCapability, usize>,
     components: Vec<ShiftStaticComponentExportComponent>,
 }
 
@@ -1095,17 +1098,26 @@ impl ShiftStaticComponentExportPreviewBuilder {
             fallback_component_count: 0,
             skipped_inactive_component_count: 0,
             unsupported_component_count: 0,
+            fallback_capability_counts: BTreeMap::new(),
             components: Vec::with_capacity(component_capacity),
         }
     }
 
     fn push(&mut self, component: ShiftStaticComponentExportComponent) {
-        match component.disposition {
+        match &component.disposition {
             ShiftStaticComponentExportDisposition::PreserveReference => {
                 self.preserve_reference_count += 1;
             }
-            ShiftStaticComponentExportDisposition::RequiresFallback { .. } => {
+            ShiftStaticComponentExportDisposition::RequiresFallback {
+                missing_capabilities,
+            } => {
                 self.fallback_component_count += 1;
+                for capability in missing_capabilities {
+                    *self
+                        .fallback_capability_counts
+                        .entry(*capability)
+                        .or_default() += 1;
+                }
             }
             ShiftStaticComponentExportDisposition::SkipInactive => {
                 self.skipped_inactive_component_count += 1;
@@ -1118,12 +1130,30 @@ impl ShiftStaticComponentExportPreviewBuilder {
     }
 
     fn finish(self) -> ShiftStaticComponentExportPreview {
+        let fallback_capabilities = self
+            .fallback_capability_counts
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let fallback_capability_counts = self
+            .fallback_capability_counts
+            .into_iter()
+            .map(
+                |(capability, component_count)| ShiftComponentLoweringCapabilityCount {
+                    capability,
+                    component_count,
+                },
+            )
+            .collect::<Vec<_>>();
+
         ShiftStaticComponentExportPreview {
             total_component_count: self.components.len(),
             preserve_reference_count: self.preserve_reference_count,
             fallback_component_count: self.fallback_component_count,
             skipped_inactive_component_count: self.skipped_inactive_component_count,
             unsupported_component_count: self.unsupported_component_count,
+            fallback_capabilities,
+            fallback_capability_counts,
             components: self.components,
         }
     }
