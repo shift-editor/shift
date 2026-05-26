@@ -337,6 +337,13 @@ pub struct ShiftSourceLayerCoverageSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLayerCoverageReport {
+    pub summary: ShiftSourceLayerCoverageSummary,
+    pub sources: Vec<ShiftSourceLayerCoverage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphVariationSourceUse {
     pub glyph_id: String,
     pub glyph_name: String,
@@ -1430,110 +1437,121 @@ impl ShiftWorkingSource {
     }
 
     pub fn source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
-        self.package
-            .sources
-            .iter()
-            .map(|source| {
-                let mut present_layers = Vec::new();
-                let mut missing_layers = Vec::new();
-                let mut interpolation_issues = Vec::new();
-
-                for glyph in &self.package.glyphs {
-                    if glyph.layers.contains_key(&source.id) {
-                        present_layers.push(ShiftSourceLayerUse {
-                            glyph_id: glyph.id.clone(),
-                            glyph_name: glyph.name.clone(),
-                            layer_id: source.id.clone(),
-                        });
-                    } else {
-                        missing_layers.push(ShiftMissingSourceLayer {
-                            glyph_id: glyph.id.clone(),
-                            glyph_name: glyph.name.clone(),
-                            expected_layer_id: source.id.clone(),
-                        });
-                    }
-
-                    if let Some(compatibility) =
-                        self.interpolation_compatibility_index.glyphs.get(&glyph.id)
-                    {
-                        interpolation_issues.extend(
-                            compatibility
-                                .issues
-                                .iter()
-                                .filter(|issue| {
-                                    issue.reference_layer_id == source.id
-                                        || issue.layer_id == source.id
-                                })
-                                .cloned()
-                                .map(|issue| ShiftSourceInterpolationIssue {
-                                    glyph_id: glyph.id.clone(),
-                                    glyph_name: glyph.name.clone(),
-                                    issue,
-                                }),
-                        );
-                    }
-                }
-
-                let interpolation_reference_issue_kind_counts = interpolation_issue_kind_counts(
-                    interpolation_issues
-                        .iter()
-                        .filter(|issue| issue.issue.reference_layer_id == source.id)
-                        .map(|issue| issue.issue.kind),
-                );
-                let interpolation_mismatch_issue_kind_counts = interpolation_issue_kind_counts(
-                    interpolation_issues
-                        .iter()
-                        .filter(|issue| issue.issue.layer_id == source.id)
-                        .map(|issue| issue.issue.kind),
-                );
-                let interpolation_issue_kind_counts = interpolation_issue_kind_counts(
-                    interpolation_issues.iter().map(|issue| issue.issue.kind),
-                );
-                let interpolation_reference_issue_count = interpolation_issues
-                    .iter()
-                    .filter(|issue| issue.issue.reference_layer_id == source.id)
-                    .count();
-                let interpolation_mismatch_issue_count = interpolation_issues
-                    .iter()
-                    .filter(|issue| issue.issue.layer_id == source.id)
-                    .count();
-                let interpolation_incompatible_glyph_count = interpolation_issues
-                    .iter()
-                    .filter(|issue| issue.issue.layer_id == source.id)
-                    .map(|issue| issue.glyph_id.as_str())
-                    .collect::<BTreeSet<_>>()
-                    .len();
-                let readiness = Self::source_layer_coverage_readiness(
-                    !missing_layers.is_empty(),
-                    interpolation_mismatch_issue_count > 0,
-                );
-
-                ShiftSourceLayerCoverage {
-                    source_id: source.id.clone(),
-                    source_name: source.name.clone(),
-                    readiness,
-                    glyph_count: self.package.glyphs.len(),
-                    layer_count: present_layers.len(),
-                    missing_layer_count: missing_layers.len(),
-                    interpolation_issue_count: interpolation_issues.len(),
-                    interpolation_reference_issue_count,
-                    interpolation_mismatch_issue_count,
-                    interpolation_incompatible_glyph_count,
-                    interpolation_issue_kind_counts,
-                    interpolation_reference_issue_kind_counts,
-                    interpolation_mismatch_issue_kind_counts,
-                    complete: missing_layers.is_empty(),
-                    interpolation_compatible: interpolation_issues.is_empty(),
-                    present_layers,
-                    missing_layers,
-                    interpolation_issues,
-                }
-            })
-            .collect()
+        self.build_source_layer_coverage()
     }
 
     pub fn source_layer_coverage_summary(&self) -> ShiftSourceLayerCoverageSummary {
-        Self::summarize_source_layer_coverage(&self.source_layer_coverage())
+        Self::summarize_source_layer_coverage(&self.build_source_layer_coverage())
+    }
+
+    pub fn source_layer_coverage_report(&self) -> ShiftSourceLayerCoverageReport {
+        let sources = self.build_source_layer_coverage();
+        let summary = Self::summarize_source_layer_coverage(&sources);
+        ShiftSourceLayerCoverageReport { summary, sources }
+    }
+
+    fn build_source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
+        self.package
+            .sources
+            .iter()
+            .map(|source| self.source_layer_coverage_for_source(source))
+            .collect()
+    }
+
+    fn source_layer_coverage_for_source(&self, source: &ShiftSource) -> ShiftSourceLayerCoverage {
+        let mut present_layers = Vec::new();
+        let mut missing_layers = Vec::new();
+        let mut interpolation_issues = Vec::new();
+
+        for glyph in &self.package.glyphs {
+            if glyph.layers.contains_key(&source.id) {
+                present_layers.push(ShiftSourceLayerUse {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    layer_id: source.id.clone(),
+                });
+            } else {
+                missing_layers.push(ShiftMissingSourceLayer {
+                    glyph_id: glyph.id.clone(),
+                    glyph_name: glyph.name.clone(),
+                    expected_layer_id: source.id.clone(),
+                });
+            }
+
+            if let Some(compatibility) =
+                self.interpolation_compatibility_index.glyphs.get(&glyph.id)
+            {
+                interpolation_issues.extend(
+                    compatibility
+                        .issues
+                        .iter()
+                        .filter(|issue| {
+                            issue.reference_layer_id == source.id || issue.layer_id == source.id
+                        })
+                        .cloned()
+                        .map(|issue| ShiftSourceInterpolationIssue {
+                            glyph_id: glyph.id.clone(),
+                            glyph_name: glyph.name.clone(),
+                            issue,
+                        }),
+                );
+            }
+        }
+
+        let interpolation_reference_issue_kind_counts = interpolation_issue_kind_counts(
+            interpolation_issues
+                .iter()
+                .filter(|issue| issue.issue.reference_layer_id == source.id)
+                .map(|issue| issue.issue.kind),
+        );
+        let interpolation_mismatch_issue_kind_counts = interpolation_issue_kind_counts(
+            interpolation_issues
+                .iter()
+                .filter(|issue| issue.issue.layer_id == source.id)
+                .map(|issue| issue.issue.kind),
+        );
+        let interpolation_issue_kind_counts = interpolation_issue_kind_counts(
+            interpolation_issues.iter().map(|issue| issue.issue.kind),
+        );
+        let interpolation_reference_issue_count = interpolation_issues
+            .iter()
+            .filter(|issue| issue.issue.reference_layer_id == source.id)
+            .count();
+        let interpolation_mismatch_issue_count = interpolation_issues
+            .iter()
+            .filter(|issue| issue.issue.layer_id == source.id)
+            .count();
+        let interpolation_incompatible_glyph_count = interpolation_issues
+            .iter()
+            .filter(|issue| issue.issue.layer_id == source.id)
+            .map(|issue| issue.glyph_id.as_str())
+            .collect::<BTreeSet<_>>()
+            .len();
+        let readiness = Self::source_layer_coverage_readiness(
+            !missing_layers.is_empty(),
+            interpolation_mismatch_issue_count > 0,
+        );
+
+        ShiftSourceLayerCoverage {
+            source_id: source.id.clone(),
+            source_name: source.name.clone(),
+            readiness,
+            glyph_count: self.package.glyphs.len(),
+            layer_count: present_layers.len(),
+            missing_layer_count: missing_layers.len(),
+            interpolation_issue_count: interpolation_issues.len(),
+            interpolation_reference_issue_count,
+            interpolation_mismatch_issue_count,
+            interpolation_incompatible_glyph_count,
+            interpolation_issue_kind_counts,
+            interpolation_reference_issue_kind_counts,
+            interpolation_mismatch_issue_kind_counts,
+            complete: missing_layers.is_empty(),
+            interpolation_compatible: interpolation_issues.is_empty(),
+            present_layers,
+            missing_layers,
+            interpolation_issues,
+        }
     }
 
     fn summarize_source_layer_coverage(

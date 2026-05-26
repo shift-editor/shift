@@ -10376,6 +10376,10 @@ fn working_source_reports_source_layer_coverage() {
     );
     assert!(!summary.complete);
     assert!(!summary.ready);
+
+    let report = working_source.source_layer_coverage_report();
+    assert_eq!(report.sources, coverage);
+    assert_eq!(report.summary, summary);
 }
 
 #[test]
@@ -10560,6 +10564,10 @@ fn working_source_reports_source_interpolation_issues() {
     );
     assert!(summary.complete);
     assert!(!summary.ready);
+
+    let report = working_source.source_layer_coverage_report();
+    assert_eq!(report.sources, coverage);
+    assert_eq!(report.summary, summary);
 }
 
 #[test]

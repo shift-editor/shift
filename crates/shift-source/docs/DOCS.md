@@ -83,6 +83,7 @@ Good renderer-facing queries:
 getGlyphDependents(glyphId)
 getInterpolationCompatibility(glyphId)
 getSourceLocations()
+getSourceLayerCoverageReport()
 getSourceLayerCoverageSummary()
 getSourceLayerCoverage()
 getComponentActivity(glyphId, layerId, location)
@@ -523,14 +524,16 @@ format exploration:
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include
   reference issue counts, mismatch issue counts, affected-glyph counts, and
-  issue-kind counts split by all/reference/mismatch roles. The compact summary
-  reports total expected/present/missing layers, ready sources, sources needing
-  work, sources with missing layers, sources with interpolation mismatches,
-  readiness buckets, and package-wide interpolation issue-kind counts so the
-  app can render source-sidebar or export-readiness badges without rebuilding
-  the aggregation in TypeScript. The app can use the explicit readiness state
-  for source-row badges while still showing reference-only context when a
-  canonical source is involved in other layers' failures. It can
+  issue-kind counts split by all/reference/mismatch roles. A report query
+  returns the compact summary and detailed source rows together for screens that
+  need both, avoiding duplicate renderer calls and duplicate Rust scans. The
+  compact summary reports total expected/present/missing layers, ready sources,
+  sources needing work, sources with missing layers, sources with interpolation
+  mismatches, readiness buckets, and package-wide interpolation issue-kind
+  counts so the app can render source-sidebar or export-readiness badges without
+  rebuilding the aggregation in TypeScript. The app can use the explicit
+  readiness state for source-row badges while still showing reference-only
+  context when a canonical source is involved in other layers' failures. It can
   distinguish "this source is the canonical reference for other broken layers"
   from "this source is the layer that needs work," distinguish "one glyph has
   several fixes" from "several glyphs are broken," and separate contour topology
