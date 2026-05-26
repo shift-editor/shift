@@ -645,7 +645,10 @@ The format should make these app behaviors straightforward:
 
 - Rename/delete previews from a dependency graph keyed by stable IDs.
 - Delete dialogs that can offer remove, decompose, or relink based on exact
-  dependents.
+  dependents. Dependent previews include component recipe summaries, so the app
+  can warn when a removal would discard conditional participation, variable
+  locations, transform variation, reset/inherit behavior, or authored component
+  variation sources.
 - Conservative delete commands that fail before mutation when component
   dependents, source layers, or source-owned variation rows still exist, plus an
   explicit component-removal delete command for the destructive "remove those

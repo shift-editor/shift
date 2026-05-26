@@ -3,16 +3,17 @@ use crate::{
     ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind, ShiftAxisMappingUpdate,
     ShiftComponentActivity, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
-    ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentVariationParentAxisValue,
-    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
-    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
-    ShiftWorkingSource, ShiftWorkingSourceSaveStatus,
+    ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
+    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
+    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
+    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphVariationAxisValue,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate, ShiftWorkingSource,
+    ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
     Axis, AxisId, AxisInheritance, Component, ComponentCondition, ComponentId, Contour,
@@ -2882,6 +2883,85 @@ fn working_source_previews_delete_dependents() {
 }
 
 #[test]
+fn working_source_delete_preview_reports_dependent_component_recipe_impact() {
+    let layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_variable_delete".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_wght".to_string(), 650.0)]),
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_heavy".to_string(),
+                name: "Heavy".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+                transform: Some(DecomposedTransform {
+                    translate_x: 12.0,
+                    translate_y: 0.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    skew_x: 0.0,
+                    skew_y: 0.0,
+                    t_center_x: 0.0,
+                    t_center_y: 0.0,
+                }),
+            }],
+            condition: Some(ShiftCondition::AxisRange {
+                axis_id: "axis_wght".to_string(),
+                min: Some(500.0),
+                max: None,
+            }),
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer(layer),
+    ))
+    .expect("working source should initialize");
+
+    let preview = working_source
+        .preview_delete_glyph("glyph_stem")
+        .expect("delete preview should include dependent recipe summaries");
+
+    assert!(!preview.can_remove_without_decomposing);
+    assert_eq!(preview.component_dependent_recipes.len(), 1);
+    assert_eq!(
+        preview.component_dependent_recipes[0],
+        ShiftComponentRecipeSummary {
+            glyph_id: "glyph_A".to_string(),
+            glyph_name: "A".to_string(),
+            layer_id: "source_Regular".to_string(),
+            component_id: "component_variable_delete".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            kind: ShiftComponentRecipeKind::ConditionalVariable,
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            condition_axis_ids: vec!["axis_wght".to_string()],
+            location_axis_ids: vec!["axis_wght".to_string()],
+            variation_source_count: 1,
+            variation_parent_axis_ids: vec!["axis_wght".to_string()],
+            variation_location_axis_ids: vec!["axis_wght".to_string()],
+            varies_transform: true,
+            lowering_hint: ShiftComponentLoweringHint::ConditionalVariableComponent,
+            required_capabilities: vec![
+                ShiftComponentLoweringCapability::Condition,
+                ShiftComponentLoweringCapability::VariableLocation,
+                ShiftComponentLoweringCapability::VariableTransform,
+                ShiftComponentLoweringCapability::AxisReset,
+            ],
+        }
+    );
+}
+
+#[test]
 fn working_source_evaluates_component_activity_from_conditions() {
     let layer = ShiftGlyphLayer {
         advance_width: 600.0,
@@ -5643,15 +5723,17 @@ fn working_source_deletes_glyph_and_removes_component_references() {
     assert_eq!(report.glyph_id, "glyph_A");
     assert_eq!(report.glyph_name, "A");
     assert_eq!(report.revision, 1);
-    assert_eq!(
-        report.removed_component_references,
-        vec![ShiftComponentUse {
-            glyph_id: "glyph_Aacute".to_string(),
-            glyph_name: "Aacute".to_string(),
-            layer_id: "source_Regular".to_string(),
-            component_id: "component_25".to_string(),
-        }]
-    );
+    assert_eq!(report.removed_component_recipes.len(), 1);
+    let removed_recipe = &report.removed_component_recipes[0];
+    assert_eq!(removed_recipe.glyph_id, "glyph_Aacute");
+    assert_eq!(removed_recipe.glyph_name, "Aacute");
+    assert_eq!(removed_recipe.layer_id, "source_Regular");
+    assert_eq!(removed_recipe.component_id, "component_25");
+    assert_eq!(removed_recipe.base_glyph_id, "glyph_A");
+    assert_eq!(removed_recipe.base_glyph_name, "A");
+    assert_eq!(removed_recipe.kind, ShiftComponentRecipeKind::Static);
+    assert_eq!(removed_recipe.variation_source_count, 0);
+    assert!(removed_recipe.required_capabilities.is_empty());
     assert_eq!(
         report.diff,
         ShiftPackageDiff {
@@ -5710,7 +5792,7 @@ fn working_source_delete_with_component_removal_allows_leaf_glyphs() {
 
     assert_eq!(report.glyph_id, "glyph_Aacute");
     assert_eq!(report.glyph_name, "Aacute");
-    assert!(report.removed_component_references.is_empty());
+    assert!(report.removed_component_recipes.is_empty());
     assert_eq!(
         report.diff.changes,
         vec![ShiftPackageChange::DeleteGlyph {

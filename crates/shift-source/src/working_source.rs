@@ -67,6 +67,7 @@ pub struct ShiftDeleteGlyphPreview {
     pub glyph_id: String,
     pub glyph_name: String,
     pub component_dependents: Vec<ShiftComponentUse>,
+    pub component_dependent_recipes: Vec<ShiftComponentRecipeSummary>,
     pub can_remove_without_decomposing: bool,
 }
 
@@ -84,7 +85,7 @@ pub struct ShiftDeleteGlyphReport {
 pub struct ShiftDeleteGlyphAndRemoveComponentsReport {
     pub glyph_id: String,
     pub glyph_name: String,
-    pub removed_component_references: Vec<ShiftComponentUse>,
+    pub removed_component_recipes: Vec<ShiftComponentRecipeSummary>,
     pub diff: ShiftPackageDiff,
     pub revision: u64,
 }
@@ -1066,11 +1067,13 @@ impl ShiftWorkingSource {
         glyph_id: &str,
     ) -> ShiftSourceResult<ShiftDeleteGlyphPreview> {
         let dependencies = self.glyph_dependencies(glyph_id)?;
+        let component_dependent_recipes = self.component_dependent_recipes(glyph_id)?;
 
         Ok(ShiftDeleteGlyphPreview {
             glyph_id: dependencies.glyph_id.clone(),
             glyph_name: dependencies.glyph_name.clone(),
             component_dependents: dependencies.component_dependents.clone(),
+            component_dependent_recipes,
             can_remove_without_decomposing: dependencies.component_dependents.is_empty(),
         })
     }
@@ -1372,6 +1375,35 @@ impl ShiftWorkingSource {
                 })
             })
             .collect()
+    }
+
+    fn component_dependent_recipes(
+        &self,
+        base_glyph_id: &str,
+    ) -> ShiftSourceResult<Vec<ShiftComponentRecipeSummary>> {
+        let base_glyph = self.glyph(base_glyph_id)?;
+        let mut summaries = Vec::new();
+        for glyph in &self.package.glyphs {
+            for (layer_id, layer) in &glyph.layers {
+                for component in &layer.components {
+                    if component.base_glyph_id == base_glyph_id {
+                        summaries.push(component_recipe_summary(
+                            glyph,
+                            layer_id,
+                            component,
+                            &base_glyph.name,
+                        ));
+                    }
+                }
+            }
+        }
+        summaries.sort_by(|left, right| {
+            left.glyph_id
+                .cmp(&right.glyph_id)
+                .then_with(|| left.layer_id.cmp(&right.layer_id))
+                .then_with(|| left.component_id.cmp(&right.component_id))
+        });
+        Ok(summaries)
     }
 
     pub fn component_lowering_diagnostics(
@@ -2515,6 +2547,7 @@ impl ShiftWorkingSource {
         let before = self.package.clone();
         let mut next = before.clone();
         let removed_component_references = remove_component_references_to_base(&mut next, glyph_id);
+        debug_assert_eq!(removed_component_references, preview.component_dependents);
         let index = next
             .glyphs
             .iter()
@@ -2533,7 +2566,7 @@ impl ShiftWorkingSource {
         Ok(ShiftDeleteGlyphAndRemoveComponentsReport {
             glyph_id: preview.glyph_id,
             glyph_name: preview.glyph_name,
-            removed_component_references,
+            removed_component_recipes: preview.component_dependent_recipes,
             diff,
             revision: self.revision,
         })
