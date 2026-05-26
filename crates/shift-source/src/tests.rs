@@ -550,10 +550,58 @@ fn interpolation_compatibility_index_reports_contour_topology_mismatch() {
         glyph.issues,
         vec![ShiftInterpolationCompatibilityIssue {
             kind: ShiftInterpolationCompatibilityIssueKind::ContourTopologyMismatch,
+            reference_layer_id: "source_Regular".to_string(),
+            layer_id: "source_Bold".to_string(),
+            expected: "on-on:closed".to_string(),
+            actual: "on-on-off:closed".to_string(),
+        }]
+    );
+}
+
+#[test]
+fn interpolation_compatibility_index_falls_back_when_default_layer_is_missing() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_A".to_string(),
+            name: "A".to_string(),
+            unicodes: Vec::new(),
+            local_axes: Vec::new(),
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Bold".to_string(), layer_with_line_contour(700.0)),
+                ("source_Condensed".to_string(), empty_layer(600.0)),
+            ]),
+        }],
+    );
+    package.sources.extend([
+        ShiftSource {
+            id: "source_Bold".to_string(),
+            name: "Bold".to_string(),
+            location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+        },
+        ShiftSource {
+            id: "source_Condensed".to_string(),
+            name: "Condensed".to_string(),
+            location: BTreeMap::from([("axis_wght".to_string(), 300.0)]),
+        },
+    ]);
+
+    let index =
+        build_interpolation_compatibility_index(&package).expect("compatibility should build");
+    let glyph = index
+        .glyphs
+        .get("glyph_A")
+        .expect("glyph should be indexed");
+
+    assert_eq!(
+        glyph.issues,
+        vec![ShiftInterpolationCompatibilityIssue {
+            kind: ShiftInterpolationCompatibilityIssueKind::ContourCountMismatch,
             reference_layer_id: "source_Bold".to_string(),
-            layer_id: "source_Regular".to_string(),
-            expected: "on-on-off:closed".to_string(),
-            actual: "on-on:closed".to_string(),
+            layer_id: "source_Condensed".to_string(),
+            expected: "1".to_string(),
+            actual: "0".to_string(),
         }]
     );
 }
@@ -613,10 +661,10 @@ fn interpolation_compatibility_index_reports_component_mismatch() {
         glyph.issues,
         vec![ShiftInterpolationCompatibilityIssue {
             kind: ShiftInterpolationCompatibilityIssueKind::ComponentBaseMismatch,
-            reference_layer_id: "source_Bold".to_string(),
-            layer_id: "source_Regular".to_string(),
-            expected: "component_26:glyph_bar".to_string(),
-            actual: "component_26:glyph_stem".to_string(),
+            reference_layer_id: "source_Regular".to_string(),
+            layer_id: "source_Bold".to_string(),
+            expected: "component_26:glyph_stem".to_string(),
+            actual: "component_26:glyph_bar".to_string(),
         }]
     );
 }
@@ -666,10 +714,10 @@ fn interpolation_compatibility_index_reports_component_identity_mismatch() {
         glyph.issues,
         vec![ShiftInterpolationCompatibilityIssue {
             kind: ShiftInterpolationCompatibilityIssueKind::ComponentIdMismatch,
-            reference_layer_id: "source_Bold".to_string(),
-            layer_id: "source_Regular".to_string(),
-            expected: "component_bold".to_string(),
-            actual: "component_regular".to_string(),
+            reference_layer_id: "source_Regular".to_string(),
+            layer_id: "source_Bold".to_string(),
+            expected: "component_regular".to_string(),
+            actual: "component_bold".to_string(),
         }]
     );
 }
@@ -10307,11 +10355,11 @@ fn working_source_reports_source_interpolation_issues() {
     );
     assert_eq!(
         coverage[0].interpolation_issues[0].issue.reference_layer_id,
-        "source_Bold"
+        "source_Regular"
     );
     assert_eq!(
         coverage[0].interpolation_issues[0].issue.layer_id,
-        "source_Regular"
+        "source_Bold"
     );
     assert_eq!(coverage[1].source_id, "source_Bold");
     assert!(!coverage[1].interpolation_compatible);
@@ -10326,11 +10374,11 @@ fn working_source_reports_source_interpolation_issues() {
     assert_eq!(coverage[1].interpolation_issues[0].glyph_name, "A");
     assert_eq!(
         coverage[1].interpolation_issues[0].issue.reference_layer_id,
-        "source_Bold"
+        "source_Regular"
     );
     assert_eq!(
         coverage[1].interpolation_issues[0].issue.layer_id,
-        "source_Regular"
+        "source_Bold"
     );
 }
 

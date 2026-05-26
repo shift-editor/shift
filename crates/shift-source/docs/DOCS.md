@@ -1231,10 +1231,10 @@ Current shape:
       "issues": [
         {
           "kind": "contourTopologyMismatch",
-          "referenceLayerId": "source_Bold",
-          "layerId": "source_Regular",
-          "expected": "on-on-off:closed",
-          "actual": "on-on:closed"
+          "referenceLayerId": "source_Regular",
+          "layerId": "source_Bold",
+          "expected": "on-on:closed",
+          "actual": "on-on-off:closed"
         }
       ]
     }
@@ -1249,6 +1249,11 @@ This directly supports:
 - export preflight diagnostics before generating variable fonts
 - targeted recomputation when `UpdateGlyph`, `DeleteGlyph`, axes, sources, or
   axis mappings change
+
+Diagnostics use the package default source as the reference layer whenever the
+glyph has that layer. Partial glyphs that do not yet have the default layer fall
+back to deterministic layer order. This keeps source panels and export preflight
+warnings anchored to the canonical master instead of depending on map ordering.
 
 This index intentionally stores signatures rather than rendered geometry. It is
 a product diagnostic and invalidation target, not canonical outline data.

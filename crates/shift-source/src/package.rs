@@ -3003,7 +3003,10 @@ pub fn build_interpolation_compatibility_index(
         .glyphs
         .iter()
         .map(|glyph| {
-            let compatibility = glyph_interpolation_compatibility(glyph);
+            let compatibility = glyph_interpolation_compatibility(
+                glyph,
+                package.manifest.default_source_id.as_deref(),
+            );
             (glyph.id.clone(), compatibility)
         })
         .collect();
@@ -3492,7 +3495,10 @@ fn component_use_sort_key(
         .then_with(|| left.component_id.cmp(&right.component_id))
 }
 
-fn glyph_interpolation_compatibility(glyph: &ShiftGlyph) -> ShiftGlyphInterpolationCompatibility {
+fn glyph_interpolation_compatibility(
+    glyph: &ShiftGlyph,
+    default_source_id: Option<&str>,
+) -> ShiftGlyphInterpolationCompatibility {
     let layer_signatures: BTreeMap<_, _> = glyph
         .layers
         .iter()
@@ -3500,8 +3506,14 @@ fn glyph_interpolation_compatibility(glyph: &ShiftGlyph) -> ShiftGlyphInterpolat
         .collect();
     let mut issues = Vec::new();
 
-    if let Some((reference_layer_id, reference_signature)) = layer_signatures.iter().next() {
-        for (layer_id, signature) in layer_signatures.iter().skip(1) {
+    if let Some((reference_layer_id, reference_signature)) =
+        interpolation_reference_layer(&layer_signatures, default_source_id)
+    {
+        for (layer_id, signature) in &layer_signatures {
+            if layer_id == reference_layer_id {
+                continue;
+            }
+
             issues.extend(compare_layer_signatures(
                 reference_layer_id,
                 reference_signature,
@@ -3523,6 +3535,22 @@ fn glyph_interpolation_compatibility(glyph: &ShiftGlyph) -> ShiftGlyphInterpolat
         layer_signatures,
         issues,
     }
+}
+
+fn interpolation_reference_layer<'a>(
+    layer_signatures: &'a BTreeMap<String, ShiftLayerCompatibilitySignature>,
+    default_source_id: Option<&str>,
+) -> Option<(&'a str, &'a ShiftLayerCompatibilitySignature)> {
+    if let Some(default_source_id) = default_source_id {
+        if let Some((layer_id, signature)) = layer_signatures.get_key_value(default_source_id) {
+            return Some((layer_id.as_str(), signature));
+        }
+    }
+
+    layer_signatures
+        .iter()
+        .next()
+        .map(|(layer_id, signature)| (layer_id.as_str(), signature))
 }
 
 pub fn interpolation_issue_kind_counts(
