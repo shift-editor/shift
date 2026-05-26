@@ -423,6 +423,10 @@ format exploration:
   They also carry lowering hints and required capabilities, so backends can
   explain whether a component is a plain component, needs condition support,
   needs variable-component support, or will need fallback handling for a target.
+  Transform variation is reported by exact decomposed fields, not only as one
+  boolean, so export UI and backend code can distinguish `translateX`-only
+  motion from scale, rotation, skew, or transformation-center variation before
+  choosing a `VARC` path or static fallback.
 - **Component capability diagnostics:** export preflight can compare component
   recipes with a target capability profile before invoking a backend. This is
   evidence for backend or `fontc` policy, not a local compiler plan: it tells
@@ -448,8 +452,9 @@ format exploration:
   component, require Shift-side fallback before `fontc`, or block on an
   unsupported variation resolver. Components that require fallback carry their
   resolved axis values, resolved transform, variation source/resolution, and
-  missing authoring capabilities so the backend can choose decomposition,
-  materialized helper glyphs, or a future variable-component export path.
+  missing authoring capabilities plus the exact transform fields that vary, so
+  the backend can choose decomposition, materialized helper glyphs, or a future
+  variable-component export path.
   Context-aware preflight can pass separate root font and current parent
   locations for recursive component checks. Conditions use the font location,
   matching component preview and keeping export capability diagnostics from
@@ -777,7 +782,7 @@ The format should make these app behaviors straightforward:
   override.
 - Component recipe UI that can show exact authored component variation sources:
   completed parent locations, which source changed the component location and
-  transform, and stable source IDs for future edit/delete commands.
+  transform fields, and stable source IDs for future edit/delete commands.
 - Component variation sources reject default-location redefinitions and duplicate
   parent locations, so the app never shows or saves an ambiguous recipe where
   one authored source silently overwrites another interpolation point.

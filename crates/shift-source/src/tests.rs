@@ -4,16 +4,16 @@ use crate::{
     ShiftComponentActivity, ShiftComponentLoweringCapability,
     ShiftComponentLoweringCapabilityCount, ShiftComponentLoweringHint,
     ShiftComponentLoweringTarget, ShiftComponentRecipeKind, ShiftComponentRecipeSummary,
-    ShiftComponentResolveContext, ShiftComponentVariationParentAxisValue,
-    ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
+    ShiftComponentResolveContext, ShiftComponentTransformField,
+    ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
+    ShiftComponentVariationResolution, ShiftComponentVariationSourceUpdate,
+    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
+    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftResolvedAxisValue, ShiftResolvedAxisValueSource,
+    ShiftSourceAxisValue, ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceUpdate,
     ShiftStaticComponentExportDisposition, ShiftWorkingSource, ShiftWorkingSourceSavePreviewStatus,
     ShiftWorkingSourceSaveStatus,
 };
@@ -2978,6 +2978,7 @@ fn working_source_delete_preview_reports_dependent_component_recipe_impact() {
             variation_parent_axis_ids: vec!["axis_wght".to_string()],
             variation_location_axis_ids: vec!["axis_wght".to_string()],
             varies_transform: true,
+            variation_transform_fields: vec![ShiftComponentTransformField::TranslateX],
             lowering_hint: ShiftComponentLoweringHint::ConditionalVariableComponent,
             required_capabilities: vec![
                 ShiftComponentLoweringCapability::Condition,
@@ -4292,6 +4293,10 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
     assert_eq!(recipes[0].variation_source_count, 0);
     assert!(!recipes[0].varies_transform);
     assert_eq!(
+        recipes[0].variation_transform_fields,
+        Vec::<ShiftComponentTransformField>::new()
+    );
+    assert_eq!(
         recipes[0].lowering_hint,
         ShiftComponentLoweringHint::StaticComponent
     );
@@ -4326,6 +4331,10 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
     assert_eq!(recipes[2].variation_source_count, 0);
     assert!(!recipes[2].varies_transform);
     assert_eq!(
+        recipes[2].variation_transform_fields,
+        Vec::<ShiftComponentTransformField>::new()
+    );
+    assert_eq!(
         recipes[2].lowering_hint,
         ShiftComponentLoweringHint::VariableComponent
     );
@@ -4358,6 +4367,10 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
         vec!["axis_stemWidth".to_string()]
     );
     assert!(recipes[3].varies_transform);
+    assert_eq!(
+        recipes[3].variation_transform_fields,
+        vec![ShiftComponentTransformField::TranslateX]
+    );
     assert_eq!(
         recipes[3].lowering_hint,
         ShiftComponentLoweringHint::ConditionalVariableComponent
@@ -4420,6 +4433,13 @@ fn component_recipe_capabilities_distinguish_transform_variation_from_location_v
     );
     assert_eq!(recipes[0].variation_location_axis_ids, Vec::<String>::new());
     assert!(recipes[0].varies_transform);
+    assert_eq!(
+        recipes[0].variation_transform_fields,
+        vec![
+            ShiftComponentTransformField::ScaleX,
+            ShiftComponentTransformField::ScaleY,
+        ]
+    );
     assert_eq!(
         recipes[0].required_capabilities,
         vec![ShiftComponentLoweringCapability::VariableTransform]
@@ -4493,6 +4513,10 @@ fn component_recipe_capabilities_ignore_neutral_transform_sources() {
     assert_eq!(recipes[0].variation_source_count, 1);
     assert_eq!(recipes[0].variation_parent_axis_ids, vec!["axis_wght"]);
     assert!(!recipes[0].varies_transform);
+    assert_eq!(
+        recipes[0].variation_transform_fields,
+        Vec::<ShiftComponentTransformField>::new()
+    );
     assert_eq!(
         recipes[0].required_capabilities,
         Vec::<ShiftComponentLoweringCapability>::new()
@@ -5193,6 +5217,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
                 ][..],
             ),
         ]
+    );
+    assert_eq!(
+        static_export_preview.components[3].variation_transform_fields,
+        vec![ShiftComponentTransformField::TranslateX]
     );
     assert_eq!(
         static_export_preview.components[3].transform.translate_x,
@@ -7277,6 +7305,7 @@ fn working_source_relink_delete_preserves_variable_component_recipe() {
             variation_parent_axis_ids: vec!["axis_wght".to_string()],
             variation_location_axis_ids: vec!["axis_wght".to_string()],
             varies_transform: true,
+            variation_transform_fields: vec![ShiftComponentTransformField::TranslateX],
             lowering_hint: ShiftComponentLoweringHint::ConditionalVariableComponent,
             required_capabilities: vec![
                 ShiftComponentLoweringCapability::Condition,

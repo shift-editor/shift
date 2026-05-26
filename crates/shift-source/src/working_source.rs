@@ -614,6 +614,7 @@ pub struct ShiftComponentRecipeSummary {
     pub variation_parent_axis_ids: Vec<String>,
     pub variation_location_axis_ids: Vec<String>,
     pub varies_transform: bool,
+    pub variation_transform_fields: Vec<ShiftComponentTransformField>,
     pub lowering_hint: ShiftComponentLoweringHint,
     pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
@@ -634,6 +635,20 @@ pub enum ShiftComponentLoweringCapability {
     VariableLocation,
     VariableTransform,
     AxisReset,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftComponentTransformField {
+    TranslateX,
+    TranslateY,
+    Rotation,
+    ScaleX,
+    ScaleY,
+    SkewX,
+    SkewY,
+    TCenterX,
+    TCenterY,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -763,6 +778,7 @@ pub struct ShiftStaticComponentExportComponent {
     pub base_glyph_name: String,
     pub disposition: ShiftStaticComponentExportDisposition,
     pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
+    pub variation_transform_fields: Vec<ShiftComponentTransformField>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub condition: Option<ShiftConditionEvaluation>,
     pub values: BTreeMap<String, ShiftResolvedAxisValue>,
@@ -2107,6 +2123,7 @@ impl ShiftWorkingSource {
                 base_glyph_name: base_glyph.name.clone(),
                 disposition,
                 required_capabilities,
+                variation_transform_fields: summary.variation_transform_fields,
                 condition,
                 values: resolved.values,
                 transform: resolved.transform,
@@ -3961,11 +3978,8 @@ fn component_recipe_summary(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let varies_transform = component.variation_sources.iter().any(|source| {
-        source
-            .transform
-            .is_some_and(|transform| transform != component.transform)
-    });
+    let variation_transform_fields = component_variation_transform_fields(component);
+    let varies_transform = !variation_transform_fields.is_empty();
     let has_condition = component.condition.is_some();
     let has_variable_location = !component.location.is_empty()
         || component.variation_sources.iter().any(|source| {
@@ -4011,6 +4025,7 @@ fn component_recipe_summary(
         variation_parent_axis_ids,
         variation_location_axis_ids,
         varies_transform,
+        variation_transform_fields,
         lowering_hint,
         required_capabilities,
     }
@@ -4059,6 +4074,55 @@ fn component_axis_value_before_source_override(
         .iter()
         .find(|axis| axis.id == axis_id)
         .map(|axis| axis.default)
+}
+
+fn component_variation_transform_fields(
+    component: &ShiftComponent,
+) -> Vec<ShiftComponentTransformField> {
+    let mut fields = BTreeSet::new();
+
+    for source in &component.variation_sources {
+        let Some(transform) = source.transform else {
+            continue;
+        };
+        collect_component_transform_fields(component.transform, transform, &mut fields);
+    }
+
+    fields.into_iter().collect()
+}
+
+fn collect_component_transform_fields(
+    base: DecomposedTransform,
+    source: DecomposedTransform,
+    fields: &mut BTreeSet<ShiftComponentTransformField>,
+) {
+    if source.translate_x != base.translate_x {
+        fields.insert(ShiftComponentTransformField::TranslateX);
+    }
+    if source.translate_y != base.translate_y {
+        fields.insert(ShiftComponentTransformField::TranslateY);
+    }
+    if source.rotation != base.rotation {
+        fields.insert(ShiftComponentTransformField::Rotation);
+    }
+    if source.scale_x != base.scale_x {
+        fields.insert(ShiftComponentTransformField::ScaleX);
+    }
+    if source.scale_y != base.scale_y {
+        fields.insert(ShiftComponentTransformField::ScaleY);
+    }
+    if source.skew_x != base.skew_x {
+        fields.insert(ShiftComponentTransformField::SkewX);
+    }
+    if source.skew_y != base.skew_y {
+        fields.insert(ShiftComponentTransformField::SkewY);
+    }
+    if source.t_center_x != base.t_center_x {
+        fields.insert(ShiftComponentTransformField::TCenterX);
+    }
+    if source.t_center_y != base.t_center_y {
+        fields.insert(ShiftComponentTransformField::TCenterY);
+    }
 }
 
 fn normalize_axis_value(value: f64, minimum: f64, default: f64, maximum: f64) -> f64 {
