@@ -215,7 +215,10 @@ Current writer behavior:
   readiness. It returns `unchanged`, `ready`, or `blockedByExternalChanges`
   along with a compact summary and the prepared commit evidence, so save
   buttons, conflict banners, and dirty-state projections do not infer status
-  from raw diff/conflict lists.
+  from raw diff/conflict lists. The summary separates canonical source writes,
+  canonical source removals, and derived-cache impact, so UI can distinguish
+  user-authored data changes from disposable cache regeneration without parsing
+  the full prepared commit.
   Even an unchanged working source compares the full saved package fingerprint
   against disk before reporting `unchanged`, so external edits cannot be
   accidentally accepted as the new clean baseline.
@@ -809,7 +812,8 @@ The format should make these app behaviors straightforward:
 - Variable-axis UI can distinguish public sliders from internal construction
   axes, while still showing how one drives the other.
 - Save diagnostics can show exactly which source modules a command intended to
-  touch before the staged writer commits them.
+  touch before the staged writer commits them, with canonical source paths
+  counted separately from derived cache paths.
 
 ## Mutation Impact Planning
 
@@ -826,6 +830,12 @@ can drive:
 - dirty-resource badges
 - targeted derived index invalidation
 - future autosave or command batching
+
+`ShiftWorkingSourceSaveSummary` mirrors the same boundary at app level:
+`canonicalPathCount` and `removedCanonicalPathCount` describe persisted source
+data, while `derivedPathCount` describes disposable cache/index impact. This
+keeps save buttons, dirty badges, and data-loss warnings from treating a cache
+rewrite the same as a canonical source edit.
 
 Examples:
 

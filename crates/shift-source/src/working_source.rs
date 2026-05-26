@@ -519,6 +519,9 @@ pub enum ShiftWorkingSourceSavePreviewStatus {
 pub struct ShiftWorkingSourceSaveSummary {
     pub change_count: usize,
     pub impacted_path_count: usize,
+    pub canonical_path_count: usize,
+    pub removed_canonical_path_count: usize,
+    pub derived_path_count: usize,
     pub conflict_count: usize,
     pub staged_recovery_count: usize,
     pub write_file_count: usize,
@@ -3973,6 +3976,9 @@ fn save_summary(
     let mut summary = ShiftWorkingSourceSaveSummary {
         change_count: prepared.diff.changes.len(),
         impacted_path_count: prepared.impacted_paths.len(),
+        canonical_path_count: prepared.diff.impact.canonical_paths.len(),
+        removed_canonical_path_count: prepared.diff.impact.removed_canonical_paths.len(),
+        derived_path_count: prepared.diff.impact.derived_paths.len(),
         conflict_count: prepared.conflicts.len(),
         staged_recovery_count: staged_recovery_plans.len(),
         ..Default::default()
