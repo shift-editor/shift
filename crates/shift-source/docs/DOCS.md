@@ -951,8 +951,9 @@ What is not yet proven is the app boundary for several of those operations. The
 bridge must still prove:
 
 - malformed-manifest and cleanup-only open states at the bridge boundary; clean
-  open, unrecoverable blockers, and recoverable partially-applied staged
-  transactions are already covered before editable data is exposed
+  open and unrecoverable blockers are covered before editable data is exposed.
+  Partially-applied staged recovery is intentionally covered in Rust, where the
+  transaction writer and recovery planner own the format details.
 - axis and axis-mapping authoring without TypeScript-side interpolation
 - edit/delete source flows and interpolation-mismatch worklist rows scoped to
   visible source/glyph rows; missing-layer rows are already covered through
