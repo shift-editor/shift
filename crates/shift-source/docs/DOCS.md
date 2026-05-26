@@ -267,6 +267,10 @@ format exploration:
   in the source graph, so literal-character lookup, coverage accounting, cmap
   export, and `glyphByUnicode`-style app queries do not depend on iteration
   order.
+- **Source labels are app-safe:** source names are editable labels for masters
+  and layers, but they must be nonblank and unique. Semantic source creation can
+  fall back to `New Source`/`New Source.1` for plus-button flows, while blank
+  source updates fail without mutating the working graph.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any

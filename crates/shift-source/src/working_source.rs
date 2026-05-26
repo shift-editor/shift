@@ -1804,16 +1804,21 @@ impl ShiftWorkingSource {
     ) -> ShiftSourceResult<ShiftCreateSourceReport> {
         let before = self.package.clone();
         let mut next = before.clone();
+        let source_name = unique_member_name_with_fallback(
+            create.name.trim(),
+            "New Source",
+            next.sources.iter().map(|source| source.name.as_str()),
+        );
         let source_id = create.source_id.unwrap_or_else(|| {
             unique_member_id(
                 "source",
-                &create.name,
+                &source_name,
                 next.sources.iter().map(|source| source.id.as_str()),
             )
         });
         next.sources.push(ShiftSource {
             id: source_id.clone(),
-            name: create.name,
+            name: source_name,
             location: create.location,
         });
 
@@ -1847,7 +1852,7 @@ impl ShiftWorkingSource {
             .ok_or_else(|| ShiftSourceError::MissingSource {
                 source_id: source_id.to_string(),
             })?;
-        source.name = update.name;
+        source.name = update.name.trim().to_string();
         source.location = update.location;
 
         self.replace_package(next)?;
@@ -3494,8 +3499,20 @@ fn unique_member_name<'a>(
     label: &str,
     existing_names: impl IntoIterator<Item = &'a str>,
 ) -> String {
+    unique_member_name_with_fallback(label, "newGlyph", existing_names)
+}
+
+fn unique_member_name_with_fallback<'a>(
+    label: &str,
+    fallback_name: &str,
+    existing_names: impl IntoIterator<Item = &'a str>,
+) -> String {
     let existing_names = existing_names.into_iter().collect::<BTreeSet<_>>();
-    let base_name = if label.is_empty() { "newGlyph" } else { label };
+    let base_name = if label.is_empty() {
+        fallback_name
+    } else {
+        label
+    };
     if !existing_names.contains(base_name) {
         return base_name.to_string();
     }

@@ -218,6 +218,12 @@ pub enum ShiftSourceError {
     #[error("duplicate Shift source id '{source_id}'")]
     DuplicateSourceId { source_id: String },
 
+    #[error("invalid Shift source name '{source_name}'")]
+    InvalidSourceName { source_name: String },
+
+    #[error("duplicate Shift source name '{source_name}'")]
+    DuplicateSourceName { source_name: String },
+
     #[error(
         "source '{source_id}' has the same completed location as source '{existing_source_id}'"
     )]

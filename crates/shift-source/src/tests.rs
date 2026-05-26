@@ -5736,6 +5736,33 @@ fn package_requires_a_valid_default_source() {
 }
 
 #[test]
+fn package_rejects_blank_and_duplicate_source_names() {
+    let mut blank_name = package_with_single_source(Vec::new());
+    blank_name.sources[0].name = "   ".to_string();
+    let error = blank_name
+        .validate()
+        .expect_err("blank source names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidSourceName { source_name } if source_name == "   "
+    ));
+
+    let mut duplicate_name = package_with_axes(vec![weight_axis()], Vec::new());
+    duplicate_name.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Regular".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let error = duplicate_name
+        .validate()
+        .expect_err("duplicate source names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateSourceName { source_name } if source_name == "Regular"
+    ));
+}
+
+#[test]
 fn package_rejects_invalid_unicode_values() {
     for invalid_unicode in ["not-hex", "D800", "110000"] {
         let package = package_with_single_source(vec![ShiftGlyph {
@@ -8257,6 +8284,29 @@ fn working_source_creates_source_with_generated_id_and_completed_location() {
 }
 
 #[test]
+fn working_source_create_source_uses_new_source_for_blank_names() {
+    let mut package = package_with_axes(vec![weight_axis()], Vec::new());
+    package.sources.push(ShiftSource {
+        id: "source_New_Source".to_string(),
+        name: "New Source".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .create_source(ShiftCreateSource {
+            source_id: None,
+            name: "   ".to_string(),
+            location: BTreeMap::from([("axis_wght".to_string(), 700.0)]),
+        })
+        .expect("blank source name should use fallback");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "source_New_Source_1");
+    assert_eq!(report.source.source_name, "New Source.1");
+}
+
+#[test]
 fn working_source_updates_source_with_narrow_impact() {
     let mut package = package_with_axes(vec![weight_axis()], Vec::new());
     package.sources.push(ShiftSource {
@@ -8340,6 +8390,22 @@ fn working_source_rejects_invalid_source_update_without_mutating() {
             source: ShiftSourceAxisValueSource::AxisDefault,
         })
     );
+
+    let error = working_source
+        .update_source(
+            "source_Regular",
+            ShiftSourceUpdate {
+                name: "   ".to_string(),
+                location: BTreeMap::new(),
+            },
+        )
+        .expect_err("blank source name should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidSourceName { source_name } if source_name.is_empty()
+    ));
+    assert_eq!(working_source.revision(), 0);
 }
 
 #[test]

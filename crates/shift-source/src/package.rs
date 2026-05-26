@@ -757,13 +757,24 @@ impl ShiftPackage {
         }
 
         let mut source_ids = HashSet::new();
+        let mut source_names = HashSet::new();
         let mut source_locations_by_id = HashMap::new();
         let mut completed_source_locations = HashMap::new();
         for source in &self.sources {
             validate_identifier(format!("source '{}'", source.name), &source.id)?;
+            if source.name.trim().is_empty() {
+                return Err(ShiftSourceError::InvalidSourceName {
+                    source_name: source.name.clone(),
+                });
+            }
             if !source_ids.insert(source.id.as_str()) {
                 return Err(ShiftSourceError::DuplicateSourceId {
                     source_id: source.id.clone(),
+                });
+            }
+            if !source_names.insert(source.name.as_str()) {
+                return Err(ShiftSourceError::DuplicateSourceName {
+                    source_name: source.name.clone(),
                 });
             }
             source_locations_by_id.insert(source.id.as_str(), &source.location);
