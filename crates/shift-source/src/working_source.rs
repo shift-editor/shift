@@ -281,6 +281,10 @@ pub struct ShiftSourceLayerCoverage {
     pub interpolation_mismatch_issue_count: usize,
     pub interpolation_incompatible_glyph_count: usize,
     pub interpolation_issue_kind_counts: Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+    pub interpolation_reference_issue_kind_counts:
+        Vec<ShiftInterpolationCompatibilityIssueKindCount>,
+    pub interpolation_mismatch_issue_kind_counts:
+        Vec<ShiftInterpolationCompatibilityIssueKindCount>,
     pub complete: bool,
     pub interpolation_compatible: bool,
     pub present_layers: Vec<ShiftSourceLayerUse>,
@@ -1427,6 +1431,18 @@ impl ShiftWorkingSource {
                     }
                 }
 
+                let interpolation_reference_issue_kind_counts = interpolation_issue_kind_counts(
+                    interpolation_issues
+                        .iter()
+                        .filter(|issue| issue.issue.reference_layer_id == source.id)
+                        .map(|issue| issue.issue.kind),
+                );
+                let interpolation_mismatch_issue_kind_counts = interpolation_issue_kind_counts(
+                    interpolation_issues
+                        .iter()
+                        .filter(|issue| issue.issue.layer_id == source.id)
+                        .map(|issue| issue.issue.kind),
+                );
                 let interpolation_issue_kind_counts = interpolation_issue_kind_counts(
                     interpolation_issues.iter().map(|issue| issue.issue.kind),
                 );
@@ -1456,6 +1472,8 @@ impl ShiftWorkingSource {
                     interpolation_mismatch_issue_count,
                     interpolation_incompatible_glyph_count,
                     interpolation_issue_kind_counts,
+                    interpolation_reference_issue_kind_counts,
+                    interpolation_mismatch_issue_kind_counts,
                     complete: missing_layers.is_empty(),
                     interpolation_compatible: interpolation_issues.is_empty(),
                     present_layers,

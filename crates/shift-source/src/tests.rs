@@ -10302,6 +10302,13 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[0].interpolation_reference_issue_count, 0);
     assert_eq!(coverage[0].interpolation_mismatch_issue_count, 0);
     assert_eq!(coverage[0].interpolation_incompatible_glyph_count, 0);
+    assert!(coverage[0].interpolation_issue_kind_counts.is_empty());
+    assert!(coverage[0]
+        .interpolation_reference_issue_kind_counts
+        .is_empty());
+    assert!(coverage[0]
+        .interpolation_mismatch_issue_kind_counts
+        .is_empty());
     assert!(coverage[0].complete);
     assert!(coverage[0].interpolation_compatible);
     assert_eq!(coverage[1].source_id, "source_Bold");
@@ -10312,6 +10319,13 @@ fn working_source_reports_source_layer_coverage() {
     assert_eq!(coverage[1].interpolation_reference_issue_count, 0);
     assert_eq!(coverage[1].interpolation_mismatch_issue_count, 0);
     assert_eq!(coverage[1].interpolation_incompatible_glyph_count, 0);
+    assert!(coverage[1].interpolation_issue_kind_counts.is_empty());
+    assert!(coverage[1]
+        .interpolation_reference_issue_kind_counts
+        .is_empty());
+    assert!(coverage[1]
+        .interpolation_mismatch_issue_kind_counts
+        .is_empty());
     assert!(!coverage[1].complete);
     assert!(coverage[1].interpolation_compatible);
     assert_eq!(coverage[1].present_layers[0].glyph_id, "glyph_B");
@@ -10387,6 +10401,13 @@ fn working_source_reports_source_interpolation_issues() {
             },
         ]
     );
+    assert_eq!(
+        coverage[0].interpolation_reference_issue_kind_counts,
+        coverage[0].interpolation_issue_kind_counts
+    );
+    assert!(coverage[0]
+        .interpolation_mismatch_issue_kind_counts
+        .is_empty());
     assert_eq!(coverage[0].interpolation_issues[0].glyph_id, "glyph_A");
     assert_eq!(
         coverage[0].interpolation_issues[0].issue.kind,
@@ -10418,6 +10439,13 @@ fn working_source_reports_source_interpolation_issues() {
                 issue_count: 1,
             },
         ]
+    );
+    assert!(coverage[1]
+        .interpolation_reference_issue_kind_counts
+        .is_empty());
+    assert_eq!(
+        coverage[1].interpolation_mismatch_issue_kind_counts,
+        coverage[1].interpolation_issue_kind_counts
     );
     assert_eq!(coverage[1].interpolation_issues[0].glyph_name, "A");
     assert_eq!(
