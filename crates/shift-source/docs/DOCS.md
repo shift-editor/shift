@@ -740,6 +740,18 @@ Lessons being folded into the package model:
 
 - Variable components need a base glyph, decomposed transform, sparse location,
   explicit inheritance behavior, and sometimes a condition.
+- Shift should keep stable IDs canonical even where prior UFO-oriented proposals
+  use glyph names for symmetry with existing `<component base="...">` data.
+  Names are editable labels and export/interchange aliases. Component targets,
+  glyph-local sources, dependency indexes, rename/delete previews, and save
+  impact should all remain ID-keyed so app edits do not require reconstructing
+  identity from mutable labels.
+- Shift should reject or disambiguate authoring states that prior art marks as
+  complicated open questions. In particular, glyph-local axes must not shadow
+  global axes by display name or stable ID. A component location may reference
+  global and base-local axes at the same time, but every coordinate is keyed by
+  stable axis ID so source validation, editor inspection, and export lowering
+  agree on which axis is being controlled.
 - `VARC` separates the root font coordinates from the current parent component
   coordinates. Shift exposes that distinction through
   `ShiftComponentResolveContext`: component conditions and
