@@ -857,6 +857,20 @@ fn write_impact_for_axis_mapping_keeps_export_mapping_explicit() {
 }
 
 #[test]
+fn write_impact_for_manifest_refreshes_default_source_compatibility() {
+    let impact = plan_write_impact(&[ShiftPackageChange::UpdateManifest]);
+
+    assert_eq!(
+        impact,
+        ShiftWriteImpact {
+            canonical_paths: vec!["manifest.json".to_string()],
+            removed_canonical_paths: Vec::new(),
+            derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+        }
+    );
+}
+
+#[test]
 fn package_diff_classifies_rename_as_label_only_change() {
     let before = package_with_component_dependency();
     let mut after = before.clone();
@@ -1448,6 +1462,58 @@ fn staged_commit_writes_marker_and_verified_payloads_without_live_mutation() {
     assert!(staged_glyph.contains("\"name\": \"RenamedBase\""));
     assert!(staged_compatibility.contains("\"glyphName\": \"RenamedBase\""));
     assert_eq!(live_after, live_before);
+}
+
+#[test]
+fn staged_manifest_default_source_change_refreshes_compatibility_payload() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+    let package_path = temp_dir.path().join("SpikeSans.shift");
+    let before = package_with_compatible_two_layer_glyph();
+    save_package(&before, &package_path).expect("package should save");
+
+    let mut after = before.clone();
+    after.manifest.default_source_id = Some("source_Bold".to_string());
+    let diff = diff_packages(&before, &after).expect("package diff should build");
+
+    assert_eq!(
+        diff,
+        ShiftPackageDiff {
+            changes: vec![ShiftPackageChange::UpdateManifest],
+            impact: ShiftWriteImpact {
+                canonical_paths: vec!["manifest.json".to_string()],
+                removed_canonical_paths: Vec::new(),
+                derived_paths: vec![INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string()],
+            },
+        }
+    );
+
+    let expected = fingerprint_relative_paths(&package_path, &diff.impact.package_relative_paths())
+        .expect("baseline fingerprint should build");
+    let prepared = prepare_package_commit(&package_path, &before, &after, expected)
+        .expect("commit should prepare");
+    let staged =
+        stage_prepared_commit(&package_path, &after, &prepared).expect("commit should stage");
+
+    assert_eq!(
+        staged.payload_paths,
+        vec![
+            "manifest.json".to_string(),
+            INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string(),
+        ]
+    );
+
+    let staged_manifest =
+        fs::read_to_string(staged.transaction_path.join("payloads/manifest.json"))
+            .expect("staged manifest should be readable");
+    let staged_compatibility = fs::read_to_string(
+        staged
+            .transaction_path
+            .join(format!("payloads/{INTERPOLATION_COMPATIBILITY_INDEX_PATH}")),
+    )
+    .expect("staged compatibility index should be readable");
+
+    assert!(staged_manifest.contains("\"defaultSourceId\": \"source_Bold\""));
+    assert!(staged_compatibility.contains("\"referenceLayerId\": \"source_Bold\""));
 }
 
 #[test]

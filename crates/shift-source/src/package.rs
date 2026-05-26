@@ -1880,6 +1880,7 @@ pub fn plan_write_impact(changes: &[ShiftPackageChange]) -> ShiftWriteImpact {
         match change {
             ShiftPackageChange::UpdateManifest => {
                 canonical_paths.insert("manifest.json".to_string());
+                derived_paths.insert(INTERPOLATION_COMPATIBILITY_INDEX_PATH.to_string());
             }
             ShiftPackageChange::UpdateFontInfo => {
                 canonical_paths.insert("font.json".to_string());

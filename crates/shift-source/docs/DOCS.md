@@ -1162,6 +1162,10 @@ DeleteGlyph(glyph_A)
   derived:   derived/dependencies.json
              derived/interpolation-compatibility.json
 
+UpdateManifest
+  canonical: manifest.json
+  derived:   derived/interpolation-compatibility.json
+
 UpdateAxisMappings
   canonical: axis-mappings.json
   derived:   derived/interpolation-compatibility.json
@@ -1172,7 +1176,10 @@ Components target `baseGlyphId`, so the rename changes the renamed glyph file
 and refreshes dependent component `baseGlyphName` label caches. Rename also
 refreshes interpolation compatibility because that derived index carries
 app-facing glyph labels. A component label-cache update remains dependency-only:
-compatibility signatures use stable IDs, not cached display names. A component
+compatibility signatures use stable IDs, not cached display names. A manifest
+update refreshes interpolation compatibility because the manifest owns the
+package `defaultSourceId`, and the compatibility index uses that source as the
+preferred diagnostic reference layer.
 edit is different: it changes the owner glyph's semantic component recipe and
 invalidates interpolation compatibility because the graph may have changed.
 
