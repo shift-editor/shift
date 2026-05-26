@@ -276,6 +276,11 @@ format exploration:
   readable. Semantic mapping creation can fall back to `New Mapping` and
   disambiguates duplicate names, while blank mapping updates fail without
   mutating the working graph.
+- **Variable authoring labels are app-safe:** glyph-local axes, glyph variation
+  sources, and component variation sources also require nonblank, unique labels
+  inside their owning glyph or component. Semantic variation-source creation
+  falls back to readable names and disambiguates duplicates, while blank updates
+  fail without mutating the working graph.
 - **Stable IDs are file-safe:** package IDs are validated as non-empty
   ASCII-stable identifiers before saving. A hand-authored glyph ID such as
   `../glyph_escape` is rejected before Shift creates `glyphs/` or writes any

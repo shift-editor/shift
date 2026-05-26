@@ -1050,11 +1050,18 @@ impl ShiftPackage {
             }
 
             let mut local_axis_ids = HashSet::new();
+            let mut local_axis_names = HashSet::new();
             for axis in &glyph.local_axes {
                 validate_identifier(
                     format!("glyph '{}' local axis '{}'", glyph.name, axis.name),
                     &axis.id,
                 )?;
+                if axis.name.trim().is_empty() {
+                    return Err(ShiftSourceError::InvalidGlyphLocalAxisName {
+                        glyph_name: glyph.name.clone(),
+                        axis_name: axis.name.clone(),
+                    });
+                }
                 if axis_ranges.contains_key(axis.id.as_str()) {
                     return Err(ShiftSourceError::GlyphLocalAxisConflictsWithGlobalAxis {
                         glyph_name: glyph.name.clone(),
@@ -1067,19 +1074,38 @@ impl ShiftPackage {
                         axis_id: axis.id.clone(),
                     });
                 }
+                if !local_axis_names.insert(axis.name.as_str()) {
+                    return Err(ShiftSourceError::DuplicateGlyphLocalAxisName {
+                        glyph_name: glyph.name.clone(),
+                        axis_name: axis.name.clone(),
+                    });
+                }
                 validate_axis_range(&axis.id, axis.minimum, axis.default, axis.maximum)?;
             }
             let mut variation_source_ids = HashSet::new();
+            let mut variation_source_names = HashSet::new();
             let mut variation_source_locations = HashMap::new();
             for source in &glyph.variation_sources {
                 validate_identifier(
                     format!("glyph '{}' variation source '{}'", glyph.name, source.name),
                     &source.id,
                 )?;
+                if source.name.trim().is_empty() {
+                    return Err(ShiftSourceError::InvalidGlyphVariationSourceName {
+                        glyph_name: glyph.name.clone(),
+                        source_name: source.name.clone(),
+                    });
+                }
                 if !variation_source_ids.insert(source.id.as_str()) {
                     return Err(ShiftSourceError::DuplicateGlyphVariationSource {
                         glyph_name: glyph.name.clone(),
                         source_id: source.id.clone(),
+                    });
+                }
+                if !variation_source_names.insert(source.name.as_str()) {
+                    return Err(ShiftSourceError::DuplicateGlyphVariationSourceName {
+                        glyph_name: glyph.name.clone(),
+                        source_name: source.name.clone(),
                     });
                 }
                 if !glyph.layers.contains_key(&source.layer_id) {
@@ -1211,6 +1237,7 @@ impl ShiftPackage {
                         )?;
                     }
                     let mut component_source_ids = HashSet::new();
+                    let mut component_source_names = HashSet::new();
                     let mut component_parent_locations = HashMap::new();
                     let default_parent_location =
                         component_parent_location_key(&BTreeMap::new(), &self.axes);
@@ -1222,11 +1249,25 @@ impl ShiftPackage {
                             ),
                             &component_source.id,
                         )?;
+                        if component_source.name.trim().is_empty() {
+                            return Err(ShiftSourceError::InvalidComponentVariationSourceName {
+                                glyph_name: glyph.name.clone(),
+                                base_glyph_id: component.base_glyph_id.clone(),
+                                source_name: component_source.name.clone(),
+                            });
+                        }
                         if !component_source_ids.insert(component_source.id.as_str()) {
                             return Err(ShiftSourceError::DuplicateComponentVariationSource {
                                 glyph_name: glyph.name.clone(),
                                 base_glyph_id: component.base_glyph_id.clone(),
                                 source_id: component_source.id.clone(),
+                            });
+                        }
+                        if !component_source_names.insert(component_source.name.as_str()) {
+                            return Err(ShiftSourceError::DuplicateComponentVariationSourceName {
+                                glyph_name: glyph.name.clone(),
+                                base_glyph_id: component.base_glyph_id.clone(),
+                                source_name: component_source.name.clone(),
                             });
                         }
                         if let Some(transform) = &component_source.transform {

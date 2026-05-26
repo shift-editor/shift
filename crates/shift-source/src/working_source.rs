@@ -2077,10 +2077,18 @@ impl ShiftWorkingSource {
                 glyph_id: glyph_id.to_string(),
             })?;
         let glyph_name = glyph.name.clone();
+        let source_name = unique_member_name_with_fallback(
+            create.name.trim(),
+            "New Variation Source",
+            glyph
+                .variation_sources
+                .iter()
+                .map(|source| source.name.as_str()),
+        );
         let source_id = create.source_id.unwrap_or_else(|| {
             unique_member_id(
                 "glyphSource",
-                &create.name,
+                &source_name,
                 glyph
                     .variation_sources
                     .iter()
@@ -2089,7 +2097,7 @@ impl ShiftWorkingSource {
         });
         glyph.variation_sources.push(ShiftGlyphSource {
             id: source_id.clone(),
-            name: create.name,
+            name: source_name,
             layer_id: create.layer_id,
             location: create.location,
         });
@@ -2144,7 +2152,7 @@ impl ShiftWorkingSource {
                 glyph_id: glyph_id.to_string(),
                 source_id: source_id.to_string(),
             })?;
-        source.name = update.name;
+        source.name = update.name.trim().to_string();
         source.layer_id = update.layer_id;
         source.location = update.location;
 
@@ -2250,10 +2258,18 @@ impl ShiftWorkingSource {
                 layer_id: layer_id.to_string(),
                 component_id: component_id.to_string(),
             })?;
+        let source_name = unique_member_name_with_fallback(
+            create.name.trim(),
+            "New Component Source",
+            component
+                .variation_sources
+                .iter()
+                .map(|source| source.name.as_str()),
+        );
         let source_id = create.source_id.unwrap_or_else(|| {
             unique_member_id(
                 "componentSource",
-                &create.name,
+                &source_name,
                 component
                     .variation_sources
                     .iter()
@@ -2264,7 +2280,7 @@ impl ShiftWorkingSource {
             .variation_sources
             .push(ShiftComponentVariationSource {
                 id: source_id.clone(),
-                name: create.name,
+                name: source_name,
                 parent_location: create.parent_location,
                 location: create.location,
                 transform: create.transform,
@@ -2345,7 +2361,7 @@ impl ShiftWorkingSource {
                 component_id: component_id.to_string(),
                 source_id: source_id.to_string(),
             })?;
-        source.name = update.name;
+        source.name = update.name.trim().to_string();
         source.parent_location = update.parent_location;
         source.location = update.location;
         source.transform = update.transform;

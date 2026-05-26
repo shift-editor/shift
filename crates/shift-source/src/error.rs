@@ -283,6 +283,18 @@ pub enum ShiftSourceError {
     #[error("glyph '{glyph_name}' defines duplicate local axis id '{axis_id}'")]
     DuplicateGlyphLocalAxis { glyph_name: String, axis_id: String },
 
+    #[error("glyph '{glyph_name}' has invalid local axis name '{axis_name}'")]
+    InvalidGlyphLocalAxisName {
+        glyph_name: String,
+        axis_name: String,
+    },
+
+    #[error("glyph '{glyph_name}' defines duplicate local axis name '{axis_name}'")]
+    DuplicateGlyphLocalAxisName {
+        glyph_name: String,
+        axis_name: String,
+    },
+
     #[error("glyph '{glyph_name}' local axis id '{axis_id}' conflicts with a global axis id")]
     GlyphLocalAxisConflictsWithGlobalAxis { glyph_name: String, axis_id: String },
 
@@ -290,6 +302,18 @@ pub enum ShiftSourceError {
     DuplicateGlyphVariationSource {
         glyph_name: String,
         source_id: String,
+    },
+
+    #[error("glyph '{glyph_name}' has invalid variation source name '{source_name}'")]
+    InvalidGlyphVariationSourceName {
+        glyph_name: String,
+        source_name: String,
+    },
+
+    #[error("glyph '{glyph_name}' defines duplicate variation source name '{source_name}'")]
+    DuplicateGlyphVariationSourceName {
+        glyph_name: String,
+        source_name: String,
     },
 
     #[error("glyph '{glyph_name}' variation source '{source_id}' has the same completed location as source '{existing_source_id}'")]
@@ -325,6 +349,20 @@ pub enum ShiftSourceError {
         glyph_name: String,
         base_glyph_id: String,
         source_id: String,
+    },
+
+    #[error("component variation source in glyph '{glyph_name}' targeting '{base_glyph_id}' has invalid name '{source_name}'")]
+    InvalidComponentVariationSourceName {
+        glyph_name: String,
+        base_glyph_id: String,
+        source_name: String,
+    },
+
+    #[error("component in glyph '{glyph_name}' targeting '{base_glyph_id}' defines duplicate variation source name '{source_name}'")]
+    DuplicateComponentVariationSourceName {
+        glyph_name: String,
+        base_glyph_id: String,
+        source_name: String,
     },
 
     #[error("component variation source '{source_id}' in glyph '{glyph_name}' targeting '{base_glyph_id}' is at the default parent location; use the component's base transform/location for the default state")]

@@ -4667,8 +4667,8 @@ fn working_source_creates_component_variation_source_with_generated_id_and_narro
         .expect("component variation source creation should succeed");
 
     assert_eq!(report.revision, 1);
-    assert_eq!(report.source_id, "componentSource_Black_component_2");
-    assert_eq!(report.source.source_name, "Black component");
+    assert_eq!(report.source_id, "componentSource_Black_component_1");
+    assert_eq!(report.source.source_name, "Black component.1");
     assert_eq!(
         report.source.parent_values.get("axis_wght"),
         Some(&ShiftComponentVariationParentAxisValue {
@@ -4699,6 +4699,51 @@ fn working_source_creates_component_variation_source_with_generated_id_and_narro
             },
         }
     );
+}
+
+#[test]
+fn working_source_create_component_variation_source_uses_fallback_for_blank_names() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_blank_create".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: Vec::new(),
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let report = working_source
+        .create_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_blank_create",
+            ShiftCreateComponentVariationSource {
+                source_id: None,
+                name: "   ".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 800.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 68.0)]),
+                transform: None,
+            },
+        )
+        .expect("blank component variation source name should use fallback");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "componentSource_New_Component_Source");
+    assert_eq!(report.source.source_name, "New Component Source");
 }
 
 #[test]
@@ -5055,6 +5100,71 @@ fn working_source_component_variation_source_no_op_does_not_advance_revision() {
     assert!(report.diff.changes.is_empty());
     assert!(report.diff.impact.package_relative_paths().is_empty());
     assert_eq!(working_source.revision(), 0);
+}
+
+#[test]
+fn working_source_rejects_blank_component_variation_source_update_without_mutating() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_7_blank_update".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let mut working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let error = working_source
+        .update_component_variation_source(
+            "glyph_A",
+            "source_Regular",
+            "component_7_blank_update",
+            "componentSource_black",
+            ShiftComponentVariationSourceUpdate {
+                name: "   ".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: None,
+            },
+        )
+        .expect_err("blank component variation source update should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidComponentVariationSourceName {
+            glyph_name,
+            base_glyph_id,
+            source_name,
+        } if glyph_name == "A" && base_glyph_id == "glyph_stem" && source_name.is_empty()
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let sources = working_source
+        .component_variation_source_locations(
+            "glyph_A",
+            "source_Regular",
+            "component_7_blank_update",
+        )
+        .expect("component variation source locations should still resolve");
+    assert_eq!(sources[0].source_name, "Black component");
 }
 
 #[test]
@@ -6440,6 +6550,84 @@ fn component_variation_sources_reject_duplicate_parent_locations() {
 }
 
 #[test]
+fn package_rejects_blank_and_duplicate_component_variation_source_names() {
+    let mut component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_name_validation".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_blank".to_string(),
+                name: "   ".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+
+    let error = package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer.clone()),
+    )
+    .validate()
+    .expect_err("blank component variation source names should fail validation");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidComponentVariationSourceName {
+            glyph_name,
+            base_glyph_id,
+            source_name,
+        } if glyph_name == "A" && base_glyph_id == "glyph_stem" && source_name == "   "
+    ));
+
+    component_layer.components[0].variation_sources = vec![
+        ShiftComponentVariationSource {
+            id: "componentSource_light".to_string(),
+            name: "Component correction".to_string(),
+            parent_location: BTreeMap::from([("axis_wght".to_string(), 100.0)]),
+            location: BTreeMap::new(),
+            transform: None,
+        },
+        ShiftComponentVariationSource {
+            id: "componentSource_black".to_string(),
+            name: "Component correction".to_string(),
+            parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+            transform: None,
+        },
+    ];
+
+    let error = package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    )
+    .validate()
+    .expect_err("duplicate component variation source names should fail validation");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateComponentVariationSourceName {
+            glyph_name,
+            base_glyph_id,
+            source_name,
+        } if glyph_name == "A"
+            && base_glyph_id == "glyph_stem"
+            && source_name == "Component correction"
+    ));
+}
+
+#[test]
 fn glyph_variation_sources_must_reference_existing_layers_and_axes() {
     let valid_layer = ShiftGlyphLayer {
         advance_width: 600.0,
@@ -6523,6 +6711,64 @@ fn glyph_local_axes_must_not_shadow_global_axes() {
 }
 
 #[test]
+fn package_rejects_blank_and_duplicate_glyph_local_axis_names() {
+    let mut blank_name = package_with_axes(
+        Vec::new(),
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: vec![ShiftGlyphAxis {
+                id: "axis_stemWidth".to_string(),
+                name: "   ".to_string(),
+                minimum: 20.0,
+                default: 40.0,
+                maximum: 80.0,
+            }],
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }],
+    );
+    let error = blank_name
+        .validate()
+        .expect_err("blank glyph local axis names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidGlyphLocalAxisName {
+            glyph_name,
+            axis_name,
+        } if glyph_name == "stem" && axis_name == "   "
+    ));
+
+    blank_name.glyphs[0].local_axes = vec![
+        ShiftGlyphAxis {
+            id: "axis_stemWidth".to_string(),
+            name: "Stem Width".to_string(),
+            minimum: 20.0,
+            default: 40.0,
+            maximum: 80.0,
+        },
+        ShiftGlyphAxis {
+            id: "axis_stemContrast".to_string(),
+            name: "Stem Width".to_string(),
+            minimum: 0.0,
+            default: 0.5,
+            maximum: 1.0,
+        },
+    ];
+    let error = blank_name
+        .validate()
+        .expect_err("duplicate glyph local axis names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateGlyphLocalAxisName {
+            glyph_name,
+            axis_name,
+        } if glyph_name == "stem" && axis_name == "Stem Width"
+    ));
+}
+
+#[test]
 fn glyph_variation_sources_reject_duplicate_completed_locations() {
     let package = package_with_axes(
         vec![weight_axis()],
@@ -6571,6 +6817,75 @@ fn glyph_variation_sources_reject_duplicate_completed_locations() {
         } if glyph_name == "stem"
             && source_id == "glyphSource_default_b"
             && existing_source_id == "glyphSource_default_a"
+    ));
+}
+
+#[test]
+fn package_rejects_blank_and_duplicate_glyph_variation_source_names() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: vec![ShiftGlyphAxis {
+                id: "axis_stemWidth".to_string(),
+                name: "Stem Width".to_string(),
+                minimum: 20.0,
+                default: 40.0,
+                maximum: 80.0,
+            }],
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_blank".to_string(),
+                name: "   ".to_string(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                layer_id: "source_Regular".to_string(),
+            }],
+            layers: BTreeMap::from([("source_Regular".to_string(), empty_layer(600.0))]),
+        }],
+    );
+    let error = package
+        .validate()
+        .expect_err("blank glyph variation source names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidGlyphVariationSourceName {
+            glyph_name,
+            source_name,
+        } if glyph_name == "stem" && source_name == "   "
+    ));
+
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    package.glyphs[0]
+        .layers
+        .insert("source_Bold".to_string(), empty_layer(700.0));
+    package.glyphs[0].variation_sources = vec![
+        ShiftGlyphSource {
+            id: "glyphSource_regular".to_string(),
+            name: "Correction".to_string(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 40.0)]),
+            layer_id: "source_Regular".to_string(),
+        },
+        ShiftGlyphSource {
+            id: "glyphSource_bold".to_string(),
+            name: "Correction".to_string(),
+            location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+            layer_id: "source_Bold".to_string(),
+        },
+    ];
+    let error = package
+        .validate()
+        .expect_err("duplicate glyph variation source names should fail validation");
+    assert!(matches!(
+        error,
+        ShiftSourceError::DuplicateGlyphVariationSourceName {
+            glyph_name,
+            source_name,
+        } if glyph_name == "stem" && source_name == "Correction"
     ));
 }
 
@@ -6700,8 +7015,8 @@ fn working_source_creates_glyph_variation_source_with_generated_id_and_narrow_im
         .expect("glyph variation source creation should succeed");
 
     assert_eq!(report.revision, 1);
-    assert_eq!(report.source_id, "glyphSource_Black_2");
-    assert_eq!(report.source.source_name, "Black");
+    assert_eq!(report.source_id, "glyphSource_Black_1");
+    assert_eq!(report.source.source_name, "Black.1");
     assert_eq!(
         report.source.values.get("axis_stemWidth"),
         Some(&ShiftGlyphVariationAxisValue {
@@ -6725,6 +7040,52 @@ fn working_source_creates_glyph_variation_source_with_generated_id_and_narrow_im
             },
         }
     );
+}
+
+#[test]
+fn working_source_create_glyph_variation_source_uses_fallback_for_blank_names() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: vec![ShiftGlyphAxis {
+                id: "axis_stemWidth".to_string(),
+                name: "Stem Width".to_string(),
+                minimum: 20.0,
+                default: 40.0,
+                maximum: 80.0,
+            }],
+            variation_sources: Vec::new(),
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let report = working_source
+        .create_glyph_variation_source(
+            "glyph_stem",
+            ShiftCreateGlyphVariationSource {
+                source_id: None,
+                name: "   ".to_string(),
+                layer_id: "source_Bold".to_string(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 78.0)]),
+            },
+        )
+        .expect("blank glyph variation source name should use fallback");
+
+    assert_eq!(report.revision, 1);
+    assert_eq!(report.source_id, "glyphSource_New_Variation_Source");
+    assert_eq!(report.source.source_name, "New Variation Source");
 }
 
 #[test]
@@ -6974,6 +7335,66 @@ fn working_source_updates_glyph_variation_source_with_narrow_impact() {
             },
         }
     );
+}
+
+#[test]
+fn working_source_rejects_blank_glyph_variation_source_update_without_mutating() {
+    let mut package = package_with_axes(
+        vec![weight_axis()],
+        vec![ShiftGlyph {
+            id: "glyph_stem".to_string(),
+            name: "stem".to_string(),
+            unicodes: Vec::new(),
+            local_axes: vec![ShiftGlyphAxis {
+                id: "axis_stemWidth".to_string(),
+                name: "Stem Width".to_string(),
+                minimum: 20.0,
+                default: 40.0,
+                maximum: 80.0,
+            }],
+            variation_sources: vec![ShiftGlyphSource {
+                id: "glyphSource_bold".to_string(),
+                name: "Bold".to_string(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+                layer_id: "source_Bold".to_string(),
+            }],
+            layers: BTreeMap::from([
+                ("source_Regular".to_string(), empty_layer(600.0)),
+                ("source_Bold".to_string(), empty_layer(700.0)),
+            ]),
+        }],
+    );
+    package.sources.push(ShiftSource {
+        id: "source_Bold".to_string(),
+        name: "Bold".to_string(),
+        location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+    });
+    let mut working_source = ShiftWorkingSource::new(package).expect("package is valid");
+
+    let error = working_source
+        .update_glyph_variation_source(
+            "glyph_stem",
+            "glyphSource_bold",
+            ShiftGlyphVariationSourceUpdate {
+                name: "   ".to_string(),
+                layer_id: "source_Bold".to_string(),
+                location: BTreeMap::from([("axis_stemWidth".to_string(), 72.0)]),
+            },
+        )
+        .expect_err("blank glyph variation source update should fail");
+
+    assert!(matches!(
+        error,
+        ShiftSourceError::InvalidGlyphVariationSourceName {
+            glyph_name,
+            source_name,
+        } if glyph_name == "stem" && source_name.is_empty()
+    ));
+    assert_eq!(working_source.revision(), 0);
+    let sources = working_source
+        .glyph_variation_source_locations("glyph_stem")
+        .expect("glyph variation source locations should still resolve");
+    assert_eq!(sources[0].source_name, "Bold");
 }
 
 #[test]
