@@ -949,6 +949,13 @@ pub struct ShiftComponentRecipeReport {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftComponentRecipeDetailReport {
+    pub revision: u64,
+    pub recipe: ShiftComponentRecipeSummary,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftComponentRecipeReportSummary {
     pub total_component_count: usize,
     pub static_component_count: usize,
@@ -2693,6 +2700,19 @@ impl ShiftWorkingSource {
             component,
             base_glyph,
         ))
+    }
+
+    pub fn component_recipe_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        component_id: &str,
+    ) -> ShiftSourceResult<ShiftComponentRecipeDetailReport> {
+        let recipe = self.component_recipe(glyph_id, layer_id, component_id)?;
+        Ok(ShiftComponentRecipeDetailReport {
+            revision: self.revision,
+            recipe,
+        })
     }
 
     pub fn component_variation_source_locations(

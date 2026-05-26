@@ -552,7 +552,10 @@ format exploration:
   static, conditional, variable, conditional-variable, capability, variation
   source, and varying-transform states. This keeps cheap component badges and
   expensive resolved-location/state queries separate, while still letting the UI
-  ignore stale async recipe responses using the working-source revision.
+  ignore stale async recipe responses using the working-source revision. A
+  selected-component recipe report returns the same summary row for one
+  component plus the working-source revision, so inspectors do not need to query
+  and filter the whole layer just to refresh one selected component.
 - **Component variation source resolution:** inspectors and export preflight can
   ask which authored component source applies at an exact parent location, or
   ask for an interpolated component location/transform at an in-between parent

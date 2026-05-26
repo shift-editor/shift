@@ -4770,6 +4770,15 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
         recipes[0].required_capabilities,
         Vec::<ShiftComponentLoweringCapability>::new()
     );
+    let detail_report = working_source
+        .component_recipe_report(
+            "glyph_A",
+            "source_Regular",
+            "component_variable_conditional",
+        )
+        .expect("selected component recipe report should summarize");
+    assert_eq!(detail_report.revision, 0);
+    assert_eq!(detail_report.recipe, recipes[3]);
 
     assert_eq!(recipes[1].component_id, "component_conditional");
     assert_eq!(recipes[1].kind, ShiftComponentRecipeKind::Conditional);
