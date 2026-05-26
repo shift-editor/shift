@@ -948,6 +948,7 @@ pub struct ShiftWorkingSourceSaveStagedRecoveryLiveStateCount {
 pub struct ShiftSourceLocation {
     pub source_id: String,
     pub source_name: String,
+    pub is_default_source: bool,
     pub values: BTreeMap<String, ShiftSourceAxisValue>,
 }
 
@@ -2070,6 +2071,7 @@ impl ShiftWorkingSource {
             .map(|source| ShiftSourceLocation {
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
+                is_default_source: self.is_default_source(&source.id),
                 values: self.complete_source_location(&source.location),
             })
             .collect()
@@ -2092,6 +2094,7 @@ impl ShiftWorkingSource {
             let source_location = ShiftSourceLocation {
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
+                is_default_source: self.is_default_source(&source.id),
                 values: self.complete_source_location(&source.location),
             };
             let mapped_location = self.mapped_location(&source.location)?;
@@ -2510,6 +2513,14 @@ impl ShiftWorkingSource {
             })
     }
 
+    fn is_default_source(&self, source_id: &str) -> bool {
+        self.package
+            .manifest
+            .default_source_id
+            .as_deref()
+            .is_some_and(|default_source_id| default_source_id == source_id)
+    }
+
     pub fn glyph_dependencies(&self, glyph_id: &str) -> ShiftSourceResult<&ShiftGlyphDependencies> {
         self.dependency_index
             .glyphs
@@ -2751,12 +2762,7 @@ impl ShiftWorkingSource {
             .ok_or_else(|| ShiftSourceError::MissingSource {
                 source_id: source_id.to_string(),
             })?;
-        let is_default_source = self
-            .package
-            .manifest
-            .default_source_id
-            .as_deref()
-            .is_some_and(|default_source_id| default_source_id == source_id);
+        let is_default_source = self.is_default_source(source_id);
         let mut layer_uses = Vec::new();
         let mut glyph_variation_source_uses = Vec::new();
 

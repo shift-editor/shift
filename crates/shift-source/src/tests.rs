@@ -11327,6 +11327,7 @@ fn working_source_completes_sparse_source_locations() {
 
     assert_eq!(locations.len(), 2);
     assert_eq!(locations[0].source_id, "source_Regular");
+    assert!(locations[0].is_default_source);
     assert_eq!(
         locations[0].values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -11335,6 +11336,7 @@ fn working_source_completes_sparse_source_locations() {
         })
     );
     assert_eq!(locations[1].source_id, "source_Bold");
+    assert!(!locations[1].is_default_source);
     assert_eq!(
         locations[1].values.get("axis_wght"),
         Some(&ShiftSourceAxisValue {
@@ -12798,10 +12800,23 @@ fn working_source_creates_source_with_generated_id_and_completed_location() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Bold");
+    assert!(!report.source.is_default_source);
     assert_eq!(report.source_locations.revision, 1);
     assert_eq!(report.source_locations.summary.source_count, 2);
+    assert!(report.source_locations.sources[0].is_default_source);
+    assert!(!report.source_locations.sources[1].is_default_source);
     assert_eq!(report.source_mapped_locations.revision, 1);
     assert_eq!(report.source_mapped_locations.summary.source_count, 2);
+    assert!(
+        report.source_mapped_locations.sources[0]
+            .source_location
+            .is_default_source
+    );
+    assert!(
+        !report.source_mapped_locations.sources[1]
+            .source_location
+            .is_default_source
+    );
     assert_eq!(
         report
             .source_mapped_locations
@@ -12895,10 +12910,23 @@ fn working_source_updates_source_with_narrow_impact() {
     assert_eq!(report.revision, 1);
     assert_eq!(report.source_id, "source_Bold");
     assert_eq!(report.source.source_name, "Black");
+    assert!(!report.source.is_default_source);
     assert_eq!(report.source_locations.revision, 1);
     assert_eq!(report.source_locations.summary.source_count, 2);
+    assert!(report.source_locations.sources[0].is_default_source);
+    assert!(!report.source_locations.sources[1].is_default_source);
     assert_eq!(report.source_mapped_locations.revision, 1);
     assert_eq!(report.source_mapped_locations.summary.source_count, 2);
+    assert!(
+        report.source_mapped_locations.sources[0]
+            .source_location
+            .is_default_source
+    );
+    assert!(
+        !report.source_mapped_locations.sources[1]
+            .source_location
+            .is_default_source
+    );
     assert_eq!(
         report.source_mapped_locations.sources[1].source_name,
         "Black"
@@ -13014,8 +13042,14 @@ fn working_source_deletes_source_with_narrow_impact() {
     assert_eq!(report.source_name, "Bold");
     assert_eq!(report.source_locations.revision, 1);
     assert_eq!(report.source_locations.summary.source_count, 1);
+    assert!(report.source_locations.sources[0].is_default_source);
     assert_eq!(report.source_mapped_locations.revision, 1);
     assert_eq!(report.source_mapped_locations.summary.source_count, 1);
+    assert!(
+        report.source_mapped_locations.sources[0]
+            .source_location
+            .is_default_source
+    );
     assert_eq!(report.source_coverage.summary.source_count, 1);
     assert!(report.source_coverage.summary.ready);
     assert_eq!(report.interpolation_compatibility.revision, 1);

@@ -691,7 +691,10 @@ format exploration:
   responses without scanning every source row.
 - **Source location completion:** source panels and export preflight can ask for
   every source's completed global location and see whether each coordinate was
-  explicit or inherited from an axis default. The same surface backs source
+  explicit or inherited from an axis default. Each source row also carries
+  `isDefaultSource`, so the renderer can show the canonical source, block
+  destructive actions, and route quick glyph creation without inspecting the
+  manifest or duplicating default-source policy. The same surface backs source
   create/update/delete reports, so UI can immediately refresh source lists,
   source badges, and interpolation compatibility summaries from validated Rust
   state rather than patching local JSON-shaped records. The source-location
