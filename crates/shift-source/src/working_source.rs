@@ -1177,6 +1177,25 @@ pub struct ShiftGlyphVariationSourceLocation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphVariationSourceLocationReport {
+    pub revision: u64,
+    pub summary: ShiftGlyphVariationSourceLocationSummary,
+    pub sources: Vec<ShiftGlyphVariationSourceLocation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphVariationSourceLocationSummary {
+    pub source_count: usize,
+    pub resolved_axis_value_count: usize,
+    pub source_location_value_count: usize,
+    pub axis_default_value_count: usize,
+    pub local_axis_default_value_count: usize,
+    pub variation_source_override_value_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftGlyphVariationAxisValue {
     pub value: f64,
     pub source: ShiftGlyphVariationAxisValueSource,
@@ -2123,6 +2142,18 @@ impl ShiftWorkingSource {
                 })
             })
             .collect()
+    }
+
+    pub fn glyph_variation_source_locations_report(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftGlyphVariationSourceLocationReport> {
+        let sources = self.glyph_variation_source_locations(glyph_id)?;
+        Ok(ShiftGlyphVariationSourceLocationReport {
+            revision: self.revision,
+            summary: glyph_variation_source_location_summary(&sources),
+            sources,
+        })
     }
 
     pub fn preview_delete_glyph(
@@ -5662,6 +5693,43 @@ fn source_location_summary(sources: &[ShiftSourceLocation]) -> ShiftSourceLocati
         resolved_axis_value_count,
         source_location_value_count,
         axis_default_value_count,
+    }
+}
+
+fn glyph_variation_source_location_summary(
+    sources: &[ShiftGlyphVariationSourceLocation],
+) -> ShiftGlyphVariationSourceLocationSummary {
+    let mut resolved_axis_value_count = 0;
+    let mut source_location_value_count = 0;
+    let mut axis_default_value_count = 0;
+    let mut local_axis_default_value_count = 0;
+    let mut variation_source_override_value_count = 0;
+
+    for source in sources {
+        for value in source.values.values() {
+            resolved_axis_value_count += 1;
+            match value.source {
+                ShiftGlyphVariationAxisValueSource::SourceLocation => {
+                    source_location_value_count += 1;
+                }
+                ShiftGlyphVariationAxisValueSource::AxisDefault => axis_default_value_count += 1,
+                ShiftGlyphVariationAxisValueSource::LocalAxisDefault => {
+                    local_axis_default_value_count += 1;
+                }
+                ShiftGlyphVariationAxisValueSource::VariationSourceOverride => {
+                    variation_source_override_value_count += 1;
+                }
+            }
+        }
+    }
+
+    ShiftGlyphVariationSourceLocationSummary {
+        source_count: sources.len(),
+        resolved_axis_value_count,
+        source_location_value_count,
+        axis_default_value_count,
+        local_axis_default_value_count,
+        variation_source_override_value_count,
     }
 }
 

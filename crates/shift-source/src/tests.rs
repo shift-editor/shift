@@ -12,18 +12,18 @@ use crate::{
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
     ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceUpdate,
-    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
-    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
-    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
-    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
-    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
-    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
-    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
-    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
-    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
-    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
-    ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
+    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
+    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
+    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
+    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
+    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
+    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
+    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
+    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
+    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
+    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
+    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -9344,6 +9344,23 @@ fn working_source_completes_glyph_variation_source_locations() {
             value: 72.0,
             source: ShiftGlyphVariationAxisValueSource::VariationSourceOverride,
         })
+    );
+
+    let report = working_source
+        .glyph_variation_source_locations_report("glyph_stem")
+        .expect("glyph variation source location report should resolve");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.sources, locations);
+    assert_eq!(
+        report.summary,
+        ShiftGlyphVariationSourceLocationSummary {
+            source_count: 2,
+            resolved_axis_value_count: 4,
+            source_location_value_count: 1,
+            axis_default_value_count: 1,
+            local_axis_default_value_count: 1,
+            variation_source_override_value_count: 1,
+        }
     );
 }
 

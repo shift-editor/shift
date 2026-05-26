@@ -563,7 +563,11 @@ format exploration:
   source create/update/delete reports include the post-mutation completed source
   list, so a glyph-source inspector can update from the command response instead
   of issuing a follow-up query or rebuilding sparse/default provenance in
-  TypeScript.
+  TypeScript. The glyph variation source location report adds the
+  working-source revision and compact provenance counts for source-location,
+  global-default, local-default, and explicit override values, so glyph source
+  inspectors and export panels can render status badges and ignore stale async
+  responses without scanning every source row.
 - **Source location completion:** source panels and export preflight can ask for
   every source's completed global location and see whether each coordinate was
   explicit or inherited from an axis default. The same surface backs source
