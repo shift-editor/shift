@@ -1229,6 +1229,32 @@ pub struct ShiftComponentVariationSourceLocation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationSourceLocationReport {
+    pub revision: u64,
+    pub summary: ShiftComponentVariationSourceLocationSummary,
+    pub sources: Vec<ShiftComponentVariationSourceLocation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftComponentVariationSourceLocationSummary {
+    pub source_count: usize,
+    pub parent_axis_value_count: usize,
+    pub parent_axis_default_value_count: usize,
+    pub variation_source_parent_location_value_count: usize,
+    pub resolved_axis_value_count: usize,
+    pub parent_location_value_count: usize,
+    pub font_location_value_count: usize,
+    pub font_default_value_count: usize,
+    pub base_local_default_value_count: usize,
+    pub component_override_value_count: usize,
+    pub component_variation_source_value_count: usize,
+    pub base_component_transform_count: usize,
+    pub component_variation_source_transform_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftComponentVariationParentAxisValue {
     pub value: f64,
     pub source: ShiftComponentVariationParentAxisValueSource,
@@ -2575,6 +2601,21 @@ impl ShiftWorkingSource {
                 })
             })
             .collect()
+    }
+
+    pub fn component_variation_source_locations_report(
+        &self,
+        glyph_id: &str,
+        layer_id: &str,
+        component_id: &str,
+    ) -> ShiftSourceResult<ShiftComponentVariationSourceLocationReport> {
+        let sources =
+            self.component_variation_source_locations(glyph_id, layer_id, component_id)?;
+        Ok(ShiftComponentVariationSourceLocationReport {
+            revision: self.revision,
+            summary: component_variation_source_location_summary(&sources),
+            sources,
+        })
     }
 
     fn component_recipes_for_uses(
@@ -5730,6 +5771,80 @@ fn glyph_variation_source_location_summary(
         axis_default_value_count,
         local_axis_default_value_count,
         variation_source_override_value_count,
+    }
+}
+
+fn component_variation_source_location_summary(
+    sources: &[ShiftComponentVariationSourceLocation],
+) -> ShiftComponentVariationSourceLocationSummary {
+    let mut parent_axis_value_count = 0;
+    let mut parent_axis_default_value_count = 0;
+    let mut variation_source_parent_location_value_count = 0;
+    let mut resolved_axis_value_count = 0;
+    let mut parent_location_value_count = 0;
+    let mut font_location_value_count = 0;
+    let mut font_default_value_count = 0;
+    let mut base_local_default_value_count = 0;
+    let mut component_override_value_count = 0;
+    let mut component_variation_source_value_count = 0;
+    let mut base_component_transform_count = 0;
+    let mut component_variation_source_transform_count = 0;
+
+    for source in sources {
+        for value in source.parent_values.values() {
+            parent_axis_value_count += 1;
+            match value.source {
+                ShiftComponentVariationParentAxisValueSource::AxisDefault => {
+                    parent_axis_default_value_count += 1;
+                }
+                ShiftComponentVariationParentAxisValueSource::VariationSourceParentLocation => {
+                    variation_source_parent_location_value_count += 1;
+                }
+            }
+        }
+
+        for value in source.values.values() {
+            resolved_axis_value_count += 1;
+            match value.source {
+                ShiftResolvedAxisValueSource::ParentLocation => parent_location_value_count += 1,
+                ShiftResolvedAxisValueSource::FontLocation => font_location_value_count += 1,
+                ShiftResolvedAxisValueSource::FontDefault => font_default_value_count += 1,
+                ShiftResolvedAxisValueSource::BaseLocalDefault => {
+                    base_local_default_value_count += 1;
+                }
+                ShiftResolvedAxisValueSource::ComponentOverride => {
+                    component_override_value_count += 1;
+                }
+                ShiftResolvedAxisValueSource::ComponentVariationSource => {
+                    component_variation_source_value_count += 1;
+                }
+            }
+        }
+
+        match source.transform_source {
+            ShiftComponentVariationTransformSource::BaseComponent => {
+                base_component_transform_count += 1;
+            }
+            ShiftComponentVariationTransformSource::ComponentVariationSource => {
+                component_variation_source_transform_count += 1;
+            }
+        }
+    }
+
+    ShiftComponentVariationSourceLocationSummary {
+        source_count: sources.len(),
+        parent_axis_value_count,
+        parent_axis_default_value_count,
+        variation_source_parent_location_value_count,
+        resolved_axis_value_count,
+        parent_location_value_count,
+        font_location_value_count,
+        font_default_value_count,
+        base_local_default_value_count,
+        component_override_value_count,
+        component_variation_source_value_count,
+        base_component_transform_count,
+        component_variation_source_transform_count,
     }
 }
 

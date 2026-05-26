@@ -47,6 +47,7 @@ pub use working_source::{
     ShiftComponentResolvedVariationSource, ShiftComponentTransformField,
     ShiftComponentVariationParentAxisValue, ShiftComponentVariationParentAxisValueSource,
     ShiftComponentVariationResolution, ShiftComponentVariationSourceLocation,
+    ShiftComponentVariationSourceLocationReport, ShiftComponentVariationSourceLocationSummary,
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftComponentVariationUnsupportedReason, ShiftComponentVariationUnsupportedReasonCount,
     ShiftComponentVariationUnsupportedReasonKind,

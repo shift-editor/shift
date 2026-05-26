@@ -8,22 +8,23 @@ use crate::{
     ShiftComponentResolvedLocationSummary, ShiftComponentResolvedStateSummary,
     ShiftComponentTransformField, ShiftComponentVariationParentAxisValue,
     ShiftComponentVariationParentAxisValueSource, ShiftComponentVariationResolution,
-    ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
-    ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
-    ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
-    ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
-    ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
-    ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
-    ShiftResolvedAxisValue, ShiftResolvedAxisValueSource, ShiftSourceAxisValue,
-    ShiftSourceAxisValueSource, ShiftSourceError, ShiftSourceLayerCoverageReadiness,
-    ShiftSourceLayerCoverageReadinessCount, ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse,
-    ShiftSourceLocationSummary, ShiftSourceUpdate, ShiftStaticComponentExportDisposition,
-    ShiftStaticComponentExportReadiness, ShiftVariableFontExportPrimaryAction,
-    ShiftVariableFontExportReadiness, ShiftVariableFontReadiness, ShiftWorkingSource,
-    ShiftWorkingSourceSaveConflictKindCount, ShiftWorkingSourceSaveConflictPathClass,
-    ShiftWorkingSourceSaveConflictPathClassCount, ShiftWorkingSourceSavePreviewStatus,
-    ShiftWorkingSourceSavePrimaryAction, ShiftWorkingSourceSaveStagedRecoveryActionCount,
+    ShiftComponentVariationSourceLocationSummary, ShiftComponentVariationSourceUpdate,
+    ShiftComponentVariationTransformSource, ShiftConditionEvaluation, ShiftCreateAxisMapping,
+    ShiftCreateComponentVariationSource, ShiftCreateGlyph, ShiftCreateGlyphSourceLayer,
+    ShiftCreateGlyphVariationSource, ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphVariationAxisValue, ShiftGlyphVariationAxisValueSource,
+    ShiftGlyphVariationSourceLocationSummary, ShiftGlyphVariationSourceUpdate,
+    ShiftGlyphVariationSourceUse, ShiftMappedAxisValue, ShiftMappedAxisValueSource,
+    ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
+    ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
+    ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
+    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
+    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
+    ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
+    ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
+    ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
+    ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
+    ShiftWorkingSourceSaveStagedRecoveryActionCount,
     ShiftWorkingSourceSaveStagedRecoveryLiveStateCount, ShiftWorkingSourceSaveStatus,
 };
 use shift_ir::{
@@ -6122,6 +6123,34 @@ fn working_source_reports_authored_component_variation_source_locations() {
     assert_eq!(
         sources[1].transform_source,
         ShiftComponentVariationTransformSource::ComponentVariationSource
+    );
+
+    let report = working_source
+        .component_variation_source_locations_report(
+            "glyph_A",
+            "source_Regular",
+            "component_7_sources",
+        )
+        .expect("component variation source location report should resolve");
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.sources, sources);
+    assert_eq!(
+        report.summary,
+        ShiftComponentVariationSourceLocationSummary {
+            source_count: 2,
+            parent_axis_value_count: 4,
+            parent_axis_default_value_count: 2,
+            variation_source_parent_location_value_count: 2,
+            resolved_axis_value_count: 6,
+            parent_location_value_count: 2,
+            font_location_value_count: 0,
+            font_default_value_count: 2,
+            base_local_default_value_count: 0,
+            component_override_value_count: 1,
+            component_variation_source_value_count: 1,
+            base_component_transform_count: 1,
+            component_variation_source_transform_count: 1,
+        }
     );
 }
 

@@ -555,7 +555,11 @@ format exploration:
   variation source create/update/delete reports return the updated component
   recipe summary as well, so component inspectors and export-capability badges
   can update from the command response without re-parsing the glyph or making a
-  second recipe query.
+  second recipe query. The component variation source location report includes
+  the working-source revision and compact counts for parent-location
+  provenance, resolved component-axis provenance, and base-vs-source transform
+  provenance, so component inspectors can render status badges and ignore stale
+  async results without scanning every variation source row.
 - **Glyph variation source completion:** inspectors and export preflight can ask
   for each glyph variation source's completed location and see whether every
   value came from the referenced source location, a global axis default, a
