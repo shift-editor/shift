@@ -718,6 +718,10 @@ The format should make these app behaviors straightforward:
 - Component recipe lists that can quickly identify static, conditional,
   variable, and conditional-variable components before asking for current
   location state, including which export capabilities each recipe requires.
+  Transform-only component variation reports `variableTransform` without
+  incorrectly requiring `variableLocation`, so backend preflight can accept
+  targets that preserve varying transforms but do not need component-axis-value
+  variation.
 - Target capability diagnostics that tell export UI whether the chosen backend
   can preserve conditions, variable component locations, variable transforms,
   and reset-vs-inherit axis semantics before any compiler runs. The app can

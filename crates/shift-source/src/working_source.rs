@@ -3784,8 +3784,11 @@ fn component_recipe_summary(
         .iter()
         .any(|source| source.transform.is_some());
     let has_condition = component.condition.is_some();
-    let has_variable_location =
-        !component.location.is_empty() || !component.variation_sources.is_empty();
+    let has_variable_location = !component.location.is_empty()
+        || component
+            .variation_sources
+            .iter()
+            .any(|source| !source.location.is_empty());
     let resets_axes =
         component.axis_inheritance != crate::package::ShiftAxisInheritance::InheritParent;
     let has_variable_recipe =

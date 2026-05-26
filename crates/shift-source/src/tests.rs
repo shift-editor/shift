@@ -4373,6 +4373,77 @@ fn working_source_summarizes_component_recipes_without_resolving_locations() {
 }
 
 #[test]
+fn component_recipe_capabilities_distinguish_transform_variation_from_location_variation() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_transform_only".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::InheritParent,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_black".to_string(),
+                name: "Black component".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::new(),
+                transform: Some(DecomposedTransform {
+                    scale_x: 1.2,
+                    scale_y: 1.2,
+                    ..DecomposedTransform::identity()
+                }),
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let recipes = working_source
+        .component_recipes("glyph_A", "source_Regular")
+        .expect("component recipes should summarize");
+    assert_eq!(recipes.len(), 1);
+    assert_eq!(recipes[0].kind, ShiftComponentRecipeKind::Variable);
+    assert_eq!(recipes[0].variation_source_count, 1);
+    assert_eq!(
+        recipes[0].variation_parent_axis_ids,
+        vec!["axis_wght".to_string()]
+    );
+    assert_eq!(recipes[0].variation_location_axis_ids, Vec::<String>::new());
+    assert!(recipes[0].varies_transform);
+    assert_eq!(
+        recipes[0].required_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableTransform]
+    );
+
+    let transform_target = ShiftComponentLoweringTarget::new(vec![
+        ShiftComponentLoweringCapability::VariableTransform,
+    ]);
+    let transform_preflight = working_source.component_lowering_preflight(&transform_target);
+    assert_eq!(transform_preflight.supported_component_count, 1);
+    assert_eq!(transform_preflight.unsupported_component_count, 0);
+    assert_eq!(transform_preflight.diagnostics, Vec::new());
+
+    let location_target =
+        ShiftComponentLoweringTarget::new(vec![ShiftComponentLoweringCapability::VariableLocation]);
+    let location_preflight = working_source.component_lowering_preflight(&location_target);
+    assert_eq!(location_preflight.supported_component_count, 0);
+    assert_eq!(location_preflight.unsupported_component_count, 1);
+    assert_eq!(
+        location_preflight.diagnostics[0].missing_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableTransform]
+    );
+}
+
+#[test]
 fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_query() {
     let mut working_source = ShiftWorkingSource::new(package_with_axes(
         vec![weight_axis(), internal_stem_axis()],
