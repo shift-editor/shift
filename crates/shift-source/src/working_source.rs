@@ -3850,14 +3850,14 @@ fn component_variation_source_varies_location(
     source: &ShiftComponentVariationSource,
 ) -> bool {
     source.location.iter().any(|(axis_id, value)| {
-        let base_value = component_axis_value_at_parent_location(
+        let base_value = component_axis_value_before_source_override(
             package, component, base_glyph, source, axis_id,
         );
         !base_value.is_some_and(|base_value| (base_value - *value).abs() < f64::EPSILON)
     })
 }
 
-fn component_axis_value_at_parent_location(
+fn component_axis_value_before_source_override(
     package: &ShiftPackage,
     component: &ShiftComponent,
     base_glyph: &ShiftGlyph,
@@ -3870,14 +3870,14 @@ fn component_axis_value_at_parent_location(
 
     if let Some(axis) = package.axes.iter().find(|axis| axis.id == axis_id) {
         return match component.axis_inheritance {
-            crate::package::ShiftAxisInheritance::InheritParent
-            | crate::package::ShiftAxisInheritance::ResetUnspecifiedToFont => Some(
+            crate::package::ShiftAxisInheritance::InheritParent => Some(
                 source
                     .parent_location
                     .get(axis_id)
                     .copied()
                     .unwrap_or(axis.default),
             ),
+            crate::package::ShiftAxisInheritance::ResetUnspecifiedToFont => Some(axis.default),
         };
     }
 

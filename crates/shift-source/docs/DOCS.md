@@ -731,9 +731,12 @@ The format should make these app behaviors straightforward:
   variation. A neutral authored component source whose transform equals the
   base component transform remains visible as a variation source, but it does
   not require `variableTransform` on its own. Likewise, an authored component
-  axis value that matches the value the component would already inherit at that
-  parent location stays visible in the source graph without requiring
-  `variableLocation` on its own.
+  axis value that matches the value the component would already use at that
+  variation source stays visible in the source graph without requiring
+  `variableLocation` on its own. For inherited components, that baseline is the
+  parent location plus explicit component overrides. For reset components, the
+  location-independent summary uses the font-axis default plus explicit
+  component overrides.
 - Target capability diagnostics that tell export UI whether the chosen backend
   can preserve conditions, variable component locations, variable transforms,
   and reset-vs-inherit axis semantics before any compiler runs. The app can

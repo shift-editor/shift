@@ -4559,6 +4559,64 @@ fn component_recipe_capabilities_ignore_neutral_location_sources() {
 }
 
 #[test]
+fn component_recipe_capabilities_use_font_default_for_reset_location_sources() {
+    let component_layer = ShiftGlyphLayer {
+        advance_width: 600.0,
+        advance_height: None,
+        contours: Vec::new(),
+        components: vec![ShiftComponent {
+            id: "component_reset_location".to_string(),
+            base_glyph_id: "glyph_stem".to_string(),
+            base_glyph_name: "stem".to_string(),
+            transform: DecomposedTransform::identity(),
+            location: BTreeMap::new(),
+            axis_inheritance: ShiftAxisInheritance::ResetUnspecifiedToFont,
+            variation_sources: vec![ShiftComponentVariationSource {
+                id: "componentSource_heavy".to_string(),
+                name: "Heavy location".to_string(),
+                parent_location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                location: BTreeMap::from([("axis_wght".to_string(), 900.0)]),
+                transform: None,
+            }],
+            condition: None,
+        }],
+        anchors: Vec::new(),
+        guidelines: Vec::new(),
+    };
+    let working_source = ShiftWorkingSource::new(package_with_axes(
+        vec![weight_axis()],
+        glyphs_for_component_layer_with_local_base(component_layer),
+    ))
+    .expect("working source should initialize");
+
+    let recipes = working_source
+        .component_recipes("glyph_A", "source_Regular")
+        .expect("component recipes should summarize");
+    assert_eq!(recipes.len(), 1);
+    assert_eq!(
+        recipes[0].axis_inheritance,
+        ShiftAxisInheritance::ResetUnspecifiedToFont
+    );
+    assert_eq!(
+        recipes[0].required_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
+    );
+
+    let reset_target =
+        ShiftComponentLoweringTarget::new(vec![ShiftComponentLoweringCapability::AxisReset]);
+    let reset_preflight = working_source.component_lowering_preflight(&reset_target);
+    assert_eq!(reset_preflight.supported_component_count, 0);
+    assert_eq!(reset_preflight.unsupported_component_count, 1);
+    assert_eq!(
+        reset_preflight.diagnostics[0].missing_capabilities,
+        vec![ShiftComponentLoweringCapability::VariableLocation]
+    );
+}
+
+#[test]
 fn working_source_creates_axis_mapping_with_generated_id_and_updates_mapping_query() {
     let mut working_source = ShiftWorkingSource::new(package_with_axes(
         vec![weight_axis(), internal_stem_axis()],
