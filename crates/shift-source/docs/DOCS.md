@@ -569,7 +569,11 @@ format exploration:
   explicit or inherited from an axis default. The same surface backs source
   create/update/delete reports, so UI can immediately refresh source lists,
   source badges, and interpolation compatibility summaries from validated Rust
-  state rather than patching local JSON-shaped records.
+  state rather than patching local JSON-shaped records. The source-location
+  report includes the working-source revision and compact counts for explicit
+  source coordinates versus axis-default coordinates, so source editors can
+  render summary badges and discard stale async results without scanning every
+  source row in TypeScript.
 - **Source layer coverage:** source panels can ask which glyphs have a layer for
   each family source, which glyphs are missing that layer, and which
   interpolation compatibility issues involve that source. Coverage rows include

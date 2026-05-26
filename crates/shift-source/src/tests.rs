@@ -17,8 +17,8 @@ use crate::{
     ShiftMappedLocationSummary, ShiftMissingSourceLayer, ShiftResolvedAxisValue,
     ShiftResolvedAxisValueSource, ShiftSourceAxisValue, ShiftSourceAxisValueSource,
     ShiftSourceError, ShiftSourceLayerCoverageReadiness, ShiftSourceLayerCoverageReadinessCount,
-    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceUpdate,
-    ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
+    ShiftSourceLayerCoverageWorkItem, ShiftSourceLayerUse, ShiftSourceLocationSummary,
+    ShiftSourceUpdate, ShiftStaticComponentExportDisposition, ShiftStaticComponentExportReadiness,
     ShiftVariableFontExportPrimaryAction, ShiftVariableFontExportReadiness,
     ShiftVariableFontReadiness, ShiftWorkingSource, ShiftWorkingSourceSaveConflictKindCount,
     ShiftWorkingSourceSaveConflictPathClass, ShiftWorkingSourceSaveConflictPathClassCount,
@@ -10612,6 +10612,19 @@ fn working_source_completes_sparse_source_locations() {
             value: 900.0,
             source: ShiftSourceAxisValueSource::SourceLocation,
         })
+    );
+
+    let report = working_source.source_locations_report();
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.sources, locations);
+    assert_eq!(
+        report.summary,
+        ShiftSourceLocationSummary {
+            source_count: 2,
+            resolved_axis_value_count: 2,
+            source_location_value_count: 1,
+            axis_default_value_count: 1,
+        }
     );
 }
 

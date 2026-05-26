@@ -762,6 +762,23 @@ pub struct ShiftSourceLocation {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLocationReport {
+    pub revision: u64,
+    pub summary: ShiftSourceLocationSummary,
+    pub sources: Vec<ShiftSourceLocation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSourceLocationSummary {
+    pub source_count: usize,
+    pub resolved_axis_value_count: usize,
+    pub source_location_value_count: usize,
+    pub axis_default_value_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSourceAxisValue {
     pub value: f64,
     pub source: ShiftSourceAxisValueSource,
@@ -1668,6 +1685,15 @@ impl ShiftWorkingSource {
                 values: self.complete_source_location(&source.location),
             })
             .collect()
+    }
+
+    pub fn source_locations_report(&self) -> ShiftSourceLocationReport {
+        let sources = self.source_locations();
+        ShiftSourceLocationReport {
+            revision: self.revision,
+            summary: source_location_summary(&sources),
+            sources,
+        }
     }
 
     pub fn source_layer_coverage(&self) -> Vec<ShiftSourceLayerCoverage> {
@@ -5613,6 +5639,29 @@ fn variable_font_export_summary(
         unsupported_component_glyph_count: component_preflight.affected_glyph_count,
         skipped_inactive_component_count: component_preflight.skipped_inactive_component_count,
         missing_component_capability_count: component_preflight.missing_capabilities.len(),
+    }
+}
+
+fn source_location_summary(sources: &[ShiftSourceLocation]) -> ShiftSourceLocationSummary {
+    let mut resolved_axis_value_count = 0;
+    let mut source_location_value_count = 0;
+    let mut axis_default_value_count = 0;
+
+    for source in sources {
+        for value in source.values.values() {
+            resolved_axis_value_count += 1;
+            match value.source {
+                ShiftSourceAxisValueSource::SourceLocation => source_location_value_count += 1,
+                ShiftSourceAxisValueSource::AxisDefault => axis_default_value_count += 1,
+            }
+        }
+    }
+
+    ShiftSourceLocationSummary {
+        source_count: sources.len(),
+        resolved_axis_value_count,
+        source_location_value_count,
+        axis_default_value_count,
     }
 }
 
