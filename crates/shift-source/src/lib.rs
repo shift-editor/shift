@@ -33,6 +33,7 @@ pub use package::{
     ShiftStagedCommitRecoveryPlan, ShiftStagedCommitRecoveryRun, ShiftStagedCommitRecoverySummary,
     ShiftStagedPathRecovery, ShiftWriteImpact, DEPENDENCY_INDEX_PATH,
     INTERPOLATION_COMPATIBILITY_INDEX_PATH, SHIFT_INTERPOLATION_COMPATIBILITY_INDEX_VERSION,
+    SHIFT_SOURCE_FORMAT, SHIFT_SOURCE_VERSION,
 };
 pub use working_source::{
     ShiftAxisMappingAxisRole, ShiftAxisMappingDiagnostic, ShiftAxisMappingDiagnosticKind,

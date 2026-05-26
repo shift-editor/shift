@@ -61,7 +61,7 @@ These modules have stricter change rules. Changes affect multiple layers and req
 
 ## Design Spikes
 
-- [`Shift Source Spike Dogfood Evaluation`](./shift-source-dogfood-evaluation.md) — exit criteria for judging whether the `shift-source` spike should become product architecture.
+- [`Shift Source Spike Evaluation`](./shift-source-spike-evaluation.md) — exit criteria for judging whether the `shift-source` spike should become product architecture.
 
 ## Validation
 

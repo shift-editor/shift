@@ -1653,6 +1653,7 @@ dependencies = [
  "shift-backends",
  "shift-edit",
  "shift-ir",
+ "shift-source",
  "shift-wire",
  "thiserror 2.0.18",
 ]

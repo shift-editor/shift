@@ -867,6 +867,72 @@ External references informing this direction:
 - HarfBuzz `avar` v2 proposal:
   `https://github.com/harfbuzz/boring-expansion-spec/blob/main/avar2.md`
 
+### App Journey Contract
+
+The package format can store broad graph facts, but the bridge should expose
+them only when a user journey needs an answer. This keeps the source crate from
+becoming a god object and keeps TypeScript from reconstructing font semantics.
+
+- **Open:** load returns trusted, recovered, or blocked state. Staged commit
+  details stay Rust-owned; the app receives the next user-presentable action.
+- **Font info edit:** metadata commands return validation failures, changed
+  fields, revision, and save impact. They do not return source/master or export
+  status.
+- **Source/master edit:** source commands return the created/updated source row,
+  authored and completed locations, diagnostics, revision, and save impact. A
+  separate source-panel worklist may report missing glyph layers or
+  interpolation blockers for visible UI, but it is not a generic export-ready
+  flag.
+- **Glyph rename:** renames are ID-keyed and return refreshed dependent labels.
+  The app must not repair component references by editable glyph name.
+- **Glyph delete:** destructive deletes use a preview only when the user must
+  choose a strategy. The preview reports user-visible references and valid
+  actions; the commit command includes the expected revision and selected
+  strategy.
+- **Component edit/preview:** component queries return stable component/base
+  IDs, resolved values, condition result, transform fields that vary, and
+  reset/inherit provenance. TypeScript renders the answer; it does not evaluate
+  conditions or parent-location inheritance.
+- **Scrub:** repeated preview queries must be resolved from cached Rust state and
+  return small visible deltas. They must not shuttle package-sized glyph/source
+  graphs across N-API.
+- **Save/reopen:** save preview and reopen own conflicts, recovery, fingerprints,
+  staged transactions, and semantic equality checks. Dirty state clears only
+  after disk reload verifies the saved graph.
+
+### Semantic Operation Groups
+
+Source APIs should be grouped by editor intent:
+
+- **Package trust:** open, recover, refuse uncertain staged state, summarize
+  editable package state.
+- **Font identity:** edit family/style/metrics and return metadata-only save
+  impact.
+- **Axis authoring:** define user-facing axes, define construction axes, map
+  user coordinates to construction coordinates, and report mapping diagnostics.
+- **Source authoring:** add/move/remove masters, complete sparse locations, and
+  provide source-panel worklists only for visible authoring work.
+- **Glyph identity:** add, rename, duplicate, and remove glyphs by stable IDs,
+  with dependent labels and references updated by Rust.
+- **Glyph layer authoring:** add/edit/remove contours, anchors, guidelines,
+  components, and per-source layers without rewriting unrelated glyph files.
+- **Component authoring:** edit base glyph ID, decomposed transform, sparse
+  location, reset/inherit behavior, local-axis coordinates, conditions, and
+  variation sources as one component graph.
+- **Preview resolution:** answer current canvas/inspector questions from cached
+  Rust state: active/inactive components, resolved axis values, transform fields
+  that vary, and small geometry/display deltas.
+- **Safe persistence:** preview save, block conflicts, stage writes, apply
+  atomically per canonical path, reload, compare semantic equality, and only then
+  mark clean.
+- **Export handoff:** prepare intent for fontc/fontir and report binary-lowering
+  blockers separately from editor authoring worklists.
+
+Tests should follow the same groups. A good source-format test proves a user
+operation and its app-visible consequences. It should fail if TypeScript must
+scan package files, infer dependency graphs, evaluate component conditions,
+repair names, or decide save/recovery semantics.
+
 Lessons being folded into the package model:
 
 - Variable components need a base glyph, decomposed transform, sparse location,

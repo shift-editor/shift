@@ -11,6 +11,27 @@ import type {
   SourceId,
   Unicode,
 } from "@shift/types";
+
+export type SourceReadiness =
+  | "singleSource"
+  | "ready"
+  | "missingSourceLayers"
+  | "interpolationIncompatible"
+  | "missingSourceLayersAndInterpolationIncompatible";
+
+export type SavePreviewStatus =
+  | "unchanged"
+  | "ready"
+  | "blockedByExternalChanges"
+  | "blockedByStagedCommit";
+
+export type SaveAction =
+  | "nothingToSave"
+  | "save"
+  | "resolveExternalChanges"
+  | "resolveStagedCommit";
+
+export type SaveStatus = "unchanged" | "saved";
 export declare class Bridge {
   constructor()
   createFont(): void
@@ -55,9 +76,94 @@ export declare class Bridge {
   restoreState(structure: NapiGlyphStructure, values: Float64Array): NapiGlyphStructureChange
 }
 
+export declare class ShiftSourceDocument {
+  constructor()
+  initializeSaved(path: string): void
+  open(path: string): void
+  fontInfo(): FontInfo
+  glyphs(): Array<GlyphEntry>
+  updateFontInfo(familyName: string, unitsPerEm: number): EditImpact
+  createGlyph(name: string, unicode: string | undefined | null, width: number): GlyphEdit
+  renameGlyph(glyphId: GlyphId, name: GlyphName): GlyphEdit
+  createSource(name: string, weight: number): FontSourceEdit
+  createGlyphSourceLayer(glyphId: GlyphId, sourceId: SourceId, width: number): GlyphEdit
+  previewSave(path: string): SavePreview
+  save(path: string): SaveResult
+}
+
+export interface EditImpact {
+  revision: number
+  changeCount: number
+  canonicalPaths: Array<string>
+  removedCanonicalPaths: Array<string>
+  derivedPaths: Array<string>
+}
+
+export interface FontInfo {
+  familyName?: string
+  styleName?: string
+  unitsPerEm: number
+}
+
+export interface FontSourceEdit {
+  impact: EditImpact
+  sourceId: SourceId
+  sourceName: string
+  variableReadiness: SourceReadiness
+  missingLayerCount: number
+}
+
+export interface GlyphEdit {
+  impact: EditImpact
+  glyphId: GlyphId
+  glyphName: GlyphName
+  variableReadiness: SourceReadiness
+  missingLayerCount: number
+}
+
+export interface GlyphEntry {
+  id: GlyphId
+  name: GlyphName
+  componentBaseGlyphNames: Array<GlyphName>
+}
+
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
+}
+
+export interface NapiAnchorData {
+  id: AnchorId
+  name?: string
+}
+
+export interface NapiAxis {
+  id: AxisId
+  tag: string
+  name: string
+  minimum: number
+  default: number
+  maximum: number
+  hidden: boolean
+}
+
+export interface NapiAxisTent {
+  axisTag: string
+  lower: number
+  peak: number
+  upper: number
+}
+
+export interface NapiComponentData {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  baseGlyphName: GlyphName
+}
+
+export interface NapiContourData {
+  id: ContourId
+  points: Array<NapiPointData>
+  closed: boolean
 }
 
 export interface NapiFontExportRequest {
@@ -68,6 +174,89 @@ export interface NapiFontExportRequest {
 export interface NapiFontExportResult {
   path: string
   format: string
+}
+
+export interface NapiFontMetadata {
+  familyName?: string
+  styleName?: string
+  versionMajor?: number
+  versionMinor?: number
+  copyright?: string
+  trademark?: string
+  designer?: string
+  designerUrl?: string
+  manufacturer?: string
+  manufacturerUrl?: string
+  license?: string
+  licenseUrl?: string
+  description?: string
+  note?: string
+}
+
+export interface NapiFontMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  capHeight?: number
+  xHeight?: number
+  lineGap?: number
+  italicAngle?: number
+  underlinePosition?: number
+  underlineThickness?: number
+}
+
+export interface NapiGlyphChangedEntities {
+  pointIds: Array<PointId>
+  contourIds: Array<ContourId>
+  anchorIds: Array<AnchorId>
+  guidelineIds: Array<GuidelineId>
+  componentIds: Array<ComponentId>
+}
+
+export interface NapiGlyphMaster {
+  sourceId: SourceId
+  sourceName: string
+  isDefaultSource: boolean
+  location: NapiLocation
+  structure: NapiGlyphStructure
+  values: Float64Array
+}
+
+export interface NapiGlyphRecord {
+  name: GlyphName
+  unicodes: Array<Unicode>
+  componentBaseGlyphNames: Array<GlyphName>
+}
+
+export interface NapiGlyphState {
+  structure: NapiGlyphStructure
+  /** Numeric glyph state ordered to match `GlyphStructure`. */
+  values: Float64Array
+  variationData?: NapiGlyphVariationData
+}
+
+export interface NapiGlyphStructure {
+  contours: Array<NapiContourData>
+  anchors: Array<NapiAnchorData>
+  components: Array<NapiComponentData>
+}
+
+export interface NapiGlyphStructureChange {
+  structure: NapiGlyphStructure
+  values: Float64Array
+  changed: NapiGlyphChangedEntities
+}
+
+export interface NapiGlyphValueChange {
+  values: Float64Array
+  changed: NapiGlyphChangedEntities
+}
+
+export interface NapiGlyphVariationData {
+  /** One entry per region. Inner = tents on the axes the region depends on. */
+  regions: Array<Array<NapiAxisTent>>
+  /** Deltas are flattened in `GlyphState::values` order. */
+  deltas: Array<Float64Array>
 }
 
 export interface NapiGlyphVariationDiagnostic {
@@ -92,6 +281,52 @@ export interface NapiGlyphVariationReport {
   compatibleMasterCount: number
   skippedMasterCount: number
   diagnostics: Array<NapiGlyphVariationDiagnostic>
+}
+
+export interface NapiLocation {
+  values: Record<string, number>
+}
+
+export interface NapiPointData {
+  id: PointId
+  pointType: NapiPointType
+  smooth: boolean
+}
+
+export declare const enum NapiPointType {
+  OnCurve = 'onCurve',
+  OffCurve = 'offCurve'
+}
+
+export interface NapiSource {
+  id: SourceId
+  name: string
+  location: NapiLocation
+  layerId: LayerId
+  filename?: string
+}
+
+export interface SavePreview {
+  revision: number
+  status: SavePreviewStatus
+  primaryAction: SaveAction
+  changeCount: number
+  canonicalPathCount: number
+  removedCanonicalPathCount: number
+  derivedPathCount: number
+  conflictCount: number
+  stagedRecoveryCount: number
+}
+
+export interface SaveResult {
+  revision: number
+  status: SaveStatus
+  changeCount: number
+  canonicalPathCount: number
+  removedCanonicalPathCount: number
+  derivedPathCount: number
+  conflictCount: number
+  stagedRecoveryCount: number
 }
 export interface NapiAnchorData {
   id: AnchorId

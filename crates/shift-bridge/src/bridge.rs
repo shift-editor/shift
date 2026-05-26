@@ -17,6 +17,19 @@ use shift_edit::{
   interpolation::{build_glyph_variation_data, build_masters, GlyphVariationBuild},
   BooleanOp, ContourId, Font, Glyph, GlyphLayer, GlyphName, LayerId, PointId, SourceId,
 };
+use shift_source::{
+  load_package as load_shift_package, save_package as save_shift_package, ShiftAxis as PackageAxis,
+  ShiftAxisRole as PackageAxisRole, ShiftComponent as PackageComponent,
+  ShiftContour as PackageContour, ShiftCreateGlyph as CreateGlyph,
+  ShiftCreateGlyphSourceLayer as CreateGlyphLayer, ShiftCreateSource as CreateSource,
+  ShiftFontInfo as PackageFont, ShiftFontInfoUpdate as FontUpdate, ShiftGlyph as PackageGlyph,
+  ShiftGlyphLayer as PackageLayer, ShiftManifest as PackageManifest, ShiftPackage as Package,
+  ShiftPackageDiff as PackageDiff, ShiftPoint as PackagePoint, ShiftPointType as PackagePointType,
+  ShiftSource as PackageSource, ShiftSourceError,
+  ShiftVariableFontReadiness as VariableFontReadiness, ShiftWorkingSource,
+  ShiftWorkingSourceSavePreviewStatus, ShiftWorkingSourceSavePrimaryAction,
+  ShiftWorkingSourceSaveStatus, SHIFT_SOURCE_FORMAT, SHIFT_SOURCE_VERSION,
+};
 use shift_wire::{
   Axis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphRecord, GlyphState, GlyphStructure,
   GlyphStructureChange, GlyphValueChange, Source,
@@ -99,6 +112,93 @@ pub struct NapiGlyphVariationReport {
   pub compatible_master_count: u32,
   pub skipped_master_count: u32,
   pub diagnostics: Vec<NapiGlyphVariationDiagnostic>,
+}
+
+#[napi(object)]
+pub struct FontInfo {
+  pub family_name: Option<String>,
+  pub style_name: Option<String>,
+  pub units_per_em: f64,
+}
+
+impl From<&PackageFont> for FontInfo {
+  fn from(font: &PackageFont) -> Self {
+    Self {
+      family_name: font.metadata.family_name.clone(),
+      style_name: font.metadata.style_name.clone(),
+      units_per_em: font.metrics.units_per_em,
+    }
+  }
+}
+
+#[napi(object)]
+pub struct GlyphEntry {
+  #[napi(ts_type = "GlyphId")]
+  pub id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub name: String,
+  #[napi(ts_type = "Array<GlyphName>")]
+  pub component_base_glyph_names: Vec<String>,
+}
+
+#[napi(object)]
+pub struct EditImpact {
+  pub revision: u32,
+  pub change_count: u32,
+  pub canonical_paths: Vec<String>,
+  pub removed_canonical_paths: Vec<String>,
+  pub derived_paths: Vec<String>,
+}
+
+#[napi(object)]
+pub struct GlyphEdit {
+  pub impact: EditImpact,
+  #[napi(ts_type = "GlyphId")]
+  pub glyph_id: String,
+  #[napi(ts_type = "GlyphName")]
+  pub glyph_name: String,
+  #[napi(ts_type = "SourceReadiness")]
+  pub variable_readiness: String,
+  pub missing_layer_count: u32,
+}
+
+#[napi(object)]
+pub struct FontSourceEdit {
+  pub impact: EditImpact,
+  #[napi(ts_type = "SourceId")]
+  pub source_id: String,
+  pub source_name: String,
+  #[napi(ts_type = "SourceReadiness")]
+  pub variable_readiness: String,
+  pub missing_layer_count: u32,
+}
+
+#[napi(object)]
+pub struct SavePreview {
+  pub revision: u32,
+  #[napi(ts_type = "SavePreviewStatus")]
+  pub status: String,
+  #[napi(ts_type = "SaveAction")]
+  pub primary_action: String,
+  pub change_count: u32,
+  pub canonical_path_count: u32,
+  pub removed_canonical_path_count: u32,
+  pub derived_path_count: u32,
+  pub conflict_count: u32,
+  pub staged_recovery_count: u32,
+}
+
+#[napi(object)]
+pub struct SaveResult {
+  pub revision: u32,
+  #[napi(ts_type = "SaveStatus")]
+  pub status: String,
+  pub change_count: u32,
+  pub canonical_path_count: u32,
+  pub removed_canonical_path_count: u32,
+  pub derived_path_count: u32,
+  pub conflict_count: u32,
+  pub staged_recovery_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -365,6 +465,364 @@ impl ActiveEdit {
     }
 
     glyph
+  }
+}
+
+fn map_source_error(error: ShiftSourceError) -> Error {
+  Error::new(Status::GenericFailure, error.to_string())
+}
+
+fn edit_impact(diff: PackageDiff, revision: u64) -> EditImpact {
+  EditImpact {
+    revision: revision.min(u32::MAX as u64) as u32,
+    change_count: diff.changes.len() as u32,
+    canonical_paths: diff.impact.canonical_paths,
+    removed_canonical_paths: diff.impact.removed_canonical_paths,
+    derived_paths: diff.impact.derived_paths,
+  }
+}
+
+fn source_variable_readiness(readiness: VariableFontReadiness) -> String {
+  match readiness {
+    VariableFontReadiness::SingleSource => "singleSource",
+    VariableFontReadiness::Ready => "ready",
+    VariableFontReadiness::MissingSourceLayers => "missingSourceLayers",
+    VariableFontReadiness::InterpolationIncompatible => "interpolationIncompatible",
+    VariableFontReadiness::MissingSourceLayersAndInterpolationIncompatible => {
+      "missingSourceLayersAndInterpolationIncompatible"
+    }
+  }
+  .to_string()
+}
+
+fn source_save_preview_status(status: ShiftWorkingSourceSavePreviewStatus) -> String {
+  match status {
+    ShiftWorkingSourceSavePreviewStatus::Unchanged => "unchanged",
+    ShiftWorkingSourceSavePreviewStatus::Ready => "ready",
+    ShiftWorkingSourceSavePreviewStatus::BlockedByExternalChanges => "blockedByExternalChanges",
+    ShiftWorkingSourceSavePreviewStatus::BlockedByStagedCommit => "blockedByStagedCommit",
+  }
+  .to_string()
+}
+
+fn source_save_primary_action(action: ShiftWorkingSourceSavePrimaryAction) -> String {
+  match action {
+    ShiftWorkingSourceSavePrimaryAction::NothingToSave => "nothingToSave",
+    ShiftWorkingSourceSavePrimaryAction::Save => "save",
+    ShiftWorkingSourceSavePrimaryAction::ResolveExternalChanges => "resolveExternalChanges",
+    ShiftWorkingSourceSavePrimaryAction::ResolveStagedCommit => "resolveStagedCommit",
+  }
+  .to_string()
+}
+
+fn source_save_status(status: ShiftWorkingSourceSaveStatus) -> String {
+  match status {
+    ShiftWorkingSourceSaveStatus::Unchanged => "unchanged",
+    ShiftWorkingSourceSaveStatus::Saved => "saved",
+  }
+  .to_string()
+}
+
+fn package_fixture_layer(width: f64) -> PackageLayer {
+  PackageLayer {
+    advance_width: width,
+    advance_height: None,
+    contours: vec![PackageContour {
+      points: vec![
+        PackagePoint {
+          x: 0.0,
+          y: 0.0,
+          point_type: PackagePointType::OnCurve,
+          smooth: false,
+        },
+        PackagePoint {
+          x: width / 2.0,
+          y: 700.0,
+          point_type: PackagePointType::OnCurve,
+          smooth: false,
+        },
+        PackagePoint {
+          x: width,
+          y: 0.0,
+          point_type: PackagePointType::OnCurve,
+          smooth: false,
+        },
+      ],
+      closed: true,
+    }],
+    components: Vec::new(),
+    anchors: Vec::new(),
+    guidelines: Vec::new(),
+  }
+}
+
+fn package_fixture() -> Package {
+  let component_layer = PackageLayer {
+    advance_width: 620.0,
+    advance_height: None,
+    contours: Vec::new(),
+    components: vec![PackageComponent {
+      id: "component_Aacute_base".to_string(),
+      base_glyph_id: "glyph_A".to_string(),
+      base_glyph_name: "A".to_string(),
+      transform: shift_ir::DecomposedTransform::identity(),
+      location: Default::default(),
+      axis_inheritance: shift_source::ShiftAxisInheritance::InheritParent,
+      variation_sources: Vec::new(),
+      condition: None,
+    }],
+    anchors: Vec::new(),
+    guidelines: Vec::new(),
+  };
+
+  Package {
+    manifest: PackageManifest {
+      format: SHIFT_SOURCE_FORMAT.to_string(),
+      version: SHIFT_SOURCE_VERSION,
+      family_id: "family_Test_Sans".to_string(),
+      default_source_id: Some("source_Regular".to_string()),
+    },
+    font: PackageFont {
+      metadata: shift_ir::FontMetadata::with_names("Test Sans".to_string(), "Regular".to_string()),
+      metrics: shift_ir::FontMetrics::default(),
+    },
+    axes: vec![PackageAxis {
+      id: "axis_wght".to_string(),
+      tag: "wght".to_string(),
+      name: "Weight".to_string(),
+      minimum: 100.0,
+      default: 400.0,
+      maximum: 900.0,
+      hidden: false,
+      role: PackageAxisRole::UserFacing,
+    }],
+    sources: vec![PackageSource {
+      id: "source_Regular".to_string(),
+      name: "Regular".to_string(),
+      location: Default::default(),
+    }],
+    axis_mappings: Vec::new(),
+    glyphs: vec![
+      PackageGlyph {
+        id: "glyph_A".to_string(),
+        name: "A".to_string(),
+        unicodes: vec!["0041".to_string()],
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: [("source_Regular".to_string(), package_fixture_layer(600.0))]
+          .into_iter()
+          .collect(),
+      },
+      PackageGlyph {
+        id: "glyph_Aacute".to_string(),
+        name: "Aacute".to_string(),
+        unicodes: vec!["00C1".to_string()],
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: [("source_Regular".to_string(), component_layer)]
+          .into_iter()
+          .collect(),
+      },
+    ],
+  }
+}
+
+#[napi]
+pub struct ShiftSourceDocument {
+  working_source: ShiftWorkingSource,
+}
+
+#[napi]
+impl ShiftSourceDocument {
+  #[napi(constructor)]
+  pub fn new() -> Result<Self> {
+    Ok(Self {
+      working_source: ShiftWorkingSource::new(package_fixture()).map_err(map_source_error)?,
+    })
+  }
+
+  #[napi]
+  pub fn initialize_saved(&mut self, path: String) -> Result<()> {
+    save_shift_package(self.working_source.package(), &path).map_err(map_source_error)?;
+    let package = load_shift_package(&path).map_err(map_source_error)?;
+    self.working_source =
+      ShiftWorkingSource::open_saved(&path, package).map_err(map_source_error)?;
+    Ok(())
+  }
+
+  #[napi]
+  pub fn open(&mut self, path: String) -> Result<()> {
+    let package = load_shift_package(&path).map_err(map_source_error)?;
+    self.working_source =
+      ShiftWorkingSource::open_saved(&path, package).map_err(map_source_error)?;
+    Ok(())
+  }
+
+  #[napi]
+  pub fn font_info(&self) -> FontInfo {
+    (&self.working_source.package().font).into()
+  }
+
+  #[napi]
+  pub fn glyphs(&self) -> Vec<GlyphEntry> {
+    let mut records: Vec<_> = self
+      .working_source
+      .package()
+      .glyphs
+      .iter()
+      .map(|glyph| {
+        let mut component_base_glyph_names: Vec<String> = glyph
+          .layers
+          .values()
+          .flat_map(|layer| layer.components.iter())
+          .map(|component| component.base_glyph_name.clone())
+          .collect();
+        component_base_glyph_names.sort();
+        component_base_glyph_names.dedup();
+        GlyphEntry {
+          id: glyph.id.clone(),
+          name: glyph.name.clone(),
+          component_base_glyph_names,
+        }
+      })
+      .collect();
+    records.sort_by(|a, b| a.id.cmp(&b.id));
+    records
+  }
+
+  #[napi]
+  pub fn update_font_info(&mut self, family_name: String, units_per_em: f64) -> Result<EditImpact> {
+    let mut font = self.working_source.package().font.clone();
+    font.metadata.family_name = Some(family_name);
+    font.metrics.units_per_em = units_per_em;
+    let report = self
+      .working_source
+      .update_font_info(FontUpdate { font })
+      .map_err(map_source_error)?;
+    Ok(edit_impact(report.diff, report.revision))
+  }
+
+  #[napi]
+  pub fn create_glyph(
+    &mut self,
+    name: String,
+    unicode: Option<String>,
+    width: f64,
+  ) -> Result<GlyphEdit> {
+    let report = self
+      .working_source
+      .create_glyph(CreateGlyph {
+        glyph_id: None,
+        name,
+        unicodes: unicode.into_iter().collect(),
+        default_layer: Some(package_fixture_layer(width)),
+      })
+      .map_err(map_source_error)?;
+    Ok(GlyphEdit {
+      impact: edit_impact(report.diff, report.revision),
+      glyph_id: report.glyph_id,
+      glyph_name: report.glyph_name,
+      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn rename_glyph(
+    &mut self,
+    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
+    #[napi(ts_arg_type = "GlyphName")] name: String,
+  ) -> Result<GlyphEdit> {
+    let report = self
+      .working_source
+      .rename_glyph(&glyph_id, name)
+      .map_err(map_source_error)?;
+    Ok(GlyphEdit {
+      impact: edit_impact(report.diff, report.revision),
+      glyph_id: report.glyph_id,
+      glyph_name: report.new_name,
+      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn create_source(&mut self, name: String, weight: f64) -> Result<FontSourceEdit> {
+    let report = self
+      .working_source
+      .create_source(CreateSource {
+        source_id: None,
+        name,
+        location: [("axis_wght".to_string(), weight)].into_iter().collect(),
+      })
+      .map_err(map_source_error)?;
+    Ok(FontSourceEdit {
+      impact: edit_impact(report.diff, report.revision),
+      source_id: report.source_id,
+      source_name: report.source.source_name,
+      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn create_glyph_source_layer(
+    &mut self,
+    #[napi(ts_arg_type = "GlyphId")] glyph_id: String,
+    #[napi(ts_arg_type = "SourceId")] source_id: String,
+    width: f64,
+  ) -> Result<GlyphEdit> {
+    let report = self
+      .working_source
+      .create_glyph_source_layer(
+        &glyph_id,
+        &source_id,
+        CreateGlyphLayer {
+          layer: package_fixture_layer(width),
+        },
+      )
+      .map_err(map_source_error)?;
+    Ok(GlyphEdit {
+      impact: edit_impact(report.diff, report.revision),
+      glyph_id: report.glyph_id,
+      glyph_name: report.glyph_name,
+      variable_readiness: source_variable_readiness(report.source_coverage.variable_readiness),
+      missing_layer_count: report.source_coverage.summary.missing_layer_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn preview_save(&self, path: String) -> Result<SavePreview> {
+    let preview = self
+      .working_source
+      .preview_save(&path)
+      .map_err(map_source_error)?;
+    Ok(SavePreview {
+      revision: preview.revision.min(u32::MAX as u64) as u32,
+      status: source_save_preview_status(preview.status),
+      primary_action: source_save_primary_action(preview.primary_action),
+      change_count: preview.summary.change_count as u32,
+      canonical_path_count: preview.summary.canonical_path_count as u32,
+      removed_canonical_path_count: preview.summary.removed_canonical_path_count as u32,
+      derived_path_count: preview.summary.derived_path_count as u32,
+      conflict_count: preview.summary.conflict_count as u32,
+      staged_recovery_count: preview.summary.staged_recovery_count as u32,
+    })
+  }
+
+  #[napi]
+  pub fn save(&mut self, path: String) -> Result<SaveResult> {
+    let report = self.working_source.save(&path).map_err(map_source_error)?;
+    Ok(SaveResult {
+      revision: report.revision.min(u32::MAX as u64) as u32,
+      status: source_save_status(report.status),
+      change_count: report.summary.change_count as u32,
+      canonical_path_count: report.summary.canonical_path_count as u32,
+      removed_canonical_path_count: report.summary.removed_canonical_path_count as u32,
+      derived_path_count: report.summary.derived_path_count as u32,
+      conflict_count: report.summary.conflict_count as u32,
+      staged_recovery_count: report.summary.staged_recovery_count as u32,
+    })
   }
 }
 

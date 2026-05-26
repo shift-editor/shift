@@ -17,6 +17,26 @@ import type {
 export type GlyphName = string;
 export type Unicode = number;
 
+export type SourceReadiness =
+  | "singleSource"
+  | "ready"
+  | "missingSourceLayers"
+  | "interpolationIncompatible"
+  | "missingSourceLayersAndInterpolationIncompatible";
+
+export type SavePreviewStatus =
+  | "unchanged"
+  | "ready"
+  | "blockedByExternalChanges"
+  | "blockedByStagedCommit";
+
+export type SaveAction =
+  | "nothingToSave"
+  | "save"
+  | "resolveExternalChanges"
+  | "resolveStagedCommit";
+
+export type SaveStatus = "unchanged" | "saved";
 export interface BridgeApi {
   createFont(): void
   loadFont(path: string): void
@@ -60,44 +80,62 @@ export interface BridgeApi {
   restoreState(structure: GlyphStructure, values: Float64Array): GlyphStructureChange
 }
 
+export declare class ShiftSourceDocument {
+  constructor()
+  initializeSaved(path: string): void
+  open(path: string): void
+  fontInfo(): FontInfo
+  glyphs(): Array<GlyphEntry>
+  updateFontInfo(familyName: string, unitsPerEm: number): EditImpact
+  createGlyph(name: string, unicode: string | undefined | null, width: number): GlyphEdit
+  renameGlyph(glyphId: GlyphId, name: GlyphName): GlyphEdit
+  createSource(name: string, weight: number): FontSourceEdit
+  createGlyphSourceLayer(glyphId: GlyphId, sourceId: SourceId, width: number): GlyphEdit
+  previewSave(path: string): SavePreview
+  save(path: string): SaveResult
+}
+
+export interface EditImpact {
+  revision: number
+  changeCount: number
+  canonicalPaths: Array<string>
+  removedCanonicalPaths: Array<string>
+  derivedPaths: Array<string>
+}
+
+export interface FontInfo {
+  familyName?: string
+  styleName?: string
+  unitsPerEm: number
+}
+
+export interface FontSourceEdit {
+  impact: EditImpact
+  sourceId: SourceId
+  sourceName: string
+  variableReadiness: SourceReadiness
+  missingLayerCount: number
+}
+
+export interface GlyphEdit {
+  impact: EditImpact
+  glyphId: GlyphId
+  glyphName: GlyphName
+  variableReadiness: SourceReadiness
+  missingLayerCount: number
+}
+
+export interface GlyphEntry {
+  id: GlyphId
+  name: GlyphName
+  componentBaseGlyphNames: Array<GlyphName>
+}
+
 export interface GlyphHandle {
   name: GlyphName
   unicode?: Unicode
 }
 
-export interface FontExportRequest {
-  path: string
-  format: string
-}
-
-export interface FontExportResult {
-  path: string
-  format: string
-}
-
-export interface GlyphVariationDiagnostic {
-  glyphName: GlyphName
-  code: string
-  severity: string
-  source?: GlyphVariationDiagnosticSource
-  message: string
-}
-
-export interface GlyphVariationDiagnosticSource {
-  id: SourceId
-  index: number
-  name: string
-}
-
-export interface GlyphVariationReport {
-  glyphName: GlyphName
-  status: string
-  variationDataAvailable: boolean
-  masterCount: number
-  compatibleMasterCount: number
-  skippedMasterCount: number
-  diagnostics: Array<GlyphVariationDiagnostic>
-}
 export interface AnchorData {
   id: AnchorId
   name?: string
@@ -130,6 +168,16 @@ export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+export interface FontExportRequest {
+  path: string
+  format: string
+}
+
+export interface FontExportResult {
+  path: string
+  format: string
 }
 
 export interface FontMetadata {
@@ -215,6 +263,30 @@ export interface GlyphVariationData {
   deltas: Array<Float64Array>
 }
 
+export interface GlyphVariationDiagnostic {
+  glyphName: GlyphName
+  code: string
+  severity: string
+  source?: GlyphVariationDiagnosticSource
+  message: string
+}
+
+export interface GlyphVariationDiagnosticSource {
+  id: SourceId
+  index: number
+  name: string
+}
+
+export interface GlyphVariationReport {
+  glyphName: GlyphName
+  status: string
+  variationDataAvailable: boolean
+  masterCount: number
+  compatibleMasterCount: number
+  skippedMasterCount: number
+  diagnostics: Array<GlyphVariationDiagnostic>
+}
+
 export interface Location {
   values: Record<string, number>
 }
@@ -233,4 +305,27 @@ export interface Source {
   location: Location
   layerId: LayerId
   filename?: string
+}
+
+export interface SavePreview {
+  revision: number
+  status: SavePreviewStatus
+  primaryAction: SaveAction
+  changeCount: number
+  canonicalPathCount: number
+  removedCanonicalPathCount: number
+  derivedPathCount: number
+  conflictCount: number
+  stagedRecoveryCount: number
+}
+
+export interface SaveResult {
+  revision: number
+  status: SaveStatus
+  changeCount: number
+  canonicalPathCount: number
+  removedCanonicalPathCount: number
+  derivedPathCount: number
+  conflictCount: number
+  stagedRecoveryCount: number
 }

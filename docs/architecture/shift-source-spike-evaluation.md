@@ -1,4 +1,4 @@
-# Shift Source Spike Dogfood Evaluation
+# Shift Source Spike Evaluation
 
 ## Goal
 
@@ -17,6 +17,24 @@ TypeScript owns UI projection only.
 
 The spike passes only if real workflows become safer and simpler than the current model.
 
+## External Inputs
+
+This evaluation is informed by three variable-font directions:
+
+- Fontra's variable-components-in-UFO proposal separates variable components
+  from standard UFO components, adds decomposed transform fields, sparse
+  component locations, and glyph-local designspace additions.
+- HarfBuzz Boring Expansion frames the product-level reason for these features:
+  reusable variable parts, compact pan-Unicode fonts, user-facing axes separated
+  from construction axes, non-linear interpolation, and sparse variation data.
+- HarfBuzz `VARC`/condition-tree proposals make reset/inherit behavior,
+  conditional components, decomposed transform fields, varied component
+  locations, and recursive component resolution explicit binary-font concepts.
+
+Shift should use these as authoring-model pressure, not copy their storage
+format directly. The app-facing contract is still journey-derived: we store rich
+source facts so Rust can answer editor questions safely and cheaply.
+
 ## Freeze Rule
 
 Until the flows below have verdicts:
@@ -25,7 +43,91 @@ Until the flows below have verdicts:
 - do not broaden report payloads
 - do not expand `.shift` schema surface
 - do not merge the spike as a product feature
-- only change code when a dogfood flow exposes a concrete gap
+- only change code when a evaluation flow exposes a concrete gap
+
+## Journey-Derived Requirements
+
+Every source-format capability must be justified by an editor journey. The
+bridge should not expose generic package status just because the source crate can
+compute it. A query is valid only when it answers a concrete screen decision,
+confirmation, inspector row, canvas preview, or save/recovery state.
+
+| Journey | User decision | Rust-owned answer | Must not leak to TS |
+| --- | --- | --- | --- |
+| Open source package | Can I trust and edit this package now? | load result, recovery status, staged-commit blockers, readable next action | raw staged files, package traversal, silent repair |
+| Edit font info | Did this metadata edit apply and what changed on disk? | validated edit result, revision, narrow save impact | source/master work status, glyph rewrites |
+| Add source/master | Was the source created at a valid axis location? | source ID, display name, completed/authored location, diagnostics, affected source table row | export readiness, all glyph payloads |
+| Source panel worklist | What work did adding/changing this source create? | missing glyph-layer rows and interpolation blockers for the visible source/panel | global “ready” flag with no UI action, TS scans over glyph files |
+| Fill source layer | Can I add this glyph layer without overwriting or corrupting variation data? | created layer, overwrite/stale blockers, affected glyph/source rows, revision, save impact | heuristic “layer exists” checks in TS |
+| Rename glyph | Can I rename this label without breaking component identity? | ID-keyed rename result, old/new labels, refreshed dependent labels, revision | component repair by glyph name |
+| Delete glyph | Which destructive choices are valid? | preview with exact user-visible references and valid strategies, then revision-checked chosen delete command | blind delete, TypeScript dependency graph reconstruction |
+| Edit component | What does this component resolve to at the current preview location? | stable component/base IDs, resolved axis values with provenance, condition result, transform fields that vary | condition evaluation or reset/inherit semantics in TS |
+| Scrub variable component/source location | What changed for this visible glyph/component at this coordinate? | small resolved preview/delta from cached Rust state | package-sized DTOs per frame |
+| Save | Can this dirty graph be safely persisted? | save preview, conflict/recovery blockers, path impact, final saved revision after disk verification | clearing dirty before semantic reload |
+| Reopen after save/crash | What state should the user see after interruption? | recovered/blocked load state and app-visible package summary | accepting mixed old/new source graph |
+
+Delete previews are required only for destructive journeys. They are not a
+generic preflight layer. A preview exists when the user must choose between
+valid strategies such as direct delete, remove component uses, decompose, relink,
+or cancel. If no references exist, the preview may collapse into a direct
+revision-checked delete command.
+
+Source coverage is likewise not a general “ready for export” question. It is a
+source-panel worklist: after adding or editing a source, the UI needs to know
+which visible glyph layers are missing or incompatible so it can guide authoring
+without scanning package files. Export-specific readiness belongs behind export
+preflight and should stay owned by the fontc handoff.
+
+## Semantic Operations
+
+The public document service should be organized around editor intentions, not
+storage verbs. Names below are illustrative, but this is the level of meaning we
+should test.
+
+| Operation | User intent | Required behavior | Primary test |
+| --- | --- | --- | --- |
+| `openEditablePackage` | Open a font project and know whether it is safe to edit | validate manifest, recover or block staged commits, fingerprint canonical paths, return app-visible package summary | opens clean package, refuses uncertain staged state, presents recovery action |
+| `editFontInfo` | Change family/style/metrics | validate values, mutate font metadata only, return changed fields, revision, save impact | edits UPM/name, save/reopen preserves values, glyph files untouched |
+| `defineAxis` | Add/edit/remove a user or construction axis | preserve stable axis ID, validate tag/name/range/default, update affected source locations/mappings | creates construction axis without exposing it as a user-facing axis |
+| `mapAxisCoordinates` | Make a public design slider drive construction coordinates | validate complete samples, reject cycles/duplicate sample inputs, return mapped source rows and diagnostics | edits mapping and updates source rows without TS interpolation |
+| `addMaster` | Add a design source at a location | allocate source ID, complete/default sparse location with provenance, return source row and affected panel work items | adds Bold source and lists missing visible glyph layers |
+| `editMasterLocation` | Move a source in design space | validate location, recompute mapped rows and affected compatibility/worklist rows | moving source updates only source metadata and derived indexes |
+| `removeMaster` | Remove a source safely | block default source, preview layer/variation-source users, require explicit cascade when needed | deleting unused source succeeds; referenced/default source reports blocker |
+| `addGlyph` | Add a glyph from the grid/sidebar | allocate stable glyph ID and collision-safe display name, create requested default layer, return grid row | quick-add glyph updates grid and save impact only for new glyph file |
+| `renameGlyph` | Rename label without breaking identity | operate by glyph ID, refresh dependent component labels, reject stale/duplicate rename | rename base glyph updates composites while component target IDs stay stable |
+| `removeGlyph` | Delete a glyph intentionally | if references exist, return valid strategies; chosen command removes/relinks/decomposes by expected revision | base glyph delete shows component users and chosen strategy updates dependents |
+| `addGlyphLayerForMaster` | Fill missing design data for one source | reject overwrite unless explicit, validate layer geometry, update source worklist row | adding Bold layer removes that glyph from missing-layer worklist |
+| `editGlyphGeometry` | Move points/contours/anchors in one layer | patch only the glyph/layer, maintain IDs, update compatibility for affected glyph | point edit updates one glyph file and redraws current glyph only |
+| `editComponent` | Add/change a component in a glyph layer | store component ID, base glyph ID, transform, sparse location, inheritance/reset behavior, condition | component inspector shows resolved base/location without TS graph repair |
+| `resolveComponentPreview` | Preview a component at current slider/scrub location | evaluate condition tree, parent/root locations, local axes, varied transform fields in Rust | scrub returns small resolved state/delta for visible component |
+| `editGlyphLocalAxis` | Make one base glyph variable along local axes | validate local axis IDs, prevent global-axis shadowing, update component-location editor rows | adding local axis enables component location control without global axis pollution |
+| `savePackage` | Persist without data loss | preview conflicts/staged blockers, stage canonical writes, apply, reload, semantic-equality check, update baseline | external edit blocks save; successful save clears dirty after reload |
+| `exportWithFontc` | Build binary artifacts | hand source/IR intent to fontc path, report lowering blockers, do not make UFO/designspace export a success criterion | export preflight reports fontc handoff blockers separately from editor worklists |
+
+### Semantic Test Suites
+
+Tests should be named after these behaviors, not after helper classes or storage
+modules.
+
+| Suite | Required scenarios |
+| --- | --- |
+| `package open and recovery` | clean open, malformed manifest, stale staged commit, partially applied staged commit, recovery cleanup, app-visible blocker text/action |
+| `font info editing` | valid edit, invalid UPM/metrics rejection before mutation, save/reopen, external conflict before save |
+| `axis authoring` | create user axis, create construction axis, reject duplicate IDs/tags where invalid, delete axis with source/mapping users |
+| `axis mapping authoring` | one-dimensional mapping, multi-axis mapping, duplicate sample rejection, mapped source diagnostics, no TS interpolation |
+| `source authoring` | add source, edit source location, delete unused source, block default/referenced source, source-panel worklist scoped to visible source |
+| `glyph identity` | create glyph, rename by ID, duplicate-name rejection, dependent component label refresh, stale confirmation rejection |
+| `glyph deletion strategies` | direct delete, blocked delete with component users, remove-component strategy, relink strategy, cycle/local-axis blockers |
+| `glyph layer editing` | add source layer, reject overwrite, delete unused layer, block layer used by glyph/component variation source |
+| `component authoring` | add component by base glyph ID, rename base keeps target, edit decomposed transform, edit sparse location, reset vs inherit preview |
+| `variable component preview` | local-axis component location, condition true/false, varied transform field summary, recursive component resolution, package-sized DTO guard |
+| `safe save` | unchanged preview, narrow dirty path impact, external canonical conflict, derived cache conflict policy, crash/staged recovery, semantic reload before clean |
+| `fontc export handoff` | source-to-fontir handoff shape, unsupported variable component lowering blocker, static lowering path, no Shift-to-UFO requirement |
+
+Passing these suites is stronger evidence than a broad “source readiness” report.
+Each test should fail if TypeScript reconstructs package semantics, if the bridge
+requires per-glyph loops for visible UI state, or if save/load can accept a mixed
+disk graph as clean.
 
 ## Required Flows
 
@@ -95,7 +197,7 @@ Pass criteria:
 - source create/update/delete are stable-ID semantic commands
 - source locations are completed by Rust with provenance
 - mapped source locations and diagnostics come from Rust
-- source coverage/readiness updates from command reports
+- source-panel worklist rows update from command reports when the UI needs them
 - interpolation compatibility invalidation is explicit
 - adding a glyph source layer refuses overwrite and validates before mutation
 - save impact is source metadata or owner glyph only, plus derived indexes
@@ -103,7 +205,7 @@ Pass criteria:
 Fail signals:
 
 - TypeScript computes missing master/layer state
-- source readiness is a heuristic over raw package data
+- source worklist state is a heuristic over raw package data
 - app needs N per-glyph bridge calls to render source panel badges
 - invalid source location partially mutates state
 
@@ -214,7 +316,7 @@ For each flow, record:
 
 ## Initial Evidence Snapshot
 
-This snapshot records what the spike currently proves in Rust and what remains unproven until the editor dogfoods the flow. Rust unit coverage is necessary, but it is not enough to graduate the spike: each required flow still needs one app-level pass through `shift_ir`, bridge DTOs, N-API, renderer state, save, and reopen.
+This snapshot records what the spike currently proves in Rust and what remains unproven until the editor exercises the same boundary. Rust unit coverage is necessary, but it is not enough to graduate the spike: each required flow still needs one pass through `shift_ir`, bridge DTOs, N-API, save, and reopen. The first pass can be headless; UI is not required to prove the document-service boundary.
 
 ### 1. Metadata Edit, Save, Reopen
 
@@ -229,11 +331,16 @@ Still unproven:
 
 - Whether the current Electron/TS font info dialog can be driven by one bridge mutation plus one revisioned response.
 - Whether the UI can avoid rebuilding package-shaped state after a metadata edit.
-- Whether reopen is tested through the same path the app will use for dogfooding, not only package-level Rust load/save tests.
+- Whether reopen is tested through the same path the app will use for source package tests, not only package-level Rust load/save tests.
 
-Next dogfood step:
+Next evaluation step:
 
 - Wire one metadata field group to the Rust document service and measure the response payload, bridge call count, dirty-state transition, save summary, and reopen result.
+
+Headless evidence:
+
+- `ShiftSourceDocument` exposes this operation through N-API.
+- `packages/bridge/src/sourceDocument.test.ts` edits font info, saves, reopens, and asserts persisted metadata through the package bridge.
 
 ### 2. Quick-Add Glyph And Rename Component Base
 
@@ -251,9 +358,14 @@ Still unproven:
 - Whether stale destructive dialogs are rejected at the bridge/app boundary using the response revision.
 - Whether existing TS component editing can be moved away from editable base glyph names without leaving a parallel truth.
 
-Next dogfood step:
+Next evaluation step:
 
-- Build a dogfood flow for add glyph -> add component -> rename base -> preview delete. Treat any TS-side dependency reconstruction as a failure signal.
+- Build an evaluation flow for add glyph -> add component -> rename base -> preview delete. Treat any TS-side dependency reconstruction as a failure signal.
+
+Headless evidence:
+
+- `ShiftSourceDocument` exposes create-glyph and ID-based rename through N-API.
+- `packages/bridge/src/sourceDocument.test.ts` creates a glyph, renames `glyph_A`, verifies `glyph_Aacute` component labels refresh from Rust, saves, and reopens.
 
 ### 3. Add Source/Master And Fill Missing Layer
 
@@ -270,9 +382,14 @@ Still unproven:
 - Whether sparse source locations and completed/defaulted coordinates are expressed clearly enough for inspector UI.
 - Whether compatibility invalidation is granular enough for interactive editing, especially on large families.
 
-Next dogfood step:
+Next evaluation step:
 
-- Dogfood add source -> inspect coverage -> add missing glyph layer -> save. Record whether UI badges, source table rows, and compatibility warnings are all driven from Rust reports.
+- Exercise add source -> inspect coverage -> add missing glyph layer -> save. Record whether UI badges, source table rows, and compatibility warnings are all driven from Rust reports.
+
+Headless evidence:
+
+- `ShiftSourceDocument` exposes source creation and glyph source-layer creation through N-API.
+- `packages/bridge/src/sourceDocument.test.ts` creates a `Bold` source, verifies missing-layer readiness, fills one glyph source layer, and confirms save/reopen behavior.
 
 ### 4. Variable Component Inspect And Resolve
 
@@ -288,9 +405,9 @@ Still unproven:
 - Whether `shift_ir` contains the same variable component concepts the editor needs for selection, rendering, undo, and preview.
 - Whether scrubbing can reuse cached Rust-side state and return screen-sized deltas instead of full component/package payloads.
 
-Next dogfood step:
+Next evaluation step:
 
-- Build a variable component inspector/scrub flow against one dogfood glyph. Measure bridge calls per scrub frame, payload size, and whether TS evaluates any condition or reset/inherit semantics.
+- Build a variable component inspector/scrub flow against one source package glyph. Measure bridge calls per scrub frame, payload size, and whether TS evaluates any condition or reset/inherit semantics.
 
 ### 5. Save Conflict And Recovery
 
@@ -305,11 +422,15 @@ Still unproven:
 
 - Whether the desktop app can present every save/recovery state without inventing additional state in TS.
 - Whether save failures leave renderer dirty state and command history coherent.
-- Whether crash recovery has been exercised through the actual dogfood package path, including reopening from the app shell.
+- Whether crash recovery has been exercised through the actual source package path, including reopening from the app shell.
 
-Next dogfood step:
+Next evaluation step:
 
-- Add a manual or scripted dogfood scenario that mutates files outside the app, simulates staged transaction states, then opens/previews/saves from the app and records the exact user-presentable recovery state.
+- Add a manual or scripted source package test that mutates files outside the app, simulates staged transaction states, then opens/previews/saves from the app and records the exact user-presentable recovery state.
+
+Headless evidence:
+
+- `packages/bridge/src/sourceDocument.test.ts` mutates a canonical glyph file outside the document service and verifies save preview returns `blockedByExternalChanges` with `resolveExternalChanges`.
 
 ### 6. Axis Mapping Preview
 
@@ -325,9 +446,9 @@ Still unproven:
 - Whether mapping edits can be previewed interactively without recomputing package-sized state in TS.
 - Whether mapping diagnostics should block export directly or appear as advisory readiness issues.
 
-Next dogfood step:
+Next evaluation step:
 
-- Use a dogfood family with one public axis and one construction axis. Edit mapping samples, inspect mapped source rows, and check if source readiness/export preflight react without TS-side interpolation.
+- Use a source package family with one public axis and one construction axis. Edit mapping samples, inspect mapped source rows, and check if source readiness/export preflight react without TS-side interpolation.
 
 ### 7. Export Preflight
 
@@ -342,24 +463,22 @@ Still unproven:
 - Whether this is the right boundary with `fontc`/`fontir`: Shift source should report intent and blockers, while fontc owns artifact lowering and binary font policy.
 - Whether the app needs export-oriented reports now or only readiness summaries until a `shift2ir`/fontc handoff exists.
 
-Next dogfood step:
+Next evaluation step:
 
 - Treat export as a preflight-only app surface for now. Do not build Shift-to-UFO export as a success criterion; binary export through fontc is the relevant product direction.
 
-## Dogfood Instrumentation
+## Headless Checks
 
-Every required flow should capture these measurements before the spike graduates:
+Every required flow should capture these checks before the spike graduates:
 
 - bridge call count per user action
-- serialized DTO byte size for command response and follow-up queries
-- Rust command/query duration
 - renderer state objects touched
 - dirty-state transition and expected revision
 - save summary path counts and conflict counts
 - whether TS evaluated domain semantics that Rust should own
 - whether reopening from disk reproduces the same app-visible state
 
-The app should fail the flow if it needs raw package traversal, per-glyph bridge loops for panel state, name-based component repair, TypeScript save/recovery logic, or package-sized responses during interactive scrubbing.
+The app should fail the flow if it needs raw package traversal, per-glyph bridge loops for panel state, name-based component repair, TypeScript save/recovery logic, or package-sized responses during interactive scrubbing. Runtime and payload-size measurements can come later when the bridge/API shape is stable.
 
 ## Pass Criteria
 
@@ -391,7 +510,7 @@ Park or cut:
 - `.shift` as a user-facing file format
 - broad speculative reports
 - export policy not proven through UI
-- operation surfaces not pulled by dogfood flows
+- operation surfaces not pulled by evaluation flows
 
 ## Expected Outcome
 
