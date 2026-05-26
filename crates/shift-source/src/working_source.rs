@@ -154,6 +154,25 @@ pub struct ShiftGlyphRelinkReplacementCandidate {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphRelinkReplacementCandidateReport {
+    pub revision: u64,
+    pub summary: ShiftGlyphRelinkReplacementCandidateSummary,
+    pub candidates: Vec<ShiftGlyphRelinkReplacementCandidate>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftGlyphRelinkReplacementCandidateSummary {
+    pub total_candidate_count: usize,
+    pub relinkable_candidate_count: usize,
+    pub blocked_candidate_count: usize,
+    pub cycle_blocked_candidate_count: usize,
+    pub missing_base_local_axes_candidate_count: usize,
+    pub base_local_axis_out_of_range_candidate_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ShiftGlyphRelinkReplacementBlocker {
     WouldCreateComponentCycle {
@@ -2315,6 +2334,18 @@ impl ShiftWorkingSource {
         });
 
         Ok(candidates)
+    }
+
+    pub fn glyph_relink_replacement_candidates_report(
+        &self,
+        glyph_id: &str,
+    ) -> ShiftSourceResult<ShiftGlyphRelinkReplacementCandidateReport> {
+        let candidates = self.glyph_relink_replacement_candidates(glyph_id)?;
+        Ok(ShiftGlyphRelinkReplacementCandidateReport {
+            revision: self.revision,
+            summary: glyph_relink_replacement_candidate_summary(&candidates),
+            candidates,
+        })
     }
 
     pub fn preview_rename_glyph(
@@ -5820,6 +5851,58 @@ fn component_activity_summary(
         inactive_component_count,
         conditional_component_count,
         unconditional_component_count: components.len() - conditional_component_count,
+    }
+}
+
+fn glyph_relink_replacement_candidate_summary(
+    candidates: &[ShiftGlyphRelinkReplacementCandidate],
+) -> ShiftGlyphRelinkReplacementCandidateSummary {
+    let mut relinkable_candidate_count = 0;
+    let mut blocked_candidate_count = 0;
+    let mut cycle_blocked_candidate_count = 0;
+    let mut missing_base_local_axes_candidate_count = 0;
+    let mut base_local_axis_out_of_range_candidate_count = 0;
+
+    for candidate in candidates {
+        if candidate.can_relink {
+            relinkable_candidate_count += 1;
+        } else {
+            blocked_candidate_count += 1;
+        }
+
+        if candidate.blockers.iter().any(|blocker| {
+            matches!(
+                blocker,
+                ShiftGlyphRelinkReplacementBlocker::WouldCreateComponentCycle { .. }
+            )
+        }) {
+            cycle_blocked_candidate_count += 1;
+        }
+        if candidate.blockers.iter().any(|blocker| {
+            matches!(
+                blocker,
+                ShiftGlyphRelinkReplacementBlocker::MissingBaseLocalAxes { .. }
+            )
+        }) {
+            missing_base_local_axes_candidate_count += 1;
+        }
+        if candidate.blockers.iter().any(|blocker| {
+            matches!(
+                blocker,
+                ShiftGlyphRelinkReplacementBlocker::BaseLocalAxisOutOfRange { .. }
+            )
+        }) {
+            base_local_axis_out_of_range_candidate_count += 1;
+        }
+    }
+
+    ShiftGlyphRelinkReplacementCandidateSummary {
+        total_candidate_count: candidates.len(),
+        relinkable_candidate_count,
+        blocked_candidate_count,
+        cycle_blocked_candidate_count,
+        missing_base_local_axes_candidate_count,
+        base_local_axis_out_of_range_candidate_count,
     }
 }
 

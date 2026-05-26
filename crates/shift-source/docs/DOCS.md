@@ -112,7 +112,7 @@ previewDeleteGlyph(glyphId)
 deleteGlyph(glyphId)
 previewDeleteGlyphRemoveComponentReferences(glyphId)
 deleteGlyphAndRemoveComponentReferences(glyphId)
-getGlyphRelinkReplacementCandidates(glyphId)
+getGlyphRelinkReplacementCandidatesReport(glyphId)
 previewDeleteGlyphRelinkComponentReferences(glyphId, replacementGlyphId)
 deleteGlyphAndRelinkComponentReferences(glyphId, replacementGlyphId)
 previewDeleteSource(sourceId)
@@ -875,7 +875,10 @@ The format should make these app behaviors straightforward:
   base-local-axis blockers, so the app does not have to trial-run every glyph
   through a full relink preview. Candidates are returned in glyph-name order for
   stable picker rendering, and cycle blockers include transitive component
-  dependencies.
+  dependencies. The candidate report carries the working-source revision plus
+  compact counts for relinkable, blocked, cycle-blocked, missing-local-axis, and
+  out-of-range-local-axis candidates, so the picker can render status and reject
+  stale async results without scanning every row.
   Component-removal delete also has a dedicated preview, so the app can show the
   exact destructive write impact before removing dependent component recipes.
   Rename, delete, source-delete, and glyph-source-layer-delete previews carry

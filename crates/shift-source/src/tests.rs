@@ -12,7 +12,8 @@ use crate::{
     ShiftComponentVariationSourceUpdate, ShiftComponentVariationTransformSource,
     ShiftConditionEvaluation, ShiftCreateAxisMapping, ShiftCreateComponentVariationSource,
     ShiftCreateGlyph, ShiftCreateGlyphSourceLayer, ShiftCreateGlyphVariationSource,
-    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker, ShiftGlyphVariationAxisValue,
+    ShiftCreateSource, ShiftGlyphRelinkReplacementBlocker,
+    ShiftGlyphRelinkReplacementCandidateSummary, ShiftGlyphVariationAxisValue,
     ShiftGlyphVariationAxisValueSource, ShiftGlyphVariationSourceLocationSummary,
     ShiftGlyphVariationSourceUpdate, ShiftGlyphVariationSourceUse, ShiftMappedAxisValue,
     ShiftMappedAxisValueSource, ShiftMappedLocationSummary, ShiftMissingSourceLayer,
@@ -7723,8 +7724,24 @@ fn working_source_lists_relink_replacement_candidates_with_cycle_blockers() {
     let candidates = working_source
         .glyph_relink_replacement_candidates("glyph_A")
         .expect("relink candidates should be listed");
+    let report = working_source
+        .glyph_relink_replacement_candidates_report("glyph_A")
+        .expect("relink candidate report should be listed");
 
     assert_eq!(candidates.len(), 2);
+    assert_eq!(report.revision, 0);
+    assert_eq!(report.candidates, candidates);
+    assert_eq!(
+        report.summary,
+        ShiftGlyphRelinkReplacementCandidateSummary {
+            total_candidate_count: 2,
+            relinkable_candidate_count: 1,
+            blocked_candidate_count: 1,
+            cycle_blocked_candidate_count: 1,
+            missing_base_local_axes_candidate_count: 0,
+            base_local_axis_out_of_range_candidate_count: 0,
+        }
+    );
     let dependent_candidate = candidates
         .iter()
         .find(|candidate| candidate.glyph_id == "glyph_Aacute")
