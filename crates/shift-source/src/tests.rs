@@ -4835,6 +4835,20 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
         1
     );
     assert_eq!(
+        static_location_preflight.skipped_inactive_components[0].component_id,
+        "component_conditional"
+    );
+    assert_eq!(
+        static_location_preflight.skipped_inactive_components[0].condition,
+        ShiftConditionEvaluation::AxisRange {
+            axis_id: "axis_wght".to_string(),
+            value: 400.0,
+            min: Some(700.0),
+            max: None,
+            active: false,
+        }
+    );
+    assert_eq!(
         static_location_preflight
             .diagnostics
             .iter()
@@ -4858,6 +4872,19 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(
         narrow_location_preflight.skipped_inactive_component_count,
         1
+    );
+    assert_eq!(
+        narrow_location_preflight.skipped_inactive_components[0].component_id,
+        "component_variable_conditional"
+    );
+    assert_eq!(
+        narrow_location_preflight.skipped_inactive_components[0].required_capabilities,
+        vec![
+            ShiftComponentLoweringCapability::Condition,
+            ShiftComponentLoweringCapability::VariableLocation,
+            ShiftComponentLoweringCapability::VariableTransform,
+            ShiftComponentLoweringCapability::AxisReset,
+        ]
     );
     assert_eq!(
         narrow_location_preflight
@@ -4887,6 +4914,10 @@ fn working_source_reports_component_lowering_diagnostics_for_target_capabilities
     assert_eq!(contextual_preflight.supported_component_count, 1);
     assert_eq!(contextual_preflight.unsupported_component_count, 2);
     assert_eq!(contextual_preflight.skipped_inactive_component_count, 1);
+    assert_eq!(
+        contextual_preflight.skipped_inactive_components[0].component_id,
+        "component_variable_conditional"
+    );
     assert_eq!(
         contextual_preflight
             .diagnostics

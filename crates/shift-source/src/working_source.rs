@@ -677,17 +677,32 @@ pub struct ShiftComponentLoweringDiagnostic {
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftComponentLoweringPreflight {
     pub total_component_count: usize,
     pub supported_component_count: usize,
     pub unsupported_component_count: usize,
     pub skipped_inactive_component_count: usize,
+    pub skipped_inactive_components: Vec<ShiftInactiveComponentLoweringDiagnostic>,
     pub affected_glyph_count: usize,
     pub missing_capabilities: Vec<ShiftComponentLoweringCapability>,
     pub missing_capability_counts: Vec<ShiftComponentLoweringCapabilityCount>,
     pub diagnostics: Vec<ShiftComponentLoweringDiagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftInactiveComponentLoweringDiagnostic {
+    pub glyph_id: String,
+    pub glyph_name: String,
+    pub layer_id: String,
+    pub component_id: String,
+    pub base_glyph_id: String,
+    pub base_glyph_name: String,
+    pub lowering_hint: ShiftComponentLoweringHint,
+    pub required_capabilities: Vec<ShiftComponentLoweringCapability>,
+    pub condition: ShiftConditionEvaluation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1795,6 +1810,7 @@ impl ShiftWorkingSource {
         let mut diagnostics = Vec::new();
         let mut total_component_count = 0;
         let mut skipped_inactive_component_count = 0;
+        let mut skipped_inactive_components = Vec::new();
         let mut affected_glyph_ids = BTreeSet::new();
         let mut missing_capability_counts =
             BTreeMap::<ShiftComponentLoweringCapability, usize>::new();
@@ -1804,21 +1820,42 @@ impl ShiftWorkingSource {
                 for component in &layer.components {
                     total_component_count += 1;
                     if let Some(context) = context {
-                        let active = component
+                        let condition = component
                             .condition
                             .as_ref()
                             .map(|condition| {
-                                self.condition_matches(
+                                self.evaluate_condition(
                                     &glyph.name,
                                     condition,
                                     &context.font_location,
                                 )
                             })
-                            .transpose()?
-                            .unwrap_or(true);
-                        if !active {
-                            skipped_inactive_component_count += 1;
-                            continue;
+                            .transpose()?;
+                        if let Some(condition) = condition {
+                            if !condition.active() {
+                                let base_glyph = self.glyph(&component.base_glyph_id)?;
+                                let summary = component_recipe_summary(
+                                    glyph,
+                                    layer_id,
+                                    component,
+                                    &base_glyph.name,
+                                );
+                                skipped_inactive_component_count += 1;
+                                skipped_inactive_components.push(
+                                    ShiftInactiveComponentLoweringDiagnostic {
+                                        glyph_id: summary.glyph_id,
+                                        glyph_name: summary.glyph_name,
+                                        layer_id: summary.layer_id,
+                                        component_id: summary.component_id,
+                                        base_glyph_id: summary.base_glyph_id,
+                                        base_glyph_name: summary.base_glyph_name,
+                                        lowering_hint: summary.lowering_hint,
+                                        required_capabilities: summary.required_capabilities,
+                                        condition,
+                                    },
+                                );
+                                continue;
+                            }
                         }
                     }
 
@@ -1878,6 +1915,7 @@ impl ShiftWorkingSource {
                 - skipped_inactive_component_count,
             unsupported_component_count,
             skipped_inactive_component_count,
+            skipped_inactive_components,
             affected_glyph_count: affected_glyph_ids.len(),
             missing_capabilities,
             missing_capability_counts,
@@ -3314,16 +3352,6 @@ impl ShiftWorkingSource {
         parent_location: &BTreeMap<String, f64>,
     ) -> shift_ir::variation::NormalizedLocation {
         normalized_component_parent_location_for_axes(&self.package.axes, parent_location)
-    }
-
-    fn condition_matches(
-        &self,
-        glyph_name: &str,
-        condition: &ShiftCondition,
-        location: &BTreeMap<String, f64>,
-    ) -> ShiftSourceResult<bool> {
-        self.evaluate_condition(glyph_name, condition, location)
-            .map(|evaluation| evaluation.active())
     }
 
     fn evaluate_condition(
