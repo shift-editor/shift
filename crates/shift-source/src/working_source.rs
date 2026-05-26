@@ -1170,7 +1170,8 @@ impl ShiftWorkingSource {
             &delete_preview.component_dependents,
         )?;
 
-        self.package
+        let mut candidates = self
+            .package
             .glyphs
             .iter()
             .filter(|glyph| glyph.id != glyph_id)
@@ -1197,7 +1198,14 @@ impl ShiftWorkingSource {
                     blockers,
                 })
             })
-            .collect()
+            .collect::<ShiftSourceResult<Vec<_>>>()?;
+        candidates.sort_by(|left, right| {
+            left.glyph_name
+                .cmp(&right.glyph_name)
+                .then_with(|| left.glyph_id.cmp(&right.glyph_id))
+        });
+
+        Ok(candidates)
     }
 
     pub fn preview_rename_glyph(

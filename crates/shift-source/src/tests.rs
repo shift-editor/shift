@@ -6071,6 +6071,63 @@ fn working_source_lists_relink_replacement_candidates_with_cycle_blockers() {
 }
 
 #[test]
+fn working_source_lists_relink_replacement_candidates_with_transitive_cycle_blockers() {
+    let mut package = package_with_component_dependency();
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_B".to_string(),
+        name: "B".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::from([(
+            "source_Regular".to_string(),
+            layer_with_component("glyph_Aacute", "Aacute"),
+        )]),
+    });
+    package.glyphs.push(ShiftGlyph {
+        id: "glyph_C".to_string(),
+        name: "C".to_string(),
+        unicodes: Vec::new(),
+        local_axes: Vec::new(),
+        variation_sources: Vec::new(),
+        layers: BTreeMap::new(),
+    });
+    let working_source =
+        ShiftWorkingSource::new(package).expect("working source should initialize");
+
+    let candidates = working_source
+        .glyph_relink_replacement_candidates("glyph_A")
+        .expect("relink candidates should be listed");
+
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|candidate| candidate.glyph_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Aacute", "B", "C"]
+    );
+    let transitive_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_B")
+        .expect("transitive dependent glyph should be listed as blocked");
+    assert!(!transitive_candidate.can_relink);
+    assert_eq!(
+        transitive_candidate.blockers,
+        vec![
+            ShiftGlyphRelinkReplacementBlocker::WouldCreateComponentCycle {
+                dependent_glyph_ids: vec!["glyph_Aacute".to_string()],
+            }
+        ]
+    );
+    let independent_candidate = candidates
+        .iter()
+        .find(|candidate| candidate.glyph_id == "glyph_C")
+        .expect("independent glyph should be listed");
+    assert!(independent_candidate.can_relink);
+    assert!(independent_candidate.blockers.is_empty());
+}
+
+#[test]
 fn working_source_lists_relink_replacement_candidates_with_local_axis_blockers() {
     let component_layer = ShiftGlyphLayer {
         advance_width: 600.0,

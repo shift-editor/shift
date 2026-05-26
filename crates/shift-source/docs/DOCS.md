@@ -659,7 +659,9 @@ The format should make these app behaviors straightforward:
   and relinked recipe summaries without mutating the working source.
   Replacement candidate queries can pre-filter the picker with cycle and
   base-local-axis blockers, so the app does not have to trial-run every glyph
-  through a full relink preview.
+  through a full relink preview. Candidates are returned in glyph-name order for
+  stable picker rendering, and cycle blockers include transitive component
+  dependencies.
   Component-removal delete also has a dedicated preview, so the app can show the
   exact destructive write impact before removing dependent component recipes.
 - Conservative delete commands that fail before mutation when component
